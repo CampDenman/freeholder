@@ -68,6 +68,7 @@ const cartLineRow = row({
   id: uuid,
   cartId: uuid,
   variantId: uuid,
+  productId: uuid,
   locationId: uuid.nullable(),
   quantity: z.number().int(),
   reservationId: uuid.nullable(),
@@ -989,6 +990,7 @@ async function projectCart(ctx: ServiceContext, cartId: string, revealToken = fa
   const rows = await ctx.tx
     .select({
       item: cartItems,
+      productId: productVariants.productId,
       sku: productVariants.sku,
       productName: products.name,
       requiresShipping: productVariants.requiresShipping,
@@ -1018,6 +1020,7 @@ async function projectCart(ctx: ServiceContext, cartId: string, revealToken = fa
       : { tracked: false, available: true };
     lines.push({
       ...row.item,
+      productId: row.productId,
       sku: row.sku,
       productName: row.productName,
       requiresShipping: row.requiresShipping,

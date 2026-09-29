@@ -26,6 +26,7 @@ export function defaultHeader(): BlockNode[] {
       props: { align: "between" },
       children: [
         { id: "header-brand", type: "brand", props: { href: "/", showTagline: false } },
+        { id: "header-cart", type: "cartWidget", props: {} },
         { id: "header-locales", type: "locales", props: { separator: "·" } },
       ],
     },

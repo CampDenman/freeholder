@@ -16,6 +16,8 @@
 import { Fragment } from "react";
 import { z } from "zod";
 import { renderNAP } from "@/core/locations/nap";
+import { formatMoney } from "@/core/i18n";
+import type { Actor } from "@/core/service";
 import { languageName, localePath } from "@/core/i18n/customer";
 import { cx } from "@/ui/primitives";
 import { defineBlock } from "./types";
@@ -23,6 +25,7 @@ import { fromPlainString, richBodySchema } from "./rich";
 import { renderRichDoc } from "./rich-render";
 import { sanitizeOwnerHtml } from "./html";
 import { selectAssignedVariants } from "../experiments";
+import { AddToCart } from "../../../../app/(public)/buy/AddToCart";
 
 /* ------------------------------------------------------------------ text */
 
@@ -798,6 +801,16 @@ export const productsIndex = defineBlock({
   },
 });
 
+/**
+ * The buy panel's data source, kept at module level so the block's resolve
+ * stays a thin composition over the catalog service.
+ */
+async function purchaseOptionsOf(slug: string, actor: Actor | undefined) {
+  const { purchaseOptions } = await import("@/modules/catalog/service");
+  const [entry] = await purchaseOptions.call({ slugs: [slug] }, actor ?? { kind: "anonymous" });
+  return entry ?? null;
+}
+
 export const productDetail = defineBlock({
   type: "productDetail",
   labelKey: "cms.block.productDetail",
@@ -807,11 +820,11 @@ export const productDetail = defineBlock({
     slug: z.string().min(1),
   }),
   starter: () => ({ productId: "00000000-0000-4000-8000-000000000000", slug: "product" }),
-  resolve: async (props) => {
+  resolve: async (props, ctx) => {
     const { resolveVisibleProduct } = await import("@/modules/catalog/service");
     const product = await resolveVisibleProduct.call(
       { slug: props.slug },
-      { kind: "anonymous" },
+      ctx.actor ?? { kind: "anonymous" },
     );
     if (!product) return null;
     // Projects owns the relation. Catalog remains unaware of portfolio data;
@@ -835,7 +848,18 @@ export const productDetail = defineBlock({
         projects = [];
       }
     }
-    return { product, projects };
+    // The buy affordance (C3.25 slice 3): the same purchase projection the
+    // shelf pages quote from, so the detail page, the card and the cart can
+    // never disagree about price or availability. A signed-in customer is
+    // quoted their own audience prices through the caller's actor.
+    let purchase: Awaited<ReturnType<typeof purchaseOptionsOf>> = null;
+    try {
+      purchase = await purchaseOptionsOf(props.slug, ctx.actor);
+    } catch {
+      // A buy panel is never the reason a product page fails.
+      purchase = null;
+    }
+    return { product, projects, purchase };
   },
   render: ({ resolved, ctx }) => {
     if (!resolved) return null;
@@ -845,6 +869,20 @@ export const productDetail = defineBlock({
           {resolved.product.subtitle ? <p className="text-lg text-ink-muted">{resolved.product.subtitle}</p> : null}
           {resolved.product.brand ? <p className="text-sm text-ink-muted">{resolved.product.brand}</p> : null}
         </div>
+        {resolved.purchase && resolved.purchase.variants.length > 0 ? (
+          <AddToCart
+            product={resolved.purchase}
+            formatMinor={(minor) =>
+              formatMoney(minor, resolved.purchase?.currency ?? "USD", ctx.locale)
+            }
+            labels={{
+              add: ctx.t("store.buy.add"),
+              choose: ctx.t("store.buy.choose"),
+              unavailable: ctx.t("store.buy.unavailable"),
+              priceUnavailable: ctx.t("store.buy.priceUnavailable"),
+            }}
+          />
+        ) : null}
         {resolved.projects.length ? (
           <section className="grid gap-3" aria-labelledby={`service-${resolved.product.id}-projects`}>
             <h2 id={`service-${resolved.product.id}-projects`} className="text-lg font-bold tracking-tight text-ink">
@@ -865,6 +903,82 @@ export const productDetail = defineBlock({
             </ul>
           </section>
         ) : null}
+      </div>
+    );
+  },
+});
+
+/**
+ * The cart line in the chrome (C3.25 slice 3).
+ *
+ * §32's shell contains no hardcoded structure, so the widget is vocabulary
+ * like any other block: the owner places it in the header Section (fresh
+ * instances get it in the default header), and the routing layer hands the
+ * request's cart snapshot through the render context. Without that snapshot —
+ * an email render, the editor preview — the block renders nothing rather than
+ * a dead link.
+ */
+export const cartWidget = defineBlock({
+  type: "cartWidget",
+  labelKey: "cms.block.cartWidget",
+  contexts: ["chrome", "page"],
+  schema: z.object({}),
+  starter: () => ({}),
+  resolve: async (_props, ctx) => (ctx.shopperCart ? ctx.shopperCart() : null),
+  render: ({ resolved, ctx }) => {
+    if (!resolved) return null;
+    const cartPath = ctx.localizeHref?.("/cart") ?? "/cart";
+    const checkoutPath = ctx.localizeHref?.("/checkout") ?? "/checkout";
+    return (
+      <div className="relative inline-flex items-center gap-2 text-sm">
+        <details className="group relative">
+          <summary
+            className="inline-flex cursor-pointer list-none items-center gap-2 rounded-md border border-rule bg-paper px-3 py-1.5 font-semibold text-ink"
+            aria-label={ctx.t("cms.block.cartWidget.summary", { count: resolved.lineCount })}
+          >
+            {ctx.t("cms.block.cartWidget.count", { count: resolved.lineCount })}
+            <span className="text-ink-muted">
+              {formatMoney(resolved.subtotalMinor, resolved.currency, ctx.locale)}
+            </span>
+          </summary>
+          <div className="absolute end-0 z-30 mt-2 w-72 rounded-lg border border-rule bg-surface p-3 shadow-float">
+            {resolved.lines.length === 0 ? (
+              <p className="text-sm text-ink-muted">{ctx.t("cms.block.cartWidget.empty")}</p>
+            ) : (
+              <ul className="grid list-none gap-2 p-0">
+                {resolved.lines.map((line) => (
+                  <li key={line.variantId} className="flex items-baseline justify-between gap-2 text-sm">
+                    <span className="text-ink">
+                      {line.productName}
+                      <span className="ms-1 text-ink-muted">× {line.quantity}</span>
+                    </span>
+                    <span className="text-ink-muted">
+                      {line.lineTotalMinor === null
+                        ? "—"
+                        : formatMoney(line.lineTotalMinor, resolved.currency, ctx.locale)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-3 flex items-center gap-2">
+              <a
+                href={cartPath}
+                className="rounded-md border border-rule px-3 py-1.5 font-semibold text-ink"
+              >
+                {ctx.t("cms.block.cartWidget.view")}
+              </a>
+              {resolved.lines.length > 0 ? (
+                <a
+                  href={checkoutPath}
+                  className="rounded-md bg-accent px-3 py-1.5 font-semibold text-on-accent"
+                >
+                  {ctx.t("cms.block.cartWidget.checkout")}
+                </a>
+              ) : null}
+            </div>
+          </div>
+        </details>
       </div>
     );
   },

@@ -1,10 +1,13 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// The collection storefront grid (C3.25 slice 1).
+// The collection storefront grid (C3.25 slices 1 and 3).
 //
-// Presentational on purpose: the page resolves the collection, this renders
-// it. Keeping it free of data loading is what lets a render test hold both
-// themes and every locale up to the light without a database.
+// Presentational on purpose: the page resolves the collection and the
+// purchase projections, this renders them. Keeping it free of data loading
+// is what lets a render test hold both themes and every locale up to the
+// light without a database.
+
+import { AddToCart, type AddToCartLabels, type AddToCartProduct } from "../../buy/AddToCart";
 
 export interface CollectionGridProduct {
   productId: string;
@@ -32,6 +35,11 @@ export interface CollectionGridLabels {
  * follow and a visitor can open in a new tab, which is the whole point of
  * paginating a storefront rather than infinite-scrolling it. Only the chrome
  * here is translated — titles and subtitles are the owner's own words.
+ *
+ * Slice 3 adds the buy affordance: when the caller passes purchase
+ * projections (catalog.purchaseOptions for exactly the page's products),
+ * each card grows an add-to-cart control — a direct button for a
+ * single-variant product, a picker when the product has options.
  */
 export function CollectionGrid({
   products,
@@ -40,6 +48,9 @@ export function CollectionGrid({
   labels,
   productHref,
   pageHref,
+  purchases,
+  formatMinor,
+  buyLabels,
 }: {
   products: CollectionGridProduct[];
   page: number;
@@ -52,6 +63,10 @@ export function CollectionGrid({
    * the applied filters, so page two of "size M" is itself a URL.
    */
   pageHref?: (page: number) => string;
+  /** Add-to-cart projections keyed by product slug, when the shelf is shoppable. */
+  purchases?: Record<string, AddToCartProduct>;
+  formatMinor?: (minor: number) => string;
+  buyLabels?: AddToCartLabels;
 }) {
   const hrefFor = pageHref ?? ((target: number) => `?page=${target}`);
   return (
@@ -74,6 +89,15 @@ export function CollectionGrid({
                   <span className="text-xs font-normal text-ink-muted">{product.brand}</span>
                 ) : null}
               </a>
+              {purchases && formatMinor && buyLabels && purchases[product.slug] ? (
+                <div className="mt-3">
+                  <AddToCart
+                    product={purchases[product.slug]!}
+                    formatMinor={formatMinor}
+                    labels={buyLabels}
+                  />
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>

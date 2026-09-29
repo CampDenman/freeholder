@@ -17,7 +17,7 @@
 // shopper moves inside it.
 
 import type { Metadata } from "next";
-import { browseProducts } from "@/modules/catalog/service";
+import { browseProducts, purchaseOptions } from "@/modules/catalog/service";
 import { composeDocumentTitle, ogImagePath } from "@/core/seo/meta";
 import { siteOrigin } from "@/core/seo/origin";
 import { localePath, localizeCustomerHref } from "@/core/i18n/customer";
@@ -26,6 +26,7 @@ import { formatMoney } from "@/core/i18n";
 import { getLocale, getT } from "../../i18n";
 import { recordPageView } from "../[[...slug]]/pageview";
 import { CollectionGrid, type CollectionGridProduct } from "../c/[slug]/CollectionGrid";
+import { addToCartLabels } from "../buy/AddToCart";
 import { FacetPanel, type FacetPanelData } from "../browse/FacetPanel";
 import { SearchBox } from "../browse/SearchBox";
 import { SortLinks } from "../browse/SortLinks";
@@ -116,6 +117,19 @@ export default async function StorefrontSearchPage({
   const { products, total, facets, currency } = result;
 
   await recordPageView("search", locale, query);
+
+  // Slice 3: the results are shoppable through the same batched projection
+  // the collection page uses — one call for exactly the page's products.
+  const purchases = products.length
+    ? Object.fromEntries(
+        (
+          await purchaseOptions.call(
+            { slugs: products.map((product) => product.slug) },
+            ANONYMOUS,
+          )
+        ).map((entry) => [entry.slug, entry]),
+      )
+    : {};
 
   const defaultLocale = business?.defaultLocale ?? "en";
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -208,6 +222,9 @@ export default async function StorefrontSearchPage({
                 : `/products/${product.slug}`
             }
             pageHref={pageHref}
+            purchases={purchases}
+            formatMinor={formatMinor}
+            buyLabels={addToCartLabels(t)}
           />
         </div>
       </div>
