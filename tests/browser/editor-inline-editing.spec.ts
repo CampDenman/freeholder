@@ -15,7 +15,6 @@ import { users, totpFactors } from "@/core/auth/schema";
 import { CSRF_COOKIE, CSRF_HEADER, issueCsrfToken } from "@/core/http/csrf";
 import { closeDb, db } from "@/core/db";
 import { pages } from "@/modules/cms/schema";
-import { businessProfile } from "@/core/settings/schema";
 import { OWNER } from "../helpers/spine";
 import { resetBrowserDatabase } from "./database";
 
@@ -58,17 +57,8 @@ test.describe("inline canvas editing", () => {
       userId: OWNER.userId,
       encryptedSecret: "c224-canvas-fixture",
     });
-    await db()
-      .insert(businessProfile)
-      .values({
-        name: "Canvas Studio",
-        country: "CA",
-        baseCurrency: "CAD",
-        timezone: "America/Vancouver",
-        defaultLocale: "en",
-        enabledLocales: ["en"],
-        setupCompletedAt: new Date(),
-      });
+    // demo.install writes the business profile itself (the demo IS the
+    // Aurora Coast setup), so nothing else is seeded here.
     const session = await db().transaction((tx) =>
       createSession(tx, OWNER.userId, { twoFactorVerified: true }),
     );
