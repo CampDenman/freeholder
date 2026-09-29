@@ -3452,7 +3452,7 @@ what is true now and what remains.
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C3.24 native storefront parity — the capability mapping is published (`deploy/c324-storefront-parity-2026-09-29.md`, 2026-09-29) with every gap dispositioned to C3.25/C2.24; the box stays open only until those items close the two fix-now gaps (collections/faceted browse/storefront search; public cart/checkout UI) — the remaining C1–C10 product item, and it is what keeps C11.16's box open. Live settlement (C11.05 honesty). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 closed 2026-09-28 by the live Tier-1 restore drill (`deploy/c11-08-restore-summary.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | §43.2's F01–F12 row applies per item. C3.24 native storefront parity — the capability mapping is published (`deploy/c324-storefront-parity-2026-09-29.md`, 2026-09-29) with every gap dispositioned to C3.25/C2.24; the box stays open only until those items close the two fix-now gaps (collections/faceted browse/storefront search; public cart/checkout UI) — the remaining C1–C10 product item, and it is what keeps C11.16's box open. C2.25 world-class visual editor and C3.26 world-class merchandising (new open work, owner directive 2026-09-29). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 closed 2026-09-28 by the live Tier-1 restore drill (`deploy/c11-08-restore-summary.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -4271,6 +4271,19 @@ project without silent telemetry, and ready to carry money.
   and G2. The service-side taxonomy, browse and public cart/checkout pages
   are C3.25; this item owns only the blocks that render them. New work:
   unchecked until the blocks land with their tests.)
+- [ ] **C2.25** World-class visual editing: true
+  what-you-see-is-what-renders editing — the page itself is the canvas
+  (inline text/image editing on the rendered surface), drag-and-drop
+  blocks and sections anywhere on the site AND in store contexts
+  (collection layouts, product rows), no separate preview frame required
+  for ordinary edits. (Owner feedback 2026-09-29, Tony Aly: "last time I
+  tried the wysiwyg it was not very wysiwyg" — the current block-form +
+  preview-frame architecture is the starting point, not the bar. First
+  evidence: a dated current-state UX audit naming every not-WYSIWYG
+  interaction; then the overhaul with browser journeys proving drag, drop,
+  inline edit, and store-section composition. Renumbered from C2.24 when
+  #446's storefront-parity items merged first; C2.24's blocks are the
+  parity floor this item's store-composition bar builds on.)
 
 **C2 exit:** every public or message-facing surface is safely editable by a
 human, collaboratively, without code, lock-in markup or accidental publication.
@@ -4576,6 +4589,19 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   builds on are C5.20–C5.22, already native and tested. Proof contract:
   mapping rows 2 and 3 flip to native with cited tests. New work: unchecked
   until both gaps close.)
+- [ ] **C3.26** World-class merchandising: first-class product taxonomy —
+  collections and categories with manual and rule-based (segment-driven)
+  membership; faceted storefront browsing (filter/sort on price, options,
+  attributes); native collection pages with grids, pagination and
+  SEO/sitemap integration; merchandising blocks for the editor (product
+  grid, featured collection, buy-button). (Owner directive 2026-09-29,
+  Tony Aly: ecommerce must be truly world-class and best-of-breed.
+  Evidence standard: the C3.24 parity mapping's gap list closed
+  item-by-item + browser journeys proving a shopper can browse
+  collections, filter, and buy; five proofs named. Renumbered from C3.25
+  when #446's storefront-parity items merged first; this item extends
+  C3.25's collections/faceted-browse parity floor to the world-class
+  ceiling described here.)
 
 **C3 exit:** every capability has one machine-checked contract; extensions and
 deployments are portable, testable and incapable of silently forking the truth.
