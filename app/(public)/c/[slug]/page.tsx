@@ -1,20 +1,28 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// The public collection page (C3.25 slice 1, gap G1 of
+// The public collection page (C3.25 slices 1–2, gap G1 of
 // deploy/c324-storefront-parity-2026-09-29.md).
 //
 // Why a route and not a CMS page: the catch-all route renders block trees an
 // owner composed, but the collection *grid* is an entity rendering — the
-// membership, ordering and pagination come from the catalog services and stay
-// current without anyone editing a page. The editor block that lets an owner
-// compose a collection onto any page is C2.24; this route is the address the
-// taxonomy itself lives at. Same exemption the gift-registry page already
-// takes: §32's "structure is data" governs authored pages, not entity views.
+// membership, ordering, filtering and pagination come from the catalog
+// services and stay current without anyone editing a page. The editor block
+// that lets an owner compose a collection onto any page is C2.24; this route
+// is the address the taxonomy itself lives at. Same exemption the gift
+// registry page already takes: §32's "structure is data" governs authored
+// pages, not entity views.
+//
+// Slice 2 adds the faceted browse: the same catalog.browseProducts query the
+// search page uses, filter state in query params, facet links that are
+// crawlable anchors, and the SEO doctrine for filtered views (src/core/seo/
+// meta.ts): a filter-shaped query is a different page to a crawler and the
+// same page to a visitor — noindexed, canonicalised to the clean collection
+// address, robots-disallowed by pattern.
 
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { resolvePublicCollection } from "@/modules/catalog/service";
+import { browseProducts } from "@/modules/catalog/service";
 import {
   breadcrumbJsonLd,
   collectionPageJsonLd,
@@ -24,6 +32,7 @@ import {
 import {
   composeDescription,
   composeDocumentTitle,
+  isFilterQuery,
   ogImagePath,
 } from "@/core/seo/meta";
 import { siteOrigin } from "@/core/seo/origin";
@@ -34,6 +43,14 @@ import { getLocale, getT } from "../../../i18n";
 import { recordPageView } from "../../[[...slug]]/pageview";
 import { ShareBar } from "../../ShareBar";
 import { CollectionGrid, type CollectionGridProduct } from "./CollectionGrid";
+import { FacetPanel, type FacetPanelData } from "../../browse/FacetPanel";
+import { SortLinks } from "../../browse/SortLinks";
+import {
+  browseQueryString,
+  browseServiceFilters,
+  parseBrowseQuery,
+  type BrowseQuery,
+} from "../../browse-params";
 
 export const dynamic = "force-dynamic";
 
@@ -43,19 +60,19 @@ const PAGE_SIZE = 24;
 type Params = { slug: string };
 type Query = Record<string, string | string[] | undefined>;
 
-/** One-based page number; anything unparsable is page one, never page zero. */
-function pageNumber(query: Query): number {
-  const raw = query.page;
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
-}
-
-async function resolve(slug: string, page: number) {
-  return resolvePublicCollection.call(
-    { slug, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE },
+async function browse(slug: string, query: Query) {
+  const parsed = parseBrowseQuery(query);
+  const result = await browseProducts.call(
+    {
+      collectionSlug: slug,
+      filters: browseServiceFilters(parsed),
+      sort: parsed.sort ?? "featured",
+      limit: PAGE_SIZE,
+      offset: (parsed.page - 1) * PAGE_SIZE,
+    },
     ANONYMOUS,
   );
+  return { parsed, result };
 }
 
 function seoOf(collection: { seo: unknown }): {
@@ -67,7 +84,9 @@ function seoOf(collection: { seo: unknown }): {
 
 /**
  * The collection's own address in a locale (§4.9's URL strategy: the default
- * locale goes unprefixed, the others carry their tag).
+ * locale goes unprefixed, the others carry their tag). Filtered views
+ * canonicalise here — the clean address is the search result, the filter
+ * combinations are not (the SEO doctrine's near-duplicate rule).
  */
 function canonicalFor(
   origin: string,
@@ -110,11 +129,11 @@ export async function generateMetadata({
   searchParams: Promise<Query>;
 }): Promise<Metadata> {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
-  const page = pageNumber(query);
-  const [{ collection }, business] = await Promise.all([
-    resolve(slug, page),
+  const [{ result: browseResult }, business] = await Promise.all([
+    browse(slug, query),
     currentBusiness(),
   ]);
+  const collection = browseResult.collection;
   if (!collection) return {};
 
   const seo = seoOf(collection);
@@ -131,13 +150,15 @@ export async function generateMetadata({
   const canonical = canonicalFor(origin, collection.slug, defaultLocale, defaultLocale);
   const alternates = alternatesFor(origin, collection.slug, business);
 
-  // Paginated views are real URLs a visitor can land on, but they are not
-  // what a search result should point at — the collection is. They stay
-  // followable so a crawler still walks them to the products.
+  // Filtered, sorted and paginated views are real URLs a visitor can land
+  // on, but they are not what a search result should point at — the
+  // collection is. They stay followable so a crawler still walks them to
+  // the products, and the page declines to be indexed (meta.ts's doctrine).
+  const filtered = isFilterQuery(query);
   return {
     title,
     description,
-    robots: page > 1 ? { index: false, follow: true } : undefined,
+    robots: filtered ? { index: false, follow: true } : undefined,
     alternates: { canonical, ...(alternates ? { languages: alternates } : {}) },
     openGraph: {
       title,
@@ -169,12 +190,12 @@ export default async function PublicCollectionPage({
     headers(),
   ]);
   const nonce = requestHeaders.get(CSP_NONCE_HEADER) ?? undefined;
-  const page = pageNumber(query);
   const [locale, t] = await Promise.all([getLocale(), getT()]);
-  const [{ collection, products, total }, business] = await Promise.all([
-    resolve(slug, page),
+  const [{ parsed, result }, business] = await Promise.all([
+    browse(slug, query),
     currentBusiness(),
   ]);
+  const { collection, products, total, facets, currency } = result;
   // Unpublished, trashed or never-there: one answer, and the honest one.
   if (!collection) notFound();
 
@@ -185,11 +206,25 @@ export default async function PublicCollectionPage({
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const gridProducts: CollectionGridProduct[] = products;
   const description = seoOf(collection).description ?? collection.description;
-  const url = canonicalFor(origin, collection.slug, locale, defaultLocale);
+
+  const hrefFor = (browseQuery: BrowseQuery) => {
+    const params = browseQueryString(browseQuery);
+    const path = localePath(`c/${collection.slug}`, locale, defaultLocale);
+    return params ? `${path}?${params}` : path;
+  };
+  const pageHref = (target: number) => hrefFor({ ...parsed, page: target });
+  const formatMinor = (minor: number) =>
+    new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: currency ?? business?.baseCurrency ?? "USD",
+      minimumFractionDigits: 0,
+    }).format(minor / 100);
+  const facetData: FacetPanelData = facets;
 
   // §5's structured-data contract: the page says what it is (a CollectionPage
   // carrying an ItemList), where it sits (a breadcrumb one hop under home),
   // and what it holds (every visible product, in the order shown).
+  const url = canonicalFor(origin, collection.slug, locale, defaultLocale);
   const jsonLd = [
     breadcrumbJsonLd(origin, `c/${collection.slug}`, (segmentPath) =>
       segmentPath === "" ? (business?.name ?? t("home.brand")) : collection.title,
@@ -228,23 +263,59 @@ export default async function PublicCollectionPage({
             <p className="max-w-prose text-ink-muted">{collection.description}</p>
           ) : null}
         </header>
-        <CollectionGrid
-          products={gridProducts}
-          page={page}
-          pageCount={pageCount}
-          labels={{
-            empty: t("store.collection.empty"),
-            previous: t("store.collection.previous"),
-            next: t("store.collection.next"),
-            page: t("store.collection.page", { page, pages: pageCount }),
-            pagination: t("store.collection.pagination"),
-          }}
-          productHref={(product) =>
-            business
-              ? localizeCustomerHref(`/products/${product.slug}`, locale, business)
-              : `/products/${product.slug}`
-          }
-        />
+        <div className="grid items-start gap-6 lg:grid-cols-[16rem_1fr]">
+          <FacetPanel
+            facets={facetData}
+            query={parsed}
+            hrefFor={hrefFor}
+            formatMinor={formatMinor}
+            labels={{
+              nav: t("store.browse.filters"),
+              heading: t("store.browse.filters"),
+              clearAll: t("store.browse.clear"),
+              price: t("store.browse.price"),
+              priceMin: t("store.browse.priceMin"),
+              priceMax: t("store.browse.priceMax"),
+              priceApply: t("store.browse.priceApply"),
+              availability: t("store.browse.availability"),
+              inStock: t("store.browse.inStock"),
+              outOfStock: t("store.browse.outOfStock"),
+              observedRange: (min, max, unit) => t("store.browse.range", { min, max, unit }),
+            }}
+          />
+          <div className="grid gap-4">
+            <SortLinks
+              query={parsed}
+              hrefFor={hrefFor}
+              labels={{
+                nav: t("store.browse.sort"),
+                featured: t("store.browse.sort.featured"),
+                priceAsc: t("store.browse.sort.priceAsc"),
+                priceDesc: t("store.browse.sort.priceDesc"),
+                newest: t("store.browse.sort.newest"),
+                title: t("store.browse.sort.title"),
+              }}
+            />
+            <CollectionGrid
+              products={gridProducts}
+              page={parsed.page}
+              pageCount={pageCount}
+              labels={{
+                empty: t("store.collection.empty"),
+                previous: t("store.collection.previous"),
+                next: t("store.collection.next"),
+                page: t("store.collection.page", { page: parsed.page, pages: pageCount }),
+                pagination: t("store.collection.pagination"),
+              }}
+              productHref={(product) =>
+                business
+                  ? localizeCustomerHref(`/products/${product.slug}`, locale, business)
+                  : `/products/${product.slug}`
+              }
+              pageHref={pageHref}
+            />
+          </div>
+        </div>
       </div>
       <ShareBar
         path={`c/${collection.slug}`}

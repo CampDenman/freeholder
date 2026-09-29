@@ -248,12 +248,16 @@ describe.runIf(hasDatabase)("the collection page at /c/<slug>", { timeout: 60_00
     await bigWall();
 
     const first = await renderPage("big-wall");
-    expect(first.html).toContain('href="?page=2"');
+    // Slice 2's pagination keeps the full view address: an absolute, still
+    // crawlable URL rather than a bare relative query.
+    expect(first.html).toContain('href="/c/big-wall?page=2"');
     expect(first.html).toContain("Page 1 of 2");
 
     const second = await renderPage("big-wall", { page: "2" });
     expect(second.metadata.robots).toEqual({ index: false, follow: true });
-    expect(second.html).toContain('href="?page=1"');
+    // Page one of this view is the clean collection address — the prev link
+    // drops the page param entirely rather than minting ?page=1.
+    expect(second.html).toContain('href="/c/big-wall"');
     expect(second.html).toContain('rel="prev"');
     expect(second.html).not.toContain('rel="next"');
   });
@@ -302,11 +306,13 @@ describe.runIf(hasDatabase)("the collection page at /c/<slug>", { timeout: 60_00
     await expect(renderPage("dark")).rejects.toThrow();
   });
 
-  it("treats unparsable page numbers as page one", async () => {
+  it("treats unparsable page numbers as page one but still declines the junk URL", async () => {
     await publishedWall();
     const { html, metadata } = await renderPage("wall", { page: "banana" });
     expect(html).not.toContain("?page=");
-    expect(metadata.robots).toBeUndefined();
+    // The page renders as page one, but ?page=banana is still a filter-shaped
+    // address for a different query string — noindexed per the doctrine.
+    expect(metadata.robots).toEqual({ index: false, follow: true });
   });
 
   it("feeds the sitemap everything the page renders, and nothing it does not", async () => {
