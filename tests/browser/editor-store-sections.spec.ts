@@ -355,6 +355,9 @@ test.describe("store-section composition on the canvas", () => {
       await expect(saved).toHaveText("Saved", { timeout: 15_000 });
 
       await page.getByRole("button", { name: "Publish changes" }).click();
+      // The publish is a save-then-publish server round-trip: wait for the
+      // editor to say it landed before reading the public page.
+      await expect(saved).toHaveText("Saved", { timeout: 15_000 });
       await page.goto("/summer-drop");
       // The band now shelves the harbour light; the row still holds its
       // picked prints.
