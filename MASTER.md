@@ -4575,7 +4575,13 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   editor blocks that render both are C2.24. The cart/checkout services this
   builds on are C5.20–C5.22, already native and tested. Proof contract:
   mapping rows 2 and 3 flip to native with cited tests. New work: unchecked
-  until both gaps close.)
+  until both gaps close. Slice 1 (product taxonomy, 2026-09-29): collections
+  and collection_products tables with services, trash/restore/purge, segment
+  recompute, public /c/<slug> pages with SEO stamping, and admin UI —
+  evidence `src/modules/catalog/collections.ts`, migration
+  `db/migrations/0020_collections.sql`, `tests/core/catalog-collections.test.ts`,
+  `tests/core/collections-storefront.test.ts`; faceted browse, storefront
+  search and the public cart/checkout pages remain for later slices.)
 
 **C3 exit:** every capability has one machine-checked contract; extensions and
 deployments are portable, testable and incapable of silently forking the truth.

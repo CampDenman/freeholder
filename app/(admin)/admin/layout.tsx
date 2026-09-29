@@ -136,6 +136,7 @@ export default async function AdminLayout({
               payments: t("payments.title"),
               pos: t("pos.title"),
               products: t("catalog.title"),
+              collections: t("admin.nav.collections"),
               prices: t("catalog.prices.listsTitle"),
               inventory: t("catalog.inventory.title"),
               procurement: t("catalog.procure.title"),

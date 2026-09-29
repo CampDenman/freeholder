@@ -24,6 +24,7 @@ import {
   ShoppingCart,
   Calculator,
   ClipboardText,
+  SquaresFour,
   AirplaneTakeoff,
   ArrowUUpLeft,
   ArrowBendUpRight,
@@ -100,6 +101,7 @@ export interface AdminNavLabels {
   payments: string;
   pos: string;
   products: string;
+  collections: string;
   prices: string;
   inventory: string;
   procurement: string;
@@ -176,6 +178,7 @@ const LINKS = [
   { href: "/admin/payments", key: "payments", module: "invoicing", Icon: CreditCard },
   { href: "/admin/pos", key: "pos", module: "invoicing", Icon: DeviceMobile },
   { href: "/admin/products", key: "products", module: "catalog", Icon: Package },
+  { href: "/admin/collections", key: "collections", module: "catalog", Icon: SquaresFour },
   { href: "/admin/price-lists", key: "prices", module: "catalog", Icon: CurrencyDollar },
   { href: "/admin/inventory", key: "inventory", module: "catalog", Icon: Stack },
   { href: "/admin/procurement", key: "procurement", module: "catalog", Icon: Truck },

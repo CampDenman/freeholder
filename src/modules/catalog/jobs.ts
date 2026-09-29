@@ -36,4 +36,39 @@ export const recoverAbandonedCarts = defineJob({
   },
 });
 
-export default [expireReservations, abandonStaleCarts, recoverAbandonedCarts];
+/**
+ * Segment collections follow an audience, so their membership is a derived
+ * answer with a freshness date on it, not a fact that keeps itself true.
+ * Hourly is the same cadence as the cart sweeps: often enough that a
+ * collection a customer sees is near-current, bounded enough that a job run
+ * is one pass over the segment collections that exist.
+ */
+export const recomputeSegmentCollections = defineJob({
+  name: "catalog.recomputeSegmentCollections",
+  summary: "Re-derive every segment-driven collection's membership from its segment.",
+  schedule: "23 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { db } = await import("@/core/db");
+    const { and, eq, isNull } = await import("drizzle-orm");
+    const { collections } = await import("./schema");
+    const { recomputeCollectionMembership } = await import("./collections");
+    const rows = await db()
+      .select({ id: collections.id })
+      .from(collections)
+      .where(and(eq(collections.ruleType, "segment"), isNull(collections.trashedAt)));
+    let recomputed = 0;
+    for (const row of rows) {
+      await recomputeCollectionMembership.call({ id: row.id }, { kind: "system" });
+      recomputed += 1;
+    }
+    return { recomputed };
+  },
+});
+
+export default [
+  expireReservations,
+  abandonStaleCarts,
+  recoverAbandonedCarts,
+  recomputeSegmentCollections,
+];

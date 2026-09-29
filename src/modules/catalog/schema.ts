@@ -28,6 +28,8 @@ import {
   ATTRIBUTE_KINDS,
   BUNDLE_PRICE_MODES,
   CANCELLATION_FEE_TYPES,
+  COLLECTION_RULE_TYPES,
+  COLLECTION_SORT_ORDERS,
   MEDIA_ROLES,
   PRICE_BREAK_MODES,
   PRICE_LIST_KINDS,
@@ -1536,4 +1538,113 @@ export const cartRecoveries = pgTable(
     recoveredAt: timestamp("recovered_at", { withTimezone: true }),
   },
   (t) => [uniqueIndex("cart_recoveries_cart_idx").on(t.cartId)],
+);
+
+/** SEO overrides, same shape and limits the CMS and products use (§5). */
+export interface CollectionSeo {
+  title?: string;
+  description?: string;
+}
+
+/**
+ * A named group of products the storefront can browse (C3.25 slice 1).
+ *
+ * The catalog was a flat list; this is the taxonomy layer the parity mapping
+ * (`deploy/c324-storefront-parity-2026-09-29.md`, gap G1) proved missing.
+ * Rows are owner-scoped the same way every catalog table is: one Freeholder
+ * instance, one owner, reads and writes riding the module's scoped grant.
+ *
+ * Membership has two honest modes, never a third hidden one. `manual` rows
+ * in `collection_products` are the membership, pinned and ordered by the
+ * owner. `segment` membership is derived by the recompute job from one saved
+ * segment (§4.14) and the paid orders its contacts placed — the rows exist
+ * so the public read is one indexed join, but the job, not a hand, decides
+ * what is in. A segment collection refuses manual add/remove/reorder rather
+ * than letting an edit silently fight the next recompute.
+ *
+ * Removal is trash, never deletion (C11.14): `trashed_at` keeps the slug
+ * taken and the row recoverable for thirty days, and trashing or purging a
+ * collection touches nothing on the products it grouped — the taxonomy
+ * points at products; it does not own them.
+ */
+export const collections = pgTable(
+  "collections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    /** Public address is /c/<slug>; unique even while trashed, so a recovering collection's name cannot be taken. */
+    slug: text("slug").notNull(),
+    description: text("description"),
+    seo: jsonb("seo").$type<CollectionSeo>().notNull().default({}),
+    ruleType: text("rule_type", { enum: COLLECTION_RULE_TYPES })
+      .notNull()
+      .default("manual"),
+    /** `segment` collections store { segmentId }; `manual` collections store {}. */
+    ruleConfig: jsonb("rule_config")
+      .$type<{ segmentId?: string }>()
+      .notNull()
+      .default({}),
+    sortOrder: text("sort_order", { enum: COLLECTION_SORT_ORDERS })
+      .notNull()
+      .default("manual"),
+    published: boolean("published").notNull().default(false),
+    imageId: uuid("image_id").references(() => assets.id, { onDelete: "set null" }),
+    trashedAt: timestamp("trashed_at", { withTimezone: true }),
+    /** Compare-and-swap token, the same stale-write refusal products use. */
+    version: integer("version").notNull().default(1),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("collections_slug_idx").on(t.slug),
+    index("collections_published_idx").on(t.published, t.updatedAt),
+    index("collections_rule_idx").on(t.ruleType),
+    check(
+      "collections_slug_valid",
+      sql`char_length(${t.slug}) between 1 and 180 and ${t.slug} ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'`,
+    ),
+    check("collections_title_valid", sql`char_length(${t.title}) between 1 and 240`),
+    check(
+      "collections_rule_type_valid",
+      sql`${t.ruleType} in ('manual','segment')`,
+    ),
+    check(
+      "collections_sort_order_valid",
+      sql`${t.sortOrder} in ('manual','title','newest')`,
+    ),
+    check(
+      "collections_segment_rule_config",
+      sql`(${t.ruleType} = 'segment') = (${t.ruleConfig} ? 'segmentId')`,
+    ),
+    check("collections_version_positive", sql`${t.version} > 0`),
+  ],
+);
+
+/**
+ * Membership of one product in one collection, ordered by `position`.
+ *
+ * For `manual` collections the owner manages these rows. For `segment`
+ * collections the recompute job rewrites them wholesale, so a read never has
+ * to ask who derived what. Deleting a collection cascades to its membership;
+ * deleting a product cascades out of every collection it was in — the join
+ * is the only thing that disappears.
+ */
+export const collectionProducts = pgTable(
+  "collection_products",
+  {
+    collectionId: uuid("collection_id")
+      .notNull()
+      .references(() => collections.id, { onDelete: "cascade" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("collection_products_unique_idx").on(t.collectionId, t.productId),
+    index("collection_products_product_idx").on(t.productId),
+    index("collection_products_position_idx").on(t.collectionId, t.position),
+    check("collection_products_position_valid", sql`${t.position} between 0 and 100000`),
+  ],
 );

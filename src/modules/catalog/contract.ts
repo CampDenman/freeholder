@@ -147,3 +147,18 @@ export const RETURN_STATUSES = [
 export const COUPON_KINDS = ["percent", "fixed", "free_shipping"] as const;
 export const GIFT_CARD_STATUSES = ["active", "redeemed", "void"] as const;
 export const OFFER_RULE_KINDS = ["bump", "post_add"] as const;
+
+/**
+ * How a collection's membership is decided (C3.25 slice 1).
+ *
+ * `manual` rows are pinned one product at a time by the owner.
+ * `segment` membership is derived: the collection names one saved segment
+ * (§4.14's one definition of "who") and the recompute job fills the
+ * collection with what those contacts bought, so the collection follows the
+ * audience instead of being re-curated by hand.
+ */
+export const COLLECTION_RULE_TYPES = ["manual", "segment"] as const;
+export type CollectionRuleType = (typeof COLLECTION_RULE_TYPES)[number];
+
+export const COLLECTION_SORT_ORDERS = ["manual", "title", "newest"] as const;
+export type CollectionSortOrder = (typeof COLLECTION_SORT_ORDERS)[number];

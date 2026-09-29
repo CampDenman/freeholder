@@ -281,3 +281,27 @@ export function collectionPageJsonLd(input: {
     ...(input.description ? { description: input.description } : {}),
   };
 }
+
+/**
+ * A collection's products as a list (§5's structured-data contract for
+ * /c/<slug>). `item` is omitted for a product with no public address of its
+ * own yet; the name and position still tell a crawler what the list holds.
+ */
+export function itemListJsonLd(input: {
+  name: string;
+  url: string;
+  items: Array<{ name: string; url?: string }>;
+}): JsonLd {
+  return {
+    "@context": CONTEXT,
+    "@type": "ItemList",
+    name: input.name,
+    url: input.url,
+    itemListElement: input.items.map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.name,
+      ...(item.url ? { item: item.url } : {}),
+    })),
+  };
+}

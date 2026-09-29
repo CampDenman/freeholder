@@ -259,6 +259,7 @@ export const SERVICE_NAMES = [
   "catalog.activateProduct",
   "catalog.addBundleComponent",
   "catalog.addCartItem",
+  "catalog.addCollectionProduct",
   "catalog.addOptionValue",
   "catalog.addProductRelation",
   "catalog.addPurchaseOrderLine",
@@ -278,11 +279,13 @@ export const SERVICE_NAMES = [
   "catalog.cancelOrder",
   "catalog.cancelPurchaseOrder",
   "catalog.checkoutCart",
+  "catalog.collectionPaths",
   "catalog.compareProducts",
   "catalog.consumeReservation",
   "catalog.countStock",
   "catalog.createAttributeDefinition",
   "catalog.createCancellationPolicy",
+  "catalog.createCollection",
   "catalog.createCoupon",
   "catalog.createCustomerGroup",
   "catalog.createDeliveryWindow",
@@ -305,6 +308,7 @@ export const SERVICE_NAMES = [
   "catalog.failFulfillment",
   "catalog.filterProductsByAttribute",
   "catalog.getCart",
+  "catalog.getCollection",
   "catalog.getFulfillment",
   "catalog.getOrCreateCart",
   "catalog.getOrder",
@@ -320,6 +324,7 @@ export const SERVICE_NAMES = [
   "catalog.listCancellationPolicies",
   "catalog.listCartOffers",
   "catalog.listCarts",
+  "catalog.listCollections",
   "catalog.listCoupons",
   "catalog.listCustomerGroups",
   "catalog.listDigitalDeliveries",
@@ -370,12 +375,15 @@ export const SERVICE_NAMES = [
   "catalog.releaseReservation",
   "catalog.removeBundleComponent",
   "catalog.removeCartItem",
+  "catalog.removeCollectionProduct",
   "catalog.removePriceRule",
   "catalog.removeProductRelation",
   "catalog.removeWishlistItem",
+  "catalog.reorderCollectionProducts",
   "catalog.requestReturn",
   "catalog.reserveStock",
   "catalog.resolvePrice",
+  "catalog.resolvePublicCollection",
   "catalog.resolveVisibleProduct",
   "catalog.restoreProduct",
   "catalog.revokeWishlistShare",
@@ -394,6 +402,7 @@ export const SERVICE_NAMES = [
   "catalog.shipFulfillment",
   "catalog.subscribeBackInStock",
   "catalog.transferStock",
+  "catalog.updateCollection",
   "catalog.updateProduct",
   "catalog.updateProductDescription",
   "catalog.upsertServiceOffering",
@@ -491,6 +500,9 @@ export const SERVICE_NAMES = [
   "cms.updateSection",
   "cms.updateTemplate",
   "cms.verifyDemoFixture",
+  "collections.purge",
+  "collections.remove",
+  "collections.restore",
   "community.createPost",
   "community.createPostBySlug",
   "community.createRoom",
@@ -2390,6 +2402,10 @@ export interface ServiceCatalog {
     input: { cartId: string; cartToken?: string; variantId: string; quantity?: number; locationId?: string; galleryId?: string; assetId?: string };
     output: { cart: { id: string; token: string | null; contactId: string | null; currency: string; kind: "cart" | "saved"; status: "open" | "converted" | "abandoned"; name: string | null; lastActivityAt: string; abandonedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; cartId: string; variantId: string; locationId: string | null; quantity: number; reservationId: string | null; galleryId: string | null; assetId: string | null; createdAt: string; updatedAt: string; sku: string; productName: string; requiresShipping: boolean; weightG: number | null; lengthMm: number | null; widthMm: number | null; heightMm: number | null; unitAmountMinor: number | null; lineTotalMinor: number | null; priceAvailable: boolean; priceReason: string | null; stock: { tracked: false; available: boolean; quantity?: number } | { tracked: true; available: boolean; backordered: boolean; restockAt: string | null; onHand: number; reserved: number; incoming: number; canPromise: number }; [key: string]: unknown }[]; subtotalMinor: number; allPriced: boolean; allAvailable: boolean };
   };
+  "catalog.addCollectionProduct": {
+    input: { collectionId: string; productId: string };
+    output: { collectionId: string; productId: string; position: number; [key: string]: unknown };
+  };
   "catalog.addOptionValue": {
     input: { optionTypeId: string; name: string; skuFragment: string; position?: number };
     output: { id: string; optionTypeId: string; name: string; skuFragment: string; position: number; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -2466,6 +2482,10 @@ export interface ServiceCatalog {
     input: { cartId: string; contactId: string; idempotencyKey: string; acceptedTerms: true; shippingAddress?: { name?: string; street1?: string; city?: string; region?: string; postalCode?: string; country: string }; shippingMethodId?: string; locationId?: string; couponCode?: string; giftCardCode?: string; applyBalance?: boolean };
     output: { order: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; orderId: string; variantId: string; quantity: number; unitAmountMinor: number; lineTotalMinor: number; snapshot: unknown; createdAt: string; [key: string]: unknown }[] };
   };
+  "catalog.collectionPaths": {
+    input: { locale?: string };
+    output: { slug: string; title: string; description?: string; updatedAt: string; kind: "collection"; [key: string]: unknown }[];
+  };
   "catalog.compareProducts": {
     input: { productIds: string[] };
     output: { products: { id: string; name: string; slug: string; kind: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; subtitle: string | null; description: unknown; brand: string | null; status: "draft" | "active" | "archived"; visibility: "public" | "unlisted" | "member_only"; taxCategoryId: string | null; seo: unknown; workingName: string | null; workingSubtitle: string | null; workingDescription: unknown | null; workingSeo: unknown | null; schemaType: string; publishedAt: string | null; archivedAt: string | null; version: number; createdAt: string; updatedAt: string; [key: string]: unknown }[]; rows: { key: string; label: string; kind: "text" | "number" | "bool" | "enum" | "measure"; unit: string | null; groupName: string | null; values: { [key: string]: boolean | string | null } }[] };
@@ -2485,6 +2505,10 @@ export interface ServiceCatalog {
   "catalog.createCancellationPolicy": {
     input: { name: string; freeUntilHours?: number; feeType?: "none" | "fixed" | "percent" | "forfeit_deposit"; feeAmount?: string; feePercentPpm?: number; rescheduleLimit?: number; noShowFeeAmount?: string; currency?: string };
     output: { id: string; name: string; freeUntilHours: number; feeType: "none" | "fixed" | "percent" | "forfeit_deposit"; feeValue: number | null; rescheduleLimit: number; noShowFeeMinor: number; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "catalog.createCollection": {
+    input: { title: string; slug: string; description?: string | null; seo?: { title?: string; description?: string }; ruleType?: "manual" | "segment"; ruleConfig?: { segmentId?: string }; sortOrder?: "manual" | "title" | "newest"; imageId?: string | null; published?: boolean };
+    output: { id: string; title: string; slug: string; description: string | null; seo: unknown; ruleType: "manual" | "segment"; ruleConfig: unknown; sortOrder: "manual" | "title" | "newest"; published: boolean; imageId: string | null; trashedAt: string | null; version: number; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "catalog.createCoupon": {
     input: { code: string; kind: "percent" | "fixed" | "free_shipping"; percentOffPpm?: number; amount?: string; currency?: string; minSubtotal?: string; maxRedemptions?: number; perContactLimit?: number; startsAt?: string; endsAt?: string; recovery?: boolean };
@@ -2574,6 +2598,10 @@ export interface ServiceCatalog {
     input: { cartId?: string; token?: string };
     output: { cart: { id: string; token: string | null; contactId: string | null; currency: string; kind: "cart" | "saved"; status: "open" | "converted" | "abandoned"; name: string | null; lastActivityAt: string; abandonedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; cartId: string; variantId: string; locationId: string | null; quantity: number; reservationId: string | null; galleryId: string | null; assetId: string | null; createdAt: string; updatedAt: string; sku: string; productName: string; requiresShipping: boolean; weightG: number | null; lengthMm: number | null; widthMm: number | null; heightMm: number | null; unitAmountMinor: number | null; lineTotalMinor: number | null; priceAvailable: boolean; priceReason: string | null; stock: { tracked: false; available: boolean; quantity?: number } | { tracked: true; available: boolean; backordered: boolean; restockAt: string | null; onHand: number; reserved: number; incoming: number; canPromise: number }; [key: string]: unknown }[]; subtotalMinor: number; allPriced: boolean; allAvailable: boolean };
   };
+  "catalog.getCollection": {
+    input: { id: string; limit?: number; offset?: number };
+    output: { collection: { id: string; title: string; slug: string; description: string | null; seo: unknown; ruleType: "manual" | "segment"; ruleConfig: unknown; sortOrder: "manual" | "title" | "newest"; published: boolean; imageId: string | null; trashedAt: string | null; version: number; createdAt: string; updatedAt: string; [key: string]: unknown }; products: { productId: string; name: string; slug: string; kind: string; status: string; subtitle: string | null; position: number; [key: string]: unknown }[]; total: number; [key: string]: unknown };
+  };
   "catalog.getFulfillment": {
     input: { id: string };
     output: { fulfillment: { id: string; orderId: string; locationId: string | null; kind: "physical" | "digital"; status: "pending" | "picking" | "packed" | "shipped" | "delivered" | "failed" | "returned"; boxId: string | null; weightG: number | null; carrier: string | null; service: string | null; trackingNumber: string | null; trackingUrl: string | null; shippedAt: string | null; deliveredAt: string | null; note: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; items: { id: string; fulfillmentId: string; orderItemId: string; quantity: number; createdAt: string; [key: string]: unknown }[] };
@@ -2633,6 +2661,10 @@ export interface ServiceCatalog {
   "catalog.listCarts": {
     input: { status?: "open" | "converted" | "abandoned" };
     output: { id: string; token: string | null; contactId: string | null; currency: string; kind: "cart" | "saved"; status: "open" | "converted" | "abandoned"; name: string | null; lastActivityAt: string; abandonedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+  };
+  "catalog.listCollections": {
+    input: { productId?: string; trashedOnly?: boolean };
+    output: { id: string; title: string; slug: string; description: string | null; seo: unknown; ruleType: "manual" | "segment"; ruleConfig: unknown; sortOrder: "manual" | "title" | "newest"; published: boolean; imageId: string | null; trashedAt: string | null; version: number; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
   "catalog.listCoupons": {
     input: Record<string, never>;
@@ -2695,7 +2727,7 @@ export interface ServiceCatalog {
     output: { id: string; kind: "upsell" | "cross_sell" | "accessory" | "replacement" | "variant_of"; position: number; related: { id: string; name: string; slug: string; kind: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; subtitle: string | null; description: unknown; brand: string | null; status: "draft" | "active" | "archived"; visibility: "public" | "unlisted" | "member_only"; taxCategoryId: string | null; seo: unknown; workingName: string | null; workingSubtitle: string | null; workingDescription: unknown | null; workingSeo: unknown | null; schemaType: string; publishedAt: string | null; archivedAt: string | null; version: number; createdAt: string; updatedAt: string; [key: string]: unknown }; [key: string]: unknown }[];
   };
   "catalog.listProducts": {
-    input: { status?: "draft" | "active" | "archived"; kind?: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; visibility?: "public" | "unlisted" | "member_only"; limit?: number };
+    input: { status?: "draft" | "active" | "archived"; kind?: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; visibility?: "public" | "unlisted" | "member_only"; collectionId?: string; limit?: number };
     output: { id: string; name: string; slug: string; kind: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; subtitle: string | null; description: unknown; brand: string | null; status: "draft" | "active" | "archived"; visibility: "public" | "unlisted" | "member_only"; taxCategoryId: string | null; seo: unknown; workingName: string | null; workingSubtitle: string | null; workingDescription: unknown | null; workingSeo: unknown | null; schemaType: string; publishedAt: string | null; archivedAt: string | null; version: number; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
   "catalog.listPurchaseOrders": {
@@ -2834,6 +2866,10 @@ export interface ServiceCatalog {
     input: { cartId: string; cartToken?: string; variantId: string };
     output: { cart: { id: string; token: string | null; contactId: string | null; currency: string; kind: "cart" | "saved"; status: "open" | "converted" | "abandoned"; name: string | null; lastActivityAt: string; abandonedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; cartId: string; variantId: string; locationId: string | null; quantity: number; reservationId: string | null; galleryId: string | null; assetId: string | null; createdAt: string; updatedAt: string; sku: string; productName: string; requiresShipping: boolean; weightG: number | null; lengthMm: number | null; widthMm: number | null; heightMm: number | null; unitAmountMinor: number | null; lineTotalMinor: number | null; priceAvailable: boolean; priceReason: string | null; stock: { tracked: false; available: boolean; quantity?: number } | { tracked: true; available: boolean; backordered: boolean; restockAt: string | null; onHand: number; reserved: number; incoming: number; canPromise: number }; [key: string]: unknown }[]; subtotalMinor: number; allPriced: boolean; allAvailable: boolean };
   };
+  "catalog.removeCollectionProduct": {
+    input: { collectionId: string; productId: string };
+    output: { collectionId: string; productId: string; [key: string]: unknown };
+  };
   "catalog.removePriceRule": {
     input: { productId: string; mode: "full" | "deposit_balance" | "payment_plan" | "hourly" | "retainer" };
     output: { id: string; mode: "full" | "deposit_balance" | "payment_plan" | "hourly" | "retainer" };
@@ -2846,6 +2882,10 @@ export interface ServiceCatalog {
     input: { contactId: string; variantId: string };
     output: { wishlist: { id: string; contactId: string; name: string; createdAt: string; updatedAt: string; [key: string]: unknown } | null; items: { id: string; variantId: string; sku: string; productName: string; [key: string]: unknown }[] };
   };
+  "catalog.reorderCollectionProducts": {
+    input: { collectionId: string; productIds: string[] };
+    output: { collectionId: string; count: number; [key: string]: unknown };
+  };
   "catalog.requestReturn": {
     input: { orderId: string; reason: string; restock?: boolean; items: { orderItemId: string; quantity: number }[] };
     output: { return: { id: string; orderId: string; contactId: string; status: "requested" | "approved" | "received" | "refunded" | "rejected"; reason: string; restock: boolean; labelUrl: string | null; creditNoteId: string | null; refundId: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; items: { id: string; returnId: string; orderItemId: string; quantity: number; restockedQuantity: number; createdAt: string; [key: string]: unknown }[] };
@@ -2857,6 +2897,10 @@ export interface ServiceCatalog {
   "catalog.resolvePrice": {
     input: { variantId: string; currency: string; contactId?: string; quantity?: number; at?: string };
     output: { available: false; currency: string; variantId: string; quantity: number; reason: string } | { available: true; currency: string; variantId: string; quantity: number; amountMinor: number; totalMinor: number; compareAtMinor: number | null; priceListId: string; priceListName: string; kind: "retail" | "wholesale" | "member" | "sale" | "contract"; breakMode: ("volume" | "tiered") | null; breakdown: { qty: number; unitMinor: number }[]; reason: string };
+  };
+  "catalog.resolvePublicCollection": {
+    input: { slug: string; limit?: number; offset?: number };
+    output: { collection: { id: string; title: string; slug: string; description: string | null; seo: unknown; sortOrder: "manual" | "title" | "newest"; updatedAt: string; [key: string]: unknown } | null; products: { productId: string; name: string; slug: string; subtitle: string | null; brand: string | null; [key: string]: unknown }[]; total: number; [key: string]: unknown };
   };
   "catalog.resolveVisibleProduct": {
     input: { slug: string };
@@ -2929,6 +2973,10 @@ export interface ServiceCatalog {
   "catalog.transferStock": {
     input: { fromItemId: string; toLocationId: string; quantity: number; note?: string };
     output: { transferId: string; outgoing: { id: string; inventoryItemId: string; delta: number; reason: "sale" | "return" | "adjustment" | "transfer" | "receipt" | "damage" | "count"; referenceType: string | null; referenceId: string | null; actor: string; note: string | null; createdAt: string; [key: string]: unknown }; incoming: { id: string; inventoryItemId: string; delta: number; reason: "sale" | "return" | "adjustment" | "transfer" | "receipt" | "damage" | "count"; referenceType: string | null; referenceId: string | null; actor: string; note: string | null; createdAt: string; [key: string]: unknown }; from: { onHand: number; reserved: number; incoming: number; available: number }; to: { onHand: number; reserved: number; incoming: number; available: number } };
+  };
+  "catalog.updateCollection": {
+    input: { id: string; expectedVersion: number; title?: string; slug?: string; description?: string | null; seo?: { title?: string; description?: string }; ruleType?: "manual" | "segment"; ruleConfig?: { segmentId?: string }; sortOrder?: "manual" | "title" | "newest"; imageId?: string | null; published?: boolean };
+    output: { id: string; title: string; slug: string; description: string | null; seo: unknown; ruleType: "manual" | "segment"; ruleConfig: unknown; sortOrder: "manual" | "title" | "newest"; published: boolean; imageId: string | null; trashedAt: string | null; version: number; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "catalog.updateProduct": {
     input: { id: string; expectedVersion: number; name?: string; slug?: string; kind?: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; subtitle?: string | null; brand?: string | null; visibility?: "public" | "unlisted" | "member_only"; taxCategoryId?: string | null; seo?: { title?: string; description?: string } };
@@ -3317,6 +3365,18 @@ export interface ServiceCatalog {
   "cms.verifyDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { outcomes: { key: string; achieved: boolean; detail?: string }[] };
+  };
+  "collections.purge": {
+    input: { id: string; confirmation: "PURGE" };
+    output: { id: string; [key: string]: unknown };
+  };
+  "collections.remove": {
+    input: { id: string };
+    output: { id: string; [key: string]: unknown };
+  };
+  "collections.restore": {
+    input: { id: string };
+    output: { id: string; title: string; slug: string; description: string | null; seo: unknown; ruleType: "manual" | "segment"; ruleConfig: unknown; sortOrder: "manual" | "title" | "newest"; published: boolean; imageId: string | null; trashedAt: string | null; version: number; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "community.createPost": {
     input: { roomId: string; contactId: string; body: string };
@@ -7119,6 +7179,7 @@ export interface FreeholderApi {
     activateProduct: (input: ServiceCatalog["catalog.activateProduct"]["input"]) => Promise<ServiceCatalog["catalog.activateProduct"]["output"]>;
     addBundleComponent: (input: ServiceCatalog["catalog.addBundleComponent"]["input"]) => Promise<ServiceCatalog["catalog.addBundleComponent"]["output"]>;
     addCartItem: (input: ServiceCatalog["catalog.addCartItem"]["input"]) => Promise<ServiceCatalog["catalog.addCartItem"]["output"]>;
+    addCollectionProduct: (input: ServiceCatalog["catalog.addCollectionProduct"]["input"]) => Promise<ServiceCatalog["catalog.addCollectionProduct"]["output"]>;
     addOptionValue: (input: ServiceCatalog["catalog.addOptionValue"]["input"]) => Promise<ServiceCatalog["catalog.addOptionValue"]["output"]>;
     addProductRelation: (input: ServiceCatalog["catalog.addProductRelation"]["input"]) => Promise<ServiceCatalog["catalog.addProductRelation"]["output"]>;
     addPurchaseOrderLine: (input: ServiceCatalog["catalog.addPurchaseOrderLine"]["input"]) => Promise<ServiceCatalog["catalog.addPurchaseOrderLine"]["output"]>;
@@ -7138,11 +7199,13 @@ export interface FreeholderApi {
     cancelOrder: (input: ServiceCatalog["catalog.cancelOrder"]["input"]) => Promise<ServiceCatalog["catalog.cancelOrder"]["output"]>;
     cancelPurchaseOrder: (input: ServiceCatalog["catalog.cancelPurchaseOrder"]["input"]) => Promise<ServiceCatalog["catalog.cancelPurchaseOrder"]["output"]>;
     checkoutCart: (input: ServiceCatalog["catalog.checkoutCart"]["input"]) => Promise<ServiceCatalog["catalog.checkoutCart"]["output"]>;
+    collectionPaths: (input?: ServiceCatalog["catalog.collectionPaths"]["input"]) => Promise<ServiceCatalog["catalog.collectionPaths"]["output"]>;
     compareProducts: (input: ServiceCatalog["catalog.compareProducts"]["input"]) => Promise<ServiceCatalog["catalog.compareProducts"]["output"]>;
     consumeReservation: (input: ServiceCatalog["catalog.consumeReservation"]["input"]) => Promise<ServiceCatalog["catalog.consumeReservation"]["output"]>;
     countStock: (input: ServiceCatalog["catalog.countStock"]["input"]) => Promise<ServiceCatalog["catalog.countStock"]["output"]>;
     createAttributeDefinition: (input: ServiceCatalog["catalog.createAttributeDefinition"]["input"]) => Promise<ServiceCatalog["catalog.createAttributeDefinition"]["output"]>;
     createCancellationPolicy: (input: ServiceCatalog["catalog.createCancellationPolicy"]["input"]) => Promise<ServiceCatalog["catalog.createCancellationPolicy"]["output"]>;
+    createCollection: (input: ServiceCatalog["catalog.createCollection"]["input"]) => Promise<ServiceCatalog["catalog.createCollection"]["output"]>;
     createCoupon: (input: ServiceCatalog["catalog.createCoupon"]["input"]) => Promise<ServiceCatalog["catalog.createCoupon"]["output"]>;
     createCustomerGroup: (input: ServiceCatalog["catalog.createCustomerGroup"]["input"]) => Promise<ServiceCatalog["catalog.createCustomerGroup"]["output"]>;
     createDeliveryWindow: (input: ServiceCatalog["catalog.createDeliveryWindow"]["input"]) => Promise<ServiceCatalog["catalog.createDeliveryWindow"]["output"]>;
@@ -7165,6 +7228,7 @@ export interface FreeholderApi {
     failFulfillment: (input: ServiceCatalog["catalog.failFulfillment"]["input"]) => Promise<ServiceCatalog["catalog.failFulfillment"]["output"]>;
     filterProductsByAttribute: (input: ServiceCatalog["catalog.filterProductsByAttribute"]["input"]) => Promise<ServiceCatalog["catalog.filterProductsByAttribute"]["output"]>;
     getCart: (input?: ServiceCatalog["catalog.getCart"]["input"]) => Promise<ServiceCatalog["catalog.getCart"]["output"]>;
+    getCollection: (input: ServiceCatalog["catalog.getCollection"]["input"]) => Promise<ServiceCatalog["catalog.getCollection"]["output"]>;
     getFulfillment: (input: ServiceCatalog["catalog.getFulfillment"]["input"]) => Promise<ServiceCatalog["catalog.getFulfillment"]["output"]>;
     getOrCreateCart: (input: ServiceCatalog["catalog.getOrCreateCart"]["input"]) => Promise<ServiceCatalog["catalog.getOrCreateCart"]["output"]>;
     getOrder: (input: ServiceCatalog["catalog.getOrder"]["input"]) => Promise<ServiceCatalog["catalog.getOrder"]["output"]>;
@@ -7180,6 +7244,7 @@ export interface FreeholderApi {
     listCancellationPolicies: (input?: ServiceCatalog["catalog.listCancellationPolicies"]["input"]) => Promise<ServiceCatalog["catalog.listCancellationPolicies"]["output"]>;
     listCartOffers: (input: ServiceCatalog["catalog.listCartOffers"]["input"]) => Promise<ServiceCatalog["catalog.listCartOffers"]["output"]>;
     listCarts: (input?: ServiceCatalog["catalog.listCarts"]["input"]) => Promise<ServiceCatalog["catalog.listCarts"]["output"]>;
+    listCollections: (input?: ServiceCatalog["catalog.listCollections"]["input"]) => Promise<ServiceCatalog["catalog.listCollections"]["output"]>;
     listCoupons: (input?: ServiceCatalog["catalog.listCoupons"]["input"]) => Promise<ServiceCatalog["catalog.listCoupons"]["output"]>;
     listCustomerGroups: (input?: ServiceCatalog["catalog.listCustomerGroups"]["input"]) => Promise<ServiceCatalog["catalog.listCustomerGroups"]["output"]>;
     listDigitalDeliveries: (input: ServiceCatalog["catalog.listDigitalDeliveries"]["input"]) => Promise<ServiceCatalog["catalog.listDigitalDeliveries"]["output"]>;
@@ -7230,12 +7295,15 @@ export interface FreeholderApi {
     releaseReservation: (input: ServiceCatalog["catalog.releaseReservation"]["input"]) => Promise<ServiceCatalog["catalog.releaseReservation"]["output"]>;
     removeBundleComponent: (input: ServiceCatalog["catalog.removeBundleComponent"]["input"]) => Promise<ServiceCatalog["catalog.removeBundleComponent"]["output"]>;
     removeCartItem: (input: ServiceCatalog["catalog.removeCartItem"]["input"]) => Promise<ServiceCatalog["catalog.removeCartItem"]["output"]>;
+    removeCollectionProduct: (input: ServiceCatalog["catalog.removeCollectionProduct"]["input"]) => Promise<ServiceCatalog["catalog.removeCollectionProduct"]["output"]>;
     removePriceRule: (input: ServiceCatalog["catalog.removePriceRule"]["input"]) => Promise<ServiceCatalog["catalog.removePriceRule"]["output"]>;
     removeProductRelation: (input: ServiceCatalog["catalog.removeProductRelation"]["input"]) => Promise<ServiceCatalog["catalog.removeProductRelation"]["output"]>;
     removeWishlistItem: (input: ServiceCatalog["catalog.removeWishlistItem"]["input"]) => Promise<ServiceCatalog["catalog.removeWishlistItem"]["output"]>;
+    reorderCollectionProducts: (input: ServiceCatalog["catalog.reorderCollectionProducts"]["input"]) => Promise<ServiceCatalog["catalog.reorderCollectionProducts"]["output"]>;
     requestReturn: (input: ServiceCatalog["catalog.requestReturn"]["input"]) => Promise<ServiceCatalog["catalog.requestReturn"]["output"]>;
     reserveStock: (input: ServiceCatalog["catalog.reserveStock"]["input"]) => Promise<ServiceCatalog["catalog.reserveStock"]["output"]>;
     resolvePrice: (input: ServiceCatalog["catalog.resolvePrice"]["input"]) => Promise<ServiceCatalog["catalog.resolvePrice"]["output"]>;
+    resolvePublicCollection: (input: ServiceCatalog["catalog.resolvePublicCollection"]["input"]) => Promise<ServiceCatalog["catalog.resolvePublicCollection"]["output"]>;
     resolveVisibleProduct: (input: ServiceCatalog["catalog.resolveVisibleProduct"]["input"]) => Promise<ServiceCatalog["catalog.resolveVisibleProduct"]["output"]>;
     restoreProduct: (input: ServiceCatalog["catalog.restoreProduct"]["input"]) => Promise<ServiceCatalog["catalog.restoreProduct"]["output"]>;
     revokeWishlistShare: (input?: ServiceCatalog["catalog.revokeWishlistShare"]["input"]) => Promise<ServiceCatalog["catalog.revokeWishlistShare"]["output"]>;
@@ -7254,6 +7322,7 @@ export interface FreeholderApi {
     shipFulfillment: (input: ServiceCatalog["catalog.shipFulfillment"]["input"]) => Promise<ServiceCatalog["catalog.shipFulfillment"]["output"]>;
     subscribeBackInStock: (input: ServiceCatalog["catalog.subscribeBackInStock"]["input"]) => Promise<ServiceCatalog["catalog.subscribeBackInStock"]["output"]>;
     transferStock: (input: ServiceCatalog["catalog.transferStock"]["input"]) => Promise<ServiceCatalog["catalog.transferStock"]["output"]>;
+    updateCollection: (input: ServiceCatalog["catalog.updateCollection"]["input"]) => Promise<ServiceCatalog["catalog.updateCollection"]["output"]>;
     updateProduct: (input: ServiceCatalog["catalog.updateProduct"]["input"]) => Promise<ServiceCatalog["catalog.updateProduct"]["output"]>;
     updateProductDescription: (input: ServiceCatalog["catalog.updateProductDescription"]["input"]) => Promise<ServiceCatalog["catalog.updateProductDescription"]["output"]>;
     upsertServiceOffering: (input: ServiceCatalog["catalog.upsertServiceOffering"]["input"]) => Promise<ServiceCatalog["catalog.upsertServiceOffering"]["output"]>;
@@ -7355,6 +7424,11 @@ export interface FreeholderApi {
     updateSection: (input: ServiceCatalog["cms.updateSection"]["input"]) => Promise<ServiceCatalog["cms.updateSection"]["output"]>;
     updateTemplate: (input: ServiceCatalog["cms.updateTemplate"]["input"]) => Promise<ServiceCatalog["cms.updateTemplate"]["output"]>;
     verifyDemoFixture: (input: ServiceCatalog["cms.verifyDemoFixture"]["input"]) => Promise<ServiceCatalog["cms.verifyDemoFixture"]["output"]>;
+  };
+  collections: {
+    purge: (input: ServiceCatalog["collections.purge"]["input"]) => Promise<ServiceCatalog["collections.purge"]["output"]>;
+    remove: (input: ServiceCatalog["collections.remove"]["input"]) => Promise<ServiceCatalog["collections.remove"]["output"]>;
+    restore: (input: ServiceCatalog["collections.restore"]["input"]) => Promise<ServiceCatalog["collections.restore"]["output"]>;
   };
   community: {
     createPost: (input: ServiceCatalog["community.createPost"]["input"]) => Promise<ServiceCatalog["community.createPost"]["output"]>;

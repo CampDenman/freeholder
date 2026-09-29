@@ -28,9 +28,25 @@ import {
   schemaTypeFor,
   type ProductStatus,
 } from "./contract";
-import { productLifecycleEvents, products } from "./schema";
+import { productLifecycleEvents, products, collectionProducts } from "./schema";
 import { syncProductPublicPage } from "./public-pages";
 import demoServices from "./demo";
+import collectionServices, {
+  addCollectionProduct,
+  collectionPaths,
+  createCollection,
+  getCollection,
+  listCollections,
+  purgeCollection,
+  purgeExpiredCollections,
+  removeCollection,
+  removeCollectionProduct,
+  reorderCollectionProducts,
+  resolvePublicCollection,
+  restoreCollection,
+  recomputeCollectionMembership,
+  updateCollection,
+} from "./collections";
 import merchandisingServices, {
   attachProductMedia,
   compareProducts,
@@ -250,6 +266,20 @@ export {
   removeWishlistItem,
   saveCart,
   setCartItemQuantity,
+  addCollectionProduct,
+  collectionPaths,
+  createCollection,
+  getCollection,
+  listCollections,
+  purgeCollection,
+  purgeExpiredCollections,
+  removeCollection,
+  removeCollectionProduct,
+  reorderCollectionProducts,
+  resolvePublicCollection,
+  restoreCollection,
+  updateCollection,
+  recomputeCollectionMembership,
   adjustStock,
   addPurchaseOrderLine,
   addShippingRateBand,
@@ -475,13 +505,15 @@ async function recordLifecycle(
 
 export const listProducts = defineService({
   name: "catalog.listProducts",
-  summary: "List products for owner operations by lifecycle, kind, or visibility.",
+  summary: "List products for owner operations by lifecycle, kind, visibility, or collection membership.",
   kind: "query",
   permission: "scoped",
   input: z.object({
     status: z.enum(PRODUCT_STATUSES).optional(),
     kind: z.enum(PRODUCT_KINDS).optional(),
     visibility: z.enum(PRODUCT_VISIBILITIES).optional(),
+    /** Narrow to one collection's membership, in the collection's stored order. */
+    collectionId: productId.optional(),
     limit: z.number().int().min(1).max(500).default(200),
   }),
   output: listed(productRow),
@@ -491,10 +523,21 @@ export const listProducts = defineService({
       input.kind ? eq(products.kind, input.kind) : undefined,
       input.visibility ? eq(products.visibility, input.visibility) : undefined,
     ].filter((value): value is NonNullable<typeof value> => Boolean(value));
+    const where = filters.length ? and(...filters) : undefined;
+    if (input.collectionId) {
+      return ctx.tx
+        .select({ product: products })
+        .from(collectionProducts)
+        .innerJoin(products, eq(products.id, collectionProducts.productId))
+        .where(and(eq(collectionProducts.collectionId, input.collectionId), where))
+        .orderBy(asc(collectionProducts.position), asc(products.name))
+        .limit(input.limit)
+        .then((rows) => rows.map((row) => row.product));
+    }
     return ctx.tx
       .select()
       .from(products)
-      .where(filters.length ? and(...filters) : undefined)
+      .where(where)
       .orderBy(desc(products.updatedAt), asc(products.name))
       .limit(input.limit);
   },
@@ -991,4 +1034,5 @@ export default [
   ...orderServices,
   ...fulfillmentServices,
   ...promotionServices,
+  ...collectionServices,
 ];
