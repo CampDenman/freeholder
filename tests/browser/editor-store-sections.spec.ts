@@ -20,6 +20,7 @@ import { users, totpFactors } from "@/core/auth/schema";
 import { CSRF_COOKIE, CSRF_HEADER, issueCsrfToken } from "@/core/http/csrf";
 import { closeDb, db } from "@/core/db";
 import { collections, products } from "@/modules/catalog/schema";
+import { pages } from "@/modules/cms/schema";
 import { OWNER } from "../helpers/spine";
 import { resetBrowserDatabase } from "./database";
 
@@ -355,9 +356,21 @@ test.describe("store-section composition on the canvas", () => {
       await expect(saved).toHaveText("Saved", { timeout: 15_000 });
 
       await page.getByRole("button", { name: "Publish changes" }).click();
-      // The publish is a save-then-publish server round-trip: wait for the
-      // editor to say it landed before reading the public page.
-      await expect(saved).toHaveText("Saved", { timeout: 15_000 });
+      // The publish is a save-then-publish server round-trip; the editor's
+      // own status reads "Saved" before and after, so wait on the fact that
+      // matters — the published tree actually holding the swap.
+      await expect
+        .poll(
+          async () => {
+            const [row] = await db()
+              .select({ blocks: pages.blocks })
+              .from(pages)
+              .where(eq(pages.id, landingPageId));
+            return JSON.stringify(row?.blocks);
+          },
+          { timeout: 15_000 },
+        )
+        .toContain("harbour-lights");
       await page.goto("/summer-drop");
       // The band now shelves the harbour light; the row still holds its
       // picked prints.
