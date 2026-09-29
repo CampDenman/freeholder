@@ -343,6 +343,80 @@ function fhApplyAsset(el, assetId) {
   });
 }
 
+// ── Order reconciliation ──────────────────────────────────────────────────
+//
+// The draft broadcast carries the whole tree, order included. The frame
+// renders *stored* state, so a reorder the editor just made (a canvas drop,
+// a grip keypress, a form-panel button) has no reflection in the DOM until a
+// save reloads the frame — unless the draft puts the DOM back in step itself.
+// That is what this does, one parent level at a time, moving the block
+// wrappers the draft names and nothing else.
+//
+// Two deliberate conservatisms keep it honest:
+//
+// - A level whose wrapper count differs from the draft's node count is left
+//   alone. A fresh block or a removed one has no (or a stale) wrapper here;
+//   the post-save reload is the reconciliation backstop for those, exactly as
+//   it is for values the draft cannot express.
+// - A level the owner is currently typing inside is left alone:
+//   re-appending ancestors mid-sentence would throw the caret away.
+function fhDirectChildren(container, isRoot) {
+  var out = [];
+  var descendants = container.querySelectorAll("[data-block-id]");
+  for (var i = 0; i < descendants.length; i++) {
+    var el = descendants[i];
+    var parentBlock = el.parentElement
+      ? el.parentElement.closest("[data-block-id]")
+      : null;
+    if ((isRoot && parentBlock === null) || (!isRoot && parentBlock === container)) {
+      out.push(el);
+    }
+  }
+  return out;
+}
+
+function fhReorderLevel(container, draftNodes, isRoot) {  if (!draftNodes || draftNodes.length === 0) return;
+  var active = document.activeElement;
+  var typing =
+    active &&
+    active !== document.body &&
+    container.contains(active) &&
+    active.closest &&
+    active.closest("[data-editable-prop], [data-editable-rich]");
+  var domChildren = fhDirectChildren(container, isRoot);
+  var byId = {};
+  for (var j = 0; j < domChildren.length; j++) {
+    byId[domChildren[j].getAttribute("data-block-id")] = domChildren[j];
+  }
+  if (!typing && domChildren.length > 0 && domChildren.length === draftNodes.length) {
+    var parent = domChildren[0].parentNode;
+    var singleParent = true;
+    for (var i = 1; i < domChildren.length; i++) {
+      if (domChildren[i].parentNode !== parent) {
+        singleParent = false;
+        break;
+      }
+    }
+    // appendChild on an already-present node moves it, so walking the draft
+    // order re-sorts the level without recreating anything — the elements
+    // keep their identity, which is what keeps focus and selection intact.
+    if (singleParent) {
+      for (var k = 0; k < draftNodes.length; k++) {
+        var el = byId[draftNodes[k].id];
+        if (el) parent.appendChild(el);
+      }
+    }
+  }
+  // A level the owner is typing into keeps its order; levels the caret is
+  // not in still re-sort.
+  for (var m = 0; m < draftNodes.length; m++) {
+    var child = byId[draftNodes[m].id];
+    if (child && draftNodes[m].children) {
+      fhReorderLevel(child, draftNodes[m].children, false);
+    }
+  }
+}
+
 // The editor's local draft, applied straight onto the typeable elements.
 //
 // The frame renders stored state; the editor broadcasts its draft tree after
@@ -400,6 +474,37 @@ function fhApplyDraft(draft) {
     var assetId = node.props[el.getAttribute("data-asset-prop")];
     fhApplyAsset(el, typeof assetId === "string" ? assetId : "");
   });
+
+  // Order: the draft's tree is the sequence the owner sees in the form
+  // panel; the canvas agrees as soon as the broadcast lands, without
+  // waiting for the post-save reload. Typing broadcasts constantly without
+  // ever changing the order, so the re-sort — the only pass here that moves
+  // DOM nodes — runs solely when the shape actually differs from what the
+  // canvas last applied.
+  var draftNodes = Array.isArray(draft) ? draft : draft && draft.blocks;
+  var signature = JSON.stringify(fhOrderShape(draftNodes));
+  if (signature !== fhOrderSignature) {
+    fhOrderSignature = signature;
+    var root = document.querySelector(".fh-canvas") || document.body;
+    fhReorderLevel(root, draftNodes, true);
+  }
+}
+
+// The nested id shape of a draft, in a string one broadcast can compare
+// against the last one it applied.
+var fhOrderSignature = null;
+function fhOrderShape(nodes) {
+  var out = [];
+  (nodes || []).forEach(function (node) {
+    if (node && typeof node.id === "string") {
+      out.push(
+        node.children && node.children.length
+          ? [node.id, fhOrderShape(node.children)]
+          : node.id,
+      );
+    }
+  });
+  return out;
 }
 
 window.addEventListener("message", function (event) {
@@ -424,4 +529,232 @@ window.addEventListener("message", function (event) {
 // Ask the editor for the current draft so typing that raced the reload is
 // not lost; the first load simply receives a no-op draft.
 parent.postMessage({ source: "freeholder-preview", ready: true }, window.location.origin);
+`;
+
+/**
+ * The drag-and-drop half of the canvas script: grips, ghost, drop indicators
+ * and the keyboard path. Kept beside {@link CANVAS_BRIDGE} as an exported
+ * string so the test suite evaluates exactly what the frame ships.
+ *
+ * The frame never moves blocks itself. A drop (or a grip keypress) posts an
+ * *intent* to the editor; the editor decides whether it is legal, applies it
+ * to the tree, and the next draft broadcast re-sorts this DOM. A refused or
+ * cancelled drop therefore simply never lands — the canvas cannot be left
+ * showing an order the tree does not hold. Escape ends a native drag with a
+ * plain dragend, which cleans up exactly like a drop outside every zone.
+ *
+ * The script reads three injected label constants (serialized in the preview
+ * layout, so they render in the owner's language): FH_DRAG_LABEL names the
+ * grip; FH_ANNOUNCE_UP / FH_ANNOUNCE_DOWN / FH_ANNOUNCE_MOVE feed the live
+ * region that confirms a move to a screen reader.
+ */
+export const CANVAS_DRAG = `
+// ── Dragging blocks around the canvas ─────────────────────────────────────
+//
+// A grip rather than making the whole block draggable: a draggable element
+// swallows text selection, and half these blocks are typed into. The grip is
+// a real <button> injected here rather than emitted by the renderer, so the
+// block components stay free of editor furniture and the affordance is
+// focusable and keyboard-operable on its own (§15.7).
+var fhLive = null;
+function fhAnnounce(text) {
+  if (!fhLive) {
+    fhLive = document.createElement("div");
+    fhLive.className = "fh-sr-only";
+    fhLive.setAttribute("role", "status");
+    fhLive.setAttribute("aria-live", "polite");
+    document.body.appendChild(fhLive);
+  }
+  // Clearing first makes two identical moves in a row announce twice.
+  fhLive.textContent = "";
+  window.setTimeout(function () {
+    fhLive.textContent = text;
+  }, 30);
+}
+
+function fhAddGrips() {
+  document.querySelectorAll("[data-block-id]").forEach(function (block) {
+    // The drag ghost is a clone of a rendered block; it is a drag image, not
+    // a live surface, and gets no furniture of its own.
+    if (block.closest(".fh-ghost")) return;
+    if (block.querySelector(":scope > .fh-grip")) return;
+    var grip = document.createElement("button");
+    grip.type = "button";
+    grip.className = "fh-grip";
+    grip.setAttribute("draggable", "true");
+    grip.setAttribute("aria-label", FH_DRAG_LABEL);
+    grip.title = FH_DRAG_LABEL;
+    // A six-dot SVG rather than a braille glyph: the accessible name comes
+    // from the label, and a text node invites axe's indeterminate
+    // color-contrast heuristic on a one-character string.
+    var NS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 10 16");
+    svg.setAttribute("width", "10");
+    svg.setAttribute("height", "14");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    for (var row = 0; row < 3; row++) {
+      for (var col = 0; col < 2; col++) {
+        var dot = document.createElementNS(NS, "circle");
+        dot.setAttribute("cx", String(2.5 + col * 5));
+        dot.setAttribute("cy", String(3 + row * 5));
+        dot.setAttribute("r", "1.4");
+        dot.setAttribute("fill", "currentColor");
+        svg.appendChild(dot);
+      }
+    }
+    grip.appendChild(svg);
+    block.appendChild(grip);
+  });
+}
+fhAddGrips();
+new MutationObserver(fhAddGrips).observe(document.body, {
+  childList: true,
+  subtree: true
+});
+
+// The sibling block at the same nesting level, skipping any non-block
+// element a container renders between its children (a variant's caption, say).
+function fhSiblingBlock(block, direction) {
+  var el = direction < 0
+    ? block.previousElementSibling
+    : block.nextElementSibling;
+  while (el && !el.hasAttribute("data-block-id")) {
+    el = direction < 0
+      ? el.previousElementSibling
+      : el.nextElementSibling;
+  }
+  return el;
+}
+
+// Keyboard reordering from the canvas: focus a block's grip and press an
+// arrow key. The move is reported as the same intent a drop posts (beside
+// the adjacent sibling), so the editor applies it through the same tree
+// surgery, and the in-frame live region confirms it where focus already is.
+document.addEventListener("keydown", function (event) {
+  var grip = event.target instanceof Element ? event.target : null;
+  if (!grip || !grip.classList || !grip.classList.contains("fh-grip")) return;
+  var direction = 0;
+  if (event.key === "ArrowUp") direction = -1;
+  if (event.key === "ArrowDown") direction = 1;
+  if (!direction) return;
+  event.preventDefault();
+  var block = grip.closest("[data-block-id]");
+  if (!block) return;
+  var sibling = fhSiblingBlock(block, direction);
+  if (!sibling) return; // already at the edge of this level
+  parent.postMessage({
+    source: "freeholder-preview",
+    move: {
+      blockId: block.getAttribute("data-block-id"),
+      targetId: sibling.getAttribute("data-block-id"),
+      position: direction < 0 ? "before" : "after"
+    }
+  }, window.location.origin);
+  fhAnnounce(direction < 0 ? FH_ANNOUNCE_UP : FH_ANNOUNCE_DOWN);
+});
+
+var fhDragId = null;
+var fhDrop = null;
+var fhGhost = null;
+
+function fhClearIndicator() {
+  document.querySelectorAll("[data-drop]").forEach(function (n) {
+    n.removeAttribute("data-drop");
+  });
+}
+
+// The translucent, live-sized preview that follows the pointer. The native
+// drag image is this element: built from the dragged block's own render, so
+// the ghost shows exactly what is being moved, at its real width.
+function fhLiftGhost(block, event) {
+  var ghost = block.cloneNode(true);
+  ghost.removeAttribute("data-dragging");
+  ghost.removeAttribute("data-selected");
+  var grip = ghost.querySelector(":scope > .fh-grip");
+  if (grip && grip.parentNode) grip.parentNode.removeChild(grip);
+  ghost.className = (ghost.className ? ghost.className + " " : "") + "fh-ghost";
+  var box = block.getBoundingClientRect();
+  ghost.style.width = box.width + "px";
+  document.body.appendChild(ghost);
+  if (event.dataTransfer && event.dataTransfer.setDragImage) {
+    event.dataTransfer.setDragImage(
+      ghost,
+      event.clientX - box.left,
+      event.clientY - box.top
+    );
+  }
+  return ghost;
+}
+
+document.addEventListener("dragstart", function (event) {
+  var target = event.target instanceof Element ? event.target : null;
+  if (!target || !target.classList.contains("fh-grip")) return;
+  var block = target.closest("[data-block-id]");
+  if (!block) return;
+  fhDragId = block.getAttribute("data-block-id");
+  block.setAttribute("data-dragging", "true");
+  fhGhost = fhLiftGhost(block, event);
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    // Firefox refuses to start a drag without data on the transfer.
+    event.dataTransfer.setData("text/plain", fhDragId);
+  }
+});
+
+document.addEventListener("dragover", function (event) {
+  if (!fhDragId) return;
+  event.preventDefault();
+  var target = event.target instanceof Element ? event.target : null;
+  var block = target ? target.closest("[data-block-id]") : null;
+  fhClearIndicator();
+  if (!block) { fhDrop = null; return; }
+
+  var id = block.getAttribute("data-block-id");
+  if (id === fhDragId) { fhDrop = null; return; }
+
+  var box = block.getBoundingClientRect();
+  var container = block.querySelector(":scope > * > [data-block-id]") !== null
+    || block.hasAttribute("data-container");
+  var empty = container && block.querySelector("[data-block-id]") === null;
+
+  var position;
+  if (empty) {
+    position = "inside";
+  } else {
+    position = event.clientY < box.top + box.height / 2 ? "before" : "after";
+  }
+  block.setAttribute("data-drop", position);
+  fhDrop = { targetId: id, position: position };
+});
+
+document.addEventListener("drop", function (event) {
+  if (!fhDragId || !fhDrop) return;
+  event.preventDefault();
+  parent.postMessage({
+    source: "freeholder-preview",
+    move: {
+      blockId: fhDragId,
+      targetId: fhDrop.targetId,
+      position: fhDrop.position
+    }
+  }, window.location.origin);
+  fhAnnounce(FH_ANNOUNCE_MOVE);
+  // The DOM is deliberately left alone. The editor applies the move to the
+  // tree, the draft broadcast re-sorts this DOM, and a drop the editor
+  // refuses simply never lands — dropping outside a zone or pressing Escape
+  // leaves the page untouched, which is what makes the drop confident.
+});
+
+document.addEventListener("dragend", function () {
+  fhDragId = null;
+  fhDrop = null;
+  fhClearIndicator();
+  document.querySelectorAll("[data-dragging]").forEach(function (n) {
+    n.removeAttribute("data-dragging");
+  });
+  if (fhGhost && fhGhost.parentNode) fhGhost.parentNode.removeChild(fhGhost);
+  fhGhost = null;
+});
 `;

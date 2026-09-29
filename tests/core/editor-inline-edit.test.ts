@@ -130,6 +130,11 @@ function labels(): EditorLabels {
     bullet: "Bullet",
     numbered: "Numbered",
     richHint: "Rich hint",
+    live: "Live",
+    draft: "Draft",
+    publishChanges: "Publish changes",
+    publishing: "Publishing…",
+    movedTo: "Moved {label} to position {position} of {total}",
     a11y,
   };
 }

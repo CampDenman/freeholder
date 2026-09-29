@@ -4291,7 +4291,23 @@ project without silent telemetry, and ready to carry money.
   tests/core/editor-preview-bridge.test.ts,
   tests/core/editor-inline-edit.test.ts and the
   tests/browser/editor-inline-editing.spec.ts journey; drag-and-drop
-  repositioning and store-section composition remain later slices.)
+  repositioning and store-section composition remain later slices. Slice B,
+  2026-09-29: blocks reposition on the rendered canvas itself — a drag handle
+  on hover and keyboard focus lifts a translucent live-sized ghost that
+  follows the pointer, a line between blocks or a highlighted nest zone
+  inside a container marks the landing, Escape or a drop outside a valid
+  zone changes nothing, and arrow keys on a focused grip reorder the same
+  way — every move reporting through the one tree operation the form panel
+  uses, re-sorted onto the canvas by the draft broadcast, persisted by the
+  existing debounced autosave, and announced to screen readers, with the
+  audit's gap 8 landing as a one-step "Publish changes" action whose
+  draft/live state is a visible chip; proven by
+  tests/core/editor-canvas-drag.test.ts,
+  tests/core/editor-reorder.test.ts and the
+  tests/browser/editor-drag-drop.spec.ts journey (drag top→bottom → Saved →
+  the published page shows the new order, plus the keyboard path). The box
+  stays open: store-section composition is the next slice, and the
+  audit's gaps 5–7 and 9–10 remain.)
 
 **C2 exit:** every public or message-facing surface is safely editable by a
 human, collaboratively, without code, lock-in markup or accidental publication.

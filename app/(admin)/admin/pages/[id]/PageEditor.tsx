@@ -16,6 +16,7 @@ import {
 import {
   detachSectionAction,
   mergePageBlocksAction,
+  publishPageNowAction,
   reloadWorkingDraftAction,
   saveAsSectionAction,
   savePageBlocksAction,
@@ -25,12 +26,14 @@ export function PageEditor({
   id,
   initialVersion,
   initialBlocks,
+  initialPublished,
   blockTypes,
   labels,
 }: {
   id: string;
   initialVersion: number;
   initialBlocks: EditorNode[];
+  initialPublished: boolean;
   blockTypes: EditorBlockType[];
   labels: EditorLabels;
 }) {
@@ -42,10 +45,19 @@ export function PageEditor({
       labels={labels}
       previewSrc={`/preview/page/${id}`}
       a11yContext="page"
+      published={initialPublished}
       save={async (blocks) => {
         const result = await savePageBlocksAction(id, blocks, versionRef.current);
         if (result.version) versionRef.current = result.version;
         return result;
+      }}
+      onPublish={async (blocks) => {
+        // Save first so the publish validates the tree the owner is looking
+        // at, then push it live — one gesture, no unpublish dance.
+        const saved = await savePageBlocksAction(id, blocks, versionRef.current);
+        if (saved.error) return saved;
+        if (saved.version) versionRef.current = saved.version;
+        return publishPageNowAction(id);
       }}
       onKeepMine={async (blocks, serverVersion) => {
         const result = await mergePageBlocksAction(id, blocks, serverVersion);

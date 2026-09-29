@@ -110,6 +110,15 @@ export interface EditorLabels {
   saveAsSection?: string;
   detachSection?: string;
   sectionName?: string;
+  /** "Live" chip — the page is published. */
+  live: string;
+  /** "Draft" chip — the page has never been published. */
+  draft: string;
+  /** Push the saved draft to the live page without unpublishing first. */
+  publishChanges: string;
+  publishing: string;
+  /** Screen-reader confirmation of an editor-side move: "Moved {label} to position {position} of {total}". */
+  movedTo: string;
   a11y: {
     title: string;
     ok: string;
@@ -139,7 +148,9 @@ export function BlockEditor({
   labels,
   previewSrc,
   a11yContext = "page",
+  published,
   save,
+  onPublish,
   onKeepMine,
   onReloadDraft,
   onSaveAsSection,
@@ -151,6 +162,8 @@ export function BlockEditor({
   /** The preview page for this subject. */
   previewSrc: string;
   a11yContext?: A11yContext;
+  /** Whether the subject is live — drives the draft/live chip. */
+  published?: boolean;
   /** Persists the whole tree. Throws with a readable message on refusal. */
   save: (blocks: EditorNode[]) => Promise<{
     error?: string;
@@ -160,6 +173,15 @@ export function BlockEditor({
     added?: number;
     removed?: number;
     changed?: number;
+  }>;
+  /**
+   * Save the current draft and publish it in one step (audit gap 8: pushing
+   * edits live must never mean unpublishing first). Only page subjects wire
+   * this; without it no publish chrome renders.
+   */
+  onPublish?: (blocks: EditorNode[]) => Promise<{
+    error?: string;
+    version?: number;
   }>;
   onKeepMine?: (blocks: EditorNode[], serverVersion: number) => Promise<{
     error?: string;
@@ -192,6 +214,9 @@ export function BlockEditor({
   const [conflict, setConflict] = useState(false);
   const [serverVersion, setServerVersion] = useState<number | undefined>();
   const [conflictCounts, setConflictCounts] = useState<string | undefined>();
+  /** Screen-reader confirmation of the last editor-side move. */
+  const [moveAnnouncement, setMoveAnnouncement] = useState("");
+  const [publishing, setPublishing] = useState(false);
 
   const byType = useMemo(
     () => new Map(blockTypes.map((b) => [b.type, b])),
@@ -238,11 +263,76 @@ export function BlockEditor({
     return () => clearTimeout(timer);
   }, [blocks, status, persist]);
 
+  /**
+   * Push the current draft live in one step (audit gap 8).
+   *
+   * The save runs first so the publish validates exactly what the owner sees;
+   * `onPublish` performs both. The live page is never taken down to come back
+   * up — `cms.publishPage` copies the draft over the published tree in one
+   * transaction, so the storefront cannot 404 mid-flow.
+   */
+  const publishNow = useCallback(async () => {
+    if (!onPublish || publishing) return;
+    setPublishing(true);
+    const result = await onPublish(blocksRef.current);
+    setPublishing(false);
+    if (result.error) {
+      setError(result.error);
+      setStatus("failed");
+      return;
+    }
+    savedRef.current = JSON.stringify(blocksRef.current);
+    setError(undefined);
+    setConflict(false);
+    setStatus("saved");
+    setSavedVersion((n) => n + 1);
+  }, [onPublish, publishing]);
+
   const mutate = (next: EditorNode[]) => {
     history.current.push(blocksRef.current);
     setBlocks(next);
     setStatus("dirty");
   };
+
+  /**
+   * Confirm an editor-side move to screen readers: which block, and where it
+   * now sits. Canvas-side moves (drops, grip arrows) announce inside the
+   * frame instead, where grip focus lives, so a move is never announced twice.
+   *
+   * `tree` is the tree *after* the move: the callers pass the tree they just
+   * committed, because the state ref still reads as the move's origin until
+   * React commits.
+   */
+  const announcePosition = useCallback((
+    blockId: string | undefined,
+    tree?: EditorNode[],
+  ) => {
+    if (!blockId) return;
+    const source = tree ?? blocksRef.current;
+    const positionOf = (
+      nodes: EditorNode[],
+    ): { index: number; total: number } | undefined => {
+      for (let i = 0; i < nodes.length; i++) {
+        if (nodes[i]!.id === blockId) return { index: i + 1, total: nodes.length };
+        const children = nodes[i]!.children;
+        if (children) {
+          const hit = positionOf(children);
+          if (hit) return hit;
+        }
+      }
+      return undefined;
+    };
+    const node = collectById(source, new Set([blockId]))[0];
+    const position = positionOf(source);
+    if (!node || !position) return;
+    const label = byType.get(node.type)?.label ?? node.type;
+    setMoveAnnouncement(
+      labels.movedTo
+        .replace("{label}", label)
+        .replace("{position}", String(position.index))
+        .replace("{total}", String(position.total)),
+    );
+  }, [byType, labels.movedTo]);
 
   const selectedSet = () => new Set(selectedIds.length > 0 ? selectedIds : selectedId ? [selectedId] : []);
 
@@ -297,13 +387,16 @@ export function BlockEditor({
       }
       if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
         event.preventDefault();
-        mutate(
-          moveSiblings(
-            blocksRef.current,
-            selectedSet(),
-            event.key === "ArrowUp" ? -1 : 1,
-          ),
+        const next = moveSiblings(
+          blocksRef.current,
+          selectedSet(),
+          event.key === "ArrowUp" ? -1 : 1,
         );
+        mutate(next);
+        // `selectedIds` mirrors even a single selection, so one entry is
+        // exactly the "one block selected" case worth announcing.
+        const only = selectedIds.length === 1 ? selectedIds[0] : undefined;
+        announcePosition(only, next);
         return;
       }
       if (event.key === "/") {
@@ -313,7 +406,7 @@ export function BlockEditor({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedId, selectedIds]);
+  }, [selectedId, selectedIds, announcePosition]);
 
   /**
    * Apply a block dragged somewhere else on the canvas.
@@ -321,18 +414,19 @@ export function BlockEditor({
    * The decision about whether the move is legal lives in `moveBlock`, which
    * is pure and tested — a container dropped into its own child would detach
    * that branch, and a component is the wrong place to be sure about that. An
-   * illegal move leaves the tree untouched, and the canvas snaps back on its
-   * next render because the tree is what it renders from.
+   * illegal move leaves the tree untouched and marks nothing dirty: the
+   * canvas did not move its DOM either, so a refused drop simply never lands.
    */
   const applyMove = useCallback(
     (blockId: string, targetId: string, position: string) => {
-      setBlocks((current) => {
-        // No cast needed: EditorNode and BlockNode are the same shape, which
-        // is the point — the editor is holding the block tree, not a parallel
-        // model of it that has to be translated back and forth.
-        const moved = moveBlock(current, blockId, targetId, position as DropPosition);
-        return moved ?? current;
-      });
+      const current = blocksRef.current;
+      // No cast needed: EditorNode and BlockNode are the same shape, which
+      // is the point — the editor is holding the block tree, not a parallel
+      // model of it that has to be translated back and forth.
+      const moved = moveBlock(current, blockId, targetId, position as DropPosition);
+      if (!moved) return;
+      history.current.push(current);
+      setBlocks(moved);
       setStatus("dirty");
     },
     [],
@@ -410,6 +504,7 @@ export function BlockEditor({
           labels={labels}
           selectedId={selectedId}
           selectedIds={selectedIds}
+          onAnnounce={announcePosition}
           onSelect={(id, additive) => {
             setSelectedId(id);
             if (!id) {
@@ -471,6 +566,20 @@ export function BlockEditor({
               : undefined
           }
         />
+        {/* Announces editor-side moves to screen readers; canvas-side moves
+            announce inside the frame, where grip focus lives. aria-live
+            without role="status" so the save status stays the only status. */}
+        <p className="sr-only" aria-live="polite">
+          {moveAnnouncement}
+        </p>
+        {onPublish ? (
+          <PublishControl
+            published={published === true}
+            busy={publishing}
+            labels={labels}
+            onPublish={() => void publishNow()}
+          />
+        ) : null}
       </div>
 
       {/* Sticky so the canvas stays in view while the controls scroll —
@@ -621,6 +730,48 @@ function SaveStatus({
   );
 }
 
+/* ---------------------------------------------------------------- publish */
+
+/**
+ * The audit's gap 8: one obvious way to push draft edits live.
+ *
+ * A draft/live chip says which state the page is in, and — while the page is
+ * live — a single "Publish changes" action saves the draft and publishes it
+ * atomically. Taking the site down to bring it back up is never part of the
+ * flow; the header's Unpublish toggle stays as the separate, scarier action.
+ */
+function PublishControl({
+  published,
+  busy,
+  labels,
+  onPublish,
+}: {
+  published: boolean;
+  busy: boolean;
+  labels: EditorLabels;
+  onPublish: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <span
+        className={cx(
+          "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+          published
+            ? "bg-success-soft text-success"
+            : "bg-surface-muted text-ink-muted",
+        )}
+      >
+        {published ? labels.live : labels.draft}
+      </span>
+      {published ? (
+        <Button type="button" onClick={onPublish} disabled={busy}>
+          {busy ? labels.publishing : labels.publishChanges}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------- block list */
 
 function BlockList({
@@ -632,6 +783,7 @@ function BlockList({
   selectedId,
   selectedIds,
   onSelect,
+  onAnnounce,
 }: {
   nodes: EditorNode[];
   onChange: (next: EditorNode[]) => void;
@@ -641,6 +793,8 @@ function BlockList({
   selectedId?: string;
   selectedIds: string[];
   onSelect: (id: string | undefined, additive?: boolean) => void;
+  /** Confirms an editor-side reorder to screen readers, with the tree it produced. */
+  onAnnounce?: (blockId: string, tree?: EditorNode[]) => void;
 }) {
   const [dragging, setDragging] = useState<number | undefined>();
 
@@ -650,6 +804,7 @@ function BlockList({
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved!);
     onChange(next);
+    onAnnounce?.(moved!.id, next);
   };
 
   const add = (type: string, starter?: Record<string, unknown>) => {
@@ -706,6 +861,7 @@ function BlockList({
                 byType={byType}
                 isFirst={index === 0}
                 isLast={index === nodes.length - 1}
+                onAnnounce={onAnnounce}
                 onMoveUp={() => move(index, index - 1)}
                 onMoveDown={() => move(index, index + 1)}
                 onDuplicate={() =>
@@ -739,6 +895,7 @@ function BlockCard({
   onSelect,
   isFirst,
   isLast,
+  onAnnounce,
   onMoveUp,
   onMoveDown,
   onDuplicate,
@@ -755,6 +912,7 @@ function BlockCard({
   onSelect: (id: string | undefined, additive?: boolean) => void;
   isFirst: boolean;
   isLast: boolean;
+  onAnnounce?: (blockId: string, tree?: EditorNode[]) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onDuplicate: () => void;
@@ -819,6 +977,7 @@ function BlockCard({
               selectedId={selectedId}
               selectedIds={selectedIds}
               onSelect={onSelect}
+              onAnnounce={onAnnounce}
             />
           </div>
         ) : null}
