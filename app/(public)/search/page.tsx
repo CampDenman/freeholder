@@ -22,6 +22,7 @@ import { composeDocumentTitle, ogImagePath } from "@/core/seo/meta";
 import { siteOrigin } from "@/core/seo/origin";
 import { localePath, localizeCustomerHref } from "@/core/i18n/customer";
 import { currentBusiness } from "@/core/settings/read";
+import { formatMoney } from "@/core/i18n";
 import { getLocale, getT } from "../../i18n";
 import { recordPageView } from "../[[...slug]]/pageview";
 import { CollectionGrid, type CollectionGridProduct } from "../c/[slug]/CollectionGrid";
@@ -131,11 +132,7 @@ export default async function StorefrontSearchPage({
   };
   const pageHref = (target: number) => hrefFor({ ...parsed, page: target });
   const formatMinor = (minor: number) =>
-    new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency: currency ?? business?.baseCurrency ?? "USD",
-      minimumFractionDigits: 0,
-    }).format(minor / 100);
+    formatMoney(minor, currency ?? business?.baseCurrency ?? "USD", locale);
   const facetData: FacetPanelData = facets;
 
   return (

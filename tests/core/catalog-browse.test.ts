@@ -199,7 +199,7 @@ async function seed(): Promise<Seed> {
         )
       ).version;
     }
-    product = (await activateProduct.call({ id: product.id, expectedVersion: version }, OWNER)) as typeof product;
+    product = await activateProduct.call({ id: product.id, expectedVersion: version }, OWNER);
     return { id: product.id, slug: input.slug };
   }
 

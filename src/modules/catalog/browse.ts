@@ -590,7 +590,9 @@ async function readOptionFacets(
       .groupBy(optionTypes.code, optionTypes.name, optionValues.skuFragment, optionValues.name);
     const perCode = new Map<string, Map<string, { value: string; label: string; count: number }>>();
     for (const row of rows) {
-      const values = perCode.get(row.code) ?? new Map();
+      const values =
+        perCode.get(row.code) ??
+        new Map<string, { value: string; label: string; count: number }>();
       values.set(row.value, { value: row.value, label: row.label, count: row.count });
       perCode.set(row.code, values);
     }
