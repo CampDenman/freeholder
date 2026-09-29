@@ -162,3 +162,18 @@ export type CollectionRuleType = (typeof COLLECTION_RULE_TYPES)[number];
 
 export const COLLECTION_SORT_ORDERS = ["manual", "title", "newest"] as const;
 export type CollectionSortOrder = (typeof COLLECTION_SORT_ORDERS)[number];
+
+/**
+ * Storefront browse ordering (C3.25 slice 2). `featured` is the honest
+ * default: a collection's own curated positions when one is being browsed,
+ * and best name match when a search term is in play. The other four are the
+ * shopper-facing sorts the merchandising brief names.
+ */
+export const BROWSE_SORT_ORDERS = [
+  "featured",
+  "price-asc",
+  "price-desc",
+  "newest",
+  "title",
+] as const;
+export type BrowseSortOrder = (typeof BROWSE_SORT_ORDERS)[number];

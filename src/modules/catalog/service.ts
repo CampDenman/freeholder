@@ -47,6 +47,7 @@ import collectionServices, {
   recomputeCollectionMembership,
   updateCollection,
 } from "./collections";
+import browseServices, { browseProducts } from "./browse";
 import merchandisingServices, {
   attachProductMedia,
   compareProducts,
@@ -280,6 +281,7 @@ export {
   restoreCollection,
   updateCollection,
   recomputeCollectionMembership,
+  browseProducts,
   adjustStock,
   addPurchaseOrderLine,
   addShippingRateBand,
@@ -1035,4 +1037,5 @@ export default [
   ...fulfillmentServices,
   ...promotionServices,
   ...collectionServices,
+  ...browseServices,
 ];
