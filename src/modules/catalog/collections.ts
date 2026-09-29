@@ -104,7 +104,7 @@ const publicMembershipRow = row({
   brand: z.string().nullable(),
 });
 
-const publicCollectionRow = row({
+export const publicCollectionRow = row({
   id: uuid,
   title: z.string(),
   slug: z.string(),

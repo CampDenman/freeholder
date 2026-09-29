@@ -4596,7 +4596,17 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   evidence `src/modules/catalog/collections.ts`, migration
   `db/migrations/0020_collections.sql`, `tests/core/catalog-collections.test.ts`,
   `tests/core/collections-storefront.test.ts`; faceted browse, storefront
-  search and the public cart/checkout pages remain for later slices.)
+  search and the public cart/checkout pages remain for later slices. Slice 2
+  (faceted browse and storefront search, 2026-09-29): one public
+  `catalog.browseProducts` service powers the `/c/<slug>` filter/sort UI and
+  the `/search` page, with facet dimensions derived from option types,
+  filterable attributes, anonymous-mirror price bands and availability, and
+  filter state in query params per the SEO doctrine — evidence
+  `src/modules/catalog/browse.ts`, `app/(public)/browse-params.ts`,
+  `app/(public)/browse/`, `app/(public)/search/page.tsx`,
+  `tests/core/catalog-browse.test.ts`,
+  `tests/core/browse-storefront.test.ts`; the public cart/checkout pages
+  remain for the next slice.)
 - [ ] **C3.26** World-class merchandising: first-class product taxonomy —
   collections and categories with manual and rule-based (segment-driven)
   membership; faceted storefront browsing (filter/sort on price, options,
@@ -4613,7 +4623,12 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `src/modules/catalog/collections.ts`, `0020_collections.sql`,
   `tests/core/catalog-collections.test.ts`,
   `tests/core/collections-storefront.test.ts` — is shared evidence for
-  this item's taxonomy half.)
+  this item's taxonomy half.) Slice 2 (2026-09-29) lands the faceted
+  browsing and storefront search named here — filter/sort on price, options
+  and attributes, crawlable query-param facet URLs under the SEO doctrine,
+  and the public `/search` surface, all through `catalog.browseProducts`
+  (evidence under C3.25's slice-2 annotation); the merchandising editor
+  blocks remain with C2.24.
 
 **C3 exit:** every capability has one machine-checked contract; extensions and
 deployments are portable, testable and incapable of silently forking the truth.

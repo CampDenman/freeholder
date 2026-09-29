@@ -39,13 +39,21 @@ export function CollectionGrid({
   pageCount,
   labels,
   productHref,
+  pageHref,
 }: {
   products: CollectionGridProduct[];
   page: number;
   pageCount: number;
   labels: CollectionGridLabels;
   productHref: (product: CollectionGridProduct) => string;
+  /**
+   * The address of another page of this view. Defaults to the bare
+   * `?page=n` a plain collection uses; faceted browses pass one that keeps
+   * the applied filters, so page two of "size M" is itself a URL.
+   */
+  pageHref?: (page: number) => string;
 }) {
+  const hrefFor = pageHref ?? ((target: number) => `?page=${target}`);
   return (
     <div className="grid gap-6">
       {products.length === 0 ? (
@@ -75,7 +83,7 @@ export function CollectionGrid({
           {page > 1 ? (
             <a
               className="rounded-md border border-rule px-3 py-1.5 text-ink"
-              href={`?page=${page - 1}`}
+              href={hrefFor(page - 1)}
               rel="prev"
             >
               {labels.previous}
@@ -85,7 +93,7 @@ export function CollectionGrid({
           {page < pageCount ? (
             <a
               className="rounded-md border border-rule px-3 py-1.5 text-ink"
-              href={`?page=${page + 1}`}
+              href={hrefFor(page + 1)}
               rel="next"
             >
               {labels.next}

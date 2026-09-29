@@ -276,6 +276,7 @@ export const SERVICE_NAMES = [
   "catalog.availability",
   "catalog.bookingRequirements",
   "catalog.bookingTerms",
+  "catalog.browseProducts",
   "catalog.cancelOrder",
   "catalog.cancelPurchaseOrder",
   "catalog.checkoutCart",
@@ -2469,6 +2470,10 @@ export interface ServiceCatalog {
   "catalog.bookingTerms": {
     input: { serviceOfferingId: string };
     output: { name: string; freeUntilHours: number; feeType: "none" | "fixed" | "percent" | "forfeit_deposit"; feeValue: number | null; rescheduleLimit: number; noShowFeeMinor: number } | null;
+  };
+  "catalog.browseProducts": {
+    input: { collectionId?: string; collectionSlug?: string; term?: string; filters?: { options?: { code: string; values: string[] }[]; attributes?: { key: string; values?: string[]; min?: string; max?: string }[]; price?: { min?: number; max?: number } | null; availability?: "in_stock" }; sort?: "featured" | "price-asc" | "price-desc" | "newest" | "title"; limit?: number; offset?: number };
+    output: { collection: { id: string; title: string; slug: string; description: string | null; seo: unknown; sortOrder: "manual" | "title" | "newest"; updatedAt: string; [key: string]: unknown } | null; products: { productId: string; name: string; slug: string; kind: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; subtitle: string | null; brand: string | null; priceFromMinor: number | null; currency: string | null; inStock: boolean; [key: string]: unknown }[]; total: number; facets: { options: { code: string; name: string; values: { value: string; label: string; count: number; [key: string]: unknown }[]; [key: string]: unknown }[]; attributes: { key: string; label: string; kind: "text" | "number" | "bool" | "enum" | "measure"; unit: string | null; values: { value: string; label: string; count: number; [key: string]: unknown }[]; min: string | null; max: string | null; [key: string]: unknown }[]; price: { currency: string; min: number; max: number; bands: { fromMinor: number; toMinor: number | null; count: number; [key: string]: unknown }[]; [key: string]: unknown } | null; availability: { inStock: number; outOfStock: number; [key: string]: unknown }; [key: string]: unknown }; currency: string | null; [key: string]: unknown };
   };
   "catalog.cancelOrder": {
     input: { id: string };
@@ -7196,6 +7201,7 @@ export interface FreeholderApi {
     availability: (input: ServiceCatalog["catalog.availability"]["input"]) => Promise<ServiceCatalog["catalog.availability"]["output"]>;
     bookingRequirements: (input: ServiceCatalog["catalog.bookingRequirements"]["input"]) => Promise<ServiceCatalog["catalog.bookingRequirements"]["output"]>;
     bookingTerms: (input: ServiceCatalog["catalog.bookingTerms"]["input"]) => Promise<ServiceCatalog["catalog.bookingTerms"]["output"]>;
+    browseProducts: (input?: ServiceCatalog["catalog.browseProducts"]["input"]) => Promise<ServiceCatalog["catalog.browseProducts"]["output"]>;
     cancelOrder: (input: ServiceCatalog["catalog.cancelOrder"]["input"]) => Promise<ServiceCatalog["catalog.cancelOrder"]["output"]>;
     cancelPurchaseOrder: (input: ServiceCatalog["catalog.cancelPurchaseOrder"]["input"]) => Promise<ServiceCatalog["catalog.cancelPurchaseOrder"]["output"]>;
     checkoutCart: (input: ServiceCatalog["catalog.checkoutCart"]["input"]) => Promise<ServiceCatalog["catalog.checkoutCart"]["output"]>;
