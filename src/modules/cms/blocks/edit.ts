@@ -202,16 +202,23 @@ export class EditorHistory {
 
   push(current: BlockNode[], label: string, next?: BlockNode[], editKey?: string): void {
     if (editKey && editKey === this.lastEditKey && next !== undefined && this.past.length > 0) {
-      // The same field is still being typed: extend the open record instead
-      // of stacking one entry per keystroke. `before` stays where it started.
-      this.past[this.past.length - 1]!.after = structuredClone(next);
+      // The same field is still being typed: the open record absorbs the
+      // edit. Only `before` is ever read back from a past record (undo
+      // returns it, and it was cloned at push time); `after` is overwritten
+      // with a fresh snapshot the moment the record moves to the redo stack,
+      // so updating it here would be a full-tree clone per keystroke spent
+      // on a value nobody reads.
       return;
     }
     this.past.push({
       label,
       at: Date.now(),
       before: structuredClone(current),
-      after: structuredClone(next ?? current),
+      // By reference on purpose: trees are immutable in the editor, and a
+      // past record's `after` is never read (undo overwrites it on the way
+      // to the redo stack). Cloning per push would tax every edit for
+      // nothing — the §15.1 keystroke clock proved it.
+      after: next ?? current,
     });
     if (this.past.length > this.limit) this.past.shift();
     this.future = [];

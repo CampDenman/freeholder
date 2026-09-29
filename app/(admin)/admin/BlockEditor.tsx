@@ -651,6 +651,30 @@ export function BlockEditor({
 
   const activePicker = propPick ? pickerFor(propPick) : undefined;
 
+  // Stable identities matter: PreviewCanvas subscribes to these, and a new
+  // function per render would tear the message listener down and re-add it on
+  // every keystroke — measured as ~2ms of keystroke→preview regression.
+  const handleAssetPick = useCallback(
+    (blockId: string, prop: string, anchor: FrameAnchor) =>
+      setPropPick({ blockId, prop, x: anchor.x, y: anchor.y }),
+    [],
+  );
+  const handleCollectionPick = useCallback(
+    (blockId: string, prop: string, current: string, anchor: FrameAnchor) =>
+      setCollectionPick({ blockId, prop, current, x: anchor.x, y: anchor.y }),
+    [],
+  );
+  const handleProductPick = useCallback(
+    (blockId: string, prop: string, current: string, anchor: FrameAnchor) =>
+      setProductPickState({ blockId, prop, current, x: anchor.x, y: anchor.y }),
+    [],
+  );
+  const handleAltEdit = useCallback(
+    (blockId: string, prop: string, current: string, anchor: FrameAnchor) =>
+      setAltEdit({ blockId, prop, current, x: anchor.x, y: anchor.y }),
+    [],
+  );
+
   const canvasProps = {
     src: previewSrc,
     version: savedVersion,
@@ -662,16 +686,11 @@ export function BlockEditor({
     // Media assets and commerce entity picks both raise the one anchored
     // picker (#453's unified propPick); the store sections' source swaps and
     // the image's alt editor raise their own.
-    onAssetPick: (blockId: string, prop: string, anchor: FrameAnchor) =>
-      setPropPick({ blockId, prop, x: anchor.x, y: anchor.y }),
-    onPropPick: (blockId: string, prop: string, anchor: FrameAnchor) =>
-      setPropPick({ blockId, prop, x: anchor.x, y: anchor.y }),
-    onCollectionPick: (blockId: string, prop: string, current: string, anchor: FrameAnchor) =>
-      setCollectionPick({ blockId, prop, current, x: anchor.x, y: anchor.y }),
-    onProductPick: (blockId: string, prop: string, current: string, anchor: FrameAnchor) =>
-      setProductPickState({ blockId, prop, current, x: anchor.x, y: anchor.y }),
-    onAltEdit: (blockId: string, prop: string, current: string, anchor: FrameAnchor) =>
-      setAltEdit({ blockId, prop, current, x: anchor.x, y: anchor.y }),
+    onAssetPick: handleAssetPick,
+    onPropPick: handleAssetPick,
+    onCollectionPick: handleCollectionPick,
+    onProductPick: handleProductPick,
+    onAltEdit: handleAltEdit,
     outlines,
     labels: labels.preview,
   } as const;
