@@ -2372,10 +2372,11 @@ function CropFocalEditor({
   const width = image?.width ?? 0;
   const height = image?.height ?? 0;
   const known = width > 0 && height > 0;
-  const focal: Focal = focalOverride ?? {
+  const assetFocal: Focal = {
     x: image?.focalX ?? BASIS / 2,
     y: image?.focalY ?? BASIS / 2,
   };
+  const focal: Focal = focalOverride ?? assetFocal;
   const ratio = IMAGE_ASPECTS[aspect] ?? null;
 
   const pointAt = (clientX: number, clientY: number): Focal => {
@@ -2556,7 +2557,11 @@ function CropFocalEditor({
                   const delta = arrowDelta(event);
                   if (!delta) return;
                   event.preventDefault();
-                  setFocalOverride(clampFocal({ x: focal.x + delta.x, y: focal.y + delta.y }));
+                  // Functional, so key repeats faster than a render compound.
+                  setFocalOverride((current) => {
+                    const base = current ?? assetFocal;
+                    return clampFocal({ x: base.x + delta.x, y: base.y + delta.y });
+                  });
                 }}
               />
             </div>
