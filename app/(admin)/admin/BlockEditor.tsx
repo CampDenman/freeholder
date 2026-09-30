@@ -2450,7 +2450,7 @@ function CropFocalEditor({
     .replace("{y}", String(Math.round(focal.y / 100)));
 
   return (
-    <AnchoredPopover x={x} y={y} width={360} label={labels.cropTitle} onClose={onClose}>
+    <AnchoredPopover x={x} y={y} width={360} height={560} label={labels.cropTitle} onClose={onClose}>
       <div className="grid gap-3">
         <p className="font-mono text-xs font-medium text-ink-muted">{labels.cropTitle}</p>
         {image === undefined ? (
@@ -2591,7 +2591,7 @@ function CropFocalEditor({
             </div>
             <div className="grid gap-1">
               <span className="font-mono text-xs font-medium text-ink-muted">{labels.preview}</span>
-              <div className="w-40 overflow-hidden rounded-md border border-rule">
+              <div className="w-32 overflow-hidden rounded-md border border-rule">
                 {framing && framing.mode !== "natural" ? (
                   <div data-crop-preview={framing.mode} style={{ ...framing.frame, width: "100%" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element -- mirrors the page's framing */}
@@ -2675,12 +2675,12 @@ async function defaultLoadImage(assetId: string): Promise<CropImage | null> {
  * anchors exactly where an LTR admin's does. Shared by every picker the
  * canvas raises.
  */
-function popoverOrigin(x: number, y: number, width: number) {
+function popoverOrigin(x: number, y: number, width: number, height = 312) {
   const inlineStart =
     document.documentElement.dir === "rtl"
       ? Math.max(8, window.innerWidth - x - width)
       : Math.max(8, Math.min(x, Math.max(8, window.innerWidth - width - 8)));
-  const blockStart = Math.max(8, Math.min(y, Math.max(8, window.innerHeight - 320)));
+  const blockStart = Math.max(8, Math.min(y, Math.max(8, window.innerHeight - height - 8)));
   return { marginInlineStart: inlineStart, marginBlockStart: blockStart };
 }
 
@@ -2688,6 +2688,7 @@ function AnchoredPopover({
   x,
   y,
   width,
+  height,
   label,
   onClose,
   children,
@@ -2695,6 +2696,8 @@ function AnchoredPopover({
   x: number;
   y: number;
   width: number;
+  /** Expected height, so a tall popover still opens inside the viewport. */
+  height?: number;
   label: string;
   onClose: () => void;
   children: React.ReactNode;
@@ -2704,8 +2707,8 @@ function AnchoredPopover({
       <div
         role="dialog"
         aria-label={label}
-        className="fixed start-0 top-0 rounded-lg border border-rule bg-surface p-2 shadow-raised"
-        style={{ width, ...popoverOrigin(x, y, width) }}
+        className="fixed start-0 top-0 max-h-[calc(100vh-1rem)] overflow-auto rounded-lg border border-rule bg-surface p-2 shadow-raised"
+        style={{ width, ...popoverOrigin(x, y, width, height) }}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
