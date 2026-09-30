@@ -305,6 +305,62 @@ describe("slice C editor chrome", () => {
     expect(visible).toBe(after[0]);
   });
 
+  it("gap 5: a staged version never swaps in under the owner's caret", async () => {
+    // A save stages the next version; if it finishes loading while the owner
+    // is typing on the canvas, swapping would hide the element holding their
+    // caret and every later keystroke would land in a frame nobody sees.
+    await renderEditor();
+    const frames = () => [...container.querySelectorAll("iframe")];
+    const live = frames()[0]!;
+    await act(async () => {
+      live.dispatchEvent(new Event("load"));
+    });
+    const doc = live.contentDocument!;
+    // jsdom does not load the preview route; give the frame a body to type in.
+    if (!doc.body) {
+      doc.replaceChildren(doc.createElement("html"));
+      doc.documentElement.appendChild(doc.createElement("body"));
+    }
+    const paragraph = doc.createElement("p");
+    paragraph.setAttribute("data-editable-rich", "body");
+    paragraph.setAttribute("contenteditable", "true");
+    paragraph.tabIndex = 0;
+    paragraph.textContent = "Mid-sentence";
+    doc.body.appendChild(paragraph);
+
+    await act(async () => {
+      type(textInput(), "Saved change");
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1_300));
+    });
+    expect(save).toHaveBeenCalled();
+    const region = container.querySelector('section[aria-label="Preview"]')!;
+
+    // The owner clicks into the canvas copy just as the staged frame loads.
+    paragraph.focus();
+    expect(doc.activeElement).toBe(paragraph);
+    const staged = frames().find((frame) => frame.className.includes("hidden"))!;
+    await act(async () => {
+      staged.dispatchEvent(new Event("load"));
+    });
+    expect(live.className).not.toContain("hidden");
+    expect(live.title).toBe("Preview");
+    expect(staged.className).toContain("hidden");
+    // …and the canvas says a newer version is still on its way.
+    expect(region.getAttribute("aria-busy")).toBe("true");
+
+    // Ending the edit lets the waiting version in.
+    await act(async () => {
+      paragraph.blur();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(staged.className).not.toContain("hidden");
+    expect(staged.title).toBe("Preview");
+    expect(live.className).toContain("hidden");
+    expect(region.hasAttribute("aria-busy")).toBe(false);
+  });
+
   it("gap 10: the zen surface opens with the canvas at true height and the outlines toggle", async () => {
     await renderEditor();
     await act(async () => {
