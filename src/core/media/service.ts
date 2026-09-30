@@ -1713,6 +1713,9 @@ export interface ResolvedImage {
   width: number | null;
   height: number | null;
   altText: string | null;
+  /** The subject's position, basis points 0..10000 (§4.5 crop anchor). */
+  focalX: number;
+  focalY: number;
 }
 
 /**
@@ -1742,6 +1745,8 @@ export const resolveImage = defineService({
       width: z.number().int().nullable(),
       height: z.number().int().nullable(),
       altText: z.string().nullable(),
+      focalX: z.number().int(),
+      focalY: z.number().int(),
     })
     .nullable(),
   handler: async (input, ctx): Promise<ResolvedImage | null> => {
@@ -1776,6 +1781,8 @@ export const resolveImage = defineService({
       width: asset.width,
       height: asset.height,
       altText: asset.altText,
+      focalX: asset.focalX,
+      focalY: asset.focalY,
     };
   },
 });

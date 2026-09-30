@@ -1131,6 +1131,10 @@ describe.runIf(hasDatabase)("the asset library", () => {
       STAFF,
     );
     expect([focal.focalX, focal.focalY]).toEqual([2400, 8100]);
+    // C2.25: the public resolve carries the subject's position, so every
+    // framed placement (object-position) keeps it in view.
+    const resolved = await resolveImage.call({ id: asset.id }, ANONYMOUS);
+    expect(resolved).toMatchObject({ focalX: 2400, focalY: 8100 });
     const detailed = await updateAssetDetails.call(
       {
         id: asset.id,
