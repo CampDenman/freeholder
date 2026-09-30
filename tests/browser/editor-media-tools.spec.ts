@@ -107,7 +107,12 @@ test.describe("canvas image upload, crop and focal point", () => {
     context,
   }) => {
     test.setTimeout(240_000);
-    await context.addCookies([{ name: SESSION_COOKIE, value: sessionToken, url: BASE_URL }]);
+    // Sign-in issues the double-submit CSRF cookie the upload API checks;
+    // a fixture session has to carry one the same way.
+    await context.addCookies([
+      { name: SESSION_COOKIE, value: sessionToken, url: BASE_URL },
+      { name: CSRF_COOKIE, value: issueCsrfToken(), url: BASE_URL },
+    ]);
 
     const saved = page.locator('p[role="status"]');
     const canvas = page.frameLocator("iframe[title='Preview']");
