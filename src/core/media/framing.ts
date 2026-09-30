@@ -194,7 +194,9 @@ export interface Framing {
   ratio?: number;
 }
 
-const percent = (value: number) => `${Number(value.toFixed(4))}%`;
+/** Four decimals is sub-pixel at any real size; integer maths, no toFixed. */
+const round4 = (value: number) => Math.round(value * 10_000) / 10_000 || 0;
+const percent = (value: number) => `${round4(value)}%`;
 
 /**
  * How to draw one placement.
@@ -247,7 +249,7 @@ export function imageFraming(input: FramingInput): Framing {
       frame: {
         position: "relative",
         overflow: "hidden",
-        aspectRatio: String(Number(ratio.toFixed(6))),
+        aspectRatio: String(Math.round(ratio * 1_000_000) / 1_000_000),
         maxWidth: "100%",
         width: `${width}px`,
       },

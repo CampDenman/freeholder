@@ -2474,7 +2474,6 @@ function CropFocalEditor({
                 setFocalOverride(pointAt(event.clientX, event.clientY));
               }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element -- the resolved original, drawn whole */}
               <img
                 src={image.src}
                 alt=""
@@ -2594,11 +2593,9 @@ function CropFocalEditor({
               <div className="w-32 overflow-hidden rounded-md border border-rule">
                 {framing && framing.mode !== "natural" ? (
                   <div data-crop-preview={framing.mode} style={{ ...framing.frame, width: "100%" }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element -- mirrors the page's framing */}
                     <img src={image.src} alt="" style={framing.image} />
                   </div>
                 ) : (
-                  // eslint-disable-next-line @next/next/no-img-element -- mirrors the page's framing
                   <img data-crop-preview="natural" src={image.src} alt="" className="block h-auto w-full" />
                 )}
               </div>

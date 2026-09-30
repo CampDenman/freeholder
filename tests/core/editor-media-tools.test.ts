@@ -228,7 +228,7 @@ describe("canvas image upload and crop & focal", () => {
       vi.fn(async (url: string, init: RequestInit = {}) => {
         calls.push({ url, method: init.method ?? "GET" });
         if (url === "/api/media/uploads" && init.method === "POST") {
-          const body = JSON.parse(String(init.body)) as { filename: string; bytes: number };
+          const body = JSON.parse(init.body as string) as { filename: string; bytes: number };
           expect(body).toMatchObject({ filename: "harbour.png", bytes: 4 });
           return Response.json({
             id: UPLOAD_ID,
@@ -341,9 +341,8 @@ describe("canvas image upload and crop & focal", () => {
 
     // A square frame, then a crop window fitted around the subject.
     const select = dialog.querySelector<HTMLSelectElement>("select")!;
-    const setValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
     await act(async () => {
-      setValue.call(select, "square");
+      select.value = "square";
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
     // The result swatch uses the renderer's own framing: object-fit cover.

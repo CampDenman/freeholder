@@ -21,7 +21,7 @@ import { CANVAS_BRIDGE } from "../../app/(preview)/canvas-bridge";
 
 const ctx = (identifyBlocks = false): BlockRenderContext => ({
   locale: "en",
-  t: ((key: string) => key) as BlockRenderContext["t"],
+  t: (key: string) => key,
   business: null,
   path: "/",
   identifyBlocks,
