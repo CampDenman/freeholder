@@ -84,6 +84,7 @@ export function PreviewCanvas({
   onCollectionPick,
   onProductPick,
   onAltEdit,
+  onCropEdit,
   outlines = false,
   heightMode = "fixed",
   labels,
@@ -160,6 +161,8 @@ export function PreviewCanvas({
     current: string,
     anchor: FrameAnchor,
   ) => void;
+  /** An image block's crop & focal affordance was clicked (C2.25). */
+  onCropEdit?: (blockId: string, prop: string, anchor: FrameAnchor) => void;
   /** Persistent block outlines (the zen surface's show-structure toggle). */
   outlines?: boolean;
   /**
@@ -314,6 +317,7 @@ export function PreviewCanvas({
         };
         productPick?: { prop?: string; current?: string; x?: number; y?: number };
         altEdit?: { prop?: string; current?: string; x?: number; y?: number };
+        cropEdit?: { prop?: string; x?: number; y?: number };
       };
       if (data?.source !== "freeholder-preview") return;
       // The frame (re)loaded — a reload may have raced the last broadcast, so
@@ -361,6 +365,10 @@ export function PreviewCanvas({
         });
         return;
       }
+      if (data.cropEdit?.prop && data.blockId && onCropEdit) {
+        onCropEdit(data.blockId, data.cropEdit.prop, anchor(data.cropEdit.x, data.cropEdit.y));
+        return;
+      }
       if (data.pick?.prop && data.blockId && onPropPick) {
         onPropPick(data.blockId, data.pick.prop, anchor(data.pick.x, data.pick.y));
       }
@@ -368,7 +376,7 @@ export function PreviewCanvas({
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [onSelect, onEdit, onMove, onAssetPick, onPropPick, onCollectionPick, onProductPick, onAltEdit, live]);
+  }, [onSelect, onEdit, onMove, onAssetPick, onPropPick, onCollectionPick, onProductPick, onAltEdit, onCropEdit, live]);
 
   // …and selecting in the editor outlines it in the frame.
   useEffect(() => {

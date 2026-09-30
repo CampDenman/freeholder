@@ -121,6 +121,7 @@ function translateField(
             label: label(t, choice.labelKey, choice.value),
           })),
     itemFields: field.itemFields?.map((sub) => translateField(t, sub, assets, entities)),
+    ...(field.kind === "asset" && field.assetKind ? { assetKind: field.assetKind } : {}),
   };
 }
 
@@ -195,6 +196,36 @@ export function editorLabels(t: Translate): EditorLabels {
     done: t("common.done"),
     altText: t("cms.editor.altText"),
     altApply: t("cms.editor.altApply"),
+    media: {
+      upload: t("cms.editor.upload"),
+      // {percent} survives as a literal; the picker fills it in as parts land.
+      uploading: t("cms.editor.uploading", { percent: "{percent}" }),
+      uploadFailed: t("cms.editor.uploadFailed"),
+      cropTitle: t("cms.editor.crop.title"),
+      focalPoint: t("cms.editor.crop.focalPoint", { x: "{x}", y: "{y}" }),
+      focalHint: t("cms.editor.crop.focalHint"),
+      cropToggle: t("cms.editor.crop.toggle"),
+      cropArea: t("cms.editor.crop.area"),
+      corners: {
+        nw: t("cms.editor.crop.cornerNw"),
+        ne: t("cms.editor.crop.cornerNe"),
+        sw: t("cms.editor.crop.cornerSw"),
+        se: t("cms.editor.crop.cornerSe"),
+      },
+      shape: t("cms.field.aspect"),
+      aspects: {
+        original: t("cms.choice.aspect.original"),
+        wide: t("cms.choice.aspect.wide"),
+        landscape: t("cms.choice.aspect.landscape"),
+        square: t("cms.choice.aspect.square"),
+        portrait: t("cms.choice.aspect.portrait"),
+      },
+      preview: t("cms.editor.crop.preview"),
+      reset: t("cms.editor.crop.reset"),
+      apply: t("cms.editor.crop.apply"),
+      loading: t("cms.editor.crop.loading"),
+      unavailable: t("cms.editor.crop.unavailable"),
+    },
     duplicate: t("cms.editor.duplicate"),
     copy: t("cms.editor.copy"),
     paste: t("cms.editor.paste"),

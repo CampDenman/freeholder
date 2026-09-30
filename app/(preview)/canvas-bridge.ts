@@ -122,6 +122,20 @@ document.addEventListener("click", function (event) {
       height: altBox.height
     };
   }
+  // The image block's crop & focal affordance (C2.25): the editor raises
+  // its crop tool anchored to the picture, so report the picture's box.
+  var cropEdit = target ? target.closest("[data-edit-crop]") : null;
+  if (cropEdit) {
+    var cropHost = cropEdit.closest("[data-asset-prop]");
+    var cropBox = (cropHost || cropEdit).getBoundingClientRect();
+    message.cropEdit = {
+      prop: cropEdit.getAttribute("data-edit-crop"),
+      x: cropBox.left,
+      y: cropBox.top,
+      width: cropBox.width,
+      height: cropBox.height
+    };
+  }
   // The entity-pick affordance on the commerce blocks (collection/product):
   // same anchored-picker message, different namespace. These are NOT media
   // assets — the draft cannot repaint them client-side, so unlike

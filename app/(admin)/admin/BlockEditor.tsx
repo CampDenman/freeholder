@@ -31,6 +31,7 @@ import {
   ListBullets,
   Plus,
   Trash,
+  UploadSimple,
 } from "@phosphor-icons/react/dist/ssr";
 import { Button, cx } from "@/ui/primitives";
 import { moveBlock, type DropPosition } from "@/modules/cms/blocks/move";
@@ -53,6 +54,20 @@ import {
   type PreviewLabels,
 } from "./PreviewCanvas";
 import { RichField } from "./RichField";
+import { uploadMediaFile } from "./media/upload-client";
+import {
+  BASIS,
+  clampCrop,
+  clampFocal,
+  cropForAspect,
+  IMAGE_ASPECTS,
+  imageFraming,
+  isFullCrop,
+  resizeCrop,
+  type Focal,
+  type ImageAspect,
+  type ImageCrop,
+} from "@/core/media/framing";
 
 export interface EditorField {
   name: string;
@@ -70,6 +85,8 @@ export interface EditorField {
   label: string;
   choices?: { value: string; label: string }[];
   itemFields?: EditorField[];
+  /** For `asset`: the one media kind the field accepts. */
+  assetKind?: "image" | "video";
 }
 
 export interface EditorBlockType {
@@ -87,6 +104,42 @@ export interface EditorNode {
   type: string;
   props: Record<string, unknown>;
   children?: EditorNode[];
+}
+
+/**
+ * The canvas image tools (C2.25): upload from the anchored picker, and the
+ * crop & focal-point editor. Optional so an editor screen that cannot upload
+ * (none today) simply shows neither.
+ */
+export interface MediaLabels {
+  upload: string;
+  /** "Uploading… {percent}%" */
+  uploading: string;
+  uploadFailed: string;
+  cropTitle: string;
+  /** Screen-reader name of the focal marker: "{x}% across, {y}% down". */
+  focalPoint: string;
+  focalHint: string;
+  cropToggle: string;
+  /** Screen-reader name of the crop window. */
+  cropArea: string;
+  corners: { nw: string; ne: string; sw: string; se: string };
+  shape: string;
+  aspects: Record<ImageAspect, string>;
+  preview: string;
+  reset: string;
+  apply: string;
+  loading: string;
+  unavailable: string;
+}
+
+/** What the crop tool needs to draw the picture: the public resolve's answer. */
+export interface CropImage {
+  src: string;
+  width: number | null;
+  height: number | null;
+  focalX: number;
+  focalY: number;
 }
 
 /** One row a store picker offers — a collection or a product. */
@@ -143,6 +196,8 @@ export interface EditorLabels {
   /** The image block's on-canvas alt editor. */
   altText: string;
   altApply: string;
+  /** Upload and crop/focal on the canvas (C2.25). */
+  media?: MediaLabels;
   duplicate: string;
   copy: string;
   paste: string;
@@ -203,6 +258,8 @@ export function BlockEditor({
   onDetachSection,
   listCollections,
   listProducts,
+  uploadImage = defaultUploadImage,
+  loadImage = defaultLoadImage,
 }: {
   initialBlocks: EditorNode[];
   blockTypes: EditorBlockType[];
@@ -254,6 +311,17 @@ export function BlockEditor({
    */
   listCollections?: () => Promise<StoreChoice[]>;
   listProducts?: () => Promise<StoreChoice[]>;
+  /**
+   * Upload one file from the canvas picker. Defaults to the media library's
+   * own resumable pipeline (upload-client.ts) — injected only so tests can
+   * observe it.
+   */
+  uploadImage?: (
+    file: File,
+    options: { signal: AbortSignal; onProgress: (percent: number) => void },
+  ) => Promise<{ id: string; filename: string }>;
+  /** Resolve a picture for the crop tool; defaults to `media.resolveImage`. */
+  loadImage?: (assetId: string) => Promise<CropImage | null>;
 }) {
   const [blocks, setBlocks] = useState<EditorNode[]>(initialBlocks);
   const [selectedId, setSelectedId] = useState<string | undefined>();
@@ -280,9 +348,38 @@ export function BlockEditor({
   /** The canvas zoom in the zen surface. */
   const [zoom, setZoom] = useState(1);
 
+  /**
+   * Files uploaded from the canvas picker this session. The server built the
+   * asset choices when the editor opened; a fresh upload joins them here so
+   * the picker, the form's select and the crop tool all know it at once.
+   */
+  const [uploaded, setUploaded] = useState<{ value: string; label: string }[]>([]);
+  const effectiveTypes = useMemo(
+    () =>
+      uploaded.length === 0
+        ? blockTypes
+        : blockTypes.map((type) => ({
+            ...type,
+            fields: type.fields.map((field) =>
+              field.kind === "asset" && field.assetKind !== "video"
+                ? {
+                    ...field,
+                    choices: [
+                      ...(field.choices ?? []),
+                      ...uploaded.filter(
+                        (extra) =>
+                          !(field.choices ?? []).some((choice) => choice.value === extra.value),
+                      ),
+                    ],
+                  }
+                : field,
+            ),
+          })),
+    [blockTypes, uploaded],
+  );
   const byType = useMemo(
-    () => new Map(blockTypes.map((b) => [b.type, b])),
-    [blockTypes],
+    () => new Map(effectiveTypes.map((b) => [b.type, b])),
+    [effectiveTypes],
   );
 
   const blockLabel = useCallback(
@@ -610,6 +707,40 @@ export function BlockEditor({
     [historyLabel, labels.historyEdit, persist],
   );
 
+  /**
+   * Several props of one block as one edit and one history record — the
+   * crop tool's apply (crop, focal point and frame shape together), and an
+   * asset swap that drops the old picture's crop. Structural: the canvas
+   * cannot repaint a crop from the draft, so it saves at once and the
+   * invisible reload shows the server's own rendering of the result.
+   */
+  const applyPropsEdit = useCallback(
+    (blockId: string, patch: Record<string, unknown>, options?: { structural?: boolean }) => {
+      const current = blocksRef.current;
+      const walk = (nodes: EditorNode[]): EditorNode[] =>
+        nodes.map((node) => {
+          if (node.id === blockId) {
+            let props = node.props;
+            for (const [key, value] of Object.entries(patch)) {
+              props = setPropAtPath(props, key, value);
+            }
+            return { ...node, props };
+          }
+          return node.children ? { ...node, children: walk(node.children) } : node;
+        });
+      const next = walk(current);
+      const node = collectById(current, new Set([blockId]))[0];
+      if (!node) return;
+      history.current.push(current, historyLabel(labels.historyEdit, node.type), next);
+      blocksRef.current = next;
+      setBlocks(next);
+      setStatus("dirty");
+      setHistoryVersion((n) => n + 1);
+      if (options?.structural) void persist();
+    },
+    [historyLabel, labels.historyEdit, persist],
+  );
+
   // A replace affordance on the canvas — an image's, or a commerce block's
   // collection/product pick — raises the anchored picker; the pick itself is
   // an ordinary canvas edit (the named prop) from there on.
@@ -624,6 +755,9 @@ export function BlockEditor({
   const [collectionPick, setCollectionPick] = useState<StorePick | undefined>();
   const [productPickState, setProductPickState] = useState<StorePick | undefined>();
   const [altEdit, setAltEdit] = useState<StorePick | undefined>();
+  const [cropEdit, setCropEdit] = useState<
+    { blockId: string; x: number; y: number } | undefined
+  >();
 
   const pickerFor = (pick: { blockId: string; prop: string }) => {
     const node = collectById(blocksRef.current, new Set([pick.blockId]))[0];
@@ -646,7 +780,13 @@ export function BlockEditor({
         : field.kind === "collection"
           ? { label: preview.replaceCollection, empty: preview.noCollections }
           : { label: preview.replaceProduct, empty: preview.noProducts };
-    return { choices: field.choices ?? [], ...meta };
+    return {
+      choices: field.choices ?? [],
+      ...meta,
+      // Upload rides the picker for image fields (the audit's gap 7): the
+      // file goes through the media library's own resumable pipeline.
+      uploadable: field.kind === "asset" && field.assetKind !== "video",
+    };
   };
 
   const activePicker = propPick ? pickerFor(propPick) : undefined;
@@ -674,6 +814,43 @@ export function BlockEditor({
       setAltEdit({ blockId, prop, current, x: anchor.x, y: anchor.y }),
     [],
   );
+  const handleCropEdit = useCallback(
+    (blockId: string, _prop: string, anchor: FrameAnchor) =>
+      setCropEdit({ blockId, x: anchor.x, y: anchor.y }),
+    [],
+  );
+
+  /**
+   * Choosing an asset from the picker. A different picture drops the old
+   * one's crop and focal override — a rectangle drawn on one photograph means
+   * nothing on another — in the same history record as the swap.
+   */
+  const pickAsset = useCallback(
+    (blockId: string, prop: string, value: string | undefined) => {
+      const node = collectById(blocksRef.current, new Set([blockId]))[0];
+      const framed =
+        node &&
+        prop === "assetId" &&
+        node.props[prop] !== value &&
+        (node.props.crop !== undefined ||
+          node.props.focalX !== undefined ||
+          node.props.focalY !== undefined);
+      if (framed) {
+        applyPropsEdit(blockId, {
+          [prop]: value,
+          crop: undefined,
+          focalX: undefined,
+          focalY: undefined,
+        });
+      } else {
+        applyInlineEdit(blockId, prop, value);
+      }
+    },
+    [applyInlineEdit, applyPropsEdit],
+  );
+  const cropNode = cropEdit
+    ? collectById(blocks, new Set([cropEdit.blockId]))[0]
+    : undefined;
 
   const canvasProps = {
     src: previewSrc,
@@ -691,6 +868,7 @@ export function BlockEditor({
     onCollectionPick: handleCollectionPick,
     onProductPick: handleProductPick,
     onAltEdit: handleAltEdit,
+    onCropEdit: labels.media ? handleCropEdit : undefined,
     outlines,
     labels: labels.preview,
   } as const;
@@ -747,7 +925,7 @@ export function BlockEditor({
             nodes={blocks}
             onChange={mutate}
             byType={byType}
-            blockTypes={blockTypes}
+            blockTypes={effectiveTypes}
             labels={labels}
             selectedId={selectedId}
             selectedIds={selectedIds}
@@ -903,10 +1081,28 @@ export function BlockEditor({
           cancelLabel={labels.cancel}
           onPick={(value) => {
             // An empty pick clears the prop, as the form select does.
-            applyInlineEdit(propPick.blockId, propPick.prop, value || undefined);
+            pickAsset(propPick.blockId, propPick.prop, value || undefined);
             setPropPick(undefined);
           }}
           onClose={() => setPropPick(undefined)}
+          upload={
+            activePicker.uploadable && labels.media
+              ? {
+                  labels: labels.media,
+                  send: uploadImage,
+                  onUploaded: (asset) => {
+                    // The new file joins the library's choices and lands on
+                    // the block in one step — upload *is* the pick.
+                    setUploaded((current) => [
+                      ...current.filter((entry) => entry.value !== asset.id),
+                      { value: asset.id, label: asset.filename },
+                    ]);
+                    pickAsset(propPick.blockId, propPick.prop, asset.id);
+                    setPropPick(undefined);
+                  },
+                }
+              : undefined
+          }
         />
       ) : null}
       {collectionPick && listCollections ? (
@@ -963,6 +1159,28 @@ export function BlockEditor({
             setAltEdit(undefined);
           }}
           onClose={() => setAltEdit(undefined)}
+        />
+      ) : null}
+      {cropEdit && labels.media && typeof cropNode?.props.assetId === "string" ? (
+        <CropFocalEditor
+          key={`${cropEdit.blockId}:${cropNode.props.assetId}`}
+          assetId={cropNode.props.assetId}
+          initial={{
+            crop: cropNode.props.crop as ImageCrop | undefined,
+            focalX: cropNode.props.focalX as number | undefined,
+            focalY: cropNode.props.focalY as number | undefined,
+            aspect: (cropNode.props.aspect as ImageAspect | undefined) ?? "original",
+          }}
+          x={cropEdit.x}
+          y={cropEdit.y}
+          labels={labels.media}
+          cancelLabel={labels.cancel}
+          load={loadImage}
+          onApply={(patch) => {
+            applyPropsEdit(cropEdit.blockId, patch, { structural: true });
+            setCropEdit(undefined);
+          }}
+          onClose={() => setCropEdit(undefined)}
         />
       ) : null}
     </div>
@@ -1893,7 +2111,10 @@ function AnchoredPicker({
   cancelLabel,
   onPick,
   onClose,
+  upload,
 }: {
+  /** Present for image fields: an upload through the media pipeline. */
+  upload?: PickerUpload;
   /** The field's choices, "None" first, exactly as the form shows them. */
   choices: { value: string; label: string }[];
   /** Physical viewport coordinates the canvas reported for the block. */
@@ -1934,6 +2155,7 @@ function AnchoredPicker({
           }
         }}
       >
+        {upload ? <PickerUploadControl upload={upload} /> : null}
         {hasAssets ? null : (
           <p className="px-2 py-1.5 text-sm text-ink-muted">{emptyLabel}</p>
         )}
@@ -1963,6 +2185,482 @@ function AnchoredPicker({
       </div>
     </div>
   );
+}
+
+/** The picker's upload door (C2.25): one file, the library's own pipeline. */
+interface PickerUpload {
+  labels: MediaLabels;
+  send: (
+    file: File,
+    options: { signal: AbortSignal; onProgress: (percent: number) => void },
+  ) => Promise<{ id: string; filename: string }>;
+  onUploaded: (asset: { id: string; filename: string }) => void;
+}
+
+const IMAGE_ACCEPT = "image/jpeg,image/png,image/gif,image/webp,image/avif";
+
+/**
+ * Upload from the anchored picker. The file travels the media library's
+ * resumable pipeline (reservation, parts or bounded proxy, validation, scan,
+ * dedupe, provenance) and the Asset it becomes is applied to the block the
+ * moment it exists — no trip to the library, no second pick.
+ */
+function PickerUploadControl({ upload }: { upload: PickerUpload }) {
+  const input = useRef<HTMLInputElement>(null);
+  const controller = useRef<AbortController | undefined>(undefined);
+  const [progress, setProgress] = useState<number | undefined>();
+  const [failed, setFailed] = useState<string | undefined>();
+  useEffect(() => () => controller.current?.abort(), []);
+  const labels = upload.labels;
+  return (
+    <div className="mb-1 grid gap-1 border-b border-rule pb-2">
+      <input
+        ref={input}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        aria-label={labels.upload}
+        className="sr-only"
+        tabIndex={-1}
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = "";
+          if (!file) return;
+          setFailed(undefined);
+          setProgress(0);
+          controller.current = new AbortController();
+          upload
+            .send(file, { signal: controller.current.signal, onProgress: setProgress })
+            .then((asset) => {
+              setProgress(undefined);
+              upload.onUploaded(asset);
+            })
+            .catch((error: unknown) => {
+              setProgress(undefined);
+              if ((error as Error)?.name === "AbortError") return;
+              setFailed(error instanceof Error && error.message ? error.message : labels.uploadFailed);
+            });
+        }}
+      />
+      <button
+        type="button"
+        disabled={progress !== undefined}
+        onClick={() => input.current?.click()}
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-rule-strong bg-field px-2.5 py-1.5 text-sm font-medium text-ink hover:bg-surface-muted focus-visible:bg-surface-muted disabled:opacity-60"
+      >
+        <UploadSimple size={14} weight="bold" />
+        {labels.upload}
+      </button>
+      {progress !== undefined ? (
+        <div className="grid gap-1" aria-live="polite">
+          <span className="text-xs text-ink-muted">
+            {labels.uploading.replace("{percent}", String(progress))}
+          </span>
+          <progress className="h-1.5 w-full accent-accent" max={100} value={progress} />
+        </div>
+      ) : null}
+      {failed ? (
+        <p role="alert" className="text-xs text-danger">
+          {failed}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------ crop & focal tool */
+
+type Corner = "nw" | "ne" | "sw" | "se";
+const CORNERS: Corner[] = ["nw", "ne", "sw", "se"];
+
+function cornerPoint(crop: ImageCrop, corner: Corner): Focal {
+  return {
+    x: corner.includes("w") ? crop.x : crop.x + crop.w,
+    y: corner.includes("n") ? crop.y : crop.y + crop.h,
+  };
+}
+
+/** Arrow keys → a basis-point step; Shift moves ten times as far. */
+function arrowDelta(event: React.KeyboardEvent): Focal | undefined {
+  const step = event.shiftKey ? 1_000 : 100;
+  switch (event.key) {
+    case "ArrowLeft":
+      return { x: -step, y: 0 };
+    case "ArrowRight":
+      return { x: step, y: 0 };
+    case "ArrowUp":
+      return { x: 0, y: -step };
+    case "ArrowDown":
+      return { x: 0, y: step };
+    default:
+      return undefined;
+  }
+}
+
+const pct = (bp: number) => `${bp / 100}%`;
+
+/**
+ * The crop & focal-point tool, anchored to the picture on the canvas (the
+ * audit's gap 7, the half a text patch cannot carry).
+ *
+ * The picture is shown whole. Clicking it marks the subject (the focal
+ * point); a toggle adds a crop window with four corner handles and a
+ * draggable body, locked to the chosen frame shape. Every control is a real
+ * button, so the same edits work from the keyboard: arrows nudge 1%, Shift
+ * 10%. A live "Result" swatch draws the placement with the very framing
+ * function the page renderer uses. Apply is one edit of the block's own
+ * `crop`, `focalX`/`focalY` and `aspect` props — the file is never touched.
+ */
+function CropFocalEditor({
+  assetId,
+  initial,
+  x,
+  y,
+  labels,
+  cancelLabel,
+  load,
+  onApply,
+  onClose,
+}: {
+  assetId: string;
+  initial: {
+    crop?: ImageCrop;
+    focalX?: number;
+    focalY?: number;
+    aspect: ImageAspect;
+  };
+  x: number;
+  y: number;
+  labels: MediaLabels;
+  cancelLabel: string;
+  load: (assetId: string) => Promise<CropImage | null>;
+  onApply: (patch: Record<string, unknown>) => void;
+  onClose: () => void;
+}) {
+  const [image, setImage] = useState<CropImage | null | undefined>();
+  const [aspect, setAspect] = useState<ImageAspect>(initial.aspect);
+  const [cropOn, setCropOn] = useState(!isFullCrop(initial.crop));
+  const [crop, setCrop] = useState<ImageCrop>(
+    initial.crop ? clampCrop(initial.crop) : { x: 0, y: 0, w: BASIS, h: BASIS },
+  );
+  const [focalOverride, setFocalOverride] = useState<Focal | undefined>(
+    initial.focalX !== undefined || initial.focalY !== undefined
+      ? { x: initial.focalX ?? BASIS / 2, y: initial.focalY ?? BASIS / 2 }
+      : undefined,
+  );
+  const stage = useRef<HTMLDivElement>(null);
+  const drag = useRef<
+    | { kind: "move"; start: Focal; origin: ImageCrop }
+    | { kind: "corner"; corner: Corner }
+    | { kind: "focal" }
+    | undefined
+  >(undefined);
+
+  useEffect(() => {
+    let live = true;
+    load(assetId)
+      .then((result) => {
+        if (live) setImage(result);
+      })
+      .catch(() => {
+        if (live) setImage(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [assetId, load]);
+
+  const width = image?.width ?? 0;
+  const height = image?.height ?? 0;
+  const known = width > 0 && height > 0;
+  const focal: Focal = focalOverride ?? {
+    x: image?.focalX ?? BASIS / 2,
+    y: image?.focalY ?? BASIS / 2,
+  };
+  const ratio = IMAGE_ASPECTS[aspect] ?? null;
+
+  const pointAt = (clientX: number, clientY: number): Focal => {
+    const box = stage.current?.getBoundingClientRect();
+    if (!box || box.width === 0 || box.height === 0) return focal;
+    return clampFocal({
+      x: ((clientX - box.left) / box.width) * BASIS,
+      y: ((clientY - box.top) / box.height) * BASIS,
+    });
+  };
+
+  const resizeTo = (corner: Corner, point: Focal) =>
+    setCrop((current) => resizeCrop(current, corner, point, width, height, ratio));
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const active = drag.current;
+      if (!active) return;
+      const point = pointAt(event.clientX, event.clientY);
+      if (active.kind === "focal") setFocalOverride(point);
+      else if (active.kind === "corner") resizeTo(active.corner, point);
+      else
+        setCrop(
+          clampCrop({
+            ...active.origin,
+            x: active.origin.x + point.x - active.start.x,
+            y: active.origin.y + point.y - active.start.y,
+          }),
+        );
+    };
+    const up = () => {
+      drag.current = undefined;
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  });
+
+  const chooseAspect = (next: ImageAspect) => {
+    setAspect(next);
+    const nextRatio = IMAGE_ASPECTS[next] ?? null;
+    if (cropOn && nextRatio && known) setCrop(cropForAspect(width, height, nextRatio, focal));
+  };
+
+  const toggleCrop = (on: boolean) => {
+    setCropOn(on);
+    if (on && known) {
+      setCrop(
+        ratio
+          ? cropForAspect(width, height, ratio, focal)
+          : { x: 1_000, y: 1_000, w: 8_000, h: 8_000 },
+      );
+    }
+  };
+
+  const framing = known
+    ? imageFraming({
+        width,
+        height,
+        crop: cropOn ? crop : undefined,
+        aspect,
+        focal,
+      })
+    : undefined;
+
+  const focalLabel = labels.focalPoint
+    .replace("{x}", String(Math.round(focal.x / 100)))
+    .replace("{y}", String(Math.round(focal.y / 100)));
+
+  return (
+    <AnchoredPopover x={x} y={y} width={360} label={labels.cropTitle} onClose={onClose}>
+      <div className="grid gap-3">
+        <p className="font-mono text-xs font-medium text-ink-muted">{labels.cropTitle}</p>
+        {image === undefined ? (
+          <p className="text-sm text-ink-muted" aria-live="polite">
+            {labels.loading}
+          </p>
+        ) : !image || !known ? (
+          <p className="text-sm text-ink-muted">{labels.unavailable}</p>
+        ) : (
+          <>
+            <p className="text-xs text-ink-muted">{labels.focalHint}</p>
+            <div
+              ref={stage}
+              data-crop-stage=""
+              className="relative w-full touch-none select-none overflow-hidden rounded-md border border-rule bg-surface-muted"
+              style={{ aspectRatio: `${width} / ${height}` }}
+              onPointerDown={(event) => {
+                if (event.target !== event.currentTarget && !(event.target as Element).matches("img")) return;
+                event.preventDefault();
+                drag.current = { kind: "focal" };
+                setFocalOverride(pointAt(event.clientX, event.clientY));
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- the resolved original, drawn whole */}
+              <img
+                src={image.src}
+                alt=""
+                draggable={false}
+                className="block h-full w-full"
+              />
+              {cropOn ? (
+                <>
+                  {/* The discarded area, dimmed with the paper token. */}
+                  <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 bg-paper opacity-70" style={{ height: pct(crop.y) }} />
+                  <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 bg-paper opacity-70" style={{ height: pct(BASIS - crop.y - crop.h) }} />
+                  <div aria-hidden className="pointer-events-none absolute bg-paper opacity-70" style={{ top: pct(crop.y), height: pct(crop.h), left: 0, width: pct(crop.x) }} />
+                  <div aria-hidden className="pointer-events-none absolute bg-paper opacity-70" style={{ top: pct(crop.y), height: pct(crop.h), right: 0, width: pct(BASIS - crop.x - crop.w) }} />
+                  <button
+                    type="button"
+                    data-crop-area=""
+                    aria-label={labels.cropArea}
+                    className="absolute cursor-move border-2 border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    style={{ left: pct(crop.x), top: pct(crop.y), width: pct(crop.w), height: pct(crop.h) }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      drag.current = {
+                        kind: "move",
+                        start: pointAt(event.clientX, event.clientY),
+                        origin: crop,
+                      };
+                    }}
+                    onKeyDown={(event) => {
+                      const delta = arrowDelta(event);
+                      if (!delta) return;
+                      event.preventDefault();
+                      setCrop((current) =>
+                        clampCrop({ ...current, x: current.x + delta.x, y: current.y + delta.y }),
+                      );
+                    }}
+                  />
+                  {CORNERS.map((corner) => {
+                    const point = cornerPoint(crop, corner);
+                    return (
+                      <button
+                        key={corner}
+                        type="button"
+                        data-crop-handle={corner}
+                        aria-label={labels.corners[corner]}
+                        className="absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-surface bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        style={{
+                          left: pct(point.x),
+                          top: pct(point.y),
+                          cursor: corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize",
+                        }}
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          drag.current = { kind: "corner", corner };
+                        }}
+                        onKeyDown={(event) => {
+                          const delta = arrowDelta(event);
+                          if (!delta) return;
+                          event.preventDefault();
+                          resizeTo(corner, { x: point.x + delta.x, y: point.y + delta.y });
+                        }}
+                      />
+                    );
+                  })}
+                </>
+              ) : null}
+              <button
+                type="button"
+                data-focal-marker=""
+                aria-label={focalLabel}
+                className="absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-accent bg-surface opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                style={{ left: pct(focal.x), top: pct(focal.y) }}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  drag.current = { kind: "focal" };
+                }}
+                onKeyDown={(event) => {
+                  const delta = arrowDelta(event);
+                  if (!delta) return;
+                  event.preventDefault();
+                  setFocalOverride(clampFocal({ x: focal.x + delta.x, y: focal.y + delta.y }));
+                }}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="inline-flex items-center gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  checked={cropOn}
+                  onChange={(event) => toggleCrop(event.target.checked)}
+                />
+                {labels.cropToggle}
+              </label>
+              <label className="ms-auto flex items-center gap-2 text-xs font-medium text-ink-muted">
+                {labels.shape}
+                <select
+                  value={aspect}
+                  onChange={(event) => chooseAspect(event.target.value as ImageAspect)}
+                  className="rounded-md border border-rule bg-field px-2 py-1 text-xs text-ink"
+                >
+                  {(Object.keys(IMAGE_ASPECTS) as ImageAspect[]).map((value) => (
+                    <option key={value} value={value}>
+                      {labels.aspects[value]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="grid gap-1">
+              <span className="font-mono text-xs font-medium text-ink-muted">{labels.preview}</span>
+              <div className="w-40 overflow-hidden rounded-md border border-rule">
+                {framing && framing.mode !== "natural" ? (
+                  <div data-crop-preview={framing.mode} style={{ ...framing.frame, width: "100%" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- mirrors the page's framing */}
+                    <img src={image.src} alt="" style={framing.image} />
+                  </div>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element -- mirrors the page's framing
+                  <img data-crop-preview="natural" src={image.src} alt="" className="block h-auto w-full" />
+                )}
+              </div>
+            </div>
+          </>
+        )}
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            disabled={!known}
+            onClick={() =>
+              onApply({
+                aspect,
+                crop: cropOn && !isFullCrop(crop) ? clampCrop(crop) : undefined,
+                focalX: focalOverride?.x,
+                focalY: focalOverride?.y,
+              })
+            }
+          >
+            {labels.apply}
+          </Button>
+          <button
+            type="button"
+            onClick={() => {
+              setCropOn(false);
+              setCrop({ x: 0, y: 0, w: BASIS, h: BASIS });
+              setAspect("original");
+              setFocalOverride(undefined);
+            }}
+            className="rounded-md px-2.5 py-1 text-xs text-ink-muted underline decoration-rule underline-offset-2"
+          >
+            {labels.reset}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md px-2.5 py-1 text-xs text-ink-muted underline decoration-rule underline-offset-2"
+          >
+            {cancelLabel}
+          </button>
+        </div>
+      </div>
+    </AnchoredPopover>
+  );
+}
+
+/** Upload one picture through the library's pipeline; the Asset it became. */
+async function defaultUploadImage(
+  file: File,
+  options: { signal: AbortSignal; onProgress: (percent: number) => void },
+): Promise<{ id: string; filename: string }> {
+  const result = await uploadMediaFile(file, options);
+  if (!result.assetId) throw new Error("The upload did not produce a file.");
+  return { id: result.assetId, filename: file.name };
+}
+
+/** The crop tool's picture: the same public resolve the renderer uses. */
+async function defaultLoadImage(assetId: string): Promise<CropImage | null> {
+  const response = await fetch("/api/v1/media.resolveImage", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: assetId }),
+    credentials: "omit",
+  });
+  if (!response.ok) return null;
+  const data = (await response.json().catch(() => null)) as CropImage | null;
+  return data && typeof data.src === "string" ? data : null;
 }
 
 /* --------------------------------------------------------- store pickers */

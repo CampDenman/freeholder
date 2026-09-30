@@ -134,6 +134,20 @@ const CANVAS_CSS = `
   .fh-alt:focus { opacity: 1; }
   .fh-alt:focus-visible { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
 
+  /* The image block's crop & focal affordance (C2.25): the bottom corner
+     under the replace button, revealed the same way. */
+  .fh-crop {
+    position: absolute; inset-block-end: 0.5rem; inset-inline-end: 0.5rem;
+    padding: 0.3rem 0.65rem; border-radius: 0.375rem;
+    border: 1px solid var(--fh-rule); background: var(--fh-surface);
+    color: var(--fh-ink); font-size: 0.75rem; font-weight: 600;
+    cursor: pointer; opacity: 0; transition: opacity 0.12s ease;
+  }
+  .fh-asset:hover .fh-crop, .fh-asset:focus-within .fh-crop,
+  [data-selected] > .fh-crop,
+  .fh-crop:focus { opacity: 1; }
+  .fh-crop:focus-visible { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
+
   /* Persistent block outlines (the zen surface's "show structure"): every
      block keeps a dashed rule around it, sharpened to the accent when
      hovered or selected exactly as before. */
