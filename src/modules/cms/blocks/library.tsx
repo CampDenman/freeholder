@@ -20,6 +20,13 @@ import { formatMoney } from "@/core/i18n";
 import type { Actor } from "@/core/service";
 import { languageName, localePath } from "@/core/i18n/customer";
 import { cx } from "@/ui/primitives";
+import {
+  effectiveFocal,
+  focalCoordinate,
+  imageAspectSchema,
+  imageCropSchema,
+  imageFraming,
+} from "@/core/media/framing";
 import { defineBlock } from "./types";
 import { fromPlainString, richBodySchema } from "./rich";
 import { renderRichDoc } from "./rich-render";
@@ -527,6 +534,13 @@ export const nav = defineBlock({
  * copying it onto every block that uses the picture is how it drifts. §5
  * requires it on public images, so a missing one is a visible gap in the media
  * library rather than something a page can quietly omit.
+ *
+ * Crop and focal point (C2.25, `core/media/framing`): the asset carries the
+ * subject's focal point; this placement may override it, choose a frame shape
+ * (`aspect`) that crops by `object-fit: cover` around that point, or set an
+ * explicit `crop` rectangle. All three are placement props on the block — the
+ * file and its renditions are never re-encoded — and the same pure framing
+ * function draws the public page, the canvas and the crop tool's preview.
  */
 export const image = defineBlock({
   type: "image",
@@ -540,9 +554,23 @@ export const image = defineBlock({
     decorative: z.boolean().default(false),
     width: z.enum(["column", "wide", "full"]).default("column"),
     rounded: z.boolean().default(true),
+    /** Frame shape; anything but `original` crops around the focal point. */
+    aspect: imageAspectSchema.default("original"),
+    /** This placement's focal point, basis points; else the asset's own. */
+    focalX: focalCoordinate.optional(),
+    focalY: focalCoordinate.optional(),
+    /** An explicit crop window in basis points of the original. */
+    crop: imageCropSchema.optional(),
   }),
   starter: () => ({}),
-  fieldHints: { assetId: { control: "asset" } },
+  // Crop and focal point are set on the canvas, where the picture is — the
+  // form has no honest control for a rectangle on an image.
+  fieldHints: {
+    assetId: { control: "asset" },
+    focalX: { hidden: true },
+    focalY: { hidden: true },
+    crop: { hidden: true },
+  },
   // Imported lazily so the block library does not drag core/media into every
   // bundle that only needs a heading.
   resolve: async (props) => {
@@ -552,7 +580,18 @@ export const image = defineBlock({
   },
   render: ({ props, resolved, ctx }) => {
     const alt = props.decorative ? "" : (props.alt ?? resolved?.altText ?? "");
-    const picture = resolved ? (
+    const framing = resolved
+      ? imageFraming({
+          width: resolved.width,
+          height: resolved.height,
+          crop: props.crop,
+          aspect: props.aspect,
+          focal: effectiveFocal(props, resolved),
+        })
+      : undefined;
+    const framed = framing !== undefined && framing.mode !== "natural";
+    const stretch = props.width === "wide" || props.width === "full";
+    const pictureEl = resolved ? (
       <picture>
         {resolved.sources.map((source) => (
           <source key={source.format} srcSet={source.srcset} type={source.type} />
@@ -564,15 +603,29 @@ export const image = defineBlock({
           height={resolved.height ?? undefined}
           loading="lazy"
           decoding="async"
+          data-framing={framed ? framing.mode : undefined}
+          style={framed ? framing.image : undefined}
           className={cx(
-            "h-auto max-w-full",
-            props.rounded && "rounded-lg",
-            props.width === "wide" && "w-full",
-            props.width === "full" && "w-full",
+            framed ? undefined : "h-auto max-w-full",
+            !framed && props.rounded && "rounded-lg",
+            !framed && stretch && "w-full",
           )}
         />
       </picture>
     ) : null;
+    // A framed placement is a window onto the ordinary picture: the frame
+    // takes the shape, clips, and carries the rounding.
+    const picture =
+      pictureEl && framed ? (
+        <div
+          className={cx("fh-frame", props.rounded && "rounded-lg")}
+          style={{ ...framing.frame, ...(stretch ? { width: "100%" } : {}) }}
+        >
+          {pictureEl}
+        </div>
+      ) : (
+        pictureEl
+      );
     // The public surface renders exactly the picture (nothing at all when no
     // asset is chosen). The canvas instead wraps it so the picture can be
     // replaced where it renders: an empty block shows a placeholder rather
@@ -589,6 +642,11 @@ export const image = defineBlock({
         <button type="button" className="fh-alt" data-edit-alt="alt">
           {ctx.t("cms.editor.editAlt")}
         </button>
+        {props.assetId ? (
+          <button type="button" className="fh-crop" data-edit-crop="crop">
+            {ctx.t("cms.editor.editCrop")}
+          </button>
+        ) : null}
       </div>
     );
   },

@@ -434,6 +434,8 @@ const image: ResolvedImage = {
   width: 800,
   height: 600,
   altText: "Smile, week zero",
+  focalX: 5000,
+  focalY: 5000,
 };
 
 type MediaItem = {
