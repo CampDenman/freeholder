@@ -47,6 +47,7 @@ import {
   schedulePage,
   snapshotRevision,
 } from "@/modules/cms/lifecycle";
+import { listCollections, listVisibleProducts } from "@/modules/catalog/service";
 import {
   addComment,
   decideReview,
@@ -452,6 +453,43 @@ export async function publishPageNowAction(
     return { version: page.version };
   } catch (error) {
     return present(error);
+  }
+}
+
+/**
+ * The collections a store-section picker can offer, for the editor's
+ * on-canvas collection swap. Refusals answer empty rather than alarming the
+ * autosave-adjacent flow that raised the picker.
+ */
+export async function listCollectionsForEditorAction(): Promise<
+  { slug: string; title: string }[]
+> {
+  try {
+    const rows = await listCollections.call({}, await currentActor());
+    return rows.map((row) => ({ slug: row.slug, title: row.title }));
+  } catch (error) {
+    console.error("catalog listing for the editor failed", error);
+    return [];
+  }
+}
+
+/**
+ * The products a product-row picker can offer: the live storefront
+ * projection, so the picker shows exactly what the row could render.
+ */
+export async function listProductsForEditorAction(): Promise<
+  { slug: string; title: string; detail: string | null }[]
+> {
+  try {
+    const rows = await listVisibleProducts.call({ limit: 200 }, await currentActor());
+    return rows.map((row) => ({
+      slug: row.slug,
+      title: row.name,
+      detail: row.subtitle,
+    }));
+  } catch (error) {
+    console.error("catalog listing for the editor failed", error);
+    return [];
   }
 }
 

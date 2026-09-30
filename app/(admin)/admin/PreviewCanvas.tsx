@@ -19,8 +19,11 @@
 // the typeable elements from the tree side in the same commit as each change,
 // so a keystroke's preview never waits for the debounced autosave or a server
 // round-trip. Everything a text patch cannot express (a new block, a heading
-// level) still reconverges when a save bumps `version` and the frame reloads
-// from stored state.
+// level, a swapped collection) still reconverges when a save bumps `version`
+// and the frame reloads from stored state — and since the audit's gap 5 that
+// reload is *invisible*: the next version loads in a hidden second frame and
+// only swaps in when it has finished rendering, so the owner never watches the
+// canvas blank, flicker or jump.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DeviceMobile, Desktop } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
@@ -57,6 +60,17 @@ export interface PreviewDraftNode {
   children?: PreviewDraftNode[];
 }
 
+/**
+ * An anchored editing affordance raised from the frame (asset swap, collection
+ * swap, product pick, alt text). `anchor` is the host's position in this
+ * document's viewport — the frame's physical coordinates plus the frame's own
+ * offset — so the editor can attach its popover next to whatever raised it.
+ */
+export interface FrameAnchor {
+  x: number;
+  y: number;
+}
+
 export function PreviewCanvas({
   src,
   version,
@@ -67,6 +81,11 @@ export function PreviewCanvas({
   onMove,
   onAssetPick,
   onPropPick,
+  onCollectionPick,
+  onProductPick,
+  onAltEdit,
+  outlines = false,
+  heightMode = "fixed",
   labels,
 }: {
   /** The preview page for this subject. */
@@ -108,7 +127,7 @@ export function PreviewCanvas({
   onAssetPick?: (
     blockId: string,
     prop: string,
-    anchor: { x: number; y: number },
+    anchor: FrameAnchor,
   ) => void;
   /**
    * The replace affordance on a commerce block (collection or product pick)
@@ -120,17 +139,123 @@ export function PreviewCanvas({
     prop: string,
     anchor: { x: number; y: number },
   ) => void;
+  /** A store section's collection-swap affordance was clicked. */
+  onCollectionPick?: (
+    blockId: string,
+    prop: string,
+    current: string,
+    anchor: FrameAnchor,
+  ) => void;
+  /** A product row's pick affordance was clicked. */
+  onProductPick?: (
+    blockId: string,
+    prop: string,
+    current: string,
+    anchor: FrameAnchor,
+  ) => void;
+  /** An image block's alt-text affordance was clicked. */
+  onAltEdit?: (
+    blockId: string,
+    prop: string,
+    current: string,
+    anchor: FrameAnchor,
+  ) => void;
+  /** Persistent block outlines (the zen surface's show-structure toggle). */
+  outlines?: boolean;
+  /**
+   * `fixed` keeps the classic 32rem editing window; `auto` sizes the frame to
+   * the page's true rendered height, which the frame reports after every
+   * change — the zen surface's full-page view (audit gap 10).
+   */
+  heightMode?: "fixed" | "auto";
   labels: PreviewLabels;
 }) {
-  const frame = useRef<HTMLIFrameElement>(null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+  /**
+   * The invisible-reload pair. `urls` holds each slot's address (one slot may
+   * be empty); `live` is the slot the owner sees. A save puts the new version
+   * into the idle slot, hidden; when it finishes loading it becomes `live`
+   * and the previously live slot goes idle, ready to host the next version.
+   */
+  const initialUrl = `${src}?v=${version}`;
+  const [urls, setUrls] = useState<[string, string | undefined]>([initialUrl, undefined]);
+  const [live, setLive] = useState<0 | 1>(0);
+  const [frameHeight, setFrameHeight] = useState<number | undefined>();
+  const slot0 = useRef<HTMLIFrameElement>(null);
+  const slot1 = useRef<HTMLIFrameElement>(null);
+  const slots = [slot0, slot1] as const;
+  /** The newest version's URL — a finishing slot swaps in only if it holds it. */
+  const wantedRef = useRef(initialUrl);
+  /** Latest slot URLs and preferences, readable by the message handler. */
+  const urlsRef = useRef(urls);
+  urlsRef.current = urls;
+  const outlinesRef = useRef(outlines);
+  outlinesRef.current = outlines;
   /** Latest draft, readable by the ready handshake between renders. */
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  /** Scroll position carried across an invisible swap. */
+  const pendingScrollRef = useRef(0);
+
+  const frameOf = (slot: 0 | 1) => slots[slot].current;
+  const liveFrame = () => frameOf(live);
 
   const postToFrame = (message: Record<string, unknown>) => {
-    frame.current?.contentWindow?.postMessage(message, window.location.origin);
+    liveFrame()?.contentWindow?.postMessage(message, window.location.origin);
   };
+
+  // A save (or the first load) names the version the canvas should show. The
+  // idle slot takes it; the visible slot keeps the old render until the new
+  // one has actually loaded.
+  useEffect(() => {
+    const url = `${src}?v=${version}`;
+    wantedRef.current = url;
+    setUrls((current) => {
+      if (current[live] === url || current[live === 0 ? 1 : 0] === url) return current;
+      const next: [string, string | undefined] = [...current];
+      next[live === 0 ? 1 : 0] = url;
+      return next;
+    });
+  }, [src, version, live]);
+
+  function onSlotLoad(slot: 0 | 1) {
+    const url = urlsRef.current[slot];
+    if (!url || url !== wantedRef.current || slot === live) return;
+    // Capture the scroll before the swap so the new render opens where the
+    // owner was reading; a same-origin frame always answers scrollY.
+    try {
+      pendingScrollRef.current = liveFrame()?.contentWindow?.scrollY ?? 0;
+    } catch {
+      pendingScrollRef.current = 0;
+    }
+    setLive(slot);
+  }
+
+  // After a swap: carry the scroll over, re-assert the selection outline and
+  // re-broadcast the draft (the new frame asked for it with its `ready`, but
+  // it asked while it was still hidden and the editor only answers the live
+  // frame). `live` is the only dependency by design: the messages re-assert
+  // current state, and selectedId/draft changes re-post through their own
+  // effects below.
+  useEffect(() => {
+    const frame = liveFrame();
+    if (!frame) return;
+    try {
+      frame.contentWindow?.scrollTo(0, pendingScrollRef.current);
+    } catch {
+      // Same-origin by construction; a defensive no-op costs nothing.
+    }
+    frame.contentWindow?.postMessage(
+      { source: "freeholder-editor", blockId: selectedId ?? null },
+      window.location.origin,
+    );
+    if (draftRef.current) {
+      frame.contentWindow?.postMessage(
+        { source: "freeholder-editor", draft: draftRef.current, outlines },
+        window.location.origin,
+      );
+    }
+  }, [live]);
 
   // The draft follows the tree in the same commit that changed it: a layout
   // effect queues the message before the browser next yields, so the frame
@@ -143,29 +268,64 @@ export function PreviewCanvas({
   // same-task floor.
   useLayoutEffect(() => {
     if (!draft) return;
-    postToFrame({ source: "freeholder-editor", draft: draftRef.current });
-  }, [draft]);
+    postToFrame({ source: "freeholder-editor", draft: draftRef.current, outlines });
+  }, [draft, outlines]);
 
-  // Clicks in the frame select a block in the editor.
+  // Clicks and edits in the frame select blocks and apply picks in the editor.
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
+      // Only the live frame speaks: the hidden staging slot loads the same
+      // scripts and posts the same ready/height messages, and answering them
+      // would leak its transient state into the editor. A null source is
+      // also accepted — synthetic MessageEvents (the unit suite) carry none,
+      // and every real frame speaks with its own window's identity.
+      const liveWindow = frameOf(live)?.contentWindow;
+      if (
+        liveWindow &&
+        event.source !== null &&
+        event.source !== liveWindow &&
+        event.source !== window
+      ) return;
+      const post = (message: Record<string, unknown>) => {
+        frameOf(live)?.contentWindow?.postMessage(message, window.location.origin);
+      };
+      const anchor = (x?: number, y?: number) => {
+        const frameBox = frameOf(live)?.getBoundingClientRect();
+        return {
+          x: (frameBox?.left ?? 0) + (x ?? 0),
+          y: (frameBox?.top ?? 0) + (y ?? 0),
+        };
+      };
       const data = event.data as {
         source?: string;
         blockId?: string | null;
         ready?: boolean;
+        height?: number;
         edit?: { blockId?: string; prop?: string; value?: unknown };
         move?: { blockId?: string; targetId?: string; position?: string };
         assetPick?: { prop?: string; x?: number; y?: number };
         pick?: { prop?: string; x?: number; y?: number };
+        collectionPick?: {
+          prop?: string;
+          current?: string;
+          x?: number;
+          y?: number;
+        };
+        productPick?: { prop?: string; current?: string; x?: number; y?: number };
+        altEdit?: { prop?: string; current?: string; x?: number; y?: number };
       };
       if (data?.source !== "freeholder-preview") return;
       // The frame (re)loaded — a reload may have raced the last broadcast, so
       // send the current draft again; it is a no-op when already in step.
       if (data.ready) {
         if (draftRef.current) {
-          postToFrame({ source: "freeholder-editor", draft: draftRef.current });
+          post({ source: "freeholder-editor", draft: draftRef.current, outlines: outlinesRef.current });
         }
+        return;
+      }
+      if (typeof data.height === "number") {
+        setFrameHeight(data.height);
         return;
       }
       if (data.edit?.blockId && data.edit.prop !== undefined) {
@@ -177,31 +337,43 @@ export function PreviewCanvas({
         return;
       }
       if (data.assetPick?.prop && data.blockId && onAssetPick) {
-        // The message's coordinates are the frame's viewport; anchor the
-        // picker in this document's viewport instead.
-        const frameBox = frame.current?.getBoundingClientRect();
-        onAssetPick(data.blockId, data.assetPick.prop, {
-          x: (frameBox?.left ?? 0) + (data.assetPick.x ?? 0),
-          y: (frameBox?.top ?? 0) + (data.assetPick.y ?? 0),
+        onAssetPick(data.blockId, data.assetPick.prop, anchor(data.assetPick.x, data.assetPick.y));
+        return;
+      }
+      if (data.collectionPick?.prop && data.blockId && onCollectionPick) {
+        onCollectionPick(
+          data.blockId,
+          data.collectionPick.prop,
+          data.collectionPick.current ?? "",
+          anchor(data.collectionPick.x, data.collectionPick.y),
+        );
+        return;
+      }
+      if (data.productPick?.prop && data.blockId && onProductPick) {
+        onProductPick(data.blockId, data.productPick.prop, data.productPick.current ?? "", {
+          ...anchor(data.productPick.x, data.productPick.y),
         });
+        return;
+      }
+      if (data.altEdit?.prop && data.blockId && onAltEdit) {
+        onAltEdit(data.blockId, data.altEdit.prop, data.altEdit.current ?? "", {
+          ...anchor(data.altEdit.x, data.altEdit.y),
+        });
+        return;
       }
       if (data.pick?.prop && data.blockId && onPropPick) {
-        const frameBox = frame.current?.getBoundingClientRect();
-        onPropPick(data.blockId, data.pick.prop, {
-          x: (frameBox?.left ?? 0) + (data.pick.x ?? 0),
-          y: (frameBox?.top ?? 0) + (data.pick.y ?? 0),
-        });
+        onPropPick(data.blockId, data.pick.prop, anchor(data.pick.x, data.pick.y));
       }
       onSelect(data.blockId ?? undefined);
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [onSelect, onEdit, onMove, onAssetPick, onPropPick]);
+  }, [onSelect, onEdit, onMove, onAssetPick, onPropPick, onCollectionPick, onProductPick, onAltEdit, live]);
 
   // …and selecting in the editor outlines it in the frame.
   useEffect(() => {
     postToFrame({ source: "freeholder-editor", blockId: selectedId ?? null });
-  }, [selectedId, version]);
+  }, [selectedId, live]);
 
   return (
     <section aria-label={labels.region} className="grid gap-2">
@@ -223,17 +395,30 @@ export function PreviewCanvas({
       </div>
 
       <div className="overflow-hidden rounded-lg border border-rule bg-surface">
-        <iframe
-          ref={frame}
-          title={labels.region}
-          // The version is in the URL, so a save reloads the frame rather than
-          // the component reaching into it.
-          src={`${src}?v=${version}`}
-          className={cx(
-            "block h-[32rem] border-0 bg-paper transition-all",
-            device === "mobile" ? "mx-auto w-[24rem]" : "w-full",
-          )}
-        />
+        {([0, 1] as const).map((slot) =>
+          urls[slot] === undefined ? null : (
+            <iframe
+              key={slot}
+              ref={slots[slot]}
+              title={slot === live ? labels.region : ""}
+              aria-hidden={slot === live ? undefined : true}
+              tabIndex={slot === live ? undefined : -1}
+              src={urls[slot]}
+              onLoad={() => onSlotLoad(slot)}
+              className={cx(
+                "block border-0 bg-paper transition-all",
+                device === "mobile" ? "mx-auto w-[24rem]" : "w-full",
+                slot !== live && "hidden",
+                heightMode === "fixed" && "h-[32rem]",
+              )}
+              style={
+                heightMode === "auto" && slot === live && frameHeight
+                  ? { height: frameHeight }
+                  : undefined
+              }
+            />
+          ),
+        )}
       </div>
     </section>
   );

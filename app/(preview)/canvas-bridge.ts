@@ -45,21 +45,81 @@ document.addEventListener("click", function (event) {
   // by the picker's own direction-aware anchoring.
   var replace = target ? target.closest("[data-replace-asset]") : null;
   if (replace) {
-    var host = replace.closest("[data-asset-prop]");
-    var box = host ? host.getBoundingClientRect() : null;
-    var pickX = 0, pickY = 0, pickW = 0, pickH = 0;
-    if (box) {
-      pickX = box.left;
-      pickY = box.top;
-      pickW = box.width;
-      pickH = box.height;
+    var assetHost = replace.closest("[data-asset-prop]");
+    var assetBox = assetHost ? assetHost.getBoundingClientRect() : null;
+    var ax = 0, ay = 0, aw = 0, ah = 0;
+    if (assetBox) {
+      ax = assetBox.left;
+      ay = assetBox.top;
+      aw = assetBox.width;
+      ah = assetBox.height;
     }
     message.assetPick = {
       prop: replace.getAttribute("data-replace-asset"),
-      x: pickX,
-      y: pickY,
-      width: pickW,
-      height: pickH
+      x: ax,
+      y: ay,
+      width: aw,
+      height: ah
+    };
+  }
+  // Store sections name a live source rather than hold a copy: the showcase
+  // and the promo band swap their collection, the product row re-picks its
+  // products. Same anchored-picker pattern as the image's asset swap.
+  var collectionSwap = target ? target.closest("[data-replace-collection]") : null;
+  if (collectionSwap) {
+    var storeHost = collectionSwap.closest("[data-store-prop]");
+    var storeBox = storeHost ? storeHost.getBoundingClientRect() : null;
+    var sx = 0, sy = 0, sw = 0, sh = 0;
+    if (storeBox) {
+      sx = storeBox.left;
+      sy = storeBox.top;
+      sw = storeBox.width;
+      sh = storeBox.height;
+    }
+    message.collectionPick = {
+      prop: collectionSwap.getAttribute("data-replace-collection"),
+      kind: storeHost ? storeHost.getAttribute("data-store-kind") : null,
+      current: storeHost ? storeHost.getAttribute("data-store-current") : "",
+      x: sx,
+      y: sy,
+      width: sw,
+      height: sh
+    };
+  }
+  var productPick = target ? target.closest("[data-pick-products]") : null;
+  if (productPick) {
+    var rowHost = productPick.closest("[data-store-prop]");
+    var rowBox = rowHost ? rowHost.getBoundingClientRect() : null;
+    var px = 0, py = 0, pw = 0, ph = 0;
+    if (rowBox) {
+      px = rowBox.left;
+      py = rowBox.top;
+      pw = rowBox.width;
+      ph = rowBox.height;
+    }
+    message.productPick = {
+      prop: productPick.getAttribute("data-pick-products"),
+      current: rowHost ? rowHost.getAttribute("data-store-current") : "",
+      x: px,
+      y: py,
+      width: pw,
+      height: ph
+    };
+  }
+  // The image block's alt-text affordance: a small anchored editor, seeded
+  // with the alt the picture currently shows.
+  var altEdit = target ? target.closest("[data-edit-alt]") : null;
+  if (altEdit) {
+    var altBlock = altEdit.closest("[data-block-id]");
+    var img = altBlock ? altBlock.querySelector("img") : null;
+    var altBox = altEdit.getBoundingClientRect();
+    message.altEdit = {
+      prop: altEdit.getAttribute("data-edit-alt"),
+      current: img ? img.getAttribute("alt") || "" : "",
+      x: altBox.left,
+      y: altBox.top,
+      width: altBox.width,
+      height: altBox.height
     };
   }
   // The entity-pick affordance on the commerce blocks (collection/product):
@@ -534,6 +594,12 @@ window.addEventListener("message", function (event) {
   if (!event.data || event.data.source !== "freeholder-editor") return;
   if (event.data.draft) {
     fhApplyDraft(event.data.draft);
+    // Persistent block outlines are a canvas preference the editor owns (the
+    // audit's gap 10): it arrives with every draft, so a frame reload keeps
+    // the owner's choice without a second message.
+    if (typeof event.data.outlines === "boolean") {
+      document.documentElement.classList.toggle("fh-outlines", event.data.outlines);
+    }
     return;
   }
   document.querySelectorAll("[data-selected]").forEach(function (n) {
@@ -546,6 +612,29 @@ window.addEventListener("message", function (event) {
     el.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
 });
+
+// ── The page's true height ────────────────────────────────────────────────
+//
+// The editor's zen surface sizes the frame to the document it actually
+// rendered, so the owner edits a page at its real height instead of a fixed
+// window (the audit's gap 10). Reported on load, on viewport resize and
+// whenever the body itself changes size — a draft re-sort or an image
+// arriving both move the number.
+function fhReportHeight() {
+  var height = Math.max(
+    document.body ? document.body.scrollHeight : 0,
+    document.documentElement ? document.documentElement.scrollHeight : 0
+  );
+  parent.postMessage(
+    { source: "freeholder-preview", height: height },
+    window.location.origin
+  );
+}
+window.addEventListener("resize", fhReportHeight);
+if (typeof ResizeObserver !== "undefined" && document.body) {
+  new ResizeObserver(fhReportHeight).observe(document.body);
+}
+fhReportHeight();
 
 // The frame has (re)loaded — after a save bumps its version, for instance.
 // Ask the editor for the current draft so typing that raced the reload is

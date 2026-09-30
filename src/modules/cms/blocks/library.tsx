@@ -586,6 +586,9 @@ export const image = defineBlock({
         <button type="button" className="fh-replace" data-replace-asset="assetId">
           {ctx.t("cms.editor.replaceImage")}
         </button>
+        <button type="button" className="fh-alt" data-edit-alt="alt">
+          {ctx.t("cms.editor.editAlt")}
+        </button>
       </div>
     );
   },

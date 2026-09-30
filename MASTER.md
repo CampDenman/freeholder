@@ -4340,9 +4340,43 @@ project without silent telemetry, and ready to carry money.
   tests/core/editor-canvas-drag.test.ts,
   tests/core/editor-reorder.test.ts and the
   tests/browser/editor-drag-drop.spec.ts journey (drag top→bottom → Saved →
-  the published page shows the new order, plus the keyboard path). The box
-  stays open: store-section composition is the next slice, and the
-  audit's gaps 5–7 and 9–10 remain.)
+  the published page shows the new order, plus the keyboard path). Slice C,
+  2026-09-29: store-section composition lands, and with it the audit's
+  remaining editor gaps that belong to this item. Three page blocks compose
+  live catalog data — `collectionShowcase` shelves a collection's current
+  membership through the storefront's own CollectionGrid, `productRow` shows
+  owner-picked products in the owner's order, and `promoBand` pairs copy and
+  a call to action with a live shelf in a full-bleed band (`width:
+  contained|full` is the section-level layout choice) — all resolving the
+  public browse/purchase projections at render time, so a product added to a
+  collection appears on the published page without a republish; the canvas
+  treats them like every other block: headings and CTA labels type where
+  they render, and a swap affordance raises an anchored picker (collections
+  from `catalog.listCollections`, products from `catalog.listVisibleProducts`)
+  whose structural pick saves immediately and reconverges through the gap-5
+  reload. Gap 5 lands as that invisible reload — a save stages the next
+  version in a hidden second frame and swaps only when it has rendered, so
+  the canvas never blanks or jumps (scroll carries over). Gap 6 lands as
+  visible undo/redo buttons with disabled states beside a history menu that
+  names every recorded edit and jumps to one (typing coalesces per field).
+  Gap 10 lands as focus mode: the canvas at the page's true reported height,
+  persistent block outlines, zoom, and the existing device widths, with the
+  admin chrome stepped aside. The image half of gap 7 lands as an on-canvas
+  alt-text editor; gap 9 was already C2.21's `syncProductPublicPage`
+  (activation publishes `/products/<slug>` plus the index, re-verified by
+  tests/core/catalog-public-pages.test.ts). Proven by
+  tests/core/store-sections.test.ts,
+  tests/core/editor-store-sections.test.ts and the
+  tests/browser/editor-store-sections.spec.ts journey (compose hero + row +
+  band on an empty page → pick products and bind the collection on the
+  canvas → publish → the public page shows live shelves, prices and the
+  collection link → add a product to the collection and the published page
+  shows it untouched → swap the band's collection on the canvas → "Publish
+  changes" → the public page follows). The box stays open on one clause,
+  dated 2026-09-29: the canvas picker's upload and crop/focal remainder of
+  the audit's gap 7, which belongs to the media workstream — crop/focal
+  exist nowhere in the platform yet and upload is the resumable media
+  pipeline, not an editor concern.)
 
 **C2 exit:** every public or message-facing surface is safely editable by a
 human, collaboratively, without code, lock-in markup or accidental publication.
