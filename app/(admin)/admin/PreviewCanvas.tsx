@@ -28,6 +28,24 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DeviceMobile, Desktop } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
+/** The canvas's typeable elements — the same test the bridge uses. */
+const EDITABLE = "[data-editable-prop], [data-editable-rich]";
+
+/**
+ * Is the owner mid-edit in this frame: the frame has focus and its caret sits
+ * in one of the typeable elements? Same-origin by construction, so the
+ * editor can simply ask the frame's document.
+ */
+export function isTypingIn(frame: HTMLIFrameElement | null | undefined): boolean {
+  try {
+    const doc = frame?.contentDocument;
+    if (!doc || !doc.hasFocus()) return false;
+    return Boolean(doc.activeElement?.closest?.(EDITABLE));
+  } catch {
+    return false;
+  }
+}
+
 export interface PreviewLabels {
   region: string;
   desktop: string;
@@ -196,6 +214,19 @@ export function PreviewCanvas({
   draftRef.current = draft;
   /** Scroll position carried across an invisible swap. */
   const pendingScrollRef = useRef(0);
+  /** The live slot, readable by listeners attached to a frame's document. */
+  const liveRef = useRef(live);
+  liveRef.current = live;
+  /**
+   * A staged slot that finished loading while the owner was typing in the
+   * live frame. Swapping then would hide the element holding their caret, and
+   * every keystroke after it would land in a frame nobody can see (and whose
+   * messages the editor no longer answers) — so the swap waits for the edit
+   * to end.
+   */
+  const deferredRef = useRef<0 | 1 | null>(null);
+  /** Frame documents already carrying the edit-end listeners. */
+  const watchedRef = useRef(new WeakSet<Document>());
 
   const frameOf = (slot: 0 | 1) => slots[slot].current;
   const liveFrame = () => frameOf(live);
@@ -219,17 +250,95 @@ export function PreviewCanvas({
   }, [src, version, live]);
 
   function onSlotLoad(slot: 0 | 1) {
+    watchForEditEnd(slot);
     const url = urlsRef.current[slot];
-    if (!url || url !== wantedRef.current || slot === live) return;
+    if (!url || url !== wantedRef.current || slot === liveRef.current) return;
+    if (isTypingIn(frameOf(liveRef.current))) {
+      deferredRef.current = slot;
+      return;
+    }
+    swapTo(slot);
+  }
+
+  function swapTo(slot: 0 | 1) {
+    deferredRef.current = null;
     // Capture the scroll before the swap so the new render opens where the
     // owner was reading; a same-origin frame always answers scrollY.
     try {
-      pendingScrollRef.current = liveFrame()?.contentWindow?.scrollY ?? 0;
+      pendingScrollRef.current = frameOf(liveRef.current)?.contentWindow?.scrollY ?? 0;
     } catch {
       pendingScrollRef.current = 0;
     }
     setLive(slot);
   }
+
+  /** The edit that held a staged swap back has ended: swap if still wanted. */
+  function resumeDeferred() {
+    const slot = deferredRef.current;
+    if (slot === null) return;
+    if (slot === liveRef.current || urlsRef.current[slot] !== wantedRef.current) {
+      deferredRef.current = null;
+      return;
+    }
+    if (isTypingIn(frameOf(liveRef.current))) return;
+    swapTo(slot);
+  }
+
+  // Each load brings a fresh document, so the listeners that notice an edit
+  // ending are attached per load. Leaving an editable for another one is
+  // still typing; Enter (which blurs), a click elsewhere in the frame, or the
+  // frame losing focus altogether ends it. When a pointer caused the blur,
+  // the swap waits until that click has been delivered, so a press on the
+  // canvas (a replace button, say) is never swallowed by the frame it
+  // started in disappearing under it.
+  function watchForEditEnd(slot: 0 | 1) {
+    let doc: Document | null | undefined;
+    try {
+      doc = frameOf(slot)?.contentDocument;
+    } catch {
+      return;
+    }
+    if (!doc || watchedRef.current.has(doc)) return;
+    watchedRef.current.add(doc);
+    let pointerDown = false;
+    let resumeAfterPointer = false;
+    doc.addEventListener("pointerdown", () => {
+      pointerDown = true;
+    }, true);
+    doc.addEventListener("pointerup", () => {
+      pointerDown = false;
+      if (!resumeAfterPointer) return;
+      resumeAfterPointer = false;
+      // The click that follows this pointerup is dispatched in the same
+      // task; the next task sees it (and its message) delivered.
+      setTimeout(resumeDeferred, 0);
+    }, true);
+    doc.addEventListener("focusout", (event) => {
+      if (slot !== liveRef.current || deferredRef.current === null) return;
+      const next = event.relatedTarget as Element | null;
+      if (next?.closest?.(EDITABLE)) return;
+      if (pointerDown) {
+        resumeAfterPointer = true;
+        return;
+      }
+      setTimeout(resumeDeferred, 0);
+    });
+  }
+
+  // A frame can finish loading before hydration attaches `onLoad` (the first
+  // frame is server-rendered), so a loaded document found here is watched too.
+  useEffect(() => {
+    for (const slot of [0, 1] as const) {
+      try {
+        const doc = frameOf(slot)?.contentDocument;
+        if (doc && doc.readyState === "complete" && doc.URL !== "about:blank") {
+          watchForEditEnd(slot);
+        }
+      } catch {
+        // Same-origin by construction.
+      }
+    }
+  }, [live, urls]);
 
   // After a swap: carry the scroll over, re-assert the selection outline and
   // re-broadcast the draft (the new frame asked for it with its `ready`, but
@@ -275,18 +384,24 @@ export function PreviewCanvas({
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
-      // Only the live frame speaks: the hidden staging slot loads the same
-      // scripts and posts the same ready/height messages, and answering them
-      // would leak its transient state into the editor. A null source is
+      // Only the live frame reports its lifecycle: the hidden staging slot
+      // loads the same scripts and posts the same ready/height messages, and
+      // answering them would leak its transient state into the editor.
+      // Everything else is the owner's own doing (a click, a keystroke, a
+      // drop), which only a frame they could see can have produced — so it is
+      // also accepted from the frame that was live until a swap a moment ago,
+      // rather than dropping a click that raced the swap. A null source is
       // also accepted — synthetic MessageEvents (the unit suite) carry none,
       // and every real frame speaks with its own window's identity.
       const liveWindow = frameOf(live)?.contentWindow;
-      if (
-        liveWindow &&
-        event.source !== null &&
-        event.source !== liveWindow &&
-        event.source !== window
-      ) return;
+      const fromLive =
+        !liveWindow ||
+        event.source === null ||
+        event.source === liveWindow ||
+        event.source === window;
+      const fromOurFrames =
+        fromLive || event.source === frameOf(live === 0 ? 1 : 0)?.contentWindow;
+      if (!fromOurFrames) return;
       const post = (message: Record<string, unknown>) => {
         frameOf(live)?.contentWindow?.postMessage(message, window.location.origin);
       };
@@ -316,6 +431,7 @@ export function PreviewCanvas({
         altEdit?: { prop?: string; current?: string; x?: number; y?: number };
       };
       if (data?.source !== "freeholder-preview") return;
+      if (!fromLive && (data.ready || typeof data.height === "number")) return;
       // The frame (re)loaded — a reload may have raced the last broadcast, so
       // send the current draft again; it is a no-op when already in step.
       if (data.ready) {
@@ -375,8 +491,14 @@ export function PreviewCanvas({
     postToFrame({ source: "freeholder-editor", blockId: selectedId ?? null });
   }, [selectedId, live]);
 
+  // A newer version than the one on show is still loading (or waiting for an
+  // edit in progress to end). Derived in render, so it is set in the very
+  // commit that bumps `version` — assistive tech hears the canvas is about to
+  // update, and anything automating the editor can wait for it to settle.
+  const settling = urls[live] !== `${src}?v=${version}`;
+
   return (
-    <section aria-label={labels.region} className="grid gap-2">
+    <section aria-label={labels.region} aria-busy={settling || undefined} className="grid gap-2">
       <div className="flex items-center gap-1">
         <DeviceButton
           active={device === "desktop"}

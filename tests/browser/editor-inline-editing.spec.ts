@@ -98,6 +98,17 @@ test.describe("inline canvas editing", () => {
 
     const saved = page.locator('p[role="status"]');
     const canvas = page.frameLocator("iframe[title='Preview']");
+    // A save reloads the canvas invisibly: the next version loads in a hidden
+    // frame and swaps in when rendered, and the canvas region is aria-busy
+    // until it has. An element resolved in the outgoing frame is hidden by
+    // the swap, and a click already waiting on it never lands — so a step
+    // that starts on the canvas right after a save waits for the swap first.
+    const canvasSettled = () =>
+      expect(page.locator('section[aria-label="Preview"]')).not.toHaveAttribute(
+        "aria-busy",
+        "true",
+        { timeout: 15_000 },
+      );
 
     await test.step("open the editor", async () => {
       await page.goto(`/admin/pages/${homePageId}`);
@@ -115,6 +126,7 @@ test.describe("inline canvas editing", () => {
       await page.keyboard.press("Enter");
       await expect(canvas.locator(".fh-canvas h1")).toHaveText(HEADLINE);
       await expect(saved).toHaveText("Saved", { timeout: 15_000 });
+      await canvasSettled();
     });
 
     await test.step("click the intro paragraph and type", async () => {
