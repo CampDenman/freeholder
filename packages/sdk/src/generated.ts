@@ -5144,7 +5144,7 @@ export interface ServiceCatalog {
   };
   "media.resolveImage": {
     input: { id: string };
-    output: { src: string; sources: { format: string; srcset: string; type: string }[]; width: number | null; height: number | null; altText: string | null } | null;
+    output: { src: string; sources: { format: string; srcset: string; type: string }[]; width: number | null; height: number | null; altText: string | null; focalX: number; focalY: number } | null;
   };
   "media.restore": {
     input: { id: string };
