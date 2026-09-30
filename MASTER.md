@@ -3467,7 +3467,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C11.16 spec reconciliation; C11.17 remains unsigned. C2.25 world-class visual editor closed 2026-09-30 (slices A–C in #450/#452/#455, the canvas picker's upload and crop/focal remainder of audit gap 7 in the C2.25 media PR) |
+| Current focus | C11.16 spec reconciliation; C11.17 remains unsigned (the world-class visual editor closed 2026-09-30 — see "Remaining open") |
 | Completion rule | Every unchecked item in C0–C11, except the items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
