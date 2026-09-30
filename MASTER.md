@@ -572,7 +572,7 @@ not expand recurrence (`src/core/ics.ts`).
 
 | Entity | Purpose | Key fields |
 |---|---|---|
-| `Asset` | Any uploaded file. | kind (image/video/doc/audio), storage_key, mime, bytes, width/height/duration, variants (jsonb: thumbs, web, watermarked), alt_text, blurhash |
+| `Asset` | Any uploaded file. | kind (image/video/doc/audio), storage_key, mime, bytes, width/height/duration, variants (jsonb: thumbs, web, watermarked), alt_text, blurhash, focal_x/focal_y (basis points, the subject's position) |
 | `MediaCaptureSession` | One explicit browser, device, share-target or upload-link capture/import session that converges on normal Assets. | created_by_user_id, source (camera/microphone/screen/share_sheet/camera_roll/upload_link/import/social), status, target_type + target_id, upload_count, expires_at, completed_at |
 | `Gallery` | Collection of assets. `kind: portfolio \| client_delivery` | title, slug, kind, contact_id (client galleries), cover_asset_id, access (public/password/pin/login), expires_at, download_policy (none/web_res/full_res/limit_n), watermark (bool), client_can_invite_partner (bool — the client may invite a scoped partner only when the owner has allowed it) |
 | `GalleryItem` | Ordered membership. | gallery_id, asset_id, position |
@@ -608,6 +608,26 @@ repointed rather than the row deleted — a document history that vanishes the
 first time two duplicates are merged is not an audit. The owner can export a
 document's whole history, versions and access alike, because "prove you sent
 it" is the reason this exists.
+
+**The focal point belongs to the picture; a crop belongs to the placement.**
+An image's `focal_x`/`focal_y` (basis points, default centre) say where its
+subject is, are set in the media library, and are returned by the public
+`media.resolveImage` so every surface that frames the image tighter than its
+natural shape keeps the subject in view. A crop is never a property of the
+file — the hero wants 16:9 and the card wants a square of the same
+photograph — so it is stored on the placement: the image block's `aspect`
+(original/wide/landscape/square/portrait, cropping by `object-fit: cover`
+around the focal point), optional `focalX`/`focalY` override, and optional
+`crop` rectangle in basis points of the original. Rendering is a window onto
+the ordinary `<picture>` — same srcset, same renditions, nothing re-encoded —
+drawn by one pure function (`src/core/media/framing.ts`) that the public
+renderer, the editor canvas and the canvas crop tool all share, so the tool
+cannot preview something the page will not ship. Because crop and focal
+overrides are block props they ride the CMS tree's revisions, undo,
+draft/publish, export and restore with no table of their own. Uploads from
+the editor canvas travel the same resumable pipeline as the library
+(`app/(admin)/admin/media/upload-client.ts`); there is one browser upload
+path, not two (C2.25).
 
 **Capture is a first-class media origin, not a browser trick.** Admin surfaces
 can record the screen, a window/tab, camera and microphone through explicit
@@ -3447,12 +3467,12 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C2.25 world-class visual editor — slice C (store-section composition) in flight, with the audit's gaps 5–7 and 9–10 remaining (slices A–B landed 2026-09-29 in #450/#452; the storefront merchandising blocks landed in #453, closing the store-composition foundation the parity blocks began); C11.16 spec reconciliation; C11.17 remains unsigned |
+| Current focus | C11.16 spec reconciliation; C11.17 remains unsigned. C2.25 world-class visual editor closed 2026-09-30 (slices A–C in #450/#452/#455, the canvas picker's upload and crop/focal remainder of audit gap 7 in the C2.25 media PR) |
 | Completion rule | Every unchecked item in C0–C11, except the items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C2.25 world-class visual editor — drag-and-drop and inline editing landed in slices A–B (#450/#452) and the storefront merchandising blocks landed 2026-09-29 (#453); slice C (store-section composition) and the audit's gaps 5–7 and 9–10 remain. Live settlement (C11.05 honesty). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 closed 2026-09-28 by the live Tier-1 restore drill (`deploy/c11-08-restore-summary.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 closed 2026-09-28 by the live Tier-1 restore drill (`deploy/c11-08-restore-summary.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -4306,7 +4326,7 @@ project without silent telemetry, and ready to carry money.
   revision/audit spine; product-wide export/restore proof is still open.
   **F12** `tests/browser/storefront-merch-blocks.spec.ts` is the composition
   proof.)
-- [ ] **C2.25** World-class visual editing: true
+- [x] **C2.25** World-class visual editing: true
   what-you-see-is-what-renders editing — the page itself is the canvas
   (inline text/image editing on the rendered surface), drag-and-drop
   blocks and sections anywhere on the site AND in store contexts
@@ -4372,11 +4392,49 @@ project without silent telemetry, and ready to carry money.
   canvas → publish → the public page shows live shelves, prices and the
   collection link → add a product to the collection and the published page
   shows it untouched → swap the band's collection on the canvas → "Publish
-  changes" → the public page follows). The box stays open on one clause,
+  changes" → the public page follows). The box stayed open on one clause,
   dated 2026-09-29: the canvas picker's upload and crop/focal remainder of
-  the audit's gap 7, which belongs to the media workstream — crop/focal
-  exist nowhere in the platform yet and upload is the resumable media
-  pipeline, not an editor concern.)
+  the audit's gap 7. Closed 2026-09-30: the anchored picker gains an
+  "Upload image" door that sends the file through the media library's own
+  resumable pipeline — one browser client,
+  `app/(admin)/admin/media/upload-client.ts`, now shared by the library's
+  upload form and the canvas (reservation, multipart parts or bounded proxy,
+  validation, scan, dedupe, provenance) — and the Asset it becomes is applied
+  to the block and joins the form's choices at once. Crop and focal point
+  become a first-class media concept (§4.5): the asset's existing
+  `focal_x`/`focal_y` (previously set in the library but honoured by no
+  renderer — the 2026-09-29 note that focal "exists nowhere" was only half
+  right) now flow through `media.resolveImage`, and the image block gains
+  `aspect`, a `focalX`/`focalY` override and a `crop` rectangle, drawn by one
+  pure framing function (`src/core/media/framing.ts`) for the public page,
+  the canvas and the tool's live "Result" swatch. A "Crop & focus" affordance
+  on the canvas raises an anchored tool: click the picture to mark the
+  subject, pick a frame shape, toggle a crop window with four corner handles
+  and a draggable body — every control a real button, arrows nudging 1% and
+  Shift 10%, token colours in both schemes — and Apply lands as one
+  structural, undoable edit that saves at once; swapping the picture drops
+  the old one's crop. No schema change (crop/focal overrides are block props
+  riding the CMS tree's revisions, draft/publish and export). Proven by
+  tests/core/media-framing.test.ts (geometry, block rendering, bridge
+  message), tests/core/editor-media-tools.test.ts (the upload hits the
+  pipeline endpoints and applies the new asset; refusal surfaces in the
+  picker; keyboard focal/shape/crop apply saves immediately as one history
+  record; reset; swap clears the crop), the resolveImage focal assertion in
+  tests/core/media.test.ts, and the tests/browser/editor-media-tools.spec.ts
+  journey (upload on the canvas → the media_uploads reservation completes
+  into a ready Asset → mark the subject, square frame, crop → saved → publish
+  → the public page draws the same square window of the uploaded file).
+  With that the item's full text is evidenced: inline text/image editing,
+  drag-and-drop, store-section composition and every audit gap in the
+  editor's lane. **F04** `/admin/pages/[id]` canvas — the picker's upload
+  door and the crop & focus tool. **F05** N/A — no new service; upload rides
+  `media.beginUpload`/`media.upload`/`media.completeUpload` and rendering
+  `media.resolveImage`, already on the HTTP/SDK/MCP gates. **F07**
+  tests/core/editor-media-tools.test.ts (pipeline refusal shown, block
+  untouched) and tests/core/media-framing.test.ts (a crop leaving the
+  picture refuses at the schema). **F09** N/A as C11.14 — crop/focal are
+  block props on the CMS revision spine and asset columns already exported.
+  **F12** tests/browser/editor-media-tools.spec.ts.)
 
 **C2 exit:** every public or message-facing surface is safely editable by a
 human, collaboratively, without code, lock-in markup or accidental publication.
