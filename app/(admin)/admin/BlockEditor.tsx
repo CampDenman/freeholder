@@ -2464,6 +2464,10 @@ function CropFocalEditor({
             <p className="text-xs text-ink-muted">{labels.focalHint}</p>
             <div
               ref={stage}
+              // Image space is physical — a photograph is not mirrored in a
+              // right-to-left admin — so the stage is always left-to-right
+              // and its logical offsets are its physical ones.
+              dir="ltr"
               data-crop-stage=""
               className="relative w-full touch-none select-none overflow-hidden rounded-md border border-rule bg-surface-muted"
               style={{ aspectRatio: `${width} / ${height}` }}
@@ -2485,14 +2489,14 @@ function CropFocalEditor({
                   {/* The discarded area, dimmed with the paper token. */}
                   <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 bg-paper opacity-70" style={{ height: pct(crop.y) }} />
                   <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 bg-paper opacity-70" style={{ height: pct(BASIS - crop.y - crop.h) }} />
-                  <div aria-hidden className="pointer-events-none absolute bg-paper opacity-70" style={{ top: pct(crop.y), height: pct(crop.h), left: 0, width: pct(crop.x) }} />
-                  <div aria-hidden className="pointer-events-none absolute bg-paper opacity-70" style={{ top: pct(crop.y), height: pct(crop.h), right: 0, width: pct(BASIS - crop.x - crop.w) }} />
+                  <div aria-hidden className="pointer-events-none absolute bg-paper opacity-70" style={{ top: pct(crop.y), height: pct(crop.h), insetInlineStart: 0, width: pct(crop.x) }} />
+                  <div aria-hidden className="pointer-events-none absolute bg-paper opacity-70" style={{ top: pct(crop.y), height: pct(crop.h), insetInlineEnd: 0, width: pct(BASIS - crop.x - crop.w) }} />
                   <button
                     type="button"
                     data-crop-area=""
                     aria-label={labels.cropArea}
                     className="absolute cursor-move border-2 border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                    style={{ left: pct(crop.x), top: pct(crop.y), width: pct(crop.w), height: pct(crop.h) }}
+                    style={{ insetInlineStart: pct(crop.x), top: pct(crop.y), width: pct(crop.w), height: pct(crop.h) }}
                     onPointerDown={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -2521,7 +2525,7 @@ function CropFocalEditor({
                         aria-label={labels.corners[corner]}
                         className="absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-surface bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                         style={{
-                          left: pct(point.x),
+                          insetInlineStart: pct(point.x),
                           top: pct(point.y),
                           cursor: corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize",
                         }}
@@ -2546,7 +2550,7 @@ function CropFocalEditor({
                 data-focal-marker=""
                 aria-label={focalLabel}
                 className="absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-accent bg-surface opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                style={{ left: pct(focal.x), top: pct(focal.y) }}
+                style={{ insetInlineStart: pct(focal.x), top: pct(focal.y) }}
                 onPointerDown={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
