@@ -68,6 +68,7 @@ const steps = [
       "tests/core/spec-reconciliation.test.ts",
       "tests/core/f-matrix.test.ts",
       "tests/core/doc-claim-mapping.test.ts",
+      "tests/core/deploy-droplet.test.ts",
     ].join(" "),
   },
 ];
