@@ -66,11 +66,14 @@ them with the droplet's secrets, outside the repo.
   `/var/log/freeholder-backup.log`. A manual run uploaded and restored cleanly
   (363/363 tables). **Check tomorrow that an archive appeared on its own** —
   `verify.md` asks for it, and nobody has seen the cron fire yet.
-- **Deploying an update** is manual until a pipeline exists: set
-  `FREEHOLDER_IMAGE` to the new `sha-<12 chars>` build's digest (anonymous
-  pulls from `ghcr.io/campdenman/freeholder` work), `docker compose pull &&
-  docker compose up -d`, then watch `docker compose logs app` for
-  `schema is up to date`. Migrations ship in the image.
+- **Deploying an update** is still manual on the forge until a `freeholder`
+  repository exists there (push-to-create is off; it needs a token). The
+  in-repo job is `.forgejo/workflows/deploy-production.yml`, described in
+  `deploy/digitalocean-droplet/deploy.md`. It pins the linux/amd64 digest of
+  a published `sha-<12>` image after attestation, backs up, then
+  `docker compose pull && docker compose up -d`, and waits for
+  `schema is up to date`. Host addresses stay in Forgejo secrets. Until that
+  repository exists, the same steps by hand are in `deploy.md`.
 - **The owner account had not been created** at hand-off time; the owner does
   `/setup` with the bootstrap secret from the droplet's `.env`. Until then
   `/admin` redirects to `/setup`.
@@ -88,12 +91,14 @@ name, or Let's Encrypt's failed-validation limit becomes the problem.
 
 Nothing is red or in flight. Pick by owner priority from:
 
-1. **A deploy pipeline**, so merging stops being a no-op for production.
-   `HANDOFF.md` (2026-08-28) argued for the in-house Forgejo rather than
-   GitHub, because this repository is public and a deploy job carries host
-   details; `../paradisemodern/.forgejo/workflows/` is the working model. The
-   unknowns it listed — how the app runs on the box, what terminates TLS — are
-   now answered: it is exactly the recipe.
+1. **Wire the deploy pipeline to the forge.** The job, the digest pinning
+   and the refusal to store a host address are in the repository
+   (`.forgejo/workflows/deploy-production.yml`,
+   `deploy/digitalocean-droplet/deploy.md`). What is not done, and cannot be
+   done from here: create the `freeholder` repository on the forge
+   (push-to-create is disabled), give the release runner the
+   `freeholder-release` label, and set the secrets that doc names. GitHub
+   remains the wrong place for that job.
 2. **The public playground** on its own disposable instance for
    `demo.freeholder.ai` (C1.38's contract: `FREEHOLDER_PLAYGROUND=1`, blocked
    egress, nightly reset), then repoint `demo`.

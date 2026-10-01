@@ -118,10 +118,19 @@ to prove all three recovery parts agree.
 
 ## Updating
 
+Merging to `main` publishes an image. It does not change this droplet. The
+operator pipeline — a confirmed Forgejo job, not a GitHub one, and not the
+unattended updater — is [`deploy.md`](deploy.md).
+
+Until that job is wired up, pin `FREEHOLDER_IMAGE` to
+`ghcr.io/campdenman/freeholder@sha256:<64 hex>` (the linux/amd64 digest, not
+the tag's index digest) and then:
+
 ```bash
 ssh root@DROPLET_IP 'cd /opt/freeholder && docker compose pull && docker compose up -d'
 ```
 
+`DROPLET_IP` stands in for the address you kept outside this repository.
 Migrations ship inside the image, so a release can never be newer than the
 schema it expects.
 

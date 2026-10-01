@@ -42,6 +42,12 @@ package versions match the platform and a `vX.Y.Z` tag (C3.20). Recipe
 update/rollback automation remains open under C10.10. C1.23 supplies the
 guarded ownership substrate.
 
+`deploy-droplet.mjs` is the operator image swap for the droplet recipe, not
+that updater. It resolves the published tag's linux/amd64 digest, requires
+main-push CI provenance, and leaves the host address to the environment.
+`deploy/digitalocean-droplet/deploy.md` is the procedure. Unattended
+`platform.applyUpdate` stays unavailable.
+
 `pnpm perf:budgets` is the §15.1 harness (C11.11). It parses the budget table
 from MASTER.md and runs `tests/core/performance-budgets.test.ts`. Default is
 the small seed. Every measurement run requires `TEST_DATABASE_URL` (or
