@@ -3,239 +3,167 @@ Copyright (C) 2026 Tony Aly
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Session handoff — 2026-09-26, third-party findings and C6.11
+# Session handoff — 2026-10-01, C2.25 closed and freeholder.ai redeployed
 
 This is a resumption snapshot, not another roadmap. **Read `CLAUDE.md` and
 `MASTER.md` first; MASTER is the sole product, architecture and status
-authority.** Refresh GitHub and run `pnpm plan:check` before relying on any count
-or PR state below. This file replaces the 2026-09-16 completion-push snapshot;
-earlier contents remain in Git history.
+authority.** Refresh GitHub and run `pnpm plan:check` before relying on any
+count or PR state below. This file replaces the 2026-09-26 snapshot; that one
+(and earlier ones) remain in Git history — see "Carried forward" below for what
+from it is still open.
 
 ## Where things stand
 
-Version stays **0.1.0**. This is not DONE and not a release candidate. Plan gate:
-**297 unique IDs, 270 checked, 27 open**. Fifteen of the 27 are real checkboxes;
-the rest are §43.2's permanent per-item F-template rows, which are not work. Seven
-mobile items are excluded by the owner decision of 2026-09-15 (§43.18).
+Version stays **0.1.0**. Not DONE, not a release candidate. Plan gate:
+**302 unique IDs, 287 checked, 15 open**. Three of the 15 are real C-items —
+**C11.10, C11.16, C11.17** — and the other twelve are §43.2's permanent
+per-item F-template rows, which re-run at the final gate rather than being
+work. Mobile is v2 by the owner decision of 2026-09-15 (§43.18).
 
-`main` is at **`445c09b3`**. Merged this session, in order: **#411** (five
-owner-authored-truth features: C8.14, C8.15, C8.16, C5.26, C6.18), **#412** (the
-`forms.get` disclosure fix), **#413** (four third-party defects), **#414** (C6.11
-closed), **#415** (the C11.11 harness made runnable on Windows).
+Between 2026-09-26 and today a long Kimi session (2026-09-15 → 09-29) landed
+roughly seventy PRs across Freeholder and paradisemodern: Paradise Comms as
+the video provider (Daily removed), the world-class storefront (C3.24–C3.26:
+collections, facets/search, public cart → checkout), the visual editor
+overhaul (C2.24/C2.25: inline canvas editing, drag-and-drop, store sections),
+the C11.08 live restore drill and C11.11 reference-target evidence. Read
+`deploy/release-notes-2026-09-27.md` through `-2026-10-01.md` for detail.
+
+This session (2026-09-30 → 10-01) merged:
+
+- **#456** — ten Dependabot bumps in one lockfile (incl. `next` 16.3.6, which
+  clears critical GHSA-vcvr-r3jv-pc5j) and two flaky-test fixes.
+- **#459** — the canvas could swallow typing: the invisible reload from #455
+  swapped frames under the owner's caret. Real product bug, now fixed.
+- **#457** — upload and crop/focal point on the canvas; **closes C2.25**.
+- **#460** — the droplet recipe's nightly backup never ran (unexported env).
+- Closed unmerged: #418 (superseded by #424/#426) and #431–#440 (rolled into
+  #456).
+
+And **moved freeholder.ai to a new droplet running current `main`** — see the
+next section.
 
 Standing authorization, unchanged: routine repository work — branches, PRs,
 merges, gates, docs — proceeds autonomously. Account passwords, API tokens and
-device passcodes are entered locally by the owner only, never in chat, commits or
-test artifacts.
+device passcodes are entered by the owner only, never in chat, commits or test
+artifacts. That includes creating the production owner account.
+
+## Production
+
+`freeholder.ai` runs on a new `freeholder-prod` droplet in the owner's **main**
+DigitalOcean account (the one this workstation's `doctl` default context
+reaches), built from `deploy/digitalocean-droplet/` with no deviations except
+the cron fix that became #460. Host address, bucket names, key names and SSH
+access are deliberately **not** in this public repository; the owner keeps
+them with the droplet's secrets, outside the repo.
+
+- **Stack:** `/opt/freeholder` — Caddy, app, Postgres via compose. The app
+  image is pinned by **digest** in `.env` (`FREEHOLDER_IMAGE`), currently the
+  build of `main` at #457. `.env.pre-cutover` on the box is the pre-switch
+  copy.
+- **Storage:** two private Spaces buckets in sfo3 (media; versioned backups)
+  and one key scoped to only those two.
+- **Backups:** `/etc/cron.d/freeholder-backup`, 03:15 UTC, logging to
+  `/var/log/freeholder-backup.log`. A manual run uploaded and restored cleanly
+  (363/363 tables). **Check tomorrow that an archive appeared on its own** —
+  `verify.md` asks for it, and nobody has seen the cron fire yet.
+- **Deploying an update** is manual until a pipeline exists: set
+  `FREEHOLDER_IMAGE` to the new `sha-<12 chars>` build's digest (anonymous
+  pulls from `ghcr.io/campdenman/freeholder` work), `docker compose pull &&
+  docker compose up -d`, then watch `docker compose logs app` for
+  `schema is up to date`. Migrations ship in the image.
+- **The owner account had not been created** at hand-off time; the owner does
+  `/setup` with the bootstrap secret from the droplet's `.env`. Until then
+  `/admin` redirects to `/setup`.
+- **The old droplet** (still answering `demo.freeholder.ai`) lives in a
+  different DigitalOcean team — apparently shared with campdenman.com — that
+  no token on this workstation can see. It holds no real data per the owner.
+  Delete it once the owner finds that team.
+
+DNS for freeholder.ai is at NameSilo (owner's account; `@` and `demo` A
+records). NameSilo's three authoritative servers published the change several
+minutes apart — wait until all three agree before pointing Caddy at a new
+name, or Let's Encrypt's failed-validation limit becomes the problem.
 
 ## The one thing to do first
 
-**#416 (`fix/third-party-batch-2`) is open and was red on SDK drift.** Its last
-push regenerates the SDK for the `ruleStrong` colour role; confirm that round is
-green, then merge. It carries eight third-party fixes including the WCAG 1.4.11
-border work across 86 files, so land it before starting anything new.
+Nothing is red or in flight. Pick by owner priority from:
 
-If it is red again, suspect the same cause twice: adding a colour role changes the
-design service's palette **and** patch schemas, and `tests/core/sdk.test.ts`
-compares the committed catalog to a fresh generation. Run
-`node scripts/generate-sdk.mjs` and commit the diff.
+1. **A deploy pipeline**, so merging stops being a no-op for production.
+   `HANDOFF.md` (2026-08-28) argued for the in-house Forgejo rather than
+   GitHub, because this repository is public and a deploy job carries host
+   details; `../paradisemodern/.forgejo/workflows/` is the working model. The
+   unknowns it listed — how the app runs on the box, what terminates TLS — are
+   now answered: it is exactly the recipe.
+2. **The public playground** on its own disposable instance for
+   `demo.freeholder.ai` (C1.38's contract: `FREEHOLDER_PLAYGROUND=1`, blocked
+   egress, nightly reset), then repoint `demo`.
+3. **The C11.10 audit loop** below, when the owner calls it.
 
-## Context that is not in the code
+## C11.10 — how the owner wants to run it
 
-A third party built two sites on Freeholder, deployed one to DigitalOcean, and
-sent three reports: 17 application findings, 8 deployment findings, and one
-private security report. **23 of the 24 were reproduced exactly as described**, at
-the line numbers given. They are careful reporters — where one of their suggested
-fixes was wrong it was wrong for a subtle reason, and their citations were still
-accurate a week later.
+No reviewer is named, deliberately. When the owner is ready, they will run
+Codex, Claude, Kimi and Grok as repeated audit rounds until each is satisfied,
+and only then designate a human reviewer. Write findings so the next agent can
+pick them up. `security/independent-review-packet.md` is dated 2026-09-12 and
+predates the storefront, the Paradise Comms adapter and the editor overhaul —
+refreshing it is the useful first step of round one.
 
-Their reports are **not in this repository**. They were provided as three files in
-the owner's Downloads directory:
+## Carried forward from 2026-09-26 (not re-verified this session)
 
-- `1-SECURITY-freeholder-forms-get-leak.md`
-- `2-freeholder-digitalocean-deployment.md`
-- `3-freeholder-findings-17-items.md`
+Third-party findings still believed open — re-check each before working it:
 
-**Ask the owner for them before continuing that work.** The summaries here are
-compressed; the originals carry reproduction details this file does not.
+- **Droplet recipe gaps** (the third party's deployment report): no CA-cert
+  support, so pg-boss cannot reach a DO *managed* database over TLS while
+  postgres.js can; no bucket CORS step, so the first admin upload can fail;
+  `www` unserved (single Caddy site block — `www.freeholder.ai` has no DNS
+  record either); SMTP documented on 587, which DigitalOcean blocks on
+  droplets, while the adapter only does implicit TLS on 465. The App Platform
+  recipe's `production: false` dev database cannot `CREATE SCHEMA`. The cron
+  item is fixed (#460).
+- **Media pair:** URLs re-signed every 900 s (uncacheable, 403 on long-open
+  tabs); local media lacks `ETag`/`Last-Modified`/`Content-Length`/`Range`.
+- **#17, #10, #13:** form errors wipe fields; plugin blocks cannot declare
+  their heading level; `--fh-measure` caps header/footer/columns at 48rem.
+- **#8, #7, #11** are features — scope #7 and #11 with the owner first.
 
-The security finding is fixed on `main` (#412). It is **not publicly disclosed**:
-the reporter withheld it, the fix landed with a neutral commit message, and
-whether to publish an advisory or notify existing instances is an owner decision
-not yet made. Every deployed instance with a public form had its notification
-addresses readable by any anonymous caller until #412.
+The reports themselves are not in this repo; they were three files in the
+owner's Downloads on the Windows machine. Ask for them.
 
-## Third-party findings — 13 of 24 fixed
+Owner decisions still pending from that snapshot:
 
-Fixed and merged: locale prefix swallowing `/og` and `/go`; renditions capped one
-step below the original; unbounded connection pool; disabled plugin passing
-readiness.
-
-Fixed, awaiting #416: manifest naming the platform; missing 404 page; `llms.txt`
-country code; 14px controls; `onDanger` unsettable; nav duplicate landmarks and
-mobile collapse; `ensureDefaults` 500; the `ruleStrong` border token.
-
-**Still open, in the order I would take them:**
-
-1. **Deployment items (6).** These cost the reporter an evening each. The nightly
-   backup cron has **never run once** — `. /opt/freeholder/.env && …` sets shell
-   variables without exporting them to a child process, and the failure goes to
-   root's mail on a box with no mail server; `BACKUP_BUCKET` is also absent from
-   `.env.example`. Then: the App Platform recipe sets `production: false`, a dev
-   database whose user cannot `CREATE SCHEMA`, so migration fails on its first
-   statement; no CA-certificate support, so pg-boss cannot reach a DigitalOcean
-   managed database over TLS while postgres.js can (they read `sslmode=require`
-   differently); no bucket CORS step, so the first admin upload fails; `www`
-   unserved, the Caddyfile having a single site block; and SMTP documented on 587,
-   which DigitalOcean blocks on droplets — note the adapter only uses implicit TLS
-   on 465, so Resend's 2465 will not work either.
-2. **Media pair.** URLs re-signed every 900 seconds, so a photograph can never be
-   cached, a tab open fifteen minutes gets 403s on lazy-loaded images, and image
-   search indexes expired URLs; sign against a rounded window instead. Local media
-   sends `private, max-age=300` with no `ETag`, `Last-Modified`, `Content-Length`
-   or `Range`.
-3. **#17, #10, #13.** A form error wipes every field and identifies none; plugin
-   blocks cannot declare the heading level they render, so a page whose title
-   lives in a hero cannot pass the publish check; `--fh-measure` caps header,
-   footer and columns at 48rem.
-4. **#8, then #7 and #11 — features, not fixes.** A list row cannot hold an image
-   picker because `src/modules/cms/blocks/fields.ts:178` passes `undefined` as the
-   hint for every list-item field, so a gallery is edited by pasting UUIDs. #7 is
-   media tagging, captioning and search. #11 is plugin folder auto-discovery: §25
-   describes it, boot reads a hand-written list in `src/modules/index.ts`, and
-   `plugins.install` writes a row nothing loads. **Scope #7 and #11 with the owner
-   before building.**
-
-## What I would do next on the plan itself
-
-**C11.10 is the long pole and needs booking, not coding.** An independent security
-review needs a third party, lead time and budget.
-`security/independent-review-packet.md` exists but is dated 2026-09-12 — since
-then a real disclosure was found and fixed and five features' worth of new public
-and scoped surface landed. Refreshing that packet would make the review cheaper
-and is worth doing while a reviewer is lined up.
-
-**C1.38 and C10.31 are probably finished and merely unticked.** `app/playground/`
-and its test exist, the update executor is in `src/core/update/apply.ts`, and
-#410's changeset says the playground is live at demo.freeholder.ai. Verify the
-evidence and tick them — but *verify*, because C6.11 proved a finished item and an
-unfinished one look identical from the checklist.
-
-**Four of the five new items need a demo fixture.** C8.14 has one; C8.15, C8.16,
-C5.26 and C6.18 each say "ships no demo fixture of its own", which is their only
-F-gap. `src/modules/events/onboarding.ts` plus the three fixture services at the
-end of `src/modules/events/service.ts` are the pattern to copy — a known, bounded
-job now.
-
-**C6.11's lesson generalises.** Its evidence line cited
-`migrations/0059_concerned_sumo.sql`, which the migration squash removed, so the
-plan gate would have rejected the tick however complete the software was. A stale
-citation and unfinished work are indistinguishable from the checklist. I audited
-the other open items and found no second instance, so the remaining fifteen are
-genuine — but re-audit after any future squash.
-
-## Release sequencing — decided, not executed
-
-The owner chose: run `changeset version` as its own PR, then tag. Not done.
-
-Facts to carry into it: **369 unconsumed changesets**, and no `v*` tag has ever
-existed, so this would be the **first-ever npm publish** of seven packages, none
-of which currently exist on npm — name claims are permanent and the unpublish
-window is 72 hours. Four changesets declare `major`, all in
-`.changeset/apache-license.md`, so the arithmetic lands on **1.0.0**, not 0.2.0.
-
-**Unresolved tension to settle first:** MASTER.md's completion record says
-"Unsigned… This is not DONE and does not claim it", with fifteen items open and
-C11.17 unsigned, while the version would read 1.0.0. My suggestion was to
-reconcile the document — noting that 1.0.0 marks the licence and API boundary
-rather than feature completion — rather than the number. **Not agreed.**
-
-Also fix before release: `.changeset/no-live-phone-example.md` has a UTF-8 BOM
-before its `---`, which some front-matter parsers skip silently.
-
-## Owner action list
-
-1. **Name the independent reviewer for C11.10.** Longest lead time of anything
-   remaining.
-2. **Decide the `forms.get` disclosure handling** — advisory, notification to
-   known instances, or a quiet fix already shipped.
-3. **Decide the release version question** above before `changeset version` runs.
-4. **C3.13** live acceptance: a Printify shop + API token, a Shopify store + app,
-   a Daily account. Software shipped; credentials entered locally.
-5. **C11.08** second Tier-1 restore target, and **C11.11** reference-target
-   hardware — the harness now runs, but its numbers must come from the reference
-   target, not a development machine.
-6. Android/iPad: per the 2026-09-15 decision, physical-device acceptance is v2
-   scope (§43.18). **No device setup is needed for v1.**
-
-## Verification environment
-
-This session ran on the owner's Windows machine: Node 24.15.0, PostgreSQL on
-**127.0.0.1:5432** with `TEST_DATABASE_URL` pointing at `freeholder_test`. That
-differs from the 2026-09-16 handoff, which described a disposable Linux cluster on
-port 55432 — that environment is not this machine, and nothing here depends on it.
-
-`pnpm` exists but is not on the Git Bash `PATH` as a bare executable; use `npx`
-for local runs, and note that `spawnSync("pnpm", …)` cannot work on Windows at all
-(see #415).
-
-Performance budgets, run locally this session and passing on small, medium and
-large: `TEST_DATABASE_URL=… PERF_DATASET=small node scripts/performance-budgets.mjs`.
-
-**This machine runs short of memory.** Two background runs were killed by the
-harness mid-session; neither was a failure of the command. Prefer CI for
-full-suite verification, and verify local sweeps mechanically where you can — for
-the 86-file border rename, undoing the rename and comparing byte-for-byte was
-stronger evidence than a typecheck would have been.
+- **`forms.get` disclosure** (fixed in #412, never announced): advisory,
+  notify known instances, or leave it.
+- **Release versioning:** no `v*` tag has ever existed and ~399 changesets
+  are unconsumed; four `major` declarations make the first `changeset
+  version` land on **1.0.0** while MASTER says "not DONE". Settle that
+  tension before running it. `.changeset/no-live-phone-example.md` had a
+  UTF-8 BOM to fix first.
+- **§4.8 ReleaseNote auto-draft** (S7 in `deploy/doc-claim-mapping.md`) has no
+  owning C-item.
 
 ## Traps this session hit, so you do not
 
-- **Three tests were asserting the wrong thing.** `notify` was tested against
-  `forms.byId`, which refuses anonymous callers, while the public `forms.get`
-  leaked. A journey test asserted Next's bare `404` heading, holding the missing
-  not-found route in place. C6.11's citation kept a finished item open. On this
-  codebase a passing test is not by itself evidence the right subject was tested.
-- **Route handlers never touch the database** (§15.5). Lint enforces it; the first
-  `app/manifest.ts` was refused. Use the request-scoped reads (`currentBusiness`,
-  `currentDesign`) and services.
-- **The generated SDK and CHANGELOG are both gated against a fresh run.** Any
-  service schema change means `node scripts/generate-sdk.mjs`; any changeset means
-  `node scripts/generate-changelog.mjs`. Generate the changelog with only
-  *tracked* changesets present — an untracked file in the inbox produces output CI
-  cannot reproduce.
-- **Browser specs seed with inserts, not `service.call`.** `owner-session.ts`
-  explains why: `service.call` boots the job graph in a way Playwright's test
-  process cannot wire.
-- **`tests/core/tokens.test.ts` keeps its own colour-role list** and asserts the
-  emitted declaration count against it, so adding a role fails until you add it
-  there deliberately. That is the guard working.
-- **CI's S3 storage is now our own mirror.** MinIO closed public distribution
-  (quay.io and Docker Hub both 401 anonymously; `bitnami/minio` was emptied), so
-  `.github/workflows/mirror-ci-images.yml` mirrors `adobe/s3mock` into
-  `ghcr.io/campdenman/freeholder-ci-s3`. **Coverage lost:** s3mock accepts any
-  credentials, so a SigV4 signing regression would now surface in deployment
-  rather than in CI.
-- **`ghcr.io` rejects a mixed-case owner** and `github.repository_owner` is
-  `CampDenman`; both workflows lower-case it at runtime. `ci.yml` still passes
-  `ghcr.io/${{ github.repository }}:edge` as `PREVIOUS_IMAGE` with that mixed
-  case, and its login is `continue-on-error`, so the upgrade gate may have been
-  silently degraded for some time. **Not investigated.**
-- **`tests/core/events.test.ts` times out locally** at the 30s `beforeEach` hook
-  (`truncateSpine` plus `updateBusiness`). It passes in CI. If that hook is near
-  the limit there too, it is a flake waiting to happen.
-- **`git stash` entries exist and predate this session.** Do not pop blindly; one
-  is annotated in Git history as already reapplied.
-
-## Known non-blocking issues
-
-- `tests/modules/funnel.test.ts` cross-file isolation flake: intermittent
-  exact-count collision on a shared database; passes in isolation, failed
-  identically on pre-change trees. Documented in `deploy/f-criteria-matrix.md` and
-  `deploy/doc-claim-mapping.md`.
-- §4.8's ReleaseNote auto-draft strike (S7 in `deploy/doc-claim-mapping.md`) names
-  real follow-up work with **no owning C-item**. Owner decision still needed: add
-  a v2 item, or leave it as documented behaviour.
-- `plugins/wevibe-industry/` is present in the working tree and untracked. It is
-  the owner's industry-starter work and must **not** be committed to this public
-  repository; `src/modules/local-plugins.ts` is deliberately an empty array
-  because importing it broke the public build and the licence gate.
+- **An "intermittent" browser failure was a real bug.** The merge queue
+  flaked twice on `editor-inline-editing.spec.ts` right after a dependency
+  bump, which looked like a dependency problem. It was #455's frame swap
+  racing the owner's caret; pinning a package back would have hidden data
+  loss. Reproduce under CPU contention (`--repeat-each 20` with the browser
+  and server on two busy cores) before blaming the bump.
+- **Image tags are 12-character SHAs** (`sha-e3de64e9272a`), not 7.
+- **`gh attestation verify` checks the platform manifest**, not the
+  multi-arch index digest compose pins — resolve the `linux/amd64` digest
+  from the index first, or it 404s.
+- **`doctl spaces` cannot create buckets.** Use the S3 API (the repo's own
+  `aws4fetch` works) with a temporary full-access key, then delete that key
+  and issue a bucket-scoped one. `doctl spaces keys delete` takes no
+  `--force`.
+- **Remove worktrees when their PR merges.** The Kimi session left 27 sibling
+  worktrees (`../freeholder-*`), all merged; they were removed this session.
+  Before removing one, confirm its branch's PR merged and that it holds no
+  uncommitted work — a squash merge means `git branch --merged` will not tell
+  you.
+- From the 2026-09-26 snapshot, still true: generated SDK and CHANGELOG are
+  gated against a fresh run (`node scripts/generate-sdk.mjs`,
+  `node scripts/generate-changelog.mjs`); route handlers never touch the
+  database; browser specs seed with inserts, not `service.call`;
+  `plugins/wevibe-industry/` must never be committed to this public repo.

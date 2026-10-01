@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 > Historical snapshot only. Not a planning authority. `MASTER.md` §43 is the
 > only product, architecture, status, and delivery source of truth. Do not pick
 > the next work item from this file or from `RESTART_HANDOFF.md`. The latest
-> session snapshot is `SESSION_HANDOFF.md` (2026-09-14).
+> session snapshot is `SESSION_HANDOFF.md` (2026-10-01).
 
 ---
 
@@ -119,6 +119,11 @@ becomes four deep.
 file is a planning authority.
 
 ### Deploying freeholder.ai
+
+> **Superseded 2026-10-01.** freeholder.ai now runs on a new droplet built
+> from `deploy/digitalocean-droplet/` in the owner's main DigitalOcean
+> account; the droplet described below was retired from the apex record. See
+> `SESSION_HANDOFF.md` → "Production". Kept as written for history.
 
 Not wired up, and worth stating plainly so nobody assumes otherwise. Merging
 to `main` publishes a signed container image (`publish-image.yml`) — that is a
