@@ -167,6 +167,7 @@ import orderServices, {
   getOrder,
   listOrders,
   payOrder,
+  releaseOrderPaymentMilestone,
 } from "./orders";
 import storefrontServices, {
   purchaseOptions,
@@ -239,6 +240,7 @@ export {
   shareWishlist,
   wishlistByShareToken,
   payOrder,
+  releaseOrderPaymentMilestone,
   createFulfillment,
   decideReturn,
   deliverFulfillment,

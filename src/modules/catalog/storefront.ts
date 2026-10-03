@@ -318,6 +318,8 @@ export const shopperCheckout = defineService({
       .regex(/^[A-Z0-9][A-Z0-9-]{2,31}$/)
       .optional(),
     acceptedTerms: z.literal(true),
+    termsVersion: z.string().trim().min(1).max(100).optional(),
+    termsHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     idempotencyKey: z.string().trim().min(8).max(240),
     locale: z.string().trim().min(2).max(35).optional(),
   }),
@@ -400,6 +402,8 @@ export const shopperCheckout = defineService({
       contactId,
       idempotencyKey: input.idempotencyKey,
       acceptedTerms: true,
+      ...(input.termsVersion ? { termsVersion: input.termsVersion } : {}),
+      ...(input.termsHash ? { termsHash: input.termsHash } : {}),
       ...(input.shippingAddress ? { shippingAddress: input.shippingAddress } : {}),
       ...(input.shippingMethodId ? { shippingMethodId: input.shippingMethodId } : {}),
       ...(input.couponCode ? { couponCode: input.couponCode } : {}),

@@ -861,6 +861,10 @@ export const voidInvoice = defineService({
     if (invoice.status === "paid" || invoice.status === "refunded" || invoice.paidMinor > 0) {
       throw new ServiceError("conflict", "A paid invoice cannot be voided. Issue a credit note and refund instead.");
     }
+    const [activeAttempt] = await ctx.tx.select({ id: payments.id }).from(payments).where(and(
+      eq(payments.invoiceId, invoice.id), inArray(payments.status, ["created", "processing"]),
+    )).limit(1);
+    if (activeAttempt) throw new ServiceError("conflict", "A payment attempt is still active. Reconcile or cancel it before voiding the invoice.");
     const [updated] = await ctx.tx
       .update(invoices)
       .set({ status: "void", voidedAt: new Date() })
@@ -1045,9 +1049,21 @@ export const settlePayment = defineService({
     if (!inArrayValue(payment.status, ["created", "processing"])) {
       throw new ServiceError("conflict", "A failed or cancelled payment cannot settle.");
     }
+    // A cancellation locks the order before its invoice. Match that order so
+    // provider settlement and cancellation cannot deadlock or race past one
+    // another while deciding whether any money has arrived.
+    const [source] = await ctx.tx.select({ sourceType: invoices.sourceType, sourceId: invoices.sourceId })
+      .from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
+    if (source?.sourceType === "order" && source.sourceId) {
+      const { orders } = await import("@/modules/catalog/schema");
+      await ctx.tx.select({ id: orders.id }).from(orders).where(eq(orders.id, source.sourceId)).for("update");
+    }
     await lock(ctx.tx, "invoice", payment.invoiceId);
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
     if (!invoice) throw new ServiceError("not_found", "That payment's invoice is not here.");
+    if (!inArrayValue(invoice.status, ["sent", "viewed", "partially_paid", "overdue"])) {
+      throw new ServiceError("conflict", "That invoice is no longer open for payment.");
+    }
     const paidMinor = sumMinor([invoice.paidMinor, payment.amountMinor], "Paid balance");
     if (paidMinor > invoice.totalMinor) {
       throw new ServiceError("conflict", "Settling this payment would overpay the invoice. Refund or cancel the competing attempt first.");
@@ -1056,6 +1072,25 @@ export const settlePayment = defineService({
     const [updatedPayment] = await ctx.tx.update(payments).set({ status: "succeeded", providerRef: input.providerRef, processedAt: input.processedAt, failureCode: null, failureMessage: null }).where(eq(payments.id, payment.id)).returning();
     await ctx.tx.update(invoices).set({ status: invoiceStatus, paidMinor, ...(invoiceStatus === "paid" ? { paidAt: input.processedAt } : {}) }).where(eq(invoices.id, invoice.id));
     await allocateSettledPayment(ctx, updatedPayment!, input.processedAt);
+    if (invoice.sourceType === "order" && invoice.sourceId) {
+      const { orders, stockReservations } = await import("@/modules/catalog/schema");
+      const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, invoice.sourceId)).limit(1);
+      if (!order || order.invoiceId !== invoice.id || order.status === "cancelled") {
+        throw new ServiceError("conflict", "The order linked to this payment is not open.");
+      }
+      if (invoiceStatus === "paid") {
+        const { payOrder } = await import("@/modules/catalog/orders");
+        await ctx.callAsSystem(payOrder, { id: order.id });
+      } else if (order.status === "pending_payment") {
+        await ctx.tx.update(orders).set({ status: "partially_paid", updatedAt: new Date() }).where(eq(orders.id, order.id));
+        await ctx.tx.update(stockReservations).set({
+          expiresAt: new Date(Date.now() + 30 * 86_400_000), updatedAt: new Date(),
+        }).where(and(eq(stockReservations.holderType, "order"), eq(stockReservations.holderId, order.id), eq(stockReservations.status, "active")));
+        ctx.queueEvent("catalog.orderPartiallyPaid", { orderId: order.id, invoiceId: invoice.id, paidMinor });
+        await ctx.emitTimeline({ contactId: order.contactId, eventType: "order.partiallyPaid", subjectType: "order", subjectId: order.id,
+          payload: { invoiceId: invoice.id, paidMinor, totalMinor: invoice.totalMinor, currency: invoice.currency } });
+      }
+    }
     await stateEvent(ctx, "payment", payment.id, payment.status, "succeeded");
     if (invoice.status !== invoiceStatus) {
       await stateEvent(ctx, "invoice", invoice.id, invoice.status, invoiceStatus, "payment_settled", { paymentId: payment.id, amountMinor: payment.amountMinor });

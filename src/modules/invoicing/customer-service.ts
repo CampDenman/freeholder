@@ -14,6 +14,8 @@ import { actorString, defineOrchestratedService, defineService, ServiceError, ty
 import { checkoutSession, invoiceRow, paymentRow } from "./contract";
 import { createPayment, failPayment, markInvoiceViewed, settlePayment, startPayment } from "./invoice-service";
 import { invoiceLines, invoices, payments } from "./schema";
+import { orderPaymentMilestones, orders } from "@/modules/catalog/schema";
+import { checkoutPaymentSchema } from "@/modules/catalog/checkout-policy";
 import { customerInvoicePath, invoiceAccessToken, paymentReturnToken, validInvoiceToken, validPaymentReturnToken } from "./customer-tokens";
 
 const access = z.object({ id: z.string().uuid(), token: z.string().max(200).optional() }).strict();
@@ -21,6 +23,31 @@ const receiptAccess = z.object({ token: z.string().min(1).max(200) }).strict();
 const payable = (invoice: typeof invoices.$inferSelect) =>
   ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status) && invoice.totalMinor > invoice.paidMinor;
 const unavailable = () => new ServiceError("not_found", "That invoice link is not available.");
+
+async function customerCheckoutAmount(invoice: typeof invoices.$inferSelect, ctx: ServiceContext): Promise<number | null> {
+  if (invoice.sourceType !== "order" || !invoice.sourceId) return invoice.totalMinor - invoice.paidMinor;
+  const [order] = await ctx.tx.select({ payment: orders.checkoutPaymentSnapshot })
+    .from(orders).where(eq(orders.id, invoice.sourceId)).limit(1);
+  if (!order) throw new ServiceError("conflict", "The order linked to this invoice needs the business to review it.");
+  if (!order.payment) return invoice.totalMinor - invoice.paidMinor;
+  const parsed = checkoutPaymentSchema.safeParse(order.payment);
+  if (!parsed.success || (parsed.data.mode === "milestones" && parsed.data.currency !== invoice.currency)) {
+    throw new ServiceError("conflict", "This order's payment terms need the business to review them.");
+  }
+  if (parsed.data.mode === "full") return invoice.totalMinor - invoice.paidMinor;
+  const stages = await ctx.tx.select().from(orderPaymentMilestones)
+    .where(eq(orderPaymentMilestones.orderId, invoice.sourceId)).orderBy(asc(orderPaymentMilestones.position));
+  if (!stages.length || stages.reduce((sum, stage) => sum + stage.amountMinor, 0) !== invoice.totalMinor) {
+    throw new ServiceError("conflict", "This order's payment milestones need the business to review them.");
+  }
+  let cumulative = 0;
+  for (const stage of stages) {
+    cumulative += stage.amountMinor;
+    if (invoice.paidMinor >= cumulative) continue;
+    return stage.releasedAt ? cumulative - invoice.paidMinor : null;
+  }
+  return null;
+}
 
 async function authorizedInvoice(input: z.infer<typeof access>, ctx: ServiceContext) {
   const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.id)).limit(1);
@@ -46,6 +73,8 @@ const customerInvoice = z.object({
   dueAt: z.date().nullable(), memo: z.string().nullable(), requiredTaxLegend: z.string().nullable(),
   lines: z.array(z.object({ id: z.string(), description: z.string(), quantityMicros: z.number().int(), totalMinor: z.number().int() })),
   canPay: z.boolean(), paymentMode: z.enum(["hosted", "manual", "unavailable"]),
+  nextPaymentMinor: z.number().int().nullable(),
+  awaitingRelease: z.boolean(),
 });
 
 export const getCustomerInvoice = defineService({
@@ -57,10 +86,12 @@ export const getCustomerInvoice = defineService({
       quantityMicros: invoiceLines.quantityMicros, totalMinor: invoiceLines.totalMinor })
       .from(invoiceLines).where(eq(invoiceLines.invoiceId, invoice.id)).orderBy(asc(invoiceLines.position));
     const adapter = paymentAdapter();
+    const nextPaymentMinor = payable(invoice) ? await customerCheckoutAmount(invoice, ctx) : null;
     return { id: invoice.id, number: invoice.number!, status: invoice.status, currency: invoice.currency,
       subtotalMinor: invoice.subtotalMinor, discountMinor: invoice.discountMinor, shippingMinor: invoice.shippingMinor,
       taxMinor: invoice.taxMinor, totalMinor: invoice.totalMinor, paidMinor: invoice.paidMinor,
-      dueAt: invoice.dueAt, memo: invoice.memo, requiredTaxLegend: invoice.requiredTaxLegend, lines, canPay: payable(invoice),
+      dueAt: invoice.dueAt, memo: invoice.memo, requiredTaxLegend: invoice.requiredTaxLegend, lines, canPay: nextPaymentMinor !== null,
+      nextPaymentMinor, awaitingRelease: payable(invoice) && nextPaymentMinor === null,
       paymentMode: !adapter.status.available || adapter.id === "none" ? "unavailable" as const :
         adapter.id === "manual" ? "manual" as const : "hosted" as const };
   },
@@ -99,13 +130,15 @@ export const sendInvoice = defineService({
     if (!invoice?.number || !payable(invoice)) throw unavailable();
     const [contact] = await ctx.tx.select().from(contacts).where(eq(contacts.id, invoice.contactId)).limit(1);
     if (!contact?.email) throw new ServiceError("validation", "This contact needs an email address.");
+    const dueNow = await customerCheckoutAmount(invoice, ctx);
+    if (dueNow === null) throw new ServiceError("conflict", "The next payment has not been released by the business yet.");
     const policy = await localeForContact(ctx.tx, contact.id);
     const locale = policy.locale;
     const t = translator(locale);
     const link = new URL(localizeCustomerHref(customerInvoicePath(invoice.id, invoiceAccessToken(invoice)), locale, policy), env().APP_URL).href;
     const delivery = await sendMail(ctx.tx, {
       to: contact.email, subject: t("customerInvoice.emailSubject", { number: invoice.number }),
-      text: `${t("customerInvoice.emailBody", { number: invoice.number, amount: formatMoney(invoice.totalMinor - invoice.paidMinor, invoice.currency, locale) })}\n\n${link}\n\n${t("customerInvoice.privateLink")}`,
+      text: `${t("customerInvoice.emailBody", { number: invoice.number, amount: formatMoney(dueNow, invoice.currency, locale) })}\n\n${link}\n\n${t("customerInvoice.privateLink")}`,
     }, { requestedBy: actorString(ctx.actor), idempotencyKey: `invoice:${invoice.id}:${input.idempotencyKey}` });
     ctx.setSubject("invoice", invoice.id);
     await ctx.emitTimeline({ contactId: invoice.contactId, eventType: "invoice.emailQueued", subjectType: "invoice", subjectId: invoice.id, payload: { deliveryId: delivery.id } });
@@ -127,6 +160,8 @@ export const claimCustomerCheckout = defineService({
     if (!adapter.status.available || adapter.id === "none") throw new ServiceError("conflict", "Online payment is not available.");
     const [contact] = await ctx.tx.select().from(contacts).where(eq(contacts.id, invoice.contactId)).limit(1);
     if (!contact?.email) throw new ServiceError("validation", "This contact needs an email address.");
+    const amountMinor = await customerCheckoutAmount(invoice, ctx);
+    if (amountMinor === null) throw new ServiceError("conflict", "The next payment has not been released by the business yet.");
     // One retry identity per outstanding balance. Double-clicks and retries
     // cannot create a second charge for the same balance. Offline instructions
     // create no pretend payment; only the owner's evidence enters the ledger.
@@ -140,12 +175,15 @@ export const claimCustomerCheckout = defineService({
     ));
     const active = activeAttempts.find((entry) =>
       entry.metadata && typeof entry.metadata === "object" && "customerCheckout" in entry.metadata && entry.metadata.customerCheckout === true);
-    if (active && (active.provider !== adapter.id || active.amountMinor !== invoice.totalMinor - invoice.paidMinor)) {
+    if (activeAttempts.some((entry) => entry.id !== active?.id)) {
+      throw new ServiceError("conflict", "Another payment attempt needs the business to check it before you try again.");
+    }
+    if (active && (active.provider !== adapter.id || active.amountMinor !== amountMinor)) {
       throw new ServiceError("conflict", "A previous payment attempt needs the business to check it before you try again.");
     }
     const payment = adapter.id === "manual" ? null : active ?? await ctx.callAsSystem(createPayment, {
       invoiceId: invoice.id, provider: adapter.id, method: "hosted_checkout",
-      amountMinor: invoice.totalMinor - invoice.paidMinor,
+      amountMinor,
       idempotencyKey: `customer-invoice:${invoice.id}:${invoice.paidMinor}:${terminalAttempts.length}`,
       metadata: { customerCheckout: true, customerEmail: contact.email, customerName: contact.name },
     });
@@ -163,7 +201,7 @@ export const applyCustomerCheckout = defineService({
     // Recheck after provider I/O: ownership, voiding and settlement can change.
     const invoice = await authorizedInvoice({ id: input.id, token: input.token }, ctx);
     const [payment] = await ctx.tx.select().from(payments).where(and(eq(payments.id, input.paymentId), eq(payments.invoiceId, invoice.id))).limit(1);
-    if (!payment || !payable(invoice) || invoice.totalMinor - invoice.paidMinor !== payment.amountMinor) throw new ServiceError("conflict", "The invoice balance changed. Open the invoice again.");
+    if (!payment || !payable(invoice) || await customerCheckoutAmount(invoice, ctx) !== payment.amountMinor) throw new ServiceError("conflict", "The invoice balance changed. Open the invoice again.");
     await ctx.callAsSystem(startPayment, { id: payment.id, providerRef: input.response.paymentRef ?? input.response.providerRef, providerCheckoutRef: input.response.providerRef });
     const url = new URL(input.response.url);
     if (url.protocol !== "https:" || url.username || url.password) throw new ServiceError("conflict", "The payment provider returned an unsafe checkout address.");

@@ -82,6 +82,8 @@ export async function shopperCheckoutAction(form: FormData): Promise<void> {
         shippingMethodId: text(form, "shippingMethodId") || undefined,
         couponCode: text(form, "couponCode").toUpperCase() || undefined,
         acceptedTerms: true,
+        termsVersion: text(form, "termsVersion") || undefined,
+        termsHash: text(form, "termsHash") || undefined,
         idempotencyKey: text(form, "idempotencyKey") || randomUUID(),
         locale: await getLocale(),
       },

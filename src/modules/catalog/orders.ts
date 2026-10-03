@@ -16,6 +16,7 @@ import { listLocations } from "@/core/locations/service";
 import { checkCoverage } from "@/core/locations/coverage";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { QUANTITY_SCALE } from "@/modules/invoicing/money";
+import { payments } from "@/modules/invoicing/schema";
 import {
   createDraftInvoice,
   getInvoice,
@@ -27,7 +28,8 @@ import { releaseReservation, reserveStock } from "./inventory";
 import { attachCartToContact, getCart, requireContactAuthority } from "./cart";
 import { quoteShipping } from "./shipping";
 import { issuePass } from "@/core/entitlements/service";
-import { carts, orderItems, orders, products, productVariants, stockReservations } from "./schema";
+import { carts, orderItems, orderPaymentMilestones, orders, products, productVariants, stockReservations } from "./schema";
+import { checkoutSettings, checkoutTermsHash, paymentMilestones, termsSnapshot } from "./checkout-policy";
 
 const id = z.string().uuid();
 
@@ -46,6 +48,8 @@ const orderRow = row({
   couponId: uuid.nullable(),
   shippingMethodId: uuid.nullable(),
   shippingAddress: z.unknown().nullable(),
+  checkoutTermsSnapshot: z.unknown().nullable(),
+  checkoutPaymentSnapshot: z.unknown().nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -60,6 +64,11 @@ const orderItemRow = row({
   createdAt: timestamp,
 });
 const orderDetail = z.object({ order: orderRow, lines: listed(orderItemRow) });
+const paymentMilestoneRow = row({
+  id: uuid, orderId: uuid, position: z.number().int(), label: z.string(),
+  amountMinor: z.number().int(), releasedAt: timestamp.nullable(),
+  releasedBy: z.string().nullable(), createdAt: timestamp,
+});
 const address = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   street1: z.string().trim().min(1).max(300).optional(),
@@ -135,6 +144,8 @@ export const checkoutCart = defineService({
     contactId: id,
     idempotencyKey: z.string().trim().min(8).max(240),
     acceptedTerms: z.literal(true),
+    termsVersion: z.string().trim().min(1).max(100).optional(),
+    termsHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     shippingAddress: address.optional(),
     shippingMethodId: id.optional(),
     locationId: id.optional(),
@@ -186,6 +197,13 @@ export const checkoutCart = defineService({
     }
     if (!basket.allAvailable) {
       throw new ServiceError("validation", "A line is no longer available.");
+    }
+    const settings = await checkoutSettings(ctx);
+    if (settings.checkoutPayment.mode === "milestones" && settings.checkoutPayment.currency !== basket.cart.currency) {
+      throw new ServiceError("conflict", "The checkout payment policy does not match this cart's currency.");
+    }
+    if (settings.checkoutTerms && (settings.checkoutTerms.version !== input.termsVersion || checkoutTermsHash(settings.checkoutTerms.body) !== input.termsHash)) {
+      throw new ServiceError("conflict", "The checkout terms changed. Review and accept the current version.");
     }
     const needsShipping = basket.lines.some((line) => line.requiresShipping);
     if (needsShipping && !input.shippingAddress) {
@@ -273,6 +291,8 @@ export const checkoutCart = defineService({
         couponId: promo.couponId,
         shippingMethodId,
         shippingAddress: input.shippingAddress ?? null,
+        checkoutTermsSnapshot: settings.checkoutTerms ? termsSnapshot(settings.checkoutTerms, new Date()) : null,
+        checkoutPaymentSnapshot: settings.checkoutPayment,
       })
       .returning();
 
@@ -346,6 +366,18 @@ export const checkoutCart = defineService({
       })
       .where(eq(orders.id, order!.id));
 
+    if (settings.checkoutPayment.mode === "milestones") {
+      const stages = paymentMilestones(issued.invoice.totalMinor, settings.checkoutPayment);
+      await ctx.tx.insert(orderPaymentMilestones).values(stages.map((stage, position) => ({
+        orderId: order!.id,
+        position,
+        label: stage.label,
+        amountMinor: stage.amountMinor,
+        releasedAt: position === 0 ? new Date() : null,
+        releasedBy: position === 0 ? "checkout" : null,
+      })));
+    }
+
     const { recordCouponRedemption, applyGiftCardToInvoice } = await import("./promotions");
     if (promo.couponId) {
       await ctx.call(recordCouponRedemption, {
@@ -409,7 +441,7 @@ export const checkoutCart = defineService({
           quantity: line.quantity,
           holderType: "order",
           holderId: order!.id,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          expiresAt: new Date(Date.now() + (issued.invoice.paidMinor > 0 ? 30 : 7) * 86_400_000),
         });
       }
     }
@@ -447,7 +479,10 @@ export const payOrder = defineService({
   handler: async (input, ctx) => {
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.id)).for("update");
     if (!order) throw new ServiceError("not_found", "That order is not here.");
-    if (order.status !== "pending_payment") {
+    if (["paid", "fulfilling", "fulfilled"].includes(order.status)) {
+      return ctx.callAsSystem(getOrder, { id: order.id });
+    }
+    if (order.status !== "pending_payment" && order.status !== "partially_paid") {
       throw new ServiceError("conflict", "Only an unpaid order can be marked paid.");
     }
     if (!order.invoiceId) {
@@ -528,6 +563,13 @@ export const cancelOrder = defineService({
     if (order.status !== "pending_payment") {
       throw new ServiceError("conflict", "Only an unpaid order can be cancelled here.");
     }
+    if (order.invoiceId) {
+      const invoice = await ctx.callAsSystem(getInvoice, { id: order.invoiceId });
+      if (invoice.invoice.paidMinor > 0) {
+        throw new ServiceError("conflict", "This order has a payment. Resolve its refund before cancelling.");
+      }
+      await ctx.callAsSystem(voidInvoice, { id: order.invoiceId, reason: "Order cancelled." });
+    }
     const reservations = await ctx.tx
       .select()
       .from(stockReservations)
@@ -545,13 +587,6 @@ export const cancelOrder = defineService({
         /* already gone */
       }
     }
-    if (order.invoiceId) {
-      try {
-        await ctx.callAsSystem(voidInvoice, { id: order.invoiceId, reason: "Order cancelled." });
-      } catch {
-        /* already void, or invoicing refused â€” the order still cancels */
-      }
-    }
     await ctx.tx.update(orders).set({ status: "cancelled", updatedAt: new Date() }).where(eq(orders.id, order.id));
     ctx.setSubject("order", order.id);
     ctx.queueEvent("catalog.orderCancelled", { orderId: order.id });
@@ -563,6 +598,48 @@ export const cancelOrder = defineService({
       payload: { invoiceId: order.invoiceId },
     });
     return ctx.callAsSystem(getOrder, { id: order.id });
+  },
+});
+
+export const releaseOrderPaymentMilestone = defineService({
+  name: "catalog.releaseOrderPaymentMilestone",
+  writeClass: "money",
+  summary: "Release the next owner-approved order milestone after earlier payments settle.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ orderId: id, position: z.number().int().positive() }),
+  output: paymentMilestoneRow,
+  handler: async (input, ctx) => {
+    const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.orderId)).for("update");
+    if (!order || !order.invoiceId) throw new ServiceError("not_found", "That order is not here.");
+    const stages = await ctx.tx.select().from(orderPaymentMilestones)
+      .where(eq(orderPaymentMilestones.orderId, order.id)).orderBy(orderPaymentMilestones.position);
+    const stage = stages[input.position];
+    if (!stage || stage.position !== input.position) throw new ServiceError("not_found", "That payment milestone is not here.");
+    if (stage.releasedAt) return stage;
+    if (order.status !== "partially_paid") {
+      throw new ServiceError("conflict", "Only a partially paid order can release another payment.");
+    }
+    if (stages.find((candidate) => !candidate.releasedAt)?.position !== input.position) {
+      throw new ServiceError("conflict", "Milestones must be released in order.");
+    }
+    const invoice = await ctx.callAsSystem(getInvoice, { id: order.invoiceId });
+    const priorMinor = stages.slice(0, input.position).reduce((sum, item) => sum + item.amountMinor, 0);
+    if (invoice.invoice.paidMinor < priorMinor) {
+      throw new ServiceError("conflict", "The previous payment must settle before the next milestone is released.");
+    }
+    const [active] = await ctx.tx.select({ id: payments.id }).from(payments).where(and(
+      eq(payments.invoiceId, order.invoiceId), inArray(payments.status, ["created", "processing"]),
+    )).limit(1);
+    if (active) throw new ServiceError("conflict", "A payment attempt needs reconciliation before the next milestone is released.");
+    const [updated] = await ctx.tx.update(orderPaymentMilestones)
+      .set({ releasedAt: new Date(), releasedBy: ctx.actor.kind === "user" ? ctx.actor.userId : ctx.actor.kind })
+      .where(eq(orderPaymentMilestones.id, stage.id)).returning();
+    ctx.setSubject("order", order.id);
+    ctx.queueEvent("catalog.orderPaymentReleased", { orderId: order.id, milestoneId: stage.id, position: stage.position });
+    await ctx.emitTimeline({ contactId: order.contactId, eventType: "order.paymentReleased", subjectType: "order", subjectId: order.id,
+      payload: { milestoneId: stage.id, position: stage.position, amountMinor: stage.amountMinor, currency: order.currency } });
+    return updated!;
   },
 });
 
@@ -616,4 +693,4 @@ registerSearchSource({
   },
 });
 
-export default [checkoutCart, payOrder, cancelOrder, getOrder, listOrders];
+export default [checkoutCart, payOrder, cancelOrder, releaseOrderPaymentMilestone, getOrder, listOrders];

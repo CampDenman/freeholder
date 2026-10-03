@@ -5621,6 +5621,16 @@ owner operations, never substitute for them.
   read authority; an order UUID alone no longer exposes addresses and lines.
   The regression first reproduced anonymous disclosure, then passed for
   denied callers and authorized staff/API keys (`order-read-authorization.md`).
+  Checkout money follow-up (C5.21/C5.22): an owner-configured catalog policy
+  now computes exact invoice-currency payment milestones after tax and shipping.
+  The first stage alone is released at checkout; later stages require an
+  explicit scoped seller action, without inferred calendar due dates. Terms
+  version, body, hash, acceptance time, and payment policy are snapshotted on
+  the order. Invoice settlement moves an order through `partially_paid` to
+  `paid` in the same transaction, and cancellation refuses any received money
+  or active attempt before stock holds are released. The odd-cent allocation
+  and lifecycle proofs are in `tests/core/checkout-policy.test.ts` and
+  `tests/core/catalog-orders.test.ts`.
 - [x] **C5.23** Build coupons, gift cards/credit ledger, bundles, order bumps,
   post-add offers and abandoned-cart recovery without parallel money paths.
   *(Evidence: `coupons`, `coupon_redemptions`, `cart_coupons`, `gift_cards`,

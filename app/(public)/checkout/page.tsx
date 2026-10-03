@@ -34,6 +34,8 @@ import { localePath, localizeCustomerHref } from "@/core/i18n/customer";
 import { siteOrigin } from "@/core/seo/origin";
 import { composeDocumentTitle } from "@/core/seo/meta";
 import { currentBusiness } from "@/core/settings/read";
+import { getModuleConfig } from "@/core/settings/service";
+import { catalogSettingsSchema, checkoutTermsHash } from "@/modules/catalog/checkout-policy";
 import { getLocale, getT } from "../../i18n";
 import { loadShopperCart } from "../shopper-cart";
 import { recordPageView } from "../[[...slug]]/pageview";
@@ -71,6 +73,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
   ]);
   const actor = await actorFromToken(cookieJar.get(SESSION_COOKIE)?.value);
   const cart = await loadShopperCart();
+  const checkoutSettings = catalogSettingsSchema.parse(await getModuleConfig.call({ module: "catalog" }, { kind: "anonymous" }));
 
   await recordPageView("checkout", locale, query);
 
@@ -251,6 +254,19 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
                     : "store.checkout.paymentUnavailable",
               )}
             </p>
+            {checkoutSettings.checkoutPayment.mode === "milestones" && checkoutSettings.checkoutPayment.currency === cart.cart.currency ? (
+              <div className="grid gap-2 text-sm text-ink">
+                <p>{checkoutSettings.checkoutPayment.firstPayment.type === "fixed"
+                  ? t("store.checkout.firstFixed", { amount: formatMinor(checkoutSettings.checkoutPayment.firstPayment.amountMinor, cart.cart.currency) })
+                  : t("store.checkout.firstPercent", { percent: checkoutSettings.checkoutPayment.firstPayment.sharePpm / 10_000 })}</p>
+                <ol className="list-decimal pl-5">
+                  {checkoutSettings.checkoutPayment.milestones.map((stage, position) => (
+                    <li key={position}>{t("store.checkout.milestoneShare", { percent: stage.sharePpm / 10_000, label: stage.label })}</li>
+                  ))}
+                </ol>
+                <p>{t("store.checkout.laterRelease")}</p>
+              </div>
+            ) : null}
           </fieldset>
 
           <label className="grid gap-1 text-sm text-ink-muted sm:max-w-64">
@@ -263,6 +279,15 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
             />
           </label>
 
+          {checkoutSettings.checkoutTerms ? (
+            <section className="grid gap-2 rounded-lg border border-rule bg-surface p-4" aria-labelledby="checkout-terms-title">
+              <h2 id="checkout-terms-title" className="font-semibold text-ink">{checkoutSettings.checkoutTerms.title}</h2>
+              <p className="whitespace-pre-wrap text-sm text-ink">{checkoutSettings.checkoutTerms.body}</p>
+              {checkoutSettings.checkoutTerms.href ? <a href={localize(checkoutSettings.checkoutTerms.href)} className="text-sm text-accent underline">{t("store.checkout.readTerms")}</a> : null}
+            </section>
+          ) : null}
+          {checkoutSettings.checkoutTerms ? <input type="hidden" name="termsVersion" value={checkoutSettings.checkoutTerms.version} /> : null}
+          {checkoutSettings.checkoutTerms ? <input type="hidden" name="termsHash" value={checkoutTermsHash(checkoutSettings.checkoutTerms.body)} /> : null}
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
               id="checkout-terms"
@@ -271,7 +296,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
               required
               className="size-4"
             />
-            {t("store.checkout.terms")}
+            {checkoutSettings.checkoutTerms ? t("store.checkout.agreeVersion", { title: checkoutSettings.checkoutTerms.title, version: checkoutSettings.checkoutTerms.version }) : t("store.checkout.terms")}
           </label>
 
           <div className="flex flex-wrap items-center gap-3">
