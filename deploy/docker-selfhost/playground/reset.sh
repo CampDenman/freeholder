@@ -10,7 +10,7 @@ docker compose --project-name freeholder-playground --file compose.yml down --ti
 docker compose --project-name freeholder-playground --file compose.yml up -d
 app=$(docker compose --project-name freeholder-playground --file compose.yml ps -q app)
 attempt=0
-until docker exec "$app" node -e 'fetch("http://localhost:3000/api/health").then(async r=>{const b=await r.json();if(!r.ok||!b.ok||!b.jobs?.ready)process.exit(1)}).catch(()=>process.exit(1))'; do
+until docker exec "$app" node -e 'Promise.all([fetch("http://localhost:3000/api/health"),fetch("http://localhost:3000/playground")]).then(async ([health,entry])=>{const b=await health.json();if(!health.ok||!b.ok||!b.jobs?.ready||!entry.ok)process.exit(1)}).catch(()=>process.exit(1))'; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 60 ]; then echo 'Playground reset failed readiness.' >&2; exit 1; fi
   sleep 3
