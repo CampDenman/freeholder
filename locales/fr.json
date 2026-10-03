@@ -1817,6 +1817,7 @@
   "cms.editor.live": "En ligne",
   "cms.editor.movedTo": "{label} déplacé à la position {position} sur {total}",
   "cms.editor.publishChanges": "Publier les modifications",
+  "cms.editor.publishFailed": "La publication ne s'est pas terminée. Vérifiez la page en ligne avant de réessayer.",
   "cms.editor.publishing": "Publication…",
   "cms.editor.bold": "Gras",
   "cms.editor.bullet": "Liste à puces",

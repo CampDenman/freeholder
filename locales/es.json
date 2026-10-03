@@ -1817,6 +1817,7 @@
   "cms.editor.live": "En vivo",
   "cms.editor.movedTo": "{label} movido a la posición {position} de {total}",
   "cms.editor.publishChanges": "Publicar cambios",
+  "cms.editor.publishFailed": "La publicación no terminó. Comprueba la página pública antes de volver a intentarlo.",
   "cms.editor.publishing": "Publicando…",
   "cms.editor.bold": "Negrita",
   "cms.editor.bullet": "Lista con viñetas",

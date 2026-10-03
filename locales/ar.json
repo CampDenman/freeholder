@@ -1634,6 +1634,7 @@
   "cms.editor.live": "منشور",
   "cms.editor.movedTo": "تم نقل {label} إلى الموضع {position} من {total}",
   "cms.editor.publishChanges": "نشر التغييرات",
+  "cms.editor.publishFailed": "لم يكتمل النشر. تحقّق من الصفحة المنشورة قبل المحاولة مرة أخرى.",
   "cms.editor.publishing": "جارٍ النشر…",
   "cms.editor.bold": "غامق",
   "cms.editor.bullet": "قائمة نقطية",

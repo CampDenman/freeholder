@@ -129,6 +129,7 @@ function labels(): EditorLabels {
     draft: "Draft",
     publishChanges: "Publish changes",
     publishing: "Publishing…",
+    publishFailed: "Check the live page before trying again.",
     movedTo: "Moved {label} to position {position} of {total}",
     a11y,
   };

@@ -243,6 +243,7 @@ export function editorLabels(t: Translate): EditorLabels {
     draft: t("cms.editor.draft"),
     publishChanges: t("cms.editor.publishChanges"),
     publishing: t("cms.editor.publishing"),
+    publishFailed: t("cms.editor.publishFailed"),
     // The placeholders survive formatting as literals — the client fills them
     // in once the moved block's new position is known (same pattern as
     // media.uploadProgress).

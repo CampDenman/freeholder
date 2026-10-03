@@ -1817,6 +1817,7 @@
   "cms.editor.live": "Live",
   "cms.editor.movedTo": "Moved {label} to position {position} of {total}",
   "cms.editor.publishChanges": "Publish changes",
+  "cms.editor.publishFailed": "Publishing did not finish. Check the live page before trying again.",
   "cms.editor.publishing": "Publishing…",
   "cms.editor.bold": "Bold",
   "cms.editor.bullet": "Bulleted list",
