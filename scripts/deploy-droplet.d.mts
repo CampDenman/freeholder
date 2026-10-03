@@ -56,3 +56,4 @@ export function waitForHealth(
 ): Promise<void>;
 
 export function remoteApplyScript(): string;
+export function remoteApplyBootstrap(): string;

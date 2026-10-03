@@ -1,6 +1,11 @@
 # create-freeholder
 
-Create an independently owned Freeholder source installation:
+Create an independently owned Freeholder source installation. This package is
+not yet published to npm; the command below becomes available with the first
+tagged package release. Until then, use the repository's
+[`GETTING_STARTED.md`](../../GETTING_STARTED.md).
+
+After publication:
 
 ```sh
 npx create-freeholder my-business

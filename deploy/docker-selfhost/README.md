@@ -7,7 +7,9 @@ use a private S3-compatible store; local disk is not a durable Tier-1 target.
 
 Copy `deploy/docker-selfhost/.env.example` to
 `deploy/docker-selfhost/.env`, fill every required value, then run the
-`install` operation in `recipe.yaml`. Compose waits for PostgreSQL health,
+`install` operation in `recipe.yaml` from the repository root. Always pass
+`--env-file deploy/docker-selfhost/.env` to Compose: its service `env_file`
+does not supply values for `${POSTGRES_PASSWORD}` interpolation. Compose waits for PostgreSQL health,
 restarts both services, and exposes only the app on port 3000.
 
 Generate independent URL-safe values for `POSTGRES_PASSWORD` and

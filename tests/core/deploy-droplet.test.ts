@@ -3,7 +3,7 @@
 // The droplet deploy path must pin the attested linux/amd64 manifest and
 // must not learn a host address from the repository.
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -13,6 +13,7 @@ import {
   attestationArguments,
   deployTargetFromEnv,
   parseRevision,
+  remoteApplyBootstrap,
   selectLinuxAmd64Digest,
   SIGNER_WORKFLOW,
   waitForHealth,
@@ -193,17 +194,21 @@ describe("remote image swap", () => {
     ].join("\n"));
     chmodSync(join(bin, "docker"), 0o755);
     if (options.dockerFails) writeFileSync(join(bin, "docker"), "#!/bin/sh\necho docker-called >&2\nexit 1\n");
+    const script = join(root, "deploy-script.sh");
+    writeFileSync(script, readFileSync("scripts/deploy-droplet-remote.sh"));
+    const scriptFd = openSync(script, "r");
     const result = spawnSync("bash", [
-      "-s", "--",
+      "-c", remoteApplyBootstrap(), "--",
       options.pin ?? PIN,
       dir,
       options.attempts ?? "2",
       options.pause ?? "0",
     ], {
-      input: readFileSync("scripts/deploy-droplet-remote.sh"),
+      stdio: [scriptFd, "pipe", "pipe"],
       encoding: "utf8",
       env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` },
     });
+    closeSync(scriptFd);
     return {
       status: result.status,
       output: `${result.stdout}${result.stderr}`,
@@ -239,6 +244,20 @@ describe("remote image swap", () => {
     expect(applied.output).not.toContain("secret-value");
     expect(applied.envFile).toContain(`PREVIOUS_FREEHOLDER_IMAGE=${previous}`);
     expect(applied.envFile).toContain(`FREEHOLDER_IMAGE=${PIN}`);
+  });
+
+  it("finishes the image swap when the backup consumes its stdin", () => {
+    const applied = apply({
+      env: `${baseEnv}FREEHOLDER_IMAGE=ghcr.io/campdenman/freeholder:edge\n`,
+      backup: [
+        "#!/bin/sh",
+        "cat >/dev/null",
+        "echo \"backup: uploaded freeholder-2026-10-01T00-00-00Z.dump and checksum (2048 bytes)\"",
+      ].join("\n"),
+    });
+    expect(applied.status).toBe(0);
+    expect(applied.envFile).toContain(`FREEHOLDER_IMAGE=${PIN}`);
+    expect(applied.output).toContain("schema is up to date");
   });
 
   it("leaves .env untouched when the backup fails or the pin is not a digest", () => {
