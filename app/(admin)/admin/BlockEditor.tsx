@@ -218,6 +218,7 @@ export interface EditorLabels {
   /** Push the saved draft to the live page without unpublishing first. */
   publishChanges: string;
   publishing: string;
+  publishFailed: string;
   /** Screen-reader confirmation of an editor-side move: "Moved {label} to position {position} of {total}". */
   movedTo: string;
   a11y: {
@@ -472,19 +473,27 @@ export function BlockEditor({
   const publishNow = useCallback(async () => {
     if (!onPublish || publishing) return;
     setPublishing(true);
-    const result = await onPublish(blocksRef.current);
-    setPublishing(false);
-    if (result.error) {
-      setError(result.error);
+    try {
+      const result = await onPublish(blocksRef.current);
+      if (result.error) {
+        setError(result.error);
+        setStatus("failed");
+        return;
+      }
+      savedRef.current = JSON.stringify(blocksRef.current);
+      setError(undefined);
+      setConflict(false);
+      setStatus("saved");
+      setSavedVersion((n) => n + 1);
+    } catch {
+      // A transport error can arrive after the server committed. Ask the owner
+      // to check the live page before retrying rather than claiming no change.
+      setError(labels.publishFailed);
       setStatus("failed");
-      return;
+    } finally {
+      setPublishing(false);
     }
-    savedRef.current = JSON.stringify(blocksRef.current);
-    setError(undefined);
-    setConflict(false);
-    setStatus("saved");
-    setSavedVersion((n) => n + 1);
-  }, [onPublish, publishing]);
+  }, [onPublish, publishing, labels.publishFailed]);
 
   /**
    * Confirm an editor-side move to screen readers: which block, and where it

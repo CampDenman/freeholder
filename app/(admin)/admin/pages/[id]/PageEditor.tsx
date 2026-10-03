@@ -40,6 +40,14 @@ export function PageEditor({
   labels: EditorLabels;
 }) {
   const versionRef = useRef(initialVersion);
+  // Autosave may already be in flight when Publish changes is clicked. Run
+  // page writes in order so both actions never submit the same version.
+  const pendingRef = useRef<Promise<void>>(Promise.resolve());
+  const inOrder = <T,>(operation: () => Promise<T>): Promise<T> => {
+    const result = pendingRef.current.then(operation, operation);
+    pendingRef.current = result.then(() => undefined, () => undefined);
+    return result;
+  };
   return (
     <BlockEditor
       initialBlocks={initialBlocks}
@@ -48,33 +56,35 @@ export function PageEditor({
       previewSrc={`/preview/page/${id}`}
       a11yContext="page"
       published={initialPublished}
-      save={async (blocks) => {
+      save={(blocks) => inOrder(async () => {
         const result = await savePageBlocksAction(id, blocks, versionRef.current);
-        if (result.version) versionRef.current = result.version;
+        if (result.version !== undefined) versionRef.current = result.version;
         return result;
-      }}
-      onPublish={async (blocks) => {
+      })}
+      onPublish={(blocks) => inOrder(async () => {
         // Save first so the publish validates the tree the owner is looking
         // at, then push it live — one gesture, no unpublish dance.
         const saved = await savePageBlocksAction(id, blocks, versionRef.current);
         if (saved.error) return saved;
-        if (saved.version) versionRef.current = saved.version;
-        return publishPageNowAction(id);
-      }}
-      onKeepMine={async (blocks, serverVersion) => {
+        if (saved.version !== undefined) versionRef.current = saved.version;
+        const published = await publishPageNowAction(id);
+        if (published.version !== undefined) versionRef.current = published.version;
+        return published;
+      })}
+      onKeepMine={(blocks, serverVersion) => inOrder(async () => {
         const result = await mergePageBlocksAction(id, blocks, serverVersion);
-        if (result.version) versionRef.current = result.version;
+        if (result.version !== undefined) versionRef.current = result.version;
         return result;
-      }}
-      onReloadDraft={async () => {
+      })}
+      onReloadDraft={() => inOrder(async () => {
         const result = await reloadWorkingDraftAction(id);
-        if (result.version) versionRef.current = result.version;
+        if (result.version !== undefined) versionRef.current = result.version;
         return {
           error: result.error,
           version: result.version,
           blocks: result.blocks as EditorNode[] | undefined,
         };
-      }}
+      })}
       onSaveAsSection={async (nodes, name) => {
         const result = await saveAsSectionAction(name, nodes);
         return {

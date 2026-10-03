@@ -124,6 +124,7 @@ function labels(): EditorLabels {
     draft: "Draft",
     publishChanges: "Publish changes",
     publishing: "Publishing…",
+    publishFailed: "Check the live page before trying again.",
     movedTo: "Moved {label} to position {position} of {total}",
     a11y,
   };
@@ -292,6 +293,23 @@ describe("editor reorder round-trip", () => {
     expect(onPublish.mock.calls[0]![0].map((node) => node.id)).toEqual(["b", "c", "a"]);
     // Success reads as the ordinary saved state.
     expect(container.querySelector("p[role='status']")?.textContent).toBe("Saved");
+  });
+
+  it("releases the Publishing button and explains a rejected request", async () => {
+    await renderEditor({
+      published: true,
+      onPublish: async () => { throw new Error("connection lost"); },
+    });
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (el) => el.textContent === "Publish changes",
+    )!;
+    await act(async () => {
+      button.click();
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    });
+    expect(button.textContent).toBe("Publish changes");
+    expect(button.disabled).toBe(false);
+    expect(container.textContent).toContain("Check the live page before trying again.");
   });
 
   it("unpublished pages show the Draft chip without a publish action", async () => {
