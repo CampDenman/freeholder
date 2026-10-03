@@ -112,7 +112,7 @@ registerContactReference({
 
 registerContactPrivacySource({
   scope: "catalog.orders",
-  tables: ["orders", "order_items"],
+  tables: ["orders", "order_items", "order_payment_milestones"],
   exportData: async (tx: Tx, contactId: string) =>
     tx
       .select({ id: orders.id, status: orders.status, currency: orders.currency, totalMinor: orders.totalMinor })
