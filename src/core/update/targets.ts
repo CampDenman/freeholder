@@ -116,9 +116,9 @@ export const TARGET_OPERATIONS: Record<Tier1Target, Required<RecipeOperations>> 
   },
   "docker-selfhost": {
     update:
-      "docker compose -f deploy/docker-selfhost/infra/compose.yml pull && docker compose -f deploy/docker-selfhost/infra/compose.yml up -d",
+      "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml pull && docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml up -d",
     rollback:
-      "FREEHOLDER_IMAGE=${PREVIOUS_FREEHOLDER_IMAGE:?set previous immutable image digest} docker compose -f deploy/docker-selfhost/infra/compose.yml up -d",
+      "FREEHOLDER_IMAGE=${PREVIOUS_FREEHOLDER_IMAGE:?set previous immutable image digest} docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml up -d",
   },
 };
 
