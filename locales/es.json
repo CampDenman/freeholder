@@ -6848,6 +6848,7 @@
   "store.confirm.total": "Total",
   "store.confirm.payNow": "Pagar ahora",
   "store.confirm.paidNote": "Este pedido está pagado por completo.",
+  "store.confirm.waitingRelease": "Hemos recibido el primer pago. El saldo pendiente se podrá pagar cuando el vendedor habilite la siguiente etapa.",
   "store.confirm.nextLegend": "Qué pasa ahora",
   "store.confirm.nextSteps": "Guarda el enlace de tu pedido: es tu recibo. El negocio prepara tu pedido y las novedades de envío llegan por correo.",
   "store.confirm.portal": "Inicia sesión para seguir este pedido en tu portal",

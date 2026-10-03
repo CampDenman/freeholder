@@ -6848,6 +6848,7 @@
   "store.confirm.total": "الإجمالي",
   "store.confirm.payNow": "ادفع الآن",
   "store.confirm.paidNote": "تم دفع هذا الطلب بالكامل.",
+  "store.confirm.waitingRelease": "تم استلام دفعتك الأولى. سيصبح الرصيد المتبقي مستحقًا عندما يتيح البائع المرحلة التالية.",
   "store.confirm.nextLegend": "ما التالي",
   "store.confirm.nextSteps": "احتفظ برابط طلبك — فهو إيصالك. يجهز المتجر طلبك وتصل مستجدات التسليم عبر البريد الإلكتروني.",
   "store.confirm.portal": "سجل الدخول لتتبع هذا الطلب في بوابتك",

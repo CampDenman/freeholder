@@ -149,7 +149,7 @@ export default async function OrderConfirmPage({
               {t("store.confirm.payNow")}
             </a>
           ) : (
-            <Callout tone="neutral">{t("store.confirm.paidNote")}</Callout>
+            <Callout tone="neutral">{t(view.order.status === "partially_paid" && invoiceOpen ? "store.confirm.waitingRelease" : "store.confirm.paidNote")}</Callout>
           )}
         </div>
       ) : view.order.status === "paid" ? (

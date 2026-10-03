@@ -6848,6 +6848,7 @@
   "store.confirm.total": "Total",
   "store.confirm.payNow": "Pay now",
   "store.confirm.paidNote": "This order is paid in full.",
+  "store.confirm.waitingRelease": "Your first payment has been received. The remaining balance becomes payable when the seller releases the next milestone.",
   "store.confirm.nextLegend": "What happens next",
   "store.confirm.nextSteps": "Keep your order link — it is your receipt. The business prepares your order and any delivery updates arrive by email.",
   "store.confirm.portal": "Sign in to track this order in your portal",
