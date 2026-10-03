@@ -51,3 +51,5 @@ to `partially_paid` after the first payment and to `paid` only when the full
 invoice settles. Digital fulfillment and shipping remain blocked while the
 order is partially paid. Cancellation refuses received money and active
 payment attempts; refunds use the normal invoice refund path.
+Hosted checkout attempts cannot be cancelled locally while the provider may
+still capture them. Reconcile the provider result before cancelling the order.

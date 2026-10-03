@@ -1019,6 +1019,9 @@ export const cancelPayment = defineService({
     if (!inArrayValue(payment.status, ["created", "processing"])) {
       throw new ServiceError("conflict", "A terminal payment cannot be cancelled.");
     }
+    if (payment.method === "hosted_checkout") {
+      throw new ServiceError("conflict", "A hosted checkout must be reconciled with its provider before its payment can be closed.");
+    }
     const [updated] = await ctx.tx
       .update(payments)
       .set({ status: "cancelled", failureCode: null, failureMessage: null })

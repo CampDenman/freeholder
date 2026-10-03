@@ -27,7 +27,7 @@ import {
   releaseOrderPaymentMilestone,
   setPriceListEntry,
 } from "@/modules/catalog/service";
-import { cancelPayment, createPayment, getInvoice, settlePayment } from "@/modules/invoicing/invoice-service";
+import { cancelPayment, createPayment, failPayment, getInvoice, settlePayment } from "@/modules/invoicing/invoice-service";
 import { getCustomerInvoice } from "@/modules/invoicing/customer-service";
 import { invoiceAccessToken } from "@/modules/invoicing/customer-tokens";
 import { setModuleConfig } from "@/core/settings/service";
@@ -224,13 +224,14 @@ describe.runIf(hasDatabase)("catalog orders", { timeout: 30_000 }, () => {
     const product = await createProduct.call({ name: "Capsule", slug: "capsule-order", kind: "physical" }, OWNER);
     const updated = await applyVariantMatrix.call({ productId: product.id, expectedVersion: product.version }, OWNER);
     const variant = (await getProductVariants.call({ productId: updated.id }, OWNER)).variants[0]!;
-    await db().update(productVariants).set({ requiresShipping: false }).where(eq(productVariants.id, variant.id));
     const list = await createPriceList.call({ name: "CAD capsules", currency: "CAD", kind: "retail" }, OWNER);
     await setPriceListEntry.call({ priceListId: list.id, variantId: variant.id, amount: "79999.01" }, OWNER);
+    const zone = await createShippingZone.call({ name: "Capsule destinations", countries: [], regions: [], postalPatterns: [] }, OWNER);
+    await createShippingMethod.call({ zoneId: zone.id, name: "Included delivery", kind: "flat", currency: "CAD", amount: "0.00" }, OWNER);
     const contact = await createContact.call({ name: "Capsule Buyer", email: "capsule-buyer@example.test" }, OWNER);
     const basket = await getOrCreateCart.call({ contactId: contact.id, currency: "CAD" }, OWNER);
     await addCartItem.call({ cartId: basket.cart.id, variantId: variant.id, quantity: 1 }, OWNER);
-    const input = { cartId: basket.cart.id, contactId: contact.id, idempotencyKey: "capsule-odd-cent", acceptedTerms: true as const, termsVersion: "capsule-v1", termsHash: checkoutTermsHash("The full CAD price is binding. Half is due now; the balance is due before delivery.") };
+    const input = { cartId: basket.cart.id, contactId: contact.id, idempotencyKey: "capsule-odd-cent", acceptedTerms: true as const, termsVersion: "capsule-v1", termsHash: checkoutTermsHash("The full CAD price is binding. Half is due now; the balance is due before delivery."), shippingAddress: { country: "CA" } };
     expect((await failure(checkoutCart.call({ ...input, termsHash: "0".repeat(64) }, OWNER))).code).toBe("conflict");
     const placed = await checkoutCart.call(input, OWNER);
     expect(placed.order.totalMinor).toBe(7_999_901);
@@ -267,6 +268,9 @@ describe.runIf(hasDatabase)("catalog orders", { timeout: 30_000 }, () => {
     expect((await failure(cancelOrder.call({ id: placed.order.id }, OWNER))).code).toBe("conflict");
     expect((await getOrder.call({ id: placed.order.id }, OWNER)).order.status).toBe("pending_payment");
     await cancelPayment.call({ id: payment.id, reason: "Buyer withdrew before payment" }, OWNER);
+    const hosted = await createPayment.call({ invoiceId: placed.order.invoiceId!, provider: "stripe", method: "hosted_checkout", amountMinor: placed.order.totalMinor, idempotencyKey: "cancel-hosted-payment" }, OWNER);
+    expect((await failure(cancelPayment.call({ id: hosted.id, reason: "Local cancellation is unsafe" }, OWNER))).code).toBe("conflict");
+    await failPayment.call({ id: hosted.id, code: "provider_declined", message: "The provider confirmed no charge." }, OWNER);
     expect((await cancelOrder.call({ id: placed.order.id }, OWNER)).order.status).toBe("cancelled");
     expect((await failure(settlePayment.call({ id: payment.id, providerRef: "late" }, OWNER))).code).toBe("conflict");
   });

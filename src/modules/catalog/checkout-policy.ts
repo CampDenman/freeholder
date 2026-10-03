@@ -30,7 +30,7 @@ export const catalogSettingsSchema = z.object({
     version: z.string().trim().min(1).max(100),
     title: z.string().trim().min(1).max(200),
     body: z.string().trim().min(1).max(50_000),
-    href: z.string().startsWith("/").max(500).optional(),
+    href: z.string().max(500).regex(/^\/(?!\/)[^\s]*$/, "Use a same-site terms path.").optional(),
   }).nullable().default(null),
 }).refine((value) => value.checkoutPayment.mode === "full" || value.checkoutTerms !== null,
   "Milestone checkout requires published purchase terms.");
