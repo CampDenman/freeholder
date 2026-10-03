@@ -59,10 +59,13 @@ returns; cloud-init keeps working after the API reports the droplet active.
 
 ## 3. Point the domain
 
-Create an `A` record for your domain at the droplet's IPv4 address, at whatever
-registrar or DNS host you use. **Do this before step 5** — Caddy asks Let's
-Encrypt for a certificate on first boot, and that only works once the name
-resolves to this machine.
+Create `A` records for your domain and `www` at the droplet's IPv4 address,
+at whatever registrar or DNS host you use. **Do this before step 5** — Caddy
+asks Let's Encrypt for certificates on first boot, and that only works once
+both names resolve to this machine. Requests to `www` redirect to the apex
+domain, preserving the path and query string. If `FREEHOLDER_DOMAIN` lists
+multiple hostnames, set `FREEHOLDER_PRIMARY_DOMAIN` to the single apex name
+that should receive the redirect.
 
 ## 4. Configure
 

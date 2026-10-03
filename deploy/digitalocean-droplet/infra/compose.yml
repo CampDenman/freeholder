@@ -26,6 +26,7 @@ services:
     # `compose up` beats discovering it in Let's Encrypt's rate limits.
     environment:
       FREEHOLDER_DOMAIN: ${FREEHOLDER_DOMAIN:?set FREEHOLDER_DOMAIN in .env — Caddy needs the hostname it should request a certificate for}
+      FREEHOLDER_PRIMARY_DOMAIN: ${FREEHOLDER_PRIMARY_DOMAIN:-${FREEHOLDER_DOMAIN:?set FREEHOLDER_DOMAIN in .env}}
     depends_on: [app]
 
   app:

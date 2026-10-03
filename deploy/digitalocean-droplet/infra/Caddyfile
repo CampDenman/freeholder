@@ -6,3 +6,7 @@
 	encode zstd gzip
 	reverse_proxy app:3000
 }
+
+www.{$FREEHOLDER_PRIMARY_DOMAIN} {
+	redir https://{$FREEHOLDER_PRIMARY_DOMAIN}{uri} 308
+}
