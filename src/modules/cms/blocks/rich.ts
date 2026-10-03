@@ -50,6 +50,21 @@ const textSpanSchema = z.object({
   marks: marksSchema,
 });
 
+const LINK_BASE = "https://freeholder.invalid/";
+const LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
+
+/** Keep links navigable without allowing executable or document URL schemes. */
+export function safeRichHref(value: string): string | undefined {
+  const candidate = value.trim();
+  if (!candidate || /[\u0000-\u001f\u007f]/.test(candidate)) return undefined;
+  try {
+    if (!LINK_PROTOCOLS.has(new URL(candidate, LINK_BASE).protocol)) return undefined;
+    return candidate;
+  } catch {
+    return undefined;
+  }
+}
+
 const linkSpanSchema = z.object({
   type: z.literal("link"),
   href: z
@@ -57,7 +72,7 @@ const linkSpanSchema = z.object({
     .trim()
     .min(1)
     .max(2048)
-    .refine((href) => !/^\s*javascript:/i.test(href), "links cannot run script"),
+    .refine((href) => safeRichHref(href) !== undefined, "links must use a safe URL"),
   children: z.array(textSpanSchema).min(1).max(40),
 });
 

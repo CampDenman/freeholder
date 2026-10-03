@@ -349,6 +349,7 @@ describe("freeholder-app init (C10.15)", () => {
 
   it("derives a legal bundle id and Expo slug from the business name", () => {
     expect(expoSlug("Aurora Coast Photography")).toBe("aurora-coast-photography");
+    expect(expoSlug(`${"-".repeat(10_000)}Studio${"-".repeat(10_000)}`)).toBe("studio");
     expect(bundleId("Aurora Coast Photography")).toBe("ai.freeholder.auroracoastphotography");
     expect(bundleId("42 Studio")).toMatch(/^ai\.freeholder\.[a-z]/);
   });

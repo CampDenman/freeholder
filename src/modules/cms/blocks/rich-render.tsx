@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Render a typed rich-text document to semantic HTML (C2.05).
 import { Fragment, type ReactNode } from "react";
-import { parseRichDoc, type RichDoc, type RichInline, type RichMark } from "./rich";
+import { parseRichDoc, safeRichHref, type RichDoc, type RichInline, type RichMark } from "./rich";
 
 function markWrap(text: string, marks: RichMark[] | undefined): ReactNode {
   let node: ReactNode = text;
@@ -17,7 +17,7 @@ function renderInlines(nodes: RichInline[]): ReactNode {
     if (node.type === "text") {
       return <Fragment key={index}>{markWrap(node.text, node.marks)}</Fragment>;
     }
-    const href = node.href.startsWith("javascript:") ? "#" : node.href;
+    const href = safeRichHref(node.href) ?? "#";
     return (
       <a key={index} href={href}>
         {renderInlines(node.children)}

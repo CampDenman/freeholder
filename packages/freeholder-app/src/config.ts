@@ -27,11 +27,14 @@ export const DEFAULT_EAS: Json = {
 };
 
 export function expoSlug(name: string): string {
-  const slug = name
+  const dashed = name
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
+    .replace(/[^a-z0-9]+/g, "-");
+  let start = 0;
+  let end = dashed.length;
+  while (dashed[start] === "-") start++;
+  while (dashed[end - 1] === "-") end--;
+  const slug = dashed.slice(start, end).slice(0, 40);
   return slug || "freeholder-customer";
 }
 

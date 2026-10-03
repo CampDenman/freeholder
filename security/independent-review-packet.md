@@ -8,6 +8,24 @@ one.
 Prepared 2026-09-12 from the tree at this change. Threat surfaces, existing
 tests, and known residuals only — no claim that the list is empty.
 
+## 2026-10-03 automated-alert triage (preliminary)
+
+This update is preparation for C11.10, not independent sign-off. GitHub CodeQL
+reported thirteen open alerts when this round began. The storefront and visual
+editor changed after the original packet was written, so the reviewer must
+walk their public and owner paths as well as the surfaces below.
+
+| Alerts | Initial disposition and evidence to check |
+| --- | --- |
+| #4, #2, #22 | This change restricts rich-text links to web/mail/phone/relative URLs, removes modulo bias from recovery-password generation, and replaces a slow mobile slug trim with linear scans. Focused regressions cover each. Confirm CodeQL closes these on `main`. |
+| #1 | The recovery CLI deliberately displays a newly generated password once. It does not run inside an HTTP request, but redirected terminal output can retain the secret. Review its operator instructions and whether a TTY-only display is warranted before dismissing the alert. |
+| #5, #6 | API keys are 32 random bytes authenticated with HMAC-SHA256; the mail webhook hashes two presented Basic values for constant-time comparison, not for stored password verification. Confirm those assumptions and key lifetimes before treating the password-hash warnings as false positives. |
+| #7, #11–#13, #18 | The importer uses regex for partial HTML extraction and entity decoding. Committed content passes through the parse5 allowlist in `src/modules/cms/blocks/html.ts`, but preview and malformed-input behavior still need a direct review. |
+| #9, #10 | These are in `scripts/a11y-smoke.mjs`, a test utility rather than a served route. Confirm no untrusted CI input reaches its generated markup. |
+
+The alert numbers refer to the repository's Code Scanning list. No alert is
+treated as resolved merely because this table names it.
+
 ## How to use this packet
 
 1. Read `SECURITY.md` for reporting, dependency policy, and 2FA/recovery.
