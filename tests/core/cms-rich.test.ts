@@ -8,6 +8,7 @@ import {
   fromPlainString,
   looksLikeHtml,
   parseRichDoc,
+  safeRichHref,
   RichValidationError,
   toEditorMarkup,
   toPlainText,
@@ -53,6 +54,16 @@ describe("typed rich text", () => {
     expect(toPlainText(doc)).toContain("bold");
     expect(toEditorMarkup(doc)).toContain("**bold**");
     expect(toEditorMarkup(doc)).toContain("[site](/about)");
+  });
+
+  it("accepts web, mail and relative links but rejects executable URL schemes", () => {
+    for (const allowed of ["/about", "#section", "https://example.com", "mailto:hi@example.com", "tel:+12505550123"]) {
+      expect(safeRichHref(allowed)).toBe(allowed);
+    }
+    for (const blocked of ["javascript:alert(1)", "JaVaScRiPt:alert(1)", "data:text/html,hello", "vbscript:msgbox(1)", "java\nscript:alert(1)"]) {
+      expect(safeRichHref(blocked)).toBeUndefined();
+      expect(() => parseRichDoc([{ type: "paragraph", children: [{ type: "link", href: blocked, children: [{ type: "text", text: "go" }] }] }])).toThrow();
+    }
   });
 
   it("coerces a text block's leftover string body on write", () => {

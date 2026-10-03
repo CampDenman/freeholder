@@ -26,7 +26,7 @@
 //
 // Usage:
 //   node scripts/owner-password.mjs [new-password] [--disable-2fa]
-import { randomBytes, scrypt as scryptCb } from "node:crypto";
+import { randomBytes, randomInt, scrypt as scryptCb } from "node:crypto";
 import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCb);
@@ -55,8 +55,7 @@ async function hashPassword(password) {
  */
 function generatePassword() {
   const alphabet = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const bytes = randomBytes(24);
-  return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join("");
+  return Array.from({ length: 24 }, () => alphabet[randomInt(alphabet.length)]).join("");
 }
 
 const disableTwoFactor = process.argv.includes("--disable-2fa");
