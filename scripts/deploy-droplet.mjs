@@ -249,9 +249,17 @@ export function remoteApplyScript() {
   return readFileSync(remoteScriptPath, "utf8");
 }
 
+export function remoteApplyBootstrap() {
+  return 'set -euo pipefail; script=$(mktemp); trap "rm -f -- $script" EXIT; cat > "$script"; bash "$script" "$@"';
+}
+
 function runRemote(target, pin) {
   if (!existsSync(target.key)) throw new Error("deploy key file is missing");
   if (!existsSync(target.knownHosts)) throw new Error("known_hosts file is missing");
+  // Read the entire script into a file before executing it. A backup command
+  // can read stdin; streaming the script into `bash -s` let that command eat
+  // the remaining deploy steps and report a false success.
+  const bootstrap = remoteApplyBootstrap();
   const child = spawn("ssh", [
     "-o", "BatchMode=yes",
     "-o", "IdentitiesOnly=yes",
@@ -260,7 +268,7 @@ function runRemote(target, pin) {
     "-o", "ConnectTimeout=20",
     "-i", target.key,
     `${target.user}@${target.host}`,
-    "bash", "-s", "--", pin, target.dir, "90", "2",
+    "bash", "-c", `'${bootstrap}'`, "--", pin, target.dir, "90", "2",
   ], { stdio: ["pipe", "inherit", "inherit"] });
   child.stdin.end(remoteApplyScript());
   return new Promise((resolve, reject) => {

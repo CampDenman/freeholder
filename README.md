@@ -21,6 +21,15 @@ history all hang off one CRM timeline.
 > scope, verified baseline and remaining checklist live only in
 > [`MASTER.md` §43](MASTER.md#43-product-completion-plan--the-live-checklist).
 
+## Try Freeholder
+
+- [Explore the live demo](https://demo.freeholder.ai/) and its shared, hourly
+  resetting playground. Use fictional data.
+- [Get started from the source](GETTING_STARTED.md) with a maintained Docker or
+  cloud deployment recipe. The `create-freeholder` npm package and stable
+  releases have not been published yet.
+- [Read the contributor guide](CONTRIBUTING.md) to help improve the project.
+
 ## Product-complete target
 
 This is the intended finished surface, not a claim that every item below is
