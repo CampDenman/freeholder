@@ -1,0 +1,14 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# Optional overlay for running the disposable playground on the same host as
+# the DigitalOcean droplet recipe. Only Caddy joins the playground proxy
+# network; the production app and database stay on their own network.
+services:
+  caddy:
+    networks:
+      - default
+      - playground-proxy
+networks:
+  playground-proxy:
+    name: freeholder-playground-proxy
+    external: true

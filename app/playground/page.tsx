@@ -2,12 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.38: honest entry to the disposable shared playground.
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { env } from "@/core/env";
 import { getT } from "../i18n";
 import { enterPlaygroundAction } from "./actions";
 
 export const dynamic = "force-dynamic";
-export const metadata = { robots: { index: false, follow: false } };
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t("playground.title"), robots: { index: false, follow: false } };
+}
 
 export default async function PlaygroundPage() {
   if (env().FREEHOLDER_PLAYGROUND !== "1") notFound();

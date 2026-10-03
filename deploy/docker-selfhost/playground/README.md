@@ -32,6 +32,20 @@ demo.example.com {
 }
 ```
 
+For the project's own `demo.freeholder.ai` on the DigitalOcean production
+droplet, the checked-in `demo.freeholder.ai.caddy` is that Caddy site. The host
+needs enough spare memory for the two bounded playground containers as well as
+the production stack. Add `compose.proxy-overlay.yml` beside the production
+`compose.yml` as `compose.playground.yml`, then put
+`COMPOSE_FILE=compose.yml:compose.playground.yml` in the production `.env`.
+This keeps Caddy attached to the internal proxy network after future Compose
+deployments while leaving the production app and database on their own network.
+Run `docker compose --env-file .env config` in `/opt/freeholder` before
+recreating Caddy. The playground still uses its own `/opt/freeholder-playground`
+Compose project and `.env`; never copy production secrets into it. Point demo
+DNS at the host only after the playground boots, a visitor can edit a sample
+page, egress is blocked, and a reset recovers the editor.
+
 Copy the reset service and timer to `/etc/systemd/system`, run
 `systemctl daemon-reload`, then `systemctl enable --now freeholder-playground-reset.timer`
 and `systemctl start freeholder-playground-reset.service`.
