@@ -374,6 +374,7 @@ export const SERVICE_NAMES = [
   "catalog.recordStockMovement",
   "catalog.recoverAbandonedCarts",
   "catalog.refundReturn",
+  "catalog.releaseOrderPaymentMilestone",
   "catalog.releaseReservation",
   "catalog.removeBundleComponent",
   "catalog.removeCartItem",
@@ -2480,15 +2481,15 @@ export interface ServiceCatalog {
   };
   "catalog.cancelOrder": {
     input: { id: string };
-    output: { order: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; orderId: string; variantId: string; quantity: number; unitAmountMinor: number; lineTotalMinor: number; snapshot: unknown; createdAt: string; [key: string]: unknown }[] };
+    output: { order: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "partially_paid" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; checkoutTermsSnapshot: unknown | null; checkoutPaymentSnapshot: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; orderId: string; variantId: string; quantity: number; unitAmountMinor: number; lineTotalMinor: number; snapshot: unknown; createdAt: string; [key: string]: unknown }[]; milestones: { id: string; orderId: string; position: number; label: string; amountMinor: number; releasedAt: string | null; releasedBy: string | null; createdAt: string; [key: string]: unknown }[] };
   };
   "catalog.cancelPurchaseOrder": {
     input: { id: string };
     output: { id: string; supplierId: string; locationId: string; status: "draft" | "ordered" | "partial" | "received" | "cancelled"; currency: string; expectedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "catalog.checkoutCart": {
-    input: { cartId: string; contactId: string; idempotencyKey: string; acceptedTerms: true; shippingAddress?: { name?: string; street1?: string; city?: string; region?: string; postalCode?: string; country: string }; shippingMethodId?: string; locationId?: string; couponCode?: string; giftCardCode?: string; applyBalance?: boolean };
-    output: { order: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; orderId: string; variantId: string; quantity: number; unitAmountMinor: number; lineTotalMinor: number; snapshot: unknown; createdAt: string; [key: string]: unknown }[] };
+    input: { cartId: string; contactId: string; idempotencyKey: string; acceptedTerms: true; termsVersion?: string; termsHash?: string; shippingAddress?: { name?: string; street1?: string; city?: string; region?: string; postalCode?: string; country: string }; shippingMethodId?: string; locationId?: string; couponCode?: string; giftCardCode?: string; applyBalance?: boolean };
+    output: { order: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "partially_paid" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; checkoutTermsSnapshot: unknown | null; checkoutPaymentSnapshot: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; orderId: string; variantId: string; quantity: number; unitAmountMinor: number; lineTotalMinor: number; snapshot: unknown; createdAt: string; [key: string]: unknown }[]; milestones: { id: string; orderId: string; position: number; label: string; amountMinor: number; releasedAt: string | null; releasedBy: string | null; createdAt: string; [key: string]: unknown }[] };
   };
   "catalog.collectionPaths": {
     input: { locale?: string };
@@ -2620,7 +2621,7 @@ export interface ServiceCatalog {
   };
   "catalog.getOrder": {
     input: { id: string };
-    output: { order: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; orderId: string; variantId: string; quantity: number; unitAmountMinor: number; lineTotalMinor: number; snapshot: unknown; createdAt: string; [key: string]: unknown }[] };
+    output: { order: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "partially_paid" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; checkoutTermsSnapshot: unknown | null; checkoutPaymentSnapshot: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; orderId: string; variantId: string; quantity: number; unitAmountMinor: number; lineTotalMinor: number; snapshot: unknown; createdAt: string; [key: string]: unknown }[]; milestones: { id: string; orderId: string; position: number; label: string; amountMinor: number; releasedAt: string | null; releasedBy: string | null; createdAt: string; [key: string]: unknown }[] };
   };
   "catalog.getProduct": {
     input: { id: string };
@@ -2688,7 +2689,7 @@ export interface ServiceCatalog {
   };
   "catalog.listFulfillmentQueue": {
     input: Record<string, never>;
-    output: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+    output: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "partially_paid" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
   "catalog.listFulfillments": {
     input: { orderId?: string; status?: "pending" | "picking" | "packed" | "shipped" | "delivered" | "failed" | "returned" };
@@ -2712,7 +2713,7 @@ export interface ServiceCatalog {
   };
   "catalog.listOrders": {
     input: { contactId?: string };
-    output: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+    output: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "partially_paid" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; checkoutTermsSnapshot: unknown | null; checkoutPaymentSnapshot: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
   "catalog.listPriceLists": {
     input: { currency?: string; kind?: "retail" | "wholesale" | "member" | "sale" | "contract" };
@@ -2804,7 +2805,7 @@ export interface ServiceCatalog {
   };
   "catalog.payOrder": {
     input: { id: string };
-    output: { order: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; orderId: string; variantId: string; quantity: number; unitAmountMinor: number; lineTotalMinor: number; snapshot: unknown; createdAt: string; [key: string]: unknown }[] };
+    output: { order: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "partially_paid" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; checkoutTermsSnapshot: unknown | null; checkoutPaymentSnapshot: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; orderId: string; variantId: string; quantity: number; unitAmountMinor: number; lineTotalMinor: number; snapshot: unknown; createdAt: string; [key: string]: unknown }[]; milestones: { id: string; orderId: string; position: number; label: string; amountMinor: number; releasedAt: string | null; releasedBy: string | null; createdAt: string; [key: string]: unknown }[] };
   };
   "catalog.placePurchaseOrder": {
     input: { id: string };
@@ -2865,6 +2866,10 @@ export interface ServiceCatalog {
   "catalog.refundReturn": {
     input: { id: string; idempotencyKey: string };
     output: { return: { id: string; orderId: string; contactId: string; status: "requested" | "approved" | "received" | "refunded" | "rejected"; reason: string; restock: boolean; labelUrl: string | null; creditNoteId: string | null; refundId: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; items: { id: string; returnId: string; orderItemId: string; quantity: number; restockedQuantity: number; createdAt: string; [key: string]: unknown }[] };
+  };
+  "catalog.releaseOrderPaymentMilestone": {
+    input: { orderId: string; position: number };
+    output: { id: string; orderId: string; position: number; label: string; amountMinor: number; releasedAt: string | null; releasedBy: string | null; createdAt: string; [key: string]: unknown };
   };
   "catalog.releaseReservation": {
     input: { id: string };
@@ -2979,12 +2984,12 @@ export interface ServiceCatalog {
     output: { fulfillment: { id: string; orderId: string; locationId: string | null; kind: "physical" | "digital"; status: "pending" | "picking" | "packed" | "shipped" | "delivered" | "failed" | "returned"; boxId: string | null; weightG: number | null; carrier: string | null; service: string | null; trackingNumber: string | null; trackingUrl: string | null; shippedAt: string | null; deliveredAt: string | null; note: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; items: { id: string; fulfillmentId: string; orderItemId: string; quantity: number; createdAt: string; [key: string]: unknown }[] };
   };
   "catalog.shopperCheckout": {
-    input: { cartId: string; cartToken?: string; email: string; name?: string; shippingAddress?: { name?: string; street1?: string; city?: string; region?: string; postalCode?: string; country: string }; shippingMethodId?: string; couponCode?: string; acceptedTerms: true; idempotencyKey: string; locale?: string };
+    input: { cartId: string; cartToken?: string; email: string; name?: string; shippingAddress?: { name?: string; street1?: string; city?: string; region?: string; postalCode?: string; country: string }; shippingMethodId?: string; couponCode?: string; acceptedTerms: true; termsVersion?: string; termsHash?: string; idempotencyKey: string; locale?: string };
     output: { status: "verification_sent" | "placed"; email: string; orderId: string | null };
   };
   "catalog.shopperOrder": {
     input: { cartId: string; cartToken: string };
-    output: { order: { id: string; status: "pending_payment" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; createdAt: string; [key: string]: unknown }; lines: { productName: string; sku: string; quantity: number; unitAmountMinor: number; lineTotalMinor: number; [key: string]: unknown }[]; shippingMethodName: string | null; invoice: { id: string; number: string | null; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; totalMinor: number; paidMinor: number; currency: string; [key: string]: unknown } | null; payHref: string | null };
+    output: { order: { id: string; status: "pending_payment" | "partially_paid" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; createdAt: string; [key: string]: unknown }; lines: { productName: string; sku: string; quantity: number; unitAmountMinor: number; lineTotalMinor: number; [key: string]: unknown }[]; shippingMethodName: string | null; invoice: { id: string; number: string | null; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; totalMinor: number; paidMinor: number; currency: string; [key: string]: unknown } | null; payHref: string | null };
   };
   "catalog.subscribeBackInStock": {
     input: { variantId: string; contactId: string; locationId?: string };
@@ -4620,7 +4625,7 @@ export interface ServiceCatalog {
   };
   "invoicing.customerInvoice": {
     input: { id: string; token?: string };
-    output: { id: string; number: string; status: string; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; totalMinor: number }[]; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable" };
+    output: { id: string; number: string; status: string; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; totalMinor: number }[]; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable"; nextPaymentMinor: number | null; awaitingRelease: boolean };
   };
   "invoicing.customerInvoiceLink": {
     input: { id: string };
@@ -7314,6 +7319,7 @@ export interface FreeholderApi {
     recordStockMovement: (input: ServiceCatalog["catalog.recordStockMovement"]["input"]) => Promise<ServiceCatalog["catalog.recordStockMovement"]["output"]>;
     recoverAbandonedCarts: (input?: ServiceCatalog["catalog.recoverAbandonedCarts"]["input"]) => Promise<ServiceCatalog["catalog.recoverAbandonedCarts"]["output"]>;
     refundReturn: (input: ServiceCatalog["catalog.refundReturn"]["input"]) => Promise<ServiceCatalog["catalog.refundReturn"]["output"]>;
+    releaseOrderPaymentMilestone: (input: ServiceCatalog["catalog.releaseOrderPaymentMilestone"]["input"]) => Promise<ServiceCatalog["catalog.releaseOrderPaymentMilestone"]["output"]>;
     releaseReservation: (input: ServiceCatalog["catalog.releaseReservation"]["input"]) => Promise<ServiceCatalog["catalog.releaseReservation"]["output"]>;
     removeBundleComponent: (input: ServiceCatalog["catalog.removeBundleComponent"]["input"]) => Promise<ServiceCatalog["catalog.removeBundleComponent"]["output"]>;
     removeCartItem: (input: ServiceCatalog["catalog.removeCartItem"]["input"]) => Promise<ServiceCatalog["catalog.removeCartItem"]["output"]>;

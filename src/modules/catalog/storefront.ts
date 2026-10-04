@@ -54,6 +54,7 @@ import {
   optionTypes,
   optionValues,
   orderItems,
+  orderPaymentMilestones,
   orders,
   productVariantOptions,
   productVariants,
@@ -318,6 +319,8 @@ export const shopperCheckout = defineService({
       .regex(/^[A-Z0-9][A-Z0-9-]{2,31}$/)
       .optional(),
     acceptedTerms: z.literal(true),
+    termsVersion: z.string().trim().min(1).max(100).optional(),
+    termsHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     idempotencyKey: z.string().trim().min(8).max(240),
     locale: z.string().trim().min(2).max(35).optional(),
   }),
@@ -400,6 +403,8 @@ export const shopperCheckout = defineService({
       contactId,
       idempotencyKey: input.idempotencyKey,
       acceptedTerms: true,
+      ...(input.termsVersion ? { termsVersion: input.termsVersion } : {}),
+      ...(input.termsHash ? { termsHash: input.termsHash } : {}),
       ...(input.shippingAddress ? { shippingAddress: input.shippingAddress } : {}),
       ...(input.shippingMethodId ? { shippingMethodId: input.shippingMethodId } : {}),
       ...(input.couponCode ? { couponCode: input.couponCode } : {}),
@@ -479,6 +484,19 @@ export const shopperOrder = defineService({
         // live, offline instructions when the business collects manually.
         if (row.number && PAYABLE_INVOICE_STATUSES.includes(row.status) && row.totalMinor > row.paidMinor) {
           payHref = customerInvoicePath(row.id, invoiceAccessToken(row));
+          if (order.checkoutPaymentSnapshot && typeof order.checkoutPaymentSnapshot === "object" &&
+            order.checkoutPaymentSnapshot.mode === "milestones") {
+            const stages = await ctx.tx.select().from(orderPaymentMilestones)
+              .where(eq(orderPaymentMilestones.orderId, order.id)).orderBy(asc(orderPaymentMilestones.position));
+            let covered = 0;
+            for (const stage of stages) {
+              covered += stage.amountMinor;
+              if (row.paidMinor < covered) {
+                if (!stage.releasedAt) payHref = null;
+                break;
+              }
+            }
+          }
         }
       }
     }

@@ -139,7 +139,7 @@ export default async function OrderConfirmPage({
         </dl>
       </div>
 
-      {view.order.status === "pending_payment" && view.invoice && view.invoice.number ? (
+      {(view.order.status === "pending_payment" || view.order.status === "partially_paid") && view.invoice && view.invoice.number ? (
         <div className="grid gap-2">
           {invoiceOpen && view.payHref ? (
             <a
@@ -149,7 +149,7 @@ export default async function OrderConfirmPage({
               {t("store.confirm.payNow")}
             </a>
           ) : (
-            <Callout tone="neutral">{t("store.confirm.paidNote")}</Callout>
+            <Callout tone="neutral">{t(view.order.status === "partially_paid" && invoiceOpen ? "store.confirm.waitingRelease" : "store.confirm.paidNote")}</Callout>
           )}
         </div>
       ) : view.order.status === "paid" ? (

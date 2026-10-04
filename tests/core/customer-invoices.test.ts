@@ -201,15 +201,16 @@ describe.runIf(hasDatabase)("customer invoices", () => {
     expect((await getInvoice.call({ id: invoice.id }, OWNER)).invoice.paidMinor).toBe(1_000);
   });
 
-  it("refuses to attach a checkout when the invoice was voided during provider work", async () => {
+  it("keeps the invoice open when a hosted checkout is active during a void request", async () => {
     const { createCheckout } = hosted();
     const { invoice, token } = await fixture();
     createCheckout.mockImplementation(async () => {
-      await voidInvoice.call({ id: invoice.id, reason: "Cancelled during provider work." }, OWNER);
+      expect(await failure(voidInvoice.call({ id: invoice.id, reason: "Cancelled during provider work." }, OWNER))).toMatchObject({ code: "conflict" });
       return { providerRef: "checkout-1", url: "https://checkout.example.test/pay" };
     });
-    expect(await failure(beginCustomerCheckout.call({ id: invoice.id, token }, ANON))).toMatchObject({ code: "not_found" });
-    expect((await db().select().from(payments))[0]?.providerCheckoutRef).toBeNull();
+    expect((await beginCustomerCheckout.call({ id: invoice.id, token }, ANON)).url).toBe("https://checkout.example.test/pay");
+    expect((await getInvoice.call({ id: invoice.id }, OWNER)).invoice.status).toBe("sent");
+    expect((await db().select().from(payments))[0]?.providerCheckoutRef).toBe("checkout-1");
   });
 
   it("does not infer settlement from a return link, validates provider amounts, and settles once", async () => {

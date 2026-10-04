@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // One catalog for every kind of sellable value (MASTER.md §4.2, C5.09).
 import { defineModule } from "@/core/module";
+import { catalogSettingsSchema } from "./checkout-policy";
 
 export default defineModule({
   name: "catalog",
   version: "0.1.0",
+  settingsSchema: catalogSettingsSchema,
   requires: ["core", "cms", "invoicing", "forms"],
   tables: () => import("./tables"),
   services: () => import("./service"),
@@ -42,6 +44,8 @@ export default defineModule({
       "catalog.cartAbandoned",
       "catalog.orderPlaced",
       "catalog.orderPaid",
+      "catalog.orderPartiallyPaid",
+      "catalog.orderPaymentReleased",
       "catalog.orderCancelled",
       "catalog.fulfillmentCreated",
       "catalog.fulfillmentShipped",

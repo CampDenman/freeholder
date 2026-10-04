@@ -119,6 +119,7 @@ export const CART_KINDS = ["cart", "saved"] as const;
 export const CART_STATUSES = ["open", "converted", "abandoned"] as const;
 export const ORDER_STATUSES = [
   "pending_payment",
+  "partially_paid",
   "paid",
   "fulfilling",
   "fulfilled",

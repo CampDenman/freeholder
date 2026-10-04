@@ -1205,6 +1205,8 @@ export const orders = pgTable(
     couponId: uuid("coupon_id"),
     shippingMethodId: uuid("shipping_method_id"),
     shippingAddress: jsonb("shipping_address").$type<Record<string, unknown>>(),
+    checkoutTermsSnapshot: jsonb("checkout_terms_snapshot").$type<Record<string, unknown>>(),
+    checkoutPaymentSnapshot: jsonb("checkout_payment_snapshot").$type<Record<string, unknown>>(),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -1214,9 +1216,29 @@ export const orders = pgTable(
     check("orders_currency", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check(
       "orders_status_valid",
-      sql`${t.status} in ('pending_payment','paid','fulfilling','fulfilled','refunded','cancelled')`,
+      sql`${t.status} in ('pending_payment','partially_paid','paid','fulfilling','fulfilled','refunded','cancelled')`,
     ),
     check("orders_totals", sql`${t.subtotalMinor} >= 0 and ${t.discountMinor} >= 0 and ${t.shippingMinor} >= 0 and ${t.taxMinor} >= 0 and ${t.totalMinor} >= 0`),
+  ],
+);
+
+/** Exact checkout stages. Only released rows are payable; dates are never inferred. */
+export const orderPaymentMilestones = pgTable(
+  "order_payment_milestones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id").notNull().references(() => orders.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    label: text("label").notNull(),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    releasedBy: text("released_by"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("order_payment_milestones_position_idx").on(t.orderId, t.position),
+    check("order_payment_milestones_amount_positive", sql`${t.amountMinor} > 0`),
+    check("order_payment_milestones_position_nonnegative", sql`${t.position} >= 0`),
   ],
 );
 

@@ -42,6 +42,7 @@ export function InvoiceView({ invoice, token, t, locale, timezone, businessName,
               ["invoices.total", invoice.totalMinor], ["invoices.paid", invoice.paidMinor],
               ["customerInvoice.balance", invoice.totalMinor - invoice.paidMinor],
             ] as const).map(([label, amount]) => <div key={label} className="flex justify-between gap-4"><dt>{t(label)}</dt><dd className="font-mono">{money(amount)}</dd></div>)}
+            {invoice.nextPaymentMinor !== null ? <div className="flex justify-between gap-4 font-semibold"><dt>{t("customerInvoice.nextPayment")}</dt><dd className="font-mono">{money(invoice.nextPaymentMinor)}</dd></div> : null}
           </dl>
           {invoice.requiredTaxLegend ? <p className="mt-4 text-sm text-ink-muted">{invoice.requiredTaxLegend}</p> : null}
           {invoice.memo ? <p className="mt-4 whitespace-pre-wrap text-sm">{invoice.memo}</p> : null}
@@ -50,10 +51,10 @@ export function InvoiceView({ invoice, token, t, locale, timezone, businessName,
           <form action={payInvoiceAction} className="grid justify-items-start gap-2">
             <input type="hidden" name="id" value={invoice.id} />
             {token ? <input type="hidden" name="token" value={token} /> : null}
-            <PaymentButton label={t(invoice.paymentMode === "manual" ? "customerInvoice.offline" : "customerInvoice.pay")} pendingLabel={t("common.working")} />
+            <PaymentButton label={t(invoice.paymentMode === "manual" ? "customerInvoice.offline" : "customerInvoice.payAmount", { amount: money(invoice.nextPaymentMinor ?? 0) })} pendingLabel={t("common.working")} />
             <p className="text-sm text-ink-muted">{t(invoice.paymentMode === "manual" ? "customerInvoice.offlineHint" : "customerInvoice.hostedHint")}</p>
           </form>
-        ) : <Callout tone="neutral">{t("customerInvoice.closed")}</Callout>}
+        ) : <Callout tone="neutral">{t(invoice.awaitingRelease ? "customerInvoice.awaitingRelease" : "customerInvoice.closed")}</Callout>}
         <a href={backHref} className="text-sm text-accent underline">{t("customerInvoice.back")}</a>
         <a href={invoiceAppReturnHref()} className="text-sm text-accent underline">{t("app.invoice.return")}</a>
       </main>

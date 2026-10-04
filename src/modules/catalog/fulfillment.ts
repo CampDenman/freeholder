@@ -216,7 +216,7 @@ async function allocatedQty(tx: Tx, orderItemId: string, exceptFulfillmentId?: s
 
 async function refreshOrderStatus(ctx: ServiceContext, orderId: string) {
   const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-  if (!order || order.status === "cancelled" || order.status === "refunded" || order.status === "pending_payment") {
+  if (!order || order.status === "cancelled" || order.status === "refunded" || order.status === "pending_payment" || order.status === "partially_paid") {
     return order ?? null;
   }
   const lines = await ctx.tx
@@ -575,7 +575,7 @@ export const grantDigitalFulfillment = defineService({
   handler: async (input, ctx) => {
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.orderId)).for("update");
     if (!order) throw new ServiceError("not_found", "That order is not here.");
-    if (order.status === "pending_payment" || order.status === "cancelled") {
+    if (order.status === "pending_payment" || order.status === "partially_paid" || order.status === "cancelled") {
       throw new ServiceError("conflict", "That order is not paid.");
     }
     const lines = await ctx.tx

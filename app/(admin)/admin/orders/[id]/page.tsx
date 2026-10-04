@@ -107,6 +107,32 @@ export default async function OrderDetailPage({
         </CardBody>
       </Card>
 
+      {bundle.milestones.length ? (
+        <Card>
+          <CardHeader title={t("catalog.orders.paymentMilestones")} />
+          <CardBody>
+            <ol className="grid list-none gap-3 p-0">
+              {bundle.milestones.map((stage) => (
+                <li key={stage.id} className="flex flex-wrap items-center gap-3 border-b border-rule pb-3 last:border-b-0">
+                  <span className="font-semibold">{stage.label}</span>
+                  <span className="font-mono">{money(stage.amountMinor, order.currency)}</span>
+                  <Pill tone={stage.releasedAt ? "success" : "neutral"}>{t(stage.releasedAt ? "catalog.orders.milestoneReleased" : "catalog.orders.milestoneLocked")}</Pill>
+                  {canManage && order.status === "partially_paid" && !stage.releasedAt &&
+                    bundle.milestones.find((candidate) => !candidate.releasedAt)?.id === stage.id ? (
+                    <form action={productAction} className="ms-auto">
+                      <input type="hidden" name="intent" value="releaseOrderPaymentMilestone" />
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <input type="hidden" name="position" value={stage.position} />
+                      <Button type="submit">{t("catalog.orders.releaseMilestone")}</Button>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          </CardBody>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader title={t("catalog.fulfill.digital")} />
         <CardBody>

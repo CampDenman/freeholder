@@ -40,6 +40,7 @@ export {
   wishlists,
   wishlistItems,
   orders,
+  orderPaymentMilestones,
   orderItems,
   fulfillments,
   fulfillmentItems,
