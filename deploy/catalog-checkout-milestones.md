@@ -41,7 +41,8 @@ from its final integer-minor total after tax, discounts, and shipping. Earlier
 stages round down; the last stage receives the exact remainder. The first
 stage is payable immediately. After that payment settles, the owner calls
 `catalog.releaseOrderPaymentMilestone` with `{ "orderId": "...", "position": 1 }`
-at the contractually agreed milestone. Only then can the customer open the
+at the contractually agreed milestone, or uses **Release this payment** on the
+order's admin page. Only then can the customer open the
 next provider checkout. Further stages use increasing positions. The release
 service refuses out-of-order releases, unsettled prior payments, and active
 attempts. It does not invent due dates or collect later payments automatically.

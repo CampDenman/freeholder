@@ -259,7 +259,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
                 <p>{checkoutSettings.checkoutPayment.firstPayment.type === "fixed"
                   ? t("store.checkout.firstFixed", { amount: formatMinor(checkoutSettings.checkoutPayment.firstPayment.amountMinor, cart.cart.currency) })
                   : t("store.checkout.firstPercent", { percent: checkoutSettings.checkoutPayment.firstPayment.sharePpm / 10_000 })}</p>
-                <ol className="list-decimal pl-5">
+                <ol className="list-decimal ps-5">
                   {checkoutSettings.checkoutPayment.milestones.map((stage, position) => (
                     <li key={position}>{t("store.checkout.milestoneShare", { percent: stage.sharePpm / 10_000, label: stage.label })}</li>
                   ))}

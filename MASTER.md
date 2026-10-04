@@ -5630,7 +5630,8 @@ owner operations, never substitute for them.
   `paid` in the same transaction, and cancellation refuses any received money
   or active attempt before stock holds are released. The odd-cent allocation
   and lifecycle proofs are in `tests/core/checkout-policy.test.ts` and
-  `tests/core/catalog-orders.test.ts`.
+  `tests/core/catalog-orders.test.ts`; the order detail shows each stage and
+  its seller release control.
 - [x] **C5.23** Build coupons, gift cards/credit ledger, bundles, order bumps,
   post-add offers and abandoned-cart recovery without parallel money paths.
   *(Evidence: `coupons`, `coupon_redemptions`, `cart_coupons`, `gift_cards`,

@@ -235,7 +235,9 @@ describe.runIf(hasDatabase)("catalog orders", { timeout: 30_000 }, () => {
     expect((await failure(checkoutCart.call({ ...input, termsHash: "0".repeat(64) }, OWNER))).code).toBe("conflict");
     const placed = await checkoutCart.call(input, OWNER);
     expect(placed.order.totalMinor).toBe(7_999_901);
-    expect(placed.order.checkoutTermsSnapshot).toMatchObject({ version: "capsule-v1", body: "The full CAD price is binding. Half is due now; the balance is due before delivery.", sha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    const snapshot = placed.order.checkoutTermsSnapshot;
+    expect(snapshot).toMatchObject({ version: "capsule-v1", body: "The full CAD price is binding. Half is due now; the balance is due before delivery." });
+    expect(snapshot?.sha256).toBe(checkoutTermsHash("The full CAD price is binding. Half is due now; the balance is due before delivery."));
     const stages = await db().select().from(orderPaymentMilestones).where(eq(orderPaymentMilestones.orderId, placed.order.id)).orderBy(orderPaymentMilestones.position);
     expect(stages.map((stage) => stage.amountMinor)).toEqual([3_999_950, 3_999_951]);
     expect(stages[0]?.releasedAt).toBeTruthy();

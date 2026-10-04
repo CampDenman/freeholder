@@ -32,6 +32,7 @@ import {
   getOrCreateCart,
   packFulfillment,
   payOrder,
+  releaseOrderPaymentMilestone,
   receiveReturn,
   refundReturn,
   requestReturn,
@@ -734,6 +735,10 @@ export async function productAction(form: FormData): Promise<void> {
       } else if (intent === "cancelOrder") {
         await cancelOrder.call({ id: field(form, "id") }, actor);
         destination = `/admin/orders/${field(form, "id")}?saved=cancelOrder`;
+      } else if (intent === "releaseOrderPaymentMilestone") {
+        const orderId = field(form, "orderId");
+        await releaseOrderPaymentMilestone.call({ orderId, position: Number(field(form, "position")) }, actor);
+        destination = `/admin/orders/${orderId}?saved=releaseOrderPaymentMilestone`;
       } else if (intent === "createFulfillment") {
         const shipped = await createFulfillment.call(
           {

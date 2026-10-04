@@ -63,12 +63,12 @@ const orderItemRow = row({
   snapshot: z.unknown(),
   createdAt: timestamp,
 });
-const orderDetail = z.object({ order: orderRow, lines: listed(orderItemRow) });
 const paymentMilestoneRow = row({
   id: uuid, orderId: uuid, position: z.number().int(), label: z.string(),
   amountMinor: z.number().int(), releasedAt: timestamp.nullable(),
   releasedBy: z.string().nullable(), createdAt: timestamp,
 });
+const orderDetail = z.object({ order: orderRow, lines: listed(orderItemRow), milestones: listed(paymentMilestoneRow) });
 const address = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   street1: z.string().trim().min(1).max(300).optional(),
@@ -654,7 +654,9 @@ export const getOrder = defineService({
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.id)).limit(1);
     if (!order) throw new ServiceError("not_found", "That order is not here.");
     const lines = await ctx.tx.select().from(orderItems).where(eq(orderItems.orderId, order.id));
-    return { order, lines };
+    const milestones = await ctx.tx.select().from(orderPaymentMilestones)
+      .where(eq(orderPaymentMilestones.orderId, order.id)).orderBy(orderPaymentMilestones.position);
+    return { order, lines, milestones };
   },
 });
 
