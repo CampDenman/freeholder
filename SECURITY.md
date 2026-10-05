@@ -101,6 +101,13 @@ unavailable, use the explicit break-glass command from the application image:
 node scripts/owner-password.mjs --disable-2fa
 ```
 
+Generated passwords are saved to an exclusive mode-0600 file in a private
+mode-0700 directory on the machine/container where recovery runs. The script
+prints its path and the installation SQL, never the password. Read the file
+locally, store the credential securely, and remove the file after recovery.
+Prefer generated recovery: a supplied command argument may remain in shell
+history or process listings.
+
 Run the printed SQL against Freeholder's database, sign in with the one-time
 password, and immediately enrol new factors from **Security**. The flag clears
 only the owner's factor credentials and sessions; it never deletes business or

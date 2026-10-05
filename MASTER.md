@@ -9439,6 +9439,14 @@ schema they inherit reads as a designed thing rather than an excavation.
   Two regressions reproduced private-body disclosure before repair; all 51
   note/search/privacy checks pass afterwards. Changeset `private-note-access.md`.
   This repair is not independent review evidence.
+  *(Stable-release repair 2026-10-05: importer HTML/title extraction uses
+  parse5 and the CMS allowlist instead of partial regex sanitation; the a11y
+  helper permits only its explicit axe injection; generated recovery passwords
+  are exclusive private files and never stdout. Regression evidence:
+  `tests/core/importers.test.ts`, `tests/core/a11y-smoke.test.ts`,
+  `tests/core/owner-password-script.test.ts`. Refreshed review packet records
+  the remaining API-token/ephemeral-Basic hashing findings for independent
+  disposition. These repairs do not close C11.10.)*
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.
