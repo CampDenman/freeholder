@@ -131,6 +131,12 @@ jobs:
         env:
           RELEASE_SHA: ${{ needs.resolve.outputs.sha }}
         run: node scripts/release-publication.mjs
+      - name: Verify active release signing key before promotion
+        if: github.event_name == 'push'
+        env:
+          FREEHOLDER_RELEASE_SIGNING_KEY: ${{ secrets.FREEHOLDER_RELEASE_SIGNING_KEY }}
+          FREEHOLDER_RELEASE_KEY_ID: "2026-09"
+        run: node scripts/release-feed.mjs check-key
       - name: Verify candidate provenance and promote its immutable digest
         env:
           GH_TOKEN: ${{ github.token }}
@@ -173,7 +179,10 @@ jobs:
             exit 1
           fi
           previous=""
-          if gh release download --pattern releases.json --output previous-releases.json >/dev/null 2>&1; then
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > release-history.json
+          previous_tag=$(node scripts/release-history.mjs release-history.json)
+          if [ -n "$previous_tag" ]; then
+            gh release download "$previous_tag" --pattern releases.json --output previous-releases.json
             previous="--previous previous-releases.json"
           fi
           # shellcheck disable=SC2086

@@ -3,6 +3,8 @@
 // Trusted release public keys (MASTER.md §39.3, C10.03). The instance verifies
 // the update feed with these keys. Rotation keeps the previous key as
 // `retiring` until every supported image ships the successor.
+import releaseKeys from "./trusted-release-keys.json";
+
 export type ReleaseKeyStatus = "active" | "retiring";
 
 export interface TrustedReleaseKey {
@@ -11,16 +13,7 @@ export interface TrustedReleaseKey {
   status: ReleaseKeyStatus;
 }
 
-export const TRUSTED_RELEASE_KEYS: readonly TrustedReleaseKey[] = [
-  {
-    id: "2026-09",
-    status: "active",
-    publicKey: `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAoEx50Lx6OFDlYuu3tcZqJDUZpNUGggaBCiPOdpqRuL8=
------END PUBLIC KEY-----
-`,
-  },
-];
+export const TRUSTED_RELEASE_KEYS: readonly TrustedReleaseKey[] = releaseKeys as TrustedReleaseKey[];
 
 export function trustedReleaseKey(
   id: string,

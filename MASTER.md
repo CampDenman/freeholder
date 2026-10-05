@@ -3472,7 +3472,7 @@ what is true now and what remains.
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 closed 2026-09-28 by the live Tier-1 restore drill (`deploy/c11-08-restore-summary.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). Paid event admission (C6.11). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 closed 2026-09-28 by the live Tier-1 restore drill (`deploy/c11-08-restore-summary.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -6089,7 +6089,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   the policy says, because there is nothing left to inspect. `/admin/hire`,
   ordered overdue-first. `0094_rentals.sql`. Coverage in
   `tests/core/rentals.test.ts`. **F04** `/admin/hire` rentals. **F05** `rentals.quote`/`reserve`/`handOver`/`takeBack`/`setTerms`/`list` at `/api/v1/rentals.*`, MCP `rentals_*`. **F07** `tests/core/rentals.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/rentals.test.ts` is the composition proof.)
-- [x] **C6.11** Build events/classes with venue, sessions, seat inventory,
+- [ ] **C6.11** Build events/classes with venue, sessions, seat inventory,
   tickets/passes, waitlists, schema.org Event, ICS and check-in.
   *(Evidence: `events` module — venue fields, sessions with capacity,
   ticket types, contact-spine registrations that waitlist when a session is
@@ -6100,6 +6100,13 @@ payment, tax, inventory and reporting path, with no floating-point money.
   `0059_concerned_sumo.sql`, which the squash removed, so the citation could
   not resolve and the item could not honestly be checked;
   `tests/core/events.test.ts`. **F04** `/admin/events` list/create. **F05** `events.create`/`update`/`addSession`/`addTicket`/`register`/`list`/`publish` at `/api/v1/events.*`, MCP `events_*`. **F07** `tests/core/events.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F06** axe WCAG A/AA over the public index, the public event page and both admin surfaces, in light and dark, in `tests/browser/events.spec.ts`; ICU parity across shipped locales by `tests/core/i18n-gate.test.ts`. **F08** `tests/core/events.test.ts` plus `tests/browser/events.spec.ts` — service, database and browser coverage. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F10** `src/modules/events/onboarding.ts` ships a demo class in en/fr/es, loaded, verified and purged by the tracked demo run. **F12** `tests/core/events.test.ts` is the composition proof.)*
+
+  *(Stable acceptance audit 2026-10-05, C6.11 reopened: free admission is
+  implemented and capacity changes are serialized. Paid tickets are refused
+  by `events.register`; there is no canonical invoice/settlement/reservation
+  flow. Legacy paid confirmations are refused at check-in. The ticket UI and
+  seeded paid class do not prove purchasable admission. Paid checkout, bounded
+  seat holds, settlement, expiry/cancellation and check-in evidence remain.)*
 
 #### Quotes, contracts, projects, and time
 - [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/
@@ -9280,7 +9287,7 @@ schema they inherit reads as a designed thing rather than an excavation.
   **F12** the mixed chain. Remaining honesty: the Playwright Asset is not the
   printed one; live multi-network publish and shadow-media proof are not
   claimed.)*
-- [x] **C11.05** Prove subscription/pass/retainer → entitlement → server-side
+- [ ] **C11.05** Prove subscription/pass/retainer → entitlement → server-side
   access → dunning/renewal → portal change/cancel → correct grant expiry.
   *(Evidence 2026-09-12: `tests/core/c11-05-subscription-journey.test.ts`.
   Subscribe grants site access, `subscriptions.changeMine` switches plan,
@@ -9293,6 +9300,11 @@ schema they inherit reads as a designed thing rather than an excavation.
   settlement remains this item's remaining honesty** — adapter doubles and the
   manual ledger are what this proof runs; it is not a claimed hop and does not
   fake a live charge.)*
+  *(Stable acceptance audit 2026-10-05: C11.05 reopened. The existing manual
+  journey remains valid evidence for entitlement changes. Actual configured
+  provider checkout, signed webhook settlement, renewal/dunning and cancellation
+  acceptance have not been run; production has no provider credentials.
+  `deploy/commerce-payments.md` is the acceptance procedure.)*
 - [x] **C11.06** Prove prompt → agent proposal → approval → safe service calls
   → visual review/publish, and separately code proposal → gates → patch.
   *(Evidence 2026-09-12: `tests/core/c11-06-agent-journey.test.ts`. Hire →
@@ -9315,7 +9327,7 @@ schema they inherit reads as a designed thing rather than an excavation.
   untrusted inputTrust, busy union shape has no titles. **F09** briefing
   assembly job. **F12** the vitest chain. OAuth/providers are mocked — no live
   Google/Microsoft session.)*
-- [x] **C11.08** Prove both fresh install → role-guided productive demo and
+- [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
   *(Partial 2026-09-12: `tests/browser/demo-scenarios.spec.ts` already proves
@@ -9359,6 +9371,14 @@ schema they inherit reads as a designed thing rather than an excavation.
   leave-running with IDs/IPs, the recipe's documented operations were run
   unmodified, and the source stayed healthy and read-only throughout. **F12**
   `pnpm plan:check` gates this box.)*
+
+  *(Stable acceptance audit 2026-10-05: C11.08 reopened. The prior Tier-1
+  drill restored database rows but all 10,000 media objects lacked source
+  bytes, so it did not prove object-byte migration. A new isolated image
+  rehearsal restored an actual uploaded PNG and a published page and checked
+  the original SHA-256 through HTTP (`deploy/stable-acceptance-2026-10-05.md`).
+  This local-storage fixture is not a Tier-1 S3 migration or the final signed
+  upgrade/failed-update rollback evidence; those legs remain.)*
 
 #### Whole-product quality
 
