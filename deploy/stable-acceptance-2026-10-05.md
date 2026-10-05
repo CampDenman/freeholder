@@ -54,14 +54,61 @@ focused database-backed release/feed/fork checks passed 50 tests in five files.
 The release PR and security PR both passed their full protected PR CI runs.
 Merge-queue/main runs are separate required gates before deployment.
 
-No npm user is authenticated in this workspace (`npm whoami`: ENEEDAUTH).
-No user/workspace/repository `.npmrc` is present. The six proposed registry
-endpoints returned 404; namespace ownership is unknown. GitHub authenticates
-as `domainersuite` (Tony Aly), which does not prove npm identity. Repository
-secret names expose a release signing key and no `NPM_TOKEN`; organization
-secret access is unavailable to the current GitHub scope. Publishing needs an
-owner-controlled npm account/namespace and privately configured publishing
-access. Credentials are never part of this record.
+The npm CLI subsequently authenticated as `campdenman`; `npm org ls freeholder`
+confirmed that account is the `@freeholder` organization owner. The namespace
+currently contains no packages. All seven proposed `0.2.0-beta.1` artifacts also
+passed the packed install/usage gate, and eleven version/publication integrity
+assertions passed. This beta preparation is private and unpublished; it does not
+close public registry acceptance or imply the owner chose that release channel.
+
+The existing workflow still requires `NPM_TOKEN`; no repository publishing token
+or package trusted publisher has been configured. npm's current publishing rules
+require publishing authentication beyond account login. The authenticated account
+and local pack test are separate from a successful authenticated public publish.
+No credential is included in this record.
+
+## Actual S3 object transfer and signed host update
+
+A disposable SeaweedFS 4.48 S3-compatible server used fresh fixture-only access
+credentials, separate `release-source` and `release-target` buckets and private
+storage on the existing host. Its immutable image was
+`chrislusf/seaweedfs@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d`.
+Production media/backup buckets and credentials were not used by this test.
+
+The real HTTP bootstrap/publish/upload journey ran against a fresh S3-backed
+source. With its app stopped, `pg_dump -Fc` produced archive SHA-256
+`102c567224a3c5e68f123951f0361fda532ee6371fd2fc3881f836feef844fa7`.
+`ownership-export.mjs` exported 377 tables, 785 rows and one actual media asset.
+`media-transfer.mjs` copied and verified one object (68 bytes) between the two
+buckets. A second empty database was restored with `pg_restore --exit-on-error`;
+the target app returned healthy status, the published page and the original PNG
+with SHA-256 `3cfe4d361cf37dd566bca35f3f2ef96510bd07d9beb01f4e77592f9d616a50dd`.
+This proves actual S3 API transfer and object recovery on an isolated same-host
+fixture; it is not managed storage or a different physical Tier-1 host.
+
+The exact merged source `449fe0efe3867f3e08ee4505980be62e1dd8c009` passed main
+[CI run 37281161334](https://github.com/CampDenman/freeholder/actions/runs/37281161334)
+and [image publication 37283078916](https://github.com/CampDenman/freeholder/actions/runs/37283078916).
+The deployment tool verified provenance and resolved the Linux amd64 image to
+`ghcr.io/campdenman/freeholder@sha256:cac139fca13101e5e614adf84b030c8777106914e71de4f6c961569324d80495`.
+
+A separate app/db/Caddy Compose installation restored that S3 database and used
+the target fixture bucket. The real `scripts/docker-updater.py` host executor
+verified the candidate's exact main-workflow cosign identity and forward ancestry,
+backed up the database, restored a shadow instance and checked schema/journal,
+worker readiness and HTTP smoke routes. It reported `schemaChanged: false`.
+
+A test-only subclass injected one explicit failure after the candidate's real
+live-container smoke succeeded. During cutover the Caddy endpoint returned 503.
+The executor recorded `rolled_back`, restored the previous immutable image and
+independently verified health and smoke routes before reopening traffic. This
+exercises actual container/proxy recovery; it does not test migration-changing
+rollback, because this candidate has no schema change.
+
+A second unmodified executor run completed the same signed upgrade successfully.
+After traffic reopened, the restored page and the S3 original were served over
+HTTP with identical content and SHA-256; workers were ready. C11.08 stays open
+for the complete normative cross-target/candidate acceptance journey.
 
 ## Outstanding findings reflected in MASTER
 
@@ -69,8 +116,9 @@ access. Credentials are never part of this record.
   flow exists. Free registration and capacity locking do not close this gap.
 - C11.05: manual/mocked entitlement journeys passed; actual configured provider
   checkout, signed webhook settlement and subscription lifecycle remain unverified.
-- C11.08: cross-target Tier-1 object-byte recovery and final candidate update/rollback
-  remain unverified. The older drill had 10,000 media rows and no source bytes.
+- C11.08: same-host S3 object transfer/recovery and the signed edge-image host
+  update/failed-cutover rollback passed. The complete cross-target final-candidate
+  journey remains open; the older two-droplet drill had no source object bytes.
 - C11.10: independent review remains unchecked at the owner's request.
 - C11.16/C11.17: reconciliation, final clean-room acceptance and owner signature
   remain open. The publisher must refuse a final stable tag while these are open.
@@ -90,3 +138,31 @@ patched version as of this check. Mobile remains v2-deferred. Neither alert was
 dismissed or waived; review exposure, follow upstream repairs, and retest before
 shipping mobile. These dependencies are separate from the v1 server's audited
 pnpm graph.
+
+## Production and playground deployment
+
+The production recipe deployed the verified `449fe0ef` immutable image above.
+It uploaded the database archive and checksum before changing the image pin,
+then reported schema readiness and public health success. `freeholder.ai`
+returned 200 with 1,519 services and all 87 mounted workers ready; `www` resolved
+to the canonical HTTPS health URL. The homepage returned 200 and contained no
+“Built by WeVibeSites” branding.
+
+The playground's independent image pin was updated to the same digest and its
+fixed Compose reset recipe recreated only the playground app/database. The
+production environment was not copied. Public demo health returned 200 with
+1,519 services, ready workers, zero failed jobs and zero dead letters.
+
+A real Chromium browser on `demo.freeholder.ai` entered as a visitor, created a
+page, added a heading, waited for Saved, published it and read the public text.
+It reopened the editor, changed the words, waited for Saved, clicked Publish
+changes and read the new public text. The button completed and no false
+“This page changed after you opened it” conflict appeared. The same visitor's
+invitation, mail test and upload-staging API calls each returned 403.
+
+These checks exercise the running deployment and a disposable demo page; they
+are separate from the full protected browser CI suite. The demo was reset after
+the mutation proof. A browser carrying the old session was redirected to the
+playground entry, the test page returned 404, and a fresh visitor could enter
+the reseeded admin. Eight documentation/reconciliation assertions and the plan
+and license gates passed for this evidence update.

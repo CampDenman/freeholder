@@ -92,7 +92,7 @@ Anti-roadmap rows are refusals, not leftovers. Reconciliation updates since
 | 20 | Replit recipe | `deploy/replit/`. | Built | C3.16. |
 | 21 | DigitalOcean | App Platform + droplet recipes. | Built | C3.16, C10.10. |
 | 22 | create-freeholder | `packages/create-freeholder`, Apache-2.0. | Built | C3.14. |
-| 23 | Migration matrix | Ownership export + `scripts/ownership-drill.mjs --all-pairs`. | Built | Pair matrix drills every CI run; the second live-instance restore ran 2026-09-28, closing C11.08 (`deploy/c11-08-restore-summary.md`). |
+| 23 | Migration matrix | Ownership export + `scripts/ownership-drill.mjs --all-pairs`. | Built; acceptance incomplete | C11.08 was reopened because the 2026-09-28 two-droplet drill had no source object bytes. Actual same-host S3 byte transfer and signed host update/rollback passed on 2026-10-05; the complete cross-target final-candidate journey remains open (`deploy/stable-acceptance-2026-10-05.md`). |
 | 24 | Plugins: the design bet | `src/core/plugins`, `packages/plugin-kit`, isolate, first-party plugins under `plugins/`. | Built | C3.08–C3.13. |
 | 25 | Plugin DX | Scaffolding, fixture instance, contract tests, `packages/plugin-kit`. | Built | C3.12. |
 | 26 | Trust model | Signed install, capability isolation, hostile-plugin refusals. | Built | C3.10–C3.11. |
