@@ -49,6 +49,20 @@ describe("importer contract (C3.21)", () => {
 });
 
 describe("first-party importers (C3.22)", () => {
+  it("parses malformed HTML without retaining executable preview content", () => {
+    const page = parseSemanticHtml(`<html lang=en><head><link href='/canonical' rel='alternate canonical'><title>A &#x26; B</title></head><body><main><h1>Welcome</h1><p onclick='steal()'>Copy<script data-x='>'>steal()</script><img src=x onerror='steal()'><a href='java&#115;cript:steal()'>Link</a></main></body>`, "https://example.com/old");
+    expect(page).toMatchObject({ title: "A & B", canonical: "https://example.com/canonical", locale: "en", slug: "canonical" });
+    expect(page.body).toContain("Copy");
+    expect(page.body).not.toMatch(/<script|onclick|onerror|javascript:|steal\(/i);
+  });
+
+  it("decodes entities once and extracts title text with the HTML parser", () => {
+    const rest = parseWordpressRest([{ title: { rendered: "<strong>A</strong> &amp;lt;B&amp;gt; &#169;" } }], "https://example.com");
+    expect(rest[0]?.title).toBe("A &lt;B&gt; ©");
+    expect(parseSemanticHtml("<h1>A <em>nested</em> heading</h1>", "https://example.com/page").title).toBe("A nested heading");
+    expect(parseSemanticHtml("<link rel=canonical href='javascript:bad()'><h1>Good</h1>", "https://example.com/page").canonical).toBeUndefined();
+  });
+
   it("parses WordPress REST, WXR, sitemap, RSS and semantic HTML", () => {
     const rest = parseWordpressRest(
       [{ link: "https://example.com/about", slug: "about", type: "page", title: { rendered: "About" }, content: { rendered: "<p>Hi</p>" } }],

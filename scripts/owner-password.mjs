@@ -26,8 +26,12 @@
 //
 // Usage:
 //   node scripts/owner-password.mjs [new-password] [--disable-2fa]
+// Generated passwords are saved in an exclusive mode-0600 file, never stdout.
 import { randomBytes, randomInt, scrypt as scryptCb } from "node:crypto";
 import { promisify } from "node:util";
+import { mkdtempSync, writeFileSync, chmodSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const scrypt = promisify(scryptCb);
 
@@ -59,7 +63,15 @@ function generatePassword() {
 }
 
 const disableTwoFactor = process.argv.includes("--disable-2fa");
-const password = process.argv.slice(2).find((value) => value !== "--disable-2fa") ?? generatePassword();
+const supplied = process.argv.slice(2).find((value) => value !== "--disable-2fa");
+const password = supplied ?? generatePassword();
+let passwordPath;
+if (!supplied) {
+  const directory = mkdtempSync(join(tmpdir(), "freeholder-owner-recovery-"));
+  chmodSync(directory, 0o700);
+  passwordPath = join(directory, "password");
+  writeFileSync(passwordPath, `${password}\n`, { flag: "wx", mode: 0o600 });
+}
 if (password.length < 12) {
   console.error("A password needs at least 12 characters.");
   process.exit(1);
@@ -82,10 +94,7 @@ const sql = `update users set password_hash = '${hash}' where role = 'owner';
 delete from sessions where user_id in (${ownerIds});${twoFactorReset}`;
 
 console.log(`
-The new owner password — copy it somewhere safe now, it is not stored anywhere
-else and this is the only time it is shown:
-
-    ${password}
+${passwordPath ? `Generated password saved privately to: ${passwordPath}\nRead it locally, then delete that file after storing it securely.` : "The supplied password is never echoed."}
 
 It is not in effect yet. Run this against the database to install it:
 
@@ -93,6 +102,6 @@ It is not in effect yet. Run this against the database to install it:
 ${sql}
 SQL
 
-Then sign in and change it from Settings, so the password that ends up in your
-shell history is not the one you keep.${disableTwoFactor ? " Two-factor authentication was also disabled; enrol it again immediately from Security." : ""}
+Then sign in and change it from Settings. Use a secure local terminal; avoid
+putting a chosen password in shell history.${disableTwoFactor ? " Two-factor authentication was also disabled; enrol it again immediately from Security." : ""}
 `);

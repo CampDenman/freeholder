@@ -1,6 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // First-party WordPress and generic-site importers (C3.22).
+import { parse, parseFragment, serialize, type DefaultTreeAdapterTypes } from "parse5";
+import { sanitizeOwnerHtml } from "@/modules/cms/blocks/html";
 import {
   assertPublicHttpUrl,
   DEFAULT_IMPORTER_LIMITS,
@@ -24,13 +26,29 @@ function textOf(xml: string, tag: string): string {
   return (match?.[1] ?? match?.[2] ?? "").trim();
 }
 
+type HtmlNode = DefaultTreeAdapterTypes.Node;
+
+function children(node: HtmlNode): HtmlNode[] {
+  return "childNodes" in node ? node.childNodes : [];
+}
+
+/** Browser parsing decodes character references once, including numeric ones. */
+function textContent(root: HtmlNode): string {
+  const text: string[] = [];
+  const pending = [root];
+  while (pending.length) {
+    const node = pending.pop()!;
+    if (node.nodeName === "#text") text.push((node as DefaultTreeAdapterTypes.TextNode).value);
+    else if (!("tagName" in node) || !["script", "style"].includes(node.tagName)) {
+      const nested = children(node);
+      for (let index = nested.length - 1; index >= 0; index -= 1) pending.push(nested[index]!);
+    }
+  }
+  return text.join("");
+}
+
 function decodeEntities(value: string): string {
-  return value
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&#39;", "'");
+  return textContent(parseFragment(value));
 }
 
 function slugFromUrl(url: string): string {
@@ -133,23 +151,36 @@ export function parseRssOrAtom(xml: string): ParsedPage[] {
 
 export function parseSemanticHtml(html: string, url: string): ParsedPage {
   enforceImporterLimits({ pages: 1, bytes: html.length, depth: 1 });
-  const title =
-    /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim() ||
-    /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html)?.[1]?.replace(/<[^>]+>/g, "").trim() ||
-    slugFromUrl(url);
-  const canonical = /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i.exec(html)?.[1];
-  const locale = /<html[^>]+lang=["']([^"']+)["']/i.exec(html)?.[1];
-  const article =
-    /<article[^>]*>([\s\S]*?)<\/article>/i.exec(html)?.[1] ||
-    /<main[^>]*>([\s\S]*?)<\/main>/i.exec(html)?.[1] ||
-    /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ||
-    html;
+  const document = parse(html);
+  const elements: DefaultTreeAdapterTypes.Element[] = [];
+  const pending: HtmlNode[] = [document];
+  while (pending.length) {
+    const node = pending.pop()!;
+    if ("tagName" in node) elements.push(node);
+    const nested = children(node);
+    for (let index = nested.length - 1; index >= 0; index -= 1) pending.push(nested[index]!);
+  }
+  const first = (tag: string) => elements.find((node) => node.tagName === tag);
+  const attribute = (node: DefaultTreeAdapterTypes.Element | undefined, name: string) => node?.attrs.find((attr) => attr.name === name)?.value;
+  const title = textContent(first("title") ?? parseFragment("")).trim() || textContent(first("h1") ?? parseFragment("")).trim() || slugFromUrl(url);
+  const canonicalNode = elements.find((node) => node.tagName === "link" && (attribute(node, "rel") ?? "").toLowerCase().split(/\s+/).includes("canonical"));
+  const canonicalHref = attribute(canonicalNode, "href");
+  let canonical: string | undefined;
+  try {
+    if (canonicalHref) {
+      const candidate = new URL(canonicalHref, url);
+      if (["http:", "https:"].includes(candidate.protocol) && !candidate.username && !candidate.password) canonical = candidate.href;
+    }
+  } catch { /* Malformed source metadata does not become canonical metadata. */ }
+  const locale = attribute(first("html"), "lang");
+  const article = first("article") ?? first("main") ?? first("body") ?? document;
   return {
     url,
     slug: slugFromUrl(canonical ?? url),
-    title: decodeEntities(title.replace(/<[^>]+>/g, "")),
+    title,
     kind: "page",
-    body: article.replace(/<script[\s\S]*?<\/script>/gi, "").trim(),
+    // Use the same allowlist as committed CMS content for import previews too.
+    body: sanitizeOwnerHtml(serialize(article)).trim(),
     locale,
     canonical,
     provenance: { url, source: "html" },

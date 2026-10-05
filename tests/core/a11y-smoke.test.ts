@@ -78,11 +78,15 @@ describe("the a11y smoke test", () => {
   it("ignores the page's own scripts rather than executing them", async () => {
     // The real pages arrive with React's hydration bundle attached. Running it
     // inside jsdom would fail for reasons that say nothing about the markup,
-    // so scripts are stripped — and this asserts that stripping them does not
-    // take the document with it.
+    // so outside-only execution refuses them while keeping their document.
     const html = doc(
       `<main><h1>S</h1></main><script>throw new Error("this must never run")</script>`,
     );
+    expect(await ids(html)).toEqual([]);
+  });
+
+  it("refuses page script execution even when script attributes contain closing angles", async () => {
+    const html = doc(`<main><h1>Safe</h1><img src=/x alt='Example' onerror='throw new Error("event handler ran")'></main><script type='application/ld+json' data-test='>'>throw new Error("page script ran")</script><script data-test='>'>throw new Error("malformed script ran")</script>`);
     expect(await ids(html)).toEqual([]);
   });
 });

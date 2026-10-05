@@ -26,6 +26,32 @@ walk their public and owner paths as well as the surfaces below.
 The alert numbers refer to the repository's Code Scanning list. No alert is
 treated as resolved merely because this table names it.
 
+## 2026-10-05 release security repairs (awaiting independent review)
+
+The current automated scan has ten open alerts. This repair addresses importer
+alerts #7, #11–#13 and #18 with parse5 text extraction and CMS-allowlisted preview
+markup; `tests/core/importers.test.ts` covers malformed script attributes, encoded
+URL schemes, numeric references and one-pass decoding. The accessibility helper
+(#9/#10) uses JSDOM outside-only execution; it no longer enables page scripts and
+then attempts regex removal. The browser-like parser determines document structure.
+`tests/core/a11y-smoke.test.ts` exercises scripts with closing angles in attributes.
+
+Recovery CLI alert #1 is addressed by never echoing supplied/generated passwords.
+Generated credentials go to an exclusive mode-0600 file in a mode-0700 directory;
+stdout contains only the path and salted scrypt SQL. Tests prove compatibility
+with the app verifier, filesystem permissions and secret absence from output.
+Operators must retrieve/delete the private file on the machine or container where
+they ran recovery. The supplied-password form can still leave shell-history and
+process-argument exposure; prefer generated recovery in a secure local shell.
+
+Alerts #5/#6 remain candidates for false-positive disposition, not dismissed here:
+API keys contain 32 cryptographically random bytes and use a keyed HMAC for an
+indexed lookup, not a human-password digest. Postmark compares hashes only to
+normalize timing of two transient presented Basic values; neither hash is stored
+as a password verifier. An independent reviewer must confirm these assumptions.
+The refreshed CodeQL run must also confirm the repaired alerts close on main.
+This section does not check C11.10 or supply independent sign-off.
+
 ## How to use this packet
 
 1. Read `SECURITY.md` for reporting, dependency policy, and 2FA/recovery.

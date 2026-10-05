@@ -89,7 +89,9 @@ business you cannot reach.
 
       docker compose exec app node scripts/owner-password.mjs
 
-- [ ] It prints the password once and does *not* apply it. Run the statement it
+- [ ] It saves the generated password to a private file inside the app container
+      and does *not* apply it. Read/delete that file through a secure local
+      terminal; the script never echoes the password. Run the statement it
       gives you against the database, then sign in with the new password.
 - [ ] Change it again from **Settings → Password**, so the password that ends
       up in your shell history is not the one you keep. Every other signed-in
