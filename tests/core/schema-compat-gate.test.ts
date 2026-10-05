@@ -131,7 +131,7 @@ describe("the migrations already in the tree", () => {
       });
     }
     expect(
-      declaredSchemaRisk(readFileSync("src/core/update/this-release.ts", "utf8")),
+      declaredSchemaRisk(readFileSync("src/core/update/release-declaration.json", "utf8")),
     ).toBe("breaking");
   });
 
@@ -144,7 +144,7 @@ ALTER TABLE "pages" DROP COLUMN "legacy_ref";`,
     expect(review.acknowledged).toBe(true);
     const mismatch = assertSchemaRisk("compatible", [review]);
     expect(mismatch.ok).toBe(false);
-    expect(mismatch.message).toMatch(/this-release\.ts/);
+    expect(mismatch.message).toMatch(/release-declaration\.json/);
     expect(assertSchemaRisk("breaking", [review]).ok).toBe(true);
     expect(declaredSchemaRisk('schemaRisk: "compatible"')).toBe("compatible");
   });

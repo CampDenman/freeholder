@@ -103,7 +103,7 @@ export function findBreakingStatements(sql) {
 
 /** The schemaRisk this build declared. Never inferred from the version number. */
 export function declaredSchemaRisk(source) {
-  const match = /schemaRisk:\s*"(compatible|breaking)"/.exec(source);
+  const match = /["\']?schemaRisk["\']?:\s*"(compatible|breaking)"/.exec(source);
   return match ? match[1] : null;
 }
 
@@ -122,8 +122,8 @@ export function assertSchemaRisk(declared, reviews) {
       message:
         `Schema-compatibility gate: ${acknowledged.map((review) => review.path).join(", ")} ` +
         `is declared schema-breaking, but this build's schemaRisk is ` +
-        `${declared ?? "missing"}. Set schemaRisk: "breaking" in ` +
-        `src/core/update/this-release.ts so the updater will not treat rollback as an image swap.`,
+        `${declared ?? "missing"}. Set schemaRisk to "breaking" in ` +
+        `src/core/update/release-declaration.json so the updater will not treat rollback as an image swap.`,
     };
   }
   return { ok: true, acknowledged };
@@ -245,7 +245,7 @@ function main() {
   }
 
   const declared = declaredSchemaRisk(
-    readFileSync(join(process.cwd(), "src/core/update/this-release.ts"), "utf8"),
+    readFileSync(join(process.cwd(), "src/core/update/release-declaration.json"), "utf8"),
   );
   const risk = assertSchemaRisk(declared, reviews);
   if (!risk.ok) {

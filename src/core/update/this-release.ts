@@ -4,14 +4,9 @@
 // written here; they are not derived from package.json.
 import { PLATFORM_VERSION } from "@/core/platform";
 import { parseReleaseMetadata, type ReleaseMetadata } from "./release";
+import declaration from "./release-declaration.json";
 
-export const THIS_RELEASE: ReleaseMetadata = parseReleaseMetadata({
-  version: PLATFORM_VERSION,
-  channel: "edge",
-  minFromVersion: "0.1.0",
-  schemaRisk: "breaking",
-  cvss: null,
-  severity: "none",
-  manualSteps: [],
-  pluginApi: PLATFORM_VERSION,
-});
+export const THIS_RELEASE: ReleaseMetadata = parseReleaseMetadata(declaration);
+if (THIS_RELEASE.version !== PLATFORM_VERSION) {
+  throw new Error("Release declaration must match the platform version.");
+}

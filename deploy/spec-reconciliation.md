@@ -6,11 +6,14 @@ SPDX-License-Identifier: Apache-2.0
 # Spec reconciliation — §§1–42 vs schema, services, UI
 
 *MASTER.md C11.16. Reconciled 2026-09-13 against parent `2b14cbe`;
-re-reconciled 2026-09-28 against main after #441–#443: C3.13 closed by the live
+re-reconciled 2026-10-04 against `04c27ca5` after the storefront, editor,
+playground and milestone-checkout changes. Historical 2026-09-28 evidence: C3.13 closed by the live
 Paradise Comms acceptance, C11.08 closed by the live Tier-1 restore drill,
 C11.11 closed on its archived reference-target evidence, the mobile-app rows
 re-cast as v2-deferred per §43.18, and C3.24 (native storefront parity)
-recorded as the new remaining product item.*
+was recorded as the then-remaining product item. C3.24–C3.26 and C2.25 have
+since closed; their former status is updated below. Independent review and
+real provider acceptance remain open.*
 
 C11.16 requires that every affirmative capability in §§1–42 either has a
 completed checklist item, is listed here as remaining work with an open
@@ -101,7 +104,7 @@ Anti-roadmap rows are refusals, not leftovers. Reconciliation updates since
 | 33 | Social hub | OAuth, ingest, composer, GBP, publication calendar. `/admin/social`. | Built | C9.24–C9.27, C9.31. Auto-clip struck. |
 | 34 | Sharing DNA | Share targets, tracked links, gallery partner, quote partner, product/gift share, embeds. `/admin/sharing`, embed routes. | Built | C9.28–C9.29, C9.34–C9.36. |
 | 35 | React Native app | `packages/mobile-app`, `apps/mobile`, screen contracts, push tokens, private cache, companion/capture code, `freeholder-app init`, store/CI gates. | Deferred to v2 | Owner decision 2026-09-15 (§43.18): C10.17, C10.18, C10.25, C10.26, C10.27, C10.28 and C10.30 defer to v2 with obligations verbatim. C10.15 init and C10.16 store/CI gates are checked. Signed store binaries still need EAS credentials. |
-| 36 | Mined roadmap | Core absorptions and first-party plugins match C3.13 / C5–C9. Anti-roadmap held. Autofill gate §36.1 / §15.10. | Built | Anti-roadmap is exclusion, not leftover. C3.24 is the open affirmative work: native storefront parity against Shopify-core capability (owner decision 2026-09-27); the importer is a migration bridge. |
+| 36 | Mined roadmap | Core absorptions and first-party plugins match C3.13 / C5–C9. Anti-roadmap held. Autofill gate §36.1 / §15.10. | Built | Anti-roadmap is exclusion, not leftover. C3.24–C3.26 closed 2026-09-29 (`deploy/c324-storefront-parity-2026-09-29.md`): native storefront parity against Shopify-core capability (owner decision 2026-09-27); the importer is a migration bridge. |
 | 37 | Self-building instance | Builder content + code lanes, MCP, `/source`, budgets, approvals. `/admin/builder`. | Built | C4.19–C4.22. GitHub PR delivery still needs a connected repo (C11.06 honesty). |
 | 38 | Day-one surface | Demos, guidance, capture, services, calendars, catalog, shipping/tax, passes, loyalty, SMS, subscriptions, ads, time, POS, projects, galleries, SEO, CRM, automations, reporting, roles, export, help, waivers, updates. | Built except named leftovers | In-person Terminal is adapter representation (C5.24), not a claimed live reader. 3D/AR is accepted media roles (C5.11), not a storefront AR viewer. |
 | 39 | Staying current | Channels, signed feed, checks, preflight, apply/rollback, N-1, policy, fork lane, targets, admin/CLI/MCP. `/admin/updates`. | Built | C10.01–C10.11, C10.19–C10.22. |
@@ -131,7 +134,7 @@ These stay in the spec. They are why C11.17 cannot be checked.
 
 | Item | What is still true |
 |---|---|
-| Native storefront parity | C3.24 (owner decision 2026-09-27): prove the native Freeholder store covers Shopify-core capability with a published mapping; close every provable gap the mapping finds. The Shopify importer is repositioned as a migration bridge. This is the remaining C1–C10 product item, and it is what keeps C11.16's own box open. |
+| Native storefront parity | Closed: C3.24–C3.26, capability mapping and native commerce journeys in `deploy/c324-storefront-parity-2026-09-29.md`. The Shopify importer remains a migration bridge. |
 | Device evidence | Not v1 remaining work: owner decision 2026-09-15 (§43.18) defers C10.17, C10.18, C10.25, C10.26, C10.27, C10.28 and C10.30 to v2 with obligations verbatim. C10.15 init and C10.16 store/CI gates are checked. |
 | Independent security review | C11.10 — packet at `security/independent-review-packet.md` is not a signed review. |
 | Live settlement | C11.05 remaining honesty. Manual/offline and adapter doubles are what journeys run. Hosted Stripe/PayPal charges are not claimed. |
@@ -140,7 +143,7 @@ These stay in the spec. They are why C11.17 cannot be checked.
 | C11.12 leftovers | Closed 2026-09-16: `locales/ar.json` ships the complete Arabic catalog (i18n-gate enforced, AI-drafted pending native review); the real-browser suite proves `html[lang=ar][dir=rtl]` with axe in both themes, keyboard loop and 320px reflow on admin, storefront and portal; populated contact/invoice/product/appointment detail forms and ten more owner screens carry the same pass. |
 | C11.14 leftovers | `search.query` covers registered live sources; other titled contact-attached stores (orders, subscriptions, remaining SEARCH_TABLE_OPT_OUTS) stay per-list. Per-record restore now covers note/task trash, media/product restoration, merge-undo, the instance drill and trash/restore/purge for pages, forms, popups, segments and saved views (`deploy/record-trash.md`, `tests/core/record-trash-families.test.ts`); money ledgers, append-only evidence, credentials and never-deleted families are named not-applicable. Retention is a bounded per-kind policy registry + `core.applyRetention` job (privacy holds honoured; consent/audit/accounting opted out), not a TTL column on every table. |
 | C11.15 | Closed 2026-09-16 by `deploy/doc-claim-mapping.md` + `tests/core/doc-claim-mapping.test.ts`: every affirmative §§1–42 claim is mapped to passing evidence or struck in the same change; the mapping gate refuses unmapped claims, unresolved paths and stale strike text. |
-| C11.16 | Re-reconciled 2026-09-28 (this change). Its own box stays open while C3.24 remains, per the reconciliation test's gate. |
+| C11.16 | Re-reconciled 2026-10-04 against `04c27ca5`: storefront/editor closures recorded, but independent review and provider acceptance remain unverified. Its box stays open pending final evidence reconciliation. |
 | C11.17 | Unsigned. Owner must sign the §43.1 record after the clean-room suite. |
 
 ## Anti-roadmap (correctly not built)

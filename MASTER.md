@@ -3462,7 +3462,7 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-09-29 |
+| Last reconciled | 2026-10-04 |
 | Evidence snapshot | On `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -8562,6 +8562,16 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `tests/core/doctor.test.ts`. **F09** SPDX. **F10** N/A. **F11**
   `deploy/release-channels.md`, changeset `release-channels.md`. **F12**
   `canApplyFrom` uses minFromVersion, not the size of the version bump.)
+  *(Stable-release preparation 2026-10-04, C3.20/C10.02/C10.03/C11.17:
+  `src/core/update/release-declaration.json` is shared by the running build,
+  schema gate and publishers. Publication preserves declared schema risk and
+  manual steps, refuses an unsigned/incomplete stable completion record, and
+  keeps candidate versions on edge/next without touching stable/latest.
+  All six v1 package artifacts are selected, including CLI and app scaffolder;
+  tag publication requires successful CI for that exact main commit.
+  `tests/core/release-publication.test.ts` covers signed feed round-trip,
+  candidate isolation, SemVer ordering and completion refusal. This is release
+  tooling evidence, not a published release or independent security review.)*
 - [x] **C10.03** Publish signed `releases.json`, image digest/signature and
   provenance; embed and rotate a trusted release public key.
   (`src/core/update/keys.ts` ships Ed25519 public key `2026-09`; retiring
@@ -9762,8 +9772,9 @@ schema they inherit reads as a designed thing rather than an excavation.
   prove the stated requirement that every affirmative feature has a completed
   item. C3.13 and mobile acceptance were the incomplete items at reopen; C3.13
   closed 2026-09-28 and mobile acceptance is owner-deferred to v2 (§43.18), so
-  C3.24 (native storefront parity, owner decision 2026-09-27) is the remaining
-  C1–C10 product item and this box stays open on it. The reconciliation
+  C3.24–C3.26 and C2.25 have since closed. The 2026-10-04 reconciliation
+  records those closures; this box remains open pending independent review
+  and actual provider acceptance, followed by final evidence reconciliation. The reconciliation
   test now enforces this precondition instead of asserting this box is checked
   while explicitly requiring unfinished product items to remain open; the
   reconciliation table was re-run 2026-09-28 with C11.08's and C11.11's

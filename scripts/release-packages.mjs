@@ -13,7 +13,11 @@ export const PACKAGE_FOLDERS = [
   "sdk",
   "templates",
   "freeholder-app",
+  "cli",
 ];
+
+import { RELEASE_VERSION } from "../src/core/update/release-version.mjs";
+import { validateReleaseMetadata } from "../src/core/update/release-validation.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -22,10 +26,8 @@ export function releaseTag(version) {
 }
 
 export function parseReleaseTag(tag) {
-  const match = /^v((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?)$/.exec(
-    tag.replace(/^refs\/tags\//, ""),
-  );
-  return match ? match[1] : null;
+  const version = tag.replace(/^refs\/tags\//, "").replace(/^v/, "");
+  return /^(?:refs\/tags\/)?v/.test(tag) && RELEASE_VERSION.test(version) ? version : null;
 }
 
 export function sdkVersionFromSource(source) {
@@ -35,7 +37,9 @@ export function sdkVersionFromSource(source) {
 
 export async function readAlignedVersion(root = repositoryRoot) {
   const platform = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-  assert.match(platform.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/);
+  assert.match(platform.version, RELEASE_VERSION);
+  const release = validateReleaseMetadata(JSON.parse(await readFile(join(root, "src/core/update/release-declaration.json"), "utf8")));
+  assert.equal(release.version, platform.version, "release declaration must match the platform version");
   for (const folder of PACKAGE_FOLDERS) {
     const manifest = JSON.parse(await readFile(join(root, "packages", folder, "package.json"), "utf8"));
     assert.equal(
@@ -114,6 +118,8 @@ export async function publishTarballs(archives, options = {}) {
     .sort();
   assert.ok(tarballs.length > 0, "expected packed tarballs");
   const args = options.publish ? [] : ["--dry-run"];
+  const version = await readAlignedVersion(options.cwd ?? repositoryRoot);
+  args.push("--tag", version.includes("-") ? "next" : "latest", "--provenance");
   for (const tarball of tarballs) {
     await run(npm.command, [...npm.prefix, "publish", tarball, "--access", "public", ...args], options.cwd ?? repositoryRoot, env);
   }

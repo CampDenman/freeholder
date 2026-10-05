@@ -1,0 +1,10 @@
+{
+  "version": "0.1.0",
+  "channel": "edge",
+  "minFromVersion": "0.1.0",
+  "schemaRisk": "breaking",
+  "cvss": null,
+  "severity": "none",
+  "manualSteps": [],
+  "pluginApi": "0.1.0"
+}

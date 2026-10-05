@@ -15,17 +15,14 @@
 //   - **Drift is stated in security terms, not commit counts.** "Fourteen
 //     commits behind" tells an owner nothing about whether they are exposed.
 //     "Two security releases behind — CVSS 8.1" does.
-import { parseSemver } from "@freeholder/plugin-kit";
+import { compareReleaseVersions } from "./release-version.mjs";
 import { channelReceives, type ReleaseChannel } from "./channels";
 import type { VerifiedRelease } from "./feed";
 import { classifyPath, type PathClass } from "./seams";
 
-/** Ordering only. Prerelease suffixes are refused upstream by the feed schema. */
+/** SemVer ordering includes release candidates before the final version. */
 export function compareVersions(a: string, b: string): number | null {
-  const left = parseSemver(a);
-  const right = parseSemver(b);
-  if (!left || !right) return null;
-  return left.major - right.major || left.minor - right.minor || left.patch - right.patch;
+  return compareReleaseVersions(a, b);
 }
 
 export interface ClassifiedPaths {
