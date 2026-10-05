@@ -23,7 +23,7 @@ points at that digest; it does not replace image verification.
 On a `vX.Y.Z` tag, `Publish image` signs `releases.json` with
 `FREEHOLDER_RELEASE_SIGNING_KEY` and uploads it as a release asset:
 
-`https://github.com/CampDenman/freeholder/releases/latest/download/releases.json`
+`https://api.github.com/repos/CampDenman/freeholder/releases`
 
 ## Key rotation
 
@@ -42,3 +42,8 @@ an image update.
 
 `platform.verifyReleaseFeed` is the same hard stop Doctor describes as
 `update.feed.key`.
+
+The default updater discovers the newest published signed feed from this public
+release list, including prereleases, and constructs the versioned asset URL in
+the fixed upstream repository. It does not treat a beta as stable/latest; signed
+feed verification and channel selection still apply.

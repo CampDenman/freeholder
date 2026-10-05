@@ -3,6 +3,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   CHECK_SLOT_COUNT,
+  DEFAULT_UPDATE_FEED_URL,
+  fetchReleaseFeed,
   isCheckSlot,
   jitterSlot,
   runScheduledUpdateCheck,
@@ -20,6 +22,31 @@ import {
 } from "../helpers/spine";
 
 describe("daily update check (C10.04)", () => {
+  it("discovers a beta-only signed feed without following metadata-supplied URLs", async () => {
+    const seen: string[] = [];
+    const feed = { schema: "fixture" };
+    const document = await fetchReleaseFeed(DEFAULT_UPDATE_FEED_URL, async (url, init) => {
+      seen.push(url);
+      expect(init.headers).toEqual({ ...UPDATE_CHECK_HEADERS });
+      return { ok: true, status: 200, text: async () => JSON.stringify(seen.length === 1 ? [{
+        tag_name: "v0.2.0-beta.1", draft: false, prerelease: true,
+        published_at: "2026-10-05T00:00:00Z",
+        assets: [{ name: "releases.json", browser_download_url: "http://127.0.0.1/private" }],
+      }] : feed) };
+    });
+    expect(document).toEqual(feed);
+    expect(seen).toEqual([
+      DEFAULT_UPDATE_FEED_URL,
+      "https://github.com/CampDenman/freeholder/releases/download/v0.2.0-beta.1/releases.json",
+    ]);
+  });
+
+  it("refuses discovery with no published signed feed", async () => {
+    await expect(fetchReleaseFeed(DEFAULT_UPDATE_FEED_URL, async () => ({
+      ok: true, status: 200, text: async () => "[]",
+    }))).rejects.toThrow("No published signed release feed");
+  });
+
   it("spreads instances across 15-minute UTC slots", () => {
     expect(jitterSlot("https://a.example")).toBeGreaterThanOrEqual(0);
     expect(jitterSlot("https://a.example")).toBeLessThan(CHECK_SLOT_COUNT);

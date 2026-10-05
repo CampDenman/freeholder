@@ -1,15 +1,21 @@
 # Daily update checks
 
-This instance checks for updates once a day. The check is a GET of a signed
-static file. It sends no instance identifier and reports nothing upstream.
+This instance checks for updates once a day. The check reads public release metadata and GETs its signed
+static feed. It sends no instance identifier and reports nothing upstream.
 
 Checking is on unless `FREEHOLDER_UPDATE_CHECK=off`. Turn it off if you would
 rather watch a mailing list. Filing a bug or a patch is `contribute.submit`;
 that write is not this check.
 
-The feed URL defaults to the GitHub release asset published by C10.03:
+The default endpoint is GitHub’s public release list:
 
-`https://github.com/CampDenman/freeholder/releases/latest/download/releases.json`
+`https://api.github.com/repos/CampDenman/freeholder/releases`
+
+The updater selects the most recently published version carrying `releases.json`,
+including a beta, then GETs that tag’s asset from the fixed upstream repository.
+The feed must verify against embedded keys before channel/version selection.
+A newer beta feed retains signed history; stable policy still refuses edge releases.
+This works before the first stable release, when GitHub’s `/latest` is unavailable.
 
 Override with `FREEHOLDER_UPDATE_FEED_URL` if you pin a mirror. The URL must
 be a public http(s) origin and must not carry query parameters.
