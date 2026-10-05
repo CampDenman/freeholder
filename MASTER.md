@@ -4683,7 +4683,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   publishes packed tarballs on a matching `vX.Y.Z` tag; `scripts/release-packages.mjs`
   refuses a tag that does not match. **F01–F03** N/A. **F04** admin header
   shows the version. **F05** health/OpenAPI/SDK. **F06** `admin.platformVersion`
-  in en/es/fr. **F07** tag mismatch and missing `NPM_TOKEN` refuse publish.
+  in en/es/fr. **F07** tag mismatch and unauthorized registry publishing refuse publication.
   **F08** `tests/core/release-packages.test.ts`. **F09** N/A. **F10** N/A.
   **F11** deploy README, packages README, changeset `versioned-release.md`.
   **F12** `pnpm packages:verify` asserts aligned versions on packed tarballs.)
