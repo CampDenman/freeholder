@@ -1,8 +1,8 @@
 {
   "name": "freeholder",
   "private": true,
-  "version": "0.1.0",
-  "description": "The open-source operating system for a one-person business (active development, not a release candidate) — the deployable monolith: public site + CMS, admin, unified CRM spine, commerce, booking, galleries, mail, analytics, MCP server",
+  "version": "0.2.0-beta.1",
+  "description": "The open-source operating system for a one-person business (active development, not a release candidate) \u2014 the deployable monolith: public site + CMS, admin, unified CRM spine, commerce, booking, galleries, mail, analytics, MCP server",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {

@@ -4677,16 +4677,24 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   behavior in `tests/core/media-transfer.test.ts`. **F04** N/A — adapter conformance tests, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/portability.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/portability.test.ts` is the composition proof.)
 - [x] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
-  (Platform and packages are `0.1.0`; SDK `PLATFORM_VERSION` is stamped from
+  (Platform and packages are `0.2.0-beta.1`; SDK `PLATFORM_VERSION` is stamped from
   `package.json`. Health, OpenAPI, Doctor, provenance, catalogue compatibility
   and admin chrome report that same string. `.github/workflows/publish-packages.yml`
   publishes packed tarballs on a matching `vX.Y.Z` tag; `scripts/release-packages.mjs`
   refuses a tag that does not match. **F01–F03** N/A. **F04** admin header
   shows the version. **F05** health/OpenAPI/SDK. **F06** `admin.platformVersion`
-  in en/es/fr. **F07** tag mismatch and missing `NPM_TOKEN` refuse publish.
+  in en/es/fr. **F07** tag mismatch and unauthorized registry publishing refuse publication.
   **F08** `tests/core/release-packages.test.ts`. **F09** N/A. **F10** N/A.
   **F11** deploy README, packages README, changeset `versioned-release.md`.
   **F12** `pnpm packages:verify` asserts aligned versions on packed tarballs.)
+  *(Public beta authorized 2026-10-05: prepare `0.2.0-beta.1` with npm `next`,
+  a GitHub prerelease and edge metadata; it does not become stable/latest.
+  Six v1 packages share this version; mobile remains deferred. The npm account
+  `campdenman` owns `@freeholder`. Protected exact-commit CI, registry publishing
+  authentication/provenance and public install acceptance still apply. The
+  pinned publisher supports staging for first-package bootstrap and OIDC for
+  configured trusted publishers. C11.10 remains unchecked at the owner's request;
+  this beta authorization does not waive any stable acceptance item.)*
 - [x] **C3.21** Define the importer plugin contract and kit: typed source/auth
   config, least-privilege permissions, discovery/pagination/checkpoints,
   transforms into core service inputs, provenance, fixtures and hostile/

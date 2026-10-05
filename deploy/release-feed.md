@@ -20,19 +20,23 @@ points at that digest; it does not replace image verification.
 
 ## Where it is published
 
-On a `vX.Y.Z` tag, `Publish image` signs `releases.json` with
+On a matching version tag (including a beta), `Publish image` signs `releases.json` with
 `FREEHOLDER_RELEASE_SIGNING_KEY` and uploads it as a release asset:
 
-`https://github.com/CampDenman/freeholder/releases/latest/download/releases.json`
+`https://github.com/CampDenman/freeholder/releases/download/<version-tag>/releases.json`
+
+The default discovery endpoint is
+`https://api.github.com/repos/CampDenman/freeholder/releases`.
 
 ## Key rotation
 
-Trusted keys live in `src/core/update/keys.ts`.
+Trusted keys live in `src/core/update/trusted-release-keys.json`;
+`src/core/update/keys.ts` exposes them to the runtime.
 
 1. Generate a new Ed25519 key pair.
 2. Add the new public key as `active` and mark the previous key `retiring`.
 3. Store the new private key as `FREEHOLDER_RELEASE_SIGNING_KEY` and set
-   `FREEHOLDER_RELEASE_KEY_ID` to the new id.
+   the publication workflow’s `FREEHOLDER_RELEASE_KEY_ID` to the new id.
 4. Ship that image. Feeds signed by either key still verify.
 5. Once every supported image includes the new public key, remove the
    retiring key.
@@ -42,3 +46,8 @@ an image update.
 
 `platform.verifyReleaseFeed` is the same hard stop Doctor describes as
 `update.feed.key`.
+
+The default updater discovers the newest published signed feed from this public
+release list, including prereleases, and constructs the versioned asset URL in
+the fixed upstream repository. It does not treat a beta as stable/latest; signed
+feed verification and channel selection still apply.

@@ -1,14 +1,11 @@
 # create-freeholder
 
-Create an independently owned Freeholder source installation. This package is
-not yet published to npm; the command below becomes available with the first
-tagged package release. Until then, use the repository's
-[`GETTING_STARTED.md`](../../GETTING_STARTED.md).
-
-After publication:
+Create an independently owned Freeholder source installation. This is a beta;
+use the `next` channel explicitly. No stable release is available. Source
+installation is described in [`GETTING_STARTED.md`](../../GETTING_STARTED.md).
 
 ```sh
-npx create-freeholder my-business
+npx create-freeholder@next my-business
 ```
 
 The CLI asks for the deployment target, business preset, country defaults and
@@ -17,7 +14,7 @@ dependencies and run migrations, and prints the setup URL — including whether
 that URL answered. For automation, pass every answer explicitly:
 
 ```sh
-npx create-freeholder my-business --non-interactive \
+npx create-freeholder@next my-business --non-interactive \
   --target railway --preset shop --country CA --payments later \
   --install --migrate
 ```

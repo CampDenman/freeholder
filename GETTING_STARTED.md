@@ -17,7 +17,10 @@ playground is shared and resets every hour. Use fictional information only.
 
 ## Run your own instance
 
-The `create-freeholder` npm package has not been released yet. Until it is,
+The first beta uses the explicit npm `next` channel. Once its packages are
+published, run `npx create-freeholder@next my-business`; check the
+[release record](https://github.com/CampDenman/freeholder/releases) for public
+availability. There is no stable release yet. To install from source now,
 clone the [source repository](https://github.com/CampDenman/freeholder) and
 use one of the maintained [deployment recipes](deploy/README.md). The
 [DigitalOcean Droplet recipe](deploy/digitalocean-droplet/README.md) includes

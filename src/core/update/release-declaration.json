@@ -1,10 +1,19 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0-beta.1",
   "channel": "edge",
   "minFromVersion": "0.1.0",
   "schemaRisk": "breaking",
   "cvss": null,
   "severity": "none",
-  "manualSteps": [],
+  "manualSteps": [
+    {
+      "id": "backup-database-and-objects",
+      "summary": "Before updating, save a database archive, all original and variant object bytes, the current immutable image pin, and private recovery keys; verify the archive and object checksums."
+    },
+    {
+      "id": "rehearse-upgrade-and-recovery",
+      "summary": "Restore the backup and object bytes into an isolated instance and verify publishing, file delivery and health. If the update fails, restore that database and objects and run the previous image before reopening traffic."
+    }
+  ],
   "pluginApi": "0.1.0"
 }

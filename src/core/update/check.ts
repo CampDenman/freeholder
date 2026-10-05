@@ -1,14 +1,16 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Private daily update check (MASTER.md §39.3, C10.04). A plain GET of a
-// static file. No instance identifier, no telemetry, nothing reported upstream.
+// signed file, discovered from public release metadata when using upstream.
+// No instance identifier, no telemetry, nothing reported upstream.
 import { createHash } from "node:crypto";
 import { env } from "@/core/env";
 import { assertPublicHttpUrl } from "@/core/import/contract";
 import { verifyReleaseFeed, type VerifiedFeed } from "./feed";
+import { previousFeedTag } from "../../../scripts/release-history.mjs";
 
 export const DEFAULT_UPDATE_FEED_URL =
-  "https://github.com/CampDenman/freeholder/releases/latest/download/releases.json";
+  "https://api.github.com/repos/CampDenman/freeholder/releases";
 
 /** 96 slots of 15 minutes cover a UTC day. */
 export const CHECK_SLOT_COUNT = 96;
@@ -59,7 +61,17 @@ export async function fetchReleaseFeed(
   if (!response.ok) {
     throw new Error(`The update feed answered ${response.status}.`);
   }
-  return JSON.parse(await response.text()) as unknown;
+  const document = JSON.parse(await response.text()) as unknown;
+  if (parsed.toString() !== DEFAULT_UPDATE_FEED_URL) return document;
+  // GitHub's /latest deliberately excludes prereleases. Both channels read
+  // the newest signed feed; channel selection happens after verification.
+  // Construct the asset URL from a validated tag, never an API-supplied URL.
+  const tag = previousFeedTag([document]);
+  if (!tag) throw new Error("No published signed release feed is available yet.");
+  return fetchReleaseFeed(
+    `https://github.com/CampDenman/freeholder/releases/download/${encodeURIComponent(tag)}/releases.json`,
+    fetchImpl,
+  );
 }
 
 export type UpdateCheckResult =

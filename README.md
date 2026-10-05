@@ -10,7 +10,7 @@ replaces the stack with one self-hosted platform where a contact is **one
 record**: their bookings, orders, quotes, gallery access, messages, and email
 history all hang off one CRM timeline.
 
-> **Status: preparing the first stable release; no stable release is published.**
+> **Status: 0.2.0-beta.1, in active development; no stable release is published.**
 > This is not a release candidate. The implemented platform is undergoing
 > final release acceptance. Independent
 > security review, real provider settlement, specification reconciliation and
@@ -23,8 +23,10 @@ history all hang off one CRM timeline.
 - [Explore the live demo](https://demo.freeholder.ai/) and its shared, hourly
   resetting playground. Use fictional data.
 - [Get started from the source](GETTING_STARTED.md) with a maintained Docker or
-  cloud deployment recipe. The `create-freeholder` npm package and stable
-  releases have not been published yet.
+  cloud deployment recipe. Beta npm availability is recorded in
+  [GitHub releases](https://github.com/CampDenman/freeholder/releases); use
+  `npx create-freeholder@next my-business` after publication. No stable release
+  is available yet.
 - [Read the contributor guide](CONTRIBUTING.md) to help improve the project.
 
 ## Product-complete target

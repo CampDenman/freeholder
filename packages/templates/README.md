@@ -1,5 +1,8 @@
 # @freeholder/templates (Apache-2.0)
 
+Install the beta explicitly with `npm install @freeholder/templates@next`. No stable release
+is available yet.
+
 Business presets for Freeholder: Bench token overrides plus full page, entity
 and email trees. `seed.installPreset` installs them through CMS, catalog, forms
 and design services so a creator, service-business or shop instance starts with
