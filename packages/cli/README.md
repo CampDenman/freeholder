@@ -9,7 +9,7 @@ Check, preflight, apply and roll back a [Freeholder](https://github.com/CampDenm
 instance from a terminal or a cron job.
 
 ```sh
-npm install -g @freeholder/cli
+npm install -g @freeholder/cli@next
 
 freeholder update --check
 freeholder update --preflight

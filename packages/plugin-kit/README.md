@@ -1,5 +1,8 @@
 # @freeholder/plugin-kit
 
+Install the beta explicitly with `npm install @freeholder/plugin-kit@next`. No stable release
+is available yet.
+
 The compiled authoring contract for portable Freeholder plugins. It exports
 manifest validation, compatibility checks, permissions, scaffolding, importer
 contracts and the development harness described in `MASTER.md` §24.

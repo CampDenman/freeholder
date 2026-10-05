@@ -23,8 +23,10 @@ history all hang off one CRM timeline.
 - [Explore the live demo](https://demo.freeholder.ai/) and its shared, hourly
   resetting playground. Use fictional data.
 - [Get started from the source](GETTING_STARTED.md) with a maintained Docker or
-  cloud deployment recipe. The `create-freeholder` npm package and stable
-  releases have not been published yet.
+  cloud deployment recipe. Beta npm availability is recorded in
+  [GitHub releases](https://github.com/CampDenman/freeholder/releases); use
+  `npx create-freeholder@next my-business` after publication. No stable release
+  is available yet.
 - [Read the contributor guide](CONTRIBUTING.md) to help improve the project.
 
 ## Product-complete target

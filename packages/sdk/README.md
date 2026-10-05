@@ -1,5 +1,8 @@
 # @freeholder/sdk
 
+Install the beta explicitly with `npm install @freeholder/sdk@next`. No stable release
+is available yet.
+
 The typed ESM client for a Freeholder instance's versioned HTTP service
 surface. Methods and input/output types are generated from the same live
 service registry that produces OpenAPI and MCP tools. Create a client with an

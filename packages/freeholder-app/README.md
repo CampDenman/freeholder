@@ -9,8 +9,8 @@ Point the white-label customer app at a [Freeholder](https://github.com/CampDenm
 instance. *MASTER.md §35, checklist item C10.15.*
 
 ```sh
-npx freeholder-app init https://example.com
-npx freeholder-app init --url https://example.com --dir apps/mobile
+npx freeholder-app@next init https://example.com
+npx freeholder-app@next init --url https://example.com --dir apps/mobile
 ```
 
 The command reads `/.well-known/freeholder` (the same public discovery document
