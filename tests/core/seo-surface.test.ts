@@ -1,7 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Public-entity SEO surface (MASTER.md §5, BigDataSEO.com RIBA, C2.21).
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { resetEnvForTests } from "@/core/env";
 import {
   kindFromSlug,
   priorityFromSlug,
@@ -15,6 +16,7 @@ import {
   indexNowPayload,
   isIndexablePublicHost,
   submitIndexNow,
+  queueIndexNow,
 } from "@/core/seo/indexnow";
 import {
   articleJsonLd,
@@ -177,6 +179,18 @@ describe("JSON-LD builders for products, services and articles", () => {
 });
 
 describe("IndexNow", () => {
+  afterEach(() => { vi.unstubAllEnvs(); resetEnvForTests(); });
+
+  it("does not enqueue or deliver external pings from an isolated playground", async () => {
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1");
+    resetEnvForTests();
+    const fetchImpl = vi.fn<typeof fetch>();
+    const queueJob = vi.fn();
+    expect(await submitIndexNow(["https://demo.example.test/about"], { origin: "https://demo.example.test", fetchImpl })).toEqual({ submitted: 0, skipped: true, batches: 0 });
+    await queueIndexNow({ queueJob }, ["about"], "playground-publish", "https://demo.example.test");
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(queueJob).not.toHaveBeenCalled();
+  });
   it("derives a stable key and refuses localhost", () => {
     expect(indexNowKey()).toMatch(/^[a-f0-9]{32}$/);
     expect(isIndexablePublicHost("http://localhost:3000")).toBe(false);

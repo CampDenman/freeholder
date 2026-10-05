@@ -4,7 +4,9 @@
 // schema risk, CVSS and manual steps are declared; the updater never infers
 // them from a version number.
 import { z } from "zod";
-import { parseSemver } from "@freeholder/plugin-kit";
+import { RELEASE_VERSION, compareReleaseVersions } from "./release-version.mjs";
+import { validateReleaseMetadata } from "./release-validation.mjs";
+export { severityForCvss } from "./release-validation.mjs";
 import {
   RELEASE_CHANNELS,
   type ReleaseChannel,
@@ -41,7 +43,7 @@ export class ReleaseMetadataError extends Error {
 
 const semver = z
   .string()
-  .regex(/^\d+\.\d+\.\d+$/, "must be semver X.Y.Z with no prerelease suffix");
+  .regex(RELEASE_VERSION, "must be a SemVer release version");
 
 export const releaseMetadataSchema = z.object({
   version: semver,
@@ -59,77 +61,26 @@ export const releaseMetadataSchema = z.object({
   pluginApi: semver,
 });
 
-/** NVD 3.x bands. Used only to refuse a mismatch, never to fill a missing field. */
-export function severityForCvss(cvss: number): Severity {
-  if (cvss <= 0) return "none";
-  if (cvss < 4) return "low";
-  if (cvss < 7) return "medium";
-  if (cvss < 9) return "high";
-  return "critical";
-}
-
-function cmp(a: string, b: string): number | null {
-  const left = parseSemver(a);
-  const right = parseSemver(b);
-  if (!left || !right) return null;
-  return left.major - right.major || left.minor - right.minor || left.patch - right.patch;
-}
-
 function refuse(message: string): never {
   throw new ReleaseMetadataError(message);
 }
 
 export function parseReleaseMetadata(input: unknown): ReleaseMetadata {
-  const parsed = releaseMetadataSchema.safeParse(input);
-  if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    const path = first?.path.length ? first.path.join(".") : "metadata";
-    refuse(
-      `${path} is missing or invalid. Compatibility, schema risk, CVSS and manual steps must be declared; the updater will not infer them from a version number.`,
-    );
+  try {
+    return validateReleaseMetadata(input);
+  } catch (error) {
+    refuse(error instanceof Error ? error.message : String(error));
   }
-  const release = parsed.data;
-  const order = cmp(release.minFromVersion, release.version);
-  if (order === null) {
-    refuse("version and minFromVersion must be semver.");
-  }
-  if (order > 0) {
-    refuse(
-      `minFromVersion ${release.minFromVersion} is after version ${release.version}, so nothing could apply this release.`,
-    );
-  }
-  if (release.cvss === null) {
-    if (release.severity !== "none") {
-      refuse("severity without a CVSS score is incomplete. Declare both, or neither.");
-    }
-  } else if (severityForCvss(release.cvss) !== release.severity) {
-    refuse(
-      `severity ${release.severity} does not match CVSS ${release.cvss}. Declare the NVD band that score actually falls in.`,
-    );
-  }
-  if (release.channel === "security") {
-    if (release.cvss === null || release.cvss <= 0) {
-      refuse(
-        "A security-channel release must include a CVSS score. The updater will not treat a patch version as a security fix.",
-      );
-    }
-    if (release.schemaRisk === "breaking") {
-      refuse(
-        "A security-channel release cannot break schema. Security patches are backports of fixes, not a place for contract changes.",
-      );
-    }
-  }
-  return release;
 }
 
 export function canApplyFrom(
   fromVersion: string,
   release: ReleaseMetadata,
 ): { ok: boolean; reason: string } {
-  if (!parseSemver(fromVersion) || !/^\d+\.\d+\.\d+$/.test(fromVersion)) {
+  if (!RELEASE_VERSION.test(fromVersion)) {
     return { ok: false, reason: `"${fromVersion}" is not semver, so this release cannot be applied from it.` };
   }
-  const order = cmp(fromVersion, release.minFromVersion);
+  const order = compareReleaseVersions(fromVersion, release.minFromVersion);
   if (order === null) {
     return { ok: false, reason: `"${fromVersion}" is not semver, so this release cannot be applied from it.` };
   }

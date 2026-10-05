@@ -5,6 +5,8 @@ import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { validateReleaseMetadata } from "../src/core/update/release-validation.mjs";
+import { compareReleaseVersions } from "../src/core/update/release-version.mjs";
 
 export const FEED_SCHEMA = "freeholder/releases/v1";
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
@@ -79,11 +81,12 @@ export function upsertRelease(releases, entry) {
     (release) => !(release.version === entry.version && release.channel === entry.channel),
   );
   next.push(entry);
-  next.sort((a, b) => (a.version < b.version ? 1 : a.version > b.version ? -1 : a.channel.localeCompare(b.channel)));
+  next.sort((a, b) => compareReleaseVersions(b.version, a.version) || a.channel.localeCompare(b.channel));
   return next;
 }
 
 export function buildReleaseEntry(input) {
+  const metadata = validateReleaseMetadata(input);
   if (!DIGEST.test(input.digest ?? "")) {
     throw new ReleaseFeedError("A release entry must name an image digest (sha256: and 64 hex characters).");
   }
@@ -94,14 +97,7 @@ export function buildReleaseEntry(input) {
     throw new ReleaseFeedError("A release entry must name the repository and workflow that built it.");
   }
   return {
-    version: input.version,
-    channel: input.channel,
-    minFromVersion: input.minFromVersion,
-    schemaRisk: input.schemaRisk,
-    cvss: input.cvss ?? null,
-    severity: input.severity,
-    manualSteps: input.manualSteps ?? [],
-    pluginApi: input.pluginApi,
+    ...metadata,
     digest: input.digest,
     image: input.image,
     notesUrl: input.notesUrl,
@@ -156,7 +152,8 @@ function main() {
     const previous = previousPath ? readJson(previousPath) : { releases: [] };
     const releases = Array.isArray(previous.releases) ? previous.releases : [];
     const cvssRaw = arg("--cvss");
-    const entry = buildReleaseEntry({
+    const declarationPath = arg("--declaration");
+    const declaration = declarationPath ? readJson(declarationPath) : {
       version: arg("--version"),
       channel: arg("--channel"),
       minFromVersion: arg("--min-from-version"),
@@ -165,6 +162,9 @@ function main() {
       severity: arg("--severity"),
       manualSteps: JSON.parse(arg("--manual-steps", "[]")),
       pluginApi: arg("--plugin-api"),
+    };
+    const entry = buildReleaseEntry({
+      ...declaration,
       digest: arg("--digest"),
       image: arg("--image"),
       notesUrl: arg("--notes-url"),

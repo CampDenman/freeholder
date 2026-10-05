@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
-# Publish the four distributable packages at the tagged platform version (C3.20).
+# Publish all six v1 distributable packages at the tagged platform version (C3.20).
 name: Publish packages
 
 on:
@@ -16,15 +16,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
+      actions: read
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Require the exact successful main CI run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+            -f head_sha="$GITHUB_SHA" -f event=push -f status=success -f per_page=100 \
+            | jq -e --arg sha "$GITHUB_SHA" \
+              'any(.workflow_runs[]; .head_sha == $sha and .head_branch == "main" and .conclusion == "success")'
       - uses: ./.github/actions/setup-project
       - name: Verify the tag matches the platform version
         run: node scripts/release-packages.mjs --check-tag
+      - name: Verify tagged release readiness
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+          IMAGE: ghcr.io/campdenman/freeholder
+        run: node scripts/release-publication.mjs
       - name: Build and pack
         run: pnpm packages:build
       - name: Publish packed tarballs
@@ -36,8 +51,11 @@ jobs:
             echo "NPM_TOKEN is required to publish packages." >&2
             exit 1
           fi
+          version=$(node -p 'require("./package.json").version')
+          npm_tag=latest
+          if [[ "$version" == *-* ]]; then npm_tag=next; fi
           mkdir -p /tmp/freeholder-release
-          pnpm --filter create-freeholder --filter @freeholder/plugin-kit --filter @freeholder/sdk --filter @freeholder/templates pack --pack-destination /tmp/freeholder-release
+          pnpm --filter create-freeholder --filter @freeholder/plugin-kit --filter @freeholder/sdk --filter @freeholder/templates --filter @freeholder/cli --filter freeholder-app pack --pack-destination /tmp/freeholder-release
           for tarball in /tmp/freeholder-release/*.tgz; do
-            corepack npm publish "$tarball" --access public --provenance
+            corepack npm publish "$tarball" --access public --provenance --tag "$npm_tag"
           done

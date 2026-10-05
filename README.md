@@ -10,15 +10,12 @@ replaces the stack with one self-hosted platform where a contact is **one
 record**: their bookings, orders, quotes, gallery access, messages, and email
 history all hang off one CRM timeline.
 
-> **Status: active product development; not a release candidate.** The core,
-> CMS, CRM, privacy, commerce, scheduling, communications, galleries, portal,
-> reporting, automation, sharing and growth foundations are implemented through
-> the current C9 work. Remaining work is documentation and F-matrix integrity
-> (C0), first-party plugin depth to §36 (reopened C3.13), the updater/mobile
-> workstream (C10), and the final whole-product evidence program (C11). Checked
-> items are reopened
-> whenever executable evidence does not prove their full wording. The complete
-> scope, verified baseline and remaining checklist live only in
+> **Status: preparing the first stable release; no stable release is published.**
+> This is not a release candidate. The implemented platform is undergoing
+> final release acceptance. Independent
+> security review, real provider settlement, specification reconciliation and
+> the owner-signed completion gate remain open. The public playground is available
+> for exploration. Verified scope and remaining work live in
 > [`MASTER.md` §43](MASTER.md#43-product-completion-plan--the-live-checklist).
 
 ## Try Freeholder

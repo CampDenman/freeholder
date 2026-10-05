@@ -126,20 +126,15 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ${{ steps.image.outputs.name }}
-          tags: |
-            type=raw,value=edge,enable=${{ github.event_name == 'workflow_run' }}
-            type=raw,value=sha-${{ needs.resolve.outputs.short_sha }}
-            type=semver,pattern={{version}},enable=${{ github.event_name == 'push' }}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'push' }}
-            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
+      - id: publication
+        name: Validate declared metadata and publication channel
+        env:
+          RELEASE_SHA: ${{ needs.resolve.outputs.sha }}
+        run: node scripts/release-publication.mjs
       - name: Verify candidate provenance and promote its immutable digest
         env:
           GH_TOKEN: ${{ github.token }}
-          TAGS: ${{ steps.meta.outputs.tags }}
+          TAGS: ${{ steps.publication.outputs.tags }}
         run: |
           digest=$(jq -r .digest artifacts/image-candidate.json)
           candidate="$IMAGE@$digest"
@@ -177,7 +172,6 @@ jobs:
             echo "FREEHOLDER_RELEASE_SIGNING_KEY is required to sign the release feed." >&2
             exit 1
           fi
-          version=$(jq -r .version package.json)
           previous=""
           if gh release download --pattern releases.json --output previous-releases.json >/dev/null 2>&1; then
             previous="--previous previous-releases.json"
@@ -185,13 +179,7 @@ jobs:
           # shellcheck disable=SC2086
           node scripts/release-feed.mjs publish \
             --out releases.json \
-            --version "$version" \
-            --channel stable \
-            --min-from-version 0.1.0 \
-            --schema-risk compatible \
-            --severity none \
-            --cvss null \
-            --plugin-api "$version" \
+            --declaration src/core/update/release-declaration.json \
             --digest "$DIGEST" \
             --image "$IMAGE" \
             --notes-url "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}" \
@@ -199,12 +187,12 @@ jobs:
             --workflow "Publish image" \
             $previous
           if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes --prerelease="${{ steps.publication.outputs.prerelease }}" --latest="${{ steps.publication.outputs.stable }}"
           fi
           gh release upload "$GITHUB_REF_NAME" releases.json --clobber
       - name: Publication summary
         env:
-          TAGS: ${{ steps.meta.outputs.tags }}
+          TAGS: ${{ steps.publication.outputs.tags }}
         run: |
           {
             echo "### Promoted after complete CI"
