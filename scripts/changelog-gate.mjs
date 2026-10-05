@@ -7,6 +7,7 @@
 // Usage: node scripts/changelog-gate.mjs <base-ref>
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { changelogTopVersion } from "./generate-changelog.mjs";
 
 const base = process.argv[2] ?? "origin/main";
 const diff = execSync(`git diff --name-only ${base}...HEAD`, {
@@ -46,7 +47,7 @@ try {
   );
   process.exit(1);
 }
-const changelogVersion = changelog.match(/^## (\d+\.\d+\.\d+)/m)?.[1];
+const changelogVersion = changelogTopVersion(changelog);
 if (changelogVersion !== packageVersion) {
   console.error(
     `Changelog gate (C11.15): CHANGELOG.md top version is ${changelogVersion ?? "(none)"}, ` +

@@ -109,6 +109,21 @@ export function buildReleaseEntry(input) {
   };
 }
 
+export function previousReleases(feed, keys) {
+  const verified = verifyFeed(feed, keys);
+  if (!Array.isArray(verified.releases)) {
+    throw new ReleaseFeedError("The previous signed feed has no release list.");
+  }
+  return verified.releases.map(buildReleaseEntry);
+}
+
+export function assertActiveSigningKey(privateKey, keyId, keys) {
+  if (!keys.some((key) => key.id === keyId && key.status === "active")) {
+    throw new ReleaseFeedError("Publication requires an active trusted release key.");
+  }
+  verifyFeed(signFeed({ releases: [] }, privateKey, keyId), keys);
+}
+
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
@@ -125,6 +140,14 @@ function arg(name, fallback) {
 
 function main() {
   const command = process.argv[2];
+  if (command === "check-key") {
+    assertActiveSigningKey(
+      process.env.FREEHOLDER_RELEASE_SIGNING_KEY,
+      process.env.FREEHOLDER_RELEASE_KEY_ID,
+      readJson(new URL("../src/core/update/trusted-release-keys.json", import.meta.url)),
+    );
+    return;
+  }
   if (command === "sign") {
     const input = arg("--in");
     const output = arg("--out");
@@ -149,8 +172,9 @@ function main() {
       throw new ReleaseFeedError("FREEHOLDER_RELEASE_SIGNING_KEY is required to sign the release feed.");
     }
     if (!keyId) throw new ReleaseFeedError("FREEHOLDER_RELEASE_KEY_ID or --key-id is required to sign the release feed.");
-    const previous = previousPath ? readJson(previousPath) : { releases: [] };
-    const releases = Array.isArray(previous.releases) ? previous.releases : [];
+    const keys = readJson(new URL("../src/core/update/trusted-release-keys.json", import.meta.url));
+    assertActiveSigningKey(privateKey, keyId, keys);
+    const releases = previousPath ? previousReleases(readJson(previousPath), keys) : [];
     const cvssRaw = arg("--cvss");
     const declarationPath = arg("--declaration");
     const declaration = declarationPath ? readJson(declarationPath) : {

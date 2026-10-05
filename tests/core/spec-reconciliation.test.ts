@@ -32,11 +32,11 @@ describe("C11.16 spec reconciliation", () => {
     }
     expect(items.get("C11.17")).toBe(false);
     for (const id of [
-      // C11.08 closed 2026-09-28 by the live Tier-1 restore drill
-      // (deploy/c11-08-restore-summary.md); C11.11 closed 2026-09-28 by the
-      // reference-target acceptance run
-      // (deploy/perf-reference-run-2026-09-27.log). Both arrived with this
-      // gate's re-aiming; the rest stay open.
+      // Remaining acceptance requires actual paid admission, provider settlement
+      // and Tier-1 object bytes; database rows and adapter doubles do not suffice.
+      "C6.11",
+      "C11.05",
+      "C11.08",
       "C11.10",
       "C11.17",
     ]) {

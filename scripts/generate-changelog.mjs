@@ -6,6 +6,7 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { RELEASE_VERSION } from "../src/core/update/release-version.mjs";
 
 const ROOT = process.cwd();
 const CHANGESET_DIR = join(ROOT, ".changeset");
@@ -78,7 +79,8 @@ ${sections.join("\n\n")}
 }
 
 export function changelogTopVersion(source) {
-  return source.match(/^## (\d+\.\d+\.\d+)/m)?.[1] ?? null;
+  const version = source.match(/^## ([^\s]+)\s*$/m)?.[1];
+  return version && RELEASE_VERSION.test(version) ? version : null;
 }
 
 function main() {

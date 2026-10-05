@@ -23,6 +23,15 @@ export function upsertRelease(
   releases: Record<string, unknown>[],
   entry: Record<string, unknown>,
 ): Record<string, unknown>[];
+export function previousReleases(
+  feed: unknown,
+  keys: { id: string; publicKey: string }[],
+): Record<string, unknown>[];
+export function assertActiveSigningKey(
+  privateKey: string,
+  keyId: string,
+  keys: { id: string; publicKey: string; status: string }[],
+): void;
 export function buildReleaseEntry(input: {
   version?: string;
   channel?: string;
