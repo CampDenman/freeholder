@@ -20,7 +20,13 @@ Run package verification from a clean checkout (`pnpm packages:verify`). It buil
 packs, installs and executes the packages outside the workspace. Registry publication
 still requires ownership and write access to create-freeholder, freeholder-app and
 @freeholder/{sdk,plugin-kit,templates,cli}. Configure the package workflow's NPM_TOKEN
-privately or establish npm trusted publishing. Neither account access nor successful
+privately for initial bootstrap or establish npm trusted publishing. The workflow
+uses npm 12.2.0; `NPM_PUBLISH_MODE=stage` stages provenance-bearing packages for
+owner promotion (useful before packages exist), and its default `publish` mode
+publishes directly. With trusted publishers configured for
+`CampDenman/freeholder` and `publish-packages.yml`, no npm token is required.
+The initial account must satisfy npm publishing/2FA requirements; login alone
+does not prove publish permission. Neither account access nor successful
 public installation is proven by a local packed-artifact test.
 
 Run the full C11.17 suite against the candidate and archive exact commit, image digest,

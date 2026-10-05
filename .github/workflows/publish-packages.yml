@@ -42,14 +42,28 @@ jobs:
         run: node scripts/release-publication.mjs
       - name: Build and pack
         run: pnpm packages:build
-      - name: Publish packed tarballs
+      - name: Install the reviewed npm publisher
+        run: npm install --global npm@12.2.0 --ignore-scripts
+      - name: Publish or stage packed tarballs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_PUBLISH_MODE: ${{ vars.NPM_PUBLISH_MODE || 'publish' }}
         run: |
           set -euo pipefail
-          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "NPM_TOKEN is required to publish packages." >&2
-            exit 1
+          case "$NPM_PUBLISH_MODE" in
+            publish) publisher=(npm publish) ;;
+            stage) publisher=(npm stage publish) ;;
+            *) echo "NPM_PUBLISH_MODE must be publish or stage." >&2; exit 1 ;;
+          esac
+          # Trusted publishing uses this job's OIDC identity. First-package
+          # staging may use a short-lived bootstrap credential until packages
+          # exist and the owner can configure their trusted publishers.
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/freeholder-publisher.npmrc"
+          trap 'rm -f -- "$NPM_CONFIG_USERCONFIG"' EXIT
+          umask 077
+          : > "$NPM_CONFIG_USERCONFIG"
+          if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+            printf '%s\n' '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > "$NPM_CONFIG_USERCONFIG"
           fi
           version=$(node -p 'require("./package.json").version')
           npm_tag=latest
@@ -57,5 +71,5 @@ jobs:
           mkdir -p /tmp/freeholder-release
           pnpm --filter create-freeholder --filter @freeholder/plugin-kit --filter @freeholder/sdk --filter @freeholder/templates --filter @freeholder/cli --filter freeholder-app pack --pack-destination /tmp/freeholder-release
           for tarball in /tmp/freeholder-release/*.tgz; do
-            corepack npm publish "$tarball" --access public --provenance --tag "$npm_tag"
+            "${publisher[@]}" "$tarball" --access public --provenance --tag "$npm_tag"
           done
