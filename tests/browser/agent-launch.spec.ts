@@ -26,6 +26,7 @@ test.describe("owner and coding agent launch", () => {
       hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true,
     } });
     const accessible = async () => {
+      await expect(page).toHaveTitle(/\S/);
       for (const theme of ["light", "dark"]) {
         await page.evaluate(value => document.documentElement.dataset.theme = value, theme);
         expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
@@ -59,6 +60,8 @@ test.describe("owner and coding agent launch", () => {
       await page.getByRole("button", { name: "Finish setup" }).click();
       await page.goto("/admin");
       await page.getByRole("button", { name: "Sign out", exact: true }).click();
+      await expect(page).toHaveURL(/\/login$/);
+      await expect(page).toHaveTitle(/Sign in/);
       await accessible();
       await page.getByLabel("Email", { exact: true }).first().fill(EMAIL);
       await page.getByRole("button", { name: "Sign in with a passkey", exact: true }).click();

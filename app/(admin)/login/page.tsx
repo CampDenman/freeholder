@@ -25,7 +25,10 @@ export const dynamic = "force-dynamic";
 
 // §5: admin surfaces are noindexed. They are also behind auth, but a login
 // page is not, so this one needs saying explicitly.
-export const metadata: Metadata = { robots: { index: false, follow: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: `${t("auth.login.title")} — ${t("common.appName")}`, robots: { index: false, follow: false } };
+}
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
