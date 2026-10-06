@@ -6,13 +6,14 @@ import { getT } from "../i18n";
 
 const STEP_KEYS = [
   "setup.steps.owner",
+  "setup.steps.security",
   "setup.steps.business",
   "setup.steps.location",
   "setup.steps.done",
 ] as const;
 
 /** Where you are in the flow — position carries real information. */
-export async function Steps({ current }: { current: 0 | 1 | 2 | 3 }) {
+export async function Steps({ current }: { current: 0 | 1 | 2 | 3 | 4 }) {
   const t = await getT();
   const STEPS = STEP_KEYS.map((key) => t(key));
 

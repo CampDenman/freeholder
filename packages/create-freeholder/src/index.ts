@@ -419,6 +419,7 @@ const SOURCE_EXCLUDED_SEGMENTS = new Set([
   ".claude",
   ".codex",
   ".data",
+  ".freeholder-launch",
   ".git",
   ".next",
   "dist",
@@ -438,7 +439,7 @@ function includeSourcePath(root: string, path: string): boolean {
   if (!pathFromRoot) return true;
   const parts = pathFromRoot.split(sep);
   return (
-    !parts.some((part) => SOURCE_EXCLUDED_SEGMENTS.has(part)) &&
+    !parts.some((part) => SOURCE_EXCLUDED_SEGMENTS.has(part) || part === ".env" || (part.startsWith(".env.") && part !== ".env.example")) &&
     !SOURCE_EXCLUDED_FILES.has(pathFromRoot)
   );
 }
@@ -551,7 +552,7 @@ async function configureProject(
 
   await writeFile(
     join(root, "GETTING_STARTED.md"),
-    `# ${options.name}\n\nGenerated for **${options.target}** using the **${options.preset}** preset.\n\nCountry defaults: ${country.code}; ${country.currency}; ${country.timezone}; ${country.locales.join(", ")}. You can change every business default during setup.\n\n## Local verification\n\ncreate-freeholder checks \`.env\`, can run \`pnpm install --frozen-lockfile\` and \`pnpm db:migrate\`, and prints the setup URL. Re-run those steps with \`--install --migrate\` after filling \`.env\`, or do them by hand:\n\n1. Install the exact Node release in \`.node-version\`, then enable the pinned package manager with \`corepack enable\`.\n2. Run \`pnpm install --frozen-lockfile\`.\n3. Copy \`.env.example\` to \`.env\` and fill every required blank. Never commit \`.env\`.\n4. Run \`pnpm db:migrate\`.\n5. Run \`pnpm dev\`, open \`/setup\`, and claim the owner account.\n6. Run \`pnpm doctor -- --url <url> --email <owner> --password <password>\` before deployment.\n\n## Deploy\n\nRead \`deploy/${options.target}/README.md\` and \`deploy/${options.target}/verify.md\`. Target infrastructure, when supplied by the recipe, is also copied to \`infra/\`.\n\nPayments: ${options.payments === "stripe" ? "Stripe is selected; configure and verify both API and webhook credentials." : "manual/offline; connect a provider later in configuration."}\n`,
+    `# ${options.name}\n\nGenerated for **${options.target}** using the **${options.preset}** preset.\n\nCountry defaults: ${country.code}; ${country.currency}; ${country.timezone}; ${country.locales.join(", ")}. You can change every business default during setup.\n\n## Local verification\n\ncreate-freeholder checks \`.env\`, can run \`pnpm install --frozen-lockfile\` and \`pnpm db:migrate\`, and prints the setup URL. Re-run those steps with \`--install --migrate\` after filling \`.env\`, or do them by hand:\n\n1. Install the exact Node release in \`.node-version\`, then enable the pinned package manager with \`corepack enable\`.\n2. Run \`pnpm install --frozen-lockfile\`.\n3. Copy \`.env.example\` to \`.env\` and fill every required blank. Never commit \`.env\`.\n4. Run \`pnpm db:migrate\`.\n5. Run \`pnpm dev\`, open \`/setup\`, and claim the owner account.\n6. Run \`pnpm doctor -- --url <url> --email <owner> --password <password>\` before deployment.\n\n## Launch with an agent\n\nRead \`AGENTS.md\` and \`deploy/agent-launch.md\`. For Replit, run \`pnpm launch:prepare --target replit --url https://YOUR-SITE.replit.app\` and import the private configuration into provider Secrets. Complete passkey setup, then connect your assistant at \`/admin/connect\`. Private claim links and credentials never belong in chat.\n\n## Deploy\n\nRead \`deploy/${options.target}/README.md\` and \`deploy/${options.target}/verify.md\`. Target infrastructure, when supplied by the recipe, is also copied to \`infra/\`.\n\nPayments: ${options.payments === "stripe" ? "Stripe is selected; configure and verify both API and webhook credentials." : "manual/offline; connect a provider later in configuration."}\n`,
   );
 }
 

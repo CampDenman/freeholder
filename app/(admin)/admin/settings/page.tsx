@@ -65,6 +65,7 @@ export default async function AdminSettingsPage({
 
   return (
     <div className="grid gap-6">
+      {access.keys ? <a className="text-sm font-medium text-accent underline" href="/admin/connect">{t("connect.title")}</a> : null}
       <div>
         <h1 className="text-xl font-bold tracking-tight">
           {t("admin.settings.title")}

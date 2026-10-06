@@ -86,7 +86,7 @@ export async function createOwnerAction(
     expires: expiresAt,
   });
 
-  redirect("/setup/business");
+  redirect("/setup/security");
 }
 
 export async function saveBusinessAction(

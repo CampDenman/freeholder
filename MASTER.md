@@ -1,7 +1,7 @@
 # FREEHOLDER — Product Specification and Completion Plan
 
 **The open-source operating system for a one-person business.**
-Living edition · reconciled 2026-09-13 · created, authored, and owned by Tony Aly · Apache-2.0
+Living edition · reconciled 2026-10-06 · created, authored, and owned by Tony Aly · Apache-2.0
 
 This is the project's **only product and delivery source of truth**. It defines
 the product, architecture, complete scope, dependency order, current state, and
@@ -1689,7 +1689,7 @@ Same pattern for storage, calendar (2-way sync w/ webhook or polling fallback), 
 
 Fresh deploy with empty DB → `/setup` (locked after completion):
 
-1. **Owner account** — email, password, OTP verification (proves mail works before anything else; offers Gmail/Outlook OAuth connect here, falls back to SMTP)
+1. **Owner account and protection** — claim the deployment using a private setup link (or the manual deployment secret), create the email/password fallback account, then create a passkey with device user verification and save downloadable recovery codes. An authenticator remains an alternative. Passkey sign-in can subsequently omit the password. Mail/provider connections are optional and their readiness is reported honestly; owner setup does not imply they work.
 2. **Business identity** — name, what-you-do (picks schema.org business type), logo
 3. **International** — country → smart defaults for locale, currency, timezone, units, tax zone template (CA GST/PST/HST, EU VAT, US none, …); add extra locales/currencies now or later
 4. **Location / NAP** — optional: address or service area, phone, hours → primary `BusinessLocation`
@@ -1716,7 +1716,7 @@ normal tested extension rather than bespoke UI work.
 
 ## 14. Replit-First Deploy Story
 
-- `.replit` + `replit.nix` committed; **Run** = migrate → seed-if-empty → dev server. Deploy = Replit Deployments with PG + Object Storage provisioned.
+- `.replit` + `replit.nix` committed; **Run** installs frozen dependencies, checks prepared Replit configuration and starts the dev server; runtime instrumentation migrates before initializing services/jobs. Deploy = Replit Deployments with PostgreSQL + Object Storage provisioned by the owner or their agent. `pnpm launch:prepare` generates private, stable credentials and a private owner claim link, reports missing infrastructure, and does not claim to provision provider accounts.
 - `npx create-freeholder` (Apache-2.0) scaffolds/forks for Railway, Render, DO App Platform, and bare Docker (`Dockerfile` + `compose.yml` with PG + MinIO for full self-host).
 - All config via env with a single `env.ts` Zod schema — `doctor` prints exactly what's missing in plain English.
 - **Export is a feature:** one admin button produces a full archive (SQL dump + media + a human-readable JSON of every entity). Ownership isn't a slogan; leaving must be easy — that's what makes staying a choice.
@@ -3462,17 +3462,17 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-10-04 |
-| Evidence snapshot | On `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
+| Last reconciled | 2026-10-06 |
+| Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C11.16 spec reconciliation; C11.17 remains unsigned (the world-class visual editor closed 2026-09-30 — see "Remaining open") |
+| Current focus | Actual Replit and Lovable account launches with the owner (C3.28); C11.16 spec reconciliation; C11.17 remains unsigned (the world-class visual editor closed 2026-09-30 — see "Remaining open") |
 | Completion rule | Every unchecked item in C0–C11, except the items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). Paid event admission (C6.11). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 was recorded closed 2026-09-28, then reopened 2026-10-05 because the drill had no source object bytes (`deploy/stable-acceptance-2026-10-05.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | Actual new Replit and Lovable launch acceptance with the owner (C3.28). Owner passkey/MCP browser acceptance (C1.39) and private launch tooling/package acceptance (C3.27) closed 2026-10-06; see the evidence under each item. §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). Paid event admission (C6.11). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 was recorded closed 2026-09-28, then reopened 2026-10-05 because the drill had no source object bytes (`deploy/stable-acceptance-2026-10-05.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -3906,7 +3906,7 @@ reading chat logs.
   `deploy/content-security-policy.md` **F04** N/A — Content-Security-Policy headers, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/csp.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** operator runbook `deploy/content-security-policy.md`. **F12** `tests/core/csp.test.ts` is the composition proof.)
 - [x] **C1.20** Patch all actionable dependency advisories and keep a zero
   known-high/critical policy with documented exceptions for lower severities.
-  (PostCSS `8.5.26` and parent-scoped drizzle-kit esbuild `0.25.12` floors fix
+  (Historical acceptance: PostCSS `8.5.26` and parent-scoped drizzle-kit esbuild `0.25.12` floors fix
   GHSA-fxqj-rqcc-2cmp and GHSA-67mh-4wv8-2f99; zero known advisories in the
   complete pnpm workspace lockfile and zero open GitHub Dependabot alerts;
   high/critical findings are unwaivable; lower-severity exceptions require
@@ -3915,6 +3915,13 @@ reading chat logs.
   `scripts/dependency-audit.mjs`; `tests/core/dependency-audit.test.ts`;
   1,065-test full suite; changeset `dependency-security-policy.md`;
   operator policy in `SECURITY.md` **F04** N/A — dependency audit CI, not a screen. **F05** N/A — not an agent capability. **F07** N/A — a CI policy gate, not a customer-data threat model. **F09** `scripts/dependency-audit.mjs` in CI and `SECURITY.md`. **F12** N/A — lockfile policy, not a composed product journey.)
+  (Rechecked 2026-10-06: `pnpm-workspace.yaml` now requires patched
+  `source-map-js >=1.2.2 <2` for GHSA-68fv-2mgg-jv7q; the locked PostCSS,
+  Tailwind and test-tooling paths resolve 1.2.2. `pnpm dependency:audit`
+  reports no known advisories in the complete pnpm workspace. The high/critical
+  gate remains unwaivable. Separate native-app unpatched advisory status is
+  recorded in `deploy/stable-acceptance-2026-10-05.md`; this rerun does not
+  clear those historical GitHub alerts or independent review.)
 - [x] **C1.21** Replace simulated public accessibility checks with real-browser
   keyboard, focus, reflow, contrast, reduced-motion and screen-reader-oriented
   tests for setup, admin, editor, storefront and portal. (production Chromium
@@ -4153,6 +4160,31 @@ project without silent telemetry, and ready to carry money.
 
 - [x] **C1.38** Provide a public, disposable shared playground on a separate database and network: restricted visitor sessions, prominent reset/privacy notice, blocked privileged operations and external delivery, hourly reset, bounded resources, and a live demo entry link. Prove content edits, denied sensitive actions, reset recovery, and separation from the production instance.
   (Checked 2026-09-27. The isolated playground base (own compose project, database container and internal-only networks; synthetic visitor entry; mutation allow-list policy) is hardened to the full contract. **Restricted visitor sessions:** `src/core/demo/playground.ts` issues sessions only for the synthetic, passwordless `visitor@playground.invalid` principal in the grant-less `playground` role with a one-hour expiry; `tests/core/playground.test.ts` proves the resolved session's grants stay inside `PLAYGROUND_MANAGE`/`PLAYGROUND_VIEW` with manage only on content modules, that no credential flow (`auth.login`) can start from it, and that role creation, staff invitations, host updates, mail test sends, uploads, SMS, payment and settings mutations are refused *server-side* with `permission` — the refusal lives in `authorizeInput` (`src/core/service.ts`), so the admin UI, REST API and MCP hit the same wall, and the test calls the services directly as the playground principal. **Reset/privacy notice:** the root-layout banner (`app/layout.tsx`, key `playground.banner`) rides every playground surface and the `/playground` entry page (`app/playground/page.tsx`, key `playground.limits`) states the hourly reset and the no-personal-information rule, in all four locale catalogs; the demo also serves `Disallow: /` robots. **Blocked external delivery:** `playgroundBlocksExternalDelivery` (`src/core/demo/playground-policy.ts`) fails closed at the three live choke points — `deliverQueuedMail` (`src/core/mail/service.ts`), `messaging.sendSms` (`src/core/messaging/sms.ts`) and the webhook sweep (`src/core/webhooks/deliver.ts`) — so background jobs running as `system` (reminders, compliance replies, queued webhooks) cannot send mail/SMS/webhooks even though the mutation allow-list never covered them; the same test proves each refusal carries the playground reason while a playground-off control takes the ordinary path, and the container gate proves blocked egress on the built image. **Hourly reset:** `deploy/docker-selfhost/playground/reset.sh` recreates the disposable project and is driven hourly by `freeholder-playground-reset.timer`; `tests/core/playground.test.ts` ("playground separation and reset recovery") simulates that cycle (fresh database + migrate + the same boot phases `instrumentation.node.ts` runs) and proves reset recovery: the old visitor session no longer validates, visitor pages are gone, the sample site is reinstalled to the same page count, and a new visitor can edit again. **Bounded resources:** uploads are refused outright (allow-list), all visitor mutations share a 300-per-minute ceiling (`enforceRateLimit`, `src/core/service.ts`), and per-surface row caps (`PLAYGROUND_ROW_CAPS` + `enforcePlaygroundRowCap`) bound pages, sections, forms, contacts, products, notes and tasks; the exact bound (299 further mutations after entry, then refusal; contacts capped at the declared limit while pages still accept edits) is asserted in `tests/core/playground.test.ts`. **Separation:** the playground is its own compose project with its own database container, tmpfs volumes and internal-only networks (`deploy/docker-selfhost/playground/compose.yml`), and the same file proves it on a live cluster: a production-shaped database and a playground database on distinct `DATABASE_URL`s, the playground flag failing closed ("disposable database") against real accounts, the synthetic pair the only users the playground database ever holds, and visitor sessions/content never appearing in the production database. **Live demo entry link:** `FREEHOLDER_PLAYGROUND_URL` renders the "Try the live demo" banner link on a main site (`app/layout.tsx`). **Browser proof:** `tests/browser/playground.spec.ts` (config `playwright.playground.config.ts`, `pnpm test:playground`) drives Chromium through entry, the notice, a real editor edit + publish, three privileged API denials as the visitor (staff invitation, mail test send, upload staging — each 403 with the playground message), the reset (session dead → `/playground` redirect, visitor page 404, reseeded sample back, re-entry and editing restored); CI's `scripts/playground-gate.sh` proves boot, sign-in, editor render and blocked egress on the built container. **F04** entry page + root banner: `app/playground/page.tsx`, `app/layout.tsx`. **F05** one refusal across every projection via the service choke point `src/core/service.ts`; container entry exercised over HTTP by `scripts/playground-gate.sh`. **F07** threat model and bounds: `src/core/demo/playground-policy.ts`, `tests/core/playground.test.ts`. **F09** hourly reset job `deploy/docker-selfhost/playground/reset.sh` + `freeholder-playground-reset.timer`, recovery proof in the same file. **F12** the browser journey composes entry → edit → publish → denial → reset → re-entry: `tests/browser/playground.spec.ts`.)
+
+- [x] **C1.39** Simplify owner protection and assistant authorization: private
+  fragment claim links, passkey-first enrollment within setup, downloadable
+  recovery codes, passwordless passkey sign-in with a separate once-only
+  challenge, and guided named/expiring scoped MCP connections. Preserve
+  password/factor fallback, privileged policy, human-only key issuance,
+  service/audit boundaries and rejection of forbidden agent actions. Evidence
+  must include real browser WebAuthn and actual permitted/refused MCP calls.
+  (Checked 2026-10-06. **F04** `tests/browser/agent-launch.spec.ts` uses a
+  real Chromium WebAuthn authenticator for private claim → passkey enrollment
+  → recovery download/acknowledgment → passwordless sign-in → connection
+  issuance, with WCAG AA checks on setup, login and connection in both themes.
+  **F05** `src/core/auth/two-factor.ts` adds the two passwordless services to
+  the HTTP/OpenAPI registry; `packages/sdk/src/generated.ts` is verified by
+  all eight live-registry SDK tests. Credential services remain off MCP;
+  CMS tool schemas describe the validated block-node shape. **F07**
+  `tests/core/two-factor.test.ts` refuses TOTP/recovery redemption of separate
+  passkey challenges and unknown-account probing; `tests/core/apikeys.test.ts`
+  retains human-only issuance and scope enforcement. The browser exercises
+  forbidden key, customer, refund and host-update tools, plus a read-only
+  connection's refused CMS write. **F09** `deploy/agent-launch.md` documents
+  password/factor recovery, domain changes, preserved encryption keys and
+  connection revocation. **F12** the browser actually creates/publishes a
+  page through MCP, verifies its public rendering and named-agent audit
+  entries without credential leakage. Actual platform launches remain C3.28.)
 
 ### 43.7 C2 — Universal editor and CMS perfection
 
@@ -4883,6 +4915,32 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 
 **C3 exit:** every capability has one machine-checked contract; extensions and
 deployments are portable, testable and incapable of silently forking the truth.
+
+- [x] **C3.27** Provide secret-safe, idempotent launch preparation with redacted
+  missing-infrastructure reporting, checked-in Replit startup and agent
+  instructions, and accurate Lovable connector/runtime API guidance. Prove
+  private file permissions, credential preservation, invalid input refusal,
+  exclusion from distributable artifacts and generated-project availability.
+  (Checked 2026-10-06. **F04** `GETTING_STARTED.md`, `deploy/replit/README.md`
+  and `deploy/agent-launch.md` document the owner launch path. **F05**
+  `AGENTS.md` and `scripts/launch-prepare.mjs` provide provider-aware agent
+  instructions and redacted CLI reporting. **F07**
+  `tests/core/agent-launch.test.ts` proves independent secrets, private file
+  permissions, safe reruns and URL/weak-secret/symlink refusals;
+  `tests/core/create-freeholder.test.ts` and
+  `tests/core/standalone-artifact.test.ts` prove private source/runtime
+  exclusions. **F09** `deploy/agent-launch.md` requires durable provider
+  Secrets and original encryption keys across restart/restore. **F12**
+  `scripts/package-artifact-gate.mjs` passed: seven packages packed,
+  installed and exercised, including generated agent instructions, launch
+  scripts, frozen install and typecheck. Production build passed the
+  standalone exclusion gate. Actual provider acceptance remains C3.28.)
+- [ ] **C3.28** Prove fresh account launches with the owner on Replit and Lovable:
+  real provider provisioning, final HTTPS owner claim/passkey/recovery, storage
+  and readiness, actual platform-agent MCP discovery and permitted publishing,
+  forbidden-operation refusal, and Lovable runtime credential isolation where
+  used. This remains open until those two actual platform launches are run;
+  local browser/CLI evidence is not a substitute.
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

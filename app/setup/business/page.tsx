@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // §13 steps 2–3: who the business is, and where it operates.
+import { setupOwner } from "../access";
 import { redirect } from "next/navigation";
 import { setupState } from "@/core/settings/service";
 import { getLocale, getT } from "../../i18n";
@@ -14,12 +15,13 @@ export default async function SetupBusinessPage() {
   const state = await setupState.call({}, { kind: "anonymous" });
   if (state.completed) redirect("/");
   if (!state.hasOwner) redirect("/setup");
+  await setupOwner();
 
   const [t, locale] = await Promise.all([getT(), getLocale()]);
 
   return (
     <>
-      <Steps current={1} />
+      <Steps current={2} />
       <h1 className="text-2xl font-bold tracking-tight">
         {t("setup.business.title")}
       </h1>

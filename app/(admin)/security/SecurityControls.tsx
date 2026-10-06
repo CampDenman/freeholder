@@ -43,7 +43,7 @@ function utc(value: Date | string): string {
   return `${new Date(value).toISOString().replace("T", " ").slice(0, 16)} UTC`;
 }
 
-function RecoveryCodes({ codes, label }: { codes?: string[]; label: string }) {
+function RecoveryCodes({ codes, label, downloadLabel }: { codes?: string[]; label: string; downloadLabel: string }) {
   if (!codes?.length) return null;
   return (
     <Callout tone="warning">
@@ -52,6 +52,11 @@ function RecoveryCodes({ codes, label }: { codes?: string[]; label: string }) {
         <div className="grid grid-cols-2 gap-2 font-mono text-sm">
           {codes.map((code) => <code key={code}>{code}</code>)}
         </div>
+        <Button type="button" variant="quiet" onClick={() => {
+          const url = URL.createObjectURL(new Blob([codes.join("\n") + "\n"], { type: "text/plain" }));
+          const link = document.createElement("a"); link.href = url; link.download = "freeholder-recovery-codes.txt"; link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }}>{downloadLabel}</Button>
       </div>
     </Callout>
   );
@@ -60,6 +65,7 @@ function RecoveryCodes({ codes, label }: { codes?: string[]; label: string }) {
 export function SecurityControls({
   status,
   labels,
+  setup,
 }: {
   status: {
     required: boolean;
@@ -71,17 +77,20 @@ export function SecurityControls({
     loginActivity: LoginActivity[];
   };
   labels: Record<string, string>;
+  setup?: { continueLabel: string; recoverySaved: string };
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [state, setState] = useState<SecurityActionState>({});
   const [totp, setTotp] = useState<SecurityActionState>({});
+  const [recoverySaved, setRecoverySaved] = useState(false);
   const [keyName, setKeyName] = useState(labels.defaultKeyName!);
 
   const run = (work: () => Promise<SecurityActionState>) => {
     setState({});
     startTransition(async () => {
       const result = await work();
+      if (result.recoveryCodes?.length) setRecoverySaved(false);
       setState(result);
       if (result.saved) router.refresh();
     });
@@ -90,6 +99,7 @@ export function SecurityControls({
   const beginTotp = () => startTransition(async () => setTotp(await beginTotpAction()));
   const confirmTotp = (form: FormData) => startTransition(async () => {
     const result = await confirmTotpAction({}, form);
+    if (result.recoveryCodes?.length) setRecoverySaved(false);
     setTotp(result);
     if (result.saved) router.refresh();
   });
@@ -104,6 +114,7 @@ export function SecurityControls({
         name: keyName,
         credentialResponse: response as unknown as Record<string, unknown>,
       });
+      if (result.recoveryCodes?.length) setRecoverySaved(false);
       setState(result);
       if (result.saved) router.refresh();
     } catch (error) {
@@ -120,7 +131,21 @@ export function SecurityControls({
       ) : null}
       {state.error ? <Callout tone="danger" icon={<WarningCircle size={17} />}>{state.error}</Callout> : null}
       {state.saved ? <Callout tone="success" icon={<CheckCircle size={17} />}>{labels.saved!}</Callout> : null}
-      <RecoveryCodes codes={state.recoveryCodes} label={labels.saveCodes!} />
+      <RecoveryCodes codes={state.recoveryCodes} label={labels.saveCodes!} downloadLabel={labels.downloadCodes!} />
+
+      <section className="grid gap-4 rounded-lg border border-rule bg-surface p-5">
+        <div><h2 className="font-semibold">{labels.keys}</h2><p className="text-sm text-ink-muted">{labels.keysIntro}</p></div>
+        {status.webauthn.map((credential) => (
+          <div key={credential.id} className="flex items-center gap-3 rounded-md bg-surface-muted p-3">
+            <Key size={19} className="text-accent" /><span className="text-sm font-medium">{credential.name}</span>
+            <Button type="button" variant="quiet" className="ms-auto" disabled={pending} onClick={() => run(async () => { const form = new FormData(); form.set("id", credential.id); return removeWebAuthnAction(form); })}>{labels.remove}</Button>
+          </div>
+        ))}
+        <Field label={labels.keyName!} htmlFor="security-key-name" hint={labels.keyNameHint}>
+          <Input id="security-key-name" value={keyName} maxLength={80} onChange={(event) => setKeyName(event.target.value)} />
+        </Field>
+        <Button type="button" disabled={pending} onClick={addKey}>{labels.addKey}</Button>
+      </section>
 
       <section className="grid gap-4 rounded-lg border border-rule bg-surface p-5">
         <div className="flex items-center gap-3">
@@ -147,22 +172,9 @@ export function SecurityControls({
             </form>
           </div>
         )}
-        <RecoveryCodes codes={totp.recoveryCodes} label={labels.saveCodes!} />
+        <RecoveryCodes codes={totp.recoveryCodes} label={labels.saveCodes!} downloadLabel={labels.downloadCodes!} />
       </section>
 
-      <section className="grid gap-4 rounded-lg border border-rule bg-surface p-5">
-        <div><h2 className="font-semibold">{labels.keys}</h2><p className="text-sm text-ink-muted">{labels.keysIntro}</p></div>
-        {status.webauthn.map((credential) => (
-          <div key={credential.id} className="flex items-center gap-3 rounded-md bg-surface-muted p-3">
-            <Key size={19} className="text-accent" /><span className="text-sm font-medium">{credential.name}</span>
-            <Button type="button" variant="quiet" className="ms-auto" disabled={pending} onClick={() => run(async () => { const form = new FormData(); form.set("id", credential.id); return removeWebAuthnAction(form); })}>{labels.remove}</Button>
-          </div>
-        ))}
-        <Field label={labels.keyName!} htmlFor="security-key-name" hint={labels.keyNameHint}>
-          <Input id="security-key-name" value={keyName} maxLength={80} onChange={(event) => setKeyName(event.target.value)} />
-        </Field>
-        <Button type="button" disabled={pending} onClick={addKey}>{labels.addKey}</Button>
-      </section>
 
       {(status.totp || status.webauthn.length > 0) ? (
         <section className="grid gap-4 rounded-lg border border-rule bg-surface p-5">
@@ -172,6 +184,7 @@ export function SecurityControls({
         </section>
       ) : null}
 
+      {!setup ? <>
       <section className="grid gap-4 rounded-lg border border-rule bg-surface p-5">
         <div><h2 className="font-semibold">{labels.sessions}</h2><p className="text-sm text-ink-muted">{labels.sessionsIntro}</p></div>
         <div className="grid gap-3">
@@ -216,6 +229,12 @@ export function SecurityControls({
           </div>
         )}
       </section>
+      </> : (status.totp || status.webauthn.length > 0) ? (
+        <div className="grid gap-4 border-t border-rule pt-5">
+          <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={recoverySaved} onChange={(event) => setRecoverySaved(event.target.checked)} className="mt-1" />{setup.recoverySaved}</label>
+          <Button type="button" disabled={!recoverySaved} onClick={() => router.push("/setup/business")}>{setup.continueLabel}</Button>
+        </div>
+      ) : null}
     </div>
   );
 }

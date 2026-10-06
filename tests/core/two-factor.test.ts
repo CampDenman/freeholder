@@ -11,6 +11,8 @@ import { login } from "@/core/auth/service";
 import { createSession } from "@/core/auth/sessions";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import {
+  beginPasskeyLogin,
+  completePasskeyLogin,
   beginTotpEnrollment,
   beginWebAuthnRegistration,
   completeTwoFactorLogin,
@@ -132,6 +134,29 @@ describe.runIf(hasDatabase)("the two-factor lifecycle", () => {
     });
   });
   afterAll(closeDb);
+
+  it("keeps anonymous passkey challenges separate from password/TOTP login and conceals account existence", async () => {
+    const session = await db().transaction(tx => createSession(tx, USER_ID));
+    const actor = await actorFromToken(session.token);
+    const factor = await beginTotpEnrollment.call({}, actor);
+    const current = Math.floor(Date.now() / 30000);
+    const enrolled = await confirmTotpEnrollment.call({ enrollmentToken: factor.enrollmentToken, code: totpCode(factor.secret, current) }, actor);
+    const existing = await beginPasskeyLogin.call({ email: "owner-2fa@example.test" }, ANONYMOUS);
+    const unknown = await beginPasskeyLogin.call({ email: "unknown@example.test" }, ANONYMOUS);
+    for (const result of [existing, unknown]) {
+      expect(result.challengeToken.length).toBeGreaterThan(20);
+      expect(result.options).toMatchObject({ userVerification: "required" });
+      expect((result.options as { allowCredentials?: unknown[] }).allowCredentials ?? []).toEqual([]);
+      for (const code of [totpCode(factor.secret, current + 1), enrolled.recoveryCodes[0]!]) {
+        const bad = await failure(completeTwoFactorLogin.call({ challengeToken: result.challengeToken, code }, ANONYMOUS));
+        expect(bad.code).toBe("permission");
+      }
+    }
+    const failures = [];
+    for (const result of [existing, unknown]) failures.push(await failure(completePasskeyLogin.call({ challengeToken: result.challengeToken, credentialResponse: { id: "unregistered" } }, ANONYMOUS)));
+    expect(failures[0]?.message).toBe(failures[1]?.message);
+  });
+
 
   it("forces a privileged session through enrollment and rejects TOTP replay", async () => {
     const session = await db().transaction((tx) => createSession(tx, USER_ID));

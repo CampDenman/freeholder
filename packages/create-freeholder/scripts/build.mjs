@@ -18,6 +18,8 @@ const rootFiles = [
   ".env.example",
   ".node-version",
   ".replit",
+  "AGENTS.md",
+  "CLAUDE.md",
   "CODE_OF_CONDUCT.md",
   "CONTRIBUTING.md",
   "DCO.md",
@@ -63,11 +65,11 @@ const rootDirectories = [
   "tests",
 ];
 
-const excludedSegments = new Set(["dist", "node_modules", ".next", "test-results"]);
+const excludedSegments = new Set(["dist", "node_modules", ".next", "test-results", ".freeholder-launch"]);
 
 function includeSource(source) {
   const parts = relative(repositoryRoot, source).split(sep);
-  return !parts.some((part) => excludedSegments.has(part));
+  return !parts.some((part) => excludedSegments.has(part) || part === ".env" || (part.startsWith(".env.") && part !== ".env.example"));
 }
 
 async function runTypeScript() {

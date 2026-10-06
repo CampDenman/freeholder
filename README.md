@@ -28,6 +28,10 @@ history all hang off one CRM timeline.
   `npx create-freeholder@next my-business` after publication. No stable release
   is available yet.
 - [Read the contributor guide](CONTRIBUTING.md) to help improve the project.
+- [Launch with a coding agent](deploy/agent-launch.md): prepare private
+  configuration for Replit, complete owner setup with a passkey, then connect
+  your assistant at `/admin/connect`. Lovable connects to a hosted Freeholder
+  backend; fresh launches on both platforms still await account acceptance.
 
 ## Product-complete target
 

@@ -125,8 +125,29 @@ describe("create-freeholder (C3.14)", () => {
       access(join(root, "infra", "app.yaml")),
       access(join(root, "instrumentation.node.ts")),
       access(join(root, ".gitignore")),
+      access(join(root, "AGENTS.md")),
+      access(join(root, "deploy", "agent-launch.md")),
+      access(join(root, "scripts", "launch-prepare.mjs")),
+      access(join(root, "scripts", "start-replit.mjs")),
     ]);
     await expect(access(join(root, "next-env.d.ts"))).rejects.toThrow();
+  });
+
+  it("excludes nested credentials and private claim files from an explicit source template", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "create-fh-private-"));
+    dirs.push(parent);
+    const template = join(parent, "template");
+    await mkdir(join(template, "deploy", "replit", ".freeholder-launch"), { recursive: true });
+    await writeFile(join(template, "package.json"), JSON.stringify({ name: "freeholder", scripts: {} }));
+    await writeFile(join(template, ".gitignore"), ".env\n.freeholder-launch/\n");
+    await writeFile(join(template, ".env.example"), "DATABASE_URL=\n");
+    await writeFile(join(template, "deploy", "replit", ".env.production"), "DO_NOT_PACKAGE=test-only-marker\n");
+    await writeFile(join(template, "deploy", "replit", ".freeholder-launch", "claim-link.txt"), "private test-only marker\n");
+    const project = join(parent, "project");
+    await createFreeholder(project, { name: "studio", templateRoot: template });
+    await expect(access(join(project, "deploy", "replit", ".env.production"))).rejects.toThrow();
+    await expect(access(join(project, "deploy", "replit", ".freeholder-launch"))).rejects.toThrow();
+    await expect(readFile(join(project, ".env.example"), "utf8")).resolves.toContain("DATABASE_URL=");
   });
 
   it("refuses a non-empty destination without modifying it", async () => {

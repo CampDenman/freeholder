@@ -31,6 +31,9 @@ overrides:
   # GHSA-r28c-9q8g-f849 and GHSA-fxqj-rqcc-2cmp: sourceMappingURL path
   # traversal/arbitrary map-file reads. 8.5.23 completes the earlier fix.
   postcss: ">=8.5.23 <9"
+  # GHSA-68fv-2mgg-jv7q: indexed source-map section offsets could block the
+  # event loop. Shared by PostCSS, Tailwind and test tooling; 1.2.2 patches it.
+  source-map-js: ">=1.2.2 <2"
   # GHSA-67mh-4wv8-2f99: the old esbuild development server allowed any site
   # to read its responses. drizzle-kit still reaches 0.18 through its retired
   # @esbuild-kit loader even though its other esbuild slots are patched. Scope

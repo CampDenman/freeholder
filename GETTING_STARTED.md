@@ -15,6 +15,21 @@ Visit [the live example](https://demo.freeholder.ai/) and follow **Enter the
 playground** to try the editor, products, forms and sample contacts. The
 playground is shared and resets every hour. Use fictional information only.
 
+## Launch with your coding agent
+
+For Replit, [import Freeholder](https://replit.com/github.com/CampDenman/freeholder)
+and follow the [agent launch guide](deploy/agent-launch.md). It includes a prompt
+for provisioning PostgreSQL and private Object Storage, one-command credential
+preparation, owner passkey setup, and connecting Replit Agent through MCP.
+
+For Lovable, use that guide to connect a separately hosted Freeholder and build
+a new interface against its MCP/API. Lovable does not import this existing
+repository, and its chat connector does not become your app's runtime backend.
+
+After owner setup, open **Settings → Connect your assistant** (`/admin/connect`)
+to choose permissions, create an expiring connection and test its MCP tools.
+Keep the owner password, passkeys and recovery codes with the owner.
+
 ## Run your own instance
 
 The first beta uses the explicit npm `next` channel. Once its packages are

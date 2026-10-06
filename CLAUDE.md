@@ -51,7 +51,7 @@ or backlog.
 - **Replit-first deployability.** Changes must not break single-command
   deploy. Seed/demo mode must keep working.
 - **SEO as architecture**, first-party analytics, KISS auth
-  (email + password + OTP for owners, magic links for customers).
+  (passkeys for owners, password + OTP fallback, magic links for customers).
 
 ## Conventions
 

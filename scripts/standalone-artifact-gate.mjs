@@ -42,6 +42,7 @@ const FORBIDDEN_ROOTS = new Set([
   ".codex",
   ".claude",
   ".work",
+  ".freeholder-launch",
   "app",
   "apps",
   "db",
@@ -56,6 +57,7 @@ const FORBIDDEN_ROOTS = new Set([
   "test-results",
 ]);
 const FORBIDDEN_ROOT_FILES = new Set([
+  "AGENTS.md",
   "CLAUDE.md",
   "HANDOFF.md",
   "MASTER.md",

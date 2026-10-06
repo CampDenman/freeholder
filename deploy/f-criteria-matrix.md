@@ -803,6 +803,21 @@ v2.
 - **F11** — `deploy/docker-selfhost/playground/README.md`; `MASTER.md` §43 annotation this row transcribes; changeset `playground-hardening.md`.
 - **F12** — Entry → edit → publish → API denial → reset → re-entry in one Chromium journey; `tests/browser/playground.spec.ts`, with database separation proven service-side in the same file.
 
+## C1.39 — Owner protection and assistant connection
+
+- **F01** — `src/core/auth/schema.ts`: existing `two_factor_challenges` and `webauthn_credentials` store identity/challenges; the new passkey-only purpose uses the existing text column without a database migration.
+- **F02** — `src/core/auth/two-factor.ts` generates discoverable credentials with required user verification and redeems separate, expiring, once-only passkey challenges through the same WebAuthn verification/session implementation.
+- **F03** — `src/core/apikeys/profiles.ts` projects exact permission presets onto available services; credential creation retains the existing human-only service and audit boundary.
+- **F04** — `app/setup/security/page.tsx`, `app/(admin)/login/PasskeySignIn.tsx`, `app/(admin)/admin/connect/page.tsx`: protection, recovery, sign-in and connection in the actual browser flows.
+- **F05** — `src/core/auth/two-factor.ts`: `auth.beginPasskeyLogin` and `auth.completePasskeyLogin` in HTTP/OpenAPI/SDK; auth stays excluded from MCP. Business MCP capabilities still derive from the registry.
+- **F06** — `app/(admin)/security/SecurityControls.tsx` offers passkey and authenticator enrollment, recovery download and saved-code acknowledgment; locale catalogs cover all four shipped languages.
+- **F07** — `tests/core/two-factor.test.ts` rejects TOTP completion of anonymous passkey challenges and equalizes unknown-account failure; `tests/browser/agent-launch.spec.ts` verifies actual WebAuthn and forbidden MCP operations.
+- **F08** — `tests/browser/agent-launch.spec.ts` runs real-browser accessibility checks in both themes; UI uses shared semantic tokens and form controls.
+- **F09** — `deploy/agent-launch.md` documents password/factor fallback, domain changes, connection revocation and ownership of recovery material.
+- **F10** — N/A — no new provider integration or plugin package; existing identity services and ordinary connection settings are reused.
+- **F11** — `MASTER.md` §43 C1.39 and `.changeset/owner-agent-launch.md` record the scope and owner-visible change.
+- **F12** — `tests/browser/agent-launch.spec.ts` composes claim, enrollment, recovery, passwordless sign-in, key issuance, actual MCP publishing/public rendering and refusal. Actual Replit/Lovable accounts remain C3.28.
+
 ## C2.01 — Separate working drafts from published revisions for every
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/cms-lifecycle.test.ts`.
@@ -1573,6 +1588,36 @@ v2.
 - **F10** — N/A — no setup or help surface of its own.
 - **F11** — `MASTER.md` §43 C3.26 annotation (dated 2026-09-29) + `deploy/c324-storefront-parity-2026-09-29.md` (rows 2–3 flipped native with cited tests).
 - **F12** — `tests/browser/storefront-merch-blocks.spec.ts` is the world-class composed journey — a page built from the merchandising blocks publishes, a shopper browses it, filters through crawlable facet URLs and buys to the token-gated confirmation.
+
+## C3.27 — Private launch preparation and agent instructions
+
+- **F01** — N/A — launch preparation writes private configuration files; it adds no business tables or secondary data spine.
+- **F02** — `scripts/launch-prepare.mjs` generates independent secrets, preserves existing configuration, writes a private claim fragment and returns a redacted missing-infrastructure report.
+- **F03** — `scripts/start-replit.mjs` checks durable Replit storage/configuration before startup; runtime instrumentation owns migrations and job initialization.
+- **F04** — `GETTING_STARTED.md`, `deploy/replit/README.md` and `deploy/agent-launch.md` supply the owner-facing launch path.
+- **F05** — `deploy/agent-launch.md`, `AGENTS.md` and `pnpm launch:prepare --json` supply the coding-agent entry point; pre-instance provisioning is done through the hosting provider, not an endpoint on a nonexistent instance.
+- **F06** — N/A — a terminal preparation tool does not add a public localized screen; its later owner/connection screens are C1.39.
+- **F07** — `tests/core/agent-launch.test.ts` verifies private permissions, secret separation, credential preservation, redacted output and invalid URL/secret/symlink refusal.
+- **F08** — N/A — no new visual primitive; browser accessibility for the associated setup/connection flows is C1.39.
+- **F09** — `deploy/agent-launch.md` requires durable provider Secrets, database/object recovery, same encryption keys across restarts, and independent runtime API credentials.
+- **F10** — `packages/create-freeholder/scripts/build.mjs` includes agent instructions in the integrity-manifested source template; private launch state and env files are excluded from generated source and production artifacts.
+- **F11** — `MASTER.md` §43 C3.27 and `.changeset/owner-agent-launch.md`; C3.28 explicitly tracks actual provider acceptance separately.
+- **F12** — `scripts/package-artifact-gate.mjs` proves packed scaffolding, frozen install and typecheck outside the workspace; `tests/core/agent-launch.test.ts` runs preparation against real temporary files.
+
+## C3.28 — Actual new Replit and Lovable launch acceptance
+
+- **F01** — `deploy/agent-launch.md`: Pending — prove each business uses its own actual provider database and storage; no new multi-tenant model is authorized.
+- **F02** — `deploy/agent-launch.md`: Pending — run each platform's real provisioning/deployment workflow with the owner after the C1.39/C3.27 tooling lands.
+- **F03** — `deploy/agent-launch.md`: Pending — validate runtime service/worker readiness, storage delivery and backup/recovery on the actual targets.
+- **F04** — `deploy/agent-launch.md`: Pending — owner claims the final HTTPS origin, completes passkey/recovery setup and reaches the working admin.
+- **F05** — `deploy/agent-launch.md`: Pending — Replit Agent and Lovable must actually discover permitted MCP tools and execute a task in their own clients.
+- **F06** — `deploy/agent-launch.md`: Pending — verify provider-facing prompts/configuration and the intended published site experience with the owner.
+- **F07** — `deploy/agent-launch.md`: Pending — prove forbidden operations and credential isolation on the actual platforms, including server-side runtime integration if a Lovable app uses it.
+- **F08** — `deploy/agent-launch.md`: Pending — verify the final owner and site surfaces on the deployed origins.
+- **F09** — `deploy/agent-launch.md`: Pending — record provider-specific restart, secret persistence, backup/recovery and revocation evidence.
+- **F10** — `deploy/agent-launch.md`: Pending — validate actual platform account/connector compatibility; local browser/CLI testing is not that evidence.
+- **F11** — `deploy/agent-launch.md`: `MASTER.md` §43 C3.28 remains unchecked until both launches and their evidence are complete.
+- **F12** — `deploy/agent-launch.md`: Pending — execute the end-to-end scenarios in `deploy/agent-launch.md` with the owner. No live platform success is claimed by this implementation.
 
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 

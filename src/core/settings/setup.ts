@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // The narrow authorization boundary for first boot. A newly registered owner
-// must finish setup before they can enrol the two-factor credential required
-// by their full-access role, so the wizard cannot use ordinary scoped writes.
+// uses narrow setup services while configuring business identity; factor
+// enrollment now happens in the wizard before ordinary privileged work.
 import { eq } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { businessProfile } from "@/core/settings/schema";

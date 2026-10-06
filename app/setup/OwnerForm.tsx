@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 "use client";
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { Button, Callout, Field, Input } from "@/ui/primitives";
 import { createOwnerAction, type ActionState } from "./actions";
@@ -31,6 +31,16 @@ export function OwnerForm({ labels }: { labels: OwnerFormLabels }) {
     createOwnerAction,
     {},
   );
+  const [claim, setClaim] = useState("");
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const secret = params.get("claim");
+    if (secret && secret.length <= 512) {
+      setClaim(secret);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, []);
+
   return (
     <form action={action} className="grid gap-5">
       {state.error ? (
@@ -62,11 +72,11 @@ export function OwnerForm({ labels }: { labels: OwnerFormLabels }) {
           required
         />
       </Field>
-      <div>
+      {claim ? <input type="hidden" name="bootstrapSecret" value={claim} /> : <div>
         <Field label={labels.bootstrapSecret} htmlFor="bootstrapSecret" hint={labels.bootstrapSecretHint}>
           <Input id="bootstrapSecret" name="bootstrapSecret" type="password" autoComplete="off" maxLength={512} />
         </Field>
-      </div>
+      </div>}
       <div>
         <Button type="submit" disabled={pending}>
           {pending ? labels.pending : labels.submit}

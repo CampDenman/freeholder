@@ -250,7 +250,7 @@ export function parseBlockTree(
 
 /** Zod wrapper, so a service's input schema can carry a whole tree. */
 export const blockTreeSchema = (context: BlockContext) =>
-  z.unknown().transform((value, ctx) => {
+  z.unknown().describe(`A ${context} block tree: a JSON array of { id, type, props, children? } nodes. Put block values inside props, never at the top level. Use a unique stable id for each node. Example heading: { "id": "intro", "type": "heading", "props": { "text": "Welcome", "level": 1 } }. Children are only allowed for container blocks. Read an existing page or section to inspect the instance's block vocabulary; the shared registry validates every write.`).transform((value, ctx) => {
     try {
       return parseBlockTree(value, context);
     } catch (error) {
