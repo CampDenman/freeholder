@@ -65,6 +65,7 @@ const nextConfig: NextConfig = {
       "./.codex/**",
       "./.claude/**",
       "./.work/**",
+      "./.freeholder-launch/**",
       "./apps/**",
       "./test-results/**",
       "./app/**/*.{ts,tsx,md}",

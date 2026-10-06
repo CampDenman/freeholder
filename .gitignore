@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Python host-tool bytecode
 __pycache__/
+
+# Private launch credentials and owner claim link
+.freeholder-launch/

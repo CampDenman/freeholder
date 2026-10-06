@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // §13: the wizard locks once this is confirmed, so it cannot be replayed
 // against a live site.
+import { setupOwner } from "../access";
 import { redirect } from "next/navigation";
 import { CheckCircle } from "@phosphor-icons/react/dist/ssr";
 import { getBusiness, setupState } from "@/core/settings/service";
@@ -21,6 +22,7 @@ export default async function SetupDonePage() {
   const state = await setupState.call({}, ANONYMOUS);
   if (state.completed) redirect("/");
   if (!state.hasOwner) redirect("/setup");
+  await setupOwner();
   if (!state.hasBusiness) redirect("/setup/business");
 
   const [business, t] = await Promise.all([
@@ -30,7 +32,7 @@ export default async function SetupDonePage() {
 
   return (
     <>
-      <Steps current={3} />
+      <Steps current={4} />
       <h1 className="text-2xl font-bold tracking-tight">
         {t("setup.done.title", { name: business?.name ?? "" })}
       </h1>
@@ -76,6 +78,7 @@ export default async function SetupDonePage() {
           }}
         />
       </div>
+      <p className="mb-6 text-sm"><a className="text-accent underline" href="/admin/connect">{t("connect.title")}</a></p>
       <DoneForm
         labels={{
           submit: t("setup.done.submit"),

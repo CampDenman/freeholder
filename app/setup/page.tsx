@@ -18,7 +18,7 @@ export default async function SetupOwnerPage() {
   // admin reachable only through the raw API used by CI.
   if (state.hasOwner) {
     if (state.completed) redirect("/");
-    redirect("/setup/business");
+    redirect("/setup/security");
   }
 
   const t = await getT();

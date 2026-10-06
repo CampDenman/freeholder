@@ -81,6 +81,7 @@ export default async function LoginPage() {
             password: t("auth.login.password"),
             submit: t("auth.login.submit"),
             pending: t("auth.login.pending"),
+            passkey: { submit: t("auth.passkey.submit"), intro: t("auth.passkey.intro"), failed: t("auth.passkey.failed") },
           }}
         />
         <a href="/forgot" className="mt-6 inline-block text-sm text-ink-muted">

@@ -95,7 +95,7 @@ export function ApiKeysCard({
   );
 
   return (
-    <Card>
+    <div id="api-keys"><Card>
       <CardHeader icon={<Key size={17} weight="fill" />} title={labels.cardTitle} />
       <CardBody>
         <p className="max-w-prose text-sm text-ink-muted">{labels.intro}</p>
@@ -231,7 +231,7 @@ export function ApiKeysCard({
           {pending ? labels.pending : labels.create}
         </Button>
       </CardFooter>
-    </Card>
+    </Card></div>
   );
 }
 

@@ -251,6 +251,11 @@ void preset;
       "src",
       ".env.example",
       "freeholder.config.ts",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "deploy/agent-launch.md",
+      "scripts/launch-prepare.mjs",
+      "scripts/start-replit.mjs",
     ]) {
       await readFile(join(generatedRoot, required), "utf8").catch(async (error) => {
         const entries = await readdir(join(generatedRoot, required)).catch(() => null);
@@ -261,6 +266,11 @@ void preset;
       access(join(generatedRoot, ".env")),
       /ENOENT/,
       "the scaffold must never copy the source instance's secrets",
+    );
+    await assert.rejects(
+      access(join(generatedRoot, ".freeholder-launch")),
+      /ENOENT/,
+      "the scaffold must never copy private owner claim files",
     );
     await assert.rejects(
       access(join(generatedRoot, "next-env.d.ts")),

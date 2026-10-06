@@ -139,10 +139,12 @@ export const SERVICE_NAMES = [
   "audiences.setCalendars",
   "audiences.setHours",
   "audiences.setServices",
+  "auth.beginPasskeyLogin",
   "auth.beginTotpEnrollment",
   "auth.beginWebAuthnRegistration",
   "auth.beginWebAuthnStepUp",
   "auth.changePassword",
+  "auth.completePasskeyLogin",
   "auth.completeTwoFactorLogin",
   "auth.completeWebAuthnLogin",
   "auth.confirmTotpEnrollment",
@@ -1927,6 +1929,10 @@ export interface ServiceCatalog {
     input: { id: string; serviceOfferingIds: string[] };
     output: { id: string; services: number };
   };
+  "auth.beginPasskeyLogin": {
+    input: { email: string };
+    output: { challengeToken: string; options: unknown; [key: string]: unknown };
+  };
   "auth.beginTotpEnrollment": {
     input: Record<string, never>;
     output: { enrollmentToken: string; secret: string; uri: string; [key: string]: unknown };
@@ -1942,6 +1948,10 @@ export interface ServiceCatalog {
   "auth.changePassword": {
     input: { currentPassword: string; newPassword: string; keepSessionToken?: string };
     output: { ok: true; otherSessionsRevoked: number };
+  };
+  "auth.completePasskeyLogin": {
+    input: { challengeToken: string; credentialResponse: { [key: string]: unknown } };
+    output: { userId: string; method: "webauthn"; token: string; sessionId: string; expiresAt: string };
   };
   "auth.completeTwoFactorLogin": {
     input: { challengeToken: string; code: string };
@@ -7066,10 +7076,12 @@ export interface FreeholderApi {
     setServices: (input: ServiceCatalog["audiences.setServices"]["input"]) => Promise<ServiceCatalog["audiences.setServices"]["output"]>;
   };
   auth: {
+    beginPasskeyLogin: (input: ServiceCatalog["auth.beginPasskeyLogin"]["input"]) => Promise<ServiceCatalog["auth.beginPasskeyLogin"]["output"]>;
     beginTotpEnrollment: (input?: ServiceCatalog["auth.beginTotpEnrollment"]["input"]) => Promise<ServiceCatalog["auth.beginTotpEnrollment"]["output"]>;
     beginWebAuthnRegistration: (input?: ServiceCatalog["auth.beginWebAuthnRegistration"]["input"]) => Promise<ServiceCatalog["auth.beginWebAuthnRegistration"]["output"]>;
     beginWebAuthnStepUp: (input?: ServiceCatalog["auth.beginWebAuthnStepUp"]["input"]) => Promise<ServiceCatalog["auth.beginWebAuthnStepUp"]["output"]>;
     changePassword: (input: ServiceCatalog["auth.changePassword"]["input"]) => Promise<ServiceCatalog["auth.changePassword"]["output"]>;
+    completePasskeyLogin: (input: ServiceCatalog["auth.completePasskeyLogin"]["input"]) => Promise<ServiceCatalog["auth.completePasskeyLogin"]["output"]>;
     completeTwoFactorLogin: (input: ServiceCatalog["auth.completeTwoFactorLogin"]["input"]) => Promise<ServiceCatalog["auth.completeTwoFactorLogin"]["output"]>;
     completeWebAuthnLogin: (input: ServiceCatalog["auth.completeWebAuthnLogin"]["input"]) => Promise<ServiceCatalog["auth.completeWebAuthnLogin"]["output"]>;
     confirmTotpEnrollment: (input: ServiceCatalog["auth.confirmTotpEnrollment"]["input"]) => Promise<ServiceCatalog["auth.confirmTotpEnrollment"]["output"]>;

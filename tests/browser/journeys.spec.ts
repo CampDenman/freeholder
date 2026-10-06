@@ -32,7 +32,7 @@ async function passwordSignIn(page: Page, password: string): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Email").fill(OWNER_EMAIL);
   await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
 }
 
 test.describe("real-browser product journeys", () => {
@@ -55,31 +55,8 @@ test.describe("real-browser product journeys", () => {
       await page.getByLabel("Password").fill(OLD_PASSWORD);
       await page.getByLabel("Setup secret", { exact: true }).fill("browser-test-only-bootstrap-secret-32-characters");
       await page.getByRole("button", { name: "Create owner account" }).click();
-      await expect(page).toHaveURL(/\/setup\/business$/);
-
-      await page.getByLabel("Business name").fill("Journey Studio");
-      await page.getByRole("button", { name: "Save and continue" }).click();
-      await expect(page).toHaveURL(/\/setup\/location$/);
-
-      await page.getByLabel("Street").fill("210 Fifth Street");
-      await page.getByLabel("City or town").fill("Courtenay");
-      await page.getByLabel("State, province or county").fill("BC");
-      await page.getByLabel("Postal code").fill("V9N 1A1");
-      await page.getByRole("button", { name: "Save and continue" }).click();
-      await expect(page).toHaveURL(/\/setup\/done$/);
-
-      await page.getByRole("button", { name: "Finish setup" }).click();
-      await expect(page).toHaveURL(/\/$/);
-      await expect(page.getByText("Journey Studio").first()).toBeVisible();
-
-      // The wizard is now locked, and privileged work moves to 2FA enrolment.
-      await page.goto("/setup");
-      await expect(page).toHaveURL(/\/$/);
-      await page.goto("/admin");
-      await expect(page).toHaveURL(/\/security\?required=1$/);
-    });
-
-    await test.step("owner enrols TOTP and receives recovery credentials", async () => {
+      await expect(page).toHaveURL(/\/setup\/security$/);
+      // Authenticator apps remain available as an alternative to passkeys.
       await page.getByRole("button", { name: "Set up authenticator app" }).click();
       const secret = page.locator("p code").first();
       await expect(secret).toBeVisible();
@@ -96,9 +73,33 @@ test.describe("real-browser product journeys", () => {
       recoveryCode = shownCodes.find((value) => /^(?:[A-Z2-7]{4}-){3}[A-Z2-7]{4}$/.test(value.trim()))?.trim() ?? "";
       expect(recoveryCode).toMatch(/^(?:[A-Z2-7]{4}-){3}[A-Z2-7]{4}$/);
 
+      await page.getByLabel("I have saved my recovery codes somewhere safe.").check();
+      await page.getByRole("button", { name: "Continue to your business" }).click();
+      await expect(page).toHaveURL(/\/setup\/business$/);
+
+
+      await page.getByLabel("Business name").fill("Journey Studio");
+      await page.getByRole("button", { name: "Save and continue" }).click();
+      await expect(page).toHaveURL(/\/setup\/location$/);
+
+      await page.getByLabel("Street").fill("210 Fifth Street");
+      await page.getByLabel("City or town").fill("Courtenay");
+      await page.getByLabel("State, province or county").fill("BC");
+      await page.getByLabel("Postal code").fill("V9N 1A1");
+      await page.getByRole("button", { name: "Save and continue" }).click();
+      await expect(page).toHaveURL(/\/setup\/done$/);
+
+      await page.getByRole("button", { name: "Finish setup" }).click();
+      await expect(page).toHaveURL(/\/$/);
+      await expect(page.getByText("Journey Studio").first()).toBeVisible();
+
+      // The wizard is locked, and owner security is already enrolled.
+      await page.goto("/setup");
+      await expect(page).toHaveURL(/\/$/);
       await page.goto("/admin");
       await expect(page.getByRole("navigation", { name: "Admin" })).toBeVisible();
     });
+
 
     await test.step("role guidance starts, skips, resumes, resets and relaunches in context", async () => {
       const ownerGuide = page.locator('[data-guidance-flow="core.owner-first-win"]');
@@ -135,7 +136,7 @@ test.describe("real-browser product journeys", () => {
       await expect(page.getByText("Wrong email or password.")).toBeVisible();
 
       await page.getByLabel("Password").fill(OLD_PASSWORD);
-      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
       await expect(page).toHaveURL(/\/login\/verify$/);
       // Enrolment consumed the current step; the verifier accepts the next
       // step in its standard ±1 clock window and still proves replay defence.
@@ -646,11 +647,11 @@ test.describe("real-browser product journeys", () => {
       await page.getByRole("link", { name: "Back to sign in" }).click();
       await page.getByLabel("Email").fill(OWNER_EMAIL);
       await page.getByLabel("Password").fill(OLD_PASSWORD);
-      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
       await expect(page.getByText("Wrong email or password.")).toBeVisible();
 
       await page.getByLabel("Password").fill(NEW_PASSWORD);
-      await page.getByRole("button", { name: "Sign in" }).click();
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
       await expect(page).toHaveURL(/\/login\/verify$/);
       await page.getByLabel("Verification code").fill(recoveryCode);
       await page.getByRole("button", { name: "Continue" }).click();

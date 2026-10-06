@@ -13,7 +13,7 @@ it("rejects repository metadata and scrubs only the generated artifact", () => {
   try {
     mkdirSync(join(workspace, ".git"), { recursive: true });
     writeFileSync(join(workspace, ".git/HEAD"), "workspace must survive");
-    for (const directory of [".git", ".agents", ".codex", ".claude", "apps", "test-results"]) {
+    for (const directory of [".git", ".agents", ".codex", ".claude", ".freeholder-launch", "apps", "test-results"]) {
       mkdirSync(join(artifact, directory), { recursive: true });
       writeFileSync(join(artifact, directory, "private.txt"), "not deployable");
     }
@@ -23,6 +23,7 @@ it("rejects repository metadata and scrubs only the generated artifact", () => {
     expect(rejected.status).toBe(1);
     expect(rejected.stderr).toContain("source-only root present: .git/");
     expect(rejected.stderr).toContain("source-only root present: apps/");
+    expect(rejected.stderr).toContain("source-only root present: .freeholder-launch/");
     const scrubbed = spawnSync(process.execPath, [gate, "--scrub"], { cwd: workspace, encoding: "utf8" });
     expect(scrubbed.status).toBe(0);
     expect(scrubbed.stdout).toContain("1 files");
