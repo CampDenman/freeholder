@@ -3906,7 +3906,7 @@ reading chat logs.
   `deploy/content-security-policy.md` **F04** N/A — Content-Security-Policy headers, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/csp.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** operator runbook `deploy/content-security-policy.md`. **F12** `tests/core/csp.test.ts` is the composition proof.)
 - [x] **C1.20** Patch all actionable dependency advisories and keep a zero
   known-high/critical policy with documented exceptions for lower severities.
-  (PostCSS `8.5.26` and parent-scoped drizzle-kit esbuild `0.25.12` floors fix
+  (Historical acceptance: PostCSS `8.5.26` and parent-scoped drizzle-kit esbuild `0.25.12` floors fix
   GHSA-fxqj-rqcc-2cmp and GHSA-67mh-4wv8-2f99; zero known advisories in the
   complete pnpm workspace lockfile and zero open GitHub Dependabot alerts;
   high/critical findings are unwaivable; lower-severity exceptions require
@@ -3915,6 +3915,13 @@ reading chat logs.
   `scripts/dependency-audit.mjs`; `tests/core/dependency-audit.test.ts`;
   1,065-test full suite; changeset `dependency-security-policy.md`;
   operator policy in `SECURITY.md` **F04** N/A — dependency audit CI, not a screen. **F05** N/A — not an agent capability. **F07** N/A — a CI policy gate, not a customer-data threat model. **F09** `scripts/dependency-audit.mjs` in CI and `SECURITY.md`. **F12** N/A — lockfile policy, not a composed product journey.)
+  (Rechecked 2026-10-06: `pnpm-workspace.yaml` now requires patched
+  `source-map-js >=1.2.2 <2` for GHSA-68fv-2mgg-jv7q; the locked PostCSS,
+  Tailwind and test-tooling paths resolve 1.2.2. `pnpm dependency:audit`
+  reports no known advisories in the complete pnpm workspace. The high/critical
+  gate remains unwaivable. Separate native-app unpatched advisory status is
+  recorded in `deploy/stable-acceptance-2026-10-05.md`; this rerun does not
+  clear those historical GitHub alerts or independent review.)
 - [x] **C1.21** Replace simulated public accessibility checks with real-browser
   keyboard, focus, reflow, contrast, reduced-motion and screen-reader-oriented
   tests for setup, admin, editor, storefront and portal. (production Chromium
