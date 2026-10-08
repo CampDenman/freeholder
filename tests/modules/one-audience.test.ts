@@ -9,8 +9,11 @@
 // version of "customers in Ontario who bought twice" is how a business ends up
 // with two numbers, and how somebody deliberately excluded from an audience
 // receives the campaign anyway.
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/core/db";
+import { resetEnvForTests } from "@/core/env";
+import { resetMailForTests } from "@/adapters/mail";
+import { mailSenders } from "@/core/mail/schema";
 import { users } from "@/core/auth/schema";
 import { invoices } from "@/modules/invoicing/schema";
 import { resolveContact } from "@/core/contacts/service";
@@ -98,6 +101,7 @@ describe.runIf(hasDatabase)("one answer to who", () => {
   afterAll(async () => {
     await closeDb();
   });
+  afterEach(() => { vi.unstubAllEnvs(); resetEnvForTests(); resetMailForTests(); });
 
   /* ------------------------------------------------- automations (§4.17) */
 
@@ -199,6 +203,12 @@ describe.runIf(hasDatabase)("one answer to who", () => {
   /* -------------------------------------------------- the convergence */
 
   it("gives the same answer to every surface that asks", async () => {
+    vi.stubEnv("MAIL_BULK_ADAPTER", "resend");
+    vi.stubEnv("MAIL_BULK_FROM", "news@example.test");
+    vi.stubEnv("RESEND_API_KEY", "test-key");
+    vi.stubEnv("RESEND_WEBHOOK_SECRET", "whsec_test");
+    resetEnvForTests(); resetMailForTests();
+    await db().insert(mailSenders).values({purpose:"bulk",provider:"resend",email:"news@example.test",verificationStatus:"verified",status:"active",isDefault:true,createdBy:OWNER.userId});
     // The point of C7.17. One definition, three consumers, one answer — and
     // the check is behavioural rather than architectural, because a rule that
     // says "call this service" can be obeyed by code that then ignores what it
