@@ -56,6 +56,31 @@ tests/core/newsletters.test.ts, tests/core/payment-adapters.test.ts and the
 existing membership/document/portal suites. Browser fixtures are disposable
 customer sessions; they are not claims of delivered mail or real card settlement.
 
+Local verification on 2026-10-07 used disposable PostgreSQL 16 databases, clean
+migrations through 0022, and the production standalone build:
+
+- Both browser journeys passed; Axe passed in light and dark themes. The owner
+  created and published a blog post. A verified customer booked, rescheduled and
+  cancelled an appointment, joined a membership, saw pending-payment access and
+  cancelled. An anonymous customer API request was refused.
+- All ten customer-surface service tests and eight SDK tests passed. These cover
+  published-versus-draft privacy, reviewed translations, stale booking terms,
+  slot contention, retry identity, deposit billing, ownership, quote acceptance,
+  private document access and one-use email proof.
+- Both newsletter archive/consent/merge cases and all twenty broadcast cases
+  passed. All eleven subscription-billing cases
+  passed across the regression runs, including verified first-payment consent,
+  exact saved-method binding, refusal of an unrelated card and compensation when
+  cancellation races provider schedule creation.
+- Production build, TypeScript, ESLint, licensing, plan consistency, service
+  composition, registry inventory and F-matrix checks passed. The dependency
+  audit is clean after updating Next.js, Sharp and shell-quote to patched versions.
+
+The database tests stage mail and use payment-provider test doubles. The first
+temporary database run exceeded its container memory limit; the container was
+adjusted and affected cases rerun. No production database was used for fixtures.
+Required GitHub CI, merge and hosted deployment are recorded separately in the PR.
+
 Production and playground mail/payment provider acceptance, independent security
 review, and the deferred trial setup above remain explicit open work. Do not
 check those acceptance items from mocked or ledger-only runs.

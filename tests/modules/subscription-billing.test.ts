@@ -10,11 +10,11 @@ import { contacts } from "@/core/contacts/schema";
 import { beginCustomerCheckout, getCustomerInvoice } from "@/modules/invoicing/customer-service";
 import { processPaymentProviderEvents } from "@/modules/invoicing/payment-provider-service";
 import { publicMembershipPlans, joinMembership, activatePaidSignup } from "@/modules/subscriptions/public-signup";
-import { createPayment } from "@/modules/invoicing/invoice-service";
+import { createPayment, settlePayment } from "@/modules/invoicing/invoice-service";
 import { users } from "@/core/auth/schema";
 import { resolveContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
-import { invoices, paymentMethods, payments } from "@/modules/invoicing/schema";
+import { invoices, paymentMethods } from "@/modules/invoicing/schema";
 import {
   priceListEntries,
   priceLists,
@@ -238,8 +238,7 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     await card(member.id);
     const [invoice]=await db().select().from(invoices).where(eq(invoices.id,joined.invoiceId!));
     const payment=await createPayment.call({invoiceId:invoice!.id,provider:"stripe",method:"card",amountMinor:invoice!.totalMinor,idempotencyKey:"unconsented-proof",metadata:{saveMethodRequested:true}},OWNER);
-    await db().update(payments).set({status:"succeeded",providerRef:"pi_unconsented",processedAt:new Date()}).where(eq(payments.id,payment.id));
-    await db().update(invoices).set({status:"paid",paidMinor:invoice!.totalMinor}).where(eq(invoices.id,invoice!.id));
+    await settlePayment.call({id:payment.id,providerRef:"pi_unconsented"},OWNER);
     expect((await activatePaidSignup.call({invoiceId:invoice!.id},{kind:"system"})).activated).toBe(false);
   });
   it("cancels a provider schedule created while the customer was cancelling",async()=>{
