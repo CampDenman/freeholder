@@ -4722,7 +4722,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   behavior in `tests/core/media-transfer.test.ts`. **F04** N/A — adapter conformance tests, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/portability.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/portability.test.ts` is the composition proof.)
 - [x] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
-  (Platform and packages are `0.2.0-beta.1`; SDK `PLATFORM_VERSION` is stamped from
+  (Platform and packages are `0.2.0-beta.2`; SDK `PLATFORM_VERSION` is stamped from
   `package.json`. Health, OpenAPI, Doctor, provenance, catalogue compatibility
   and admin chrome report that same string. `.github/workflows/publish-packages.yml`
   publishes packed tarballs on a matching `vX.Y.Z` tag; `scripts/release-packages.mjs`
