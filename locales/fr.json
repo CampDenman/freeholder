@@ -7080,5 +7080,11 @@
   "portal.record.refundDue": "Remboursement dû (traité par l’établissement)",
   "blog.slugHint": "L’article sera disponible à /blog/ suivi de cette adresse.",
   "publicBooking.moveTerms": "La facture et les conditions d’annulation initiales restent applicables lorsque vous déplacez ce rendez-vous.",
-  "publicBooking.acceptMove": "J’accepte de déplacer ce rendez-vous selon ses conditions d’annulation initiales."
+  "publicBooking.acceptMove": "J’accepte de déplacer ce rendez-vous selon ses conditions d’annulation initiales.",
+  "newsletters.unsubscribeLink": "Se désabonner des e-mails marketing",
+  "newsletters.unsubscribeTitle": "Se désabonner des e-mails marketing",
+  "newsletters.unsubscribeInstruction": "Confirmez pour ne plus recevoir les e-mails marketing de cette entreprise. Vos reçus et autres messages essentiels continueront.",
+  "newsletters.confirmTitle": "Confirmer votre abonnement à la newsletter",
+  "newsletters.confirmInstruction": "Confirmez que vous souhaitez recevoir cette newsletter.",
+  "newsletters.confirmAction": "Confirmer l’abonnement"
 }

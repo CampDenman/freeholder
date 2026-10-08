@@ -24,6 +24,11 @@ export interface OutboundEmail {
   from?: string;
   /** Stable internal correlation/idempotency value, never shown as content. */
   deliveryId?: string;
+  /** Narrow allowlist, validated before the encrypted outbox is written. */
+  headers?: {
+    "List-Unsubscribe"?: string;
+    "List-Unsubscribe-Post"?: "List-Unsubscribe=One-Click";
+  };
 }
 
 export type MailProvider =

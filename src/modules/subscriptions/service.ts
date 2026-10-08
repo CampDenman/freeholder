@@ -27,6 +27,7 @@ import { matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, row, timestamp, uuid as uuidSchema } from "@/core/contract";
 import {
   defineService,
+  permits,
   getService,
   ServiceError,
   type ServiceContext,
@@ -1072,7 +1073,8 @@ export const cancelSubscription = defineService({
     const [subscription] = await ctx.tx
       .select()
       .from(subscriptions)
-      .where(eq(subscriptions.id, input.id));
+      .where(eq(subscriptions.id, input.id))
+      .for("update");
     if (!subscription) throw new ServiceError("not_found", "There is no such subscription.");
     if (subscription.status === "cancelled" || subscription.status === "expired") {
       throw new ServiceError("conflict", "That subscription has already ended.");
@@ -1393,8 +1395,8 @@ export const listSubscriptions = defineService({
     limit: z.number().int().min(1).max(200).default(50),
   }),
   output: listed(subscriptionRow),
-  handler: (input, ctx) =>
-    ctx.tx
+  handler: async (input, ctx) => {
+    const rows = await ctx.tx
       .select()
       .from(subscriptions)
       .where(
@@ -1404,7 +1406,18 @@ export const listSubscriptions = defineService({
         ),
       )
       .orderBy(desc(subscriptions.createdAt))
-      .limit(input.limit),
+      .limit(input.limit);
+    if (permits(ctx.actor, "scoped", "subscriptions.list", "query")) return rows;
+    // A self-service reader receives only the contract's customer fields.
+    // row() deliberately allows unknown database columns; stripping here
+    // prevents provider references, retry keys and private overrides leaking.
+    return rows.map((subscription) => subscriptionRow.strip().parse({
+      ...subscription,
+      provider: null,
+      providerRef: null,
+      paymentMethodId: null,
+    }));
+  },
 });
 
 export const getSubscription = defineService({

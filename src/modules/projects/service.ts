@@ -30,7 +30,7 @@ import {
 import { pages } from "@/modules/cms/schema";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { isUniqueViolation } from "@/core/db";
-import { defineService, getService, ServiceError, type Actor } from "@/core/service";
+import { defineService, getService, permits, ServiceError, type Actor } from "@/core/service";
 // The checklist is the platform's one task list (C7.02), not a second one.
 // C6.15 shipped `project_tasks` before that table existed; these services keep
 // their names and their shape and write through core, so a project's list and
@@ -657,6 +657,7 @@ export const listProjects = defineService({
   ),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
+    const staffRead = permits(ctx.actor, "scoped", "projects.list", "query");
     const rows = await ctx.tx
       .select({ project: projects, contactName: contacts.name })
       .from(projects)
@@ -694,7 +695,16 @@ export const listProjects = defineService({
     }
 
     return rows.map(({ project, contactName }) => ({
-      ...project,
+      ...(staffRead ? project : {
+        id: project.id, contactId: project.contactId, clientDisplayName: project.clientDisplayName,
+        title: project.title, slug: project.slug, summary: project.summary, status: project.status,
+        ownerUserId: null, locationId: project.locationId, serviceProductIds: project.serviceProductIds,
+        startedOn: project.startedOn, occurredOn: project.occurredOn, completedAt: project.completedAt,
+        notes: null, blocks: [], coverAssetId: null, featured: project.featured, seo: {},
+        publicationStatus: project.publicationStatus, publishedAt: project.publishedAt,
+        publicPageId: project.publicPageId, version: project.version,
+        createdAt: project.createdAt, updatedAt: project.updatedAt,
+      }),
       contactName,
       openTasks: counts.get(project.id) ?? 0,
     }));

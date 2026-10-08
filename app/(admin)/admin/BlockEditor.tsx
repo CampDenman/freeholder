@@ -288,6 +288,11 @@ export function BlockEditor({
   onPublish?: (blocks: EditorNode[]) => Promise<{
     error?: string;
     version?: number;
+    conflict?: boolean;
+    serverVersion?: number;
+    added?: number;
+    removed?: number;
+    changed?: number;
   }>;
   onKeepMine?: (blocks: EditorNode[], serverVersion: number) => Promise<{
     error?: string;
@@ -422,7 +427,7 @@ export function BlockEditor({
     setConflict(false);
     setServerVersion(undefined);
     setConflictCounts(undefined);
-    setStatus("saved");
+    setStatus(JSON.stringify(blocksRef.current) === snapshot ? "saved" : "dirty");
     setSavedVersion((n) => n + 1);
   }, [save]);
 
@@ -473,17 +478,23 @@ export function BlockEditor({
   const publishNow = useCallback(async () => {
     if (!onPublish || publishing) return;
     setPublishing(true);
+    const snapshot = JSON.stringify(blocksRef.current);
     try {
       const result = await onPublish(blocksRef.current);
       if (result.error) {
         setError(result.error);
+        setConflict(Boolean(result.conflict));
+        setServerVersion(result.serverVersion);
+        setConflictCounts(result.conflict
+          ? `+${result.added ?? 0} / −${result.removed ?? 0} / ~${result.changed ?? 0}`
+          : undefined);
         setStatus("failed");
         return;
       }
-      savedRef.current = JSON.stringify(blocksRef.current);
+      savedRef.current = snapshot;
       setError(undefined);
       setConflict(false);
-      setStatus("saved");
+      setStatus(JSON.stringify(blocksRef.current) === snapshot ? "saved" : "dirty");
       setSavedVersion((n) => n + 1);
     } catch {
       // A transport error can arrive after the server committed. Ask the owner

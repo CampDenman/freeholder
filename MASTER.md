@@ -1100,6 +1100,11 @@ up gated by a boolean somebody forgot to check.
   teaser server-side and stops; there is no hidden div and no client-side
   removal, because a paywall that ships the content and hides it is not a
   paywall.
+- Public CMS JSON uses an explicit published-field projection: working drafts,
+  approval metadata and gated block children are excluded. Trusted server
+  rendering resolves the published block tree internally and applies the
+  actual viewer's access before emitting HTML (`cms.resolvePageForRender`,
+  internal only; `tests/core/cms-public-boundary.test.ts`).
 - **Metered access is honest about crawlers.** Google requires
   `isAccessibleForFree: false` plus a `cssSelector` naming the gated part
   (`hasPart`), and serving crawlers something visitors cannot get is cloaking.
@@ -3462,7 +3467,7 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-10-07 |
+| Last reconciled | 2026-10-08 |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -4204,6 +4209,12 @@ project without silent telemetry, and ready to carry money.
   changeset `cms-author-history.md`. **F04** `/admin/pages/[id]` preview, schedule, approval. **F05** `cms.createPreviewLink`/`schedulePage`/`requestApproval`/`compareRevisions`/`snapshotRevision`/`restoreRevision`/`listRevisions` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-lifecycle.test.ts` is the composition proof.)
 - [x] **C2.03** Add optimistic concurrency/version tokens, presence, edit
   leases, conflict detection and an explicit merge/reload workflow.
+  Audit follow-up 2026-10-08: updates, lifecycle transitions and publishes
+  lock the page before checking its version. Editor publish binds the saved
+  version; typing during a request stays dirty. Template rejoin uses the
+  canonical draft service. `tests/core/cms-public-boundary.test.ts`,
+  `cms-layouts.test.ts`, `editor-inline-edit.test.ts` and
+  `page-editor-publish.test.ts` reproduce and cover these failures.
   (`cms.savePage` version tokens; `tests/core/cms-lifecycle.test.ts`;
   changeset `cms-collab-presence-comments.md` **F04** `/admin/pages/[id]` presence and edit lease. **F05** `cms.updatePage` version tokens plus `cms.heartbeatPresence`/`listPresence`/`leavePresence` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-lifecycle.test.ts` is the composition proof.)
 - [x] **C2.04** Add comments, mentions, review requests and resolved threads
@@ -6987,10 +6998,10 @@ permitted conversation on the same contact timeline.
   for C8.04; the watermark pipeline and `GallerySelection` wait. **Delivery
   is session-scoped, not key-scoped**: the public item shape carries no
   object key, and both bytes routes (`/g/{slug}/view/{item}` and
-  `/g/{slug}/download/{item}`) go through `galleries.viewItem` /
-  `galleries.downloadItem`, because `/media/{key}` authorizes any ready
-  object for anyone holding the key and so outlives expiry, revoke and the
-  per-asset flag. Rotating the PIN or changing the access mode deletes the
+  `/g/{slug}/download/{item}`) use internal `galleries.viewItem` /
+  `galleries.downloadItem` authorizers. Generic `/media/{key}` delivery refuses
+  private client assets; a known object key cannot replace the session,
+  expiry, revocation or per-asset checks. Rotating the PIN or changing the access mode deletes the
   sessions it opened. `limit_n` counts the gallery's download log rather
   than the session, so unlocking again is not a fresh allowance, and
   `download_policy: none` makes every item report `canDownload: false`. A
@@ -7035,7 +7046,7 @@ permitted conversation on the same contact timeline.
   pixel spread on a flat field, so a blank overlay fails — and five more in
   `tests/core/client-galleries.test.ts` covering web_res, full_res, the
   watermark precedence and both refusals. Changesets
-  `watermarked-proof-renditions.md` and `gallery-download-policy.md`. **F04** `/admin/galleries` list/create. **F05** `media.backfillWatermarks` plus `galleries.downloadItem`/`viewItem` at `/api/v1/media.backfillWatermarks` and `/api/v1/galleries.*`, MCP `media_*`/`galleries_*`. **F07** `tests/core/media-watermark.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/media-watermark.test.ts` is the composition proof.)
+  `watermarked-proof-renditions.md` and `gallery-download-policy.md`. **F04** `/admin/galleries` list/create. **F05** `media.backfillWatermarks` at `/api/v1/media.backfillWatermarks`, MCP `media_backfillWatermarks`; gallery discovery and sessions use registered `galleries.*` tools. Gallery byte delivery uses the controlled `/g/[slug]` view/download/archive routes; internal byte authorizers are excluded from HTTP/MCP because storage keys are not public capabilities. **F07** `tests/core/media-watermark.test.ts` and `tests/core/adversarial-gallery-privacy.test.ts` cover permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/media-watermark.test.ts` is the composition proof.)
 - [x] **C8.05** Add gallery proofing: `GallerySelection` favorites, selects and
   rejects with per-asset comments, on the contact spine, from the client
   surface and the phone.
@@ -9523,6 +9534,11 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.10** Complete independent security review of auth, payments,
   webhooks, MCP/agents, OAuth, plugins, updater, uploads and customer privacy;
   resolve every critical/high and disposition every lower finding.
+  Audit follow-up 2026-10-08: three adversarial agents plus integration review
+  repaired reproducible CMS, reset, customer privacy, gallery, booking, billing,
+  MCP, consent and installer failures. `security/adversarial-audit-2026-10-08.md`
+  records the evidence and limits; the independent packet is refreshed. This
+  work does not provide independent sign-off or close live acceptance items.
   *(Packet 2026-09-12: `security/independent-review-packet.md` lists threat
   surfaces, existing tests and known residuals. This is not the review; the
   checkbox stays open until an independent reviewer signs it.)*
@@ -10120,9 +10136,10 @@ carries only a one-line marker per item.
 >   late requests from the old session may not repopulate it. No proofing writes
 >   are queued or retried automatically.
 >   *(Implementation 2026-09-12: galleries tab from `portal.myRecords`, proofing
->   screen via `galleries.openWithLogin` → `viewSession` / `viewItem`, then
+>   screen via `galleries.openWithLogin` → `viewSession`, then
 >   `setSelection`, `clearSelection` and `submitRound`. Image bytes load from
->   `/g/{slug}/view/{itemId}` with the gallery-session bearer and share C10.30's
+>   `/g/{slug}/view/{itemId}` through a separately declared HTTP read with the
+>   gallery-session bearer and share C10.30's
 >   60-second encrypted lease. **F01/F02/F03/F05** no schema or new services;
 >   the app is a client of the existing gallery and portal APIs. The contract
 >   still excludes owner-only `galleries.list` and `galleries.listSelections`.

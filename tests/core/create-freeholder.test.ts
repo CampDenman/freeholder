@@ -208,7 +208,7 @@ describe("create-freeholder (C3.14)", () => {
         "DATABASE_URL=postgres://postgres:postgres@localhost:5432/freeholder_dev",
         "BOOTSTRAP_SECRET=fixture-only-bootstrap-secret-of-32-characters",
         "SESSION_SECRET=tooshort",
-        "CREDENTIAL_KEY=0123456789abcdef0123456789abcdef",
+        "CREDENTIAL_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "APP_URL=http://localhost:3000",
       ].join("\n"),
     );
@@ -229,7 +229,7 @@ describe("create-freeholder (C3.14)", () => {
         "DATABASE_URL=postgres://postgres:postgres@localhost:5432/freeholder_dev",
         "BOOTSTRAP_SECRET=fixture-only-bootstrap-secret-of-32-characters",
         "SESSION_SECRET=deterministic-session-secret-key-32+",
-        "CREDENTIAL_KEY=0123456789abcdef0123456789abcdef",
+        "CREDENTIAL_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "APP_URL=https://studio.example",
       ].join("\n"),
     );
@@ -254,6 +254,31 @@ describe("create-freeholder (C3.14)", () => {
     expect(lines.join("\n")).toMatch(/Dependencies installed/);
     expect(lines.join("\n")).toMatch(/Migrations applied/);
     expect(lines.join("\n")).toMatch(/Setup is reachable at https:\/\/studio\.example\/setup/);
+  });
+
+  it("refuses malformed encryption keys and keeps unsafe site URLs out of setup reports", async () => {
+    const root = await mkdtemp(join(tmpdir(), "create-fh-invalid-"));
+    dirs.push(root);
+    const unsafeOrigin = new URL("https://studio.example/");
+    unsafeOrigin.username = "private-user";
+    unsafeOrigin.password = "private-password";
+    unsafeOrigin.searchParams.set("token", "private-query");
+    await writeFile(join(root, ".env"), [
+      "DATABASE_URL=postgres://postgres:postgres@localhost:5432/freeholder_dev",
+      "BOOTSTRAP_SECRET=fixture-only-bootstrap-secret-of-32-characters",
+      "SESSION_SECRET=deterministic-session-secret-key-32+",
+      "CREDENTIAL_KEY=0123456789abcdef0123456789abcdef",
+      `APP_URL=${unsafeOrigin}`,
+    ].join("\n"));
+    const inspection = await inspectProjectEnv(root, "local");
+    expect(inspection.complete).toBe(false);
+    expect(inspection.missing).toEqual(["CREDENTIAL_KEY", "APP_URL"]);
+    const lines = await prepareGeneratedProject(root, { probe: false });
+    expect(lines.join("\n")).not.toContain("private-user");
+    expect(lines.join("\n")).not.toContain("private-password");
+    expect(lines.join("\n")).not.toContain("private-query");
+    expect(setupUrlFromEnv({ APP_URL: "not a URL" })).toBe("http://localhost:3000/setup");
+    expect(setupUrlFromEnv({ APP_URL: "http://studio.example" })).toBe("http://localhost:3000/setup");
   });
 
   it("refuses migrate without DATABASE_URL and tells the operator how to recover", async () => {

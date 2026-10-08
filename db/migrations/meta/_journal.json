@@ -162,6 +162,20 @@
       "when": 1793310000002,
       "tag": "0022_customer_surfaces",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793310000003,
+      "tag": "0023_gallery_private_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793310000004,
+      "tag": "0024_broadcast_unsubscribe",
+      "breakpoints": true
     }
   ]
 }

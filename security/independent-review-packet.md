@@ -52,6 +52,21 @@ as a password verifier. An independent reviewer must confirm these assumptions.
 The refreshed CodeQL run must also confirm the repaired alerts close on main.
 This section does not check C11.10 or supply independent sign-off.
 
+## 2026-10-08 adversarial implementation audit
+
+Three agents reviewed auth/customer privacy, customer money/booking paths and
+platform/MCP/consent. The integrating agent reproduced public CMS disclosure
+and editor races. Repairs, baseline assertions and operational limits are in
+`security/adversarial-audit-2026-10-08.md`. Review the published-field projection,
+trusted renderer, gallery privacy backfill and archive invalidation, atomic
+reset redemption, customer record projections, billing ownership/settlement
+checks and durable unsubscribe delivery in particular.
+
+These are implementation tests by coding agents, not independent review.
+C11.10 remains unchecked. Validate private object-provider policy and external
+mail/payment acceptance separately; a green mocked provider is not evidence of
+live delivery or settlement.
+
 ## How to use this packet
 
 1. Read `SECURITY.md` for reporting, dependency policy, and 2FA/recovery.

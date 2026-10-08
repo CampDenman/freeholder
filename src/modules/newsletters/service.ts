@@ -558,7 +558,7 @@ export const confirmSubscription = defineService({
       .select()
       .from(newsletterSubscriptions)
       .where(eq(newsletterSubscriptions.confirmToken, input.token))
-      .limit(1);
+      .limit(1).for("update");
     if (!row) throw new ServiceError("not_found", "That confirmation link is not valid.");
     if (row.status === "unsubscribed") {
       throw new ServiceError("conflict", "This address has been unsubscribed.");
@@ -619,14 +619,13 @@ export const unsubscribeFromNewsletter = defineService({
       .select()
       .from(newsletterSubscriptions)
       .where(eq(newsletterSubscriptions.unsubscribeToken, input.token))
-      .limit(1);
+      .limit(1).for("update");
     if (!row) throw new ServiceError("not_found", "That unsubscribe link is not valid.");
     const [updated] = await ctx.tx
       .update(newsletterSubscriptions)
       .set({
         status: "unsubscribed",
         unsubscribedAt: row.unsubscribedAt ?? sql`now()`,
-        unsubscribeToken: token(),
       })
       .where(eq(newsletterSubscriptions.id, row.id))
       .returning();
@@ -683,6 +682,7 @@ export {
   listBroadcasts,
   broadcastStats,
   broadcastRecipientList,
+  unsubscribeFromBroadcast,
   // The provider-feedback listener. Named in the manifest's `listens`, which
   // resolves handlers from this module.
   onMailDeliveryUpdated,
@@ -706,4 +706,3 @@ export default [
   ...templateServices,
   ...broadcastServices,
 ];
-

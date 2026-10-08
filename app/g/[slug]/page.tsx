@@ -183,7 +183,7 @@ export default async function ClientGalleryPage({
                 return (
                   <li key={item.id} className="grid gap-2">
                     <img
-                      src={`/g/${slug}/view/${item.id}`}
+                      src={item.viewUrl}
                       alt={item.altText || item.filename || ""}
                       className="w-full rounded-md border border-rule bg-surface"
                     />
@@ -230,8 +230,8 @@ export default async function ClientGalleryPage({
                         {t("galleries.proof.saveComment")}
                       </Button>
                     </form>
-                    {item.canDownload ? (
-                      <a href={`/g/${slug}/download/${item.id}`} className="text-sm underline">
+                    {item.canDownload && item.downloadUrl ? (
+                      <a href={item.downloadUrl} className="text-sm underline">
                         {t("galleries.action.download")}
                       </a>
                     ) : null}
@@ -246,7 +246,7 @@ export default async function ClientGalleryPage({
               <Button type="submit">{t("galleries.round.submit")}</Button>
             </form>
           ) : null}
-          {opened.gallery.downloadPolicy !== "none" && opened.items.length > 0 ? (
+          {opened.archiveUrl ? (
             <div className="grid gap-2">
               <h2 className="text-lg font-semibold">{t("galleries.archive")}</h2>
               {archive?.state === "building" ? (
@@ -256,7 +256,7 @@ export default async function ClientGalleryPage({
                 <p className="text-sm text-danger">{t("galleries.archive.failed")}</p>
               ) : null}
               {archive?.state === "ready" ? (
-                <a href={`/g/${slug}/archive`} className="text-sm underline">
+                <a href={opened.archiveUrl} className="text-sm underline">
                   {t("galleries.archive.get")}
                 </a>
               ) : (

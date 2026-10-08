@@ -12,11 +12,12 @@
 // in the PR and the backlog rather than implied by a green suite: these tests
 // speak the protocol as I understand it, which is exactly the thing a real
 // client would be checking.
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleMcp, PROTOCOL_VERSION } from "@/mcp/server";
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 import { listExternalServices, listServices, type Actor } from "@/core/service";
 import { ready } from "@/core/runtime";
+import { toContractJsonSchema } from "@/core/contract/json-schema";
 import { createApiKey } from "@/core/apikeys/service";
 import { users } from "@/core/auth/schema";
 import { db } from "@/core/db";
@@ -164,6 +165,28 @@ describe.runIf(hasDatabase)("the handshake", { timeout: 30_000 }, () => {
     );
   });
 
+  it.each([null, false, 42, "not a request", {}, { jsonrpc: "2.0", id: {}, method: "ping" }])(
+    "refuses malformed JSON-RPC envelopes without crashing: %j",
+    async (body) => {
+      const response = await handleMcp(new Request("http://localhost/api/mcp", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }), INFO);
+      expect(await response.json()).toMatchObject({ jsonrpc: "2.0", id: null, error: { code: -32600 } });
+    },
+  );
+
+  it("rejects an empty batch and isolates invalid entries from valid requests", async () => {
+    const request = (body: unknown) => handleMcp(new Request("http://localhost/api/mcp", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    }), INFO);
+    expect(await (await request([])).json()).toMatchObject({ error: { code: -32600 } });
+    const results = await (await request([null, { jsonrpc: "2.0", id: 3, method: "ping" }])).json() as unknown[];
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({ jsonrpc: "2.0", id: null, error: { code: -32600 } });
+    expect(results[1]).toEqual({ jsonrpc: "2.0", id: 3, result: {} });
+  });
+
   it("answers a batch, and answers nothing to a batch of notifications", async () => {
     const batched = await handleMcp(
       new Request("http://localhost/api/mcp", {
@@ -293,6 +316,24 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
       expect(tool.inputSchema).toHaveProperty("properties");
       expect(tool.description).toContain("service");
     }
+  });
+
+  it("preserves the same inputs as HTTP and SDK discovery, including dates", () => {
+    // Some defaults are functions of "now". Compare both projections at one
+    // instant while leaving network timers real for the surrounding DB suite.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-08T12:00:00Z"));
+    try {
+      const tools = toolsFor(OWNER);
+      const broadcast = tools.find(tool => tool.name === "broadcasts_save")!;
+      const schema = broadcast.inputSchema as { required: string[]; properties: { scheduledAt: { anyOf: unknown[] } } };
+      for (const key of ["name", "templateId", "segmentId"]) expect(schema.required).toContain(key);
+      expect(schema.properties.scheduledAt.anyOf).toContainEqual({ type: "string", format: "date-time" });
+      for (const tool of tools) {
+        const service = serviceForTool(OWNER, tool.name)!;
+        expect(tool.inputSchema, tool.name).toEqual({ properties: {}, ...toContractJsonSchema(service.def.input, "input") as object });
+      }
+    } finally { vi.useRealTimers(); }
   });
 
   it("uses names a client will accept", async () => {

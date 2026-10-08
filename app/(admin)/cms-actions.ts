@@ -446,13 +446,21 @@ export async function setPagePublishedAction(form: FormData): Promise<void> {
  */
 export async function publishPageNowAction(
   id: string,
+  expectedVersion: number,
 ): Promise<SaveResult> {
   try {
-    const page = await publishPage.call({ id, published: true }, await currentActor());
+    const page = await publishPage.call({ id, published: true, expectedVersion }, await currentActor());
     applyInvalidation(invalidationPlan({ kind: "published", pageId: id, slug: page.slug }));
     return { version: page.version };
   } catch (error) {
-    return present(error);
+    const shown = present(error);
+    if (!shown.conflict) return shown;
+    try {
+      const current = await reloadWorkingDraft.call({ id }, await currentActor());
+      return { ...shown, serverVersion: current.version };
+    } catch {
+      return shown;
+    }
   }
 }
 

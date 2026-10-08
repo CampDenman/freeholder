@@ -10,13 +10,15 @@
 // So the deduplication belongs here rather than in either caller. See
 // core/settings/read.ts for the same argument at more length.
 import { cache } from "react";
-import { getSection, resolvePage } from "./service";
+import { getSection, resolvePageForRender } from "./service";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
 /** A published page by path, fetched at most once per request per path. */
 export const publishedPage = cache((slug: string, locale: string) =>
-  resolvePage.call({ slug, locale }, ANONYMOUS),
+  // Server-only entry: no HTTP, MCP or API key can request the raw gated tree.
+  // renderBlocks still evaluates every gate against the actual viewer.
+  resolvePageForRender.call({ slug, locale }, { kind: "system" }),
 );
 
 /** Site chrome (header, footer) by key, fetched at most once per request. */

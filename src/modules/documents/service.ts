@@ -20,7 +20,7 @@
 import { z } from "zod";
 import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { listed, row, uuid as uuidSchema } from "@/core/contract";
-import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import { defineService, permits, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {
@@ -292,6 +292,7 @@ export const listDocuments = defineService({
           input.subjectType ? eq(documents.subjectType, input.subjectType) : undefined,
           input.subjectId ? eq(documents.subjectId, input.subjectId) : undefined,
           input.status ? eq(documents.status, input.status) : undefined,
+          permits(ctx.actor, "scoped", "documents.list", "query") ? undefined : eq(documents.status, "shared"),
         ),
       )
       .orderBy(desc(documents.updatedAt))

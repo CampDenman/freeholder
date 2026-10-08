@@ -86,6 +86,7 @@ describe("page editor publishing", () => {
     const saveCalls = savePageBlocksAction.mock.calls as unknown[][];
     expect(saveCalls.map((call) => call[2])).toEqual([1, 2]);
     expect(publishPageNowAction).toHaveBeenCalledOnce();
+    expect(publishPageNowAction).toHaveBeenCalledWith("page-1", 3);
 
     await editorProps!.save(blocks);
     expect(saveCalls[2]?.[2]).toBe(4);

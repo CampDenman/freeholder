@@ -154,6 +154,30 @@ configured, pending, missing and reconnect states, the exact authenticated
 feedback URL, and remediation variable names without rendering secret values
 or sending mail.
 
+## Campaign consent and unsubscribe links
+
+Every campaign recipient receives an opaque opt-out capability in both message
+bodies and the `List-Unsubscribe` / `List-Unsubscribe-Post` headers. Resend,
+Postmark and SES carry these through their supported header fields. An opt-out
+withdraws this business's marketing-email consent on the shared contact record;
+transactional receipts and essential account messages remain separate.
+Provider one-click POSTs are repeatable. A browser GET only displays a translated
+confirmation form, so a mail scanner cannot withdraw consent or confirm a
+newsletter subscription merely by fetching its link.
+
+Campaign batches serialize against the campaign row and use a stable
+per-recipient delivery key. Queued campaign messages check consent again just
+before provider delivery; a withdrawal suppresses them and updates the owner's
+recipient outcomes. A provider request that has already started cannot be
+recalled. No unsubscribe capability appears in owner recipient listings or
+contact exports.
+
+Migration `0024_broadcast_unsubscribe.sql` adds a private UUID token and unique
+index to existing recipient rows. It preserves campaign history. Actual inbox
+delivery, header signing (including DKIM coverage), and provider one-click
+behavior still require the production acceptance checks below. This repair does
+not claim legal compliance or replace an independent review.
+
 ## Threat model and verification
 
 The relevant threats are replayed/forged feedback, SSRF through SNS URLs,

@@ -195,9 +195,24 @@ export function parseEnvFile(text: string): Record<string, string> {
 }
 
 export function setupUrlFromEnv(env: Record<string, string>): string {
-  let raw = env.APP_URL?.trim() || "http://localhost:3000";
-  while (raw.endsWith("/")) raw = raw.slice(0, -1);
-  return `${raw}/setup`;
+  // C3.27: never echo userinfo or query credentials in a setup report.
+  return `${siteOrigin(env.APP_URL) ?? "http://localhost:3000"}/setup`;
+}
+
+function siteOrigin(value: string | undefined): string | null {
+  if (!value?.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    if (url.username || url.password || url.search || url.hash || !/^\/+$/u.test(url.pathname) ||
+      (url.protocol !== "https:" && !(url.protocol === "http:" && local))) return null;
+    return url.origin;
+  } catch { return null; }
+}
+
+function credentialKeyReady(value: string): boolean {
+  return /^[a-fA-F0-9]{64}$/.test(value) ||
+    (/^[A-Za-z0-9_-]{43}$/.test(value) && Buffer.from(value, "base64url").length === 32);
 }
 
 function isPresent(value: string | undefined): value is string {
@@ -221,6 +236,8 @@ export async function inspectProjectEnv(
     const value = env[key];
     if (!isPresent(value)) return true;
     if ((key === "SESSION_SECRET" || key === "BOOTSTRAP_SECRET") && value.trim().length < 32) return true;
+    if (key === "CREDENTIAL_KEY" && !credentialKeyReady(value.trim())) return true;
+    if (key === "APP_URL" && !siteOrigin(value)) return true;
     return false;
   });
   const recovery = [

@@ -383,6 +383,8 @@ export const galleryArchives = pgTable(
     storageKey: text("storage_key"),
     bytes: integer("bytes"),
     fileCount: integer("file_count"),
+    /** Exact policy/item snapshot packaged; null legacy bundles need a rebuild. */
+    deliveryHash: text("delivery_hash"),
     /** Why it could not be built, in words the owner can act on. */
     error: text("error"),
     builtAt: timestamp("built_at", { withTimezone: true }),

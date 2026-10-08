@@ -216,6 +216,20 @@ describe.runIf(hasDatabase)("consent-gated publish surfaces (C8.16)", { timeout:
   it("renders a consented pair and series on every surface, and one withdrawal removes them from all", async () => {
     const made = await publishedCaseStudy();
 
+    // With consent and public assets, the sitemap, structured-data query,
+    // portfolio and service page all expose the published work.
+    const before = await readSurfaces(made.slug, made.offering.id);
+    expect(before.inSitemap).toBe(true);
+    expect(before.inFeeds).toBe(false);
+    expect(before.inBrowse).toBe(true);
+    expect(before.inServiceProofs).toBe(true);
+    expect(before.structured?.project.slug).toBe(made.slug);
+    expect(before.structured?.images.map((entry) => entry.role).sort()).toEqual([
+      "after",
+      "before",
+      "series",
+    ]);
+
     const gallery = await createGallery.call(
       {
         contactId: made.clientId,
@@ -232,20 +246,13 @@ describe.runIf(hasDatabase)("consent-gated publish surfaces (C8.16)", { timeout:
     );
     await addGalleryItem.call({ galleryId: gallery.id, assetId: made.after.id }, OWNER);
 
-    // On consent: the page exists for the sitemap, the structured-data query
-    // resolves the pair and the series, the portfolio and the service page
-    // list the work, and the gallery shows both frames.
-    const before = await readSurfaces(made.slug, made.offering.id);
-    expect(before.inSitemap).toBe(true);
-    expect(before.inFeeds).toBe(false);
-    expect(before.inBrowse).toBe(true);
-    expect(before.inServiceProofs).toBe(true);
-    expect(before.structured?.project.slug).toBe(made.slug);
-    expect(before.structured?.images.map((entry) => entry.role).sort()).toEqual([
-      "after",
-      "before",
-      "series",
-    ]);
+    // Adding shared assets to a client gallery makes them private across
+    // public views, even with consent and an already-published case study.
+    const privateGallery = await readSurfaces(made.slug, made.offering.id);
+    expect(privateGallery.inSitemap).toBe(true);
+    expect(privateGallery.inBrowse).toBe(true);
+    expect(privateGallery.inServiceProofs).toBe(true);
+    expect(privateGallery.structured?.images.map((entry) => entry.role)).toEqual(["series"]);
 
     const openedBefore = await unlockGallery.call(
       { slug: gallery.slug, secret: "2468" },
@@ -256,11 +263,16 @@ describe.runIf(hasDatabase)("consent-gated publish surfaces (C8.16)", { timeout:
     expect(openedBefore.items.map((item) => item.assetId).sort()).toEqual(
       [made.before.id, made.after.id].sort(),
     );
-    const itemBefore = await viewGalleryItem.call(
-      { sessionToken: openedBefore.sessionToken, itemId: openedBefore.items[0]!.id },
-      ANONYMOUS,
-    );
-    expect(itemBefore?.assetId).toBe(openedBefore.items[0]!.assetId);
+    for (const item of openedBefore.items) {
+      expect(await viewGalleryItem.call(
+        { sessionToken: openedBefore.sessionToken, itemId: item.id },
+        ANONYMOUS,
+      )).toMatchObject({ assetId: item.assetId });
+      expect(await downloadGalleryItem.call(
+        { sessionToken: openedBefore.sessionToken, itemId: item.id },
+        ANONYMOUS,
+      )).toMatchObject({ assetId: item.assetId });
+    }
 
     // The single act of withdrawal. No per-surface cleanup exists because the
     // surfaces all read the ledger.

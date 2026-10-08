@@ -23,6 +23,7 @@ const INTERNAL = [
   "assessments.purgeExpired",
   "calculators.purgeExpired",
   "cms.purgeExpiredPages",
+  "cms.resolvePageForRender",
   "collections.purgeExpired",
   "forms.purgeExpired",
   "popups.purgeExpired",
@@ -138,6 +139,7 @@ const CALLER_AUTHORIZED_PHASES = [
   "assessments.purgeExpired",
   "calculators.purgeExpired",
   "cms.purgeExpiredPages",
+  "cms.resolvePageForRender",
   "collections.purgeExpired",
   "forms.purgeExpired",
   "popups.purgeExpired",
@@ -148,6 +150,10 @@ const CALLER_AUTHORIZED_PHASES = [
   // on an external protocol.
   "catalog.recomputeCollectionMembership",
   "documents.myDownload",
+  // Storage keys stay behind the gallery's controlled byte routes.
+  "galleries.viewItem",
+  "galleries.downloadItem",
+  "galleries.downloadArchive",
   "media.privateAssetDownloadAccess",
   "invoicing.claimCustomerCheckout",
   "invoicing.applyCustomerCheckout",

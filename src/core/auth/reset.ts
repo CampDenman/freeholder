@@ -146,16 +146,20 @@ export const resetPassword = defineService({
   rateLimit: {
     limit: 20,
     windowSeconds: 15 * 60,
-    subject: () => "reset",
+    subject: (input) => hashToken(input.token),
     message: "Too many attempts. Wait a few minutes and try again.",
   },
   output: okResult.extend({ sessionsRevoked: z.number().int() }),
   handler: async (input, ctx) => {
-    const [reset] = await ctx.tx
-      .select()
-      .from(passwordResets)
-      .where(eq(passwordResets.tokenHash, hashToken(input.token)))
-      .limit(1);
+    // Claim before hashing/updating the password. A conditional UPDATE locks
+    // and rechecks the row after any concurrent redemption commits, so one
+    // credential cannot authorize two racing password replacements. Failure
+    // later in this transaction rolls the claim back with the password.
+    const [reset] = await ctx.tx.update(passwordResets)
+      .set({ usedAt: sql`now()` })
+      .where(and(eq(passwordResets.tokenHash, hashToken(input.token)),
+        isNull(passwordResets.usedAt), sql`${passwordResets.expiresAt} > now()`))
+      .returning({ userId: passwordResets.userId });
 
     // One message for every way a link can be no good — expired, spent,
     // invented. Distinguishing them tells somebody probing which of their
@@ -166,18 +170,12 @@ export const resetPassword = defineService({
         "That reset link is no longer valid. Ask for a new one.",
       );
     };
-    if (!reset || reset.usedAt) refuse();
-    if (reset!.expiresAt.getTime() < Date.now()) refuse();
+    if (!reset) refuse();
 
     await ctx.tx
       .update(users)
       .set({ passwordHash: await hashPassword(input.newPassword) })
       .where(eq(users.id, reset!.userId));
-
-    await ctx.tx
-      .update(passwordResets)
-      .set({ usedAt: sql`now()` })
-      .where(eq(passwordResets.id, reset!.id));
 
     // Every session, including any the person doing this had. They are about
     // to sign in with the password they just chose, and an attacker's session

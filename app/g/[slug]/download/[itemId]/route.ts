@@ -9,14 +9,19 @@ import { downloadGalleryItem } from "@/modules/galleries/service";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string; itemId: string }>; },
 ): Promise<Response> {
-  const { itemId } = await params;
-  const token = (await cookies()).get(GALLERY_SESSION_COOKIE)?.value;
+  const { slug, itemId } = await params;
+  // Native clients and agents use the same session capability as the browser.
+  // An explicit invalid credential must never fall back to an ambient cookie.
+  const authorization = request.headers.get("authorization");
+  const token = authorization !== null
+    ? /^Bearer ([^\s]+)$/i.exec(authorization)?.[1]
+    : (await cookies()).get(GALLERY_SESSION_COOKIE)?.value;
   if (!token) return new Response(null, { status: 404 });
   const allowed = await downloadGalleryItem
-    .call({ sessionToken: token, itemId }, { kind: "anonymous" })
+    .call({ sessionToken: token, itemId, slug }, { kind: "anonymous" })
     .catch(() => null);
   if (!allowed) return new Response(null, { status: 404 });
   const body = await storage().get(allowed.storageKey);
@@ -27,6 +32,7 @@ export async function GET(
       "content-type": "application/octet-stream",
       "content-disposition": `attachment; filename="${safe}"; filename*=UTF-8''${encodeURIComponent(allowed.filename)}`,
       "cache-control": "private, no-store",
+      "vary": "Cookie, Authorization",
       "x-robots-tag": "noindex, nofollow",
     },
   });

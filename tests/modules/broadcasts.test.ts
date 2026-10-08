@@ -9,7 +9,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
-import { mailDeliveries, mailSuppressions, mailSenders } from "@/core/mail/schema";
+import { mailDeliveries, mailOutbox, mailSuppressions, mailSenders } from "@/core/mail/schema";
+import { decryptMailOutbox } from "@/core/mail/outbox-crypto";
 import { resetMailForTests } from "@/adapters/mail";
 import { resetEnvForTests } from "@/core/env";
 import { recordMailProviderEvent } from "@/core/mail/service";
@@ -30,15 +31,18 @@ import {
   sendNext,
   startBroadcast,
   tick,
+  unsubscribeFromBroadcast,
 } from "@/modules/newsletters/service";
 import { saveSegment } from "@/core/segments/service";
-import { recordConsent } from "@/core/privacy/service";
+import { canContact, recordConsent } from "@/core/privacy/service";
 import { users } from "@/core/auth/schema";
-import { resolveContact } from "@/core/contacts/service";
+import { mergeContacts, resolveContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
 import { ready } from "@/core/runtime";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 import { flushQueuedMail } from "../helpers/mail";
+import { waitForBlockedQuery } from "../helpers/database-lock";
+import { POST as unsubscribePost } from "../../app/unsubscribe/route";
 
 const BUSINESS = {
   name: "Aurora Coast Studio",
@@ -206,6 +210,28 @@ describe.runIf(hasDatabase)("broadcasts", () => {
     );
   });
 
+  it("refuses a stale edit once a concurrent start has frozen the campaign", async () => {
+    const { segment } = await audience(1);
+    const template = await ready_();
+    const saved = await saveBroadcast.call({ name: "Original", templateId: template.id, segmentId: segment.id }, OWNER);
+    let release!: () => void;
+    let started!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const entered = new Promise<void>(resolve => { started = resolve; });
+    const starting = db().transaction(async tx => {
+      await startBroadcast.call({ id: saved.id }, OWNER, { tx });
+      started();
+      await held;
+    });
+    await entered;
+    const editing = saveBroadcast.call({ id: saved.id, name: "Stale replacement", templateId: template.id, segmentId: segment.id }, OWNER)
+      .then(() => "unexpected success", (error: unknown) => (error as { code?: string }).code);
+    try { await waitForBlockedQuery("broadcasts"); } finally { release(); }
+    await starting;
+    expect(await editing).toBe("conflict");
+    expect((await db().select().from(broadcasts).where(eq(broadcasts.id, saved.id)))[0]).toMatchObject({ name: "Original", status: "sending" });
+  });
+
   it("records the address as it was, not as it becomes", async () => {
     const { people, segment } = await audience(1);
     const template = await ready_();
@@ -246,6 +272,95 @@ describe.runIf(hasDatabase)("broadcasts", () => {
     const [row] = await db().select().from(broadcasts).where(eq(broadcasts.id, saved.id));
     expect(row!.status).toBe("sent");
     expect(row!.finishedAt).not.toBeNull();
+  });
+
+  it("stages one delivery per recipient when workers overlap", async () => {
+    const { segment } = await audience(2);
+    const template = await ready_();
+    const saved = await saveBroadcast.call({ name: "Concurrent workers", templateId: template.id, segmentId: segment.id }, OWNER);
+    await startBroadcast.call({ id: saved.id }, OWNER);
+    const results = await Promise.all([
+      sendNext.call({ id: saved.id, size: 1 }, { kind: "system" }),
+      sendNext.call({ id: saved.id, size: 1 }, { kind: "system" }),
+    ]);
+    expect(results.reduce((total, result) => total + result.sent, 0)).toBe(2);
+    const deliveries = await db().select().from(mailDeliveries);
+    expect(deliveries).toHaveLength(2);
+    expect(new Set(deliveries.map(delivery => delivery.recipient)).size).toBe(2);
+    expect(await broadcastStats.call({ id: saved.id }, OWNER)).toMatchObject({ sent: 2, pending: 0 });
+  });
+
+  it("delivers working opt-out links and suppresses queued and future campaigns after withdrawal", async () => {
+    const { people, segment } = await audience(1);
+    const template = await ready_();
+    const saved = await saveBroadcast.call({ name: "Opt-out", templateId: template.id, segmentId: segment.id }, OWNER);
+    await startBroadcast.call({ id: saved.id }, OWNER);
+    await sendNext.call({ id: saved.id }, { kind: "system" });
+    const [recipient] = await db().select().from(broadcastRecipients).where(eq(broadcastRecipients.broadcastId, saved.id));
+    const [queued] = await db().select().from(mailOutbox).where(eq(mailOutbox.deliveryId, recipient!.deliveryId!));
+    const message = JSON.parse(decryptMailOutbox(queued!.encryptedMessage, queued!.deliveryId)) as {
+      text: string; html: string; headers: Record<string, string>; marketingContactId: string;
+    };
+    const link = new URL(message.headers["List-Unsubscribe"]!.slice(1, -1));
+    expect(link.searchParams.get("broadcastToken")).toBe(recipient!.unsubscribeToken);
+    expect(message.text).toContain(link.href);
+    expect(message.html).toContain("Unsubscribe from marketing emails");
+    expect(message.html.indexOf("Unsubscribe from marketing emails")).toBeLessThan(message.html.indexOf("</body>"));
+    expect(message.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
+    expect(message.marketingContactId).toBe(people[0]!.id);
+    expect(JSON.stringify(await broadcastRecipientList.call({ id: saved.id }, OWNER))).not.toContain(recipient!.unsubscribeToken);
+    await expect(unsubscribeFromBroadcast.call({ token: crypto.randomUUID() }, { kind: "anonymous" })).rejects.toMatchObject({ code: "not_found" });
+    await unsubscribeFromBroadcast.call({ token: recipient!.unsubscribeToken }, { kind: "anonymous" });
+    await unsubscribeFromBroadcast.call({ token: recipient!.unsubscribeToken }, { kind: "anonymous" });
+    expect(await canContact.call({ contactId: people[0]!.id, purpose: "marketing", channel: "email" }, OWNER)).toMatchObject({ allowed: false, reason: "withdrawn" });
+    const provider = vi.fn(async () => Response.json({ id: "must-not-send" }));
+    vi.stubGlobal("fetch", provider);
+    await flushQueuedMail();
+    expect(provider).not.toHaveBeenCalled();
+    expect((await db().select().from(mailDeliveries).where(eq(mailDeliveries.id, recipient!.deliveryId!)))[0]?.status).toBe("suppressed");
+    expect(await broadcastStats.call({ id: saved.id }, OWNER)).toMatchObject({ sent: 0, suppressed: 1 });
+    const next = await saveBroadcast.call({ name: "After opt-out", templateId: template.id, segmentId: segment.id }, OWNER);
+    await startBroadcast.call({ id: next.id }, OWNER);
+    expect(await sendNext.call({ id: next.id }, { kind: "system" })).toMatchObject({ sent: 0, failed: 1 });
+  });
+
+  it("keeps already submitted opt-out links working through repeated contact merges", async () => {
+    const { people, segment } = await audience(3);
+    const template = await ready_();
+    const saved = await saveBroadcast.call({ name: "Merged recipients", templateId: template.id, segmentId: segment.id }, OWNER);
+    await startBroadcast.call({ id: saved.id }, OWNER);
+    await sendNext.call({ id: saved.id }, { kind: "system" });
+    const copies = await db().select().from(broadcastRecipients).where(eq(broadcastRecipients.broadcastId, saved.id));
+    const queued = await db().select().from(mailOutbox);
+    const oldLinks = new Map(copies.map(copy => {
+      const envelope = queued.find(item => item.deliveryId === copy.deliveryId)!;
+      const message = JSON.parse(decryptMailOutbox(envelope.encryptedMessage, envelope.deliveryId)) as { headers: Record<string, string> };
+      return [copy.contactId, message.headers["List-Unsubscribe"]!.slice(1, -1)];
+    }));
+    await flushQueuedMail();
+    expect((await db().select().from(mailDeliveries)).map(delivery => delivery.status)).toEqual(["submitted", "submitted", "submitted"]);
+
+    await mergeContacts.call({ survivingId: people[0]!.id, duplicateId: people[1]!.id }, OWNER);
+    expect(await broadcastRecipientList.call({ id: saved.id }, OWNER)).toHaveLength(2);
+    const follow = (link: string) => unsubscribePost(new Request(link, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "List-Unsubscribe=One-Click",
+    }));
+    // This is the link from the copy whose recipient row the merge removed.
+    expect((await follow(oldLinks.get(people[1]!.id)!)).status).toBe(200);
+    expect(await canContact.call({ contactId: people[0]!.id, purpose: "marketing", channel: "email" }, OWNER)).toMatchObject({ allowed: false, reason: "withdrawn" });
+
+    // The first survivor later becomes a duplicate. Its inherited capability
+    // must follow the person again, rather than surviving only one merge.
+    await mergeContacts.call({ survivingId: people[2]!.id, duplicateId: people[0]!.id }, OWNER);
+    const listed = await broadcastRecipientList.call({ id: saved.id }, OWNER);
+    expect(listed).toHaveLength(1);
+    for (const link of oldLinks.values()) {
+      expect((await follow(link)).status).toBe(200);
+      expect(JSON.stringify(listed)).not.toContain(new URL(link).searchParams.get("broadcastToken"));
+    }
+    expect(await canContact.call({ contactId: people[2]!.id, purpose: "marketing", channel: "email" }, OWNER)).toMatchObject({ allowed: false, reason: "withdrawn" });
   });
 
   it("does not let one suppressed address halt the campaign", async () => {

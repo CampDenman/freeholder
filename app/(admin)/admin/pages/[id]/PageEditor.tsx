@@ -67,7 +67,7 @@ export function PageEditor({
         const saved = await savePageBlocksAction(id, blocks, versionRef.current);
         if (saved.error) return saved;
         if (saved.version !== undefined) versionRef.current = saved.version;
-        const published = await publishPageNowAction(id);
+        const published = await publishPageNowAction(id, versionRef.current);
         if (published.version !== undefined) versionRef.current = published.version;
         return published;
       })}
