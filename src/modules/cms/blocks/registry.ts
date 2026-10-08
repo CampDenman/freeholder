@@ -61,8 +61,11 @@ import {
 } from "./surfaces";
 import { helpFeedback, knowledge } from "./help";
 
+import { blogIndex } from "../blog";
+
 const definitions: BlockDefinition<z.ZodType, never>[] = [
   heading,
+  blogIndex,
   text,
   image,
   video,

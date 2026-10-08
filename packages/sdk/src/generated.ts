@@ -276,6 +276,8 @@ export const SERVICE_NAMES = [
   "catalog.attachCartToContact",
   "catalog.attachProductMedia",
   "catalog.availability",
+  "catalog.bookService",
+  "catalog.bookableServices",
   "catalog.bookingRequirements",
   "catalog.bookingTerms",
   "catalog.browseProducts",
@@ -359,9 +361,12 @@ export const SERVICE_NAMES = [
   "catalog.listVisibleProducts",
   "catalog.listWishlist",
   "catalog.loadDemoFixture",
+  "catalog.moveMyBooking",
+  "catalog.myBookingSelection",
   "catalog.packFulfillment",
   "catalog.payOrder",
   "catalog.placePurchaseOrder",
+  "catalog.publicBookingQuote",
   "catalog.publishProduct",
   "catalog.purchaseOptions",
   "catalog.purgeDemoFixture",
@@ -455,6 +460,7 @@ export const SERVICE_NAMES = [
   "cms.helpArticles",
   "cms.helpCategories",
   "cms.leavePresence",
+  "cms.listBlogPosts",
   "cms.listComments",
   "cms.listPages",
   "cms.listPresence",
@@ -906,6 +912,7 @@ export const SERVICE_NAMES = [
   "loyalty.tiers",
   "mail.beginOAuth",
   "mail.completeOAuth",
+  "mail.readiness",
   "mail.registerSender",
   "mail.releaseSuppression",
   "mail.setDefaultSender",
@@ -1075,8 +1082,12 @@ export const SERVICE_NAMES = [
   "popups.save",
   "popups.saveBlocks",
   "popups.setStatus",
+  "portal.actOnMyRecord",
   "portal.myProfile",
+  "portal.myRecord",
   "portal.myRecords",
+  "portal.requestSignIn",
+  "portal.signInStatus",
   "portal.updateMyProfile",
   "printOnDemand.configuration",
   "printOnDemand.list",
@@ -1313,10 +1324,14 @@ export const SERVICE_NAMES = [
   "subscriptions.chargePlatformInvoice",
   "subscriptions.enroll",
   "subscriptions.get",
+  "subscriptions.join",
   "subscriptions.list",
   "subscriptions.listOffered",
   "subscriptions.listPlans",
+  "subscriptions.mine",
+  "subscriptions.myPaymentMethods",
   "subscriptions.pause",
+  "subscriptions.publicPlans",
   "subscriptions.resume",
   "subscriptions.savePlan",
   "subscriptions.subscribe",
@@ -2198,7 +2213,7 @@ export interface ServiceCatalog {
     output: { intakeFormId: string | null; waiverOutstanding: boolean; waiverTitle: string | null; ready: boolean; [key: string]: unknown } | null;
   };
   "bookings.reschedule": {
-    input: { id: string; startsAt: string; endsAt: string; calendarId?: string; reason?: string | null; overridePolicy?: boolean };
+    input: { id: string; startsAt: string; endsAt: string; calendarId?: string; secondaryCalendarIds?: string[]; reason?: string | null; overridePolicy?: boolean };
     output: { id: string; contactId: string; serviceOfferingId: string | null; calendarId: string; secondaryCalendarIds: string[]; startsAt: string; endsAt: string; timezoneAtBooking: string; status: "requested" | "confirmed" | "in_progress" | "completed" | "no_show" | "cancelled"; locationId: string | null; locationDetail: string | null; capacityUsed: number; exclusive: boolean; invoiceId: string | null; rescheduledFromId: string | null; rescheduleCount: number; cancellationPolicy: { name: string; freeUntilHours: number; feeType: "none" | "fixed" | "percent" | "forfeit_deposit"; feeValue: number | null; rescheduleLimit: number; noShowFeeMinor: number } | null; cancellationOutcome: { free: boolean; feeMinor: number; refundDueMinor: number; outstandingMinor: number; forfeitsDeposit: boolean; paidMinor: number; valueMinor: number; currency: string | null; policyName: string; reason: string; decidedAt: string } | null; intakeSubmissionId: string | null; waiverId: string | null; source: "site" | "admin" | "agent" | "import"; notes: string | null; cancellationReason: string | null; [key: string]: unknown };
   };
   "bookings.rescheduleByToken": {
@@ -2476,6 +2491,14 @@ export interface ServiceCatalog {
   "catalog.availability": {
     input: { variantId: string; locationId?: string; quantity?: number };
     output: { tracked: false; available: true; quantity: number } | { tracked: true; available: boolean; backordered: boolean; restockAt: string | null; onHand: number; reserved: number; incoming: number; canPromise: number };
+  };
+  "catalog.bookService": {
+    input: { productId: string; currency: string; mode?: "full" | "deposit_balance"; seats?: number; calendarId: string; startsAt: string; termsHash: string; acceptedTerms: true; requestKey: string };
+    output: { bookingId: string; invoiceId: string | null };
+  };
+  "catalog.bookableServices": {
+    input: Record<string, never>;
+    output: { currency: string; services: { productId: string; offeringId: string; name: string; durationMin: number; modes: ("full" | "deposit_balance")[] }[] };
   };
   "catalog.bookingRequirements": {
     input: { serviceOfferingId: string };
@@ -2809,6 +2832,14 @@ export interface ServiceCatalog {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { records: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
   };
+  "catalog.moveMyBooking": {
+    input: { id: string; startsAt: string; calendarId: string };
+    output: { id: string };
+  };
+  "catalog.myBookingSelection": {
+    input: { id: string };
+    output: { productId: string; offeringId: string; calendarId: string; seats: number };
+  };
   "catalog.packFulfillment": {
     input: { id: string; boxId?: string; weightG?: number };
     output: { fulfillment: { id: string; orderId: string; locationId: string | null; kind: "physical" | "digital"; status: "pending" | "picking" | "packed" | "shipped" | "delivered" | "failed" | "returned"; boxId: string | null; weightG: number | null; carrier: string | null; service: string | null; trackingNumber: string | null; trackingUrl: string | null; shippedAt: string | null; deliveredAt: string | null; note: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; items: { id: string; fulfillmentId: string; orderItemId: string; quantity: number; createdAt: string; [key: string]: unknown }[] };
@@ -2820,6 +2851,10 @@ export interface ServiceCatalog {
   "catalog.placePurchaseOrder": {
     input: { id: string };
     output: { id: string; supplierId: string; locationId: string; status: "draft" | "ordered" | "partial" | "received" | "cancelled"; currency: string; expectedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "catalog.publicBookingQuote": {
+    input: { productId: string; currency: string; mode?: "full" | "deposit_balance"; seats?: number };
+    output: { productId: string; offeringId: string; name: string; durationMin: number; capacity: number; currency: string; totalMinor: number; dueNowMinor: number; balanceMinor: number; mode: "full" | "deposit_balance"; termsHash: string; policy: { name: string; freeUntilHours: number; feeType: "none" | "fixed" | "percent" | "forfeit_deposit"; feeValue: number | null; rescheduleLimit: number; noShowFeeMinor: number } | null };
   };
   "catalog.publishProduct": {
     input: { id: string; expectedVersion: number };
@@ -3192,6 +3227,10 @@ export interface ServiceCatalog {
   "cms.leavePresence": {
     input: { pageId: string };
     output: { pageId: string };
+  };
+  "cms.listBlogPosts": {
+    input: { locale?: string; prefix?: string; page?: number; limit?: number };
+    output: { total: number; page: number; pages: number; posts: { slug: string; title: string; description: string | null; updatedAt: string }[] };
   };
   "cms.listComments": {
     input: { pageId: string; includeResolved?: boolean };
@@ -4058,7 +4097,7 @@ export interface ServiceCatalog {
     output: { id: string; title: string; description: string | null; subjectType: string | null; subjectId: string | null; contactId: string | null; currentVersionId: string | null; status: "draft" | "shared" | "archived"; updatedAt: string; [key: string]: unknown }[];
   };
   "documents.open": {
-    input: { token: string; password?: string; action?: "view" | "download" };
+    input: { token?: string; documentId?: string; password?: string; action?: "view" | "download" };
     output: { ok: true; documentId: string; title: string; version: number; assetId: string; filename: string; mime: string; downloadPolicy: "none" | "view" | "download"; [key: string]: unknown } | { ok: false };
   };
   "documents.revokeShare": {
@@ -4562,7 +4601,7 @@ export interface ServiceCatalog {
     output: { assessment: { id: string; sourceInvoiceId: string; feeInvoiceId: string; basis: "fixed" | "percentage"; outstandingMinor: number; fixedMinor: number | null; ratePpm: number | null; capMinor: number | null; graceDays: number; assessedMinor: number; assessedAt: string; reason: string; idempotencyKey: string; requestHash: string; createdAt: string; [key: string]: unknown }; invoice: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } };
   };
   "invoicing.beginCustomerCheckout": {
-    input: { id: string; token?: string };
+    input: { id: string; token?: string; saveMethodConsent?: boolean };
     output: { url: string };
   };
   "invoicing.beginInPersonPayment": {
@@ -4635,7 +4674,7 @@ export interface ServiceCatalog {
   };
   "invoicing.customerInvoice": {
     input: { id: string; token?: string };
-    output: { id: string; number: string; status: string; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; totalMinor: number }[]; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable"; nextPaymentMinor: number | null; awaitingRelease: boolean };
+    output: { id: string; number: string; status: string; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; totalMinor: number }[]; saveMethodRequired: boolean; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable"; nextPaymentMinor: number | null; awaitingRelease: boolean };
   };
   "invoicing.customerInvoiceLink": {
     input: { id: string };
@@ -4996,6 +5035,10 @@ export interface ServiceCatalog {
   "mail.completeOAuth": {
     input: { provider: "google" | "microsoft"; state: string; code: string };
     output: { senderId: string; email: string; returnTo: string };
+  };
+  "mail.readiness": {
+    input: Record<string, never>;
+    output: { transactional: boolean; bulk: boolean };
   };
   "mail.registerSender": {
     input: { purpose: "transactional" | "bulk"; provider: "smtp" | "resend" | "postmark" | "ses"; email: string; displayName?: string; providerIdentity?: string };
@@ -5673,13 +5716,29 @@ export interface ServiceCatalog {
     input: { id: string; status: "draft" | "active" | "paused" };
     output: { id: string; slug: string; name: string; title: string; surface: "modal" | "banner" | "corner"; trigger: "immediate" | "delay" | "scroll" | "exitIntent"; triggerValue: number; blocks: unknown; audience: "everyone" | "inSegment" | "notInSegment"; segmentId: string | null; pathPatterns: unknown; locales: unknown; frequencyCap: number | null; frequencyPeriodHours: number; dismissSuppressHours: number; stopAfterCapture: boolean; captureMode: "none" | "email"; newsletterId: string | null; consentStatement: string | null; consentVersion: string | null; successMessage: string | null; startsAt: string | null; endsAt: string | null; priority: number; status: "draft" | "active" | "paused"; [key: string]: unknown };
   };
+  "portal.actOnMyRecord": {
+    input: { section: string; id: string; action: "accept" | "decline" | "cancel" | "download"; name?: string; reason?: string };
+    output: { href?: string };
+  };
   "portal.myProfile": {
     input: Record<string, never>;
     output: { contactId: string; name: string; email: string | null; phone: string | null; preferredLocale: string | null; hasPassword: boolean; createdAt: string; [key: string]: unknown };
   };
+  "portal.myRecord": {
+    input: { section: string; id: string };
+    output: { id: string; title: string; status: string | null; at: string | null; amountMinor: number | null; currency: string | null; fields: { labelKey: string; value: string }[]; lines: { description: string; amountMinor?: number; currency?: string }[]; links: { labelKey: string; href: string }[]; actions: ("accept" | "decline" | "cancel" | "download")[] };
+  };
   "portal.myRecords": {
     input: { section?: string; limit?: number };
     output: { key: string; count: number; records: { id: string; title: string; status: string | null; at: string | null; href: string | null; amountMinor?: number | null; currency?: string | null; [key: string]: unknown }[]; failed: boolean; [key: string]: unknown }[];
+  };
+  "portal.requestSignIn": {
+    input: { email: string; name?: string; locale?: string };
+    output: { sent: true };
+  };
+  "portal.signInStatus": {
+    input: Record<string, never>;
+    output: { available: boolean };
   };
   "portal.updateMyProfile": {
     input: { name?: string; phone?: string | null };
@@ -6238,7 +6297,7 @@ export interface ServiceCatalog {
     output: { id: string; email: string; role: string; lastLoginAt: string | null; [key: string]: unknown }[];
   };
   "scheduling.slots": {
-    input: { serviceOfferingId: string; productId: string; from: string; to: string; preferredCalendarId?: string; seats?: number; granularityMin?: number; limit?: number; audienceToken?: string };
+    input: { serviceOfferingId: string; productId: string; from: string; to: string; preferredCalendarId?: string; onlyPreferred?: boolean; excludeBookingId?: string; seats?: number; granularityMin?: number; limit?: number; audienceToken?: string };
     output: { startsAt: string; endsAt: string; calendarId: string; calendarName: string; resourceCalendarIds: string[]; seatsAvailable: number }[];
   };
   "scoring.advance": {
@@ -6591,7 +6650,7 @@ export interface ServiceCatalog {
   };
   "subscriptions.cancel": {
     input: { id: string; immediately?: boolean; reason?: string };
-    output: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown };
+    output: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown };
   };
   "subscriptions.cancelAgreement": {
     input: { id: string; immediately?: boolean; reason?: string };
@@ -6623,11 +6682,15 @@ export interface ServiceCatalog {
   };
   "subscriptions.get": {
     input: { id: string };
-    output: { subscription: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }; plan: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; [key: string]: unknown } | null; history: { kind: "created" | "trialing" | "activated" | "renewed" | "payment_failed" | "dunning" | "paused" | "resumed" | "plan_changed" | "cancelled" | "expired"; invoiceId: string | null; detail: string | null; at: string; [key: string]: unknown }[]; [key: string]: unknown };
+    output: { subscription: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }; plan: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; [key: string]: unknown } | null; history: { kind: "created" | "trialing" | "activated" | "renewed" | "payment_failed" | "dunning" | "paused" | "resumed" | "plan_changed" | "cancelled" | "expired"; invoiceId: string | null; detail: string | null; at: string; [key: string]: unknown }[]; [key: string]: unknown };
+  };
+  "subscriptions.join": {
+    input: { planId: string; termsHash: string; requestKey: string; acceptedTerms: true; paymentMethodId?: string };
+    output: { id: string; invoiceId: string | null; pending: boolean };
   };
   "subscriptions.list": {
     input: { contactId?: string; status?: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; limit?: number };
-    output: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }[];
+    output: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }[];
   };
   "subscriptions.listOffered": {
     input: Record<string, never>;
@@ -6637,21 +6700,33 @@ export interface ServiceCatalog {
     input: { status?: "draft" | "active" | "archived" };
     output: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; dunning: { retries: number[]; graceDays: number; notifyChannels: ("email" | "sms" | "in_app")[]; finalAction: "pause" | "cancel" | "downgrade"; downgradeToPlanId: string | null; [key: string]: unknown } | null; [key: string]: unknown }[];
   };
+  "subscriptions.mine": {
+    input: { id: string };
+    output: { name: string; pending: boolean; invoiceId: string | null; cancelAtPeriodEnd: boolean };
+  };
+  "subscriptions.myPaymentMethods": {
+    input: Record<string, never>;
+    output: { id: string; label: string }[];
+  };
   "subscriptions.pause": {
     input: { id: string };
-    output: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown };
+    output: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown };
+  };
+  "subscriptions.publicPlans": {
+    input: Record<string, never>;
+    output: { id: string; name: string; description: string | null; currency: string; amountMinor: number; setupFeeMinor: number; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; billingMode: "manual" | "platform" | "provider"; cancelBehaviour: "immediate" | "period_end"; termsHash: string; available: boolean }[];
   };
   "subscriptions.resume": {
     input: { id: string };
-    output: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown };
+    output: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown };
   };
   "subscriptions.savePlan": {
     input: { id?: string; productId: string; name: string; interval?: "day" | "week" | "month" | "year"; intervalCount?: number; trialDays?: number; trialRequiresCard?: boolean; setupFeeMinor?: number; billingMode?: "provider" | "platform" | "manual"; cancelBehaviour?: "period_end" | "immediate"; proration?: "create_prorations" | "none"; status?: "draft" | "active" | "archived"; dunning?: { retries?: number[]; graceDays?: number; notifyChannels?: ("email" | "sms" | "in_app")[]; finalAction?: "pause" | "cancel" | "downgrade"; downgradeToPlanId?: string | null } };
     output: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; dunning: { retries: number[]; graceDays: number; notifyChannels: ("email" | "sms" | "in_app")[]; finalAction: "pause" | "cancel" | "downgrade"; downgradeToPlanId: string | null; [key: string]: unknown } | null; [key: string]: unknown };
   };
   "subscriptions.subscribe": {
-    input: { contactId: string; planId: string; productVariantId?: string; currency?: string; paymentMethodId?: string };
-    output: { subscription: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }; invoiceId: string | null; [key: string]: unknown };
+    input: { contactId: string; planId: string; productVariantId?: string; currency?: string; paymentMethodId?: string; deferFirstPayment?: boolean };
+    output: { subscription: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }; invoiceId: string | null; [key: string]: unknown };
   };
   "tasks.create": {
     input: { subjectType?: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId?: string | null; title: string; details?: string | null; dueAt?: string | null; remindAt?: string | null; assigneeUserId?: string | null; priority?: "low" | "normal" | "high" | "urgent"; cadence?: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount?: number };
@@ -7231,6 +7306,8 @@ export interface FreeholderApi {
     attachCartToContact: (input: ServiceCatalog["catalog.attachCartToContact"]["input"]) => Promise<ServiceCatalog["catalog.attachCartToContact"]["output"]>;
     attachProductMedia: (input: ServiceCatalog["catalog.attachProductMedia"]["input"]) => Promise<ServiceCatalog["catalog.attachProductMedia"]["output"]>;
     availability: (input: ServiceCatalog["catalog.availability"]["input"]) => Promise<ServiceCatalog["catalog.availability"]["output"]>;
+    bookService: (input: ServiceCatalog["catalog.bookService"]["input"]) => Promise<ServiceCatalog["catalog.bookService"]["output"]>;
+    bookableServices: (input?: ServiceCatalog["catalog.bookableServices"]["input"]) => Promise<ServiceCatalog["catalog.bookableServices"]["output"]>;
     bookingRequirements: (input: ServiceCatalog["catalog.bookingRequirements"]["input"]) => Promise<ServiceCatalog["catalog.bookingRequirements"]["output"]>;
     bookingTerms: (input: ServiceCatalog["catalog.bookingTerms"]["input"]) => Promise<ServiceCatalog["catalog.bookingTerms"]["output"]>;
     browseProducts: (input?: ServiceCatalog["catalog.browseProducts"]["input"]) => Promise<ServiceCatalog["catalog.browseProducts"]["output"]>;
@@ -7314,9 +7391,12 @@ export interface FreeholderApi {
     listVisibleProducts: (input?: ServiceCatalog["catalog.listVisibleProducts"]["input"]) => Promise<ServiceCatalog["catalog.listVisibleProducts"]["output"]>;
     listWishlist: (input?: ServiceCatalog["catalog.listWishlist"]["input"]) => Promise<ServiceCatalog["catalog.listWishlist"]["output"]>;
     loadDemoFixture: (input: ServiceCatalog["catalog.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["catalog.loadDemoFixture"]["output"]>;
+    moveMyBooking: (input: ServiceCatalog["catalog.moveMyBooking"]["input"]) => Promise<ServiceCatalog["catalog.moveMyBooking"]["output"]>;
+    myBookingSelection: (input: ServiceCatalog["catalog.myBookingSelection"]["input"]) => Promise<ServiceCatalog["catalog.myBookingSelection"]["output"]>;
     packFulfillment: (input: ServiceCatalog["catalog.packFulfillment"]["input"]) => Promise<ServiceCatalog["catalog.packFulfillment"]["output"]>;
     payOrder: (input: ServiceCatalog["catalog.payOrder"]["input"]) => Promise<ServiceCatalog["catalog.payOrder"]["output"]>;
     placePurchaseOrder: (input: ServiceCatalog["catalog.placePurchaseOrder"]["input"]) => Promise<ServiceCatalog["catalog.placePurchaseOrder"]["output"]>;
+    publicBookingQuote: (input: ServiceCatalog["catalog.publicBookingQuote"]["input"]) => Promise<ServiceCatalog["catalog.publicBookingQuote"]["output"]>;
     publishProduct: (input: ServiceCatalog["catalog.publishProduct"]["input"]) => Promise<ServiceCatalog["catalog.publishProduct"]["output"]>;
     purchaseOptions: (input?: ServiceCatalog["catalog.purchaseOptions"]["input"]) => Promise<ServiceCatalog["catalog.purchaseOptions"]["output"]>;
     purgeDemoFixture: (input: ServiceCatalog["catalog.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["catalog.purgeDemoFixture"]["output"]>;
@@ -7414,6 +7494,7 @@ export interface FreeholderApi {
     helpArticles: (input?: ServiceCatalog["cms.helpArticles"]["input"]) => Promise<ServiceCatalog["cms.helpArticles"]["output"]>;
     helpCategories: (input?: ServiceCatalog["cms.helpCategories"]["input"]) => Promise<ServiceCatalog["cms.helpCategories"]["output"]>;
     leavePresence: (input: ServiceCatalog["cms.leavePresence"]["input"]) => Promise<ServiceCatalog["cms.leavePresence"]["output"]>;
+    listBlogPosts: (input?: ServiceCatalog["cms.listBlogPosts"]["input"]) => Promise<ServiceCatalog["cms.listBlogPosts"]["output"]>;
     listComments: (input: ServiceCatalog["cms.listComments"]["input"]) => Promise<ServiceCatalog["cms.listComments"]["output"]>;
     listPages: (input?: ServiceCatalog["cms.listPages"]["input"]) => Promise<ServiceCatalog["cms.listPages"]["output"]>;
     listPresence: (input: ServiceCatalog["cms.listPresence"]["input"]) => Promise<ServiceCatalog["cms.listPresence"]["output"]>;
@@ -7654,7 +7735,7 @@ export interface FreeholderApi {
     export: (input: ServiceCatalog["documents.export"]["input"]) => Promise<ServiceCatalog["documents.export"]["output"]>;
     history: (input: ServiceCatalog["documents.history"]["input"]) => Promise<ServiceCatalog["documents.history"]["output"]>;
     list: (input?: ServiceCatalog["documents.list"]["input"]) => Promise<ServiceCatalog["documents.list"]["output"]>;
-    open: (input: ServiceCatalog["documents.open"]["input"]) => Promise<ServiceCatalog["documents.open"]["output"]>;
+    open: (input?: ServiceCatalog["documents.open"]["input"]) => Promise<ServiceCatalog["documents.open"]["output"]>;
     revokeShare: (input: ServiceCatalog["documents.revokeShare"]["input"]) => Promise<ServiceCatalog["documents.revokeShare"]["output"]>;
     save: (input: ServiceCatalog["documents.save"]["input"]) => Promise<ServiceCatalog["documents.save"]["output"]>;
     share: (input: ServiceCatalog["documents.share"]["input"]) => Promise<ServiceCatalog["documents.share"]["output"]>;
@@ -7915,6 +7996,7 @@ export interface FreeholderApi {
   mail: {
     beginOAuth: (input: ServiceCatalog["mail.beginOAuth"]["input"]) => Promise<ServiceCatalog["mail.beginOAuth"]["output"]>;
     completeOAuth: (input: ServiceCatalog["mail.completeOAuth"]["input"]) => Promise<ServiceCatalog["mail.completeOAuth"]["output"]>;
+    readiness: (input?: ServiceCatalog["mail.readiness"]["input"]) => Promise<ServiceCatalog["mail.readiness"]["output"]>;
     registerSender: (input: ServiceCatalog["mail.registerSender"]["input"]) => Promise<ServiceCatalog["mail.registerSender"]["output"]>;
     releaseSuppression: (input: ServiceCatalog["mail.releaseSuppression"]["input"]) => Promise<ServiceCatalog["mail.releaseSuppression"]["output"]>;
     setDefaultSender: (input: ServiceCatalog["mail.setDefaultSender"]["input"]) => Promise<ServiceCatalog["mail.setDefaultSender"]["output"]>;
@@ -8106,8 +8188,12 @@ export interface FreeholderApi {
     setStatus: (input: ServiceCatalog["popups.setStatus"]["input"]) => Promise<ServiceCatalog["popups.setStatus"]["output"]>;
   };
   portal: {
+    actOnMyRecord: (input: ServiceCatalog["portal.actOnMyRecord"]["input"]) => Promise<ServiceCatalog["portal.actOnMyRecord"]["output"]>;
     myProfile: (input?: ServiceCatalog["portal.myProfile"]["input"]) => Promise<ServiceCatalog["portal.myProfile"]["output"]>;
+    myRecord: (input: ServiceCatalog["portal.myRecord"]["input"]) => Promise<ServiceCatalog["portal.myRecord"]["output"]>;
     myRecords: (input?: ServiceCatalog["portal.myRecords"]["input"]) => Promise<ServiceCatalog["portal.myRecords"]["output"]>;
+    requestSignIn: (input: ServiceCatalog["portal.requestSignIn"]["input"]) => Promise<ServiceCatalog["portal.requestSignIn"]["output"]>;
+    signInStatus: (input?: ServiceCatalog["portal.signInStatus"]["input"]) => Promise<ServiceCatalog["portal.signInStatus"]["output"]>;
     updateMyProfile: (input?: ServiceCatalog["portal.updateMyProfile"]["input"]) => Promise<ServiceCatalog["portal.updateMyProfile"]["output"]>;
   };
   printOnDemand: {
@@ -8390,10 +8476,14 @@ export interface FreeholderApi {
     chargePlatformInvoice: (input: ServiceCatalog["subscriptions.chargePlatformInvoice"]["input"]) => Promise<ServiceCatalog["subscriptions.chargePlatformInvoice"]["output"]>;
     enroll: (input: ServiceCatalog["subscriptions.enroll"]["input"]) => Promise<ServiceCatalog["subscriptions.enroll"]["output"]>;
     get: (input: ServiceCatalog["subscriptions.get"]["input"]) => Promise<ServiceCatalog["subscriptions.get"]["output"]>;
+    join: (input: ServiceCatalog["subscriptions.join"]["input"]) => Promise<ServiceCatalog["subscriptions.join"]["output"]>;
     list: (input?: ServiceCatalog["subscriptions.list"]["input"]) => Promise<ServiceCatalog["subscriptions.list"]["output"]>;
     listOffered: (input?: ServiceCatalog["subscriptions.listOffered"]["input"]) => Promise<ServiceCatalog["subscriptions.listOffered"]["output"]>;
     listPlans: (input?: ServiceCatalog["subscriptions.listPlans"]["input"]) => Promise<ServiceCatalog["subscriptions.listPlans"]["output"]>;
+    mine: (input: ServiceCatalog["subscriptions.mine"]["input"]) => Promise<ServiceCatalog["subscriptions.mine"]["output"]>;
+    myPaymentMethods: (input?: ServiceCatalog["subscriptions.myPaymentMethods"]["input"]) => Promise<ServiceCatalog["subscriptions.myPaymentMethods"]["output"]>;
     pause: (input: ServiceCatalog["subscriptions.pause"]["input"]) => Promise<ServiceCatalog["subscriptions.pause"]["output"]>;
+    publicPlans: (input?: ServiceCatalog["subscriptions.publicPlans"]["input"]) => Promise<ServiceCatalog["subscriptions.publicPlans"]["output"]>;
     resume: (input: ServiceCatalog["subscriptions.resume"]["input"]) => Promise<ServiceCatalog["subscriptions.resume"]["output"]>;
     savePlan: (input: ServiceCatalog["subscriptions.savePlan"]["input"]) => Promise<ServiceCatalog["subscriptions.savePlan"]["output"]>;
     subscribe: (input: ServiceCatalog["subscriptions.subscribe"]["input"]) => Promise<ServiceCatalog["subscriptions.subscribe"]["output"]>;

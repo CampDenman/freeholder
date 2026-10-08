@@ -14,6 +14,11 @@ import { listHires } from "./service";
 registerPortalSection({
   key: "rentals",
   order: 60,
+  detail: async(ctx,contactId,id)=>{
+    const hire=(await ctx.call(listHires,{contactId,limit:200})).find(row=>row.id===id);
+    if(!hire)throw new Error("Rental ownership changed.");
+    return {fields:[{labelKey:"portal.record.starts",value:hire.startsAt.toISOString()},{labelKey:"portal.record.ends",value:hire.dueAt.toISOString()},{labelKey:"portal.record.description",value:hire.sku}],links:hire.invoiceId?[{labelKey:"portal.record.invoice",href:`/portal/invoices/${hire.invoiceId}`}]:[]};
+  },
   load: async (ctx, contactId, limit) => {
     const rows = await ctx.call(listHires, { contactId, limit });
     return rows.map((hire) => ({
@@ -21,9 +26,9 @@ registerPortalSection({
       title: hire.id.slice(0, 8),
       status: hire.status,
       at: hire.dueAt ?? hire.startsAt ?? null,
-      href: null,
+      href: `/portal/records/rentals/${hire.id}`,
       amountMinor: hire.quotedMinor,
-      currency: null,
+      currency: hire.currency,
     }));
   },
 });

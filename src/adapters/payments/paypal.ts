@@ -448,6 +448,7 @@ export function createPayPalPayments(options: PayPalPaymentOptions = {}): Paymen
         },
         body: JSON.stringify({
           plan_id: planId,
+        ...(request.firstBillingAt ? { start_time: request.firstBillingAt } : {}),
           custom_id: request.metadata.subscriptionId,
           payment_source: { token: { id: request.methodRef, type: "PAYMENT_METHOD_TOKEN" } },
         }),

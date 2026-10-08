@@ -4,6 +4,7 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter } from "@/adapters/payments";
+import { bookings } from "@/core/scheduling/schema";
 import { contacts } from "@/core/contacts/schema";
 import { env } from "@/core/env";
 import { formatMoney, translator } from "@/core/i18n";
@@ -11,9 +12,10 @@ import { localeForContact, localizeCustomerHref } from "@/core/i18n/customer";
 import { sendMail } from "@/core/mail/service";
 import { contactForActor } from "@/core/portal/service";
 import { actorString, defineOrchestratedService, defineService, ServiceError, type ServiceContext } from "@/core/service";
+import { customerCheckoutAllowed, requiresSavedMethod } from "./checkout-requirements";
 import { checkoutSession, invoiceRow, paymentRow } from "./contract";
 import { createPayment, failPayment, markInvoiceViewed, settlePayment, startPayment } from "./invoice-service";
-import { invoiceLines, invoices, payments } from "./schema";
+import { invoiceLines, invoices, payments, paymentPlans, paymentPlanInstallments } from "./schema";
 import { orderPaymentMilestones, orders } from "@/modules/catalog/schema";
 import { checkoutPaymentSchema } from "@/modules/catalog/checkout-policy";
 import { customerInvoicePath, invoiceAccessToken, paymentReturnToken, validInvoiceToken, validPaymentReturnToken } from "./customer-tokens";
@@ -25,6 +27,17 @@ const payable = (invoice: typeof invoices.$inferSelect) =>
 const unavailable = () => new ServiceError("not_found", "That invoice link is not available.");
 
 async function customerCheckoutAmount(invoice: typeof invoices.$inferSelect, ctx: ServiceContext): Promise<number | null> {
+  if (!await customerCheckoutAllowed(ctx, invoice)) return null;
+  if (invoice.sourceType === "booking" && invoice.sourceId) {
+    const [booking] = await ctx.tx.select({status:bookings.status}).from(bookings).where(eq(bookings.id, invoice.sourceId)).limit(1);
+    if (!booking || ["cancelled", "no_show"].includes(booking.status)) return null;
+  }
+  const [plan] = await ctx.tx.select({ id: paymentPlans.id }).from(paymentPlans).where(and(eq(paymentPlans.invoiceId, invoice.id), eq(paymentPlans.status, "active"))).limit(1);
+  if (plan) {
+    const stages = await ctx.tx.select().from(paymentPlanInstallments).where(eq(paymentPlanInstallments.planId, plan.id)).orderBy(asc(paymentPlanInstallments.position));
+    const next = stages.find(stage => !["paid", "waived"].includes(stage.status) && stage.amountMinor > stage.paidMinor);
+    return next ? Math.min(next.amountMinor-next.paidMinor, invoice.totalMinor-invoice.paidMinor) : null;
+  }
   if (invoice.sourceType !== "order" || !invoice.sourceId) return invoice.totalMinor - invoice.paidMinor;
   const [order] = await ctx.tx.select({ payment: orders.checkoutPaymentSnapshot })
     .from(orders).where(eq(orders.id, invoice.sourceId)).limit(1);
@@ -72,6 +85,7 @@ const customerInvoice = z.object({
   taxMinor: z.number().int(), totalMinor: z.number().int(), paidMinor: z.number().int(),
   dueAt: z.date().nullable(), memo: z.string().nullable(), requiredTaxLegend: z.string().nullable(),
   lines: z.array(z.object({ id: z.string(), description: z.string(), quantityMicros: z.number().int(), totalMinor: z.number().int() })),
+  saveMethodRequired: z.boolean(),
   canPay: z.boolean(), paymentMode: z.enum(["hosted", "manual", "unavailable"]),
   nextPaymentMinor: z.number().int().nullable(),
   awaitingRelease: z.boolean(),
@@ -91,6 +105,7 @@ export const getCustomerInvoice = defineService({
       subtotalMinor: invoice.subtotalMinor, discountMinor: invoice.discountMinor, shippingMinor: invoice.shippingMinor,
       taxMinor: invoice.taxMinor, totalMinor: invoice.totalMinor, paidMinor: invoice.paidMinor,
       dueAt: invoice.dueAt, memo: invoice.memo, requiredTaxLegend: invoice.requiredTaxLegend, lines, canPay: nextPaymentMinor !== null,
+      saveMethodRequired: await requiresSavedMethod(ctx, invoice),
       nextPaymentMinor, awaitingRelease: payable(invoice) && nextPaymentMinor === null,
       paymentMode: !adapter.status.available || adapter.id === "none" ? "unavailable" as const :
         adapter.id === "manual" ? "manual" as const : "hosted" as const };
@@ -146,10 +161,11 @@ export const sendInvoice = defineService({
   },
 });
 
+const checkoutAccess = access.extend({ saveMethodConsent: z.boolean().default(false) });
 const checkoutSource = z.object({ invoice: invoiceRow, payment: paymentRow.nullable(), email: z.string(), name: z.string() });
 export const claimCustomerCheckout = defineService({
   name: "invoicing.claimCustomerCheckout", summary: "Authorize and durably reserve a customer payment before contacting its provider.",
-  kind: "mutation", permission: "public", external: false, input: access, output: checkoutSource,
+  kind: "mutation", permission: "public", external: false, input: checkoutAccess, output: checkoutSource,
   handler: async (input, ctx) => {
     // Serialize only customer claims; preserve the shared ledger's own lock
     // order (payment idempotency, then invoice) to avoid cross-flow deadlocks.
@@ -157,6 +173,10 @@ export const claimCustomerCheckout = defineService({
     const invoice = await authorizedInvoice(input, ctx);
     if (!payable(invoice)) throw new ServiceError("conflict", "This invoice is not open for payment.");
     const adapter = paymentAdapter();
+    const saveMethod = await requiresSavedMethod(ctx, invoice);
+    if (saveMethod && (!input.saveMethodConsent || !adapter.capabilities().savedMethods || adapter.id === "manual")) {
+      throw new ServiceError("conflict", "This membership requires consent and a provider that supports saved payment methods.");
+    }
     if (!adapter.status.available || adapter.id === "none") throw new ServiceError("conflict", "Online payment is not available.");
     const [contact] = await ctx.tx.select().from(contacts).where(eq(contacts.id, invoice.contactId)).limit(1);
     if (!contact?.email) throw new ServiceError("validation", "This contact needs an email address.");
@@ -185,7 +205,7 @@ export const claimCustomerCheckout = defineService({
       invoiceId: invoice.id, provider: adapter.id, method: "hosted_checkout",
       amountMinor,
       idempotencyKey: `customer-invoice:${invoice.id}:${invoice.paidMinor}:${terminalAttempts.length}`,
-      metadata: { customerCheckout: true, customerEmail: contact.email, customerName: contact.name },
+      metadata: { customerCheckout: true, customerEmail: contact.email, customerName: contact.name, saveMethodRequested: saveMethod },
     });
     const savedCustomer = z.object({ customerEmail: z.string(), customerName: z.string() }).safeParse(payment?.metadata);
     return { invoice, payment, email: savedCustomer.success ? savedCustomer.data.customerEmail : contact.email,
@@ -215,7 +235,7 @@ export const applyCustomerCheckout = defineService({
 
 export const beginCustomerCheckout = defineOrchestratedService({
   name: "invoicing.beginCustomerCheckout", summary: "Open the configured provider checkout for your invoice, or show offline payment instructions.",
-  kind: "mutation", permission: "public", writeClass: "money", input: access, output: z.object({ url: z.string().url() }),
+  kind: "mutation", permission: "public", writeClass: "money", input: checkoutAccess, output: z.object({ url: z.string().url() }),
   rateLimit: { limit: 20, windowSeconds: 60, subject: (input: z.infer<typeof access>) => `invoice-checkout:${input.id}`, message: "Please wait before trying payment again." },
   handler: async (input, actor) => {
     const source = await claimCustomerCheckout.call(input, actor);
@@ -248,6 +268,7 @@ export const beginCustomerCheckout = defineOrchestratedService({
         currency: payment.currency, amountMinor: payment.amountMinor, description: `Invoice ${source.invoice.number}`,
         customer: { email: source.email, name: source.name }, successUrl, cancelUrl: cancel.href,
         idempotencyKey: payment.idempotencyKey,
+        saveMethod: (payment.metadata as { saveMethodRequested?: boolean }).saveMethodRequested === true,
       });
       return await applyCustomerCheckout.call({ ...input, paymentId: payment.id, response: checkout }, actor);
     } catch (error) {

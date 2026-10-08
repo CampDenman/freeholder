@@ -285,6 +285,31 @@ function senderRoute(sender: SenderRow): {
   return { provider: adapter.id, delivers: adapter.delivers, kind: adapter.kind };
 }
 
+/** Preflight the same route used by sendMail, without staging a message. */
+export async function assertMailReady(tx: Tx, purpose: Purpose): Promise<void> {
+  const sender = await defaultSender(tx, purpose);
+  if (!sender && purpose === "bulk") {
+    throw new ServiceError("conflict", "Choose and verify a default bulk sender before sending a campaign.");
+  }
+  const route = sender ? senderRoute(sender) : providerForPurpose(purpose);
+  if (!route.delivers || (purpose === "bulk" && route.kind === "transactional")) {
+    throw new ServiceError("conflict", "Configure a delivering mail provider and sender before sending.");
+  }
+}
+
+export const mailReadiness = defineService({
+  name: "mail.readiness", summary: "Whether transactional and campaign mail can be sent with the current sender configuration.",
+  kind: "query", permission: "scoped", input: z.object({}),
+  output: z.object({ transactional: z.boolean(), bulk: z.boolean() }),
+  handler: async (_input, ctx) => {
+    const ready = async (purpose: Purpose) => {
+      try { await assertMailReady(ctx.tx, purpose); return true; }
+      catch (error) { if (error instanceof ServiceError) return false; throw error; }
+    };
+    return { transactional: await ready("transactional"), bulk: await ready("bulk") };
+  },
+});
+
 async function adapterFor(sender: SenderRow): Promise<MailAdapter> {
   assertSenderReady(sender);
   if (sender.provider === "gmail" || sender.provider === "outlook") {
@@ -1345,6 +1370,7 @@ export const recordMailProviderEvent = defineService({
 
 export default [
   mailStatus,
+  mailReadiness,
   registerMailSender,
   verifyMailSender,
   applyMailSenderVerification,

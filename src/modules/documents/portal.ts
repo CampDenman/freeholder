@@ -12,6 +12,8 @@
 // longer part of the relationship", and a portal that kept showing it would
 // make archiving a filing decision with no effect on the person it is about.
 import { registerPortalSection } from "@/core/portal/sections";
+import { and,eq,isNull,gt,or } from "drizzle-orm";
+import { documentShares } from "./schema";
 import { listDocuments } from "./service";
 
 registerPortalSection({
@@ -20,6 +22,12 @@ registerPortalSection({
   // for the contract they signed is doing something more common than checking
   // a referral balance.
   order: 70,
+  detail: async(ctx,contactId,id)=>{
+    const document=(await ctx.call(listDocuments,{contactId,status:"shared",limit:200})).find(row=>row.id===id);
+    if(!document)throw new Error("Document ownership changed.");
+    const [share]=await ctx.tx.select({id:documentShares.id}).from(documentShares).where(and(eq(documentShares.documentId,id),eq(documentShares.contactId,contactId),eq(documentShares.access,"login"),isNull(documentShares.revokedAt),or(isNull(documentShares.expiresAt),gt(documentShares.expiresAt,new Date())))).limit(1);
+    return {fields:document.description?[{labelKey:"portal.record.description",value:document.description}]:[],links:share?[{labelKey:"portal.record.download",href:`/portal/files/${id}`}]:[]};
+  },
   load: async (ctx, contactId, limit) => {
     const rows = await ctx.call(listDocuments, { contactId, status: "shared", limit });
     return rows.map((document) => ({
@@ -27,11 +35,7 @@ registerPortalSection({
       title: document.title,
       status: document.status,
       at: document.updatedAt,
-      // Null, like every other room. A share link is a credential and a portal
-      // list is not where credentials belong — the emailed link still opens
-      // it, and a session-authenticated document page is its own piece of
-      // work. `core/portal/sections.ts` explains the rule.
-      href: null,
+      href: `/portal/records/documents/${document.id}`,
     }));
   },
 });

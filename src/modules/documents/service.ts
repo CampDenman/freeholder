@@ -30,6 +30,7 @@ import {
 } from "@/core/search/registry";
 import { hashPassword, verifyPassword } from "@/core/auth/passwords";
 import { assets } from "@/core/media/schema";
+import { contactForActor } from "@/core/portal/service";
 import { users } from "@/core/auth/schema";
 import {
   DOCUMENT_ACCESS_ACTIONS,
@@ -205,6 +206,8 @@ export const addVersion = defineService({
     if (asset.scanStatus === "infected") {
       throw new ServiceError("conflict", "That file failed its virus scan.");
     }
+
+    await ctx.tx.update(assets).set({ isPrivate: true }).where(eq(assets.id, input.assetId));
 
     // The number comes from the database, not the caller. Two uploads racing
     // would otherwise both compute "3" and one would win silently; here the
@@ -486,15 +489,16 @@ export const openShare = defineService({
   rateLimit: {
     limit: 10,
     windowSeconds: 15 * 60,
-    subject: (input) => `document-open:${hashShareToken(input.token)}`,
+    subject: (input) => `document-open:${input.documentId ?? hashShareToken(input.token ?? "invalid")}`,
     message: "Too many tries. Wait a few minutes and try again.",
   },
   input: z.object({
-    token: z.string().min(10).max(200),
+    token: z.string().min(10).max(200).optional(),
+    documentId: z.uuid().optional(),
     password: z.string().max(200).optional(),
     /** Whether the caller is fetching the file or just looking at the page. */
     action: z.enum(["view", "download"]).default("view"),
-  }),
+  }).refine(input => Boolean(input.token) !== Boolean(input.documentId), "Supply a private link or a signed-in document ID."),
   output: z.union([
     row({
       ok: z.literal(true),
@@ -509,11 +513,10 @@ export const openShare = defineService({
     z.object({ ok: z.literal(false) }),
   ]),
   handler: async (input, ctx) => {
-    const [found] = await ctx.tx
-      .select()
-      .from(documentShares)
-      .where(eq(documentShares.tokenHash, hashShareToken(input.token)))
-      .limit(1);
+    const contact = input.documentId ? await contactForActor(ctx) : null;
+    const [found] = await ctx.tx.select().from(documentShares).where(input.documentId && contact
+      ? and(eq(documentShares.documentId,input.documentId),eq(documentShares.contactId,contact.id),eq(documentShares.access,"login"),isNull(documentShares.revokedAt))
+      : eq(documentShares.tokenHash,hashShareToken(input.token!))).orderBy(desc(documentShares.createdAt)).limit(1).for("update");
     // Nothing to log against, and an unknown token is as likely to be a typo
     // as an attack. The visitor sees what every other refusal shows.
     if (!found) return deny(ctx.tx, null, "unknown");
@@ -542,7 +545,7 @@ export const openShare = defineService({
       .select()
       .from(documents)
       .where(eq(documents.id, found.documentId));
-    if (!document) return deny(ctx.tx, found, "missing");
+    if (!document || document.status !== "shared" || (contact && document.contactId !== contact.id)) return deny(ctx.tx, found, "missing");
 
     // Pinned wins, and null means current. §4.5: guessing between them is how
     // somebody signs the wrong page.
@@ -559,7 +562,7 @@ export const openShare = defineService({
       })
       .from(documentVersions)
       .innerJoin(assets, eq(assets.id, documentVersions.assetId))
-      .where(eq(documentVersions.id, versionId));
+      .where(and(eq(documentVersions.id, versionId), eq(documentVersions.documentId, document.id), eq(assets.status, "ready")));
     if (!version) return deny(ctx.tx, found, "empty");
 
     await logAccess(ctx.tx, {
@@ -599,6 +602,18 @@ export const openShare = defineService({
 });
 
 /* -------------------------------------------------------------- history */
+
+export const myDocumentDownload = defineService({
+  name: "documents.myDownload", summary: "Authorize your session-bound document download under its current share policy.", kind: "mutation", permission: "authenticated", writeClass: "write", external: false,
+  input:z.object({id:z.uuid()}),
+  output:z.object({storageKey:z.string(),filename:z.string(),mime:z.string(),bytes:z.number()}).nullable(),
+  handler:async(input,ctx)=>{
+    const opened=await ctx.call(openShare,{documentId:input.id,action:"download"});
+    if(!opened.ok)return null;
+    const {authorizeAssetDownload}=await import("@/core/media/service");
+    return ctx.callAsSystem(authorizeAssetDownload,{id:opened.assetId});
+  },
+});
 
 export const accessHistory = defineService({
   name: "documents.history",
@@ -849,6 +864,7 @@ registerSearchSource({
 });
 
 export default [
+  myDocumentDownload,
   saveDocument,
   addVersion,
   versions,

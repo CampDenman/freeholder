@@ -35,4 +35,18 @@ export const advanceDunning = defineJob({
   },
 });
 
-export default [renewSubscriptions, advanceDunning];
+export const finishCustomerSignups = defineJob({
+  name: "subscriptions.finishCustomerSignups", summary: "Activate paid signups and recover future provider schedules.", schedule: "* * * * *", concurrency: 1,
+  handler: async () => {
+    const { finishMembershipSignups, pendingMembershipSchedules } = await import("./public-signup");
+    const { attachProviderSchedule } = await import("./billing");
+    const result = await finishMembershipSignups.call({}, { kind: "system" });
+    const failures: unknown[] = [];
+    for (const id of await pendingMembershipSchedules.call({}, { kind: "system" })) {
+      try { await attachProviderSchedule.call({ subscriptionId: id }, { kind: "system" }); } catch (error) { failures.push(error); }
+    }
+    if (failures.length) throw new AggregateError(failures, "Some membership renewal schedules need retrying.");
+    return result;
+  },
+});
+export default [renewSubscriptions, advanceDunning, finishCustomerSignups];

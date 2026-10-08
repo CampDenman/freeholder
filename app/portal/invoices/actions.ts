@@ -29,7 +29,7 @@ export async function payInvoiceAction(form: FormData): Promise<void> {
   const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
   let url: string;
   try {
-    ({ url } = await beginCustomerCheckout.call({ id, token }, actor));
+    ({ url } = await beginCustomerCheckout.call({ id, token, saveMethodConsent: form.get("saveMethodConsent") === "yes" }, actor));
   } catch {
     const path = customerInvoicePath(id, token);
     redirect(await localized(`${path}${token ? "&" : "?"}error=payment`));

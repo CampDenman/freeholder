@@ -1826,6 +1826,10 @@ export const resolveAsset = defineService({
       .where(eq(assets.id, input.id))
       .limit(1);
     if (!asset || asset.kind === "image" || asset.status !== "ready") return null;
+    if (asset.isPrivate) {
+      try { await ctx.call(privateAssetDownloadAccess, {}); }
+      catch (error) { if (error instanceof ServiceError && error.code === "permission") return null; throw error; }
+    }
     return {
       id: asset.id,
       kind: asset.kind,
@@ -1843,9 +1847,14 @@ export const resolveAsset = defineService({
   },
 });
 
+const privateAssetDownloadAccess = defineService({
+  name: "media.privateAssetDownloadAccess", summary: "Require library access before downloading a private client asset.", kind: "query", permission: "scoped", external: false,
+  input: z.object({}), output: z.object({ allowed: z.literal(true) }), handler: async () => ({ allowed: true as const }),
+});
+
 export const authorizeAssetDownload = defineService({
   name: "media.authorizeAssetDownload",
-  summary: "Authorize a controlled document download.",
+  summary: "Authorize a public file or a staff download of a private client document.",
   kind: "query",
   permission: "public",
   input: z.object({ id: z.string().uuid() }),
@@ -1858,6 +1867,7 @@ export const authorizeAssetDownload = defineService({
   handler: async (input, ctx) => {
     const [asset] = await ctx.tx
       .select({
+        isPrivate: assets.isPrivate,
         storageKey: assets.storageKey,
         filename: assets.filename,
         mime: assets.mime,
@@ -1872,7 +1882,10 @@ export const authorizeAssetDownload = defineService({
         ),
       )
       .limit(1);
-    return asset ?? null;
+    if (asset?.isPrivate) await ctx.call(privateAssetDownloadAccess, {});
+    if (!asset) return null;
+    const { isPrivate: _private, ...safe } = asset;
+    return safe;
   },
 });
 
@@ -1911,6 +1924,7 @@ export const authorizeObjectDelivery = defineService({
           eq(mediaObjects.key, input.key),
           eq(mediaObjects.state, "attached"),
           eq(assets.status, "ready"),
+          eq(assets.isPrivate, false),
         ),
       )
       .limit(1);
@@ -3272,6 +3286,7 @@ export default [
   getAsset,
   resolveImage,
   resolveAsset,
+  privateAssetDownloadAccess,
   authorizeAssetDownload,
   authorizeObjectDelivery,
   backfillWatermarks,

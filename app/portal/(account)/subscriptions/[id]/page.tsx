@@ -10,6 +10,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { myRecords } from "@/core/portal/service";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
+import { myMembership } from "@/modules/subscriptions/public-signup";
 import { listOfferedPlans } from "@/modules/subscriptions/service";
 import { getLocale, getT } from "../../../../i18n";
 import {
@@ -56,6 +57,7 @@ export default async function PortalSubscriptionPage({
   const record = rooms[0]?.records.find((each) => each.id === id);
   if (!record) notFound();
 
+  const membership = await myMembership.call({id},actor);
   const status = record.status ?? "active";
   const canCancel =
     !query.cancelled &&
@@ -93,7 +95,7 @@ export default async function PortalSubscriptionPage({
 
       <Card>
         <CardHeader
-          title={record.title}
+          title={membership.name}
           status={
             <Pill tone={TONE[status as keyof typeof TONE] ?? "neutral"}>
               {t(`subscriptions.status.${status}`)}
@@ -101,7 +103,8 @@ export default async function PortalSubscriptionPage({
           }
         />
         <CardBody>
-          {record.at ? (
+          {membership.pending ? <p role="status">{t("memberships.pending")} {membership.invoiceId ? <a className="underline" href={href(`/portal/invoices/${membership.invoiceId}`)}>{t("portal.record.invoice")}</a> : null}</p> : null}
+          {record.at && !membership.pending ? (
             <p className="text-sm text-ink-muted">
               {t(
                 query.cancelled || status === "cancelled" || status === "expired"

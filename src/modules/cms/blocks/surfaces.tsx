@@ -713,9 +713,9 @@ export const booking = defineBlock({
   contexts: ["page"],
   schema: z.object({
     slug: z.string().min(1),
-    ctaHref: href.default("/contact"),
+    ctaHref: href.default("/book"),
   }),
-  starter: () => ({ slug: "session", ctaHref: "/contact" }),
+  starter: () => ({ slug: "session", ctaHref: "/book" }),
   resolve: async (props) => {
     const { resolveVisibleProduct } = await import("@/modules/catalog/service");
     const product = await resolveVisibleProduct.call({ slug: props.slug }, { kind: "anonymous" });
@@ -737,12 +737,12 @@ export const booking = defineBlock({
             {ctx.t("cms.booking.duration", { minutes: resolved.offering.durationMin })}
           </p>
         ) : null}
-        <p className="text-sm text-ink-muted">{ctx.t("cms.booking.noCalendar")}</p>
+        <p className="text-sm text-ink-muted">{ctx.t("publicBooking.intro")}</p>
         <a
-          href={ctx.localizeHref?.(props.ctaHref) ?? props.ctaHref}
+          href={ctx.localizeHref?.(props.ctaHref === "/book" ? `/book?service=${resolved.product.id}` : props.ctaHref) ?? props.ctaHref}
           className="inline-flex w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent"
         >
-          {ctx.t("cms.booking.request")}
+          {ctx.t("publicBooking.find")}
         </a>
       </article>
     );

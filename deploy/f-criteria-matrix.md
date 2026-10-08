@@ -1193,6 +1193,21 @@ v2.
 - **F11** — N/A — no doc ships with this change itself — the dated UX audit lands under `deploy/` or `docs/` as the item's first evidence, and this row updates then.
 - **F12** — N/A — no composed journey is claimed yet — the browser journeys proving drag, drop, inline edit and store-section composition are the composition proof the overhaul must name.
 
+## C2.26 — Public blog index
+
+- **F01** — Additive customer identifiers and asset privacy backfill: `db/migrations/0022_customer_surfaces.sql`.
+- **F02** — Typed shared services: `src/modules/cms/blog.tsx`; customer identity and refusal tests: `tests/modules/customer-surfaces.test.ts`.
+- **F03** — Canonical contact, invoice, grant and share-policy composition: `tests/modules/customer-surfaces.test.ts`.
+- **F04** — Human surface: `app/(admin)/admin/blog/page.tsx`; browser evidence: `tests/browser/customer-surfaces.spec.ts`.
+- **F05** — The service registry projects the same schemas and permissions to HTTP/MCP: `src/modules/cms/blog.tsx`, `packages/sdk/src/generated.ts`.
+- **F06** — Four locale catalogs: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; runtime catalog gate: `tests/core/locale-quality.test.ts`.
+- **F07** — Customer ownership, stale terms, duplicate reservations, payment-bound grants and private downloads: `tests/modules/customer-surfaces.test.ts`.
+- **F08** — Database regressions: `tests/modules/customer-surfaces.test.ts`; browser forms: `tests/browser/customer-surfaces.spec.ts`.
+- **F09** — Provider and deployment limitations remain explicit: `deploy/customer-surfaces-2026-10-07.md`; no mocked live-provider acceptance is claimed.
+- **F10** — Configuration and customer entry points: `deploy/customer-surfaces-2026-10-07.md`.
+- **F11** — Beta release notes: `.changeset/customer-self-service.md`; scope and remaining acceptance: `deploy/customer-surfaces-2026-10-07.md`.
+- **F12** — Composed software journeys: `tests/browser/customer-surfaces.spec.ts`, `tests/modules/customer-surfaces.test.ts`; actual provider acceptance remains open in `MASTER.md`.
+
 ## C3.01 — Add required output schemas to every service and validate
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/service-output.test.ts`.
@@ -2624,6 +2639,21 @@ v2.
 - **F11** — `deploy/spec-reconciliation.md` — the §-mapping for MASTER.md §4.18 and this item's §43 annotation; release note in `.changeset/calculators-and-coverage.md`.
 - **F12** — `tests/browser/calculators.spec.ts` — a listed postcode, one outside, on a real page.
 
+## C6.19 — Public self-serve booking
+
+- **F01** — Additive customer identifiers and asset privacy backfill: `db/migrations/0022_customer_surfaces.sql`.
+- **F02** — Typed shared services: `src/modules/catalog/public-booking.ts`; customer identity and refusal tests: `tests/modules/customer-surfaces.test.ts`.
+- **F03** — Canonical contact, invoice, grant and share-policy composition: `tests/modules/customer-surfaces.test.ts`.
+- **F04** — Human surface: `app/(public)/book/page.tsx`; browser evidence: `tests/browser/customer-surfaces.spec.ts`.
+- **F05** — The service registry projects the same schemas and permissions to HTTP/MCP: `src/modules/catalog/public-booking.ts`, `packages/sdk/src/generated.ts`.
+- **F06** — Four locale catalogs: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; runtime catalog gate: `tests/core/locale-quality.test.ts`.
+- **F07** — Customer ownership, stale terms, duplicate reservations, payment-bound grants and private downloads: `tests/modules/customer-surfaces.test.ts`.
+- **F08** — Database regressions: `tests/modules/customer-surfaces.test.ts`; browser forms: `tests/browser/customer-surfaces.spec.ts`.
+- **F09** — Provider and deployment limitations remain explicit: `deploy/customer-surfaces-2026-10-07.md`; no mocked live-provider acceptance is claimed.
+- **F10** — Configuration and customer entry points: `deploy/customer-surfaces-2026-10-07.md`.
+- **F11** — Beta release notes: `.changeset/customer-self-service.md`; scope and remaining acceptance: `deploy/customer-surfaces-2026-10-07.md`.
+- **F12** — Composed software journeys: `tests/browser/customer-surfaces.spec.ts`, `tests/modules/customer-surfaces.test.ts`; actual provider acceptance remains open in `MASTER.md`.
+
 ## C7.01 — Build configurable lifecycle and deal pipelines, stages
 
 - **F01** — `db/migrations/0000_reviewed-baseline.sql` — reviewed baseline (C10.19) folding the item's migration tag `0101_pipelines.sql`; table invariants asserted in `tests/core/pipelines.test.ts`.
@@ -3118,6 +3148,21 @@ v2.
 - **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; this item ships no demo fixture of its own.
 - **F11** — `deploy/spec-reconciliation.md` — the §-mapping for MASTER.md §4.18 and this item's §43 annotation; release note in `.changeset/consent-is-evidence.md`.
 - **F12** — `tests/core/media-consent.test.ts` — the hourly sweep takes published work offline when its permission stops standing.
+
+## C8.17 — Session-bound customer records
+
+- **F01** — Additive customer identifiers and asset privacy backfill: `db/migrations/0022_customer_surfaces.sql`.
+- **F02** — Typed shared services: `src/core/portal/record-service.ts`; customer identity and refusal tests: `tests/modules/customer-surfaces.test.ts`.
+- **F03** — Canonical contact, invoice, grant and share-policy composition: `tests/modules/customer-surfaces.test.ts`.
+- **F04** — Human surface: `app/portal/(account)/records/[section]/[id]/page.tsx`; browser evidence: `tests/browser/customer-surfaces.spec.ts`.
+- **F05** — The service registry projects the same schemas and permissions to HTTP/MCP: `src/core/portal/record-service.ts`, `packages/sdk/src/generated.ts`.
+- **F06** — Four locale catalogs: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; runtime catalog gate: `tests/core/locale-quality.test.ts`.
+- **F07** — Customer ownership, stale terms, duplicate reservations, payment-bound grants and private downloads: `tests/modules/customer-surfaces.test.ts`.
+- **F08** — Database regressions: `tests/modules/customer-surfaces.test.ts`; browser forms: `tests/browser/customer-surfaces.spec.ts`.
+- **F09** — Provider and deployment limitations remain explicit: `deploy/customer-surfaces-2026-10-07.md`; no mocked live-provider acceptance is claimed.
+- **F10** — Configuration and customer entry points: `deploy/customer-surfaces-2026-10-07.md`.
+- **F11** — Beta release notes: `.changeset/customer-self-service.md`; scope and remaining acceptance: `deploy/customer-surfaces-2026-10-07.md`.
+- **F12** — Composed software journeys: `tests/browser/customer-surfaces.spec.ts`, `tests/modules/customer-surfaces.test.ts`; actual provider acceptance remains open in `MASTER.md`.
 
 ## C9.01 — Build visual trigger → condition → action automations over the
 
@@ -3628,6 +3673,36 @@ v2.
 - **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; per-item contextual help is not separately evidenced.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping).
 - **F12** — `tests/modules/social-onboarding.test.ts` is the composition proof.
+
+## C9.37 — Newsletter readiness and sending journey
+
+- **F01** — Additive customer identifiers and asset privacy backfill: `db/migrations/0022_customer_surfaces.sql`.
+- **F02** — Typed shared services: `src/modules/newsletters/broadcast-service.ts`; customer identity and refusal tests: `tests/modules/customer-surfaces.test.ts`.
+- **F03** — Canonical contact, invoice, grant and share-policy composition: `tests/modules/customer-surfaces.test.ts`.
+- **F04** — Human surface: `app/(admin)/admin/newsletters/broadcasts/page.tsx`; browser evidence: `tests/browser/customer-surfaces.spec.ts`.
+- **F05** — The service registry projects the same schemas and permissions to HTTP/MCP: `src/modules/newsletters/broadcast-service.ts`, `packages/sdk/src/generated.ts`.
+- **F06** — Four locale catalogs: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; runtime catalog gate: `tests/core/locale-quality.test.ts`.
+- **F07** — Customer ownership, stale terms, duplicate reservations, payment-bound grants and private downloads: `tests/modules/customer-surfaces.test.ts`.
+- **F08** — Database regressions: `tests/modules/customer-surfaces.test.ts`; browser forms: `tests/browser/customer-surfaces.spec.ts`.
+- **F09** — Provider and deployment limitations remain explicit: `deploy/customer-surfaces-2026-10-07.md`; no mocked live-provider acceptance is claimed.
+- **F10** — Configuration and customer entry points: `deploy/customer-surfaces-2026-10-07.md`.
+- **F11** — Beta release notes: `.changeset/customer-self-service.md`; scope and remaining acceptance: `deploy/customer-surfaces-2026-10-07.md`.
+- **F12** — Composed software journeys: `tests/browser/customer-surfaces.spec.ts`, `tests/modules/customer-surfaces.test.ts`; actual provider acceptance remains open in `MASTER.md`.
+
+## C9.38 — Public membership signup
+
+- **F01** — Additive customer identifiers and asset privacy backfill: `db/migrations/0022_customer_surfaces.sql`.
+- **F02** — Typed shared services: `src/modules/subscriptions/public-signup.ts`; customer identity and refusal tests: `tests/modules/customer-surfaces.test.ts`.
+- **F03** — Canonical contact, invoice, grant and share-policy composition: `tests/modules/customer-surfaces.test.ts`.
+- **F04** — Human surface: `app/(public)/memberships/page.tsx`; browser evidence: `tests/browser/customer-surfaces.spec.ts`.
+- **F05** — The service registry projects the same schemas and permissions to HTTP/MCP: `src/modules/subscriptions/public-signup.ts`, `packages/sdk/src/generated.ts`.
+- **F06** — Four locale catalogs: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; runtime catalog gate: `tests/core/locale-quality.test.ts`.
+- **F07** — Customer ownership, stale terms, duplicate reservations, payment-bound grants and private downloads: `tests/modules/customer-surfaces.test.ts`.
+- **F08** — Database regressions: `tests/modules/customer-surfaces.test.ts`; browser forms: `tests/browser/customer-surfaces.spec.ts`.
+- **F09** — Provider and deployment limitations remain explicit: `deploy/customer-surfaces-2026-10-07.md`; no mocked live-provider acceptance is claimed.
+- **F10** — Configuration and customer entry points: `deploy/customer-surfaces-2026-10-07.md`.
+- **F11** — Beta release notes: `.changeset/customer-self-service.md`; scope and remaining acceptance: `deploy/customer-surfaces-2026-10-07.md`.
+- **F12** — Composed software journeys: `tests/browser/customer-surfaces.spec.ts`, `tests/modules/customer-surfaces.test.ts`; actual provider acceptance remains open in `MASTER.md`.
 
 ## C9.32 — Build scheduled exports and the accounting export shapes
 
@@ -4572,4 +4647,3 @@ v2.
 - **F10** — Partial, honestly labelled: rides the host demo (`tests/core/seed-demo.test.ts`); no plugin-specific seed claimed.
 - **F11** — `plugins/voice-video/manifest.ts` + `plugins/voice-video/plugin.json` + `deploy/spec-reconciliation.md`.
 - **F12** — `tests/browser/first-party-plugins.spec.ts` — unconfigured rooms refuse honestly in the real browser.
-

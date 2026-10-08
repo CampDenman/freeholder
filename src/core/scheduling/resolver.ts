@@ -24,7 +24,7 @@
 // needing a therapist *and* a room offers a slot only where both are free. A
 // resolver that picked the person first and then looked for a room would offer
 // slots it cannot honour, which is worse than offering fewer.
-import { and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { or, and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { openWindows, type OpenWindow } from "@/core/scheduling/availability";
 import {
   bookings,
@@ -55,6 +55,7 @@ export interface Slot {
 
 export interface SlotRequest {
   serviceOfferingId: string;
+  excludeBookingId?: string;
   /** Inclusive local dates in the business's zone, `YYYY-MM-DD`. */
   from: string;
   to: string;
@@ -107,13 +108,15 @@ async function busyFor(
   tx: Tx,
   calendarId: string,
   window: { from: Date; to: Date },
+  excludeBookingId?: string,
 ): Promise<Busy[]> {
   const booked = await tx
     .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt })
     .from(bookings)
     .where(
       and(
-        eq(bookings.calendarId, calendarId),
+        or(eq(bookings.calendarId, calendarId), sql`${calendarId}::uuid = any(${bookings.secondaryCalendarIds})`),
+        excludeBookingId ? sql`${bookings.id} <> ${excludeBookingId}::uuid` : undefined,
         sql`${bookings.status} = any(${sql.param([...HOLDING_STATUSES])})`,
         gte(bookings.endsAt, window.from),
         lte(bookings.startsAt, window.to),
@@ -382,7 +385,7 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
     { startsAt: Date; endsAt: Date; capacityUsed: number }[]
   >();
   for (const member of [...candidates, ...resources]) {
-    busyByCalendar.set(member.calendarId, await busyFor(tx, member.calendarId, busyWindow));
+    busyByCalendar.set(member.calendarId, await busyFor(tx, member.calendarId, busyWindow, request.excludeBookingId));
     if (member.capacityDefault > 1) {
       heldByCalendar.set(
         member.calendarId,
@@ -395,7 +398,8 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
           .from(bookings)
           .where(
             and(
-              eq(bookings.calendarId, member.calendarId),
+              or(eq(bookings.calendarId, member.calendarId), sql`${member.calendarId}::uuid = any(${bookings.secondaryCalendarIds})`),
+              request.excludeBookingId ? sql`${bookings.id} <> ${request.excludeBookingId}::uuid` : undefined,
               sql`${bookings.status} = any(${sql.param([...HOLDING_STATUSES])})`,
               gte(bookings.endsAt, busyWindow.from),
               lte(bookings.startsAt, busyWindow.to),

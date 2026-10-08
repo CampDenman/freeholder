@@ -40,6 +40,8 @@ import organizationServices from "@/core/contacts/organizations";
 import relationshipServices from "@/core/contacts/relationships";
 import privacyServices from "@/core/privacy/service";
 import mediaConsentServices from "@/core/privacy/media-consent";
+import { customerSignInStatus, requestCustomerSignIn } from "@/core/portal/sign-in";
+import { myRecord, actOnMyRecord } from "@/core/portal/record-service";
 import portalServices from "@/core/portal/service";
 import doctorServices from "@/core/doctor/service";
 import eventServices from "@/core/events/service";
@@ -147,6 +149,10 @@ const services: Service[] = [
   ...mediaConsentServices,
   ...coverageServices,
   ...portalServices,
+  myRecord,
+  actOnMyRecord,
+  customerSignInStatus,
+  requestCustomerSignIn,
   ...doctorServices,
   ...eventServices,
   ...outboxServices,

@@ -1020,7 +1020,10 @@ registerSearchSource({
   },
 });
 
+import publicBookingServices from "./public-booking";
+
 export default [
+  ...publicBookingServices,
   ...demoServices,
   listProducts,
   getProduct,

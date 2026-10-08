@@ -150,6 +150,8 @@ const subscriptionRow = row({
   currentPeriodEnd: timestamp,
   trialEndsAt: timestamp.nullable(),
   paymentMethodId: uuidSchema.nullable(),
+  signupPending: z.boolean(),
+  signupInvoiceId: uuidSchema.nullable(),
   pendingPlanId: uuidSchema.nullable(),
   provider: z.string().nullable(),
   providerRef: z.string().nullable(),
@@ -626,6 +628,7 @@ export const subscribe = defineService({
     currency: z.string().trim().length(3).optional(),
     /** Required for platform and provider billing. */
     paymentMethodId: uuidSchema.optional(),
+    deferFirstPayment: z.boolean().default(false),
   }),
   output: row({
     subscription: subscriptionRow,
@@ -667,7 +670,7 @@ export const subscribe = defineService({
     }
 
     let paymentMethod: typeof paymentMethods.$inferSelect | null = null;
-    if (plan.billingMode !== "manual") {
+    if (plan.billingMode !== "manual" && (!input.deferFirstPayment || input.paymentMethodId)) {
       if (!input.paymentMethodId) {
         throw new ServiceError(
           "validation",
@@ -690,6 +693,10 @@ export const subscribe = defineService({
 
     const now = new Date();
     const trialing = plan.trialDays > 0;
+    if (input.deferFirstPayment && trialing && plan.trialRequiresCard && !paymentMethod) {
+      throw new ServiceError("conflict", "This trial needs a saved payment method before it can start.");
+    }
+    const pending = input.deferFirstPayment && !trialing;
     // A trial *is* the first period. Treating it as a prelude would leave a
     // subscription with no period at all for its first fortnight, and every
     // question about "what are they inside" would have no answer.
@@ -708,7 +715,9 @@ export const subscribe = defineService({
         billingMode: plan.billingMode,
         provider: paymentMethod?.provider ?? null,
         paymentMethodId: paymentMethod?.id ?? null,
-        status: trialing ? "trialing" : "active",
+        status: pending ? "paused" : trialing ? "trialing" : "active",
+        signupPending: pending,
+        pausedAt: pending ? now : null,
         currentPeriodStart: start,
         currentPeriodEnd: end,
         trialEndsAt: trialing ? end : null,
@@ -716,7 +725,7 @@ export const subscribe = defineService({
       .returning();
 
     await record(ctx, created!.id, "created");
-    await record(ctx, created!.id, trialing ? "trialing" : "activated");
+    if (!pending) await record(ctx, created!.id, trialing ? "trialing" : "activated");
 
     // A trial bills nothing, which is what makes it a trial. The first invoice
     // is raised by the renewal sweep when the trial period ends.
@@ -737,6 +746,10 @@ export const subscribe = defineService({
         .values({ subscriptionId: created!.id, kind: "renewed", invoiceId });
     }
 
+    if (pending) {
+      await ctx.tx.update(subscriptions).set({ signupInvoiceId: invoiceId }).where(eq(subscriptions.id, created!.id));
+      created!.signupInvoiceId = invoiceId;
+    }
     ctx.setSubject("subscription", created!.id);
     ctx.queueEvent("subscription.created", {
       subscriptionId: created!.id,
@@ -750,7 +763,7 @@ export const subscribe = defineService({
       planName: plan.name,
       startsAt: created!.currentPeriodStart,
       endsAt: created!.currentPeriodEnd,
-      status: "active",
+      status: pending ? "paused" : "active",
     });
     return { subscription: created!, invoiceId };
   },
@@ -986,6 +999,7 @@ export const resumeSubscription = defineService({
       .from(subscriptions)
       .where(eq(subscriptions.id, input.id));
     if (!subscription) throw new ServiceError("not_found", "There is no such subscription.");
+    if (subscription.signupPending) throw new ServiceError("conflict", "Pay the first invoice before activating this signup.");
     if (subscription.status !== "paused") {
       throw new ServiceError("conflict", "That subscription is not paused.");
     }
@@ -1068,7 +1082,7 @@ export const cancelSubscription = defineService({
       .select({ cancelBehaviour: plans.cancelBehaviour })
       .from(plans)
       .where(eq(plans.id, subscription.planId));
-    const atOnce = input.immediately ?? plan?.cancelBehaviour === "immediate";
+    const atOnce = subscription.signupPending || (input.immediately ?? plan?.cancelBehaviour === "immediate");
     const now = new Date();
 
     const [cancelled] = await ctx.tx
@@ -1359,6 +1373,7 @@ export async function onInvoicePaid(
       : undefined;
   if (!invoiceId) return;
   await recoverDunning.call({ invoiceId }, { kind: "system" });
+  await activatePaidSignup.call({ invoiceId }, { kind: "system" });
 }
 
 /* -------------------------------------------------------------- reading */
@@ -1590,7 +1605,10 @@ export {
   reconcileProviderPeriod,
 };
 
+import publicMembershipServices, { activatePaidSignup } from "./public-signup";
+
 export default [
+  ...publicMembershipServices,
   savePlan,
   listPlans,
   listOfferedPlans,

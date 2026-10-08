@@ -1,0 +1,207 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// Customer journeys run against real PostgreSQL, shared services and permissions.
+import { randomUUID } from "node:crypto";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { db } from "@/core/db";
+import { setTranslation } from "@/core/i18n/service";
+import { consumeCustomerMagicLink } from "@/core/auth/magic-links/service";
+import { mailOutbox } from "@/core/mail/schema";
+import { decryptMailOutbox } from "@/core/mail/outbox-crypto";
+import { resetEnvForTests } from "@/core/env";
+import { resetMailForTests } from "@/adapters/mail";
+import { users } from "@/core/auth/schema";
+import { contacts } from "@/core/contacts/schema";
+import { resolveContact } from "@/core/contacts/service";
+import { ready } from "@/core/runtime";
+import { updateBusiness } from "@/core/settings/service";
+import { myRecord, actOnMyRecord } from "@/core/portal/record-service";
+import { customerSignInStatus, requestCustomerSignIn } from "@/core/portal/sign-in";
+import { createCalendar, setServiceCalendars } from "@/core/scheduling/service";
+import { setAvailability } from "@/core/scheduling/availability-service";
+import { createAudience, setAudienceServices } from "@/core/scheduling/audiences";
+import { availableSlots } from "@/core/scheduling/resolver-service";
+import { bookings } from "@/core/scheduling/schema";
+import { hasAccess } from "@/core/entitlements/service";
+import { productVariants, products, priceLists, priceListEntries } from "@/modules/catalog/schema";
+import { upsertServiceOffering, setPriceRule } from "@/modules/catalog/offerings";
+import { publicBookingQuote, bookPublicService, moveMyBooking } from "@/modules/catalog/public-booking";
+import { createPage, publishPage, updatePage, ensureDefaults } from "@/modules/cms/service";
+import { listBlogPosts } from "@/modules/cms/blog";
+import { savePlan, cancelMySubscription } from "@/modules/subscriptions/service";
+import { publicMembershipPlans, joinMembership, activatePaidSignup } from "@/modules/subscriptions/public-signup";
+import { subscriptions } from "@/modules/subscriptions/schema";
+import { invoices } from "@/modules/invoicing/schema";
+import { createPayment, settlePayment } from "@/modules/invoicing/invoice-service";
+import { getCustomerInvoice } from "@/modules/invoicing/customer-service";
+import { assets } from "@/core/media/schema";
+import { authorizeAssetDownload, authorizeObjectDelivery } from "@/core/media/service";
+import { saveDocument, addVersion, share, revokeShare, myDocumentDownload } from "@/modules/documents/service";
+import { createQuote, sendQuote } from "@/modules/quotes/service";
+import { ANONYMOUS, closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+
+const futureDay = new Date(); futureDay.setUTCDate(futureDay.getUTCDate() + 14);
+const DAY = futureDay.toISOString().slice(0,10);
+let contactId:string;
+const OTHER={...CUSTOMER,userId:"00000000-0000-4000-8000-000000000004"};
+async function priced(kind:"service"|"digital"="service") {
+  const [product]=await db().insert(products).values({name:"Public offer",slug:`offer-${randomUUID()}`,kind,status:"active",publishedAt:new Date()}).returning();
+  const [variant]=await db().insert(productVariants).values({productId:product!.id,combinationKey:"default",sku:randomUUID(),isDefault:true}).returning();
+  const [list]=await db().insert(priceLists).values({name:"Retail",currency:"CAD",active:true}).returning();
+  await db().insert(priceListEntries).values({priceListId:list!.id,variantId:variant!.id,amountMinor:10000});
+  return{product:product!,variant:variant!};
+}
+async function bookingSelection(){
+  const {product}=await priced();
+  const offering=await upsertServiceOffering.call({productId:product.id,durationMin:60,locationType:"in_person",depositType:"fixed",depositAmount:"25.00",currency:"CAD"},OWNER);
+  await setPriceRule.call({productId:product.id,mode:"deposit_balance"},OWNER);
+  const calendar=await createCalendar.call({kind:"person",name:"Appointments",timezone:"UTC",capacityDefault:1,userId:OWNER.userId},OWNER);
+  await setAvailability.call({calendarId:calendar.id,rules:[{weekday:futureDay.getUTCDay(),starts:"09:00",ends:"17:00",kind:"bookable"}]},OWNER);
+  await setServiceCalendars.call({serviceOfferingId:offering.id,members:[{calendarId:calendar.id,role:"primary",priority:0}]},OWNER);
+  const audience=await createAudience.call({name:"Visitors",who:"public",hours:"calendar"},OWNER);
+  await setAudienceServices.call({id:audience.id,serviceOfferingIds:[offering.id]},OWNER);
+  const quote=await publicBookingQuote.call({productId:product.id,currency:"CAD",mode:"deposit_balance"},ANONYMOUS);
+  const slots=await availableSlots.call({productId:product.id,serviceOfferingId:offering.id,from:DAY,to:DAY},CUSTOMER);
+  expect(slots.length).toBeGreaterThan(1);
+  const input={productId:product.id,currency:"CAD",mode:"deposit_balance" as const,seats:1,calendarId:slots[0]!.calendarId,startsAt:slots[0]!.startsAt.toISOString(),termsHash:quote.termsHash,acceptedTerms:true as const,requestKey:randomUUID()};
+  return{input,slots,offering};
+}
+describe.runIf(hasDatabase)("public customer surfaces",()=>{
+  beforeAll(async()=>{await ready();},60000);
+  beforeEach(async()=>{
+    await truncateSpine();
+    await db().insert(users).values([{id:OWNER.userId,email:"owner@example.test",role:"owner"},{id:CUSTOMER.userId,email:"customer@example.test",role:"customer"},{id:OTHER.userId,email:"other@example.test",role:"customer"}]);
+    await updateBusiness.call({name:"Customer proof",country:"CA",baseCurrency:"CAD",timezone:"UTC",enabledLocales:["en","fr"]},OWNER);
+    const {contact}=await resolveContact.call({email:"customer@example.test",name:"Customer"},OWNER);
+    contactId=contact.id;
+    await db().update(contacts).set({userId:CUSTOMER.userId}).where(eq(contacts.id,contact.id));
+    const {contact:other}=await resolveContact.call({email:"other@example.test",name:"Other"},OWNER);
+    await db().update(contacts).set({userId:OTHER.userId}).where(eq(contacts.id,other.id));
+  });
+  afterAll(closeDb);
+  afterEach(() => { vi.unstubAllEnvs(); resetEnvForTests(); resetMailForTests(); });
+  it("publishes an editable blog index and never exposes drafts or working copies",async()=>{
+    await ensureDefaults.call({locale:"en"},OWNER);
+    const draft=await createPage.call({slug:"blog/private",title:"Private draft"},OWNER);
+    const post=await createPage.call({slug:"blog/first",title:"Published title",blocks:[{id:"h1",type:"heading",props:{text:"Published title",level:1}}],seo:{description:"Public excerpt"}},OWNER);
+    await publishPage.call({id:post.id,published:true},OWNER);
+    await updatePage.call({id:post.id,expectedVersion:2,title:"Unpublished secret"},OWNER);
+    const result=await listBlogPosts.call({locale:"en",limit:1},ANONYMOUS);
+    expect(result.total).toBe(1);expect(result.posts[0]?.title).toBe("Published title");
+    expect(JSON.stringify(result)).not.toContain("Unpublished secret");expect(JSON.stringify(result)).not.toContain(draft.id);
+    await setTranslation.call({entityType:"page",entityId:post.id,locale:"fr",status:"reviewed",fields:{title:"Premier article",seo:{description:"Extrait public"}}},OWNER);
+    const french=await listBlogPosts.call({locale:"fr"},ANONYMOUS);
+    expect(french.posts[0]).toMatchObject({slug:"blog/first",title:"Premier article",description:"Extrait public"});
+    const second=await createPage.call({slug:"blog/second",title:"Second post",blocks:[{id:"h1",type:"heading",props:{text:"Second post",level:1}}]},OWNER);
+    await publishPage.call({id:second.id,published:true},OWNER);
+    expect((await listBlogPosts.call({locale:"en",limit:1,page:2},ANONYMOUS)).posts[0]?.slug).toBe("blog/first");
+    await publishPage.call({id:second.id,published:false},OWNER);
+    await publishPage.call({id:post.id,published:false},OWNER);
+    expect((await listBlogPosts.call({locale:"en"},ANONYMOUS)).posts).toEqual([]);
+  });
+  it("reserves once on retry, bills only the deposit, opens the portal and moves then cancels",async()=>{
+    const {input,slots}=await bookingSelection();
+    expect((await failure(bookPublicService.call(input,ANONYMOUS))).code).toBe("permission");
+    const reserved=await bookPublicService.call(input,CUSTOMER);
+    expect(await bookPublicService.call(input,CUSTOMER)).toEqual(reserved);
+    expect((await db().select().from(bookings))).toHaveLength(1);
+    const invoice=await getCustomerInvoice.call({id:reserved.invoiceId!},CUSTOMER);
+    expect(invoice.nextPaymentMinor).toBe(2500);
+    const detail=await myRecord.call({section:"bookings",id:reserved.bookingId},CUSTOMER);
+    expect(detail.links.some(l=>l.labelKey==="portal.record.invoice")).toBe(true);
+    expect(JSON.stringify(detail)).not.toContain("rescheduleToken");
+    expect((await failure(myRecord.call({section:"bookings",id:reserved.bookingId},OTHER))).code).toBe("not_found");
+    const later=slots.find(s=>s.startsAt.getTime()>=slots[0]!.endsAt.getTime()+3600000)!;
+    const moved=await moveMyBooking.call({id:reserved.bookingId,calendarId:later.calendarId,startsAt:later.startsAt.toISOString()},CUSTOMER);
+    expect(moved.id).not.toBe(reserved.bookingId);
+    await actOnMyRecord.call({section:"bookings",id:moved.id,action:"cancel"},CUSTOMER);
+    expect((await myRecord.call({section:"bookings",id:moved.id},CUSTOMER)).status).toBe("cancelled");
+  });
+  it("refuses stale promises and simultaneous claims for the last place",async()=>{
+    const {input,offering}=await bookingSelection();
+    expect((await failure(bookPublicService.call({...input,termsHash:"0".repeat(64)},CUSTOMER))).code).toBe("conflict");
+    expect((await failure(availableSlots.call({productId:input.productId,serviceOfferingId:randomUUID(),from:DAY,to:DAY},ANONYMOUS))).code).toBe("validation");
+    const results=await Promise.allSettled([bookPublicService.call(input,CUSTOMER),bookPublicService.call({...input,requestKey:randomUUID()},OTHER)]);
+    expect(results.filter(r=>r.status==="fulfilled")).toHaveLength(1);
+    expect((await db().select().from(bookings))).toHaveLength(1);
+    expect(offering.id).toBeTruthy();
+  });
+  it("keeps paid memberships inaccessible until settlement and cancellation cannot activate them",async()=>{
+    const {product}=await priced("digital");
+    const plan=await savePlan.call({productId:product.id,name:"Monthly",status:"active",billingMode:"manual"},OWNER);
+    const offered=(await publicMembershipPlans.call({},ANONYMOUS))[0]!;
+    const input={planId:plan.id,termsHash:offered.termsHash,requestKey:randomUUID(),acceptedTerms:true as const};
+    const joined=await joinMembership.call(input,CUSTOMER);
+    expect(joined.pending).toBe(true);expect(await joinMembership.call(input,CUSTOMER)).toEqual(joined);
+    expect((await activatePaidSignup.call({invoiceId:joined.invoiceId!},{kind:"system"})).activated).toBe(false);
+    const access={contactId,resource:{kind:"site"}};
+    expect((await hasAccess.call(access,OWNER)).allowed).toBe(false);
+    const invoice=(await db().select().from(invoices).where(eq(invoices.id,joined.invoiceId!)))[0]!;
+    const payment=await createPayment.call({invoiceId:invoice.id,provider:"manual",method:"bank_transfer",amountMinor:invoice.totalMinor,idempotencyKey:"membership-payment"},OWNER);
+    await settlePayment.call({id:payment.id,providerRef:"offline-membership-proof"},OWNER);
+    await activatePaidSignup.call({invoiceId:invoice.id},{kind:"system"});
+    const row=(await db().select().from(subscriptions).where(eq(subscriptions.id,joined.id)))[0]!;
+    expect(row.status).toBe("active");expect(row.signupPending).toBe(false);
+    expect((await hasAccess.call(access,OWNER)).allowed).toBe(true);
+    await cancelMySubscription.call({id:joined.id},CUSTOMER);
+    expect((await activatePaidSignup.call({invoiceId:invoice.id},{kind:"system"})).activated).toBe(false);
+  });
+  it("prevents duplicate memberships and never activates a cancelled pending signup",async()=>{
+    const {product}=await priced("digital");
+    const plan=await savePlan.call({productId:product.id,name:"Cancellable",status:"active"},OWNER);
+    const offered=(await publicMembershipPlans.call({},ANONYMOUS))[0]!;
+    const input={planId:plan.id,termsHash:offered.termsHash,requestKey:randomUUID(),acceptedTerms:true as const};
+    const joined=await joinMembership.call(input,CUSTOMER);
+    expect((await failure(joinMembership.call({...input,requestKey:randomUUID()},CUSTOMER))).code).toBe("conflict");
+    await cancelMySubscription.call({id:joined.id},CUSTOMER);
+    expect((await getCustomerInvoice.call({id:joined.invoiceId!},CUSTOMER)).canPay).toBe(false);
+    const invoice=(await db().select().from(invoices).where(eq(invoices.id,joined.invoiceId!)))[0]!;
+    const payment=await createPayment.call({invoiceId:invoice.id,provider:"manual",method:"bank_transfer",amountMinor:invoice.totalMinor,idempotencyKey:"late-paid"},OWNER);
+    await settlePayment.call({id:payment.id,providerRef:"late-offline-proof"},OWNER);
+    expect((await activatePaidSignup.call({invoiceId:invoice.id},{kind:"system"})).activated).toBe(false);
+    expect((await hasAccess.call({contactId,resource:{kind:"site"}},OWNER)).allowed).toBe(false);
+  });
+  it("opens and accepts your own quote without exposing its private link",async()=>{
+    const quote=await createQuote.call({contactId,title:"Client proposal",currency:"CAD",lines:[{description:"Work",quantity:1,unitAmount:"100.00"}]},OWNER);
+    const sent=await sendQuote.call({id:quote.id},OWNER);
+    const detail=await myRecord.call({section:"quotes",id:quote.id},CUSTOMER);
+    expect(detail.actions).toContain("accept");
+    expect(JSON.stringify(detail)).not.toContain(sent.viewToken);
+    expect((await failure(actOnMyRecord.call({section:"quotes",id:quote.id,action:"accept",name:"Other Person"},OTHER))).code).toBe("not_found");
+    await actOnMyRecord.call({section:"quotes",id:quote.id,action:"accept",name:"Customer"},CUSTOMER);
+    expect((await myRecord.call({section:"quotes",id:quote.id},CUSTOMER)).status).toBe("accepted");
+  });
+  it("protects document bytes, honors a one-download share, and refuses another customer",async()=>{
+    const document=await saveDocument.call({title:"Private client file",contactId},OWNER);
+    const [asset]=await db().insert(assets).values({kind:"doc",storageKey:`test/${randomUUID()}.pdf`,filename:"private.pdf",mime:"application/pdf",legacyBytes:10,bytes:10,status:"ready"}).returning();
+    await addVersion.call({documentId:document.id,assetId:asset!.id},OWNER);
+    const shared=await share.call({documentId:document.id,contactId,access:"login",downloadLimit:1},OWNER);
+    expect(await authorizeObjectDelivery.call({key:asset!.storageKey},ANONYMOUS)).toBeNull();
+    expect((await failure(authorizeAssetDownload.call({id:asset!.id},ANONYMOUS))).code).toBe("permission");
+    expect(await myDocumentDownload.call({id:document.id},OTHER)).toBeNull();
+    expect((await myDocumentDownload.call({id:document.id},CUSTOMER))?.filename).toBe("private.pdf");
+    expect(await myDocumentDownload.call({id:document.id},CUSTOMER)).toBeNull();
+    await revokeShare.call({shareId:shared.shareId},OWNER);
+    expect(await myDocumentDownload.call({id:document.id},CUSTOMER)).toBeNull();
+  });
+  it("creates a new portal contact only email proof can sign in, and spends the proof once",async()=>{
+    vi.stubEnv("SMTP_HOST","127.0.0.1"); vi.stubEnv("SMTP_PORT","2525"); vi.stubEnv("MAIL_FROM","sender@example.test");
+    resetEnvForTests(); resetMailForTests();
+    expect(await customerSignInStatus.call({},ANONYMOUS)).toEqual({available:true});
+    await requestCustomerSignIn.call({email:"new-visitor@example.test",name:"New Visitor",locale:"fr"},ANONYMOUS);
+    const [contact]=await db().select().from(contacts).where(eq(contacts.email,"new-visitor@example.test"));
+    expect(contact?.userId).toBeNull();
+    const outbox=await db().select().from(mailOutbox);
+    const message=outbox.map(row=>JSON.parse(decryptMailOutbox(row.encryptedMessage,row.deliveryId)) as {text:string}).find(mail=>mail.text.includes("/portal/magic?"));
+    const link=message!.text.match(/https?:\/\/[^\s]+/)![0];
+    const token=new URL(link).searchParams.get("token")!;
+    const signedIn=await consumeCustomerMagicLink.call({token},ANONYMOUS);
+    expect(signedIn.contactId).toBe(contact!.id);expect(signedIn.locale).toBe("fr");
+    expect((await failure(consumeCustomerMagicLink.call({token},ANONYMOUS))).code).toBe("permission");
+  });
+  it("does not promise a sign-in email when no delivering route exists",async()=>{
+    expect(await customerSignInStatus.call({},ANONYMOUS)).toEqual({available:false});
+    expect((await failure(requestCustomerSignIn.call({email:"new@example.test"},ANONYMOUS))).code).toBe("conflict");
+  });
+});

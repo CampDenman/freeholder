@@ -94,6 +94,7 @@ export default async function PortalHomePage() {
         </Card>
       ) : null}
 
+      <nav className="flex flex-wrap gap-4"><a className="underline" href={href("/book")}>{t("publicBooking.title")}</a><a className="underline" href={href("/memberships")}>{t("memberships.title")}</a></nav>
       <Card>
         <CardHeader title={t("portal.language")} />
         <CardBody>

@@ -4,10 +4,17 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
+import { randomUUID } from "node:crypto";
+import type { PaymentAdapter } from "@/adapters/payments";
+import { contacts } from "@/core/contacts/schema";
+import { beginCustomerCheckout, getCustomerInvoice } from "@/modules/invoicing/customer-service";
+import { processPaymentProviderEvents } from "@/modules/invoicing/payment-provider-service";
+import { publicMembershipPlans, joinMembership, activatePaidSignup } from "@/modules/subscriptions/public-signup";
+import { createPayment } from "@/modules/invoicing/invoice-service";
 import { users } from "@/core/auth/schema";
 import { resolveContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
-import { invoices, paymentMethods } from "@/modules/invoicing/schema";
+import { invoices, paymentMethods, payments } from "@/modules/invoicing/schema";
 import {
   priceListEntries,
   priceLists,
@@ -16,6 +23,8 @@ import {
 } from "@/modules/catalog/schema";
 import { subscriptions } from "@/modules/subscriptions/schema";
 import {
+  attachProviderSchedule,
+  cancelSubscription,
   changeMyPlan,
   changePlan,
   chargePlatformDue,
@@ -29,8 +38,9 @@ import { ready } from "@/core/runtime";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const mocks = vi.hoisted(() => ({
+  createCheckout: vi.fn<PaymentAdapter["createCheckout"]>(),
   chargeSavedMethod: vi.fn(),
-  createRecurringSchedule: vi.fn(),
+  createRecurringSchedule: vi.fn<PaymentAdapter["createRecurringSchedule"]>(),
   updateRecurringSchedule: vi.fn(),
   cancelRecurringSchedule: vi.fn(),
 }));
@@ -53,6 +63,7 @@ vi.mock("@/adapters/payments", async (importOriginal) => {
         inPerson: false,
         strongCustomerAuthentication: true,
       }),
+      createCheckout: mocks.createCheckout,
       chargeSavedMethod: mocks.chargeSavedMethod,
       createRecurringSchedule: mocks.createRecurringSchedule,
       updateRecurringSchedule: mocks.updateRecurringSchedule,
@@ -175,6 +186,8 @@ describe.runIf(hasDatabase)("subscription billing", () => {
       .values({ id: OWNER.userId, email: "owner@example.test", role: "owner" })
       .onConflictDoNothing();
     await updateBusiness.call(BUSINESS, OWNER);
+    mocks.createCheckout.mockReset();
+    mocks.createCheckout.mockResolvedValue({providerRef:"cs_signup",paymentRef:"pi_signup",url:"https://checkout.example.test/signup"});
     mocks.chargeSavedMethod.mockReset();
     mocks.createRecurringSchedule.mockReset();
     mocks.updateRecurringSchedule.mockReset();
@@ -193,6 +206,54 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     await closeDb();
   });
 
+  it("requires renewal consent and activates the exact saved method from the verified first payment",async()=>{
+    const member=await person("public-member");
+    await db().insert(users).values({id:CUSTOMER.userId,email:member.email!,role:"customer"});
+    await db().update(contacts).set({userId:CUSTOMER.userId}).where(eq(contacts.id,member.id));
+    const monthly=await plan({billingMode:"provider"});
+    const offered=(await publicMembershipPlans.call({},{kind:"anonymous"})).find(p=>p.id===monthly.id)!;
+    const joined=await joinMembership.call({planId:monthly.id,termsHash:offered.termsHash,requestKey:randomUUID(),acceptedTerms:true},CUSTOMER);
+    expect((await getCustomerInvoice.call({id:joined.invoiceId!},CUSTOMER)).saveMethodRequired).toBe(true);
+    expect((await failure(beginCustomerCheckout.call({id:joined.invoiceId!},CUSTOMER))).code).toBe("conflict");
+    await beginCustomerCheckout.call({id:joined.invoiceId!,saveMethodConsent:true},CUSTOMER);
+    expect(mocks.createCheckout.mock.calls[0]![0].saveMethod).toBe(true);
+    const [invoice]=await db().select().from(invoices).where(eq(invoices.id,joined.invoiceId!));
+    await processPaymentProviderEvents.call({provider:"stripe",bodySha256:"a".repeat(64),receivedAt:new Date().toISOString(),events:[{id:"evt_signup",kind:"payment_succeeded",providerRef:"pi_signup",checkoutRef:"cs_signup",invoiceId:invoice!.id,amountMinor:invoice!.totalMinor,currency:"CAD",occurredAt:new Date().toISOString(),savedMethod:{providerRef:"pm_signup",providerCustomerRef:"cus_signup",kind:"card",label:"card ending 4242",last4:"4242"}}]},OWNER);
+    await activatePaidSignup.call({invoiceId:invoice!.id},{kind:"system"});
+    const [sub]=await db().select().from(subscriptions).where(eq(subscriptions.id,joined.id));
+    const [method]=await db().select().from(paymentMethods).where(eq(paymentMethods.providerMethodRef,"pm_signup"));
+    expect(sub).toMatchObject({status:"active",signupPending:false,paymentMethodId:method!.id});
+    await attachProviderSchedule.call({subscriptionId:joined.id},OWNER);
+    expect(mocks.createRecurringSchedule.mock.calls[0]![0].firstBillingAt).toBe(sub!.currentPeriodEnd.toISOString());
+    await attachProviderSchedule.call({subscriptionId:joined.id},OWNER);
+    expect(mocks.createRecurringSchedule).toHaveBeenCalledOnce();
+  });
+  it("does not activate automatic signup from an unrelated saved card",async()=>{
+    const member=await person("unconsented-member");
+    await db().insert(users).values({id:CUSTOMER.userId,email:member.email!,role:"customer"});
+    await db().update(contacts).set({userId:CUSTOMER.userId}).where(eq(contacts.id,member.id));
+    const monthly=await plan({billingMode:"platform"});
+    const offered=(await publicMembershipPlans.call({},{kind:"anonymous"})).find(p=>p.id===monthly.id)!;
+    const joined=await joinMembership.call({planId:monthly.id,termsHash:offered.termsHash,requestKey:randomUUID(),acceptedTerms:true},CUSTOMER);
+    await card(member.id);
+    const [invoice]=await db().select().from(invoices).where(eq(invoices.id,joined.invoiceId!));
+    const payment=await createPayment.call({invoiceId:invoice!.id,provider:"stripe",method:"card",amountMinor:invoice!.totalMinor,idempotencyKey:"unconsented-proof",metadata:{saveMethodRequested:true}},OWNER);
+    await db().update(payments).set({status:"succeeded"}).where(eq(payments.id,payment.id));
+    await db().update(invoices).set({status:"paid",paidMinor:invoice!.totalMinor}).where(eq(invoices.id,invoice!.id));
+    expect((await activatePaidSignup.call({invoiceId:invoice!.id},{kind:"system"})).activated).toBe(false);
+  });
+  it("cancels a provider schedule created while the customer was cancelling",async()=>{
+    const member=await person("schedule-race");const method=await card(member.id);
+    const monthly=await plan({billingMode:"provider"});
+    const started=await subscribe.call({contactId:member.id,planId:monthly.id,paymentMethodId:method.id},OWNER);
+    mocks.createRecurringSchedule.mockImplementationOnce(async()=>{
+      await cancelSubscription.call({id:started.subscription.id,immediately:true},OWNER);
+      return{providerRef:"sub_cancel_race"};
+    });
+    expect((await failure(attachProviderSchedule.call({subscriptionId:started.subscription.id},OWNER))).code).toBe("conflict");
+    expect(mocks.cancelRecurringSchedule).toHaveBeenCalledWith(expect.objectContaining({providerRef:"sub_cancel_race"}));
+    expect((await db().select().from(subscriptions).where(eq(subscriptions.id,started.subscription.id)))[0]?.providerRef).toBeNull();
+  });
   it("charges a stored method for a platform plan without skipping the paid period", async () => {
     const member = await person("platform");
     const method = await card(member.id);

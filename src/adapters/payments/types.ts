@@ -113,6 +113,8 @@ export interface OffSessionChargeResult {
 }
 
 export interface RecurringScheduleRequest {
+  /** First renewal after an already paid period or free trial. */
+  firstBillingAt?: string;
   customerRef: string;
   methodRef: string;
   currency: string;

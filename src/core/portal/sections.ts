@@ -42,15 +42,8 @@ export type PortalRecord = {
   /**
    * Where the customer opens it, or null.
    *
-   * Null is the common case today and is a deliberate refusal rather than a
-   * gap. Most customer-facing record pages are reached by a view token, and a
-   * token is a credential: `quotes.list` names its columns one by one
-   * specifically so `view_token` cannot ride along into "every list, log and
-   * screenshot". A portal that put those tokens in a list would undo that.
-   *
-   * So the room shows the record and its state, the emailed link still opens
-   * it, and a session-authenticated record page is a per-module piece of work
-   * rather than something this registry can invent.
+   * Session-authenticated record pages are safe in lists. A bearer view or
+   * share token is a credential and must never be returned here.
    */
   href: string | null;
   amountMinor?: number | null;
@@ -70,6 +63,14 @@ export type PortalSection = {
    * is the admin one, run on behalf of the only person entitled to the answer.
    */
   load: (ctx: ServiceContext, contactId: string, limit: number) => Promise<PortalRecord[]>;
+  /** Called only after the session's contact owns the requested list record. */
+  detail?: (ctx: ServiceContext, contactId: string, id: string) => Promise<{
+    fields?: { labelKey: string; value: string }[];
+    lines?: { description: string; amountMinor?: number; currency?: string }[];
+    links?: { labelKey: string; href: string }[];
+    actions?: ("accept" | "decline" | "cancel" | "download")[];
+  }>;
+  act?: (ctx: ServiceContext, contactId: string, id: string, input: { action: string; name?: string; reason?: string }) => Promise<{ href?: string }>;
 };
 
 const sections = new Map<string, PortalSection>();
