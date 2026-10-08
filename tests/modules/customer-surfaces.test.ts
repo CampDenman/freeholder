@@ -105,7 +105,9 @@ describe.runIf(hasDatabase)("public customer surfaces",()=>{
     expect((await failure(bookPublicService.call(input,ANONYMOUS))).code).toBe("permission");
     const reserved=await bookPublicService.call(input,CUSTOMER);
     expect(await bookPublicService.call(input,CUSTOMER)).toEqual(reserved);
-    expect((await db().select().from(bookings))).toHaveLength(1);
+    const rows=await db().select().from(bookings);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.cancellationPolicy).toEqual((await publicBookingQuote.call({productId:input.productId,currency:input.currency,mode:input.mode,seats:input.seats},CUSTOMER)).policy);
     const invoice=await getCustomerInvoice.call({id:reserved.invoiceId!},CUSTOMER);
     expect(invoice.nextPaymentMinor).toBe(2500);
     const detail=await myRecord.call({section:"bookings",id:reserved.bookingId},CUSTOMER);
@@ -117,6 +119,12 @@ describe.runIf(hasDatabase)("public customer surfaces",()=>{
     expect(moved.id).not.toBe(reserved.bookingId);
     await actOnMyRecord.call({section:"bookings",id:moved.id,action:"cancel"},CUSTOMER);
     expect((await myRecord.call({section:"bookings",id:moved.id},CUSTOMER)).status).toBe("cancelled");
+  });
+  it("refuses an owner duration change after a customer accepted the original appointment",async()=>{
+    const {input}=await bookingSelection();
+    await upsertServiceOffering.call({productId:input.productId,durationMin:90,locationType:"in_person"},OWNER);
+    expect((await failure(bookPublicService.call(input,CUSTOMER))).code).toBe("conflict");
+    expect(await db().select().from(bookings)).toHaveLength(0);
   });
   it("refuses stale promises and simultaneous claims for the last place",async()=>{
     const {input,offering}=await bookingSelection();

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C6.19: public discovery and verified, retry-safe customer reservations.
-import { cancellationTerms } from "@/core/scheduling/policy";
+import { cancellationTerms, termsFrom } from "@/core/scheduling/policy";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -29,7 +29,7 @@ export const publicBookingQuote = defineService({
     if (!offering) throw new ServiceError("not_found", "That service is not bookable.");
     const price = await ctx.call(quoteServicePayment, { ...input, quantity: input.seats });
     if (!price.available) throw new ServiceError("conflict", "That service cannot be priced in this currency.");
-    const policy = await ctx.call(bookingTerms, { serviceOfferingId: offering.id });
+    const policy = termsFrom(await ctx.call(bookingTerms, { serviceOfferingId: offering.id }));
     const hash = createHash("sha256").update(JSON.stringify({ productId: product.id, offeringId: offering.id, durationMin: offering.durationMin, capacity: offering.capacity, offeringUpdatedAt: offering.updatedAt, price: price.priceMinor, due: price.dueNowMinor, currency: input.currency, mode: input.mode, seats: input.seats, policy })).digest("hex");
     return { productId: product.id, offeringId: offering.id, name: product.name, durationMin: offering.durationMin, capacity: offering.capacity, currency: input.currency, totalMinor: price.priceMinor, dueNowMinor: price.dueNowMinor, balanceMinor: price.priceMinor-price.dueNowMinor, mode: input.mode, termsHash: hash, policy };
   },
@@ -83,6 +83,7 @@ export const bookPublicService = defineService({
     await ctx.tx.select({ id: calendars.id }).from(calendars).where(inArray(calendars.id, [candidate.calendarId,...candidate.resourceCalendarIds].sort())).orderBy(calendars.id).for("update");
     const slot = await find();
     if (!slot) throw new ServiceError("conflict", "That time was just taken. Choose another.");
+    if (slot.endsAt.getTime() - slot.startsAt.getTime() !== quote.durationMin * 60000) throw new ServiceError("conflict", "The appointment duration changed. Review it before booking.");
     const booking = await ctx.callAsSystem(createBooking, { calendarId: slot.calendarId, contact: { email: contact.email }, serviceOfferingId: quote.offeringId, secondaryCalendarIds: slot.resourceCalendarIds, startsAt: slot.startsAt.toISOString(), endsAt: slot.endsAt.toISOString(), capacityUsed: input.seats, source: "site", status: "requested" });
     let invoiceId: string | null = null;
     if (quote.totalMinor > 0) {
@@ -94,7 +95,7 @@ export const bookPublicService = defineService({
       const deposit = Math.min(quote.dueNowMinor, issued.invoice.totalMinor);
       if (quote.mode === "deposit_balance" && deposit > 0 && deposit < issued.invoice.totalMinor) await ctx.callAsSystem(createPaymentPlan, { invoiceId: issued.invoice.id, idempotencyKey: `booking-deposit:${booking.id}`, installments: [{ dueAt: new Date(), amountMinor: deposit }, { dueAt: slot.startsAt, amountMinor: issued.invoice.totalMinor-deposit }] });
     }
-    await ctx.tx.update(bookings).set({ invoiceId, publicRequestKey: input.requestKey, meta: { publicTermsHash: input.termsHash } }).where(eq(bookings.id, booking.id));
+    await ctx.tx.update(bookings).set({ invoiceId, cancellationPolicy: quote.policy, publicRequestKey: input.requestKey, meta: { publicTermsHash: input.termsHash } }).where(eq(bookings.id, booking.id));
     ctx.setSubject("booking", booking.id);
     return { bookingId: booking.id, invoiceId };
   },
