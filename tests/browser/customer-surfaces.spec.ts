@@ -97,7 +97,7 @@ test.describe("public customer surfaces",()=>{
     const ownRecord=new URL(page.url()).pathname;
     const outsider=await browser.newContext({baseURL:C11_BASE_URL});const outside=await outsider.newPage();
     const denied=await outside.request.post("/api/v1/portal.myRecord",{data:{section:"bookings",id:ownRecord.split("/").at(-1)}});
-    expect(denied.status()).toBe(403);await outsider.close();
+    expect(denied.status()).toBe(401);await outsider.close();
     await page.goto("/memberships");
     await page.getByLabel("I agree to this membership’s price, renewal and cancellation terms.").check();
     await page.getByRole("button",{name:"Join membership",exact:true}).click();

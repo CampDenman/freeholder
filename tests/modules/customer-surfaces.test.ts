@@ -38,7 +38,7 @@ import { getCustomerInvoice } from "@/modules/invoicing/customer-service";
 import { assets } from "@/core/media/schema";
 import { authorizeAssetDownload, authorizeObjectDelivery } from "@/core/media/service";
 import { saveDocument, addVersion, share, revokeShare, myDocumentDownload } from "@/modules/documents/service";
-import { createQuote, sendQuote } from "@/modules/quotes/service";
+import { createQuote, setQuoteItems, sendQuote } from "@/modules/quotes/service";
 import { ANONYMOUS, closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const futureDay = new Date(); futureDay.setUTCDate(futureDay.getUTCDate() + 14);
@@ -163,7 +163,8 @@ describe.runIf(hasDatabase)("public customer surfaces",()=>{
     expect((await hasAccess.call({contactId,resource:{kind:"site"}},OWNER)).allowed).toBe(false);
   });
   it("opens and accepts your own quote without exposing its private link",async()=>{
-    const quote=await createQuote.call({contactId,title:"Client proposal",currency:"CAD",lines:[{description:"Work",quantity:1,unitAmount:"100.00"}]},OWNER);
+    const quote=await createQuote.call({contactId,title:"Client proposal",currency:"CAD"},OWNER);
+    await setQuoteItems.call({id:quote.id,items:[{description:"Work",unitPriceMinor:10000}]},OWNER);
     const sent=await sendQuote.call({id:quote.id},OWNER);
     const detail=await myRecord.call({section:"quotes",id:quote.id},CUSTOMER);
     expect(detail.actions).toContain("accept");
@@ -186,7 +187,7 @@ describe.runIf(hasDatabase)("public customer surfaces",()=>{
     expect(await myDocumentDownload.call({id:document.id},CUSTOMER)).toBeNull();
   });
   it("creates a new portal contact only email proof can sign in, and spends the proof once",async()=>{
-    vi.stubEnv("SMTP_HOST","127.0.0.1"); vi.stubEnv("SMTP_PORT","2525"); vi.stubEnv("MAIL_FROM","sender@example.test");
+    vi.stubEnv("MAIL_ADAPTER","smtp"); vi.stubEnv("SMTP_HOST","127.0.0.1"); vi.stubEnv("SMTP_PORT","2525"); vi.stubEnv("MAIL_FROM","sender@example.test");
     resetEnvForTests(); resetMailForTests();
     expect(await customerSignInStatus.call({},ANONYMOUS)).toEqual({available:true});
     await requestCustomerSignIn.call({email:"new-visitor@example.test",name:"New Visitor",locale:"fr"},ANONYMOUS);
