@@ -1758,6 +1758,10 @@ export const resolveImage = defineService({
     // Null rather than an error: a block pointing at a deleted asset should
     // leave a gap in a page, never take the page down.
     if (!asset || asset.kind !== "image" || asset.status !== "ready") return null;
+    if (asset.isPrivate) {
+      try { await ctx.call(privateAssetDownloadAccess, {}); }
+      catch (error) { if (error instanceof ServiceError && error.code === "permission") return null; throw error; }
+    }
 
     const store = storage();
     const variants = asset.variants as VariantSet;

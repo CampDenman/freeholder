@@ -36,7 +36,7 @@ import { invoices } from "@/modules/invoicing/schema";
 import { createPayment, settlePayment } from "@/modules/invoicing/invoice-service";
 import { getCustomerInvoice } from "@/modules/invoicing/customer-service";
 import { assets } from "@/core/media/schema";
-import { authorizeAssetDownload, authorizeObjectDelivery } from "@/core/media/service";
+import { authorizeAssetDownload, authorizeObjectDelivery, resolveImage } from "@/core/media/service";
 import { saveDocument, addVersion, share, revokeShare, myDocumentDownload } from "@/modules/documents/service";
 import { createQuote, setQuoteItems, sendQuote } from "@/modules/quotes/service";
 import { ANONYMOUS, closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
@@ -183,7 +183,14 @@ describe.runIf(hasDatabase)("public customer surfaces",()=>{
   });
   it("protects document bytes, honors a one-download share, and refuses another customer",async()=>{
     const document=await saveDocument.call({title:"Private client file",contactId},OWNER);
+    const [image]=await db().insert(assets).values({kind:"image",storageKey:`test/${randomUUID()}.jpg`,filename:"client.jpg",mime:"image/jpeg",legacyBytes:10,bytes:10,status:"ready"}).returning();
+    expect(await resolveImage.call({id:image!.id},ANONYMOUS)).not.toBeNull();
+    await addVersion.call({documentId:document.id,assetId:image!.id},OWNER);
+    expect(await resolveImage.call({id:image!.id},ANONYMOUS)).toBeNull();
+    expect(await resolveImage.call({id:image!.id},CUSTOMER)).toBeNull();
+    expect(await resolveImage.call({id:image!.id},OWNER)).not.toBeNull();
     const [asset]=await db().insert(assets).values({kind:"doc",storageKey:`test/${randomUUID()}.pdf`,filename:"private.pdf",mime:"application/pdf",legacyBytes:10,bytes:10,status:"ready"}).returning();
+    expect(await authorizeObjectDelivery.call({key:asset!.storageKey},ANONYMOUS)).not.toBeNull();
     await addVersion.call({documentId:document.id,assetId:asset!.id},OWNER);
     const shared=await share.call({documentId:document.id,contactId,access:"login",downloadLimit:1},OWNER);
     expect(await authorizeObjectDelivery.call({key:asset!.storageKey},ANONYMOUS)).toBeNull();

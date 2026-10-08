@@ -47,6 +47,10 @@ and disabling the documents module. Generic media routes cannot bypass share
 expiry, revocation, login or download limits. Unrelated public asset downloads
 retain their existing behavior. Portal lists and record responses contain no
 quote, booking or document bearer credentials, provider references or staff notes.
+The image resolver also checks the private flag before minting original or
+rendition URLs. The regression starts with public image/object controls, attaches
+them as client documents, and then proves anonymous and customer preview denial,
+owner library authorization and refusal of the original object's known key.
 
 ## Verification
 
