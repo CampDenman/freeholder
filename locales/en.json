@@ -7078,5 +7078,7 @@
   "memberships.pending": "Your membership is awaiting its first payment. Access starts after payment is confirmed.",
   "portal.record.cancellationFee": "Cancellation fee",
   "portal.record.refundDue": "Refund due (the business will process it)",
-  "blog.slugHint": "The post will be at /blog/ followed by this address."
+  "blog.slugHint": "The post will be at /blog/ followed by this address.",
+  "publicBooking.moveTerms": "Your original invoice and cancellation policy still apply when you move this appointment.",
+  "publicBooking.acceptMove": "I agree to move this appointment under its original cancellation policy."
 }

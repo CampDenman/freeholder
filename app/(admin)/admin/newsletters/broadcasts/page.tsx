@@ -45,7 +45,7 @@ export default async function BroadcastsPage({
     domainOrNull(listBroadcasts.call({}, actor)),
     domainOrNull(listTemplates.call({}, actor)),
     domainOrNull(listSegments.call({}, actor)),
-    mailReadiness.call({}, actor),
+    domainOrNull(mailReadiness.call({}, actor)),
   ]);
 
   // Campaign wording, not receipts: sending an invoice template to a list is
@@ -77,7 +77,7 @@ export default async function BroadcastsPage({
       </div>
       <p className="max-w-prose text-sm text-ink-muted">{t("broadcasts.intro")}</p>
 
-      {!readiness.bulk ? <p role="status" className="rounded-md border border-warning bg-warning-soft p-4">{t("broadcasts.senderNeeded")} <Link href="/admin/settings#mail" className="underline">{t("broadcasts.configureSender")}</Link></p> : null}
+      {!readiness?.bulk ? <p role="status" className="rounded-md border border-warning bg-warning-soft p-4">{t("broadcasts.senderNeeded")} <Link href="/admin/settings#mail" className="underline">{t("broadcasts.configureSender")}</Link></p> : null}
 
       {query.error ? (
         <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">

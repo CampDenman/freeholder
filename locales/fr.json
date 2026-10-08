@@ -7078,5 +7078,7 @@
   "memberships.pending": "Votre abonnement attend le premier paiement. L’accès commence après confirmation.",
   "portal.record.cancellationFee": "Frais d’annulation",
   "portal.record.refundDue": "Remboursement dû (traité par l’établissement)",
-  "blog.slugHint": "L’article sera disponible à /blog/ suivi de cette adresse."
+  "blog.slugHint": "L’article sera disponible à /blog/ suivi de cette adresse.",
+  "publicBooking.moveTerms": "La facture et les conditions d’annulation initiales restent applicables lorsque vous déplacez ce rendez-vous.",
+  "publicBooking.acceptMove": "J’accepte de déplacer ce rendez-vous selon ses conditions d’annulation initiales."
 }

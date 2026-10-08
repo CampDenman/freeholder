@@ -1,7 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C2.26/C6.19/C8.17/C9.38: real browser forms with a disposable database.
-import { test, expect } from "@playwright/test";
+import { THEME_COOKIE } from "@/core/design/theme";
+import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -14,6 +15,17 @@ import { bookingAudiences, bookingAudienceServices } from "@/core/scheduling/aud
 import { priceListEntries, priceLists, productVariants, products, serviceOfferings, priceRules } from "@/modules/catalog/schema";
 import { plans, subscriptions } from "@/modules/subscriptions/schema";
 import { seedC11Owner, useOwnerSession, C11_BASE_URL, C11_OWNER } from "./owner-session";
+
+async function assertThemes(page: Page) {
+  for (const theme of ["light", "dark"]) {
+    await page.context().addCookies([{name:THEME_COOKIE,value:theme,url:C11_BASE_URL}]);
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme",theme);
+    const result=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();
+    expect(result.violations).toEqual([]);
+    expect(result.incomplete.filter(item=>item.id==="color-contrast")).toEqual([]);
+  }
+}
 
 async function fixture() {
   const day=new Date();day.setUTCDate(day.getUTCDate()+14);
@@ -51,15 +63,20 @@ test.describe("public customer surfaces",()=>{
     await expect(page.getByText("Live",{exact:true})).toBeVisible();
     await page.goto("/blog");
     await expect(page.getByRole("link",{name:"First public post",exact:true})).toBeVisible();
-    expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+    await assertThemes(page);
     await page.getByRole("link",{name:"First public post",exact:true}).click();
     await expect(page.getByRole("heading",{name:"First public post",exact:true})).toBeVisible();
+    await page.goto("/newsletters");
+    await expect(page.getByRole("heading",{name:"Newsletters",exact:true})).toBeVisible();
+    await page.goto("/admin/newsletters/broadcasts");
+    await expect(page.getByRole("link",{name:"Configure mail",exact:true})).toHaveAttribute("href","/admin/settings#mail");
+    await assertThemes(page);
   });
   test("a customer reserves, moves and cancels an appointment, then joins a membership awaiting payment",async({page,context,browser})=>{
     await seedC11Owner("Public journeys");const data=await fixture();
     await page.goto(`/book?service=${data.serviceId}&date=${data.date}`);
     await expect(page.getByRole("link",{name:"Verify your email to reserve a time"})).toBeVisible();
-    expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+    await assertThemes(page);
     await context.addCookies([{name:SESSION_COOKIE,value:data.token,url:C11_BASE_URL}]);
     await page.reload();
     await page.getByLabel("I agree to the price and cancellation policy shown above.").first().check();
@@ -70,7 +87,7 @@ test.describe("public customer surfaces",()=>{
     await page.getByRole("link",{name:"Reschedule appointment",exact:true}).click();
     await page.getByLabel("Date",{exact:true}).fill(data.date);
     await page.getByRole("button",{name:"Find available times",exact:true}).click();
-    await page.getByLabel("I agree to the price and cancellation policy shown above.").nth(4).check();
+    await page.getByLabel("I agree to move this appointment under its original cancellation policy.").nth(4).check();
     await page.getByRole("button",{name:"Reschedule appointment",exact:true}).nth(4).click();
     await expect(page).toHaveURL(/\/portal\/records\/bookings\/[a-f0-9-]+\?saved=1$/);
     expect(new URL(page.url()).pathname).not.toBe(firstRecord);
@@ -89,7 +106,7 @@ test.describe("public customer surfaces",()=>{
     expect(subscription?.signupPending).toBe(true);expect(subscription?.status).toBe("paused");
     await page.goto(`/portal/subscriptions/${subscription!.id}`);
     await expect(page.getByText("Your membership is awaiting its first payment. Access starts after payment is confirmed.")).toBeVisible();
-    expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+    await assertThemes(page);
     await page.getByLabel("Yes, cancel this membership.").check();
     await page.getByRole("button",{name:"Cancel",exact:true}).click();
     await expect(page).toHaveURL(/cancelled=1/);

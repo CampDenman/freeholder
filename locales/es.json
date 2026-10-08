@@ -7078,5 +7078,7 @@
   "memberships.pending": "Tu membresía espera el primer pago. El acceso comienza al confirmarse el pago.",
   "portal.record.cancellationFee": "Cargo de cancelación",
   "portal.record.refundDue": "Reembolso pendiente (lo procesará el negocio)",
-  "blog.slugHint": "El artículo estará en /blog/ seguido de esta dirección."
+  "blog.slugHint": "El artículo estará en /blog/ seguido de esta dirección.",
+  "publicBooking.moveTerms": "La factura y la política de cancelación originales siguen vigentes al cambiar esta cita.",
+  "publicBooking.acceptMove": "Acepto cambiar esta cita según su política de cancelación original."
 }
