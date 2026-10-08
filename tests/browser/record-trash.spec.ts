@@ -48,6 +48,7 @@ test("owners restore the same notes and tasks and explicitly purge trash", async
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.reload();
     await page.getByRole("button", { name: "Restore", exact: true }).press("Enter");
+    await expect(page.getByRole("status")).toContainText("Restored.");
     await page.goto(`/admin/contacts/${contact!.id}`);
     await expect(page.locator(`#note-body-${note!.id}`)).toHaveValue("Recover browser note");
     await page.goto("/admin/tasks");
@@ -55,6 +56,7 @@ test("owners restore the same notes and tasks and explicitly purge trash", async
     await expect(page.getByText("Recover browser task", { exact: true })).toHaveCount(0);
     await page.locator('a[href="/admin/trash?kind=tasks"]').click();
     await page.getByRole("button", { name: "Restore", exact: true }).press("Enter");
+    await expect(page.getByRole("status")).toContainText("Restored.");
     await page.goto("/admin/tasks");
     await expect(page.getByText("Recover browser task", { exact: true })).toBeVisible();
     expect((await db().select().from(tasks).where(eq(tasks.id, task!.id)))[0]?.trashedAt).toBeNull();
