@@ -215,7 +215,8 @@ test.describe("storefront shopper journey (C3.25 slice 3)", () => {
         .analyze();
       expect(audit.violations).toEqual([]);
       await page.getByRole("button").first().click();
-      await expect(page).toHaveURL(/\/portal\/(login|contact-import)$/);
+      await expect(page).toHaveURL(/\/portal$/);
+      await expect(page.getByText(SHOPPER.email, { exact: true })).toBeVisible();
     });
 
     await test.step("the signed-in shopper places the order in one step", async () => {

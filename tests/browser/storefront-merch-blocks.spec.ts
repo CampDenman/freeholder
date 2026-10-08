@@ -297,7 +297,8 @@ test.describe("the merchandising blocks end to end (C2.24)", () => {
       await page.goto(new URL(link).pathname + new URL(link).search);
       await expect(page).toHaveURL(/\/portal\/magic\/confirm$/);
       await page.getByRole("button").first().click();
-      await expect(page).toHaveURL(/\/portal\/(login|contact-import)$/);
+      await expect(page).toHaveURL(/\/portal$/);
+      await expect(page.getByText(SHOPPER.email, { exact: true })).toBeVisible();
 
       await page.goto("/checkout");
       await expect(page.getByText(`signed in as ${SHOPPER.email}`)).toBeVisible();

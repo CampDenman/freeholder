@@ -56,6 +56,14 @@ export function defaultAnnouncement(): BlockNode[] {
 export function defaultFooter(businessName: string): BlockNode[] {
   return [
     {
+      id: "footer-indexes",
+      type: "nav",
+      props: {
+        links: [{ label: "Blog", href: "/blog" }, { label: "Newsletters", href: "/newsletters" }],
+        ariaLabelKey: "cms.nav.primary",
+      },
+    },
+    {
       id: "footer-text",
       type: "text",
       props: {
