@@ -22,9 +22,11 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/core/db";
+import { resetEnvForTests } from "@/core/env";
+import { resetMailForTests } from "@/adapters/mail";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { ready } from "@/core/runtime";
@@ -384,6 +386,7 @@ describe.runIf(hasDatabase)("popups against the spine", () => {
   }, 60_000);
 
   afterAll(closeDb);
+  afterEach(() => { vi.unstubAllEnvs(); resetEnvForTests(); resetMailForTests(); });
 
   async function livePopup(overrides: Record<string, unknown> = {}) {
     const created = await savePopup.call(
@@ -623,6 +626,11 @@ describe.runIf(hasDatabase)("popups against the spine", () => {
   });
 
   it("takes an address only with consent, and writes the evidence on the spine", async () => {
+    vi.stubEnv("MAIL_ADAPTER", "smtp");
+    vi.stubEnv("SMTP_HOST", "127.0.0.1");
+    vi.stubEnv("SMTP_PORT", "2525");
+    vi.stubEnv("MAIL_FROM", "sender@example.test");
+    resetEnvForTests(); resetMailForTests();
     const newsletter = await createNewsletter.call(
       { name: "Studio notes", slug: "studio-notes" },
       OWNER,
