@@ -10,6 +10,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Megaphone } from "@phosphor-icons/react/dist/ssr";
 import { Button, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
+import { mailReadiness } from "@/core/mail/service";
 import { currentBusiness } from "@/core/settings/read";
 import { listSegments } from "@/core/segments/service";
 import { listBroadcasts, listTemplates } from "@/modules/newsletters/service";
@@ -38,12 +39,13 @@ export default async function BroadcastsPage({
 }) {
   const actor = await requireStaffActor("newsletters", "manage");
   const query = await searchParams;
-  const [t, business, rows, templates, segments] = await Promise.all([
+  const [t, business, rows, templates, segments, readiness] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(listBroadcasts.call({}, actor)),
     domainOrNull(listTemplates.call({}, actor)),
     domainOrNull(listSegments.call({}, actor)),
+    domainOrNull(mailReadiness.call({}, actor)),
   ]);
 
   // Campaign wording, not receipts: sending an invoice template to a list is
@@ -74,6 +76,8 @@ export default async function BroadcastsPage({
         </h1>
       </div>
       <p className="max-w-prose text-sm text-ink-muted">{t("broadcasts.intro")}</p>
+
+      {!readiness?.bulk ? <p role="status" className="rounded-md border border-warning bg-warning-soft p-4">{t("broadcasts.senderNeeded")} <Link href="/admin/settings#mail" className="underline">{t("broadcasts.configureSender")}</Link></p> : null}
 
       {query.error ? (
         <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">

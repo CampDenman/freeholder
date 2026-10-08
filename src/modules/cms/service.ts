@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import { listBlogPosts } from "./blog";
 // CMS services (MASTER.md Â§11, Â§32).
 //
 // The module's only entry points. The public route, the admin, the REST API
@@ -1610,6 +1611,10 @@ export const ensureDefaults = defineService({
       .returning({ id: pages.id });
     if (insertedHome.length > 0) created.push("page:home");
 
+    const blog = await ctx.tx.insert(pages).values({ slug: "blog", locale: input.locale, title: "Blog", blocks: parseBlockTree([{ id: "blog-title", type: "heading", props: { text: "Blog", level: 1 } }, { id: "blog-index", type: "blogIndex", props: {} }], "page"), status: "published", publishedAt: sql`now()` }).onConflictDoNothing({ target: [pages.slug, pages.locale] }).returning({ id: pages.id });
+    if (blog.length) created.push("page:blog");
+    const archive = await ctx.tx.insert(pages).values({ slug: "newsletters", locale: input.locale, title: "Newsletters", blocks: parseBlockTree([{ id: "newsletters-title", type: "heading", props: { text: "Newsletters", level: 1 } }, { id: "newsletters-archive", type: "newsletterArchive", props: {} }, { id: "newsletters-subscribe", type: "newsletterSubscribe", props: {} }], "page"), status: "published", publishedAt: sql`now()` }).onConflictDoNothing({ target: [pages.slug, pages.locale] }).returning({ id: pages.id });
+    if (archive.length) created.push("page:newsletters");
     const templates = await ctx.call(ensureTemplates, { locale: input.locale });
     created.push(...templates.created);
 
@@ -1675,6 +1680,7 @@ registerSearchSource({
 });
 
 export default [
+  listBlogPosts,
   resolvePage,
   getPage,
   listPages,

@@ -28,7 +28,7 @@ import {
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { contacts } from "@/core/contacts/schema";
-import { sendMail } from "@/core/mail/service";
+import { assertMailReady, sendMail } from "@/core/mail/service";
 import { segmentMembership } from "@/core/segments/service";
 import {
   BROADCAST_STATUSES,
@@ -173,7 +173,7 @@ export const startBroadcast = defineService({
     const [broadcast] = await ctx.tx
       .select()
       .from(broadcasts)
-      .where(eq(broadcasts.id, input.id));
+      .where(eq(broadcasts.id, input.id)).for("update");
     if (!broadcast) throw new ServiceError("not_found", "There is no such broadcast.");
     if (broadcast.status !== "draft" && broadcast.status !== "scheduled") {
       throw new ServiceError("conflict", "That broadcast has already started.");
@@ -194,6 +194,8 @@ export const startBroadcast = defineService({
         "That template is archived. Restore it, or choose another, before sending.",
       );
     }
+
+    await assertMailReady(ctx.tx, "bulk");
 
     // The audience as the segment sees it right now. §30 calls a segment "the
     // unit of 'who'", so this is the same read a campaign report would make —
@@ -261,6 +263,8 @@ export async function sendBatch(
     .where(eq(broadcasts.id, broadcastId));
   if (!broadcast) throw new ServiceError("not_found", "There is no such broadcast.");
   if (broadcast.status !== "sending") return { sent: 0, failed: 0, remaining: 0 };
+
+  await assertMailReady(ctx.tx, "bulk");
 
   const batch = await ctx.tx
     .select()
@@ -466,6 +470,7 @@ export const resumeBroadcast = defineService({
   input: z.object({ id: uuidSchema }),
   output: row({ broadcastId: uuidSchema, remaining: z.number().int() }),
   handler: async (input, ctx) => {
+    await assertMailReady(ctx.tx, "bulk");
     const [resumed] = await ctx.tx
       .update(broadcasts)
       .set({ status: "sending" })

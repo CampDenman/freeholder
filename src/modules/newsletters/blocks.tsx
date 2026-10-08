@@ -15,7 +15,7 @@ export const newsletterArchive = defineBlock({
     return listPublicIssues.call({}, { kind: "anonymous" });
   },
   render: ({ resolved, ctx }) => {
-    if (!resolved || resolved.length === 0) return null;
+    if (!resolved || resolved.length === 0) return <p className="text-ink-muted">{ctx.t("newsletters.archiveEmpty")}</p>;
     return (
       <ul className="grid list-none gap-4 p-0">
         {resolved.map((issue) => (
@@ -73,6 +73,8 @@ export const newsletterSubscribe = defineBlock({
   }),
   starter: () => ({}),
   resolve: async (props) => {
+    const { customerSignInStatus } = await import("@/core/portal/sign-in");
+    if (!(await customerSignInStatus.call({}, {kind:"anonymous"})).available) return [];
     const { listPublicNewsletters } = await import("./service");
     const rows = await listPublicNewsletters.call({}, { kind: "anonymous" });
     const active = rows.filter((row) => row.status === "active");

@@ -198,6 +198,8 @@ export function footer(): BlockNode[] {
               ...NAV_LINKS,
               { label: "Weddings", href: "/services/weddings" },
               { label: "Portraits", href: "/services/portraits" },
+              { label: "Blog", href: "/blog" },
+              { label: "Newsletters", href: "/newsletters" },
             ],
             ariaLabelKey: "cms.nav.primary",
           },
@@ -482,6 +484,25 @@ export const TRANSLATIONS: Array<{
 ];
 
 export const PAGES: SeedPage[] = [
+  {
+    slug: "blog",
+    title: "Studio journal",
+    seo: { description: "Notes from the studio, coastal photography stories and recent work from Aurora Coast Photography." },
+    blocks: () => [
+      { id: "blog-title", type: "heading", props: { text: "Studio journal", level: 1 } },
+      { id: "blog-index", type: "blogIndex", props: {} },
+    ],
+  },
+  {
+    slug: "newsletters",
+    title: "Studio newsletters",
+    seo: { description: "Read the studio newsletter archive and subscribe to occasional news from Aurora Coast Photography." },
+    blocks: () => [
+      { id: "newsletters-title", type: "heading", props: { text: "Studio newsletters", level: 1 } },
+      { id: "newsletters-archive", type: "newsletterArchive", props: {} },
+      { id: "newsletters-subscribe", type: "newsletterSubscribe", props: {} },
+    ],
+  },
   {
     slug: "",
     title: "Aurora Coast Photography",

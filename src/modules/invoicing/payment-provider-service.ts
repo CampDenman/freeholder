@@ -231,7 +231,7 @@ async function persistMethod(
   evidence: SavedPaymentMethodEvidence,
   kind: "saved_method_added" | "saved_method_removed",
   occurredAt: Date,
-): Promise<void> {
+): Promise<string> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment-method:${providerId}:${evidence.providerRef}`}))`);
   const [existing] = await tx
     .select()
@@ -241,7 +241,7 @@ async function persistMethod(
   if (existing && existing.contactId !== contactId) {
     throw new ServiceError("conflict", "The saved payment method is already linked to a different contact.");
   }
-  if (existing && existing.providerStatusAt > occurredAt) return;
+  if (existing && existing.providerStatusAt > occurredAt) return existing.id;
   const status = kind === "saved_method_added" ? "active" as const : "revoked" as const;
   const values = {
     contactId,
@@ -262,8 +262,10 @@ async function persistMethod(
   };
   if (existing) {
     await tx.update(paymentMethods).set(values).where(eq(paymentMethods.id, existing.id));
+    return existing.id;
   } else {
-    await tx.insert(paymentMethods).values(values);
+    const [created] = await tx.insert(paymentMethods).values(values).returning({ id: paymentMethods.id });
+    return created!.id;
   }
 }
 
@@ -289,7 +291,8 @@ async function processPaymentEvent(providerId: string, event: z.infer<typeof pay
       await upsertProviderCustomer(ctx.tx, contactId, providerId, event.providerCustomerRef ?? event.savedMethod?.providerCustomerRef);
       const metadata = payment.metadata && typeof payment.metadata === "object" && !Array.isArray(payment.metadata) ? payment.metadata as Record<string, unknown> : {};
       if (event.savedMethod && metadata.saveMethodRequested === true) {
-        await persistMethod(ctx.tx, providerId, contactId, event.savedMethod, "saved_method_added", new Date(event.occurredAt));
+        const savedPaymentMethodId = await persistMethod(ctx.tx, providerId, contactId, event.savedMethod, "saved_method_added", new Date(event.occurredAt));
+        await ctx.tx.update(payments).set({ metadata: { ...metadata, savedPaymentMethodId } }).where(eq(payments.id, payment.id));
       }
     }
     return "payment_succeeded";

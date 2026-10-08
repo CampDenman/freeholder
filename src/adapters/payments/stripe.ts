@@ -361,6 +361,9 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       };
     },
     async createRecurringSchedule(request): Promise<RecurringScheduleResult> {
+      const product = await api("/v1/products", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": `${request.idempotencyKey}:product` }, body: new URLSearchParams({ name: request.description.slice(0, 250) }) });
+      const productId = text(product.id);
+      if (!productId) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return a product reference.");
       const form = new URLSearchParams({
         customer: request.customerRef,
         default_payment_method: request.methodRef,
@@ -369,11 +372,15 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         "items[0][price_data][unit_amount]": String(request.amountMinor),
         "items[0][price_data][recurring][interval]": request.interval,
         "items[0][price_data][recurring][interval_count]": String(request.intervalCount),
-        "items[0][price_data][product_data][name]": request.description.slice(0, 250),
+        "items[0][price_data][product]": productId,
         "metadata[freeholder_subscription_id]": request.metadata.subscriptionId,
         "metadata[freeholder_contact_id]": request.metadata.contactId,
         "metadata[freeholder_plan_id]": request.metadata.planId,
       });
+      if (request.firstBillingAt) {
+        form.set("billing_cycle_anchor", String(Math.floor(new Date(request.firstBillingAt).getTime() / 1000)));
+        form.set("proration_behavior", "none");
+      }
       const value = await api("/v1/subscriptions", {
         method: "POST",
         headers: {
@@ -395,13 +402,16 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       const items = object(current.items);
       const first = Array.isArray(items?.data) ? object(items.data[0]) : undefined;
       const itemId = text(first?.id);
+      const price = object(first?.price);
+      const productId = text(price?.product) ?? text(object(price?.product)?.id);
+      if (!itemId || !productId) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return the current subscription item and product.");
       const form = new URLSearchParams({
         proration_behavior: request.proration === "create_prorations" ? "create_prorations" : "none",
         "items[0][price_data][currency]": request.currency.toLowerCase(),
         "items[0][price_data][unit_amount]": String(request.amountMinor),
         "items[0][price_data][recurring][interval]": request.interval,
         "items[0][price_data][recurring][interval_count]": String(request.intervalCount),
-        "items[0][price_data][product_data][name]": request.description.slice(0, 250),
+        "items[0][price_data][product]": productId,
       });
       if (itemId) form.set("items[0][id]", itemId);
       const value = await api(`/v1/subscriptions/${encodeURIComponent(request.providerRef)}`, {

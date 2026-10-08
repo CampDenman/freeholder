@@ -25,9 +25,12 @@ overrides:
   #
   # The specifier must match package.json's exactly. An override rewrites the
   # specifier of a direct dependency as well as a transitive one, so a broader
-  # range here (">=0.35.0" against a manifest saying "^0.35.3") makes the
+  # range here (">=0.35.0" against a manifest saying "^0.35.5") makes the
   # lockfile disagree with package.json and fails --frozen-lockfile in CI.
-  sharp: "^0.35.3"
+  # GHSA-wq5f-xc86-pv6w: patched bundled librsvg in sharp 0.35.5.
+  sharp: "^0.35.5"
+  # GHSA-pqg4-j6r4-53mv: quote() command injection through launch-editor.
+  shell-quote: ">=1.11.0 <2"
   # GHSA-r28c-9q8g-f849 and GHSA-fxqj-rqcc-2cmp: sourceMappingURL path
   # traversal/arbitrary map-file reads. 8.5.23 completes the earlier fix.
   postcss: ">=8.5.23 <9"

@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Newsletters: double-opt-in, RFC 8058, public archive, prefs (C9.04).
 
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, vi, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
+import { resetMailForTests } from "@/adapters/mail";
+import { resetEnvForTests } from "@/core/env";
 import { db } from "@/core/db";
 import { pages } from "@/modules/cms/schema";
 import { publishedPaths } from "@/modules/cms/service";
@@ -24,6 +26,11 @@ import { ANONYMOUS, closeDb, hasDatabase, OWNER, truncateSpine } from "../helper
 
 describe.runIf(hasDatabase)("newsletters module", { timeout: 30_000 }, () => {
   beforeEach(async () => {
+    vi.stubEnv("MAIL_ADAPTER", "smtp");
+    vi.stubEnv("SMTP_HOST", "127.0.0.1");
+    vi.stubEnv("SMTP_PORT", "2525");
+    vi.stubEnv("MAIL_FROM", "sender@example.test");
+    resetEnvForTests(); resetMailForTests();
     await truncateSpine();
     await updateBusiness.call(
       {
@@ -35,6 +42,7 @@ describe.runIf(hasDatabase)("newsletters module", { timeout: 30_000 }, () => {
       OWNER,
     );
   });
+  afterEach(() => { vi.unstubAllEnvs(); resetEnvForTests(); resetMailForTests(); });
   afterAll(closeDb);
 
   it("publishes an archive leaf, requires double opt-in, and honours RFC 8058 unsubscribe", async () => {

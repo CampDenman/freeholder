@@ -11,6 +11,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   index,
   integer,
@@ -61,6 +62,7 @@ export const assets = pgTable(
     /** §4.5 names blurhash. Not yet generated — see the backlog. */
     blurhash: text("blurhash"),
     /** Only ready assets may be resolved outside the media console. */
+    isPrivate: boolean("is_private").notNull().default(false),
     status: text("status", {
       enum: ["processing", "ready", "quarantined", "failed", "trashed"],
     })

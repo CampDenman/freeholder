@@ -174,6 +174,15 @@ describe.runIf(hasDatabase)("broadcasts", () => {
     await closeDb();
   });
 
+  it("refuses missing or unverified senders before freezing any recipient",async()=>{
+    const {segment}=await audience(1);
+    const template=await ready_();
+    const draft=await saveBroadcast.call({name:"Must stay a draft",templateId:template.id,segmentId:segment.id},OWNER);
+    await db().delete(mailSenders);
+    await expect(startBroadcast.call({id:draft.id},OWNER)).rejects.toMatchObject({code:"conflict"});
+    expect((await db().select().from(broadcasts).where(eq(broadcasts.id,draft.id)))[0]?.status).toBe("draft");
+    expect(await db().select().from(broadcastRecipients)).toHaveLength(0);
+  });
   it("freezes the audience when it starts", async () => {
     // §30's segments are dynamic. A send that re-read one mid-flight would
     // mail people who joined after it began and skip people who left, and

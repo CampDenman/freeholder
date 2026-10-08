@@ -3,11 +3,11 @@
 // Documents always leave through this controlled attachment response. That is
 // true even for public object storage, so a PDF/office file never becomes
 // executable same-origin content and trash revokes the link immediately.
+import { actorFromRequest } from "@/core/http/actor";
 import { storage } from "@/adapters/storage";
 import { authorizeAssetDownload } from "@/core/media/service";
 
 export const dynamic = "force-dynamic";
-const ANONYMOUS = { kind: "anonymous" } as const;
 
 function attachment(filename: string): string {
   const safe = filename.replace(/[\r\n"]/g, "").slice(0, 180) || "download";
@@ -15,11 +15,12 @@ function attachment(filename: string): string {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params;
-  const allowed = await authorizeAssetDownload.call({ id }, ANONYMOUS);
+  const actor = await actorFromRequest(request);
+  const allowed = await authorizeAssetDownload.call({ id }, actor).catch(() => null);
   if (!allowed) return new Response(null, { status: 404 });
   const source = await storage().stream(allowed.storageKey);
   if (!source) return new Response(null, { status: 404 });

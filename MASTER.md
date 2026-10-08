@@ -1,7 +1,7 @@
 # FREEHOLDER — Product Specification and Completion Plan
 
 **The open-source operating system for a one-person business.**
-Living edition · reconciled 2026-10-06 · created, authored, and owned by Tony Aly · Apache-2.0
+Living edition · reconciled 2026-10-07 · created, authored, and owned by Tony Aly · Apache-2.0
 
 This is the project's **only product and delivery source of truth**. It defines
 the product, architecture, complete scope, dependency order, current state, and
@@ -3462,17 +3462,17 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-10-06 |
+| Last reconciled | 2026-10-07 |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Actual Replit and Lovable account launches with the owner (C3.28); C11.16 spec reconciliation; C11.17 remains unsigned (the world-class visual editor closed 2026-09-30 — see "Remaining open") |
+| Current focus | Complete customer-facing blog, booking, newsletter delivery, membership signup and portal records (C2.26, C6.19, C8.17, C9.37, C9.38); actual Replit and Lovable account launches with the owner (C3.28); C11.16 spec reconciliation; C11.17 remains unsigned (the world-class visual editor closed 2026-09-30 — see "Remaining open") |
 | Completion rule | Every unchecked item in C0–C11, except the items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | Actual new Replit and Lovable launch acceptance with the owner (C3.28). Owner passkey/MCP browser acceptance (C1.39) and private launch tooling/package acceptance (C3.27) closed 2026-10-06; see the evidence under each item. §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). Paid event admission (C6.11). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 was recorded closed 2026-09-28, then reopened 2026-10-05 because the drill had no source object bytes (`deploy/stable-acceptance-2026-10-05.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | Customer-facing acceptance gaps identified 2026-10-07: C2.26, C6.19, C8.17, C9.37 and C9.38. Actual new Replit and Lovable launch acceptance with the owner (C3.28). Owner passkey/MCP browser acceptance (C1.39) and private launch tooling/package acceptance (C3.27) closed 2026-10-06; see the evidence under each item. §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). Paid event admission (C6.11). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 was recorded closed 2026-09-28, then reopened 2026-10-05 because the drill had no source object bytes (`deploy/stable-acceptance-2026-10-05.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -4470,6 +4470,8 @@ project without silent telemetry, and ready to carry money.
 
 **C2 exit:** every public or message-facing surface is safely editable by a
 human, collaboratively, without code, lock-in markup or accidental publication.
+
+- [ ] **C2.26** Deliver a public blog index with published post discovery, pagination, locale-aware links and metadata, an editable index block and an owner publish workflow. Drafts and gated bodies remain private.
 
 ### 43.8 C3 — Living contract, plugins, packages, and portable operation
 
@@ -6437,6 +6439,8 @@ payment, tax, inventory and reporting path, with no floating-point money.
 **C6 exit:** the same availability and money engines can sell time, spaces,
 equipment, classes and expertise without double-booking or duplicated records.
 
+- [ ] **C6.19** Deliver real public self-serve service booking: service selection, live availability, verified customer identity, explicit price/terms, race-safe reservation, invoice/payment handoff and customer confirmation/reschedule/cancel. The contact-link embed is not acceptance.
+
 ### 43.12 C7 — Working CRM, messaging, inbox, and human operations
 
 #### CRM as the daily work surface
@@ -7519,6 +7523,8 @@ permitted conversation on the same contact timeline.
 **C8 exit:** the business can prove, deliver and support its work while each
 customer has one secure, comprehensible home for the relationship.
 
+- [ ] **C8.17** Complete usable session-bound customer portal records and sign-in return journeys. Customers can open their own bookings, quotes, orders, projects, rentals and files without exposing bearer credentials or another contact’s records.
+
 ### 43.14 C9 — Automations, audience growth, recurring access, and media reach
 
 #### Automation, email, and reporting
@@ -8506,6 +8512,9 @@ customer has one secure, comprehensible home for the relationship.
 
 **C9 exit:** audience, access, attribution and recurring revenue compound on
 the spine without surveillance, shadow ledgers or channel-specific silos.
+
+- [ ] **C9.37** Complete the owner newsletter sending journey with delivery readiness, verified sender guidance, consent-aware audience selection, test-send, scheduling, visible per-recipient outcomes and a customer archive/subscribe workflow. Actual external delivery remains explicit acceptance when provider credentials are unavailable.
+- [ ] **C9.38** Deliver public membership plan discovery and customer signup, canonical invoice/payment handoff, payment-bound entitlement activation, safe retries, and portal change/cancel. Automatic renewal requires the existing provider contract; live settlement remains C11.05.
 
 ### 43.15 C10 — Ownership durability, self-update, and mobile applications
 

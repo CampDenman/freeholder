@@ -68,6 +68,8 @@ export default async function PagesPage({
         </p>
       ) : null}
 
+      <a href="/admin/blog" className="underline">{t("blog.title")}</a>
+
       <Card>
         {pages.length === 0 ? (
           <div className="grid justify-items-start gap-3 px-4 py-10">

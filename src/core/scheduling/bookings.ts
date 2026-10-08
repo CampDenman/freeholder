@@ -539,6 +539,7 @@ export const rescheduleBooking = defineService({
     startsAt: z.iso.datetime(),
     endsAt: z.iso.datetime(),
     calendarId: z.uuid().optional(),
+    secondaryCalendarIds: z.array(z.uuid()).max(10).optional(),
     reason: z.string().trim().max(500).nullish(),
     /**
      * Move it regardless of the policy — the owner's own override.
@@ -616,7 +617,7 @@ export const rescheduleBooking = defineService({
         contactId: previous.contactId,
         serviceOfferingId: previous.serviceOfferingId,
         calendarId: calendar.id,
-        secondaryCalendarIds: previous.secondaryCalendarIds,
+        secondaryCalendarIds: input.secondaryCalendarIds ?? previous.secondaryCalendarIds,
         startsAt,
         endsAt,
         timezoneAtBooking: calendar.timezone,

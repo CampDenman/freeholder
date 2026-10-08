@@ -104,6 +104,10 @@ const INTERNAL = [
   // The renewal sweep (C9.13). System because a period ending is not
   // something anybody did: a job finds what is due and raises the invoice on
   // nobody's behalf, long after the person who subscribed has gone.
+  // C9.38: verified first-payment activation and durable signup recovery.
+  "subscriptions.activatePaidSignup",
+  "subscriptions.finishSignups",
+  "subscriptions.pendingCustomerSchedules",
   "subscriptions.renewDue",
   // The dunning sweep (C9.16). System because a retry offset expiring is not
   // something anybody did: a job finds who is past due and sends the notice
@@ -143,6 +147,8 @@ const CALLER_AUTHORIZED_PHASES = [
   // catalog.recomputeSegmentCollections on nobody's behalf and claims nothing
   // on an external protocol.
   "catalog.recomputeCollectionMembership",
+  "documents.myDownload",
+  "media.privateAssetDownloadAccess",
   "invoicing.claimCustomerCheckout",
   "invoicing.applyCustomerCheckout",
   "invoicing.customerPaymentSource",

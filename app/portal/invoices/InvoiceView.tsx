@@ -51,6 +51,7 @@ export function InvoiceView({ invoice, token, t, locale, timezone, businessName,
           <form action={payInvoiceAction} className="grid justify-items-start gap-2">
             <input type="hidden" name="id" value={invoice.id} />
             {token ? <input type="hidden" name="token" value={token} /> : null}
+            {invoice.saveMethodRequired ? <label className="flex items-start gap-2"><input type="checkbox" name="saveMethodConsent" value="yes" required /><span>{t("memberships.saveConsent")}</span></label> : null}
             <PaymentButton label={t(invoice.paymentMode === "manual" ? "customerInvoice.offline" : "customerInvoice.payAmount", { amount: money(invoice.nextPaymentMinor ?? 0) })} pendingLabel={t("common.working")} />
             <p className="text-sm text-ink-muted">{t(invoice.paymentMode === "manual" ? "customerInvoice.offlineHint" : "customerInvoice.hostedHint")}</p>
           </form>

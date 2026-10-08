@@ -10,7 +10,7 @@ import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { recordConsent, registerContactPrivacySource } from "@/core/privacy/service";
-import { sendMail } from "@/core/mail/service";
+import { assertMailReady, sendMail } from "@/core/mail/service";
 import { siteOrigin } from "@/core/seo/origin";
 import {
   newsletterIssues,
@@ -478,6 +478,7 @@ export const subscribeToNewsletter = defineService({
     if (!newsletter || newsletter.status !== "active") {
       throw new ServiceError("not_found", "That newsletter is not open for subscriptions.");
     }
+    await assertMailReady(ctx.tx, "transactional");
     const resolved = await ctx.callAsSystem(resolveContact, {
       email: input.email,
       name: input.name,
@@ -530,15 +531,11 @@ export const subscribeToNewsletter = defineService({
           .returning();
     const origin = siteOrigin();
     const confirmUrl = `${origin}/newsletters/confirm?token=${confirmToken}`;
-    try {
-      await sendMail(ctx.tx, {
-        to: input.email,
-        subject: `Confirm ${newsletter.name}`,
-        text: `Confirm your subscription to ${newsletter.name}: ${confirmUrl}`,
-      });
-    } catch {
-      // Double-opt-in still exists; a missing sender must not invent a confirmed subscriber.
-    }
+    await sendMail(ctx.tx, {
+      to: input.email,
+      subject: `Confirm ${newsletter.name}`,
+      text: `Confirm your subscription to ${newsletter.name}: ${confirmUrl}`,
+    }, { requireDelivery: true });
     ctx.setSubject("newsletterSubscription", saved!.id);
     ctx.queueEvent("newsletters.subscribed", {
       subscriptionId: saved!.id,

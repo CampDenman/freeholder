@@ -14,6 +14,11 @@ import { listProjects } from "./service";
 registerPortalSection({
   key: "projects",
   order: 70,
+  detail: async (ctx,contactId,id) => {
+    const project=(await ctx.call(listProjects,{contactId,limit:200})).find(row=>row.id===id);
+    if(!project)throw new Error("Project ownership changed.");
+    return {fields:[...(project.summary?[{labelKey:"portal.record.description",value:project.summary}]:[]),...(project.startedOn?[{labelKey:"portal.record.starts",value:project.startedOn}]:[]),...(project.completedAt?[{labelKey:"portal.record.completed",value:project.completedAt.toISOString()}]:[])]};
+  },
   load: async (ctx, contactId, limit) => {
     const rows = await ctx.call(listProjects, { contactId, limit });
     return rows.map((project) => ({
@@ -21,7 +26,7 @@ registerPortalSection({
       title: project.clientDisplayName ?? project.title,
       status: project.status,
       at: project.updatedAt ?? project.createdAt ?? null,
-      href: null,
+      href: `/portal/records/projects/${project.id}`,
     }));
   },
 });

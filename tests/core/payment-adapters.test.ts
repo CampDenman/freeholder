@@ -118,11 +118,12 @@ describe("Stripe payment adapter", () => {
       if (url.endsWith("/v1/payment_intents")) {
         return Response.json({ id: "pi_off_1", status: "succeeded", amount: 2500, currency: "cad", created: 1_700_000_000 });
       }
+      if (url.endsWith("/v1/products")) return Response.json({ id: "prod_membership" });
       if (url.endsWith("/v1/subscriptions")) {
         return Response.json({ id: "sub_1" });
       }
       if (url.includes("/v1/subscriptions/sub_1")) {
-        if (init?.method === "GET") return Response.json({ id: "sub_1", items: { data: [{ id: "si_1" }] } });
+        if (init?.method === "GET") return Response.json({ id: "sub_1", items: { data: [{ id: "si_1", price: { product: "prod_membership" } }] } });
         if (init?.method === "DELETE") return Response.json({ id: "sub_1", status: "canceled" });
         return Response.json({ id: "sub_1" });
       }
@@ -160,9 +161,15 @@ describe("Stripe payment adapter", () => {
         intervalCount: 1,
         description: "Monthly",
         idempotencyKey: "sched-1",
+        firstBillingAt: "2026-11-07T12:00:00.000Z",
         metadata: { subscriptionId: invoice.invoiceId, contactId: invoice.contactId, planId: invoice.invoiceId },
       }),
     ).resolves.toEqual({ providerRef: "sub_1", customerRef: "cus_1" });
+    const schedule = new URLSearchParams(bodyText(calls.at(-1)?.init?.body));
+    expect(schedule.get("items[0][price_data][product]")).toBe("prod_membership");
+    expect(schedule.has("items[0][price_data][product_data][name]")).toBe(false);
+    expect(schedule.get("billing_cycle_anchor")).toBe(String(Date.parse("2026-11-07T12:00:00.000Z") / 1000));
+    expect(schedule.get("proration_behavior")).toBe("none");
     await expect(
       adapter.updateRecurringSchedule({
         providerRef: "sub_1",

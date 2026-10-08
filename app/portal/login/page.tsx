@@ -9,6 +9,9 @@ import { actorFromToken } from "@/core/http/actor";
 import { currentBusiness } from "@/core/settings/read";
 import { getLocale, getT } from "../../i18n";
 import { localizeCustomerHref } from "@/core/i18n/customer";
+import { redirect } from "next/navigation";
+import { customerSignInStatus } from "@/core/portal/sign-in";
+import { safeCustomerReturnPath } from "@/core/portal/return-path";
 import { MagicLinkForm } from "./MagicLinkForm";
 import { PortalLocaleChooser } from "../PortalLocaleChooser";
 
@@ -18,7 +21,10 @@ export const metadata: Metadata = {
   referrer: "no-referrer",
 };
 
-export default async function PortalLoginPage() {
+export default async function PortalLoginPage({ searchParams }: { searchParams: Promise<{ returnTo?: string }> }) {
+  const query = await searchParams;
+  const returnTo = safeCustomerReturnPath(query.returnTo);
+  const availability = await customerSignInStatus.call({}, {kind:"anonymous"});
   const [business, locale, t, jar] = await Promise.all([
     currentBusiness(),
     getLocale(),
@@ -31,6 +37,7 @@ export default async function PortalLoginPage() {
     defaultLocale: business?.defaultLocale ?? "en",
     enabledLocales: business?.enabledLocales ?? ["en"],
   };
+  if (signedIn && query.returnTo) redirect(localizeCustomerHref(returnTo, locale, policy));
   return (
     <main className="mx-auto max-w-md px-6 py-16">
       <div className="mb-8 flex items-center gap-3">
@@ -56,12 +63,13 @@ export default async function PortalLoginPage() {
           </a>
         </Callout>
       ) : (
-        <MagicLinkForm labels={{
+        availability.available ? <MagicLinkForm returnTo={returnTo} labels={{
+          name: t("portal.profile.name"),
           email: t("portal.login.email"),
           submit: t("portal.login.submit"),
           pending: t("portal.login.pending"),
           sent: t("portal.login.sent"),
-        }} />
+        }} /> : <Callout>{t("portal.login.unavailable")}</Callout>
       )}
     </main>
   );

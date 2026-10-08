@@ -350,6 +350,7 @@ export const chargePlatformDue = defineOrchestratedService({
 
 const claimProviderSchedule = defineService({
   name: "subscriptions.claimProviderSchedule",
+  external: false,
   writeClass: "write",
   summary: "Read the facts a provider schedule needs.",
   kind: "query",
@@ -360,6 +361,7 @@ const claimProviderSchedule = defineService({
     contactId: uuidSchema,
     planId: uuidSchema,
     provider: z.string(),
+    existingRef: z.string().nullable(),
     methodRef: z.string(),
     customerRef: z.string(),
     amountMinor: z.number().int(),
@@ -367,6 +369,7 @@ const claimProviderSchedule = defineService({
     interval: z.enum(["day", "week", "month", "year"]),
     intervalCount: z.number().int(),
     description: z.string(),
+    firstBillingAt: z.string().optional(),
     idempotencyKey: z.string(),
   }),
   handler: async (input, ctx) => {
@@ -379,12 +382,15 @@ const claimProviderSchedule = defineService({
     if (subscription.billingMode !== "provider") {
       throw new ServiceError("conflict", "That subscription is not on provider billing.");
     }
+    if (subscription.signupPending || subscription.cancelledAt || subscription.cancelAtPeriodEnd || !["active", "trialing"].includes(subscription.status)) {
+      throw new ServiceError("conflict", "That membership cannot start a renewal schedule.");
+    }
     const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
     if (!plan) throw new ServiceError("not_found", "There is no such plan.");
     const [method] = subscription.paymentMethodId
       ? await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, subscription.paymentMethodId)).limit(1)
       : [];
-    if (!method?.providerMethodRef || !method.providerCustomerRef) {
+    if (!method?.providerMethodRef || !method.providerCustomerRef || method.status !== "active" || method.contactId !== subscription.contactId) {
       throw new ServiceError("conflict", "Provider billing needs a stored method with a provider customer.");
     }
     const priced = (await ctx.callAsSystem(resolvePrice, {
@@ -401,6 +407,7 @@ const claimProviderSchedule = defineService({
       contactId: subscription.contactId,
       planId: plan.id,
       provider: method.provider,
+      existingRef: subscription.providerRef,
       methodRef: method.providerMethodRef,
       customerRef: method.providerCustomerRef,
       amountMinor: priced.amountMinor,
@@ -408,6 +415,7 @@ const claimProviderSchedule = defineService({
       interval: plan.interval,
       intervalCount: plan.intervalCount,
       description: plan.name,
+      firstBillingAt: subscription.publicRequestKey || subscription.trialEndsAt ? subscription.currentPeriodEnd.toISOString() : undefined,
       idempotencyKey: `subscription-schedule:${subscription.id}`,
     };
   },
@@ -415,6 +423,7 @@ const claimProviderSchedule = defineService({
 
 const applyProviderSchedule = defineService({
   name: "subscriptions.applyProviderSchedule",
+  external: false,
   writeClass: "write",
   summary: "Stamp the provider's schedule reference on the subscription.",
   kind: "mutation",
@@ -424,14 +433,16 @@ const applyProviderSchedule = defineService({
     provider: z.string().min(1).max(80),
     providerRef: z.string().min(1).max(500),
   }),
-  output: row({ id: uuidSchema }),
+  output: row({ id: uuidSchema, accepted: z.boolean() }),
   handler: async (input, ctx) => {
+    const [current] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, input.subscriptionId)).limit(1).for("update");
+    if (!current || current.signupPending || current.cancelledAt || current.cancelAtPeriodEnd || !["active", "trialing"].includes(current.status)) return { id: input.subscriptionId, accepted: false };
     await ctx.tx
       .update(subscriptions)
       .set({ provider: input.provider, providerRef: input.providerRef })
       .where(eq(subscriptions.id, input.subscriptionId));
     ctx.setSubject("subscription", input.subscriptionId);
-    return { id: input.subscriptionId };
+    return { id: input.subscriptionId, accepted: true };
   },
 });
 
@@ -445,6 +456,7 @@ export const attachProviderSchedule = defineOrchestratedService({
   output: row({ id: uuidSchema, providerRef: z.string() }),
   handler: async (input, actor) => {
     const claimed = await claimProviderSchedule.call(input, actor);
+    if (claimed.existingRef) return { id: claimed.subscriptionId, providerRef: claimed.existingRef };
     const created = await paymentAdapter(claimed.provider).createRecurringSchedule({
       customerRef: claimed.customerRef,
       methodRef: claimed.methodRef,
@@ -453,6 +465,7 @@ export const attachProviderSchedule = defineOrchestratedService({
       interval: claimed.interval,
       intervalCount: claimed.intervalCount,
       description: claimed.description,
+      firstBillingAt: claimed.firstBillingAt,
       idempotencyKey: claimed.idempotencyKey,
       metadata: {
         subscriptionId: claimed.subscriptionId,
@@ -460,7 +473,7 @@ export const attachProviderSchedule = defineOrchestratedService({
         planId: claimed.planId,
       },
     });
-    await applyProviderSchedule.call(
+    const applied = await applyProviderSchedule.call(
       {
         subscriptionId: claimed.subscriptionId,
         provider: claimed.provider,
@@ -468,6 +481,10 @@ export const attachProviderSchedule = defineOrchestratedService({
       },
       actor,
     );
+    if (!applied.accepted) {
+      await paymentAdapter(claimed.provider).cancelRecurringSchedule({ providerRef: created.providerRef, idempotencyKey: `subscription-cancel:${created.providerRef}` });
+      throw new ServiceError("conflict", "The membership was cancelled while its schedule was being created.");
+    }
     return { id: claimed.subscriptionId, providerRef: created.providerRef };
   },
 });

@@ -158,6 +158,10 @@ export const subscriptions = pgTable(
       { onDelete: "set null" },
     ),
     /** Plan waiting for period end when proration is `none`. */
+    signupPending: boolean("signup_pending").notNull().default(false),
+    signupInvoiceId: uuid("signup_invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+    publicRequestKey: uuid("public_request_key"),
+    publicTermsHash: text("public_terms_hash"),
     pendingPlanId: uuid("pending_plan_id").references(() => plans.id, {
       onDelete: "set null",
     }),
@@ -201,6 +205,8 @@ export const subscriptions = pgTable(
     updatedAt: updatedAtColumn(),
   },
   (t) => [
+    uniqueIndex("subscriptions_public_request_idx").on(t.contactId, t.publicRequestKey).where(sql`${t.publicRequestKey} is not null`),
+    index("subscriptions_signup_idx").on(t.signupPending, t.signupInvoiceId),
     index("subscriptions_contact_idx").on(t.contactId),
     // The renewal sweep's own query: what is due, oldest first.
     index("subscriptions_due_idx").on(t.status, t.currentPeriodEnd),
