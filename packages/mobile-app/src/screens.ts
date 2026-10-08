@@ -57,6 +57,9 @@ export type ScreenId = (typeof SCREEN_IDS)[number];
  */
 export type ScreenAudience = "public" | "signed-in" | "staff";
 
+/** Shared controlled byte route; this is not a generated SDK service. */
+export const GALLERY_IMAGE_ROUTE = "GET /g/{slug}/view/{itemId}";
+
 export interface ScreenContract {
   id: ScreenId;
   audience: ScreenAudience;
@@ -64,6 +67,8 @@ export interface ScreenContract {
   titleKey: string;
   /** Services this screen reads. Queries only — see `writes`. */
   reads: readonly string[];
+  /** Controlled HTTP byte reads, authorized by the platform's shared service. */
+  httpReads?: readonly string[];
   /**
    * Services this screen may call as a mutation, and only in response to a
    * deliberate tap.
@@ -185,7 +190,8 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     id: "gallery",
     audience: "signed-in",
     titleKey: "app.gallery.title",
-    reads: ["galleries.viewSession", "galleries.viewItem"],
+    reads: ["galleries.viewSession"],
+    httpReads: [GALLERY_IMAGE_ROUTE],
     // Proofing is the one thing §35 calls the killer feature, and a favourite
     // is a decision about the customer's own selection rather than about
     // availability — so it is a write the platform can accept at any time.
@@ -385,6 +391,13 @@ export function staffScreens(): ScreenId[] {
 
 export function customerSignedInScreens(): ScreenId[] {
   return SCREEN_IDS.filter((id) => SCREENS[id].audience === "signed-in");
+}
+
+/** Reject an undeclared byte route before fetching or consulting its cache. */
+export function assertHttpReadOnContract(screen: ScreenId, route: string): void {
+  if (!SCREENS[screen].httpReads?.includes(route)) {
+    throw new Error(`The ${screen} screen may not read ${route}. Add it to that screen's HTTP contract.`);
+  }
 }
 
 /** Every service any screen touches, for the scope an app's key would need. */

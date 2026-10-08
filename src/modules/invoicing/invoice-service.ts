@@ -18,6 +18,7 @@ import {
 import {
   actorString,
   defineService,
+  permits,
   ServiceError,
   type ServiceContext,
   type Tx,
@@ -320,6 +321,12 @@ registerContactPrivacySource({
   },
 });
 
+const invoiceListRow = invoiceRow.extend({
+  sequenceKey: z.string().optional(),
+  idempotencyKey: z.string().optional(),
+  requestHash: z.string().optional(),
+});
+
 export const listInvoices = defineService({
   name: "invoicing.list",
   summary: "List invoices by contact or lifecycle state.",
@@ -335,18 +342,37 @@ export const listInvoices = defineService({
     status: z.enum(["draft", "sent", "viewed", "partially_paid", "paid", "overdue", "void", "refunded"]).optional(),
     limit: z.number().int().min(1).max(500).default(100),
   }),
-  output: listed(invoiceRow),
-  handler: async (input, ctx) => {
+  output: listed(invoiceListRow),
+  handler: async (input, ctx): Promise<z.output<typeof invoiceListRow>[]> => {
+    const staffRead = permits(ctx.actor, "scoped", "invoicing.list", "query");
     const filters = [
       input.contactId ? eq(invoices.contactId, input.contactId) : undefined,
       input.status ? eq(invoices.status, input.status) : undefined,
+      staffRead ? undefined : and(ne(invoices.status, "draft"), sql`${invoices.issuedAt} is not null`),
     ].filter((value): value is NonNullable<typeof value> => Boolean(value));
-    return ctx.tx
+    const found = await ctx.tx
       .select()
       .from(invoices)
       .where(filters.length ? and(...filters) : undefined)
       .orderBy(desc(invoices.createdAt))
       .limit(input.limit);
+    if (staffRead) return found;
+    // Named projection: future provider/workflow columns must not silently
+    // become customer-visible just because this shared query gains a column.
+    return found.map(invoice => ({
+      id: invoice.id, contactId: invoice.contactId, number: invoice.number,
+      sourceType: invoice.sourceType, sourceId: invoice.sourceId, status: invoice.status,
+      currency: invoice.currency, subtotalMinor: invoice.subtotalMinor,
+      discountMinor: invoice.discountMinor, shippingMinor: invoice.shippingMinor,
+      taxMinor: invoice.taxMinor, taxZoneId: invoice.taxZoneId, totalMinor: invoice.totalMinor,
+      paidMinor: invoice.paidMinor, refundedMinor: invoice.refundedMinor,
+      billingAddress: invoice.billingAddress, customerTaxId: invoice.customerTaxId,
+      requiredTaxLegend: invoice.requiredTaxLegend, memo: invoice.memo,
+      schedule: invoice.schedule, depositOfInvoiceId: invoice.depositOfInvoiceId,
+      dueAt: invoice.dueAt, issuedAt: invoice.issuedAt, viewedAt: invoice.viewedAt,
+      paidAt: invoice.paidAt, voidedAt: invoice.voidedAt,
+      createdAt: invoice.createdAt, updatedAt: invoice.updatedAt,
+    }));
   },
 });
 

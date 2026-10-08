@@ -7080,5 +7080,11 @@
   "portal.record.refundDue": "المبلغ المستحق للاسترداد (يعالجه النشاط التجاري)",
   "blog.slugHint": "ستظهر المقالة في /blog/ متبوعًا بهذا العنوان.",
   "publicBooking.moveTerms": "تظل الفاتورة وسياسة الإلغاء الأصليتان ساريتين عند تغيير موعد هذا الحجز.",
-  "publicBooking.acceptMove": "أوافق على تغيير هذا الموعد وفق سياسة الإلغاء الأصلية."
+  "publicBooking.acceptMove": "أوافق على تغيير هذا الموعد وفق سياسة الإلغاء الأصلية.",
+  "newsletters.unsubscribeLink": "إلغاء الاشتراك في رسائل التسويق",
+  "newsletters.unsubscribeTitle": "إلغاء الاشتراك في رسائل التسويق",
+  "newsletters.unsubscribeInstruction": "أكّد لإيقاف رسائل التسويق من هذا النشاط التجاري. ستستمر إيصالاتك والرسائل الأساسية الأخرى.",
+  "newsletters.confirmTitle": "تأكيد اشتراكك في النشرة",
+  "newsletters.confirmInstruction": "أكّد رغبتك في تلقي هذه النشرة.",
+  "newsletters.confirmAction": "تأكيد الاشتراك"
 }

@@ -158,14 +158,30 @@ async function callTool(
 }
 
 async function handleOne(
-  request: JsonRpcRequest,
+  body: unknown,
   actor: Actor,
   info: McpServerInfo,
 ): Promise<unknown> {
-  if (request.jsonrpc !== "2.0" || typeof request.method !== "string") {
-    return failure(request.id, INVALID_REQUEST, "Not a JSON-RPC 2.0 request.");
+  // C3.05: JSON decoding does not validate an envelope. Invalid entries must
+  // produce protocol errors rather than crashing the whole HTTP/batch call.
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return failure(null, INVALID_REQUEST, "Not a JSON-RPC 2.0 request.");
+  }
+  const request = body as JsonRpcRequest;
+  const validId = request.id === undefined || request.id === null ||
+    typeof request.id === "string" || (typeof request.id === "number" && Number.isFinite(request.id));
+  if (request.jsonrpc !== "2.0" || typeof request.method !== "string" || !validId) {
+    return failure(validId ? request.id : null, INVALID_REQUEST, "Not a JSON-RPC 2.0 request.");
+  }
+  if (request.params !== undefined && (!request.params || typeof request.params !== "object" || Array.isArray(request.params))) {
+    return request.id === undefined ? undefined : failure(request.id, INVALID_PARAMS, "Named parameters must be an object.");
   }
 
+  const response = await dispatch(request, actor, info);
+  return request.id === undefined ? undefined : response;
+}
+
+async function dispatch(request: JsonRpcRequest, actor: Actor, info: McpServerInfo): Promise<unknown> {
   switch (request.method) {
     case "initialize":
       return initialize(request, info);
@@ -230,9 +246,10 @@ export async function handleMcp(
   // Batches were part of the protocol before the 2025-06-18 revision removed
   // them. Answering one is a few lines and lets an older client work.
   if (Array.isArray(body)) {
+    if (body.length === 0) return Response.json(failure(null, INVALID_REQUEST, "An empty batch is not a request."));
     const responses = (
       await Promise.all(
-        body.map((entry) => handleOne(entry as JsonRpcRequest, actor, info)),
+        body.map((entry) => handleOne(entry, actor, info)),
       )
     ).filter((entry) => entry !== undefined);
     // A batch of nothing but notifications gets no body, per JSON-RPC.
@@ -241,7 +258,7 @@ export async function handleMcp(
       : Response.json(responses);
   }
 
-  const response = await handleOne(body as JsonRpcRequest, actor, info);
+  const response = await handleOne(body, actor, info);
   // A notification produces no response at all — undefined here means "say
   // nothing", which JSON-RPC requires and clients rely on when matching
   // responses back to the requests they sent.

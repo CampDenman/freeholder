@@ -92,9 +92,12 @@ seconds) through `readThrough({ maxAgeMs, ... }, call, cache)`. Network and
 persistence latency count against the lease; failed reads never renew it.
 HTTP 401/403/404 evict instead of falling back. The returned `expiresAt` lets
 the native binding clear displayed data and revalidate on expiry/foreground.
-Private gallery image bytes use the same lease, keyed as `galleries.viewItem`
-by slug and item, so a revoked gallery cannot stay readable on the phone past
-that minute. Proofing mutations go through `writeThrough` and are never queued.
+Private gallery image bytes use the same lease, keyed by slug and item under
+the legacy `galleries.viewItem` cache namespace. That label is not an exposed
+SDK service: the gallery screen separately declares
+`GET /g/{slug}/view/{itemId}` in `httpReads`. The controlled route uses the
+gallery-session bearer, so a revoked gallery cannot stay readable on the phone
+past that minute. Proofing mutations go through `writeThrough` and are never queued.
 
 `encryptedCache` wraps platform storage with authenticated encryption and binds
 each payload to its requested cache key. `revocableCache` serializes operations

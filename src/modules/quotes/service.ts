@@ -25,7 +25,7 @@
 import "./view-entity";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
@@ -40,6 +40,7 @@ import { businessProfile } from "@/core/settings/schema";
 import { env } from "@/core/env";
 import {
   defineService,
+  permits,
   ServiceError,
   type Actor,
   type ServiceContext,
@@ -1160,6 +1161,7 @@ export const listQuotes = defineService({
   ),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
+    const staffRead = permits(ctx.actor, "scoped", "quotes.list", "query");
     // Columns named one by one rather than `quotes` wholesale. `row()` is a
     // loose object, so spreading the record would carry `view_token` — a
     // credential — into every list, log and screenshot. The first draft did
@@ -1177,7 +1179,7 @@ export const listQuotes = defineService({
           validUntil: quotes.validUntil,
           depositMinor: quotes.depositMinor,
           terms: quotes.terms,
-          notes: quotes.notes,
+          notes: staffRead ? quotes.notes : sql<null>`null`,
           sentAt: quotes.sentAt,
           firstViewedAt: quotes.firstViewedAt,
           acceptedAt: quotes.acceptedAt,
@@ -1193,6 +1195,7 @@ export const listQuotes = defineService({
         and(
           input.status ? eq(quotes.status, input.status) : undefined,
           input.contactId ? eq(quotes.contactId, input.contactId) : undefined,
+          staffRead ? undefined : ne(quotes.status, "draft"),
         ),
       )
       .orderBy(desc(quotes.createdAt))

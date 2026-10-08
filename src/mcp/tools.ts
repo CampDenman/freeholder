@@ -18,8 +18,8 @@
 //
 // **What is not a tool at all.** Credential services are excluded whatever the
 // caller's scopes say — see EXCLUDED_FAMILIES.
-import { z } from "zod";
 import { listServices, permits, type Actor, type Service } from "@/core/service";
+import { toContractJsonSchema } from "@/core/contract/json-schema";
 
 /**
  * Families that never become tools.
@@ -104,13 +104,9 @@ function describe(service: Service): string {
  * advertise a shape the service would reject.
  */
 function inputSchema(service: Service): Record<string, unknown> {
-  let schema: Record<string, unknown>;
-  try {
-    schema = z.toJSONSchema(service.def.input, { io: "input" });
-  } catch {
-    schema = { type: "object" };
-  }
-  delete schema.$schema;
+  // C3.04: dates and coercions must retain the HTTP/SDK wire shape. A local
+  // Zod conversion used to throw on dates and erase every field in the tool.
+  const schema = toContractJsonSchema(service.def.input, "input") as Record<string, unknown>;
   // MCP requires an object schema at the top level. A service whose input is
   // not an object (none are today) would otherwise produce a tool no client
   // can call.

@@ -287,20 +287,10 @@ export const rejoinLayout = defineService({
       cloneTree(parseBlockTree(template.blocks, "page"), stamp),
       input.bindings ?? {},
     );
-    const [page] = await ctx.tx
-      .select()
-      .from(pages)
-      .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
-      .limit(1);
-    if (!page) throw new ServiceError("not_found", "That page is not on this site.");
-    await ctx.tx
-      .update(pages)
-      .set({
-        blocks,
-        workingBlocks: blocks,
-        version: page.version + 1,
-      })
-      .where(eq(pages.id, input.pageId));
+    // Rejoining is an editorial change: use the same draft, version and
+    // revision boundary as an ordinary edit, including for published pages.
+    const { updatePage } = await import("./service");
+    await ctx.call(updatePage, { id: input.pageId, blocks });
     const [updated] = await ctx.tx
       .update(contentLayouts)
       .set({ detached: false })

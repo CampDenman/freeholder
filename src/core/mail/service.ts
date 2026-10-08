@@ -30,6 +30,7 @@ import {
 } from "@/core/mail/schema";
 import { oauthAccessTokenOutsideTransaction } from "@/core/mail/oauth";
 import { decryptMailOutbox, encryptMailOutbox } from "@/core/mail/outbox-crypto";
+import { dispatchNow, enqueue } from "@/core/events/outbox";
 import {
   defineService,
   ServiceError,
@@ -332,6 +333,8 @@ export interface MailSendOptions {
   idempotencyKey?: string;
   /** Refuse before staging when the selected route is only a local sink. */
   requireDelivery?: boolean;
+  /** Bulk campaigns recheck this contact's consent immediately before I/O. */
+  marketingContactId?: string;
 }
 
 export interface MailSendResult {
@@ -350,6 +353,11 @@ const stagedMessage = z
     html: z.string().max(4_000_000).optional(),
     replyTo: address.optional(),
     from: z.string().max(500).refine((value) => !/[\r\n]/.test(value)).optional(),
+    headers: z.object({
+      "List-Unsubscribe": z.string().max(2_048).regex(/^<https?:\/\/[^<>\r\n]+>$/).optional(),
+      "List-Unsubscribe-Post": z.literal("List-Unsubscribe=One-Click").optional(),
+    }).strict().optional(),
+    marketingContactId: uuid.optional(),
   })
   .strict();
 type StagedMessage = z.output<typeof stagedMessage>;
@@ -373,7 +381,7 @@ export async function sendMail(
   options: MailSendOptions = {},
 ): Promise<MailSendResult> {
   const purpose = options.purpose ?? "transactional";
-  const prepared = stagedMessage.parse({ ...message, to: message.to });
+  const prepared = stagedMessage.parse({ ...message, to: message.to, marketingContactId: options.marketingContactId });
   const recipient = prepared.to;
   const [suppressed] = await tx
     .select({ email: mailSuppressions.email, reason: mailSuppressions.reason })
@@ -526,13 +534,21 @@ async function finishQueuedMail(
   deliveryId: string,
   values: Partial<typeof mailDeliveries.$inferInsert>,
 ): Promise<void> {
+  const events: Array<{ id: string; eventName: string; payload: unknown }> = [];
   await db().transaction(async (tx) => {
-    await tx
+    const [delivery] = await tx
       .update(mailDeliveries)
       .set({ ...values, updatedAt: new Date() })
-      .where(eq(mailDeliveries.id, deliveryId));
+      .where(eq(mailDeliveries.id, deliveryId))
+      .returning({ recipient: mailDeliveries.recipient });
     await tx.delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
+    if (delivery && (values.status === "suppressed" || values.status === "failed")) {
+      const eventName = "mail.deliveryUpdated";
+      const payload = { deliveryId, recipient: delivery.recipient, type: values.status };
+      events.push({ id: await enqueue(tx, eventName, payload), eventName, payload });
+    }
   });
+  await dispatchNow(events);
 }
 
 /** Snapshot, provider call, apply: no database transaction spans the call. */
@@ -595,6 +611,15 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
       lastError: `Suppressed after a ${suppressed.reason.replace("_", " ")}.`,
     });
     return { status: "suppressed" };
+  }
+
+  if (queued.delivery.purpose === "bulk" && message.marketingContactId) {
+    const { canContact } = await import("@/core/privacy/service");
+    const consent = await canContact.call({ contactId: message.marketingContactId, purpose: "marketing", channel: "email" }, { kind: "system" });
+    if (!consent.allowed) {
+      await finishQueuedMail(deliveryId, { status: "suppressed", lastError: "Marketing email consent was withdrawn before delivery." });
+      return { status: "suppressed" };
+    }
   }
 
   await db()

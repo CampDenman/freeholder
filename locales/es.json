@@ -7080,5 +7080,11 @@
   "portal.record.refundDue": "Reembolso pendiente (lo procesará el negocio)",
   "blog.slugHint": "El artículo estará en /blog/ seguido de esta dirección.",
   "publicBooking.moveTerms": "La factura y la política de cancelación originales siguen vigentes al cambiar esta cita.",
-  "publicBooking.acceptMove": "Acepto cambiar esta cita según su política de cancelación original."
+  "publicBooking.acceptMove": "Acepto cambiar esta cita según su política de cancelación original.",
+  "newsletters.unsubscribeLink": "Cancelar los correos de marketing",
+  "newsletters.unsubscribeTitle": "Cancelar los correos de marketing",
+  "newsletters.unsubscribeInstruction": "Confirma para dejar de recibir correos de marketing de este negocio. Seguirás recibiendo tus recibos y otros mensajes esenciales.",
+  "newsletters.confirmTitle": "Confirmar tu suscripción al boletín",
+  "newsletters.confirmInstruction": "Confirma que quieres recibir este boletín.",
+  "newsletters.confirmAction": "Confirmar suscripción"
 }

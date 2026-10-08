@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   SCREENS,
+  GALLERY_IMAGE_ROUTE,
+  assertHttpReadOnContract,
   SCREEN_IDS,
   TAB_ORDER,
   OWNER_TAB_ORDER,
@@ -73,6 +75,25 @@ describe("screen contracts (C10.13)", () => {
     const real = sdkServiceNames();
     const missing = servicesUsed().filter((name) => !real.has(name));
     expect(missing).toEqual([]);
+  });
+
+  it("declares controlled gallery bytes separately and rejects undeclared HTTP reads (C10.27)", async () => {
+    await ready();
+    expect(SCREENS.gallery.httpReads).toEqual([GALLERY_IMAGE_ROUTE]);
+    expect(servicesUsed()).not.toContain("galleries.viewItem");
+    expect(getService("galleries.viewItem").def.external).toBe(false);
+    expect(() => assertHttpReadOnContract("gallery", GALLERY_IMAGE_ROUTE)).not.toThrow();
+    expect(() => assertHttpReadOnContract("home", GALLERY_IMAGE_ROUTE)).toThrow(/may not read/);
+    expect(() => assertHttpReadOnContract("gallery", "GET /media/{key}")).toThrow(/may not read/);
+    expect(() => assertHttpReadOnContract("gallery", "POST /g/{slug}/view/{itemId}")).toThrow(/may not read/);
+    for (const screen of Object.values(SCREENS)) {
+      for (const route of screen.httpReads ?? []) {
+        const [method, path] = route.split(" ");
+        expect(method).toBe("GET");
+        const routeFile = `app${path!.replace(/\{([^}]+)\}/g, "[$1]")}/route.ts`;
+        expect(readFileSync(routeFile, "utf8")).toContain("export async function GET");
+      }
+    }
   });
 
   it("gives every screen somewhere to sit and something to say when empty", () => {

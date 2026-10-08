@@ -38,7 +38,9 @@ import {
 } from "./broadcast-schema";
 import { emailTemplates } from "./template-schema";
 import { renderTemplate } from "./template-service";
-import { canContact } from "@/core/privacy/service";
+import { canContact, recordConsent } from "@/core/privacy/service";
+import { siteOrigin } from "@/core/seo/origin";
+import { t } from "@/core/i18n";
 
 const broadcastRow = row({
   id: uuidSchema,
@@ -77,7 +79,7 @@ export const saveBroadcast = defineService({
       const [existing] = await ctx.tx
         .select({ status: broadcasts.status })
         .from(broadcasts)
-        .where(eq(broadcasts.id, input.id));
+        .where(eq(broadcasts.id, input.id)).for("update");
       if (!existing) throw new ServiceError("not_found", "There is no such broadcast.");
       // Editing something already going out would change the wording halfway
       // through the audience, so half the list gets one message and half
@@ -260,7 +262,7 @@ export async function sendBatch(
   const [broadcast] = await ctx.tx
     .select()
     .from(broadcasts)
-    .where(eq(broadcasts.id, broadcastId));
+    .where(eq(broadcasts.id, broadcastId)).for("update");
   if (!broadcast) throw new ServiceError("not_found", "There is no such broadcast.");
   if (broadcast.status !== "sending") return { sent: 0, failed: 0, remaining: 0 };
 
@@ -324,15 +326,19 @@ export async function sendBatch(
           "contact.email": recipient.email,
         },
       });
+      const unsubscribeUrl = `${siteOrigin()}/unsubscribe?broadcastToken=${recipient.unsubscribeToken}&locale=${encodeURIComponent(person?.preferredLocale ?? "en")}`;
+      const unsubscribeLabel = t(person?.preferredLocale ?? "en", "newsletters.unsubscribeLink");
+      const escapedUrl = unsubscribeUrl.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
       const delivery = await sendMail(
         ctx.tx,
         {
           to: recipient.email,
           subject: broadcast.subject ?? rendered.subject,
-          html: rendered.html,
-          text: rendered.text,
+          html: rendered.html.replace("</body>", `<p><a href="${escapedUrl}">${unsubscribeLabel}</a></p></body>`),
+          text: `${rendered.text}\n\n${unsubscribeLabel}: ${unsubscribeUrl}`,
+          headers: { "List-Unsubscribe": `<${unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
         },
-        { purpose: "bulk" },
+        { purpose: "bulk", requireDelivery: true, idempotencyKey: `broadcast-recipient:${recipient.id}`, marketingContactId: recipient.contactId },
       );
       await ctx.tx
         .update(broadcastRecipients)
@@ -591,6 +597,30 @@ export const broadcastRecipientList = defineService({
       .limit(input.limit),
 });
 
+// C9.37: an opaque per-copy capability withdraws marketing consent only. It
+// reveals no contact details and remains usable for repeated one-click POSTs.
+export const unsubscribeFromBroadcast = defineService({
+  name: "broadcasts.unsubscribe",
+  summary: "Withdraw marketing email consent using the unsubscribe link in a campaign.",
+  kind: "mutation", permission: "public",
+  input: z.object({ token: uuidSchema }),
+  output: z.object({ unsubscribed: z.literal(true) }),
+  handler: async (input, ctx) => {
+    const [recipient] = await ctx.tx.select({ id: broadcastRecipients.id, contactId: broadcastRecipients.contactId })
+      .from(broadcastRecipients).where(or(
+        eq(broadcastRecipients.unsubscribeToken, input.token),
+        sql`${broadcastRecipients.unsubscribeTokenAliases} @> ARRAY[${input.token}]::uuid[]`,
+      )).for("update");
+    if (!recipient) throw new ServiceError("not_found", "That unsubscribe link is not valid.");
+    const current = await ctx.callAsSystem(canContact, { contactId: recipient.contactId, purpose: "marketing", channel: "email" });
+    if (current.reason !== "withdrawn") await ctx.callAsSystem(recordConsent, {
+      contactId: recipient.contactId, purpose: "marketing", channel: "email", state: "withdrawn", method: "preference_center",
+    });
+    ctx.setSubject("broadcastRecipient", recipient.id);
+    return { unsubscribed: true as const };
+  },
+});
+
 /* ------------------------------------------------------------ the spine */
 
 registerContactReference({
@@ -598,23 +628,33 @@ registerContactReference({
   // One row per person per broadcast, so merging two people who both received
   // one would collide. The survivor's row stands and the duplicate's goes: two
   // rows saying the same message reached the same person would double every
-  // count on the stats screen.
+  // count on the stats screen. C9.37: keep every old opt-out capability before
+  // dropping its row, including capabilities inherited through earlier merges.
   repoint: async (tx, duplicateId, survivingId) => {
     const mine = await tx
       .select()
       .from(broadcastRecipients)
-      .where(eq(broadcastRecipients.contactId, duplicateId));
+      .where(eq(broadcastRecipients.contactId, duplicateId))
+      .for("update");
     for (const each of mine) {
       const [survivor] = await tx
-        .select({ id: broadcastRecipients.id })
+        .select({ id: broadcastRecipients.id, aliases: broadcastRecipients.unsubscribeTokenAliases })
         .from(broadcastRecipients)
         .where(
           and(
             eq(broadcastRecipients.broadcastId, each.broadcastId),
             eq(broadcastRecipients.contactId, survivingId),
           ),
-        );
+        )
+        .for("update");
       if (survivor) {
+        await tx.update(broadcastRecipients).set({
+          unsubscribeTokenAliases: [...new Set([
+            ...survivor.aliases,
+            each.unsubscribeToken,
+            ...each.unsubscribeTokenAliases,
+          ])],
+        }).where(eq(broadcastRecipients.id, survivor.id));
         await tx.delete(broadcastRecipients).where(eq(broadcastRecipients.id, each.id));
         continue;
       }
@@ -725,7 +765,11 @@ export async function onMailDeliveryUpdated(payload: unknown): Promise<void> {
       ? ("bounced" as const)
       : event.type === "complaint"
         ? ("complained" as const)
-        : null;
+        : event.type === "suppressed"
+          ? ("suppressed" as const)
+          : event.type === "failed"
+            ? ("failed" as const)
+            : null;
   if (!state) return;
 
   // Only ever the delivery this event names. Falling back to the address would
@@ -758,4 +802,5 @@ export default [
   listBroadcasts,
   broadcastStats,
   broadcastRecipientList,
+  unsubscribeFromBroadcast,
 ];

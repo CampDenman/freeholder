@@ -163,6 +163,32 @@ describe.runIf(hasDatabase)("using a reset link", () => {
     expect(reused.code).toBe("permission");
   });
 
+  it("allows exactly one concurrent redemption of a reset link", async () => {
+    const token = await requestToken();
+    const passwords = [NEW, "a-concurrent-password-that-must-not-overwrite"];
+    const outcomes = await Promise.allSettled(passwords.map(newPassword =>
+      resetPassword.call({ token, newPassword }, ANONYMOUS),
+    ));
+
+    const successful = outcomes.flatMap((outcome, index) =>
+      outcome.status === "fulfilled" ? [index] : [],
+    );
+    expect(successful).toHaveLength(1);
+    const rejected = outcomes.find(outcome => outcome.status === "rejected");
+    expect(rejected).toMatchObject({ status: "rejected", reason: { code: "permission" } });
+    await expect(login.call({ email: EMAIL, password: passwords[successful[0]!]! }, ANONYMOUS))
+      .resolves.toMatchObject({ role: "owner" });
+  });
+
+  it("does not let invented tokens spend a valid link's reset allowance", async () => {
+    const token = await requestToken();
+    await Promise.all(Array.from({ length: 20 }, () => failure(
+      resetPassword.call({ token: "invented-reset-link-with-no-account", newPassword: NEW }, ANONYMOUS),
+    )));
+    await expect(resetPassword.call({ token, newPassword: NEW }, ANONYMOUS))
+      .resolves.toMatchObject({ ok: true });
+  });
+
   it("signs out every session, including the attacker's", async () => {
     // Unlike a voluntary change, a reset keeps nothing: the person doing it is
     // about to sign in with the password they just chose, and whoever they are

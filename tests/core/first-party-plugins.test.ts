@@ -316,7 +316,7 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", { ti
     const contactIds = [...new Set(imported.map((row) => row.contactId))];
     expect(contactIds).toHaveLength(2);
     const invoices = (await listInvoices.call({}, OWNER)).filter((row) =>
-      row.idempotencyKey.startsWith(`marketplace:${connected.id}:`),
+      row.idempotencyKey?.startsWith(`marketplace:${connected.id}:`),
     );
     expect(invoices).toHaveLength(2);
     expect(invoices.map((row) => row.idempotencyKey).sort()).toEqual(
@@ -339,7 +339,7 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", { ti
     expect(merged.every((row) => row.contactId === keep)).toBe(true);
     const keptInvoices = await listInvoices.call({ contactId: keep }, OWNER);
     expect(
-      keptInvoices.filter((row) => row.idempotencyKey.startsWith(`marketplace:${connected.id}:`)),
+      keptInvoices.filter((row) => row.idempotencyKey?.startsWith(`marketplace:${connected.id}:`)),
     ).toHaveLength(2);
   });
 
@@ -364,7 +364,7 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", { ti
     expect((await syncMarketplaceChannel.call({ channelId: shopify.id }, OWNER)).imported).toBe(1);
     expect((await syncMarketplaceChannel.call({ channelId: etsy.id }, OWNER)).imported).toBe(1);
     const invoices = (await listInvoices.call({}, OWNER)).filter((row) =>
-      row.idempotencyKey.startsWith("marketplace:"),
+      row.idempotencyKey?.startsWith("marketplace:"),
     );
     expect(invoices).toHaveLength(2);
     expect(invoices.map((row) => row.idempotencyKey).sort()).toEqual(

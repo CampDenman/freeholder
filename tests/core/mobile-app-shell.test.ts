@@ -141,6 +141,10 @@ describe("the Expo application (C10.23)", () => {
     expect(images).toContain("/g/");
     expect(images).toContain("/view/");
     expect(images).toContain("authorization");
+    expect(images).toContain('assertHttpReadOnContract("gallery", GALLERY_IMAGE_ROUTE)');
+    expect(images.indexOf('assertHttpReadOnContract("gallery", GALLERY_IMAGE_ROUTE)'))
+      .toBeLessThan(images.indexOf("return readThrough"));
+    expect(images).not.toContain('assertOnContract("gallery", "galleries.viewItem")');
     expect(images).toContain("maxAgeMs: PRIVATE_CACHE_LEASE_MS");
     expect(images).toContain("result.expiresAt - Date.now()");
     expect(images).not.toMatch(/\/api\/v1\/galleries\.viewItem/);

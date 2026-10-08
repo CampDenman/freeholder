@@ -7,6 +7,7 @@
 // through the spine. Per-asset flags are a ceiling: a guest overlay cannot
 // grant more than the item allows.
 import { z } from "zod";
+import { createHash } from "node:crypto";
 import { and, asc, desc, eq, exists, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { contactForActor } from "@/core/portal/service";
 import { registerPortalSection } from "@/core/portal/sections";
@@ -201,6 +202,11 @@ const itemRow = row({
   status: z.string().optional(),
 });
 
+const liveItemRow = itemRow.extend({
+  viewUrl: z.string(),
+  downloadUrl: z.string().nullable(),
+});
+
 const guestRow = row({
   id: uuid,
   galleryId: uuid,
@@ -258,7 +264,7 @@ const archiveRow = row({
 
 /** The stored object is never named to the client; the route serves it. */
 function publicArchive(archive: typeof galleryArchives.$inferSelect) {
-  const { storageKey: _storageKey, createdAt: _c, updatedAt: _u, ...rest } = archive;
+  const { storageKey: _storageKey, deliveryHash: _deliveryHash, createdAt: _c, updatedAt: _u, ...rest } = archive;
   return rest;
 }
 
@@ -289,8 +295,9 @@ function publicGallery(
   };
 }
 
-async function loadGallery(ctx: ServiceContext, galleryId: string) {
-  const [gallery] = await ctx.tx.select().from(galleries).where(eq(galleries.id, galleryId)).limit(1);
+async function loadGallery(ctx: ServiceContext, galleryId: string, lock = false) {
+  const lookup = ctx.tx.select().from(galleries).where(eq(galleries.id, galleryId)).limit(1);
+  const [gallery] = lock ? await lookup.for("update") : await lookup;
   if (!gallery) throw new ServiceError("not_found", "That gallery is not here.");
   return gallery;
 }
@@ -448,6 +455,38 @@ function deliverableFor(
   return master;
 }
 
+/** Bind a bundle to the files and policy that are currently deliverable. */
+async function archiveContents(ctx: ServiceContext, gallery: typeof galleries.$inferSelect) {
+  const rows = await ctx.tx.select({ item: galleryItems, asset: assets })
+    .from(galleryItems).innerJoin(assets, eq(assets.id, galleryItems.assetId))
+    .where(eq(galleryItems.galleryId, gallery.id)).orderBy(asc(galleryItems.position), asc(galleryItems.id));
+  const blocked = await consentBlockedAssetIds(ctx.tx, rows.map(({ asset }) => asset.id));
+  const deliverable = rows
+    .filter(({ item, asset }) => gallery.downloadPolicy !== "none" && asset.status === "ready" &&
+      item.canView && item.canDownload && !blocked.has(asset.id))
+    .map((row) => ({ row, delivery: deliverableFor(row.asset, gallery, "download") }))
+    .filter((entry): entry is typeof entry & { delivery: Delivery } => entry.delivery !== null);
+  const deliveryHash = createHash("sha256").update(JSON.stringify({
+    policy: [gallery.downloadPolicy, gallery.downloadLimit, gallery.watermark],
+    // Include excluded/removed items and asset state too: a restriction must
+    // invalidate a ZIP containing bytes that are no longer in the live list.
+    items: rows.map(({ item, asset }) => [item.id, item.assetId, item.position,
+      item.canView, item.canDownload, asset.status, asset.updatedAt, asset.storageKey,
+      asset.filename, asset.mime, asset.bytes, asset.checksumSha256, asset.variants]),
+    blocked: [...blocked].sort(),
+  })).digest("hex");
+  return { deliverable, deliveryHash };
+}
+
+/** Called only with the gallery row locked, across every download session. */
+async function hasDownloadAllowance(ctx: ServiceContext, gallery: typeof galleries.$inferSelect, count: number) {
+  if (gallery.downloadPolicy !== "limit_n") return true;
+  const [taken] = await ctx.tx.select({ count: sql<number>`count(*)::int` })
+    .from(galleryAccessLogs).where(and(eq(galleryAccessLogs.galleryId, gallery.id),
+      eq(galleryAccessLogs.action, "download")));
+  return (taken?.count ?? 0) + count <= (gallery.downloadLimit ?? 0);
+}
+
 function itemAllowed(
   item: { canView: boolean; canDownload: boolean },
   guest: { canView: boolean; canDownload: boolean } | null,
@@ -463,6 +502,7 @@ async function liveItems(
   ctx: ServiceContext,
   gallery: {
     id: string;
+    slug: string;
     downloadPolicy: (typeof GALLERY_DOWNLOAD_POLICIES)[number];
     watermark: boolean;
   },
@@ -479,21 +519,26 @@ async function liveItems(
     .orderBy(asc(galleryItems.position));
   return rows
     .filter((row) => row.asset.status === "ready" && itemAllowed(row.item, guest, "view"))
-    .map((row) => ({
-      id: row.item.id,
-      galleryId: row.item.galleryId,
-      assetId: row.item.assetId,
-      position: row.item.position,
-      canView: true,
-      canDownload:
-        gallery.downloadPolicy !== "none" &&
+    .map((row) => {
+      const canDownload = gallery.downloadPolicy !== "none" &&
         itemAllowed(row.item, guest, "download") &&
-        deliverableFor(row.asset, gallery, "download") !== null,
-      filename: row.asset.filename,
-      altText: row.asset.altText,
-      mime: row.asset.mime,
-      status: row.asset.status,
-    }));
+        deliverableFor(row.asset, gallery, "download") !== null;
+      const path = `/g/${encodeURIComponent(gallery.slug)}`;
+      return {
+        id: row.item.id,
+        galleryId: row.item.galleryId,
+        assetId: row.item.assetId,
+        position: row.item.position,
+        canView: true,
+        canDownload,
+        viewUrl: `${path}/view/${row.item.id}`,
+        downloadUrl: canDownload ? `${path}/download/${row.item.id}` : null,
+        filename: row.asset.filename,
+        altText: row.asset.altText,
+        mime: row.asset.mime,
+        status: row.asset.status,
+      };
+    });
 }
 
 /**
@@ -604,8 +649,8 @@ async function issueSession(
   return token;
 }
 
-async function loadSession(ctx: ServiceContext, token: string) {
-  const [session] = await ctx.tx
+async function loadSession(ctx: ServiceContext, token: string, lockGallery = false) {
+  let [session] = await ctx.tx
     .select()
     .from(gallerySessions)
     .where(eq(gallerySessions.tokenHash, hashGalleryToken("session", token)))
@@ -613,7 +658,16 @@ async function loadSession(ctx: ServiceContext, token: string) {
   if (!session || isExpired(session.expiresAt)) {
     throw new ServiceError("permission", "That did not work. Nothing has changed.");
   }
-  const gallery = await loadGallery(ctx, session.galleryId);
+  const gallery = await loadGallery(ctx, session.galleryId, lockGallery);
+  if (lockGallery) {
+    // Secret rotation may have invalidated the session while this request
+    // waited for the shared gallery allowance/policy lock.
+    [session] = await ctx.tx.select().from(gallerySessions)
+      .where(eq(gallerySessions.id, session.id)).limit(1);
+    if (!session || isExpired(session.expiresAt)) {
+      throw new ServiceError("permission", "That did not work. Nothing has changed.");
+    }
+  }
   assertLive(gallery);
   const guest = session.guestId
     ? (
@@ -690,11 +744,14 @@ async function openedSessionPayload(
     ctx.tx,
     items.map((item) => item.assetId),
   );
+  const visibleItems = items.filter((item) => !blocked.has(item.assetId));
   return {
     ok: true as const,
     sessionToken,
     gallery: publicGallery(gallery),
-    items: items.filter((item) => !blocked.has(item.assetId)),
+    items: visibleItems,
+    archiveUrl: visibleItems.some(item => item.canDownload)
+      ? `/g/${encodeURIComponent(gallery.slug)}/archive` : null,
     selections: await selectionsFor(ctx, gallery.id, contactId),
     round: await currentRound(ctx, gallery.id),
     lastDecided: await lastDecidedRound(ctx, gallery.id),
@@ -949,6 +1006,9 @@ export const addGalleryItem = defineService({
     if (asset.status !== "ready") {
       throw new ServiceError("validation", "Only a ready file can go in a client gallery.");
     }
+    // Privacy is durable: removing a gallery or disabling this module must
+    // never turn a previously private client file into a public library URL.
+    await ctx.tx.update(assets).set({ isPrivate: true }).where(eq(assets.id, asset.id));
     const [last] = await ctx.tx
       .select({ position: galleryItems.position })
       .from(galleryItems)
@@ -1399,7 +1459,9 @@ const unlocked = z.object({
     watermark: true,
     expiresAt: true,
   }),
-  items: listed(itemRow),
+  items: listed(liveItemRow),
+  /** Controlled byte routes accept the session token as a Bearer credential. */
+  archiveUrl: z.string().nullable(),
   /** This person's own marks, so the surface can render what they chose. */
   selections: listed(selectionRow),
   /** Where the approval conversation stands, which the client must see. */
@@ -1581,10 +1643,12 @@ export const downloadGalleryItem = defineService({
   summary: "Download one gallery file the session is allowed to take.",
   kind: "mutation",
   permission: "public",
+  external: false,
   writeClass: "write",
   input: z.object({
     sessionToken: z.string().min(20).max(200),
     itemId: id,
+    slug: slug.optional(),
   }),
   output: row({
     assetId: uuid,
@@ -1594,7 +1658,10 @@ export const downloadGalleryItem = defineService({
     bytes: z.number(),
   }),
   handler: async (input, ctx) => {
-    const { session, gallery, guest } = await loadSession(ctx, input.sessionToken);
+    const { session, gallery, guest } = await loadSession(ctx, input.sessionToken, true);
+    if (input.slug !== undefined && gallery.slug !== input.slug) {
+      throw new ServiceError("not_found", "That file is not in this gallery.");
+    }
     const [row] = await ctx.tx
       .select({ item: galleryItems, asset: assets })
       .from(galleryItems)
@@ -1630,17 +1697,7 @@ export const downloadGalleryItem = defineService({
       throw new ServiceError("permission", "That file cannot be downloaded.");
     }
     if (gallery.downloadPolicy === "limit_n") {
-      const [taken] = await ctx.tx
-        .select({ count: sql<number>`count(*)::int` })
-        .from(galleryAccessLogs)
-        .where(
-          and(
-            eq(galleryAccessLogs.galleryId, gallery.id),
-            eq(galleryAccessLogs.action, "download"),
-          ),
-        );
-      const next = (taken?.count ?? 0) + 1;
-      if (next > (gallery.downloadLimit ?? 0)) {
+      if (!await hasDownloadAllowance(ctx, gallery, 1)) {
         await logAccess(ctx, {
           galleryId: gallery.id,
           contactId: session.contactId,
@@ -1672,6 +1729,7 @@ export const viewGalleryItem = defineService({
   summary: "Authorize one gallery image for a live session.",
   kind: "query",
   permission: "public",
+  external: false,
   input: z.object({
     sessionToken: z.string().min(20).max(200),
     itemId: id,
@@ -2101,8 +2159,8 @@ export const requestGalleryArchive = defineService({
   input: z.object({ sessionToken: z.string().min(20).max(200) }),
   output: archiveRow,
   handler: async (input, ctx) => {
-    const { gallery } = await loadSession(ctx, input.sessionToken);
-    if (gallery.downloadPolicy === "none") {
+    const { gallery, guest } = await loadSession(ctx, input.sessionToken);
+    if (gallery.downloadPolicy === "none" || (guest && (!guest.canView || !guest.canDownload))) {
       throw new ServiceError("permission", "This gallery is view-only.");
     }
     const [existing] = await ctx.tx
@@ -2124,6 +2182,7 @@ export const requestGalleryArchive = defineService({
           fileCount: null,
           error: null,
           builtAt: null,
+          deliveryHash: null,
           updatedAt: new Date(),
         },
       })
@@ -2155,29 +2214,7 @@ export const buildGalleryArchive = defineService({
       throw new ServiceError("permission", "Only trusted platform work packages a gallery.");
     }
     const gallery = await loadGallery(ctx, input.galleryId);
-    const rows = await ctx.tx
-      .select({ item: galleryItems, asset: assets })
-      .from(galleryItems)
-      .innerJoin(assets, eq(assets.id, galleryItems.assetId))
-      .where(eq(galleryItems.galleryId, gallery.id))
-      .orderBy(asc(galleryItems.position));
-
-    // C8.16: a packaged archive follows the same consent rule as the live
-    // list — withdrawn media is not deliverable in a bundle either.
-    const blocked = await consentBlockedAssetIds(
-      ctx.tx,
-      rows.map((row) => row.asset.id),
-    );
-    const deliverable = rows
-      .filter((row) => row.asset.status === "ready" && !blocked.has(row.asset.id))
-      .map((row) => ({
-        row,
-        delivery: deliverableFor(row.asset, gallery, "download"),
-      }))
-      .filter(
-        (entry): entry is typeof entry & { delivery: NonNullable<typeof entry.delivery> } =>
-          entry.delivery !== null && entry.row.item.canDownload,
-      );
+    const { deliverable, deliveryHash } = await archiveContents(ctx, gallery);
 
     const fail = async (message: string) => {
       const [failed] = await ctx.tx
@@ -2223,6 +2260,7 @@ export const buildGalleryArchive = defineService({
         storageKey: key,
         bytes: zip.bytes,
         fileCount: zip.entries,
+        deliveryHash,
         error: null,
         builtAt: new Date(),
         updatedAt: new Date(),
@@ -2255,13 +2293,21 @@ export const galleryArchiveState = defineService({
   input: z.object({ sessionToken: z.string().min(20).max(200) }),
   output: archiveRow.nullable(),
   handler: async (input, ctx) => {
-    const { gallery } = await loadSession(ctx, input.sessionToken);
+    const { gallery, guest } = await loadSession(ctx, input.sessionToken);
+    if (gallery.downloadPolicy === "none" || (guest && (!guest.canView || !guest.canDownload))) return null;
     const [archive] = await ctx.tx
       .select()
       .from(galleryArchives)
       .where(eq(galleryArchives.galleryId, gallery.id))
       .limit(1);
-    return archive ? publicArchive(archive) : null;
+    if (!archive) return null;
+    if (archive.state === "ready" && (!archive.deliveryHash ||
+      archive.deliveryHash !== (await archiveContents(ctx, gallery)).deliveryHash)) {
+      // Keep the old bundle offline and let the existing translated failed /
+      // request-again surface offer recovery, rather than a ready 404 link.
+      return { ...publicArchive(archive), state: "failed" as const, error: "The gallery changed. Request a new archive." };
+    }
+    return publicArchive(archive);
   },
 });
 
@@ -2269,36 +2315,35 @@ export const galleryArchiveState = defineService({
 export const downloadGalleryArchive = defineService({
   name: "galleries.downloadArchive",
   summary: "Download the packaged gallery.",
-  kind: "query",
+  kind: "mutation",
+  writeClass: "write",
   permission: "public",
-  input: z.object({ sessionToken: z.string().min(20).max(200) }),
+  external: false,
+  input: z.object({ sessionToken: z.string().min(20).max(200), slug: slug.optional() }),
   output: row({ storageKey: z.string(), filename: z.string(), bytes: z.number().int() }).nullable(),
   handler: async (input, ctx) => {
-    const { gallery } = await loadSession(ctx, input.sessionToken);
-    if (gallery.downloadPolicy === "none") return null;
-    // C8.16: an archive packaged before a consent withdrawal may still hold
-    // the withdrawn media, and this endpoint cannot tell. The gallery owner
-    // rebuilds (packaging excludes blocked media); until then the bundle
-    // stays offline rather than delivering what the list no longer shows.
-    const items = await ctx.tx
-      .select({ assetId: galleryItems.assetId })
-      .from(galleryItems)
-      .where(eq(galleryItems.galleryId, gallery.id));
-    if (
-      items.length > 0 &&
-      (await consentBlockedAssetIds(
-        ctx.tx,
-        items.map((item) => item.assetId),
-      )).size > 0
-    ) {
-      return null;
-    }
+    const { session, gallery, guest } = await loadSession(ctx, input.sessionToken, true);
+    if (input.slug !== undefined && gallery.slug !== input.slug) return null;
+    if (gallery.downloadPolicy === "none" || (guest && (!guest.canView || !guest.canDownload))) return null;
     const [archive] = await ctx.tx
       .select()
       .from(galleryArchives)
       .where(eq(galleryArchives.galleryId, gallery.id))
       .limit(1);
-    if (archive?.state !== "ready" || !archive.storageKey) return null;
+    if (archive?.state !== "ready" || !archive.storageKey || !archive.deliveryHash) return null;
+    const current = await archiveContents(ctx, gallery);
+    if (archive.deliveryHash !== current.deliveryHash || current.deliverable.length === 0) return null;
+    if (!await hasDownloadAllowance(ctx, gallery, current.deliverable.length)) return null;
+    // A ZIP consumes one allowance per contained file, under the same lock
+    // and log as individual downloads. Reopening a session cannot reset it.
+    for (const { row } of current.deliverable) {
+      await logAccess(ctx, { galleryId: gallery.id, contactId: session.contactId,
+        action: "download", assetId: row.asset.id });
+    }
+    if (gallery.downloadPolicy === "limit_n") {
+      await ctx.tx.update(gallerySessions).set({ downloadsUsed: session.downloadsUsed + current.deliverable.length })
+        .where(eq(gallerySessions.id, session.id));
+    }
     return {
       storageKey: archive.storageKey,
       filename: `${gallery.slug}.zip`,

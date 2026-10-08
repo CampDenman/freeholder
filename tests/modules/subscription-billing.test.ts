@@ -22,11 +22,13 @@ import {
   products,
 } from "@/modules/catalog/schema";
 import { subscriptions } from "@/modules/subscriptions/schema";
+import { hasAccess } from "@/core/entitlements/service";
 import {
   attachProviderSchedule,
   cancelSubscription,
   changeMyPlan,
   changePlan,
+  chargePlatformInvoice,
   chargePlatformDue,
   enroll,
   proratedDifference,
@@ -301,6 +303,49 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     expect(row?.currentPeriodEnd.getTime()).toBeGreaterThan(Date.now());
   });
 
+  it.each(["succeeded", "failed"] as const)("does not restore access when an in-flight %s charge finishes after cancellation", async (status) => {
+    const member = await person(`cancel-charge-${status}`);
+    const method = await card(member.id);
+    const monthly = await plan({ billingMode: "platform", dunning: { retries: [1], graceDays: 7, notifyChannels: ["email"], finalAction: "pause" } });
+    const started = await subscribe.call({ contactId: member.id, planId: monthly.id, paymentMethodId: method.id }, OWNER);
+    mocks.chargeSavedMethod.mockImplementationOnce(async () => {
+      await cancelSubscription.call({ id: started.subscription.id, immediately: true }, OWNER);
+      return { providerRef: `pi_cancel_race_${status}`, status };
+    });
+    await chargePlatformInvoice.call({ subscriptionId: started.subscription.id, invoiceId: started.invoiceId! }, OWNER);
+    const [row] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
+    expect(row?.status).toBe("cancelled");
+    expect((await hasAccess.call({ contactId: member.id, resource: { kind: "site" } }, OWNER)).allowed).toBe(false);
+    const [invoice] = await db().select().from(invoices).where(eq(invoices.id, started.invoiceId!));
+    expect(invoice?.status).toBe(status === "succeeded" ? "paid" : "sent");
+  });
+
+  it("does not begin charging a membership that has already been cancelled", async () => {
+    const member = await person("cancel-before-charge");
+    const method = await card(member.id);
+    const monthly = await plan({ billingMode: "platform" });
+    const started = await subscribe.call({ contactId: member.id, planId: monthly.id, paymentMethodId: method.id }, OWNER);
+    await cancelSubscription.call({ id: started.subscription.id, immediately: true }, OWNER);
+    const result = await chargePlatformInvoice.call({ subscriptionId: started.subscription.id, invoiceId: started.invoiceId! }, OWNER);
+    expect(result.skipped).toBe(true);
+    expect(mocks.chargeSavedMethod).not.toHaveBeenCalled();
+  });
+
+  it("refuses to charge a member's card against another member's invoice", async () => {
+    const monthly = await plan({ billingMode: "platform" });
+    const member = await person("charge-owner");
+    const other = await person("invoice-owner");
+    const method = await card(member.id);
+    const otherMethod = await card(other.id);
+    const started = await subscribe.call({ contactId: member.id, planId: monthly.id, paymentMethodId: method.id }, OWNER);
+    const unrelated = await subscribe.call({ contactId: other.id, planId: monthly.id, paymentMethodId: otherMethod.id }, OWNER);
+    const error = await failure(chargePlatformInvoice.call({ subscriptionId: started.subscription.id, invoiceId: unrelated.invoiceId! }, OWNER));
+    expect(error.code).toBe("conflict");
+    expect(mocks.chargeSavedMethod).not.toHaveBeenCalled();
+    const [invoice] = await db().select().from(invoices).where(eq(invoices.id, unrelated.invoiceId!));
+    expect(invoice?.paidMinor).toBe(0);
+  });
+
   it("hands a provider schedule over at enroll and follows a paid webhook", async () => {
     const member = await person("provider");
     const method = await card(member.id);
@@ -358,6 +403,18 @@ describe.runIf(hasDatabase)("subscription billing", () => {
       .from(subscriptions)
       .where(eq(subscriptions.id, started.subscriptionId));
     expect(after?.currentPeriodEnd.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it.each([{ amountMinor: 100, currency: "CAD" }, { amountMinor: 2500, currency: "USD" }])("refuses provider settlement evidence that differs from the canonical invoice: %o", async (evidence) => {
+    const member = await person(`wrong-settlement-${evidence.currency}`);
+    const method = await card(member.id);
+    const monthly = await plan({ billingMode: "provider" });
+    const started = await enroll.call({ contactId: member.id, planId: monthly.id, paymentMethodId: method.id }, OWNER);
+    const error = await failure(reconcileProviderPeriod.call({ provider: "stripe", providerRef: "sub_1", kind: "subscription_period_paid", ...evidence }, { kind: "system" }));
+    expect(error.code).toBe("conflict");
+    const [invoice] = await db().select().from(invoices).where(eq(invoices.id, started.invoiceId!));
+    expect(invoice?.status).toBe("sent");
+    expect(invoice?.paidMinor).toBe(0);
   });
 
   it("defers a plan change when proration is none", async () => {

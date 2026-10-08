@@ -74,16 +74,17 @@ describe.runIf(hasDatabase)("the customer portal's rooms", () => {
 
   it("shows a customer the quote the owner sent them", async () => {
     const { contact, actor } = await signedInCustomer();
-    const { createQuote } = await import("@/modules/quotes/service");
-    await createQuote.call(
+    const { createQuote, setQuoteItems, sendQuote } = await import("@/modules/quotes/service");
+    const quote = await createQuote.call(
       {
         contactId: contact.id,
         title: "Two days on the coast",
         currency: "CAD",
-        lines: [{ description: "Coverage", quantity: 1, unitAmount: "1200.00" }],
       },
       OWNER,
     );
+    await setQuoteItems.call({ id: quote.id, items: [{ description: "Coverage", unitPriceMinor: 120_000 }] }, OWNER);
+    await sendQuote.call({ id: quote.id }, OWNER);
 
     const rooms = await myRecords.call({ section: "quotes" }, actor);
     expect(rooms).toHaveLength(1);
@@ -97,16 +98,17 @@ describe.runIf(hasDatabase)("the customer portal's rooms", () => {
     // the shape that checks whether it was.
     const mine = await signedInCustomer("rae@example.test");
     const theirs = { contact: await otherCustomer("sam@example.test") };
-    const { createQuote } = await import("@/modules/quotes/service");
-    await createQuote.call(
+    const { createQuote, setQuoteItems, sendQuote } = await import("@/modules/quotes/service");
+    const quote = await createQuote.call(
       {
         contactId: theirs.contact.id,
         title: "Somebody else's job",
         currency: "CAD",
-        lines: [{ description: "Coverage", quantity: 1, unitAmount: "900.00" }],
       },
       OWNER,
     );
+    await setQuoteItems.call({ id: quote.id, items: [{ description: "Coverage", unitPriceMinor: 90_000 }] }, OWNER);
+    await sendQuote.call({ id: quote.id }, OWNER);
 
     const rooms = await myRecords.call({ section: "quotes" }, mine.actor);
     expect(rooms[0]!.records).toHaveLength(0);
@@ -220,11 +222,13 @@ describe.runIf(hasDatabase)("self-service permission", () => {
 
   it("lets a customer run the owner's query about themselves", async () => {
     const { contact, actor } = await signedInCustomer();
-    const { listQuotes, createQuote } = await import("@/modules/quotes/service");
-    await createQuote.call(
+    const { listQuotes, createQuote, setQuoteItems, sendQuote } = await import("@/modules/quotes/service");
+    const quote = await createQuote.call(
       { contactId: contact.id, title: "Mine", currency: "CAD" },
       OWNER,
     );
+    await setQuoteItems.call({ id: quote.id, items: [{ description: "Coverage", unitPriceMinor: 10_000 }] }, OWNER);
+    await sendQuote.call({ id: quote.id }, OWNER);
     // The same service the owner calls, with the same filter.
     const rows = await listQuotes.call({ contactId: contact.id }, actor);
     expect(rows).toHaveLength(1);

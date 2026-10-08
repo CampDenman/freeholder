@@ -128,6 +128,10 @@ export const broadcastRecipients = pgTable(
      * did not.
      */
     email: text("email").notNull(),
+    /** Private capability carried in this copy's opt-out link, never listings. */
+    unsubscribeToken: uuid("unsubscribe_token").notNull().defaultRandom(),
+    /** C9.37: delivered links inherited when duplicate recipients are merged. */
+    unsubscribeTokenAliases: uuid("unsubscribe_token_aliases").array().notNull().default(sql`'{}'::uuid[]`),
     state: text("state", { enum: RECIPIENT_STATES }).notNull().default("pending"),
     /** Why, when the state is a refusal. */
     detail: text("detail"),
@@ -149,6 +153,8 @@ export const broadcastRecipients = pgTable(
     // One copy per person per broadcast. A resumed send must not double up,
     // and under concurrency only the index holds that.
     uniqueIndex("broadcast_recipients_once_idx").on(t.broadcastId, t.contactId),
+    uniqueIndex("broadcast_recipients_unsubscribe_idx").on(t.unsubscribeToken),
+    index("broadcast_recipients_unsubscribe_aliases_idx").using("gin", t.unsubscribeTokenAliases),
     // The send loop's own query: the next unsent batch, oldest first.
     index("broadcast_recipients_pending_idx")
       .on(t.broadcastId, t.createdAt)

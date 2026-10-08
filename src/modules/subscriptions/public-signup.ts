@@ -27,11 +27,15 @@ export const publicMembershipPlans = defineService({
   name:"subscriptions.publicPlans", summary:"Public membership prices, trial and cancellation promises.",kind:"query",permission:"public",input:z.object({}),output:z.array(planView),
   handler:async (_input,ctx)=>{
     const business=await ctx.call(getBusiness,{});
+    const contact = ctx.actor.kind === "user" ? await contactForActor(ctx).catch((error: unknown) => {
+      if (error instanceof ServiceError && ["permission", "not_found"].includes(error.code)) return null;
+      throw error;
+    }) : null;
     const currency=business?.baseCurrency??"USD";
     const rows=await ctx.tx.select({plan:plans,product:products,variant:productVariants.id}).from(plans).innerJoin(products,eq(products.id,plans.productId)).innerJoin(productVariants,and(eq(productVariants.productId,products.id),eq(productVariants.isDefault,true),eq(productVariants.status,"active"))).where(and(eq(plans.status,"active"),eq(products.status,"active"),eq(products.visibility,"public"))).orderBy(plans.name);
     const result=[];
     for(const {plan,product,variant} of rows){
-      const price=await ctx.callAsSystem(resolvePrice,{variantId:variant,currency,quantity:1});
+      const price=await ctx.callAsSystem(resolvePrice,{variantId:variant,currency,contactId:contact?.id,quantity:1});
       if(!price.available||price.amountMinor===undefined)continue;
       const promise={id:plan.id,name:plan.name,description:product.subtitle,currency,amountMinor:price.amountMinor,setupFeeMinor:plan.setupFeeMinor,interval:plan.interval,intervalCount:plan.intervalCount,trialDays:plan.trialDays,trialRequiresCard:plan.trialRequiresCard,billingMode:plan.billingMode,cancelBehaviour:plan.cancelBehaviour};
       const adapter=paymentAdapter();

@@ -89,12 +89,14 @@ and C10.26 still need physical device interaction and accessibility checks
 before their checkboxes close.
 
 Galleries (C10.27) list the C10.29 portal room and open a gallery with
-`galleries.openWithLogin`, then `viewSession` / `viewItem`. Favourites, selects,
+`galleries.openWithLogin`, then `galleries.viewSession`. Favourites, selects,
 rejects, comments and round submit use the same mutations as `app/g/[slug]`.
 Proofing writes are live-only: they are never queued or retried. Private image
 bytes come from `/g/{slug}/view/{itemId}` with `Authorization: Bearer
 {gallerySessionToken}` — the gallery capability, never the user's login token,
-and never in the URL. Those bytes share C10.30's 60-second encrypted lease;
+and never in the URL. The screen declares this controlled GET in `httpReads`,
+separately from SDK services; `galleries.viewItem` is an internal authorizer.
+Those bytes share C10.30's 60-second encrypted lease;
 401/403/404 evict immediately, offline failures never renew the lease, expiry
 clears the photo while the screen stays open, and sign-out cannot let a late
 response refill the next account. Physical-device proofing and accessibility

@@ -7080,5 +7080,11 @@
   "portal.record.refundDue": "Refund due (the business will process it)",
   "blog.slugHint": "The post will be at /blog/ followed by this address.",
   "publicBooking.moveTerms": "Your original invoice and cancellation policy still apply when you move this appointment.",
-  "publicBooking.acceptMove": "I agree to move this appointment under its original cancellation policy."
+  "publicBooking.acceptMove": "I agree to move this appointment under its original cancellation policy.",
+  "newsletters.unsubscribeLink": "Unsubscribe from marketing emails",
+  "newsletters.unsubscribeTitle": "Unsubscribe from marketing emails",
+  "newsletters.unsubscribeInstruction": "Confirm to stop marketing emails from this business. Your receipts and other essential messages will continue.",
+  "newsletters.confirmTitle": "Confirm your newsletter subscription",
+  "newsletters.confirmInstruction": "Confirm that you want to receive this newsletter.",
+  "newsletters.confirmAction": "Confirm subscription"
 }

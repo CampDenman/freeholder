@@ -226,6 +226,19 @@ const pageRow = row({
   createdAt: timestamp,
   updatedAt: timestamp,
 });
+// An allowlist, not a database row: new editorial columns must stay private.
+const publishedPageRow = z.object({
+  id: uuid,
+  slug: z.string(),
+  locale: z.string(),
+  title: z.string(),
+  blocks: z.unknown(),
+  status: z.literal("published"),
+  publishedAt: timestamp.nullable(),
+  seo: z.unknown(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
 const sectionRow = row({
   id: uuid,
   key: z.string(),
@@ -327,13 +340,14 @@ const visibleLocationPage = sql`not exists (
     )
 )`;
 
-export const resolvePage = defineService({
-  name: "cms.resolvePage",
-  summary: "The published page at a path, or null.",
+export const resolvePageForRender = defineService({
+  name: "cms.resolvePageForRender",
+  summary: "A published snapshot for the trusted server renderer, which applies viewer gates.",
   kind: "query",
-  permission: "public",
+  permission: "system",
+  external: false,
   input: z.object({ slug: lookupSlug, locale: z.string().default("en") }),
-  output: pageRow.nullable(),
+  output: publishedPageRow.nullable(),
   handler: async (input, ctx) => {
     // Pages are stored in the site's own language and *translated*, not
     // duplicated (Â§4.9). So the lookup is by slug in the source language, and
@@ -369,7 +383,7 @@ export const resolvePage = defineService({
     }
 
     const sourceLocale = source?.defaultLocale ?? page.locale;
-    if (input.locale === sourceLocale) return page;
+    if (input.locale === sourceLocale) return publishedPageRow.parse(page);
 
     const translation = await ctx.callAsSystem(getTranslation, {
       entityType: "page",
@@ -381,7 +395,7 @@ export const resolvePage = defineService({
       // language rather than not at all. A visitor who followed a French link
       // to an untranslated page should read the English one, not a 404 â€” and
       // hreflang only ever advertises the locales that do have one.
-      return page;
+      return publishedPageRow.parse(page);
     }
 
     const fields = translation.fields as {
@@ -389,12 +403,37 @@ export const resolvePage = defineService({
       blocks?: unknown;
       seo?: unknown;
     };
-    return {
+    return publishedPageRow.parse({
       ...page,
       title: fields.title ?? page.title,
       blocks: fields.blocks ?? page.blocks,
       seo: fields.seo ?? page.seo,
-    };
+    });
+  },
+});
+
+function publicBlockTree(value: unknown): unknown {
+  if (!Array.isArray(value)) return [];
+  return (value as BlockNode[]).map((node) => ({
+    ...node,
+    ...(node.children !== undefined
+      ? { children: node.type === "paywall" ? [] : publicBlockTree(node.children) }
+      : {}),
+  }));
+}
+
+export const resolvePage = defineService({
+  name: "cms.resolvePage",
+  summary: "Published public content at a path; editorial fields and gated bodies are excluded.",
+  kind: "query",
+  permission: "public",
+  input: z.object({ slug: lookupSlug, locale: z.string().default("en") }),
+  output: publishedPageRow.nullable(),
+  handler: async (input, ctx) => {
+    const page = await ctx.callAsSystem(resolvePageForRender, input);
+    // Gate evaluation, metering and entitlement-aware delivery belong to the
+    // server renderer. A raw public JSON lookup cannot reveal the hidden tree.
+    return page ? { ...page, blocks: publicBlockTree(page.blocks) } : null;
   },
 });
 
@@ -858,7 +897,8 @@ export const updatePage = defineService({
       .select()
       .from(pages)
       .where(and(eq(pages.id, id), isNull(pages.trashedAt)))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!before) throw new ServiceError("not_found", `no page with id ${id}`);
     if (expectedVersion !== undefined && before.version !== expectedVersion) {
       throw new ServiceError(
@@ -996,15 +1036,19 @@ export const publishPage = defineService({
   summary: "Make a page live, or take it back to draft.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({ id: z.string().uuid(), published: z.boolean() }),
+  input: z.object({ id: z.string().uuid(), published: z.boolean(), expectedVersion: z.number().int().positive().optional() }),
   output: pageRow,
   handler: async (input, ctx) => {
     const [before] = await ctx.tx
       .select()
       .from(pages)
       .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
+    if (input.expectedVersion !== undefined && before.version !== input.expectedVersion) {
+      throw new ServiceError("conflict", "This page changed after you reviewed it. Reload before publishing again.");
+    }
     if (input.published && before.approvalState === "pending") {
       throw new ServiceError(
         "conflict",
@@ -1426,7 +1470,8 @@ export const restoreRevision = defineService({
         .select()
         .from(pages)
         .where(and(eq(pages.id, revision.subjectId), isNull(pages.trashedAt)))
-        .limit(1);
+        .limit(1)
+        .for("update");
       if (!before) throw new ServiceError("not_found", "that page is gone");
 
       await writeRevision(ctx.tx, {
@@ -1682,6 +1727,7 @@ registerSearchSource({
 export default [
   listBlogPosts,
   resolvePage,
+  resolvePageForRender,
   getPage,
   listPages,
   publishedPaths,

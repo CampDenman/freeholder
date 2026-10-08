@@ -302,7 +302,8 @@ export const schedulePage = defineService({
       .select()
       .from(pages)
       .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
     if (input.publishAt === undefined && input.unpublishAt === undefined) {
       throw new ServiceError("validation", "cms.schedulePage: nothing to change");
@@ -422,7 +423,8 @@ export const requestApproval = defineService({
       .select()
       .from(pages)
       .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
     const [page] = await ctx.tx
       .update(pages)
@@ -470,7 +472,8 @@ export const decideApproval = defineService({
       .select()
       .from(pages)
       .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
     if (before.approvalState !== "pending") {
       throw new ServiceError("conflict", "This page is not waiting for approval.");
@@ -732,7 +735,8 @@ export const touchEditLease = defineService({
       .select()
       .from(pages)
       .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
     const actor = actorString(ctx.actor);
     const now = Date.now();

@@ -222,7 +222,7 @@ describe("canvas edits at the editor", () => {
     vi.unstubAllGlobals();
   });
 
-  async function renderEditor() {
+  async function renderEditor(onPublish?: Parameters<typeof BlockEditor>[0]["onPublish"]) {
     save = vi.fn(async (_blocks: EditorNode[]) => ({ version: 2 }));
     root = createRoot(container);
     await act(async () => {
@@ -233,6 +233,7 @@ describe("canvas edits at the editor", () => {
           labels: labels(),
           previewSrc: "/preview/page/p1",
           save,
+          ...(onPublish ? { onPublish, published: true } : {}),
         }),
       );
     });
@@ -243,6 +244,34 @@ describe("canvas edits at the editor", () => {
       await new Promise((resolve) => setTimeout(resolve, 1_300));
     });
   }
+
+  it("saves typing that arrives while an earlier autosave is in flight", async () => {
+    await renderEditor();
+    let complete!: (value: { version: number }) => void;
+    save.mockReturnValueOnce(new Promise(resolve => { complete = resolve; }));
+    await act(async () => canvasMessage({ source: "freeholder-preview", edit: { blockId: "h1", prop: "text", value: "First saved snapshot" } }));
+    await flushAutosave();
+    expect(save).toHaveBeenCalledTimes(1);
+    await act(async () => canvasMessage({ source: "freeholder-preview", edit: { blockId: "h1", prop: "text", value: "Typed during autosave" } }));
+    await act(async () => complete({ version: 2 }));
+    await flushAutosave();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1]?.[0][0]?.props.text).toBe("Typed during autosave");
+  });
+
+  it("keeps typing during publication dirty until that newer draft is saved", async () => {
+    let complete!: (value: { version: number }) => void;
+    const onPublish = vi.fn(() => new Promise<{ version: number }>(resolve => { complete = resolve; }));
+    await renderEditor(onPublish);
+    const publish = Array.from(container.querySelectorAll("button")).find(button => button.textContent === "Publish changes")!;
+    await act(async () => publish.click());
+    expect(onPublish).toHaveBeenCalledOnce();
+    await act(async () => canvasMessage({ source: "freeholder-preview", edit: { blockId: "h1", prop: "text", value: "Typed while publishing" } }));
+    await act(async () => complete({ version: 3 }));
+    await flushAutosave();
+    expect(save).toHaveBeenCalledOnce();
+    expect(save.mock.calls[0]?.[0][0]?.props.text).toBe("Typed while publishing");
+  });
 
   it("round-trips a flat canvas edit into the tree, the draft and the save", async () => {
     await renderEditor();

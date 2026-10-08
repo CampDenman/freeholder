@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 import {
   cacheKey,
+  assertHttpReadOnContract,
+  GALLERY_IMAGE_ROUTE,
   decodeGalleryImageResponse,
   freshnessLabel,
   noCache,
@@ -14,7 +16,7 @@ import {
   type Freshness,
 } from "@freeholder/mobile-app";
 import { privateCaches, privateCacheOwner } from "./cache";
-import { assertOnContract, type Caller, type ScreenData } from "./screen-data";
+import { type Caller, type ScreenData } from "./screen-data";
 import { fetchBytesWithTimeout } from "./transport";
 
 export interface GalleryImage {
@@ -22,10 +24,13 @@ export interface GalleryImage {
   uri: string;
 }
 
+// Preserve the existing encrypted-cache namespace. It is not an exposed RPC.
+const GALLERY_IMAGE_CACHE_KEY = "galleries.viewItem";
+
 export function galleryImageCacheKey(instanceUrl: string, slug: string, itemId: string): string {
   // Omit the gallery session so a re-open within the lease still hits; the
   // user vault is what sign-out wipes.
-  return cacheKey(instanceUrl, "galleries.viewItem", { slug, itemId });
+  return cacheKey(instanceUrl, GALLERY_IMAGE_CACHE_KEY, { slug, itemId });
 }
 
 export async function readGalleryImage(
@@ -33,12 +38,12 @@ export async function readGalleryImage(
   input: { slug: string; itemId: string; galleryToken: string },
   cache: Cache,
 ): Promise<{ value: GalleryImage | null; freshness: Freshness; expiresAt?: number }> {
-  assertOnContract("gallery", "galleries.viewItem");
+  assertHttpReadOnContract("gallery", GALLERY_IMAGE_ROUTE);
   return readThrough<GalleryImage>(
     {
       key: galleryImageCacheKey(caller.instanceUrl, input.slug, input.itemId),
       kind: "query",
-      service: "galleries.viewItem",
+      service: GALLERY_IMAGE_CACHE_KEY,
       maxAgeMs: PRIVATE_CACHE_LEASE_MS,
     },
     async () => decodeGalleryImageResponse(await fetchBytesWithTimeout(

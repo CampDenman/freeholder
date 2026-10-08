@@ -41,6 +41,14 @@ export function proratedDifference(
   return Math.round((newMinor * remaining) / total) - Math.round((oldMinor * remaining) / total);
 }
 
+function mayChargePlatform(subscription: typeof subscriptions.$inferSelect): boolean {
+  return subscription.billingMode === "platform"
+    && !subscription.signupPending
+    && !subscription.cancelledAt
+    && !subscription.cancelAtPeriodEnd
+    && ["active", "trialing", "past_due"].includes(subscription.status);
+}
+
 const claimCharge = defineService({
   name: "subscriptions.claimPlatformCharge",
   writeClass: "write",
@@ -70,10 +78,11 @@ const claimCharge = defineService({
       .select()
       .from(subscriptions)
       .where(eq(subscriptions.id, input.subscriptionId))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!subscription) throw new ServiceError("not_found", "There is no such subscription.");
-    const current = await applyPendingPlan(ctx, subscription);
-    if (current.billingMode !== "platform") {
+    const current = mayChargePlatform(subscription) ? await applyPendingPlan(ctx, subscription) : subscription;
+    if (!mayChargePlatform(current)) {
       return {
         skip: true,
         subscriptionId: current.id,
@@ -122,6 +131,9 @@ const claimCharge = defineService({
     }
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
     if (!invoice) throw new ServiceError("not_found", "The period invoice is missing.");
+    if (invoice.contactId !== current.contactId || invoice.currency !== current.currency || invoice.sourceType !== "subscription" || invoice.sourceId?.split(":")[0] !== current.id || !invoice.issuedAt || !["sent", "viewed", "partially_paid", "overdue", "paid"].includes(invoice.status)) {
+      throw new ServiceError("conflict", "That invoice cannot be charged to this membership.");
+    }
     const amountMinor = invoice.totalMinor - invoice.paidMinor;
     if (amountMinor <= 0) {
       return {
@@ -146,7 +158,7 @@ const claimCharge = defineService({
           .where(eq(paymentMethods.id, current.paymentMethodId))
           .limit(1)
       : [];
-    if (!method || method.status !== "active") {
+    if (!method || method.status !== "active" || method.contactId !== current.contactId) {
       throw new ServiceError("conflict", "Platform billing needs an active stored payment method.");
     }
     const payment = await ctx.call(createPayment, {
@@ -193,7 +205,8 @@ const applyCharge = defineService({
       .select()
       .from(subscriptions)
       .where(eq(subscriptions.id, input.subscriptionId))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!subscription) throw new ServiceError("not_found", "There is no such subscription.");
     const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
     if (input.succeeded) {
@@ -202,6 +215,10 @@ const applyCharge = defineService({
         providerRef: input.providerRef,
         processedAt: new Date(),
       });
+      // Provider I/O can finish after cancellation or pausing committed. The
+      // money still belongs in the ledger, but it cannot restart membership
+      // access or extend a cancelled renewal promise.
+      if (!mayChargePlatform(subscription)) return { advanced: false };
       const now = new Date();
       if (subscription.currentPeriodEnd > now) {
         if (subscription.status === "trialing") {
@@ -239,6 +256,7 @@ const applyCharge = defineService({
       invoiceId: input.invoiceId,
       detail: input.failureMessage ?? "declined",
     });
+    if (!mayChargePlatform(subscription)) return { advanced: false };
     await beginDunning(ctx, subscription, {
       invoiceId: input.invoiceId,
       detail: input.failureMessage ?? "declined",
@@ -808,7 +826,8 @@ async function settlePeriodInvoice(
   ctx: Parameters<typeof raiseInvoice>[0],
   subscription: typeof subscriptions.$inferSelect,
   options: {
-    amountMinor?: number;
+    amountMinor: number;
+    currency: string;
     periodStart: Date;
     periodEnd: Date;
     provider: string;
@@ -840,7 +859,7 @@ async function settlePeriodInvoice(
     const price = await priceFor(ctx, subscription);
     if ("refused" in price) return null;
     const invoiceId = await raiseInvoice(ctx, subscription, {
-      amountMinor: options.amountMinor ?? price.amountMinor,
+      amountMinor: price.amountMinor,
       periodStart: options.periodStart,
       periodEnd: options.periodEnd,
     });
@@ -848,8 +867,10 @@ async function settlePeriodInvoice(
     invoice = raised ?? null;
   }
   if (!invoice) return null;
+  if (options.currency !== invoice.currency) throw new ServiceError("conflict", "The provider payment currency does not match the membership invoice.");
   const outstanding = invoice.totalMinor - invoice.paidMinor;
   if (outstanding <= 0) return invoice.id;
+  if (options.amountMinor !== outstanding) throw new ServiceError("conflict", "The provider payment amount does not match the membership invoice balance.");
   const payment = await ctx.call(createPayment, {
     invoiceId: invoice.id,
     provider: options.provider,
@@ -875,7 +896,7 @@ export const reconcileProviderPeriod = defineService({
     provider: z.string().min(1).max(80),
     providerRef: z.string().min(1).max(500),
     kind: z.enum(["subscription_period_paid", "subscription_period_failed", "subscription_cancelled"]),
-    amountMinor: z.number().int().optional(),
+    amountMinor: z.number().int().min(0).optional(),
     currency: z.string().length(3).optional(),
     periodStart: z.string().datetime().optional(),
     periodEnd: z.string().datetime().optional(),
@@ -906,6 +927,7 @@ export const reconcileProviderPeriod = defineService({
       await beginDunning(ctx, subscription, { detail: "provider" });
       return { applied: true };
     }
+    if (input.amountMinor === undefined || !input.currency) throw new ServiceError("validation", "A membership payment needs provider amount and currency evidence.");
     const now = new Date();
     const start = input.periodStart ? new Date(input.periodStart) : subscription.currentPeriodStart;
     const end = input.periodEnd
@@ -917,6 +939,7 @@ export const reconcileProviderPeriod = defineService({
     }
     const invoiceId = await settlePeriodInvoice(ctx, subscription, {
       amountMinor: input.amountMinor,
+      currency: input.currency,
       periodStart: renewing ? subscription.currentPeriodEnd : subscription.currentPeriodStart,
       periodEnd: renewing
         ? periodEnd(subscription.currentPeriodEnd, plan?.interval ?? "month", plan?.intervalCount ?? 1)

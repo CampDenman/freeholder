@@ -222,6 +222,7 @@ export const SERVICE_NAMES = [
   "broadcasts.start",
   "broadcasts.stats",
   "broadcasts.testSend",
+  "broadcasts.unsubscribe",
   "builder.apply",
   "builder.codeStatus",
   "builder.deliverCode",
@@ -731,8 +732,6 @@ export const SERVICE_NAMES = [
   "galleries.archiveState",
   "galleries.clearSelection",
   "galleries.create",
-  "galleries.downloadArchive",
-  "galleries.downloadItem",
   "galleries.get",
   "galleries.inviteGuest",
   "galleries.invitePartner",
@@ -760,7 +759,6 @@ export const SERVICE_NAMES = [
   "galleries.update",
   "galleries.updateItem",
   "galleries.verifyDemoFixture",
-  "galleries.viewItem",
   "galleries.viewSession",
   "giftRegistry.addItem",
   "giftRegistry.contribute",
@@ -2276,6 +2274,10 @@ export interface ServiceCatalog {
     input: { templateId: string; to: string; subject?: string | null; variables?: { [key: string]: string } };
     output: { sent: boolean; subject: string; [key: string]: unknown };
   };
+  "broadcasts.unsubscribe": {
+    input: { token: string };
+    output: { unsubscribed: true };
+  };
   "builder.apply": {
     input: { id: string };
     output: { applied: false; status: "stale"; message: string } | { applied: true; status: "applied"; proposal: { id: string; brief: string; lane: "structure" | "vocabulary" | "refused"; status: "ready" | "applied" | "rejected" | "stale" | "rolled_back"; summary: string; rationale: string; baseSnapshot: unknown; changes: unknown; diff: unknown; applyResult: unknown; model: string; provider: string | null; inputTokens: number; outputTokens: number; totalTokens: number; createdByActor: string; appliedAt: string | null; rolledBackAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } };
@@ -3301,7 +3303,7 @@ export interface ServiceCatalog {
     output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.publishPage": {
-    input: { id: string; published: boolean };
+    input: { id: string; published: boolean; expectedVersion?: number };
     output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.publishedPaths": {
@@ -3354,7 +3356,7 @@ export interface ServiceCatalog {
   };
   "cms.resolvePage": {
     input: { slug: string; locale?: string };
-    output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
+    output: { id: string; slug: string; locale: string; title: string; blocks: unknown; status: "published"; publishedAt: string | null; seo: unknown; createdAt: string; updatedAt: string } | null;
   };
   "cms.resolvePreviewLink": {
     input: { token: string };
@@ -4312,14 +4314,6 @@ export interface ServiceCatalog {
     input: { contactId: string; title: string; slug?: string; access: "password" | "pin" | "login"; secret?: string; expiresAt?: string | null; downloadPolicy?: "none" | "web_res" | "full_res" | "limit_n"; downloadLimit?: number; watermark?: boolean; clientCanInvitePartner?: boolean };
     output: { id: string; contactId: string | null; title: string; slug: string; kind: "client_delivery"; coverAssetId: string | null; access: "password" | "pin" | "login"; secretSet: boolean; expiresAt: string | null; downloadPolicy: "none" | "web_res" | "full_res" | "limit_n"; downloadLimit: number | null; watermark: boolean; clientCanInvitePartner: boolean; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
-  "galleries.downloadArchive": {
-    input: { sessionToken: string };
-    output: { storageKey: string; filename: string; bytes: number; [key: string]: unknown } | null;
-  };
-  "galleries.downloadItem": {
-    input: { sessionToken: string; itemId: string };
-    output: { assetId: string; storageKey: string; filename: string; mime: string; bytes: number; [key: string]: unknown };
-  };
   "galleries.get": {
     input: { id: string };
     output: { id: string; contactId: string | null; title: string; slug: string; kind: "client_delivery"; coverAssetId: string | null; access: "password" | "pin" | "login"; secretSet: boolean; expiresAt: string | null; downloadPolicy: "none" | "web_res" | "full_res" | "limit_n"; downloadLimit: number | null; watermark: boolean; clientCanInvitePartner: boolean; createdAt: string; updatedAt: string; items: { id: string; galleryId: string; assetId: string; position: number; canView: boolean; canDownload: boolean; filename?: string; altText?: string | null; mime?: string; status?: string; [key: string]: unknown }[]; [key: string]: unknown };
@@ -4366,7 +4360,7 @@ export interface ServiceCatalog {
   };
   "galleries.openWithLogin": {
     input: { slug: string };
-    output: { ok: true; sessionToken: string; gallery: { id: string; title: string; slug: string; access: "password" | "pin" | "login"; downloadPolicy: "none" | "web_res" | "full_res" | "limit_n"; watermark: boolean; expiresAt: string | null; [key: string]: unknown }; items: { id: string; galleryId: string; assetId: string; position: number; canView: boolean; canDownload: boolean; filename?: string; altText?: string | null; mime?: string; status?: string; [key: string]: unknown }[]; selections: { id: string; galleryId: string; contactId: string | null; assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; round: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; lastDecided: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; canInvitePartner: boolean; invitedPartners: { id: string; galleryId: string; contactId: string; contactName?: string; contactEmail?: string | null; role: "client" | "partner"; canView: boolean; canDownload: boolean; expiresAt: string | null; revokedAt: string | null; invitedByContactId?: string | null; [key: string]: unknown }[] } | { ok: false };
+    output: { ok: true; sessionToken: string; gallery: { id: string; title: string; slug: string; access: "password" | "pin" | "login"; downloadPolicy: "none" | "web_res" | "full_res" | "limit_n"; watermark: boolean; expiresAt: string | null; [key: string]: unknown }; items: { id: string; galleryId: string; assetId: string; position: number; canView: boolean; canDownload: boolean; filename?: string; altText?: string | null; mime?: string; status?: string; viewUrl: string; downloadUrl: string | null; [key: string]: unknown }[]; archiveUrl: string | null; selections: { id: string; galleryId: string; contactId: string | null; assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; round: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; lastDecided: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; canInvitePartner: boolean; invitedPartners: { id: string; galleryId: string; contactId: string; contactName?: string; contactEmail?: string | null; role: "client" | "partner"; canView: boolean; canDownload: boolean; expiresAt: string | null; revokedAt: string | null; invitedByContactId?: string | null; [key: string]: unknown }[] } | { ok: false };
   };
   "galleries.publicBySlug": {
     input: { slug: string };
@@ -4378,7 +4372,7 @@ export interface ServiceCatalog {
   };
   "galleries.redeemGuest": {
     input: { token: string };
-    output: { ok: true; sessionToken: string; gallery: { id: string; title: string; slug: string; access: "password" | "pin" | "login"; downloadPolicy: "none" | "web_res" | "full_res" | "limit_n"; watermark: boolean; expiresAt: string | null; [key: string]: unknown }; items: { id: string; galleryId: string; assetId: string; position: number; canView: boolean; canDownload: boolean; filename?: string; altText?: string | null; mime?: string; status?: string; [key: string]: unknown }[]; selections: { id: string; galleryId: string; contactId: string | null; assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; round: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; lastDecided: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; canInvitePartner: boolean; invitedPartners: { id: string; galleryId: string; contactId: string; contactName?: string; contactEmail?: string | null; role: "client" | "partner"; canView: boolean; canDownload: boolean; expiresAt: string | null; revokedAt: string | null; invitedByContactId?: string | null; [key: string]: unknown }[] } | { ok: false };
+    output: { ok: true; sessionToken: string; gallery: { id: string; title: string; slug: string; access: "password" | "pin" | "login"; downloadPolicy: "none" | "web_res" | "full_res" | "limit_n"; watermark: boolean; expiresAt: string | null; [key: string]: unknown }; items: { id: string; galleryId: string; assetId: string; position: number; canView: boolean; canDownload: boolean; filename?: string; altText?: string | null; mime?: string; status?: string; viewUrl: string; downloadUrl: string | null; [key: string]: unknown }[]; archiveUrl: string | null; selections: { id: string; galleryId: string; contactId: string | null; assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; round: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; lastDecided: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; canInvitePartner: boolean; invitedPartners: { id: string; galleryId: string; contactId: string; contactName?: string; contactEmail?: string | null; role: "client" | "partner"; canView: boolean; canDownload: boolean; expiresAt: string | null; revokedAt: string | null; invitedByContactId?: string | null; [key: string]: unknown }[] } | { ok: false };
   };
   "galleries.removeItem": {
     input: { id: string };
@@ -4414,7 +4408,7 @@ export interface ServiceCatalog {
   };
   "galleries.unlock": {
     input: { slug: string; secret: string };
-    output: { ok: true; sessionToken: string; gallery: { id: string; title: string; slug: string; access: "password" | "pin" | "login"; downloadPolicy: "none" | "web_res" | "full_res" | "limit_n"; watermark: boolean; expiresAt: string | null; [key: string]: unknown }; items: { id: string; galleryId: string; assetId: string; position: number; canView: boolean; canDownload: boolean; filename?: string; altText?: string | null; mime?: string; status?: string; [key: string]: unknown }[]; selections: { id: string; galleryId: string; contactId: string | null; assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; round: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; lastDecided: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; canInvitePartner: boolean; invitedPartners: { id: string; galleryId: string; contactId: string; contactName?: string; contactEmail?: string | null; role: "client" | "partner"; canView: boolean; canDownload: boolean; expiresAt: string | null; revokedAt: string | null; invitedByContactId?: string | null; [key: string]: unknown }[] } | { ok: false };
+    output: { ok: true; sessionToken: string; gallery: { id: string; title: string; slug: string; access: "password" | "pin" | "login"; downloadPolicy: "none" | "web_res" | "full_res" | "limit_n"; watermark: boolean; expiresAt: string | null; [key: string]: unknown }; items: { id: string; galleryId: string; assetId: string; position: number; canView: boolean; canDownload: boolean; filename?: string; altText?: string | null; mime?: string; status?: string; viewUrl: string; downloadUrl: string | null; [key: string]: unknown }[]; archiveUrl: string | null; selections: { id: string; galleryId: string; contactId: string | null; assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; round: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; lastDecided: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; canInvitePartner: boolean; invitedPartners: { id: string; galleryId: string; contactId: string; contactName?: string; contactEmail?: string | null; role: "client" | "partner"; canView: boolean; canDownload: boolean; expiresAt: string | null; revokedAt: string | null; invitedByContactId?: string | null; [key: string]: unknown }[] } | { ok: false };
   };
   "galleries.update": {
     input: { id: string; title?: string; access?: "password" | "pin" | "login"; secret?: string | null; expiresAt?: string | null; downloadPolicy?: "none" | "web_res" | "full_res" | "limit_n"; downloadLimit?: number | null; watermark?: boolean; clientCanInvitePartner?: boolean; coverAssetId?: string | null };
@@ -4428,13 +4422,9 @@ export interface ServiceCatalog {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { outcomes: { key: string; achieved: boolean; detail?: string }[] };
   };
-  "galleries.viewItem": {
-    input: { sessionToken: string; itemId: string; slug?: string };
-    output: { assetId: string; storageKey: string; filename: string; mime: string; bytes: number; [key: string]: unknown } | null;
-  };
   "galleries.viewSession": {
     input: { sessionToken: string };
-    output: { ok: true; sessionToken: string; gallery: { id: string; title: string; slug: string; access: "password" | "pin" | "login"; downloadPolicy: "none" | "web_res" | "full_res" | "limit_n"; watermark: boolean; expiresAt: string | null; [key: string]: unknown }; items: { id: string; galleryId: string; assetId: string; position: number; canView: boolean; canDownload: boolean; filename?: string; altText?: string | null; mime?: string; status?: string; [key: string]: unknown }[]; selections: { id: string; galleryId: string; contactId: string | null; assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; round: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; lastDecided: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; canInvitePartner: boolean; invitedPartners: { id: string; galleryId: string; contactId: string; contactName?: string; contactEmail?: string | null; role: "client" | "partner"; canView: boolean; canDownload: boolean; expiresAt: string | null; revokedAt: string | null; invitedByContactId?: string | null; [key: string]: unknown }[] };
+    output: { ok: true; sessionToken: string; gallery: { id: string; title: string; slug: string; access: "password" | "pin" | "login"; downloadPolicy: "none" | "web_res" | "full_res" | "limit_n"; watermark: boolean; expiresAt: string | null; [key: string]: unknown }; items: { id: string; galleryId: string; assetId: string; position: number; canView: boolean; canDownload: boolean; filename?: string; altText?: string | null; mime?: string; status?: string; viewUrl: string; downloadUrl: string | null; [key: string]: unknown }[]; archiveUrl: string | null; selections: { id: string; galleryId: string; contactId: string | null; assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; round: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; lastDecided: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; canInvitePartner: boolean; invitedPartners: { id: string; galleryId: string; contactId: string; contactName?: string; contactEmail?: string | null; role: "client" | "partner"; canView: boolean; canDownload: boolean; expiresAt: string | null; revokedAt: string | null; invitedByContactId?: string | null; [key: string]: unknown }[] };
   };
   "giftRegistry.addItem": {
     input: { registryId: string; title: string; url?: string; amountCents?: number; currency?: string };
@@ -4722,7 +4712,7 @@ export interface ServiceCatalog {
   };
   "invoicing.list": {
     input: { contactId?: string; status?: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; limit?: number };
-    output: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+    output: { id: string; contactId: string; number: string | null; sequenceKey?: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign"; sourceId: string | null; idempotencyKey?: string; requestHash?: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
   "invoicing.listInPersonPayments": {
     input: { limit?: number };
@@ -7244,6 +7234,7 @@ export interface FreeholderApi {
     start: (input: ServiceCatalog["broadcasts.start"]["input"]) => Promise<ServiceCatalog["broadcasts.start"]["output"]>;
     stats: (input: ServiceCatalog["broadcasts.stats"]["input"]) => Promise<ServiceCatalog["broadcasts.stats"]["output"]>;
     testSend: (input: ServiceCatalog["broadcasts.testSend"]["input"]) => Promise<ServiceCatalog["broadcasts.testSend"]["output"]>;
+    unsubscribe: (input: ServiceCatalog["broadcasts.unsubscribe"]["input"]) => Promise<ServiceCatalog["broadcasts.unsubscribe"]["output"]>;
   };
   builder: {
     apply: (input: ServiceCatalog["builder.apply"]["input"]) => Promise<ServiceCatalog["builder.apply"]["output"]>;
@@ -7797,8 +7788,6 @@ export interface FreeholderApi {
     archiveState: (input: ServiceCatalog["galleries.archiveState"]["input"]) => Promise<ServiceCatalog["galleries.archiveState"]["output"]>;
     clearSelection: (input: ServiceCatalog["galleries.clearSelection"]["input"]) => Promise<ServiceCatalog["galleries.clearSelection"]["output"]>;
     create: (input: ServiceCatalog["galleries.create"]["input"]) => Promise<ServiceCatalog["galleries.create"]["output"]>;
-    downloadArchive: (input: ServiceCatalog["galleries.downloadArchive"]["input"]) => Promise<ServiceCatalog["galleries.downloadArchive"]["output"]>;
-    downloadItem: (input: ServiceCatalog["galleries.downloadItem"]["input"]) => Promise<ServiceCatalog["galleries.downloadItem"]["output"]>;
     get: (input: ServiceCatalog["galleries.get"]["input"]) => Promise<ServiceCatalog["galleries.get"]["output"]>;
     inviteGuest: (input: ServiceCatalog["galleries.inviteGuest"]["input"]) => Promise<ServiceCatalog["galleries.inviteGuest"]["output"]>;
     invitePartner: (input: ServiceCatalog["galleries.invitePartner"]["input"]) => Promise<ServiceCatalog["galleries.invitePartner"]["output"]>;
@@ -7826,7 +7815,6 @@ export interface FreeholderApi {
     update: (input: ServiceCatalog["galleries.update"]["input"]) => Promise<ServiceCatalog["galleries.update"]["output"]>;
     updateItem: (input: ServiceCatalog["galleries.updateItem"]["input"]) => Promise<ServiceCatalog["galleries.updateItem"]["output"]>;
     verifyDemoFixture: (input: ServiceCatalog["galleries.verifyDemoFixture"]["input"]) => Promise<ServiceCatalog["galleries.verifyDemoFixture"]["output"]>;
-    viewItem: (input: ServiceCatalog["galleries.viewItem"]["input"]) => Promise<ServiceCatalog["galleries.viewItem"]["output"]>;
     viewSession: (input: ServiceCatalog["galleries.viewSession"]["input"]) => Promise<ServiceCatalog["galleries.viewSession"]["output"]>;
   };
   giftRegistry: {

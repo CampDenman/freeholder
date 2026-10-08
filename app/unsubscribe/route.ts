@@ -3,34 +3,28 @@
 // RFC 8058 one-click unsubscribe (C9.04).
 
 import { NextResponse } from "next/server";
-import { unsubscribeFromNewsletter } from "@/modules/newsletters/service";
+import { unsubscribeFromBroadcast, unsubscribeFromNewsletter } from "@/modules/newsletters/service";
 import { readBoundedText, RequestBodyError } from "@/core/http/body";
+import { mailLinkConfirmation } from "@/core/mail/link-confirmation";
 
 export const dynamic = "force-dynamic";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
-async function apply(token: string | null) {
-  if (!token) return NextResponse.json({ error: "missing token" }, { status: 400 });
-  await unsubscribeFromNewsletter.call({ token }, ANONYMOUS);
+async function apply(token: string | null, broadcastToken: string | null) {
+  if ((!token && !broadcastToken) || (token && broadcastToken)) return NextResponse.json({ error: "missing or ambiguous token" }, { status: 400 });
+  if (broadcastToken) await unsubscribeFromBroadcast.call({ token: broadcastToken }, ANONYMOUS);
+  else await unsubscribeFromNewsletter.call({ token: token! }, ANONYMOUS);
   return NextResponse.json({ unsubscribed: true });
 }
 
 export async function GET(request: Request) {
-  const token = new URL(request.url).searchParams.get("token");
-  try {
-    await apply(token);
-    return new NextResponse("You have been unsubscribed.", {
-      status: 200,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    });
-  } catch {
-    return new NextResponse("That unsubscribe link is not valid.", { status: 404 });
-  }
+  return mailLinkConfirmation(request, "unsubscribe");
 }
 
 export async function POST(request: Request) {
-  const urlToken = new URL(request.url).searchParams.get("token");
+  const url = new URL(request.url);
+  const urlToken = url.searchParams.get("token");
   let bodyToken: string | null = null;
   const contentType = request.headers.get("content-type") ?? "";
   if (contentType.includes("application/x-www-form-urlencoded")) {
@@ -48,7 +42,7 @@ export async function POST(request: Request) {
     bodyToken = params.get("token");
   }
   try {
-    return await apply(urlToken ?? bodyToken);
+    return await apply(urlToken ?? bodyToken, url.searchParams.get("broadcastToken"));
   } catch {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
