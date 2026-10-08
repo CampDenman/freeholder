@@ -238,7 +238,7 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     await card(member.id);
     const [invoice]=await db().select().from(invoices).where(eq(invoices.id,joined.invoiceId!));
     const payment=await createPayment.call({invoiceId:invoice!.id,provider:"stripe",method:"card",amountMinor:invoice!.totalMinor,idempotencyKey:"unconsented-proof",metadata:{saveMethodRequested:true}},OWNER);
-    await db().update(payments).set({status:"succeeded"}).where(eq(payments.id,payment.id));
+    await db().update(payments).set({status:"succeeded",providerRef:"pi_unconsented",processedAt:new Date()}).where(eq(payments.id,payment.id));
     await db().update(invoices).set({status:"paid",paidMinor:invoice!.totalMinor}).where(eq(invoices.id,invoice!.id));
     expect((await activatePaidSignup.call({invoiceId:invoice!.id},{kind:"system"})).activated).toBe(false);
   });

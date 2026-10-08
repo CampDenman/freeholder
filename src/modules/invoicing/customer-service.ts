@@ -270,7 +270,7 @@ export const beginCustomerCheckout = defineOrchestratedService({
         idempotencyKey: payment.idempotencyKey,
         saveMethod: (payment.metadata as { saveMethodRequested?: boolean }).saveMethodRequested === true,
       });
-      return await applyCustomerCheckout.call({ ...input, paymentId: payment.id, response: checkout }, actor);
+      return await applyCustomerCheckout.call({ id: input.id, token: input.token, paymentId: payment.id, response: checkout }, actor);
     } catch (error) {
       if (error instanceof ServiceError) throw error;
       // Keep the durable attempt and its retry identity when the provider may
