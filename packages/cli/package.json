@@ -1,6 +1,6 @@
 {
   "name": "@freeholder/cli",
-  "version": "0.2.0-beta.2",
+  "version": "0.2.0-beta.3",
   "description": "freeholder update \u2014 check, preflight, apply and roll back a Freeholder instance from a terminal or a cron job",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",

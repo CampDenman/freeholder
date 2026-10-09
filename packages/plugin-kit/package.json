@@ -1,6 +1,6 @@
 {
   "name": "@freeholder/plugin-kit",
-  "version": "0.2.0-beta.2",
+  "version": "0.2.0-beta.3",
   "description": "Authoring contract for Freeholder plugins \u2014 definePlugin, permissions, compatibility (MASTER.md \u00a724, C3.08)",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",

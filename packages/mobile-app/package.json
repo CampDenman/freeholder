@@ -1,6 +1,6 @@
 {
   "name": "@freeholder/mobile-app",
-  "version": "0.2.0-beta.2",
+  "version": "0.2.0-beta.3",
   "description": "White-label Expo/React Native app for a Freeholder instance's customers, driven entirely by the generated SDK",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",

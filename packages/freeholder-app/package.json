@@ -1,6 +1,6 @@
 {
   "name": "freeholder-app",
-  "version": "0.2.0-beta.2",
+  "version": "0.2.0-beta.3",
   "description": "npx freeholder-app init \u2014 pull instance branding and write store-ready icons, splash, metadata and an auditable Expo config diff",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
