@@ -10,7 +10,7 @@ replaces the stack with one self-hosted platform where a contact is **one
 record**: their bookings, orders, quotes, gallery access, messages, and email
 history all hang off one CRM timeline.
 
-> **Status: 0.2.0-beta.2, in active development; no stable release is published.**
+> **Status: 0.2.0-beta.3, in active development; no stable release is published.**
 > This is not a release candidate. The implemented platform is undergoing
 > final release acceptance. Independent
 > security review, real provider settlement, specification reconciliation and
