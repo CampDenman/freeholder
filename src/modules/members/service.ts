@@ -27,6 +27,7 @@ import {
 import graphServices, { approvePendingFollowers, PROFILE_SETTINGS } from "./graph";
 import postServices from "./posts";
 import messageServices from "./messages";
+import callServices from "./calls";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
 const RESERVED = new Set([
@@ -389,6 +390,7 @@ export default [
   ...graphServices,
   ...postServices,
   ...messageServices,
+  ...callServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

@@ -10364,11 +10364,26 @@ whatever is best for the people using the site.
   ride core delivery and stay quiet for requests and muted conversations.
   **F12** the browser journey sends a request from a profile, accepts it,
   replies, and unsends. Changeset `member-messages.md`.)*
-- [ ] **C12.07** Build private WebRTC voice and video calls between members:
-  peer-to-peer for one-to-one, a self-hostable open-source SFU adapter for
-  groups, TURN relay with short-lived credentials, end-to-end media encryption
-  on SFU calls, calls only from connections or accepted requests, and no
-  recording unless every participant consents during the call.
+- [x] **C12.07** Build private WebRTC voice and video calls between two
+  members: peer to peer, with media encrypted between the devices by WebRTC;
+  the server relays only signalling, which it deletes once read and when the
+  call ends; short-lived credentials for the site's own TURN relay (coturn
+  `use-auth-secret`), with no third-party server by default; calls only from
+  people the callee follows or befriended, or whose message request they
+  accepted; one call at a time; unanswered calls become missed-call
+  notifications; nothing is recorded. Group calls are C12.24.
+  *(Evidence 2026-10-14: `src/modules/members/calls.ts`, migration
+  `db/migrations/0029_member_calls.sql`, `tests/modules/member-calls.test.ts`,
+  `tests/browser/member-calls.spec.ts`. **F04** `/call/[id]`, voice and video
+  buttons on `/@handle`, and the incoming-call bar on every public page.
+  **F05** `members.startCall` on HTTP, the SDK and MCP; the live-call
+  services are HTTP and SDK only (`mcpExclude`), because an agent cannot hold
+  a microphone. **F07** connection-gated ringing, block refusal, participant-
+  only signalling, signals deleted on read and on hang-up, rate limits.
+  **F09** missed calls notify through core delivery; `TURN_URLS`,
+  `TURN_SECRET` and `STUN_URLS` in `src/core/env.ts`. **F12** two real
+  Chromium contexts with fake devices ring, answer, connect peer to peer,
+  mute and hang up. Changeset `member-calls.md`.)*
 - [ ] **C12.08** Build the member marketplace: members list physical goods,
   services (bookable through the scheduling engine), digital goods and rentals
   on the existing catalog with seller ownership, with categories, search, and
@@ -10436,6 +10451,10 @@ whatever is best for the people using the site.
   MLS (RFC 9420): keys only on members' devices, multi-device support,
   history the server cannot read, and message franking so a recipient can
   report exactly the messages they choose to moderation.
+- [ ] **C12.24** Add group voice and video calls through a self-hostable
+  open-source SFU adapter (LiveKit first), with end-to-end media encryption
+  (SFrame) so the SFU forwards media it cannot decrypt, and the same
+  who-may-call rules as one-to-one calls.
 
 ---
 

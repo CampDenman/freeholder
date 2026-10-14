@@ -39,9 +39,12 @@ import {
   parseAnalyticsConsentState,
 } from "@/modules/analytics/visitor";
 import { AnalyticsRuntime } from "./AnalyticsRuntime";
+import { IncomingCall } from "./call/IncomingCall";
+import { myMembership } from "@/modules/members/service";
 import { AnalyticsConsentControl } from "./AnalyticsConsentControl";
 import { SkipLink } from "@/ui/SkipLink";
 import { actorFromToken } from "@/core/http/actor";
+import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { assignmentsFor } from "@/modules/cms/experiments";
 import { ANON_HEADER, SESSION_HEADER } from "@/modules/analytics/visitor";
 import { recordExperimentImpressions } from "@/modules/analytics/service";
@@ -73,6 +76,10 @@ export default async function PublicLayout({
     cookieJar.get(SESSION_COOKIE_NAME)?.value,
   );
   const showBuilder = publicActor.kind === "user" && publicActor.role === "owner";
+  // §44.7: an active member hears a ringing call on any public page. This
+  // reads the sign-in session; `publicActor` above reads the analytics cookie.
+  const signedIn = await actorFromToken(cookieJar.get(SESSION_COOKIE)?.value);
+  const member = signedIn.kind === "user" ? await myMembership.call({}, signedIn).catch(() => null) : null;
 
   const [announcement, header, navigation, footer] = await Promise.all([
     publishedSection(ANNOUNCEMENT_KEY, locale),
@@ -203,6 +210,16 @@ export default async function PublicLayout({
         returnTo={requestHeaders.get(REQUEST_TARGET_HEADER) ?? "/"}
         t={t}
       />
+      {member?.status === "active" ? (
+        <IncomingCall
+          labels={{
+            incomingVoice: t("members.calls.incomingVoice", { name: "{name}" }),
+            incomingVideo: t("members.calls.incomingVideo", { name: "{name}" }),
+            answer: t("members.calls.answer"),
+            decline: t("members.calls.decline"),
+          }}
+        />
+      ) : null}
       <AnalyticsRuntime
         policy={analytics.consentPolicy}
         state={consent}

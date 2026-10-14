@@ -4449,21 +4449,20 @@ v2.
 - **F10** — N/A — seeded demo conversations arrive with the starter seed in C12.16 (`deploy/members-platform.md`).
 - **F11** — `deploy/members-platform.md` and `.changeset/member-messages.md`.
 - **F12** — `tests/browser/members.spec.ts`: a stranger's message arrives as a request, is accepted and answered, and one message is unsent.
-## C12.07 — Build private WebRTC voice and video calls between members:
+## C12.07 — Build private WebRTC voice and video calls between two members
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-
+- **F01** — `db/migrations/0029_member_calls.sql`: calls with media and state checks, and signalling rows that are deleted once read.
+- **F02** — `tests/modules/member-calls.test.ts`: who may ring whom, busy refusal, answering, one-time signals, missed calls and block refusal.
+- **F03** — N/A — calls connect members whose contacts were linked in C12.01 (`tests/modules/members.test.ts`).
+- **F04** — `tests/browser/member-calls.spec.ts`: `/call/[id]`, the profile's call buttons and the incoming-call bar.
+- **F05** — `packages/sdk/src/generated.ts`: `members.startCall` on HTTP, the SDK and MCP; live-call services excluded from MCP because an agent cannot hold a microphone.
+- **F06** — `tests/browser/member-calls.spec.ts`: axe on the incoming-call dialog; status announced through a live region; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-calls.test.ts`: connection-gated ringing, block refusal, participant-only signalling, signal deletion, short-lived TURN credentials with no third-party default.
+- **F08** — `tests/modules/member-calls.test.ts` + `tests/browser/member-calls.spec.ts`.
+- **F09** — `src/core/env.ts`: `TURN_URLS`, `TURN_SECRET` and `STUN_URLS` configure the site's own relay; missed calls notify through core delivery.
+- **F10** — N/A — calls need two live people; the starter seed in C12.16 adds members who can be called (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-calls.md`.
+- **F12** — `tests/browser/member-calls.spec.ts`: two real browser contexts ring, answer, connect peer to peer, mute and hang up.
 ## C12.08 — Build the member marketplace: members list physical goods,
 
 - **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
@@ -4689,6 +4688,21 @@ v2.
 - **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
 
 ## C12.23 — Make member messages end-to-end encrypted by default with MLS
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+
+## C12.24 — Add group voice and video calls through a self-hostable open-source SFU adapter
 
 - **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
 - **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.

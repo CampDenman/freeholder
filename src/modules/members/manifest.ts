@@ -26,6 +26,7 @@ export default defineModule({
       "member.mentioned",
       "member.tagged",
       "member.messaged",
+      "member.callStarted",
     ],
   },
 });

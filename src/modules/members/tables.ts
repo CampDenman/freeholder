@@ -15,4 +15,6 @@ export {
   memberConversations,
   memberConversationParticipants,
   memberMessages,
+  memberCalls,
+  memberCallSignals,
 } from "./schema";

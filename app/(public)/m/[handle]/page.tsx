@@ -15,6 +15,7 @@ import { Button, Callout, Pill } from "@/ui/primitives";
 import { getLocale, getT } from "../../../i18n";
 import { PostCard, postLabels } from "../PostCard";
 import { memberGraphAction } from "../actions";
+import { startCallAction } from "../../call/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +74,7 @@ export default async function MemberProfile({
           {t("members.graph.counts", { followers: profile.followers, following: profile.following, friends: profile.friends })}
         </p>
       </header>
-      {query.error ? <Callout tone="danger">{t("members.graph.failed")}</Callout> : null}
+      {query.error ? <Callout tone="danger">{t(query.error === "conflict" ? "members.calls.busy" : "members.graph.failed")}</Callout> : null}
       {r.blocked ? (
         <Callout>{t("members.graph.youBlocked")}</Callout>
       ) : (
@@ -104,6 +105,13 @@ export default async function MemberProfile({
               {r.friend === "you_asked" ? <Verb handle={profile.handle} verb="unfriend" label={t("members.graph.cancelFriend")} variant="quiet" /> : null}
               {r.friend === "friends" ? <Verb handle={profile.handle} verb="unfriend" label={t("members.graph.unfriend")} variant="quiet" /> : null}
               <a className="inline-flex items-center rounded-md border border-rule-strong px-3 py-2 text-sm underline" href={`/messages?to=${profile.handle}`}>{t("members.messages.message")}</a>
+              {(["voice", "video"] as const).map((media) => (
+                <form key={media} action={startCallAction}>
+                  <input type="hidden" name="handle" value={profile.handle} />
+                  <input type="hidden" name="media" value={media} />
+                  <Button type="submit" variant="quiet">{t(media === "video" ? "members.calls.videoCall" : "members.calls.voiceCall")}</Button>
+                </form>
+              ))}
               <Verb handle={profile.handle} verb={r.muted ? "unmute" : "mute"} label={t(r.muted ? "members.graph.unmute" : "members.graph.mute")} variant="quiet" />
               <Verb handle={profile.handle} verb={r.restricted ? "unrestrict" : "restrict"} label={t(r.restricted ? "members.graph.unrestrict" : "members.graph.restrict")} variant="quiet" />
               <Verb handle={profile.handle} verb="block" label={t("members.graph.block")} variant="danger" />

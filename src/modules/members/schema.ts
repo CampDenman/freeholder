@@ -292,3 +292,47 @@ export const memberMessages = pgTable(
   },
   (t) => [index("member_messages_conversation_idx").on(t.conversationId, t.createdAt)],
 );
+
+/** §44.7: a private call between two members. Media never touches the server. */
+export const memberCalls = pgTable(
+  "member_calls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    callerId: uuid("caller_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    calleeId: uuid("callee_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    media: text("media", { enum: ["voice", "video"] }).notNull(),
+    state: text("state", { enum: ["ringing", "active", "ended", "declined", "missed"] }).notNull(),
+    createdAt: createdAtColumn(),
+    answeredAt: timestamp("answered_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("member_calls_callee_idx").on(t.calleeId, t.state),
+    index("member_calls_caller_idx").on(t.callerId, t.state),
+    check("member_calls_not_self", sql`${t.callerId} <> ${t.calleeId}`),
+    check("member_calls_media_valid", sql`${t.media} in ('voice','video')`),
+    check("member_calls_state_valid", sql`${t.state} in ('ringing','active','ended','declined','missed')`),
+  ],
+);
+
+/**
+ * WebRTC signalling between the two devices: session descriptions and ICE
+ * candidates. Each is deleted once the other device reads it, and all are
+ * deleted when the call ends; they carry no media.
+ */
+export const memberCallSignals = pgTable(
+  "member_call_signals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    callId: uuid("call_id").notNull().references(() => memberCalls.id, { onDelete: "cascade" }),
+    fromId: uuid("from_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["offer", "answer", "candidate"] }).notNull(),
+    payload: jsonb("payload").notNull(),
+    /** clock_timestamp, so signals sent in quick succession keep their order. */
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`clock_timestamp()`),
+  },
+  (t) => [
+    index("member_call_signals_call_idx").on(t.callId, t.createdAt),
+    check("member_call_signals_kind_valid", sql`${t.kind} in ('offer','answer','candidate')`),
+  ],
+);

@@ -69,3 +69,20 @@ from mocked payment, mail or media runs alone.
   Message link on `/@handle`, read-receipt setting on `/portal/member`.
 - Tests: `tests/modules/member-messages.test.ts` (4 cases) and the fourth
   journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
+
+## C12.07 — one-to-one calls (2026-10-14)
+
+- Services: `src/modules/members/calls.ts`; browser side
+  `app/(public)/call/CallRoom.tsx` (WebRTC) and `IncomingCall.tsx`.
+- Relay: set `TURN_URLS` (comma-separated `turn:`/`turns:` URLs) and
+  `TURN_SECRET` (coturn `static-auth-secret` with `use-auth-secret`) to give
+  calls one-hour relay credentials. `STUN_URLS` is optional. With none of
+  these, calls connect only when a direct path exists. freeholder.ai does not
+  run a relay yet.
+- Tests: `tests/modules/member-calls.test.ts` (4 cases),
+  `tests/browser/member-calls.spec.ts` (real WebRTC between two contexts).
+- Found while building: `app/(public)/layout.tsx` resolves `publicActor` from
+  the analytics cookie (`fh_s`), not the sign-in session, so the owner's
+  on-page builder link likely never shows. Not changed here; the call bar
+  reads the sign-in session directly.
+- Not yet: group calls (C12.24).
