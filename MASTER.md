@@ -113,7 +113,7 @@ Owners can also file a bug, feature request or code submission from their runnin
 
 ## 2. Architectural Principles
 
-1. **Single-tenant.** One Freeholder instance serves one business. No tenant_id anywhere. This kills multi-tenant complexity and matches the "click deploy" story (Replit first, then DO/Railway/Render/anything with Postgres + object storage).
+1. **One site, many people.** One Freeholder instance serves one site, with no tenant_id anywhere; that site can have any number of members who publish, connect, message, call, buy and sell with each other (§44, owner decision 2026-10-14). This kills multi-tenant complexity and matches the "click deploy" story (Replit first, then DO/Railway/Render/anything with Postgres + object storage).
 2. **Monolith with modules.** One app, one Postgres database, one ORM schema. Modules are feature folders that can be toggled on/off in admin, not services. A module may own tables, but it may never duplicate a spine entity.
 3. **The Contact Spine.** `Contact` is the center of gravity. Bookings, orders, quotes, invoices, gallery access, form submissions, email events, reviews, messages — everything references `contact_id`. The CRM timeline is a *view* over the spine, not a separate store.
 4. **Money converges on Invoice → Payment.** Whether value arrives via cart checkout, an accepted quote, a booking deposit, or a subscription cycle, it is realized as an `Invoice` paid by one or more `Payment` records through a payment-provider adapter. One reconciliation path, one refund path, one reporting path.
@@ -2785,10 +2785,8 @@ oversight and invites somebody to build it badly.
 - **Serial-number and lot tracking, warehouse bin logic, wave picking.** The
   inventory ledger is built so these *can* land later; a one-person business
   does not need them and their weight would be felt by everyone.
-- **Multi-tenancy in any form** (§2). One deploy, one business, forever.
-- **Voice and video calling.** Person-to-person *text* is core (§4.14) because
-  its obligations are; calls mean a vendor SDK and a vendor's compliance
-  posture, so they arrive as plugins attaching to the same conversation.
+- **Hosting many unrelated sites in one deployment** (§2). One deploy is one site. That site may have any number of members (§44).
+- ~~**Voice and video calling.**~~ Superseded 2026-10-14: private member-to-member calls are WebRTC in core (§44.7).
 - **Multi-level referral structures.** One hop, enforced by the absence of a
   parent link on `AffiliateCode` (§4.13) rather than by policy.
 - **Anything that makes the owner's data someone else's product** (§36's
@@ -3467,12 +3465,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-10-08 |
+| Last reconciled | 2026-10-14 |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Newsletter external delivery (C9.37) and membership card-required trials (C9.38); actual Replit and Lovable account launches with the owner (C3.28); C11.16 spec reconciliation; C11.17 remains unsigned (the world-class visual editor closed 2026-09-30 — see "Remaining open") |
+| Current focus | Members, social graph, messaging, WebRTC calls and marketplace (C12, §44, owner decision 2026-10-14); Newsletter external delivery (C9.37) and membership card-required trials (C9.38); actual Replit and Lovable account launches with the owner (C3.28); C11.16 spec reconciliation; C11.17 remains unsigned (the world-class visual editor closed 2026-09-30 — see "Remaining open") |
 | Completion rule | Every unchecked item in C0–C11, except the items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
@@ -3599,7 +3597,8 @@ Work proceeds in this order unless this section is changed first:
 `C0 truth → C1 core safety → C2 editor → C3 living contract/ecosystem → C4
 agents/connections → C5 money → C6 scheduling/services → C7 CRM/comms → C8
 content/portal → C9 growth/revenue depth → C10 ownership/update/mobile → C11
-perfection proof`
+perfection proof`, with `C12 members/social/marketplace` (§44) proceeding alongside
+once C1 identity holds.
 
 Finishing a later workstream is allowed when it does not create a second path
 or cement a missing upstream contract. The active workstream remains the first
@@ -10267,3 +10266,184 @@ the plan's references to print-on-demand as a v1 requirement resolve here.
 C1.03/C1.05/C6.08/C9.09/C9.12/C11.10: production first ownership requires an independent BOOTSTRAP_SECRET; public waitlist enrollment returns only an acknowledgement; referral contact attribution requires ownership or scope; redemption locks account and reward rows; magic-link limits use token hashes and forms use validated submitter identities or explicitly trusted proxy addresses.
 
 C6.11 is reopened: free event enrollment validates ticket ownership and availability and serializes capacity changes. Paid enrollment refuses until a canonical invoice/payment settlement flow exists. Existing paid confirmations from before this repair need operator reconciliation. At that date C10.06/C10.10 were reopened because automatic apply/rollback was unavailable. Their later Docker host-executor delivery and evidence under §43.16 supersede that historical status; both are checked. The other target recipes retain their documented manual procedures. Previous updater history alone does not prove deployment or recoverability.
+
+### 43.19 C12 — Members, social graph, messaging, calls, and marketplace
+
+Owner decision 2026-10-14: Freeholder is the open-source, MCP-friendly starter
+for anyone vibe-coding a next-generation site, not only a one-person business.
+A site has many members who can publish, connect, message, call, buy and sell
+with each other. §44 is the normative specification. The standing default is
+whatever is best for the people using the site.
+
+- [ ] **C12.01** Make members first-class accounts: self-serve signup and
+  passkey-first sign-in, unique handles, roles (site admin, staff, member),
+  member-to-contact linking, age and adult-content gating, and the
+  site-admin controls for open, invite-only or approval-required membership.
+- [ ] **C12.02** Ship public member profiles at `/@handle` with bio, avatar,
+  links and profile sections. Every profile field and every published item
+  carries a visibility of public, followers, friends, subscribers or only me.
+  Members choose their defaults; search indexing of a profile is opt-in.
+- [ ] **C12.03** Build the social graph: one-way follow, mutual friend
+  request/accept, private accounts that approve followers, block, mute and
+  restrict. Blocking is enforced in every read path, not only in feeds.
+- [ ] **C12.04** Build posts and feeds: text and media posts, threaded
+  comments, reactions, mentions, hashtags, consent-gated tagging of people,
+  reposts and quotes. The default home feed is chronological from people a
+  member follows; any ranked discovery feed is optional and explains itself.
+- [ ] **C12.05** Let members offer paid subscriptions to their own content,
+  with subscriber-only visibility, through the money spine and C12.09 payouts.
+- [ ] **C12.06** Build direct messages: one-to-one and group conversations,
+  message requests from non-connections, attachments, opt-in read receipts,
+  and end-to-end encryption by default (MLS, RFC 9420), with message franking
+  so a recipient can report abuse without giving the server general access.
+- [ ] **C12.07** Build private WebRTC voice and video calls between members:
+  peer-to-peer for one-to-one, a self-hostable open-source SFU adapter for
+  groups, TURN relay with short-lived credentials, end-to-end media encryption
+  on SFU calls, calls only from connections or accepted requests, and no
+  recording unless every participant consents during the call.
+- [ ] **C12.08** Build the member marketplace: members list physical goods,
+  services (bookable through the scheduling engine), digital goods and rentals
+  on the existing catalog with seller ownership, with categories, search, and
+  a storefront on each seller's profile.
+- [ ] **C12.09** Build multi-seller checkout and payouts: a cart across
+  sellers, a connected-account payment adapter (Stripe Connect first) with
+  provider-run seller verification, a site-admin platform fee that defaults
+  to zero, funds released on delivery confirmation or after a stated window,
+  refunds, and a payout ledger per seller on the Invoice → Payment spine.
+- [ ] **C12.10** Build buyer protection: order conversations, delivery
+  confirmation, a dispute workflow with site-admin mediation, and refund or
+  release outcomes recorded on the ledger.
+- [ ] **C12.11** Build reputation: buyer and seller reviews only after a
+  completed transaction, double-blind reveal, public replies and reporting.
+- [ ] **C12.12** Build trust and safety: report anything, a moderation queue
+  extending the community plugin's, rate limits and spam controls, a
+  prohibited-items policy, adult content that is opt-in and never shown to
+  minors, known-abuse-image hash matching with a legal reporting path, and an
+  audit trail for every moderation action.
+- [ ] **C12.13** Build member notifications: in-app, web push and email
+  digests, with per-type controls and quiet hours chosen by the member.
+- [ ] **C12.14** Expose every member capability through the service layer to
+  HTTP, SDK and MCP, and let members issue scoped, expiring keys so their own
+  agents act as them, never beyond the member's own permissions.
+- [ ] **C12.15** Guarantee member data rights: full export (profile, posts,
+  purchases, sales, contacts, and message history decryptable on the member's
+  own device), account deletion with stated handling of shared content, no
+  third-party trackers, and no sale of member data.
+- [ ] **C12.16** Make it a starter: a new-site template and seeded demo
+  members, posts, listings and conversations; the playground shows the member
+  features; vibe-coding guides for Replit, Lovable and coding agents.
+- [ ] **C12.17** Prove the whole member journey end to end: two members join,
+  follow and befriend, message, call each other in Chromium and Firefox, one
+  buys a service from the other, the seller is paid out, both review, and a
+  report reaches moderation; plus a load test of feeds and messaging.
+- [ ] **C12.18** Offer opt-in ActivityPub federation so members can follow
+  and be followed across the fediverse and take their audience elsewhere.
+
+---
+
+## 44. Members, Social, Messaging, Calls, and Marketplace
+
+*Owner decision 2026-10-14.* Freeholder started as the operating system for a
+one-person business. It is now the open-source, MCP-friendly starter for anyone
+vibe-coding a next-generation site: a creator community, a local marketplace, a
+club, a studio with clients who also know each other. This section supersedes
+every earlier statement that a deployment has exactly one user who matters.
+Checklist: §43.19 (C12).
+
+### 44.1 One site, many people
+
+One deployment is still one site, with one database and no `tenant_id`
+(§2.1). Hosting many unrelated sites inside one deployment remains out of
+scope. What changes is who the site serves: any number of **members**, each
+with a profile, a social graph, conversations, and optionally a storefront.
+Site admins and staff keep the owner tools in §§3–43.
+
+A member is a user account linked to a `Contact` (§2.3), so a member who buys,
+books or messages is the same person everywhere in the spine.
+
+### 44.2 The standing default
+
+When a design choice is open, choose what is best for the people using the
+site, even where it is harder to build or earns the site less:
+
+- Privacy is the default; exposure is the member's choice.
+- Chronological feeds by default; ranking is optional and explains itself.
+- End-to-end encryption for private messages and calls.
+- No third-party trackers, no sale of member data, full export, real deletion.
+- Money flows to the person who did the work; the site fee defaults to zero.
+- Minors are protected without asking adults to give up their privacy.
+
+### 44.3 Profiles and visibility
+
+Every member has a profile at `/@handle`. Every profile field and published
+item carries one visibility: **public**, **followers**, **friends**,
+**subscribers** (paid, §44.5), or **only me**. Members set their defaults and
+can change any item later. Search-engine indexing of a member profile is
+opt-in; public site pages keep the SEO architecture in §5.
+
+### 44.4 Social graph and content
+
+- **Follow** is one-way; **friend** is mutual (request and accept). Private
+  accounts approve followers.
+- **Block** removes visibility both ways in every read path; **mute** hides
+  without notifying; **restrict** limits replies.
+- Posts support text and media, threaded comments, reactions, mentions,
+  hashtags, reposts and quotes. Tagging another member requires their
+  approval before it appears on their profile.
+
+### 44.5 Member subscriptions
+
+A member can offer paid subscriptions to their own content. Subscriber-only
+items use the entitlement machinery in §4.15; money follows §4.3 and pays out
+through §44.8.
+
+### 44.6 Direct messages
+
+One-to-one and group conversations, with message requests from people who are
+not connected. Messages are end-to-end encrypted by default using MLS
+(RFC 9420); the server stores ciphertext. A recipient can report a message
+with cryptographic message franking, so moderation sees exactly what was
+reported and nothing else. Read receipts are opt-in. Owner-to-customer
+messaging in §4.14 is unchanged and separate.
+
+### 44.7 Voice and video calls
+
+Private calls between members use WebRTC. One-to-one calls are peer-to-peer;
+group calls use a self-hostable open-source SFU through an adapter (§2.5).
+TURN relay uses short-lived credentials. SFU media is end-to-end encrypted.
+Members can only be called by connections or by people whose request they
+accepted. Nothing is recorded unless every participant consents during the
+call. This supersedes the 2026-09-27 routing of voice and video through a
+provider plugin for member-to-member calls.
+
+### 44.8 Marketplace
+
+Members sell physical goods, services bookable through the scheduling engine
+(§4.4), digital goods and rentals. Listings reuse the catalog (§4.2) with a
+seller dimension; each seller's storefront appears on their profile.
+
+Checkout supports carts across sellers through a connected-account payment
+adapter (Stripe Connect first), with seller verification run by the provider.
+Each seller's share becomes its own invoice on the Invoice → Payment spine.
+The site fee is set by the site admin and defaults to zero. Funds are held
+until the buyer confirms delivery or a stated window passes, then paid out.
+Disputes go to site-admin mediation. Reviews are possible only after a
+completed transaction and are revealed to both sides together.
+
+### 44.9 Trust and safety
+
+Anything can be reported. Moderation extends the community plugin's queue with
+audit trails, rate limits and spam controls. Sites publish a prohibited-items
+policy. Adult content is opt-in for adults and never shown to minors. Known
+abuse imagery is hash-matched on upload with a legal reporting path.
+
+### 44.10 Agents
+
+Every member capability is a service (§2.7), so it reaches HTTP, SDK and MCP.
+Members can issue scoped, expiring keys so their own agents act as them; a
+member key can never exceed that member's permissions.
+
+### 44.11 Federation
+
+Opt-in ActivityPub federation lets members follow and be followed across the
+fediverse and take their audience elsewhere.

@@ -32,8 +32,10 @@ or backlog.
   it cannot be moved back under a caller's transaction by composition. OAuth
   state claims commit before single-use codes are exchanged, and provider
   responses are applied in a fresh transaction afterwards.
-- **Single-tenant.** One deploy = one business. No tenant-isolation
-  abstractions.
+- **One site, many members.** One deploy = one site, with no tenant-isolation
+  abstractions between sites. That site serves any number of members who
+  publish, connect, message, call, buy and sell with each other (`MASTER.md`
+  §44). When a choice is open, pick what is best for the people using the site.
 - **Monolith + toggleable modules.** No microservices. Adapters for the
   swappable edges: payments (Stripe default, PayPal), mail
   (Google/Outlook OAuth for transactional, provider adapter for bulk),
