@@ -20,6 +20,11 @@ export default defineModule({
       "member.followRequested",
       "member.friended",
       "member.friendRequested",
+      "member.posted",
+      "member.commented",
+      "member.reacted",
+      "member.mentioned",
+      "member.tagged",
     ],
   },
 });

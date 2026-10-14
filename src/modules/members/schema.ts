@@ -145,3 +145,91 @@ export const memberRelations = pgTable(
     check("member_relations_kind_valid", sql`${t.kind} in ('block','mute','restrict')`),
   ],
 );
+
+/** §44.4: a member's post. A repost has no body; a quote has both. */
+export const memberPosts = pgTable(
+  "member_posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    authorId: uuid("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull().default(""),
+    visibility: text("visibility", { enum: VISIBILITIES }).notNull(),
+    repostOf: uuid("repost_of"),
+    createdAt: createdAtColumn(),
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("member_posts_author_idx").on(t.authorId, t.createdAt),
+    index("member_posts_created_idx").on(t.createdAt, t.id),
+    index("member_posts_repost_idx").on(t.repostOf),
+    check("member_posts_visibility_valid", sql`${t.visibility} in ('public','followers','friends','subscribers','only_me')`),
+    check("member_posts_body_length", sql`char_length(${t.body}) <= 5000`),
+    check("member_posts_has_content", sql`char_length(${t.body}) > 0 or ${t.repostOf} is not null`),
+  ],
+);
+
+/** Threaded comments; `parentId` points at the comment being answered. */
+export const memberComments = pgTable(
+  "member_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id").notNull().references(() => memberPosts.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    parentId: uuid("parent_id"),
+    body: text("body").notNull(),
+    createdAt: createdAtColumn(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("member_comments_post_idx").on(t.postId, t.createdAt),
+    check("member_comments_body_length", sql`char_length(${t.body}) between 1 and 2000`),
+  ],
+);
+
+export const REACTIONS = ["like", "love", "laugh", "wow", "sad", "thanks"] as const;
+
+export const memberReactions = pgTable(
+  "member_reactions",
+  {
+    postId: uuid("post_id").notNull().references(() => memberPosts.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: REACTIONS }).notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.postId, t.userId] }),
+    check("member_reactions_kind_valid", sql`${t.kind} in ('like','love','laugh','wow','sad','thanks')`),
+  ],
+);
+
+/** Hashtags, lowercased, for discovery of public posts. */
+export const memberPostTags = pgTable(
+  "member_post_tags",
+  {
+    postId: uuid("post_id").notNull().references(() => memberPosts.id, { onDelete: "cascade" }),
+    tag: text("tag").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.postId, t.tag] }), index("member_post_tags_tag_idx").on(t.tag)],
+);
+
+/** Mentions in posts and comments, and people tagged in a post (with consent). */
+export const memberMentions = pgTable(
+  "member_mentions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id").notNull().references(() => memberPosts.id, { onDelete: "cascade" }),
+    commentId: uuid("comment_id").references(() => memberComments.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["mention", "tag"] }).notNull(),
+    /** Tags need the tagged member's approval before they appear on their profile. */
+    status: text("status", { enum: ["pending", "approved", "declined"] }).notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    index("member_mentions_user_idx").on(t.userId, t.kind, t.status),
+    index("member_mentions_post_idx").on(t.postId),
+    check("member_mentions_kind_valid", sql`${t.kind} in ('mention','tag')`),
+    check("member_mentions_status_valid", sql`${t.status} in ('pending','approved','declined')`),
+  ],
+);

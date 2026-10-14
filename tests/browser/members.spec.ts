@@ -134,4 +134,56 @@ test.describe("members (C12.01)", () => {
     await samContext.close();
     await raeContext.close();
   });
+
+  test("posting, the home feed, comments and reactions (C12.04)", async ({ browser }) => {
+    await seedC11Owner("Posts proof");
+    const SAM_ID = "00000000-0000-4000-8000-0000000000d2";
+    await db().insert(users).values([
+      { id: MEMBER_ID, email: "rae@example.test", role: "customer" },
+      { id: SAM_ID, email: "sam@example.test", role: "customer" },
+    ]);
+    const now = new Date();
+    await db().insert(memberProfiles).values([
+      { userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: now, isPrivate: false },
+      { userId: SAM_ID, handle: "sam", displayName: "Sam Ito", ageAttestedAt: now, isPrivate: false },
+    ]);
+    const [rae, sam] = await Promise.all([
+      db().transaction((tx) => createSession(tx, MEMBER_ID)),
+      db().transaction((tx) => createSession(tx, SAM_ID)),
+    ]);
+    const raeContext = await browser.newContext({ baseURL: C11_BASE_URL });
+    await raeContext.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
+    const raePage = await raeContext.newPage();
+    await raePage.goto("/feed");
+    await expect(raePage.getByRole("heading", { level: 1, name: "Feed" })).toBeVisible();
+    await raePage.getByLabel("What’s new?").fill("Morning light at #comox with @sam");
+    await raePage.getByLabel("Who can see this").selectOption("public");
+    await raePage.getByRole("button", { name: "Post", exact: true }).click();
+    await expect(raePage.getByText("Morning light at")).toBeVisible();
+    await axeInBothThemes(raePage);
+
+    const samContext = await browser.newContext({ baseURL: C11_BASE_URL });
+    await samContext.addCookies([{ name: SESSION_COOKIE, value: sam.token, url: C11_BASE_URL }]);
+    const samPage = await samContext.newPage();
+    await samPage.goto("/feed");
+    await expect(samPage.getByText("Morning light at")).toHaveCount(0);
+    await samPage.goto("/@rae");
+    await samPage.getByRole("button", { name: "Follow", exact: true }).click();
+    await expect(samPage.getByRole("button", { name: "Unfollow" })).toBeVisible();
+    await samPage.goto("/feed");
+    await expect(samPage.getByText("Morning light at")).toBeVisible();
+    await samPage.getByRole("button", { name: "Love" }).click();
+    await expect(samPage.getByRole("button", { name: "Love" })).toHaveAttribute("aria-pressed", "true");
+    await samPage.getByRole("link", { name: "Comments" }).click();
+    await samPage.getByLabel("Add a comment").fill("Gorgeous.");
+    await samPage.getByRole("button", { name: "Comment", exact: true }).click();
+    await expect(samPage.getByText("Gorgeous.")).toBeVisible();
+    await axeInBothThemes(samPage);
+
+    await samPage.goto("/tags/comox");
+    await expect(samPage.getByRole("heading", { level: 1, name: "#comox" })).toBeVisible();
+    await expect(samPage.getByText("Morning light at")).toBeVisible();
+    await samContext.close();
+    await raeContext.close();
+  });
 });

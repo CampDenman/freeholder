@@ -10320,10 +10320,25 @@ whatever is best for the people using the site.
   journey requests a follow and a friendship, approves both from
   connections, and blocks. Later reads (posts, messages, calls) reuse
   `relationBetween`. Changeset `member-graph.md`.)*
-- [ ] **C12.04** Build posts and feeds: text and media posts, threaded
-  comments, reactions, mentions, hashtags, consent-gated tagging of people,
-  reposts and quotes. The default home feed is chronological from people a
-  member follows; any ranked discovery feed is optional and explains itself.
+- [x] **C12.04** Build posts and feeds: text posts, threaded comments,
+  reactions, mentions, hashtags, consent-gated tagging of people, reposts and
+  quotes. The default home feed is chronological from people a member follows
+  or has befriended; the optional "latest public posts" view is also
+  chronological and says so. Media attachments are C12.21.
+  *(Evidence 2026-10-14: `src/modules/members/posts.ts`, migration
+  `db/migrations/0027_member_posts.sql`, `tests/modules/member-posts.test.ts`,
+  `tests/browser/members.spec.ts`. **F04** `/feed`, `/p/[id]`, `/tags/[tag]`
+  and posts on `/@handle`. **F05** `members.post`, `members.editPost`,
+  `members.deletePost`, `members.feed`, `members.latest`, `members.postsBy`,
+  `members.viewPost`, `members.comment`, `members.deleteComment`,
+  `members.react`, `members.pendingTags`, `members.answerTag`. **F07** every
+  post read applies the author's visibility and blocks; mutes leave the home
+  feed; restricted members' comments are seen only by them and the author;
+  only public posts can be reposted; tags wait for the tagged member's
+  approval; rate limits on posting and commenting. **F09** N/A — no jobs.
+  **F12** the browser journey posts publicly with a hashtag and a mention,
+  follows, reacts, comments and opens the hashtag page. Changeset
+  `member-posts.md`.)*
 - [ ] **C12.05** Let members offer paid subscriptions to their own content,
   with subscriber-only visibility, through the money spine and C12.09 payouts.
 - [ ] **C12.06** Build direct messages: one-to-one and group conversations,
@@ -10378,6 +10393,9 @@ whatever is best for the people using the site.
 - [ ] **C12.20** Give member profiles an avatar and optional profile
   sections (for example portfolio, services, pinned posts), each with its own
   visibility.
+- [ ] **C12.21** Let members attach images and video to posts and comments,
+  with alt text, safe processing, and the post's visibility applied to every
+  file.
 
 ---
 

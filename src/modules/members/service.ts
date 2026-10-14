@@ -25,6 +25,7 @@ import {
   memberSettings,
 } from "./schema";
 import graphServices, { approvePendingFollowers, PROFILE_SETTINGS } from "./graph";
+import postServices from "./posts";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
 const RESERVED = new Set([
@@ -383,6 +384,7 @@ export async function activeMember(ctx: ServiceContext, userId: string) {
 
 export default [
   ...graphServices,
+  ...postServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

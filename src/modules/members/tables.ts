@@ -7,4 +7,9 @@ export {
   memberFollows,
   memberFriendships,
   memberRelations,
+  memberPosts,
+  memberComments,
+  memberReactions,
+  memberPostTags,
+  memberMentions,
 } from "./schema";

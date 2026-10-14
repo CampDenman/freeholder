@@ -8,9 +8,12 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { viewProfile } from "@/modules/members/graph";
+import { postsBy } from "@/modules/members/posts";
+import { currentBusiness } from "@/core/settings/read";
 import { myMembership } from "@/modules/members/service";
 import { Button, Callout, Pill } from "@/ui/primitives";
-import { getT } from "../../../i18n";
+import { getLocale, getT } from "../../../i18n";
+import { PostCard, postLabels } from "../PostCard";
 import { memberGraphAction } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -50,8 +53,9 @@ export default async function MemberProfile({
   params: Promise<{ handle: string }>;
   searchParams: Promise<{ error?: string; done?: string }>;
 }) {
-  const [{ handle }, query, t] = await Promise.all([params, searchParams, getT()]);
+  const [{ handle }, query, t, locale, business] = await Promise.all([params, searchParams, getT(), getLocale(), currentBusiness()]);
   const { actor, profile } = await load(handle);
+  const posts = await postsBy.call({ handle: profile.handle }, actor);
   const viewer = actor.kind === "user" ? await myMembership.call({}, actor) : null;
   const r = profile.relation;
   const canAct = viewer?.status === "active" && !r.self;
@@ -105,6 +109,15 @@ export default async function MemberProfile({
             </>
           )}
         </div>
+      ) : null}
+      {!r.blocked ? (
+        <section className="grid gap-4">
+          <h2 className="text-xl font-semibold">{t("members.feed.posts")}</h2>
+          {posts.posts.length === 0 ? <p className="text-ink-muted">{t("members.feed.noneVisible")}</p> : null}
+          {posts.posts.map((post) => (
+            <PostCard key={post.id} post={post} viewerId={actor.kind === "user" ? actor.userId : null} back="/feed" timezone={business?.timezone ?? "UTC"} locale={locale} labels={postLabels(t, post)} />
+          ))}
+        </section>
       ) : null}
       {!viewer && actor.kind === "user" ? <a className="underline" href="/join">{t("members.graph.joinToConnect")}</a> : null}
       {actor.kind !== "user" ? <a className="underline" href="/join">{t("members.graph.joinToConnect")}</a> : null}

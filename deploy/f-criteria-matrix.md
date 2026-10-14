@@ -4406,21 +4406,20 @@ v2.
 - **F10** — N/A — a seeded demo graph arrives with C12.16 (`deploy/members-platform.md`).
 - **F11** — `deploy/members-platform.md` and `.changeset/member-graph.md`.
 - **F12** — `tests/browser/members.spec.ts`: request a follow and a friendship, approve both, then block and confirm the profile disappears.
-## C12.04 — Build posts and feeds: text and media posts, threaded
+## C12.04 — Build posts and feeds
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-
+- **F01** — `db/migrations/0027_member_posts.sql`: posts, comments, reactions, hashtags and mentions/tags with content, visibility, kind and status checks.
+- **F02** — `tests/modules/member-posts.test.ts`: posting, editing, deleting, feeds, comments, reactions and tag consent with refusals for anonymous, non-authors and blocked members.
+- **F03** — N/A — posts belong to members, whose contacts were linked in C12.01 (`tests/modules/members.test.ts`).
+- **F04** — `tests/browser/members.spec.ts`: `/feed`, `/p/[id]`, `/tags/[tag]` and posts on `/@handle`.
+- **F05** — `packages/sdk/src/generated.ts`: the twelve `members.*` post services on HTTP, the SDK and MCP.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on the feed and a post page; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-posts.test.ts`: visibility per post, blocks, mutes, restricted comments, public-only reposts, consent-gated tags, rate limits.
+- **F08** — `tests/modules/member-posts.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background work; posts are ordinary rows in the one database.
+- **F10** — N/A — seeded demo posts arrive with the starter seed in C12.16 (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-posts.md`.
+- **F12** — `tests/browser/members.spec.ts`: post with a hashtag and a mention, follow, react, comment, and open the hashtag page.
 ## C12.05 — Let members offer paid subscriptions to their own content,
 
 - **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
@@ -4647,6 +4646,21 @@ v2.
 - **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
 
 ## C12.20 — Give member profiles an avatar and optional profile sections
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+
+## C12.21 — Let members attach images and video to posts and comments
 
 - **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
 - **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.

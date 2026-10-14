@@ -35,3 +35,15 @@ from mocked payment, mail or media runs alone.
   `tests/browser/members.spec.ts` (2 journeys). Passed locally 2026-10-14.
 - Not yet: avatars and profile sections (C12.20); subscriber visibility
   resolves with C12.05.
+
+## C12.04 — posts and feeds (2026-10-14)
+
+- Services: `src/modules/members/posts.ts`. The home feed query restates
+  `canSee` in SQL so a page is one query; `tests/modules/member-posts.test.ts`
+  holds both to the same answers.
+- Screens: `/feed` (Following and Latest), `/p/[id]`, `/tags/[tag]`, posts on
+  `/@handle`, tag approvals at the top of `/feed`.
+- Tests: `tests/modules/member-posts.test.ts` (4 cases) and the third journey
+  in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
+- Not yet: media attachments (C12.21); notifications for mentions, comments
+  and reactions (C12.13; events are already queued).
