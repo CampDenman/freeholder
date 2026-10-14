@@ -38,7 +38,7 @@ export function renderIndex(manifest) {
   }
   if (manifest.skipped.length > 0) {
     lines.push("## Not captured", "", "| Route | Why |", "| --- | --- |");
-    for (const s of manifest.skipped) lines.push(`| \`${s.route}\` | ${s.reason.replace(/\|/g, "\\|").replace(/\n/g, " ")} |`);
+    for (const s of manifest.skipped) lines.push(`| \`${s.route}\` | ${s.reason.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " ")} |`);
     lines.push("");
   }
   return lines.join("\n");
