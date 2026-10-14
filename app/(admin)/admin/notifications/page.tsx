@@ -75,6 +75,13 @@ function topicLabel(topic: string, t: Awaited<ReturnType<typeof getT>>): string 
     "mail.delivery": "notifications.topic.mail",
     "contribute.ingested": "notifications.topic.contribute",
     "contribute.status": "notifications.topic.contributeStatus",
+    "members.follow": "members.notifications.topic.follow",
+    "members.friend": "members.notifications.topic.friend",
+    "members.mention": "members.notifications.topic.mention",
+    "members.comment": "members.notifications.topic.comment",
+    "members.reaction": "members.notifications.topic.reaction",
+    "members.message": "members.notifications.topic.message",
+    "members.call": "members.notifications.topic.call",
   };
   return t(keys[topic] ?? topic);
 }

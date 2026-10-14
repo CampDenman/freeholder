@@ -79,6 +79,15 @@ export const NOTIFICATION_TOPICS = [
   "gallery.ready",
   "invoice.due",
   "catalog.backInStock",
+  // Member-to-member activity (§44, C12.13). Email defaults to a digest for
+  // these: a person should not get an email every time someone reacts.
+  "members.follow",
+  "members.friend",
+  "members.mention",
+  "members.comment",
+  "members.reaction",
+  "members.message",
+  "members.call",
 ] as const;
 
 const notificationCreateResult = z.object({
@@ -674,7 +683,7 @@ async function effectiveModes(
 ): Promise<Record<NotificationChannel, NotificationMode>> {
   const defaults: Record<NotificationChannel, NotificationMode> = {
     in_app: input.kind === "email" ? "off" : "immediate",
-    email: "immediate",
+    email: notificationTopic.startsWith("members.") ? "digest" : "immediate",
     sms: "off",
     push: "off",
   };

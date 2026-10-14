@@ -4364,66 +4364,62 @@ v2.
 - **F12** — Open — the clean-room run is not yet executed with zero unexplained failures and the record is unsigned (`scripts/fast-gates.mjs` is the local half).
 
 
-## C12.01 — Make members first-class accounts: self-serve signup and
+## C12.01 — Make members first-class accounts
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
+- **F01** — `db/migrations/0025_members.sql`: member profiles, site membership rules and invitations, with handle, status and age-range constraints.
+- **F02** — `tests/modules/members.test.ts`: typed services with permission refusals for anonymous joins, customers calling admin services and missing age confirmation.
+- **F03** — `tests/modules/members.test.ts`: joining resolves the member's contact through `contacts.resolve` and links it to their user.
+- **F04** — `tests/browser/members.spec.ts`: `/join`, `/portal/member` and `/admin/members` operated in a real browser.
+- **F05** — `packages/sdk/src/generated.ts`: `members.*` projected to HTTP, the SDK and MCP from the service registry.
+- **F06** — `tests/browser/members.spec.ts`: axe WCAG A/AA in light and dark on all three screens; strings in en, fr, es and ar (`locales/en.json`).
+- **F07** — `tests/modules/members.test.ts`: rate limits, reserved and taken handles, invitation-bound joins, scoped admin services, required suspension reasons.
+- **F08** — `tests/modules/members.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background jobs; membership is ordinary rows in the one database and rides existing backup and export.
+- **F10** — N/A — demo members arrive with the starter seed in C12.16 (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/members-join.md`.
+- **F12** — `tests/browser/members.spec.ts`: join under an approval rule, edit the profile, approve, suspend with a reason, and the member sees the suspension.
+## C12.02 — Ship public member profiles at /@handle
 
-## C12.02 — Ship public member profiles at `/@handle` with bio, avatar,
+- **F01** — `db/migrations/0026_member_graph.sql`: per-field visibility, default post visibility, links, private account and indexing columns with checked values.
+- **F02** — `tests/modules/member-graph.test.ts`: `members.profile` returns each field only to permitted viewers; `members.updateMe` validates links and visibilities.
+- **F03** — N/A — profiles hang off the member's user, already linked to their contact in C12.01 (`tests/modules/members.test.ts`).
+- **F04** — `tests/browser/members.spec.ts`: `/@handle` viewed anonymously and as a follower; privacy settings on `/portal/member`.
+- **F05** — `packages/sdk/src/generated.ts`: `members.profile` and `members.updateMe` on HTTP, the SDK and MCP.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/@handle`; strings in en, fr, es and ar (`locales/en.json`).
+- **F07** — `tests/modules/member-graph.test.ts`: private by default, field-level `canSee`, not-found for blocked viewers, opt-in indexing.
+- **F08** — `tests/modules/member-graph.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background work; profile state is ordinary rows in the one database.
+- **F10** — N/A — demo members and profiles arrive with the starter seed in C12.16 (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-graph.md`.
+- **F12** — `tests/browser/members.spec.ts`: a private profile hides the bio from strangers and shows it once the follow is approved.
+## C12.03 — Build the social graph
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
+- **F01** — `db/migrations/0026_member_graph.sql`: follows, friendships (one row per pair) and block/mute/restrict relations with not-self and ordering checks.
+- **F02** — `tests/modules/member-graph.test.ts`: follow, request, approve, befriend, unfriend and relation services with refusals for inactive, anonymous and blocked callers.
+- **F03** — N/A — graph edges join users, whose contacts were linked in C12.01 (`tests/modules/members.test.ts`).
+- **F04** — `tests/browser/members.spec.ts`: profile buttons and `/portal/connections`.
+- **F05** — `packages/sdk/src/generated.ts`: `members.follow`, `members.befriend`, `members.setRelation` and `members.connections` on HTTP, the SDK and MCP.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/portal/connections`; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-graph.test.ts`: blocks hide both sides and end ties; mutes and restrictions stay private; only active members reach out; rate limits.
+- **F08** — `tests/modules/member-graph.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background work; edges are ordinary rows in the one database.
+- **F10** — N/A — a seeded demo graph arrives with C12.16 (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-graph.md`.
+- **F12** — `tests/browser/members.spec.ts`: request a follow and a friendship, approve both, then block and confirm the profile disappears.
+## C12.04 — Build posts and feeds
 
-## C12.03 — Build the social graph: one-way follow, mutual friend
-
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-
-## C12.04 — Build posts and feeds: text and media posts, threaded
-
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-
+- **F01** — `db/migrations/0027_member_posts.sql`: posts, comments, reactions, hashtags and mentions/tags with content, visibility, kind and status checks.
+- **F02** — `tests/modules/member-posts.test.ts`: posting, editing, deleting, feeds, comments, reactions and tag consent with refusals for anonymous, non-authors and blocked members.
+- **F03** — N/A — posts belong to members, whose contacts were linked in C12.01 (`tests/modules/members.test.ts`).
+- **F04** — `tests/browser/members.spec.ts`: `/feed`, `/p/[id]`, `/tags/[tag]` and posts on `/@handle`.
+- **F05** — `packages/sdk/src/generated.ts`: the twelve `members.*` post services on HTTP, the SDK and MCP.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on the feed and a post page; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-posts.test.ts`: visibility per post, blocks, mutes, restricted comments, public-only reposts, consent-gated tags, rate limits.
+- **F08** — `tests/modules/member-posts.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background work; posts are ordinary rows in the one database.
+- **F10** — N/A — seeded demo posts arrive with the starter seed in C12.16 (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-posts.md`.
+- **F12** — `tests/browser/members.spec.ts`: post with a hashtag and a mention, follow, react, comment, and open the hashtag page.
 ## C12.05 — Let members offer paid subscriptions to their own content,
 
 - **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
@@ -4439,36 +4435,34 @@ v2.
 - **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
 - **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
 
-## C12.06 — Build direct messages: one-to-one and group conversations,
+## C12.06 — Build direct messages
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
+- **F01** — `db/migrations/0028_member_messages.sql`: conversations (one per direct pair), participants with request state, and sealed messages; read-receipt preference on profiles.
+- **F02** — `tests/modules/member-messages.test.ts`: requests versus inbox, accept and decline, group conversations, unsend, and refusals for outsiders and blocked members.
+- **F03** — N/A — participants are members whose contacts were linked in C12.01 (`tests/modules/members.test.ts`).
+- **F04** — `tests/browser/members.spec.ts`: `/messages`, `/messages/[id]` and the profile's Message link.
+- **F05** — `packages/sdk/src/generated.ts`: the nine `members.*` message services on HTTP, the SDK and MCP.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on a conversation and the requests folder; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-messages.test.ts`: participant-only access, no reply before acceptance, blocks close conversations, sealed bodies, reciprocal receipts.
+- **F08** — `tests/modules/member-messages.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — `src/modules/members/messages.ts`: new-message notifications use core delivery and skip requests and muted conversations.
+- **F10** — N/A — seeded demo conversations arrive with the starter seed in C12.16 (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-messages.md`.
+- **F12** — `tests/browser/members.spec.ts`: a stranger's message arrives as a request, is accepted and answered, and one message is unsent.
+## C12.07 — Build private WebRTC voice and video calls between two members
 
-## C12.07 — Build private WebRTC voice and video calls between members:
-
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-
+- **F01** — `db/migrations/0029_member_calls.sql`: calls with media and state checks, and signalling rows that are deleted once read.
+- **F02** — `tests/modules/member-calls.test.ts`: who may ring whom, busy refusal, answering, one-time signals, missed calls and block refusal.
+- **F03** — N/A — calls connect members whose contacts were linked in C12.01 (`tests/modules/members.test.ts`).
+- **F04** — `tests/browser/member-calls.spec.ts`: `/call/[id]`, the profile's call buttons and the incoming-call bar.
+- **F05** — `packages/sdk/src/generated.ts`: `members.startCall` on HTTP, the SDK and MCP; live-call services excluded from MCP because an agent cannot hold a microphone.
+- **F06** — `tests/browser/member-calls.spec.ts`: axe on the incoming-call dialog; status announced through a live region; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-calls.test.ts`: connection-gated ringing, block refusal, participant-only signalling, signal deletion, short-lived TURN credentials with no third-party default.
+- **F08** — `tests/modules/member-calls.test.ts` + `tests/browser/member-calls.spec.ts`.
+- **F09** — `src/core/env.ts`: `TURN_URLS`, `TURN_SECRET` and `STUN_URLS` configure the site's own relay; missed calls notify through core delivery.
+- **F10** — N/A — calls need two live people; the starter seed in C12.16 adds members who can be called (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-calls.md`.
+- **F12** — `tests/browser/member-calls.spec.ts`: two real browser contexts ring, answer, connect peer to peer, mute and hang up.
 ## C12.08 — Build the member marketplace: members list physical goods,
 
 - **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
@@ -4544,21 +4538,20 @@ v2.
 - **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
 - **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
 
-## C12.13 — Build member notifications: in-app, web push and email
+## C12.13 — Build member notifications
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-
+- **F01** — N/A — no new tables; member topics use core notifications, preferences and deliveries (`src/core/notifications/schema.ts`).
+- **F02** — `tests/modules/member-notifications.test.ts`: notifications for each member activity, folding of reactions, and per-topic preferences.
+- **F03** — N/A — recipients are member users already linked to contacts in C12.01 (`tests/modules/members.test.ts`).
+- **F04** — `tests/browser/members.spec.ts`: `/portal/notifications` lists requests and saves per-topic settings.
+- **F05** — `packages/sdk/src/generated.ts`: core `notifications.*` services expose the member topics on HTTP, the SDK and MCP.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/portal/notifications`; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-notifications.test.ts`: silence from blocked and muted senders, no self-notifications, idempotent keys.
+- **F08** — `tests/modules/member-notifications.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — `src/core/notifications/service.ts`: delivery, digests and retries use the existing notification outbox.
+- **F10** — N/A — seeded demo activity arrives with the starter seed in C12.16 (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-notifications.md`.
+- **F12** — `tests/browser/members.spec.ts`: follow and friend requests appear as notifications and a topic's email mode is changed.
 ## C12.14 — Expose every member capability through the service layer to
 
 - **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
@@ -4633,6 +4626,96 @@ v2.
 - **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
 - **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
 - **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
+
+## C12.19 — Offer members passkey-first sign-in
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+
+## C12.20 — Give member profiles an avatar and optional profile sections
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+
+## C12.21 — Let members attach images and video to posts, comments and messages
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+
+## C12.22 — Add web push for member notifications and quiet hours
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+
+## C12.23 — Make member messages end-to-end encrypted by default with MLS
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+
+## C12.24 — Add group voice and video calls through a self-hostable open-source SFU adapter
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
 ## C10.17 — v2-deferred (§43.18) — C10.17
 
 - **F01** — N/A — no schema change in this item.

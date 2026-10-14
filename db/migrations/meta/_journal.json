@@ -176,6 +176,41 @@
       "when": 1793310000004,
       "tag": "0024_broadcast_unsubscribe",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793310000005,
+      "tag": "0025_members",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793310000006,
+      "tag": "0026_member_graph",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793310000007,
+      "tag": "0027_member_posts",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1793310000008,
+      "tag": "0028_member_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1793310000009,
+      "tag": "0029_member_calls",
+      "breakpoints": true
     }
   ]
 }

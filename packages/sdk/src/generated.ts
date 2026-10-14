@@ -964,6 +964,52 @@ export const SERVICE_NAMES = [
   "media.upload",
   "media.uploadStatus",
   "media.usage",
+  "members.answerCall",
+  "members.answerFollow",
+  "members.answerRequest",
+  "members.answerTag",
+  "members.befriend",
+  "members.callConfig",
+  "members.callStatus",
+  "members.comment",
+  "members.connections",
+  "members.conversation",
+  "members.conversations",
+  "members.deleteComment",
+  "members.deletePost",
+  "members.editPost",
+  "members.endCall",
+  "members.feed",
+  "members.follow",
+  "members.handleAvailable",
+  "members.incomingCalls",
+  "members.invite",
+  "members.join",
+  "members.latest",
+  "members.leaveConversation",
+  "members.list",
+  "members.me",
+  "members.muteConversation",
+  "members.pendingTags",
+  "members.post",
+  "members.postsBy",
+  "members.profile",
+  "members.react",
+  "members.sendMessage",
+  "members.setRelation",
+  "members.setStatus",
+  "members.settings",
+  "members.signal",
+  "members.startCall",
+  "members.startConversation",
+  "members.takeSignals",
+  "members.unfollow",
+  "members.unfriend",
+  "members.unreadConversations",
+  "members.unsendMessage",
+  "members.updateMe",
+  "members.updateSettings",
+  "members.viewPost",
   "messaging.checkNumbers",
   "messaging.complianceEvents",
   "messaging.createKeywordRule",
@@ -5242,6 +5288,190 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { pages: number; sections: number };
   };
+  "members.answerCall": {
+    input: { id: string; accept: boolean };
+    output: { id: string; media: "voice" | "video"; state: "ringing" | "active" | "ended" | "declined" | "missed"; role: "caller" | "callee"; other: { userId: string; handle: string; displayName: string; [key: string]: unknown }; createdAt: string; [key: string]: unknown };
+  };
+  "members.answerFollow": {
+    input: { handle: string; approve: boolean };
+    output: { ok: true };
+  };
+  "members.answerRequest": {
+    input: { conversationId: string; accept: boolean };
+    output: { ok: true };
+  };
+  "members.answerTag": {
+    input: { mentionId: string; approve: boolean };
+    output: { ok: true };
+  };
+  "members.befriend": {
+    input: { handle: string };
+    output: { friend: "you_asked" | "friends" };
+  };
+  "members.callConfig": {
+    input: Record<string, never>;
+    output: { iceServers: { urls: string[]; username?: string; credential?: string }[]; relayConfigured: boolean };
+  };
+  "members.callStatus": {
+    input: { id: string };
+    output: { id: string; media: "voice" | "video"; state: "ringing" | "active" | "ended" | "declined" | "missed"; role: "caller" | "callee"; other: { userId: string; handle: string; displayName: string; [key: string]: unknown }; createdAt: string; [key: string]: unknown };
+  };
+  "members.comment": {
+    input: { postId: string; parentId?: string; body: string };
+    output: { id: string; parentId: string | null; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; restricted: boolean; [key: string]: unknown };
+  };
+  "members.connections": {
+    input: Record<string, never>;
+    output: { followers: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; following: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; friends: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; followRequests: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; friendRequests: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; sentFollowRequests: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; sentFriendRequests: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; blocked: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; muted: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; restricted: { userId: string; handle: string; displayName: string; [key: string]: unknown }[] };
+  };
+  "members.conversation": {
+    input: { id: string; before?: string };
+    output: { conversation: { id: string; kind: "direct" | "group"; title: string | null; people: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; state: "active" | "requested"; muted: boolean; lastMessageAt: string; unread: boolean; [key: string]: unknown }; closed: boolean; messages: { id: string; sender: { userId: string; handle: string; displayName: string; [key: string]: unknown } | null; body: string | null; createdAt: string; mine: boolean; [key: string]: unknown }[]; seenBy: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; older: boolean };
+  };
+  "members.conversations": {
+    input: { box?: "inbox" | "requests" };
+    output: { id: string; kind: "direct" | "group"; title: string | null; people: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; state: "active" | "requested"; muted: boolean; lastMessageAt: string; unread: boolean; [key: string]: unknown }[];
+  };
+  "members.deleteComment": {
+    input: { id: string };
+    output: { ok: true };
+  };
+  "members.deletePost": {
+    input: { id: string };
+    output: { ok: true };
+  };
+  "members.editPost": {
+    input: { id: string; body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me" };
+    output: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown };
+  };
+  "members.endCall": {
+    input: { id: string };
+    output: { ok: true };
+  };
+  "members.feed": {
+    input: { before?: string };
+    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
+  };
+  "members.follow": {
+    input: { handle: string };
+    output: { following: "requested" | "active" };
+  };
+  "members.handleAvailable": {
+    input: { handle: string };
+    output: { available: boolean; reason: string | null };
+  };
+  "members.incomingCalls": {
+    input: Record<string, never>;
+    output: { id: string; media: "voice" | "video"; state: "ringing" | "active" | "ended" | "declined" | "missed"; role: "caller" | "callee"; other: { userId: string; handle: string; displayName: string; [key: string]: unknown }; createdAt: string; [key: string]: unknown }[];
+  };
+  "members.invite": {
+    input: { email: string };
+    output: { ok: true };
+  };
+  "members.join": {
+    input: { handle: string; displayName: string; meetsMinimumAge: true; isAdult: boolean };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; createdAt: string; [key: string]: unknown };
+  };
+  "members.latest": {
+    input: { before?: string; tag?: string };
+    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
+  };
+  "members.leaveConversation": {
+    input: { conversationId: string };
+    output: { ok: true };
+  };
+  "members.list": {
+    input: { status?: "active" | "pending" | "suspended"; search?: string; limit?: number; offset?: number };
+    output: { members: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; createdAt: string; email: string; statusReason: string | null; [key: string]: unknown }[]; total: number };
+  };
+  "members.me": {
+    input: Record<string, never>;
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; createdAt: string; [key: string]: unknown } | null;
+  };
+  "members.muteConversation": {
+    input: { conversationId: string; muted: boolean };
+    output: { ok: true };
+  };
+  "members.pendingTags": {
+    input: Record<string, never>;
+    output: { mentionId: string; post: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }; [key: string]: unknown }[];
+  };
+  "members.post": {
+    input: { body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; repostOf?: string; tag?: string[] };
+    output: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown };
+  };
+  "members.postsBy": {
+    input: { before?: string; handle: string };
+    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
+  };
+  "members.profile": {
+    input: { handle: string };
+    output: { userId: string; handle: string; displayName: string; isPrivate: boolean; indexable: boolean; bio: string | null; links: { label: string; url: string }[] | null; followers: number; following: number; friends: number; relation: { self: boolean; blocked: boolean; youBlocked: boolean; following: "none" | "requested" | "active"; followsYou: boolean; friend: "none" | "you_asked" | "they_asked" | "friends"; muted: boolean; restricted: boolean; subscriber: boolean }; [key: string]: unknown };
+  };
+  "members.react": {
+    input: { postId: string; kind: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null };
+    output: { ok: true };
+  };
+  "members.sendMessage": {
+    input: { conversationId: string; body: string };
+    output: { id: string };
+  };
+  "members.setRelation": {
+    input: { handle: string; kind: "block" | "mute" | "restrict"; on: boolean };
+    output: { ok: true };
+  };
+  "members.setStatus": {
+    input: { userId: string; status: "active" | "pending" | "suspended"; reason?: string };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; createdAt: string; [key: string]: unknown };
+  };
+  "members.settings": {
+    input: Record<string, never>;
+    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; [key: string]: unknown };
+  };
+  "members.signal": {
+    input: { callId: string; kind: "offer" | "answer" | "candidate"; payload: { type: "offer" | "answer"; sdp: string } | { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null } };
+    output: { ok: true };
+  };
+  "members.startCall": {
+    input: { handle: string; media: "voice" | "video" };
+    output: { id: string; media: "voice" | "video"; state: "ringing" | "active" | "ended" | "declined" | "missed"; role: "caller" | "callee"; other: { userId: string; handle: string; displayName: string; [key: string]: unknown }; createdAt: string; [key: string]: unknown };
+  };
+  "members.startConversation": {
+    input: { handles: string[]; title?: string; body: string };
+    output: { id: string };
+  };
+  "members.takeSignals": {
+    input: { callId: string };
+    output: { state: "ringing" | "active" | "ended" | "declined" | "missed"; signals: { kind: "offer" | "answer" | "candidate"; payload: unknown }[] };
+  };
+  "members.unfollow": {
+    input: { handle: string };
+    output: { ok: true };
+  };
+  "members.unfriend": {
+    input: { handle: string };
+    output: { ok: true };
+  };
+  "members.unreadConversations": {
+    input: Record<string, never>;
+    output: { unread: number; requests: number };
+  };
+  "members.unsendMessage": {
+    input: { id: string };
+    output: { ok: true };
+  };
+  "members.updateMe": {
+    input: { displayName?: string; bio?: string; handle?: string; isAdult?: boolean; bioVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; linksVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; links?: { label: string; url: string }[]; isPrivate?: boolean; indexable?: boolean; readReceipts?: boolean };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; createdAt: string; [key: string]: unknown };
+  };
+  "members.updateSettings": {
+    input: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number };
+    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; [key: string]: unknown };
+  };
+  "members.viewPost": {
+    input: { id: string };
+    output: { post: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }; comments: { id: string; parentId: string | null; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; restricted: boolean; [key: string]: unknown }[] };
+  };
   "messaging.checkNumbers": {
     input: Record<string, never>;
     output: { checked: number; problems: number; [key: string]: unknown };
@@ -8042,6 +8272,54 @@ export interface FreeholderApi {
     upload: (input: ServiceCatalog["media.upload"]["input"]) => Promise<ServiceCatalog["media.upload"]["output"]>;
     uploadStatus: (input: ServiceCatalog["media.uploadStatus"]["input"]) => Promise<ServiceCatalog["media.uploadStatus"]["output"]>;
     usage: (input: ServiceCatalog["media.usage"]["input"]) => Promise<ServiceCatalog["media.usage"]["output"]>;
+  };
+  members: {
+    answerCall: (input: ServiceCatalog["members.answerCall"]["input"]) => Promise<ServiceCatalog["members.answerCall"]["output"]>;
+    answerFollow: (input: ServiceCatalog["members.answerFollow"]["input"]) => Promise<ServiceCatalog["members.answerFollow"]["output"]>;
+    answerRequest: (input: ServiceCatalog["members.answerRequest"]["input"]) => Promise<ServiceCatalog["members.answerRequest"]["output"]>;
+    answerTag: (input: ServiceCatalog["members.answerTag"]["input"]) => Promise<ServiceCatalog["members.answerTag"]["output"]>;
+    befriend: (input: ServiceCatalog["members.befriend"]["input"]) => Promise<ServiceCatalog["members.befriend"]["output"]>;
+    callConfig: (input?: ServiceCatalog["members.callConfig"]["input"]) => Promise<ServiceCatalog["members.callConfig"]["output"]>;
+    callStatus: (input: ServiceCatalog["members.callStatus"]["input"]) => Promise<ServiceCatalog["members.callStatus"]["output"]>;
+    comment: (input: ServiceCatalog["members.comment"]["input"]) => Promise<ServiceCatalog["members.comment"]["output"]>;
+    connections: (input?: ServiceCatalog["members.connections"]["input"]) => Promise<ServiceCatalog["members.connections"]["output"]>;
+    conversation: (input: ServiceCatalog["members.conversation"]["input"]) => Promise<ServiceCatalog["members.conversation"]["output"]>;
+    conversations: (input?: ServiceCatalog["members.conversations"]["input"]) => Promise<ServiceCatalog["members.conversations"]["output"]>;
+    deleteComment: (input: ServiceCatalog["members.deleteComment"]["input"]) => Promise<ServiceCatalog["members.deleteComment"]["output"]>;
+    deletePost: (input: ServiceCatalog["members.deletePost"]["input"]) => Promise<ServiceCatalog["members.deletePost"]["output"]>;
+    editPost: (input: ServiceCatalog["members.editPost"]["input"]) => Promise<ServiceCatalog["members.editPost"]["output"]>;
+    endCall: (input: ServiceCatalog["members.endCall"]["input"]) => Promise<ServiceCatalog["members.endCall"]["output"]>;
+    feed: (input?: ServiceCatalog["members.feed"]["input"]) => Promise<ServiceCatalog["members.feed"]["output"]>;
+    follow: (input: ServiceCatalog["members.follow"]["input"]) => Promise<ServiceCatalog["members.follow"]["output"]>;
+    handleAvailable: (input: ServiceCatalog["members.handleAvailable"]["input"]) => Promise<ServiceCatalog["members.handleAvailable"]["output"]>;
+    incomingCalls: (input?: ServiceCatalog["members.incomingCalls"]["input"]) => Promise<ServiceCatalog["members.incomingCalls"]["output"]>;
+    invite: (input: ServiceCatalog["members.invite"]["input"]) => Promise<ServiceCatalog["members.invite"]["output"]>;
+    join: (input: ServiceCatalog["members.join"]["input"]) => Promise<ServiceCatalog["members.join"]["output"]>;
+    latest: (input?: ServiceCatalog["members.latest"]["input"]) => Promise<ServiceCatalog["members.latest"]["output"]>;
+    leaveConversation: (input: ServiceCatalog["members.leaveConversation"]["input"]) => Promise<ServiceCatalog["members.leaveConversation"]["output"]>;
+    list: (input?: ServiceCatalog["members.list"]["input"]) => Promise<ServiceCatalog["members.list"]["output"]>;
+    me: (input?: ServiceCatalog["members.me"]["input"]) => Promise<ServiceCatalog["members.me"]["output"]>;
+    muteConversation: (input: ServiceCatalog["members.muteConversation"]["input"]) => Promise<ServiceCatalog["members.muteConversation"]["output"]>;
+    pendingTags: (input?: ServiceCatalog["members.pendingTags"]["input"]) => Promise<ServiceCatalog["members.pendingTags"]["output"]>;
+    post: (input?: ServiceCatalog["members.post"]["input"]) => Promise<ServiceCatalog["members.post"]["output"]>;
+    postsBy: (input: ServiceCatalog["members.postsBy"]["input"]) => Promise<ServiceCatalog["members.postsBy"]["output"]>;
+    profile: (input: ServiceCatalog["members.profile"]["input"]) => Promise<ServiceCatalog["members.profile"]["output"]>;
+    react: (input: ServiceCatalog["members.react"]["input"]) => Promise<ServiceCatalog["members.react"]["output"]>;
+    sendMessage: (input: ServiceCatalog["members.sendMessage"]["input"]) => Promise<ServiceCatalog["members.sendMessage"]["output"]>;
+    setRelation: (input: ServiceCatalog["members.setRelation"]["input"]) => Promise<ServiceCatalog["members.setRelation"]["output"]>;
+    setStatus: (input: ServiceCatalog["members.setStatus"]["input"]) => Promise<ServiceCatalog["members.setStatus"]["output"]>;
+    settings: (input?: ServiceCatalog["members.settings"]["input"]) => Promise<ServiceCatalog["members.settings"]["output"]>;
+    signal: (input: ServiceCatalog["members.signal"]["input"]) => Promise<ServiceCatalog["members.signal"]["output"]>;
+    startCall: (input: ServiceCatalog["members.startCall"]["input"]) => Promise<ServiceCatalog["members.startCall"]["output"]>;
+    startConversation: (input: ServiceCatalog["members.startConversation"]["input"]) => Promise<ServiceCatalog["members.startConversation"]["output"]>;
+    takeSignals: (input: ServiceCatalog["members.takeSignals"]["input"]) => Promise<ServiceCatalog["members.takeSignals"]["output"]>;
+    unfollow: (input: ServiceCatalog["members.unfollow"]["input"]) => Promise<ServiceCatalog["members.unfollow"]["output"]>;
+    unfriend: (input: ServiceCatalog["members.unfriend"]["input"]) => Promise<ServiceCatalog["members.unfriend"]["output"]>;
+    unreadConversations: (input?: ServiceCatalog["members.unreadConversations"]["input"]) => Promise<ServiceCatalog["members.unreadConversations"]["output"]>;
+    unsendMessage: (input: ServiceCatalog["members.unsendMessage"]["input"]) => Promise<ServiceCatalog["members.unsendMessage"]["output"]>;
+    updateMe: (input?: ServiceCatalog["members.updateMe"]["input"]) => Promise<ServiceCatalog["members.updateMe"]["output"]>;
+    updateSettings: (input: ServiceCatalog["members.updateSettings"]["input"]) => Promise<ServiceCatalog["members.updateSettings"]["output"]>;
+    viewPost: (input: ServiceCatalog["members.viewPost"]["input"]) => Promise<ServiceCatalog["members.viewPost"]["output"]>;
   };
   messaging: {
     checkNumbers: (input?: ServiceCatalog["messaging.checkNumbers"]["input"]) => Promise<ServiceCatalog["messaging.checkNumbers"]["output"]>;

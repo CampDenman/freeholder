@@ -31,6 +31,7 @@ import quotesManifest from "@/modules/quotes/manifest";
 import projectsManifest from "@/modules/projects/manifest";
 import galleriesManifest from "@/modules/galleries/manifest";
 import reviewsManifest from "@/modules/reviews/manifest";
+import membersManifest from "@/modules/members/manifest";
 import crmManifest from "@/modules/crm/manifest";
 import loyaltyManifest from "@/modules/loyalty/manifest";
 import referralsManifest from "@/modules/referrals/manifest";
@@ -71,6 +72,7 @@ const manifests: ModuleManifest[] = [
   projectsManifest,
   galleriesManifest,
   reviewsManifest,
+  membersManifest,
   crmManifest,
   adsManifest,
   shareManifest,

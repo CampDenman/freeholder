@@ -75,6 +75,17 @@ const envSchema = z.object({
   CREDENTIAL_KEY_PREVIOUS: z.string().optional(),
 
   /**
+   * Member calls (§44.7). WebRTC needs a relay for people behind strict
+   * networks. These name the site's own TURN server (for example coturn with
+   * `use-auth-secret`); calls then get short-lived credentials. STUN_URLS is
+   * optional and defaults to the TURN servers. Nothing defaults to a third
+   * party: without these, calls connect only when a direct path exists.
+   */
+  TURN_URLS: z.string().optional(),
+  TURN_SECRET: z.string().min(16).optional(),
+  STUN_URLS: z.string().optional(),
+
+  /**
    * S3-compatible object storage (§12). One set of names for DigitalOcean
    * Spaces, Cloudflare R2, MinIO, Backblaze and AWS alike — they speak the
    * same protocol, so naming them after a vendor would be a lie the next

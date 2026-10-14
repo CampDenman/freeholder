@@ -148,6 +148,7 @@ export interface AdminNavLabels {
   gifts: string;
   printOnDemand: string;
   community: string;
+  members: string;
   voiceVideo: string;
   marketplace: string;
   reviews: string;
@@ -217,6 +218,7 @@ const LINKS = [
   { href: "/admin/loyalty", key: "loyalty", module: "loyalty", Icon: Ticket },
   { href: "/admin/gifts", key: "gifts", module: "giftRegistry", Icon: Gift },
   { href: "/admin/print-on-demand", key: "printOnDemand", module: "printOnDemand", Icon: Printer },
+  { href: "/admin/members", key: "members", module: "members", Icon: UsersThree },
   { href: "/admin/community", key: "community", module: "community", Icon: UsersThree },
   { href: "/admin/voice-video", key: "voiceVideo", module: "voiceVideo", Icon: VideoCamera },
   { href: "/admin/marketplace", key: "marketplace", module: "marketplace", Icon: Storefront },

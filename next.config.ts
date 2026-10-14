@@ -86,6 +86,12 @@ const nextConfig: NextConfig = {
   // Set here rather than in a recipe's reverse proxy on purpose — every target
   // must get them, and a header that depends on the deploy being configured
   // correctly is a header half the deploys will not have.
+  // §44.3: member profiles live at /@handle. The `@` prefix is reserved by the
+  // App Router for parallel routes, so the address is rewritten to /m/handle.
+  async rewrites() {
+    return { beforeFiles: [{ source: "/@:handle", destination: "/m/:handle" }], afterFiles: [], fallback: [] };
+  },
+
   async headers() {
     return [
       {

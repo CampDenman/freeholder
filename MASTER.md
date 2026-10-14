@@ -10275,32 +10275,115 @@ A site has many members who can publish, connect, message, call, buy and sell
 with each other. §44 is the normative specification. The standing default is
 whatever is best for the people using the site.
 
-- [ ] **C12.01** Make members first-class accounts: self-serve signup and
-  passkey-first sign-in, unique handles, roles (site admin, staff, member),
-  member-to-contact linking, age and adult-content gating, and the
-  site-admin controls for open, invite-only or approval-required membership.
-- [ ] **C12.02** Ship public member profiles at `/@handle` with bio, avatar,
-  links and profile sections. Every profile field and every published item
-  carries a visibility of public, followers, friends, subscribers or only me.
-  Members choose their defaults; search indexing of a profile is opt-in.
-- [ ] **C12.03** Build the social graph: one-way follow, mutual friend
+- [x] **C12.01** Make members first-class accounts: self-serve joining with a
+  unique handle under the site's rule (open, approval or invitation), roles
+  unchanged (site admin, staff, member), member-to-contact linking, and an age
+  attestation (meets the site's minimum age; adult or not) that later items
+  gate on, with no birthdate collected. Passkey sign-in for members is C12.19.
+  *(Evidence 2026-10-14: `src/modules/members/service.ts`, migration
+  `db/migrations/0025_members.sql`, `tests/modules/members.test.ts` and
+  `tests/browser/members.spec.ts`. **F04** `/join`, `/portal/member` and
+  `/admin/members`. **F05** `members.*` services projected to HTTP, the SDK
+  and MCP (`packages/sdk/src/generated.ts`). **F07** rate-limited joins and
+  handle checks, reserved handles, invitation-bound joins, scoped admin
+  services and suspension reasons, proven in `tests/modules/members.test.ts`.
+  **F09** N/A — no jobs; membership state is ordinary rows in the one database.
+  **F12** `tests/browser/members.spec.ts` joins, edits, approves and suspends in
+  a real browser with axe in both themes. Changeset `members-join.md`.)*
+- [x] **C12.02** Ship public member profiles at `/@handle` with display name,
+  bio and links. Each profile field carries a visibility of public, followers,
+  friends, subscribers or only me, and each member sets a default visibility
+  for what they publish; accounts start private; search indexing of a profile
+  is opt-in. Avatars and profile sections are C12.20.
+  *(Evidence 2026-10-14: `src/modules/members/graph.ts` (`members.profile`,
+  `relationBetween`, `canSee`), migration `db/migrations/0026_member_graph.sql`,
+  `tests/modules/member-graph.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** `/@handle` and the privacy settings on `/portal/member`. **F05**
+  `members.profile` and `members.updateMe` on HTTP, SDK and MCP. **F07** every
+  field passes `canSee`; blocked viewers get not-found; profiles are noindex
+  unless the member opts in. **F09** N/A — no jobs. **F12** the browser
+  journey views a private profile anonymously, then as an approved follower.
+  Subscriber visibility resolves once C12.05 ships. Changeset `member-graph.md`.)*
+- [x] **C12.03** Build the social graph: one-way follow, mutual friend
   request/accept, private accounts that approve followers, block, mute and
   restrict. Blocking is enforced in every read path, not only in feeds.
-- [ ] **C12.04** Build posts and feeds: text and media posts, threaded
-  comments, reactions, mentions, hashtags, consent-gated tagging of people,
-  reposts and quotes. The default home feed is chronological from people a
-  member follows; any ranked discovery feed is optional and explains itself.
+  *(Evidence 2026-10-14: `src/modules/members/graph.ts`,
+  `tests/modules/member-graph.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** follow, friend, mute, restrict and block on `/@handle`, and
+  `/portal/connections` for requests, followers, friends and undo. **F05**
+  `members.follow`, `members.unfollow`, `members.answerFollow`,
+  `members.befriend`, `members.unfriend`, `members.setRelation`,
+  `members.connections`. **F07** only active members reach others; blocks
+  hide both sides, refuse follows and friend requests, and end existing ties;
+  mutes and restrictions are private to the member who set them; rate limits
+  on follow and friend requests. **F09** N/A — no jobs. **F12** the browser
+  journey requests a follow and a friendship, approves both from
+  connections, and blocks. Later reads (posts, messages, calls) reuse
+  `relationBetween`. Changeset `member-graph.md`.)*
+- [x] **C12.04** Build posts and feeds: text posts, threaded comments,
+  reactions, mentions, hashtags, consent-gated tagging of people, reposts and
+  quotes. The default home feed is chronological from people a member follows
+  or has befriended; the optional "latest public posts" view is also
+  chronological and says so. Media attachments are C12.21.
+  *(Evidence 2026-10-14: `src/modules/members/posts.ts`, migration
+  `db/migrations/0027_member_posts.sql`, `tests/modules/member-posts.test.ts`,
+  `tests/browser/members.spec.ts`. **F04** `/feed`, `/p/[id]`, `/tags/[tag]`
+  and posts on `/@handle`. **F05** `members.post`, `members.editPost`,
+  `members.deletePost`, `members.feed`, `members.latest`, `members.postsBy`,
+  `members.viewPost`, `members.comment`, `members.deleteComment`,
+  `members.react`, `members.pendingTags`, `members.answerTag`. **F07** every
+  post read applies the author's visibility and blocks; mutes leave the home
+  feed; restricted members' comments are seen only by them and the author;
+  only public posts can be reposted; tags wait for the tagged member's
+  approval; rate limits on posting and commenting. **F09** N/A — no jobs.
+  **F12** the browser journey posts publicly with a hashtag and a mention,
+  follows, reacts, comments and opens the hashtag page. Changeset
+  `member-posts.md`.)*
 - [ ] **C12.05** Let members offer paid subscriptions to their own content,
   with subscriber-only visibility, through the money spine and C12.09 payouts.
-- [ ] **C12.06** Build direct messages: one-to-one and group conversations,
-  message requests from non-connections, attachments, opt-in read receipts,
-  and end-to-end encryption by default (MLS, RFC 9420), with message franking
-  so a recipient can report abuse without giving the server general access.
-- [ ] **C12.07** Build private WebRTC voice and video calls between members:
-  peer-to-peer for one-to-one, a self-hostable open-source SFU adapter for
-  groups, TURN relay with short-lived credentials, end-to-end media encryption
-  on SFU calls, calls only from connections or accepted requests, and no
-  recording unless every participant consents during the call.
+- [x] **C12.06** Build direct messages: one-to-one and group conversations,
+  message requests from anyone the recipient does not follow or befriend,
+  opt-in read receipts that a member sees only while sharing their own,
+  blocks that close a conversation both ways, unsend for everyone, and bodies
+  encrypted at rest bound to each message. End-to-end encryption (MLS,
+  RFC 9420) with message franking is C12.23; attachments are C12.21. The
+  messages screen states plainly that messages are not yet end-to-end
+  encrypted.
+  *(Evidence 2026-10-14: `src/modules/members/messages.ts`,
+  `src/modules/members/message-crypto.ts`, migration
+  `db/migrations/0028_member_messages.sql`, `tests/modules/member-messages.test.ts`,
+  `tests/browser/members.spec.ts`. **F04** `/messages`, `/messages/[id]` and
+  the Message link on `/@handle`. **F05** `members.startConversation`,
+  `members.conversations`, `members.conversation`, `members.sendMessage`,
+  `members.answerRequest`, `members.leaveConversation`,
+  `members.muteConversation`, `members.unsendMessage`,
+  `members.unreadConversations`. **F07** participants only; requests cannot
+  be replied to until accepted and leak no read state; blocks close direct
+  conversations; bodies sealed with AES-256-GCM bound to the message id and
+  overwritten on unsend; rate limits. **F09** notifications for new messages
+  ride core delivery and stay quiet for requests and muted conversations.
+  **F12** the browser journey sends a request from a profile, accepts it,
+  replies, and unsends. Changeset `member-messages.md`.)*
+- [x] **C12.07** Build private WebRTC voice and video calls between two
+  members: peer to peer, with media encrypted between the devices by WebRTC;
+  the server relays only signalling, which it deletes once read and when the
+  call ends; short-lived credentials for the site's own TURN relay (coturn
+  `use-auth-secret`), with no third-party server by default; calls only from
+  people the callee follows or befriended, or whose message request they
+  accepted; one call at a time; unanswered calls become missed-call
+  notifications; nothing is recorded. Group calls are C12.24.
+  *(Evidence 2026-10-14: `src/modules/members/calls.ts`, migration
+  `db/migrations/0029_member_calls.sql`, `tests/modules/member-calls.test.ts`,
+  `tests/browser/member-calls.spec.ts`. **F04** `/call/[id]`, voice and video
+  buttons on `/@handle`, and the incoming-call bar on every public page.
+  **F05** `members.startCall` on HTTP, the SDK and MCP; the live-call
+  services are HTTP and SDK only (`mcpExclude`), because an agent cannot hold
+  a microphone. **F07** connection-gated ringing, block refusal, participant-
+  only signalling, signals deleted on read and on hang-up, rate limits.
+  **F09** missed calls notify through core delivery; `TURN_URLS`,
+  `TURN_SECRET` and `STUN_URLS` in `src/core/env.ts`. **F12** two real
+  Chromium contexts with fake devices ring, answer, connect peer to peer,
+  mute and hang up. Changeset `member-calls.md`.)*
 - [ ] **C12.08** Build the member marketplace: members list physical goods,
   services (bookable through the scheduling engine), digital goods and rentals
   on the existing catalog with seller ownership, with categories, search, and
@@ -10320,8 +10403,22 @@ whatever is best for the people using the site.
   prohibited-items policy, adult content that is opt-in and never shown to
   minors, known-abuse-image hash matching with a legal reporting path, and an
   audit trail for every moderation action.
-- [ ] **C12.13** Build member notifications: in-app, web push and email
-  digests, with per-type controls and quiet hours chosen by the member.
+- [x] **C12.13** Build member notifications: in-app and email (immediate,
+  daily or weekly digest, or off) for follows, friend requests, mentions,
+  tags, comments, replies and reactions, with per-type controls chosen by the
+  member, email defaulting to a digest, reactions folded into one entry per
+  post, and silence from anyone blocked or muted. Web push and quiet hours are
+  C12.22.
+  *(Evidence 2026-10-14: `src/modules/members/notify.ts`, member topics in
+  `src/core/notifications/service.ts`, `tests/modules/member-notifications.test.ts`,
+  `tests/browser/members.spec.ts`. **F04** `/portal/notifications`. **F05**
+  core `notifications.list`, `notifications.markAllRead`,
+  `notifications.preferences` and `notifications.updatePreference` cover the
+  member topics. **F07** no self-notifications; blocked or muted senders and
+  inactive recipients are skipped; idempotency keys stop duplicates. **F09**
+  delivery, digests and retries ride the core notification outbox. **F12** the
+  browser journey sees follow and friend requests in notifications and
+  changes a topic's email setting. Changeset `member-notifications.md`.)*
 - [ ] **C12.14** Expose every member capability through the service layer to
   HTTP, SDK and MCP, and let members issue scoped, expiring keys so their own
   agents act as them, never beyond the member's own permissions.
@@ -10338,6 +10435,26 @@ whatever is best for the people using the site.
   report reaches moderation; plus a load test of feeds and messaging.
 - [ ] **C12.18** Offer opt-in ActivityPub federation so members can follow
   and be followed across the fediverse and take their audience elsewhere.
+- [ ] **C12.19** Offer members passkey-first sign-in: enrol a passkey after
+  the email proof, sign in with it on return, manage passkeys from the portal,
+  and keep email proof as the recovery path.
+- [ ] **C12.20** Give member profiles an avatar and optional profile
+  sections (for example portfolio, services, pinned posts), each with its own
+  visibility.
+- [ ] **C12.21** Let members attach images and video to posts, comments and messages,
+  with alt text, safe processing, and the post's visibility applied to every
+  file.
+- [ ] **C12.22** Add web push for member notifications (standard Web Push
+  with the site's own keys, no third-party service) and member-chosen quiet
+  hours that hold push and email until they end.
+- [ ] **C12.23** Make member messages end-to-end encrypted by default with
+  MLS (RFC 9420): keys only on members' devices, multi-device support,
+  history the server cannot read, and message franking so a recipient can
+  report exactly the messages they choose to moderation.
+- [ ] **C12.24** Add group voice and video calls through a self-hostable
+  open-source SFU adapter (LiveKit first), with end-to-end media encryption
+  (SFrame) so the SFU forwards media it cannot decrypt, and the same
+  who-may-call rules as one-to-one calls.
 
 ---
 
