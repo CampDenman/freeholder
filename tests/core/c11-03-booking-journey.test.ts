@@ -64,10 +64,23 @@ import {
 import { invoices } from "@/modules/invoicing/schema";
 import { ANONYMOUS, closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
-const DAY = "2026-10-14";
-const TEN = "2026-10-14T10:00:00.000Z";
-const FOUR = "2026-10-14T16:00:00.000Z";
-const FIVE = "2026-10-14T17:00:00.000Z";
+/** A UTC date (YYYY-MM-DD) on `weekday` (0 = Sunday) at least `minDays` ahead.
+ * Fixed calendar dates rot: once they pass, availability and feeds go empty. */
+function futureWeekday(weekday: number, minDays = 21): string {
+  const day = new Date(Date.now() + minDays * 86_400_000);
+  day.setUTCDate(day.getUTCDate() + ((weekday - day.getUTCDay() + 7) % 7));
+  return day.toISOString().slice(0, 10);
+}
+function addDays(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T00:00:00.000Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+const DAY = futureWeekday(3);
+const TEN = `${DAY}T10:00:00.000Z`;
+const FOUR = `${DAY}T16:00:00.000Z`;
+const FIVE = `${DAY}T17:00:00.000Z`;
+const EVENT_DAY = addDays(DAY, -13);
+const HIRE_END = addDays(DAY, 3);
 
 describe.runIf(hasDatabase)("C11.03 discovery to loyalty", { timeout: 90_000 }, () => {
   beforeEach(async () => {
@@ -184,8 +197,8 @@ describe.runIf(hasDatabase)("C11.03 discovery to loyalty", { timeout: 90_000 }, 
     const session = await addEventSession.call(
       {
         eventId: event.id,
-        startsAt: new Date("2026-10-01T17:00:00Z"),
-        endsAt: new Date("2026-10-01T19:00:00Z"),
+        startsAt: new Date(`${EVENT_DAY}T17:00:00Z`),
+        endsAt: new Date(`${EVENT_DAY}T19:00:00Z`),
         timezone: "America/Vancouver",
         capacity: 1,
         waitlistEnabled: true,
@@ -234,8 +247,8 @@ describe.runIf(hasDatabase)("C11.03 discovery to loyalty", { timeout: 90_000 }, 
     const hireQuote = await quoteHire.call(
       {
         variantId: variant.id,
-        startsAt: "2026-10-14T09:00:00.000Z",
-        endsAt: "2026-10-17T09:00:00.000Z",
+        startsAt: `${DAY}T09:00:00.000Z`,
+        endsAt: `${HIRE_END}T09:00:00.000Z`,
         currency: "CAD",
       },
       ANONYMOUS,
@@ -246,8 +259,8 @@ describe.runIf(hasDatabase)("C11.03 discovery to loyalty", { timeout: 90_000 }, 
       {
         variantId: variant.id,
         contact: { email: "rae-c11@example.test", name: "Rae Lane" },
-        startsAt: "2026-10-14T09:00:00.000Z",
-        endsAt: "2026-10-17T09:00:00.000Z",
+        startsAt: `${DAY}T09:00:00.000Z`,
+        endsAt: `${HIRE_END}T09:00:00.000Z`,
         currency: "CAD",
       },
       ANONYMOUS,
