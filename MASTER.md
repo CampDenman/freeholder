@@ -4955,6 +4955,11 @@ deployments are portable, testable and incapable of silently forking the truth.
   forbidden-operation refusal, and Lovable runtime credential isolation where
   used. This remains open until those two actual platform launches are run;
   local browser/CLI evidence is not a substitute.
+- [ ] **C3.29** Keep living screenshots of every screen: each change to `main`
+  and each release captures every public, admin and portal route over the demo
+  business plus a signed-in customer, in light and dark at desktop and mobile
+  sizes, publishes them to the repository's `screenshots` branch, and updates
+  the gallery on freeholder.ai. Owner standing rule, 2026-10-14.
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

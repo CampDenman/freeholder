@@ -1634,6 +1634,21 @@ v2.
 - **F11** — `deploy/agent-launch.md`: `MASTER.md` §43 C3.28 remains unchecked until both launches and their evidence are complete.
 - **F12** — `deploy/agent-launch.md`: Pending — execute the end-to-end scenarios in `deploy/agent-launch.md` with the owner. No live platform success is claimed by this implementation.
 
+
+## C3.29 — Keep living screenshots of every screen
+
+- **F01** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+- **F02** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+- **F03** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+- **F04** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+- **F05** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+- **F06** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+- **F07** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+- **F08** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+- **F09** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+- **F10** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+- **F11** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+- **F12** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/agents-board.test.ts`.
