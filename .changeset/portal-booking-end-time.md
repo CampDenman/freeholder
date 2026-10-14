@@ -1,5 +1,4 @@
 ---
 "freeholder": patch
 ---
-
-The end time of an appointment in the customer portal now shows as a normal date and time in the appointment's time zone.
+A booking in the customer portal now shows when it ends as a readable date and time in the booking's own time zone, instead of a raw machine timestamp.
