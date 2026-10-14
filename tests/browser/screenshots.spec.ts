@@ -211,6 +211,10 @@ test.describe("living screenshots", () => {
       if (href) await visit(pattern, href);
       else skipped.push({ route: pattern, reason: "no link to a record of this kind in the demo" });
     }
+    // Public CMS pages live behind the catch-all route; capture the ones the site links to.
+    const staticPatterns = routes.filter((r) => !r.pattern.includes("[[...")).map((r) => matcher(r.pattern));
+    const cmsPages = [...hrefs].filter((h) => roleFor(h) === "public" && !seen.has(h) && !staticPatterns.some((re) => re.test(h)) && !/^\/(api|media|og|ics|feeds|go|s|share|unsubscribe)\b/.test(h));
+    for (const href of cmsPages.slice(0, 40)) await visit("/[[...slug]]", href);
     for (const context of Object.values(contexts)) await context.close();
 
     writeFileSync(join(OUT, "manifest.json"), JSON.stringify({ capturedAt: new Date().toISOString(), commit: process.env.GITHUB_SHA ?? null, shots, skipped }, null, 2));
