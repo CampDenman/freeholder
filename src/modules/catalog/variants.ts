@@ -569,7 +569,31 @@ export const setDefaultVariant = defineService({
   },
 });
 
+export const setVariantShipping = defineService({
+  name: "catalog.setVariantShipping",
+  summary: "Say whether a variant ships, and its weight, so downloads and services check out without an address.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ variantId: uuid, requiresShipping: z.boolean(), weightG: z.number().int().min(0).max(1_000_000).nullable().optional() }),
+  output: variantRow,
+  handler: async (input, ctx) => {
+    const [updated] = await ctx.tx
+      .update(productVariants)
+      .set({
+        requiresShipping: input.requiresShipping,
+        ...(input.weightG !== undefined ? { weightG: input.weightG } : {}),
+        updatedAt: sql`now()`,
+      })
+      .where(eq(productVariants.id, input.variantId))
+      .returning();
+    if (!updated) throw new ServiceError("not_found", "That variant does not exist.");
+    ctx.setSubject("product_variant", updated.id);
+    return updated;
+  },
+});
+
 export default [
+  setVariantShipping,
   listOptionTypes,
   createOptionType,
   addOptionValue,

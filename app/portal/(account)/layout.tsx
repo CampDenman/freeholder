@@ -66,6 +66,7 @@ export default async function PortalLayout({
     { path: "/portal/connections", label: t("portal.nav.connections") },
     { path: "/portal/notifications", label: t("portal.nav.notifications") },
     { path: "/portal/listings", label: t("portal.nav.listings") },
+    { path: "/portal/payouts", label: t("portal.nav.payouts") },
     { path: "/portal/profile", label: t("portal.nav.profile") },
     { path: "/portal/privacy", label: t("portal.nav.privacy") },
   ];

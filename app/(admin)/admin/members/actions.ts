@@ -10,6 +10,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { inviteMember, setMemberStatus, updateMembershipRules } from "@/modules/members/service";
 import { reviewListing } from "@/modules/members/listings";
+import { setPayoutAccountStatus, settlePayouts } from "@/modules/members/payouts";
 
 const PATH = "/admin/members";
 
@@ -70,9 +71,43 @@ export async function setMemberStatusAction(form: FormData): Promise<void> {
 }
 
 export async function saveMarketRulesAction(form: FormData): Promise<void> {
+  const model = text(form, "payoutModel");
   await run(async () =>
     updateMembershipRules.call(
-      { marketplaceEnabled: form.get("marketplaceEnabled") === "yes", listingReview: form.get("listingReview") === "yes" },
+      {
+        marketplaceEnabled: form.get("marketplaceEnabled") === "yes",
+        listingReview: form.get("listingReview") === "yes",
+        payoutModel: model === "seller_merchant" || model === "instant" ? model : "hold",
+        holdDays: Number(text(form, "holdDays")) || 14,
+        siteFeeBps: Math.round(Number(text(form, "siteFeePercent") || "0") * 100),
+        payoutAdapter: text(form, "payoutAdapter") || "manual",
+      },
+      await actor(),
+    ),
+  );
+}
+
+export async function payoutAccountAction(form: FormData): Promise<void> {
+  const status = text(form, "status");
+  await run(async () =>
+    setPayoutAccountStatus.call(
+      { userId: text(form, "userId"), status: status === "disabled" ? "disabled" : status === "pending" ? "pending" : "ready" },
+      await actor(),
+    ),
+  );
+}
+
+export async function settlePayoutsAction(form: FormData): Promise<void> {
+  const action = text(form, "action");
+  const ids = form.getAll("ids").filter((v): v is string => typeof v === "string");
+  await run(async () =>
+    settlePayouts.call(
+      {
+        ids,
+        action: action === "paid" || action === "cancel" || action === "owe" ? action : "release",
+        reference: text(form, "reference") || undefined,
+        note: text(form, "note") || undefined,
+      },
       await actor(),
     ),
   );

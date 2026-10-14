@@ -409,6 +409,7 @@ export const SERVICE_NAMES = [
   "catalog.setPriceRule",
   "catalog.setProductAttribute",
   "catalog.setProductOptionValues",
+  "catalog.setVariantShipping",
   "catalog.setVariantStockPolicy",
   "catalog.shareWishlist",
   "catalog.shipFulfillment",
@@ -994,6 +995,9 @@ export const SERVICE_NAMES = [
   "members.me",
   "members.muteConversation",
   "members.myListings",
+  "members.myPayouts",
+  "members.payoutAccount",
+  "members.payouts",
   "members.pendingListings",
   "members.pendingTags",
   "members.post",
@@ -1001,10 +1005,13 @@ export const SERVICE_NAMES = [
   "members.profile",
   "members.react",
   "members.reviewListing",
+  "members.savePayoutInstructions",
   "members.sendMessage",
+  "members.setPayoutAccountStatus",
   "members.setRelation",
   "members.setStatus",
   "members.settings",
+  "members.settlePayouts",
   "members.signal",
   "members.startCall",
   "members.startConversation",
@@ -3074,6 +3081,10 @@ export interface ServiceCatalog {
   "catalog.setProductOptionValues": {
     input: { productId: string; expectedVersion: number; optionTypeId: string; optionValueIds: string[] };
     output: { id: string; name: string; slug: string; kind: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; subtitle: string | null; description: unknown; brand: string | null; status: "draft" | "active" | "archived"; visibility: "public" | "unlisted" | "member_only"; taxCategoryId: string | null; seo: unknown; workingName: string | null; workingSubtitle: string | null; workingDescription: unknown | null; workingSeo: unknown | null; schemaType: string; publishedAt: string | null; archivedAt: string | null; version: number; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "catalog.setVariantShipping": {
+    input: { variantId: string; requiresShipping: boolean; weightG?: number | null };
+    output: { id: string; productId: string; combinationKey: string; sku: string; isDefault: boolean; status: "active" | "archived"; backorderPolicy: "refuse" | "allow_date" | "allow_silent"; expectedRestockAt: string | null; requiresShipping: boolean; weightG: number | null; lengthMm: number | null; widthMm: number | null; heightMm: number | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "catalog.setVariantStockPolicy": {
     input: { variantId: string; backorderPolicy: "refuse" | "allow_date" | "allow_silent"; expectedRestockAt?: string | null };
@@ -5415,6 +5426,18 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; createdAt: string; [key: string]: unknown }[];
   };
+  "members.myPayouts": {
+    input: Record<string, never>;
+    output: { totals: { currency: string; state: "held" | "due" | "paid" | "cancelled" | "review"; netMinor: number; [key: string]: unknown }[]; payouts: { id: string; orderId: string; sellerId: string; sellerHandle: string; currency: string; grossMinor: number; feeMinor: number; netMinor: number; state: "held" | "due" | "paid" | "cancelled" | "review"; model: "hold" | "seller_merchant" | "instant"; releaseAt: string | null; paidAt: string | null; reference: string | null; note: string | null; createdAt: string; [key: string]: unknown }[] };
+  };
+  "members.payoutAccount": {
+    input: Record<string, never>;
+    output: { adapter: string; manual: boolean; status: "none" | "pending" | "ready" | "disabled"; instructions: string | null };
+  };
+  "members.payouts": {
+    input: { state?: "held" | "due" | "paid" | "cancelled" | "review" };
+    output: { payouts: { id: string; orderId: string; sellerId: string; sellerHandle: string; currency: string; grossMinor: number; feeMinor: number; netMinor: number; state: "held" | "due" | "paid" | "cancelled" | "review"; model: "hold" | "seller_merchant" | "instant"; releaseAt: string | null; paidAt: string | null; reference: string | null; note: string | null; createdAt: string; [key: string]: unknown }[]; accounts: { userId: string; handle: string; status: "pending" | "ready" | "disabled"; instructions: string | null; [key: string]: unknown }[] };
+  };
   "members.pendingListings": {
     input: Record<string, never>;
     output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; createdAt: string; sellerHandle: string; sellerName: string; [key: string]: unknown }[];
@@ -5443,9 +5466,17 @@ export interface ServiceCatalog {
     input: { productId: string; approve: boolean; note?: string };
     output: { ok: true };
   };
+  "members.savePayoutInstructions": {
+    input: { instructions: string };
+    output: { ok: true };
+  };
   "members.sendMessage": {
     input: { conversationId: string; body: string };
     output: { id: string };
+  };
+  "members.setPayoutAccountStatus": {
+    input: { userId: string; status: "ready" | "disabled" | "pending" };
+    output: { ok: true };
   };
   "members.setRelation": {
     input: { handle: string; kind: "block" | "mute" | "restrict"; on: boolean };
@@ -5457,7 +5488,11 @@ export interface ServiceCatalog {
   };
   "members.settings": {
     input: Record<string, never>;
-    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; [key: string]: unknown };
+    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; [key: string]: unknown };
+  };
+  "members.settlePayouts": {
+    input: { ids: string[]; action: "release" | "paid" | "cancel" | "owe"; reference?: string; note?: string };
+    output: { changed: number };
   };
   "members.signal": {
     input: { callId: string; kind: "offer" | "answer" | "candidate"; payload: { type: "offer" | "answer"; sdp: string } | { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null } };
@@ -5500,8 +5535,8 @@ export interface ServiceCatalog {
     output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.updateSettings": {
-    input: { joinPolicy?: "open" | "approval" | "invite"; minimumAge?: number; marketplaceEnabled?: boolean; listingReview?: boolean };
-    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; [key: string]: unknown };
+    input: { joinPolicy?: "open" | "approval" | "invite"; minimumAge?: number; marketplaceEnabled?: boolean; listingReview?: boolean; payoutModel?: "hold" | "seller_merchant" | "instant"; holdDays?: number; siteFeeBps?: number; payoutAdapter?: string };
+    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; [key: string]: unknown };
   };
   "members.viewPost": {
     input: { id: string };
@@ -7694,6 +7729,7 @@ export interface FreeholderApi {
     setPriceRule: (input: ServiceCatalog["catalog.setPriceRule"]["input"]) => Promise<ServiceCatalog["catalog.setPriceRule"]["output"]>;
     setProductAttribute: (input: ServiceCatalog["catalog.setProductAttribute"]["input"]) => Promise<ServiceCatalog["catalog.setProductAttribute"]["output"]>;
     setProductOptionValues: (input: ServiceCatalog["catalog.setProductOptionValues"]["input"]) => Promise<ServiceCatalog["catalog.setProductOptionValues"]["output"]>;
+    setVariantShipping: (input: ServiceCatalog["catalog.setVariantShipping"]["input"]) => Promise<ServiceCatalog["catalog.setVariantShipping"]["output"]>;
     setVariantStockPolicy: (input: ServiceCatalog["catalog.setVariantStockPolicy"]["input"]) => Promise<ServiceCatalog["catalog.setVariantStockPolicy"]["output"]>;
     shareWishlist: (input?: ServiceCatalog["catalog.shareWishlist"]["input"]) => Promise<ServiceCatalog["catalog.shareWishlist"]["output"]>;
     shipFulfillment: (input: ServiceCatalog["catalog.shipFulfillment"]["input"]) => Promise<ServiceCatalog["catalog.shipFulfillment"]["output"]>;
@@ -8339,6 +8375,9 @@ export interface FreeholderApi {
     me: (input?: ServiceCatalog["members.me"]["input"]) => Promise<ServiceCatalog["members.me"]["output"]>;
     muteConversation: (input: ServiceCatalog["members.muteConversation"]["input"]) => Promise<ServiceCatalog["members.muteConversation"]["output"]>;
     myListings: (input?: ServiceCatalog["members.myListings"]["input"]) => Promise<ServiceCatalog["members.myListings"]["output"]>;
+    myPayouts: (input?: ServiceCatalog["members.myPayouts"]["input"]) => Promise<ServiceCatalog["members.myPayouts"]["output"]>;
+    payoutAccount: (input?: ServiceCatalog["members.payoutAccount"]["input"]) => Promise<ServiceCatalog["members.payoutAccount"]["output"]>;
+    payouts: (input?: ServiceCatalog["members.payouts"]["input"]) => Promise<ServiceCatalog["members.payouts"]["output"]>;
     pendingListings: (input?: ServiceCatalog["members.pendingListings"]["input"]) => Promise<ServiceCatalog["members.pendingListings"]["output"]>;
     pendingTags: (input?: ServiceCatalog["members.pendingTags"]["input"]) => Promise<ServiceCatalog["members.pendingTags"]["output"]>;
     post: (input?: ServiceCatalog["members.post"]["input"]) => Promise<ServiceCatalog["members.post"]["output"]>;
@@ -8346,10 +8385,13 @@ export interface FreeholderApi {
     profile: (input: ServiceCatalog["members.profile"]["input"]) => Promise<ServiceCatalog["members.profile"]["output"]>;
     react: (input: ServiceCatalog["members.react"]["input"]) => Promise<ServiceCatalog["members.react"]["output"]>;
     reviewListing: (input: ServiceCatalog["members.reviewListing"]["input"]) => Promise<ServiceCatalog["members.reviewListing"]["output"]>;
+    savePayoutInstructions: (input: ServiceCatalog["members.savePayoutInstructions"]["input"]) => Promise<ServiceCatalog["members.savePayoutInstructions"]["output"]>;
     sendMessage: (input: ServiceCatalog["members.sendMessage"]["input"]) => Promise<ServiceCatalog["members.sendMessage"]["output"]>;
+    setPayoutAccountStatus: (input: ServiceCatalog["members.setPayoutAccountStatus"]["input"]) => Promise<ServiceCatalog["members.setPayoutAccountStatus"]["output"]>;
     setRelation: (input: ServiceCatalog["members.setRelation"]["input"]) => Promise<ServiceCatalog["members.setRelation"]["output"]>;
     setStatus: (input: ServiceCatalog["members.setStatus"]["input"]) => Promise<ServiceCatalog["members.setStatus"]["output"]>;
     settings: (input?: ServiceCatalog["members.settings"]["input"]) => Promise<ServiceCatalog["members.settings"]["output"]>;
+    settlePayouts: (input: ServiceCatalog["members.settlePayouts"]["input"]) => Promise<ServiceCatalog["members.settlePayouts"]["output"]>;
     signal: (input: ServiceCatalog["members.signal"]["input"]) => Promise<ServiceCatalog["members.signal"]["output"]>;
     startCall: (input: ServiceCatalog["members.startCall"]["input"]) => Promise<ServiceCatalog["members.startCall"]["output"]>;
     startConversation: (input: ServiceCatalog["members.startConversation"]["input"]) => Promise<ServiceCatalog["members.startConversation"]["output"]>;

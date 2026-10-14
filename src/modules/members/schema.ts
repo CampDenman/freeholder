@@ -14,6 +14,8 @@ import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 export const MEMBER_STATUSES = ["active", "pending", "suspended"] as const;
 export const JOIN_POLICIES = ["open", "approval", "invite"] as const;
+export const PAYOUT_MODELS = ["hold", "seller_merchant", "instant"] as const;
+export const PAYOUT_STATES = ["held", "due", "paid", "cancelled", "review"] as const;
 /** Lowercase letters, digits and underscores; 3–30 characters. */
 export const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
 import { VISIBILITIES } from "./visibility";
@@ -74,12 +76,25 @@ export const memberSettings = pgTable(
     marketplaceEnabled: boolean("marketplace_enabled").notNull().default(false),
     /** New listings wait for the site's review before they are public. */
     listingReview: boolean("listing_review").notNull().default(true),
+    /**
+     * §44.8, owner decision 2026-10-14: hold funds until delivery by default;
+     * `seller_merchant` sends charges straight to sellers; `instant` pays at once.
+     */
+    payoutModel: text("payout_model", { enum: PAYOUT_MODELS }).notNull().default("hold"),
+    holdDays: integer("hold_days").notNull().default(14),
+    /** The site's cut of each member sale, in basis points. Zero by default. */
+    siteFeeBps: integer("site_fee_bps").notNull().default(0),
+    /** Which marketplace payout adapter moves money to sellers. */
+    payoutAdapter: text("payout_adapter").notNull().default("manual"),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
     check("member_settings_singleton", sql`${t.id} = 1`),
     check("member_settings_join_policy_valid", sql`${t.joinPolicy} in ('open','approval','invite')`),
     check("member_settings_minimum_age_range", sql`${t.minimumAge} between 13 and 21`),
+    check("member_settings_payout_model_valid", sql`${t.payoutModel} in ('hold','seller_merchant','instant')`),
+    check("member_settings_hold_days_range", sql`${t.holdDays} between 1 and 90`),
+    check("member_settings_site_fee_range", sql`${t.siteFeeBps} between 0 and 5000`),
   ],
 );
 
@@ -360,5 +375,53 @@ export const memberListings = pgTable(
     index("member_listings_seller_idx").on(t.sellerId, t.createdAt),
     index("member_listings_review_idx").on(t.review, t.createdAt),
     check("member_listings_review_valid", sql`${t.review} in ('pending','approved','rejected')`),
+  ],
+);
+
+/**
+ * §44.8: how the site pays one seller. For the manual adapter the seller
+ * gives instructions (sealed at rest) and the site marks the account ready;
+ * provider adapters (C12.26, C12.27) keep the provider's account id here.
+ */
+export const memberPayoutAccounts = pgTable(
+  "member_payout_accounts",
+  {
+    userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+    adapter: text("adapter").notNull(),
+    status: text("status", { enum: ["pending", "ready", "disabled"] }).notNull().default("pending"),
+    instructionsSealed: text("instructions_sealed"),
+    externalAccountId: text("external_account_id"),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [check("member_payout_accounts_status_valid", sql`${t.status} in ('pending','ready','disabled')`)],
+);
+
+/** §44.8: what the site owes each seller for each order line. */
+export const memberPayouts = pgTable(
+  "member_payouts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id").notNull(),
+    orderItemId: uuid("order_item_id").notNull(),
+    sellerId: uuid("seller_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+    currency: text("currency").notNull(),
+    grossMinor: integer("gross_minor").notNull(),
+    feeMinor: integer("fee_minor").notNull(),
+    netMinor: integer("net_minor").notNull(),
+    state: text("state", { enum: PAYOUT_STATES }).notNull(),
+    model: text("model", { enum: PAYOUT_MODELS }).notNull(),
+    releaseAt: timestamp("release_at", { withTimezone: true }),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    reference: text("reference"),
+    note: text("note"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("member_payouts_order_item_idx").on(t.orderItemId),
+    index("member_payouts_seller_idx").on(t.sellerId, t.state),
+    index("member_payouts_release_idx").on(t.state, t.releaseAt),
+    check("member_payouts_state_valid", sql`${t.state} in ('held','due','paid','cancelled','review')`),
+    check("member_payouts_amounts", sql`${t.feeMinor} >= 0 and ${t.netMinor} = ${t.grossMinor} - ${t.feeMinor}`),
   ],
 );

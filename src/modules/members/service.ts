@@ -19,6 +19,7 @@ import {
   HANDLE_PATTERN,
   JOIN_POLICIES,
   MEMBER_STATUSES,
+  PAYOUT_MODELS,
   VISIBILITIES,
   memberInvitations,
   memberProfiles,
@@ -29,6 +30,8 @@ import postServices from "./posts";
 import messageServices from "./messages";
 import callServices from "./calls";
 import listingServices from "./listings";
+import payoutServices, { payoutAdapters } from "./payouts";
+export { onOrderPaid, onRefundSucceeded } from "./payouts";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
 const RESERVED = new Set([
@@ -68,6 +71,10 @@ const settings = row({
   minimumAge: z.number().int(),
   marketplaceEnabled: z.boolean(),
   listingReview: z.boolean(),
+  payoutModel: z.enum(PAYOUT_MODELS),
+  holdDays: z.number().int(),
+  siteFeeBps: z.number().int(),
+  payoutAdapter: z.string(),
 });
 
 function signedInUser(actor: Actor): string {
@@ -82,6 +89,10 @@ async function readSettings(ctx: ServiceContext) {
     minimumAge: found?.minimumAge ?? 16,
     marketplaceEnabled: found?.marketplaceEnabled ?? false,
     listingReview: found?.listingReview ?? true,
+    payoutModel: found?.payoutModel ?? "hold",
+    holdDays: found?.holdDays ?? 14,
+    siteFeeBps: found?.siteFeeBps ?? 0,
+    payoutAdapter: found?.payoutAdapter ?? "manual",
   };
 }
 
@@ -135,10 +146,19 @@ export const updateMembershipRules = defineService({
     minimumAge: z.number().int().min(13).max(21).optional(),
     marketplaceEnabled: z.boolean().optional(),
     listingReview: z.boolean().optional(),
+    payoutModel: z.enum(PAYOUT_MODELS).optional(),
+    holdDays: z.number().int().min(1).max(90).optional(),
+    siteFeeBps: z.number().int().min(0).max(5000).optional(),
+    payoutAdapter: z.string().trim().min(1).max(60).optional(),
   }),
   output: settings,
   handler: async (input, ctx) => {
     const next = { ...(await readSettings(ctx)), ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)) };
+    const adapter = payoutAdapters().find((a) => a.id === next.payoutAdapter);
+    if (!adapter) throw new ServiceError("validation", "That payout provider is not installed.");
+    if (!adapter.models.includes(next.payoutModel)) {
+      throw new ServiceError("validation", "That payout provider cannot run the chosen payout model.");
+    }
     await ctx.tx
       .insert(memberSettings)
       .values({ id: 1, ...next })
@@ -409,6 +429,7 @@ export default [
   ...messageServices,
   ...callServices,
   ...listingServices,
+  ...payoutServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

@@ -4477,21 +4477,20 @@ v2.
 - **F10** — N/A — demo listings arrive with the starter seed in C12.16 (`deploy/members-platform.md`).
 - **F11** — `deploy/members-platform.md` and `.changeset/member-listings.md`.
 - **F12** — `tests/browser/members.spec.ts`: list, review, approve, browse the market and shop, and confirm the listing cannot be added to a cart.
-## C12.09 — Build multi-seller checkout and payouts: a cart across
+## C12.09 — Build multi-seller checkout and payouts
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-
+- **F01** — `db/migrations/0031_member_payouts.sql`: payout model, hold days, site fee and adapter settings; seller payout accounts; the per-line payout ledger with amount and state checks.
+- **F02** — `tests/modules/member-payouts.test.ts`: gate refusals, ledger recording, release, payment, refund reversal, and model/provider validation.
+- **F03** — N/A — the buyer is resolved through `contacts.resolve` by the existing checkout; sellers are members linked in C12.01 (`tests/modules/members.test.ts`).
+- **F04** — `tests/browser/members.spec.ts`: `/portal/payouts` and the payout sections of `/admin/members`.
+- **F05** — `packages/sdk/src/generated.ts`: the payout services on HTTP, the SDK and MCP.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/portal/payouts`; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-payouts.test.ts`: seller gate, sealed payout details reconfirmed on change, model/provider compatibility, refunds after payout sent to review.
+- **F08** — `tests/modules/member-payouts.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — `src/modules/members/jobs.ts`: `members.releaseDuePayouts` every 15 minutes; idempotent ledger rows from `catalog.orderPaid` and `refund.succeeded`.
+- **F10** — N/A — demo sales and payouts arrive with the starter seed in C12.16 (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-payouts.md`.
+- **F12** — `tests/modules/member-payouts.test.ts` buys from two sellers through checkout and settlement; `tests/browser/members.spec.ts` turns a listing buyable by confirming payout details.
 ## C12.10 — Build buyer protection: order conversations, delivery
 
 - **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
@@ -4717,6 +4716,36 @@ v2.
 - **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
 
 ## C12.25 — Let members offer bookable services on their own calendar
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+
+## C12.26 — Implement the Stripe Connect marketplace adapter for all three payout models
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+
+## C12.27 — Add marketplace payout adapters for providers other than Stripe
 
 - **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
 - **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
