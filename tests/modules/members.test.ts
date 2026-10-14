@@ -43,7 +43,7 @@ describe.runIf(hasDatabase)("members (C12.01)", () => {
   afterAll(closeDb);
 
   it("lets a signed-in person join an open site and links them to the spine", async () => {
-    expect(await membershipRules.call({}, ANONYMOUS)).toEqual({ joinPolicy: "open", minimumAge: 16 });
+    expect(await membershipRules.call({}, ANONYMOUS)).toMatchObject({ joinPolicy: "open", minimumAge: 16, marketplaceEnabled: false });
     expect((await handleAvailability.call({ handle: "Rae_Lane" }, ANONYMOUS)).available).toBe(true);
     const joined = await joinSite.call(join("Rae_Lane"), CUSTOMER);
     expect(joined).toMatchObject({ handle: "rae_lane", displayName: "Rae Lane", status: "active", isAdult: true });
