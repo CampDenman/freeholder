@@ -27,7 +27,8 @@ async function shoot(page: Page, name: string) {
     for (const size of SIZES) {
       await page.setViewportSize({ width: size.width, height: size.height });
       await page.reload();
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("load");
+      await page.waitForTimeout(400);
       await page.screenshot({ path: `${OUT}/${name}--${size.name}--${theme}.png`, fullPage: true });
     }
   }
