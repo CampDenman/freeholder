@@ -24,8 +24,16 @@ import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const SERVICE = "00000000-0000-4000-8000-000000000a01";
 const ACCOUNT = "00000000-0000-4000-8000-000000000a02";
-const MONDAY = "2026-09-14";
-const NOW = new Date("2026-09-01T00:00:00.000Z");
+/** A UTC date (YYYY-MM-DD) on `weekday` (0 = Sunday) at least `minDays` ahead.
+ * Fixed calendar dates rot: once they pass, availability and feeds go empty. */
+function futureWeekday(weekday: number, minDays = 21): string {
+  const day = new Date(Date.now() + minDays * 86_400_000);
+  day.setUTCDate(day.getUTCDate() + ((weekday - day.getUTCDay() + 7) % 7));
+  return day.toISOString().slice(0, 10);
+}
+
+const MONDAY = futureWeekday(1);
+const NOW = new Date(Date.parse(`${MONDAY}T00:00:00.000Z`) - 13 * 86_400_000);
 
 describe("RFC 5545, the parts we emit", () => {
   it("folds on octets rather than characters", () => {
