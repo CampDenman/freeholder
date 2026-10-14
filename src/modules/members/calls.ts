@@ -114,7 +114,14 @@ async function shape(ctx: ServiceContext, call: typeof memberCalls.$inferSelect,
   };
 }
 
-/** Short-lived TURN credentials in the coturn `use-auth-secret` scheme. */
+/**
+ * Short-lived TURN credentials in the coturn `use-auth-secret` scheme.
+ *
+ * HMAC-SHA1 is fixed by that scheme (the TURN REST API every TURN server
+ * implements), not chosen here. As a MAC keyed with the site's secret it is
+ * not weakened by SHA-1's collision attacks, and the credential expires in
+ * an hour. The username is a timestamp and a member id, not a secret.
+ */
 export function relayCredentials(userId: string, now = Date.now()) {
   const secret = env().TURN_SECRET;
   const urls = (env().TURN_URLS ?? "").split(",").map((u) => u.trim()).filter(Boolean);
