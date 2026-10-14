@@ -6,6 +6,7 @@
 // and `canSee`, so a block, a private account or a field's visibility is
 // enforced in one place rather than remembered by each screen. Blocking is
 // symmetric for visibility: neither side can see or reach the other.
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { listed, okResult, row } from "@/core/contract";
@@ -19,6 +20,7 @@ import {
   memberRelations,
   type Visibility,
 } from "./schema";
+import { notifyMember } from "./notify";
 
 export type Relation = {
   self: boolean;
@@ -242,6 +244,14 @@ export const followMember = defineService({
       .returning();
     ctx.setSubject("member", target.userId);
     ctx.queueEvent(saved!.status === "active" ? "member.followed" : "member.followRequested", { followerId: self.userId, followeeId: target.userId });
+    await notifyMember(ctx, {
+      to: target.userId,
+      from: self.userId,
+      topic: "members.follow",
+      key: saved!.status === "active" ? "members.notify.followed" : "members.notify.followRequest",
+      href: saved!.status === "active" ? `/@${self.handle}` : "/portal/connections",
+      idempotencyKey: `member-follow:${randomUUID()}`,
+    });
     return { following: saved!.status };
   },
 });
@@ -283,6 +293,15 @@ export const answerFollowRequest = defineService({
       const [updated] = await ctx.tx.update(memberFollows).set({ status: "active" }).where(where).returning();
       if (!updated) throw new ServiceError("not_found", "There is no request from that member.");
       ctx.queueEvent("member.followed", { followerId: follower.userId, followeeId: userId });
+      const [me] = await ctx.tx.select({ handle: memberProfiles.handle }).from(memberProfiles).where(eq(memberProfiles.userId, userId));
+      await notifyMember(ctx, {
+        to: follower.userId,
+        from: userId,
+        topic: "members.follow",
+        key: "members.notify.followApproved",
+        href: `/@${me?.handle ?? ""}`,
+        idempotencyKey: `member-follow-approved:${randomUUID()}`,
+      });
     } else {
       await ctx.tx.delete(memberFollows).where(where);
     }
@@ -310,6 +329,14 @@ export const befriendMember = defineService({
         .set({ status: "accepted", acceptedAt: new Date() })
         .where(and(eq(memberFriendships.lowId, low), eq(memberFriendships.highId, high)));
       ctx.queueEvent("member.friended", { userIds: [low, high] });
+      await notifyMember(ctx, {
+        to: target.userId,
+        from: self.userId,
+        topic: "members.friend",
+        key: "members.notify.friendAccepted",
+        href: `/@${self.handle}`,
+        idempotencyKey: `member-friend-accepted:${randomUUID()}`,
+      });
       return { friend: "friends" as const };
     }
     await ctx.tx
@@ -317,6 +344,14 @@ export const befriendMember = defineService({
       .values({ lowId: low, highId: high, requestedBy: self.userId, status: "pending" })
       .onConflictDoNothing();
     ctx.queueEvent("member.friendRequested", { from: self.userId, to: target.userId });
+    await notifyMember(ctx, {
+      to: target.userId,
+      from: self.userId,
+      topic: "members.friend",
+      key: "members.notify.friendRequest",
+      href: "/portal/connections",
+      idempotencyKey: `member-friend-request:${randomUUID()}`,
+    });
     return { friend: "you_asked" as const };
   },
 });

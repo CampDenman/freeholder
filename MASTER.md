@@ -10369,8 +10369,22 @@ whatever is best for the people using the site.
   prohibited-items policy, adult content that is opt-in and never shown to
   minors, known-abuse-image hash matching with a legal reporting path, and an
   audit trail for every moderation action.
-- [ ] **C12.13** Build member notifications: in-app, web push and email
-  digests, with per-type controls and quiet hours chosen by the member.
+- [x] **C12.13** Build member notifications: in-app and email (immediate,
+  daily or weekly digest, or off) for follows, friend requests, mentions,
+  tags, comments, replies and reactions, with per-type controls chosen by the
+  member, email defaulting to a digest, reactions folded into one entry per
+  post, and silence from anyone blocked or muted. Web push and quiet hours are
+  C12.22.
+  *(Evidence 2026-10-14: `src/modules/members/notify.ts`, member topics in
+  `src/core/notifications/service.ts`, `tests/modules/member-notifications.test.ts`,
+  `tests/browser/members.spec.ts`. **F04** `/portal/notifications`. **F05**
+  core `notifications.list`, `notifications.markAllRead`,
+  `notifications.preferences` and `notifications.updatePreference` cover the
+  member topics. **F07** no self-notifications; blocked or muted senders and
+  inactive recipients are skipped; idempotency keys stop duplicates. **F09**
+  delivery, digests and retries ride the core notification outbox. **F12** the
+  browser journey sees follow and friend requests in notifications and
+  changes a topic's email setting. Changeset `member-notifications.md`.)*
 - [ ] **C12.14** Expose every member capability through the service layer to
   HTTP, SDK and MCP, and let members issue scoped, expiring keys so their own
   agents act as them, never beyond the member's own permissions.
@@ -10396,6 +10410,9 @@ whatever is best for the people using the site.
 - [ ] **C12.21** Let members attach images and video to posts and comments,
   with alt text, safe processing, and the post's visibility applied to every
   file.
+- [ ] **C12.22** Add web push for member notifications (standard Web Push
+  with the site's own keys, no third-party service) and member-chosen quiet
+  hours that hold push and email until they end.
 
 ---
 

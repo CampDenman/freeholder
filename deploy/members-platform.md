@@ -47,3 +47,14 @@ from mocked payment, mail or media runs alone.
   in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
 - Not yet: media attachments (C12.21); notifications for mentions, comments
   and reactions (C12.13; events are already queued).
+
+## C12.13 — member notifications (2026-10-14)
+
+- `src/modules/members/notify.ts` decides whether one member hears about
+  another; core notifications deliver. Member topics: `members.follow`,
+  `members.friend`, `members.mention`, `members.comment`, `members.reaction`.
+- Screen: `/portal/notifications` (recent items, mark all read, per-topic
+  in-app and email settings).
+- Tests: `tests/modules/member-notifications.test.ts` (2 cases) and the
+  notifications steps in `tests/browser/members.spec.ts`. Passed locally.
+- Not yet: web push and quiet hours (C12.22).

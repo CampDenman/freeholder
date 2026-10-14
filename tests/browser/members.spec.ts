@@ -115,6 +115,13 @@ test.describe("members (C12.01)", () => {
     const raeContext = await browser.newContext({ baseURL: C11_BASE_URL });
     await raeContext.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
     const raePage = await raeContext.newPage();
+    await raePage.goto("/portal/notifications");
+    await expect(raePage.getByRole("link", { name: "Sam Ito asked to follow you" })).toBeVisible();
+    await expect(raePage.getByRole("link", { name: "Sam Ito sent you a friend request" })).toBeVisible();
+    await axeInBothThemes(raePage);
+    await raePage.getByLabel("By email").first().selectOption("off");
+    await raePage.getByRole("button", { name: "Save settings" }).click();
+    await expect(raePage.getByText("Your notification settings are saved.")).toBeVisible();
     await raePage.goto("/portal/connections");
     await expect(raePage.getByRole("heading", { level: 1, name: "Connections" })).toBeVisible();
     await axeInBothThemes(raePage);

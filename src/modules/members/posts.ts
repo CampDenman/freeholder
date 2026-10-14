@@ -10,11 +10,13 @@
 // Every read reuses `relationBetween`/`canSee` semantics from graph.ts. The
 // feed query restates them in SQL so a page of posts is one query; the test
 // suite holds the two to the same answers.
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Actor, type ServiceContext } from "@/core/service";
 import { canSee, relationBetween, type Relation } from "./graph";
+import { notifyMember } from "./notify";
 import {
   REACTIONS,
   VISIBILITIES,
@@ -88,6 +90,9 @@ async function writeDerived(ctx: ServiceContext, postId: string, authorId: strin
       .insert(memberMentions)
       .values(mentioned.map((userId) => ({ postId, userId, kind: "mention" as const, status: "approved" as const })));
     ctx.queueEvent("member.mentioned", { postId, userIds: mentioned });
+    for (const to of mentioned) {
+      await notifyMember(ctx, { to, from: authorId, topic: "members.mention", key: "members.notify.mentioned", href: `/p/${postId}`, idempotencyKey: `member-mention:${postId}:${to}:${randomUUID()}` });
+    }
   }
   const people = await reachableHandles(ctx, authorId, tagged);
   if (people.length) {
@@ -95,6 +100,9 @@ async function writeDerived(ctx: ServiceContext, postId: string, authorId: strin
       .insert(memberMentions)
       .values(people.map((userId) => ({ postId, userId, kind: "tag" as const, status: "pending" as const })));
     ctx.queueEvent("member.tagged", { postId, userIds: people });
+    for (const to of people) {
+      await notifyMember(ctx, { to, from: authorId, topic: "members.mention", key: "members.notify.tagged", href: "/feed", idempotencyKey: `member-tag:${postId}:${to}` });
+    }
   }
 }
 
@@ -438,12 +446,14 @@ export const commentOnPost = defineService({
     const me = await activeAuthor(ctx);
     const { post, relation } = await visiblePost(ctx, me.userId, input.postId);
     if (relation.blocked) throw new ServiceError("not_found", "That post is not available.");
+    let parentAuthor: string | null = null;
     if (input.parentId) {
       const [parent] = await ctx.tx
-        .select({ id: memberComments.id })
+        .select({ id: memberComments.id, authorId: memberComments.authorId })
         .from(memberComments)
         .where(and(eq(memberComments.id, input.parentId), eq(memberComments.postId, post.id), isNull(memberComments.deletedAt)));
       if (!parent) throw new ServiceError("not_found", "That comment is not available.");
+      parentAuthor = parent.authorId;
     }
     const [created] = await ctx.tx
       .insert(memberComments)
@@ -457,6 +467,14 @@ export const commentOnPost = defineService({
     }
     ctx.setSubject("member_post", post.id);
     ctx.queueEvent("member.commented", { postId: post.id, commentId: created!.id, authorId: me.userId, postAuthorId: post.authorId });
+    const href = `/p/${post.id}`;
+    await notifyMember(ctx, { to: post.authorId, from: me.userId, topic: "members.comment", key: "members.notify.commented", href, idempotencyKey: `member-comment:${created!.id}:author` });
+    if (parentAuthor && parentAuthor !== post.authorId) {
+      await notifyMember(ctx, { to: parentAuthor, from: me.userId, topic: "members.comment", key: "members.notify.replied", href, idempotencyKey: `member-comment:${created!.id}:parent` });
+    }
+    for (const to of mentioned) {
+      await notifyMember(ctx, { to, from: me.userId, topic: "members.mention", key: "members.notify.mentioned", href, idempotencyKey: `member-comment:${created!.id}:mention:${to}` });
+    }
     const [restriction] = await ctx.tx
       .select()
       .from(memberRelations)
@@ -515,6 +533,16 @@ export const reactToPost = defineService({
         .values({ postId: input.postId, userId: me.userId, kind: input.kind })
         .onConflictDoUpdate({ target: [memberReactions.postId, memberReactions.userId], set: { kind: input.kind } });
       ctx.queueEvent("member.reacted", { postId: input.postId, userId: me.userId, kind: input.kind });
+      const [post] = await ctx.tx.select({ authorId: memberPosts.authorId }).from(memberPosts).where(eq(memberPosts.id, input.postId));
+      await notifyMember(ctx, {
+        to: post!.authorId,
+        from: me.userId,
+        topic: "members.reaction",
+        key: "members.notify.reacted",
+        href: `/p/${input.postId}`,
+        idempotencyKey: `member-reaction:${input.postId}:${me.userId}:${randomUUID()}`,
+        dedupeKey: `member-reaction:${input.postId}`,
+      });
     }
     return { ok: true as const };
   },
