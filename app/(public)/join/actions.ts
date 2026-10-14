@@ -10,6 +10,7 @@ import { localizeCustomerHref } from "@/core/i18n/customer";
 import { ServiceError } from "@/core/service";
 import { currentBusiness } from "@/core/settings/read";
 import { joinSite, updateMyMembership } from "@/modules/members/service";
+import { VISIBILITIES, type Visibility } from "@/modules/members/visibility";
 import { getLocale } from "../../i18n";
 
 function text(form: FormData, key: string): string {
@@ -20,6 +21,10 @@ function text(form: FormData, key: string): string {
 async function localized(path: string): Promise<string> {
   const [business, locale] = await Promise.all([currentBusiness(), getLocale()]);
   return business ? localizeCustomerHref(path, locale, business) : path;
+}
+
+function visibility(value: string): Visibility | undefined {
+  return (VISIBILITIES as readonly string[]).includes(value) ? (value as Visibility) : undefined;
 }
 
 function code(error: unknown): string {
@@ -55,6 +60,14 @@ export async function updateMemberProfileAction(form: FormData): Promise<void> {
         bio: text(form, "bio"),
         handle: text(form, "handle") || undefined,
         isAdult: form.get("isAdult") === "yes",
+        isPrivate: form.get("isPrivate") === "yes",
+        indexable: form.get("indexable") === "yes",
+        bioVisibility: visibility(text(form, "bioVisibility")),
+        linksVisibility: visibility(text(form, "linksVisibility")),
+        defaultPostVisibility: visibility(text(form, "defaultPostVisibility")),
+        links: [0, 1, 2]
+          .map((i) => ({ label: text(form, `linkLabel${i}`).trim(), url: text(form, `linkUrl${i}`).trim() }))
+          .filter((link) => link.label && link.url),
       },
       actor,
     );

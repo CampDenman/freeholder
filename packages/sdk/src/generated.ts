@@ -964,13 +964,21 @@ export const SERVICE_NAMES = [
   "media.upload",
   "media.uploadStatus",
   "media.usage",
+  "members.answerFollow",
+  "members.befriend",
+  "members.connections",
+  "members.follow",
   "members.handleAvailable",
   "members.invite",
   "members.join",
   "members.list",
   "members.me",
+  "members.profile",
+  "members.setRelation",
   "members.setStatus",
   "members.settings",
+  "members.unfollow",
+  "members.unfriend",
   "members.updateMe",
   "members.updateSettings",
   "messaging.checkNumbers",
@@ -5251,6 +5259,22 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { pages: number; sections: number };
   };
+  "members.answerFollow": {
+    input: { handle: string; approve: boolean };
+    output: { ok: true };
+  };
+  "members.befriend": {
+    input: { handle: string };
+    output: { friend: "you_asked" | "friends" };
+  };
+  "members.connections": {
+    input: Record<string, never>;
+    output: { followers: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; following: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; friends: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; followRequests: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; friendRequests: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; sentFollowRequests: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; sentFriendRequests: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; blocked: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; muted: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; restricted: { userId: string; handle: string; displayName: string; [key: string]: unknown }[] };
+  };
+  "members.follow": {
+    input: { handle: string };
+    output: { following: "requested" | "active" };
+  };
   "members.handleAvailable": {
     input: { handle: string };
     output: { available: boolean; reason: string | null };
@@ -5261,27 +5285,43 @@ export interface ServiceCatalog {
   };
   "members.join": {
     input: { handle: string; displayName: string; meetsMinimumAge: true; isAdult: boolean };
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; createdAt: string; [key: string]: unknown };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.list": {
     input: { status?: "active" | "pending" | "suspended"; search?: string; limit?: number; offset?: number };
-    output: { members: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; createdAt: string; email: string; statusReason: string | null; [key: string]: unknown }[]; total: number };
+    output: { members: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; createdAt: string; email: string; statusReason: string | null; [key: string]: unknown }[]; total: number };
   };
   "members.me": {
     input: Record<string, never>;
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; createdAt: string; [key: string]: unknown } | null;
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; createdAt: string; [key: string]: unknown } | null;
+  };
+  "members.profile": {
+    input: { handle: string };
+    output: { userId: string; handle: string; displayName: string; isPrivate: boolean; indexable: boolean; bio: string | null; links: { label: string; url: string }[] | null; followers: number; following: number; friends: number; relation: { self: boolean; blocked: boolean; youBlocked: boolean; following: "none" | "requested" | "active"; followsYou: boolean; friend: "none" | "you_asked" | "they_asked" | "friends"; muted: boolean; restricted: boolean; subscriber: boolean }; [key: string]: unknown };
+  };
+  "members.setRelation": {
+    input: { handle: string; kind: "block" | "mute" | "restrict"; on: boolean };
+    output: { ok: true };
   };
   "members.setStatus": {
     input: { userId: string; status: "active" | "pending" | "suspended"; reason?: string };
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; createdAt: string; [key: string]: unknown };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.settings": {
     input: Record<string, never>;
     output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; [key: string]: unknown };
   };
+  "members.unfollow": {
+    input: { handle: string };
+    output: { ok: true };
+  };
+  "members.unfriend": {
+    input: { handle: string };
+    output: { ok: true };
+  };
   "members.updateMe": {
-    input: { displayName?: string; bio?: string; handle?: string; isAdult?: boolean };
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; createdAt: string; [key: string]: unknown };
+    input: { displayName?: string; bio?: string; handle?: string; isAdult?: boolean; bioVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; linksVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; links?: { label: string; url: string }[]; isPrivate?: boolean; indexable?: boolean };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.updateSettings": {
     input: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number };
@@ -8089,13 +8129,21 @@ export interface FreeholderApi {
     usage: (input: ServiceCatalog["media.usage"]["input"]) => Promise<ServiceCatalog["media.usage"]["output"]>;
   };
   members: {
+    answerFollow: (input: ServiceCatalog["members.answerFollow"]["input"]) => Promise<ServiceCatalog["members.answerFollow"]["output"]>;
+    befriend: (input: ServiceCatalog["members.befriend"]["input"]) => Promise<ServiceCatalog["members.befriend"]["output"]>;
+    connections: (input?: ServiceCatalog["members.connections"]["input"]) => Promise<ServiceCatalog["members.connections"]["output"]>;
+    follow: (input: ServiceCatalog["members.follow"]["input"]) => Promise<ServiceCatalog["members.follow"]["output"]>;
     handleAvailable: (input: ServiceCatalog["members.handleAvailable"]["input"]) => Promise<ServiceCatalog["members.handleAvailable"]["output"]>;
     invite: (input: ServiceCatalog["members.invite"]["input"]) => Promise<ServiceCatalog["members.invite"]["output"]>;
     join: (input: ServiceCatalog["members.join"]["input"]) => Promise<ServiceCatalog["members.join"]["output"]>;
     list: (input?: ServiceCatalog["members.list"]["input"]) => Promise<ServiceCatalog["members.list"]["output"]>;
     me: (input?: ServiceCatalog["members.me"]["input"]) => Promise<ServiceCatalog["members.me"]["output"]>;
+    profile: (input: ServiceCatalog["members.profile"]["input"]) => Promise<ServiceCatalog["members.profile"]["output"]>;
+    setRelation: (input: ServiceCatalog["members.setRelation"]["input"]) => Promise<ServiceCatalog["members.setRelation"]["output"]>;
     setStatus: (input: ServiceCatalog["members.setStatus"]["input"]) => Promise<ServiceCatalog["members.setStatus"]["output"]>;
     settings: (input?: ServiceCatalog["members.settings"]["input"]) => Promise<ServiceCatalog["members.settings"]["output"]>;
+    unfollow: (input: ServiceCatalog["members.unfollow"]["input"]) => Promise<ServiceCatalog["members.unfollow"]["output"]>;
+    unfriend: (input: ServiceCatalog["members.unfriend"]["input"]) => Promise<ServiceCatalog["members.unfriend"]["output"]>;
     updateMe: (input?: ServiceCatalog["members.updateMe"]["input"]) => Promise<ServiceCatalog["members.updateMe"]["output"]>;
     updateSettings: (input: ServiceCatalog["members.updateSettings"]["input"]) => Promise<ServiceCatalog["members.updateSettings"]["output"]>;
   };

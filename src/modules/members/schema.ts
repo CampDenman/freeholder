@@ -7,7 +7,7 @@
 // someone, a member profile is something the person keeps about themselves.
 // The link to the spine is the user's own contact row (`contacts.user_id`).
 import { sql } from "drizzle-orm";
-import { boolean, check, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/core/auth/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
@@ -15,6 +15,9 @@ export const MEMBER_STATUSES = ["active", "pending", "suspended"] as const;
 export const JOIN_POLICIES = ["open", "approval", "invite"] as const;
 /** Lowercase letters, digits and underscores; 3–30 characters. */
 export const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
+import { VISIBILITIES } from "./visibility";
+export { VISIBILITIES, type Visibility } from "./visibility";
+export const RELATION_KINDS = ["block", "mute", "restrict"] as const;
 
 export const memberProfiles = pgTable(
   "member_profiles",
@@ -32,11 +35,23 @@ export const memberProfiles = pgTable(
     statusReason: text("status_reason"),
     statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
     handleChangedAt: timestamp("handle_changed_at", { withTimezone: true }),
+    /** §44.3: profile fields and defaults are the member's choice; private by default. */
+    bioVisibility: text("bio_visibility", { enum: VISIBILITIES }).notNull().default("followers"),
+    links: jsonb("links").$type<{ label: string; url: string }[]>().notNull().default([]),
+    linksVisibility: text("links_visibility", { enum: VISIBILITIES }).notNull().default("followers"),
+    defaultPostVisibility: text("default_post_visibility", { enum: VISIBILITIES }).notNull().default("followers"),
+    /** A private account approves each follower. */
+    isPrivate: boolean("is_private").notNull().default(true),
+    /** Search engines may index the profile only when the member says so. */
+    indexable: boolean("indexable").notNull().default(false),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
     uniqueIndex("member_profiles_handle_idx").on(t.handle),
+    check("member_profiles_bio_visibility_valid", sql`${t.bioVisibility} in ('public','followers','friends','subscribers','only_me')`),
+    check("member_profiles_links_visibility_valid", sql`${t.linksVisibility} in ('public','followers','friends','subscribers','only_me')`),
+    check("member_profiles_default_post_visibility_valid", sql`${t.defaultPostVisibility} in ('public','followers','friends','subscribers','only_me')`),
     index("member_profiles_status_idx").on(t.status, t.createdAt),
     check("member_profiles_handle_format", sql`${t.handle} ~ '^[a-z0-9_]{3,30}$'`),
     check("member_profiles_status_valid", sql`${t.status} in ('active','pending','suspended')`),
@@ -74,5 +89,59 @@ export const memberInvitations = pgTable(
   (t) => [
     uniqueIndex("member_invitations_email_idx").on(t.email),
     check("member_invitations_email_lower", sql`${t.email} = lower(${t.email})`),
+  ],
+);
+
+/** §44.4: one-way follows. A follow of a private account starts as a request. */
+export const memberFollows = pgTable(
+  "member_follows",
+  {
+    followerId: uuid("follower_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    followeeId: uuid("followee_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    status: text("status", { enum: ["active", "requested"] }).notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.followerId, t.followeeId] }),
+    index("member_follows_followee_idx").on(t.followeeId, t.status),
+    check("member_follows_not_self", sql`${t.followerId} <> ${t.followeeId}`),
+    check("member_follows_status_valid", sql`${t.status} in ('active','requested')`),
+  ],
+);
+
+/** §44.4: mutual friendship, stored once per pair with the lower id first. */
+export const memberFriendships = pgTable(
+  "member_friendships",
+  {
+    lowId: uuid("low_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    highId: uuid("high_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    requestedBy: uuid("requested_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+    status: text("status", { enum: ["pending", "accepted"] }).notNull(),
+    createdAt: createdAtColumn(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.lowId, t.highId] }),
+    index("member_friendships_high_idx").on(t.highId, t.status),
+    check("member_friendships_ordered", sql`${t.lowId} < ${t.highId}`),
+    check("member_friendships_status_valid", sql`${t.status} in ('pending','accepted')`),
+    check("member_friendships_requester_in_pair", sql`${t.requestedBy} in (${t.lowId}, ${t.highId})`),
+  ],
+);
+
+/** §44.4: block, mute and restrict, each private to the member who set it. */
+export const memberRelations = pgTable(
+  "member_relations",
+  {
+    ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    targetId: uuid("target_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: RELATION_KINDS }).notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.ownerId, t.targetId, t.kind] }),
+    index("member_relations_target_idx").on(t.targetId, t.kind),
+    check("member_relations_not_self", sql`${t.ownerId} <> ${t.targetId}`),
+    check("member_relations_kind_valid", sql`${t.kind} in ('block','mute','restrict')`),
   ],
 );

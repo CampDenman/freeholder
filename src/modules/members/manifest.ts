@@ -11,6 +11,15 @@ export default defineModule({
   tables: () => import("./tables"),
   services: () => import("./service"),
   events: {
-    emits: ["member.joined", "member.approved", "member.suspended", "member.reactivated"],
+    emits: [
+      "member.joined",
+      "member.approved",
+      "member.suspended",
+      "member.reactivated",
+      "member.followed",
+      "member.followRequested",
+      "member.friended",
+      "member.friendRequested",
+    ],
   },
 });

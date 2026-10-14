@@ -8,7 +8,8 @@ import { actorFromToken } from "@/core/http/actor";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { currentBusiness } from "@/core/settings/read";
 import { myMembership } from "@/modules/members/service";
-import { Button, Callout, Field, Input, Pill } from "@/ui/primitives";
+import { Button, Callout, Field, Input, Pill, Select } from "@/ui/primitives";
+import { VISIBILITIES } from "@/modules/members/visibility";
 import { getLocale, getT } from "../../../i18n";
 import { updateMemberProfileAction } from "../../../(public)/join/actions";
 
@@ -35,7 +36,7 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold">{t("members.profile.title")}</h1>
       <p className="flex items-center gap-2">
-        <span>@{me.handle}</span>
+        <a className="underline" href={`/@${me.handle}`}>@{me.handle}</a>
         <Pill>{t(`members.status.${me.status}`)}</Pill>
       </p>
       {me.status === "pending" ? <Callout>{t("members.profile.pending")}</Callout> : null}
@@ -53,10 +54,41 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
         <Field label={t("members.field.bio")} htmlFor="bio">
           <textarea id="bio" name="bio" maxLength={1000} rows={4} defaultValue={me.bio} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
         </Field>
+        <fieldset className="grid gap-2">
+          <legend className="font-medium">{t("members.field.links")}</legend>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="grid gap-2 sm:grid-cols-2">
+              <Field label={t("members.field.linkLabel", { n: i + 1 })} htmlFor={`linkLabel${i}`}>
+                <Input id={`linkLabel${i}`} name={`linkLabel${i}`} maxLength={40} defaultValue={me.links[i]?.label ?? ""} />
+              </Field>
+              <Field label={t("members.field.linkUrl", { n: i + 1 })} htmlFor={`linkUrl${i}`}>
+                <Input id={`linkUrl${i}`} name={`linkUrl${i}`} type="url" maxLength={500} defaultValue={me.links[i]?.url ?? ""} />
+              </Field>
+            </div>
+          ))}
+        </fieldset>
         <label className="flex items-start gap-2">
           <input type="checkbox" name="isAdult" value="yes" defaultChecked={me.isAdult} />
           <span>{t("members.field.isAdult")}</span>
         </label>
+        <fieldset className="grid gap-3">
+          <legend className="font-medium">{t("members.privacy.title")}</legend>
+          <label className="flex items-start gap-2">
+            <input type="checkbox" name="isPrivate" value="yes" defaultChecked={me.isPrivate} />
+            <span>{t("members.privacy.isPrivate")}</span>
+          </label>
+          <label className="flex items-start gap-2">
+            <input type="checkbox" name="indexable" value="yes" defaultChecked={me.indexable} />
+            <span>{t("members.privacy.indexable")}</span>
+          </label>
+          {(["bioVisibility", "linksVisibility", "defaultPostVisibility"] as const).map((key) => (
+            <Field key={key} label={t(`members.privacy.${key}`)} htmlFor={key}>
+              <Select id={key} name={key} defaultValue={me[key]}>
+                {VISIBILITIES.map((v) => <option key={v} value={v}>{t(`members.visibility.${v}`)}</option>)}
+              </Select>
+            </Field>
+          ))}
+        </fieldset>
         <Button type="submit">{t("members.profile.save")}</Button>
       </form>
     </div>

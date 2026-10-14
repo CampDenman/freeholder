@@ -183,6 +183,13 @@
       "when": 1793310000005,
       "tag": "0025_members",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793310000006,
+      "tag": "0026_member_graph",
+      "breakpoints": true
     }
   ]
 }

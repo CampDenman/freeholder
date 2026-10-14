@@ -20,3 +20,18 @@ from mocked payment, mail or media runs alone.
   `tests/browser/members.spec.ts` (real-browser journey with axe in both
   themes). Both passed locally against PostgreSQL 16 on 2026-10-14.
 - Not yet: passkey sign-in for members (C12.19); demo members (C12.16).
+
+## C12.02–C12.03 — profiles and the social graph (2026-10-14)
+
+- Services: `src/modules/members/graph.ts` (`members.profile`,
+  `members.follow`, `members.unfollow`, `members.answerFollow`,
+  `members.befriend`, `members.unfriend`, `members.setRelation`,
+  `members.connections`); visibility and privacy settings on `members.updateMe`.
+- Every read of one member by another goes through `relationBetween` and
+  `canSee`. Later items (posts, messages, calls) must reuse them.
+- Screens: `/@handle` (rewritten to `/m/[handle]`), `/portal/connections`,
+  privacy settings on `/portal/member`.
+- Tests: `tests/modules/member-graph.test.ts` (5 cases),
+  `tests/browser/members.spec.ts` (2 journeys). Passed locally 2026-10-14.
+- Not yet: avatars and profile sections (C12.20); subscriber visibility
+  resolves with C12.05.

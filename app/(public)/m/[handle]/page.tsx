@@ -1,0 +1,113 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// C12.02 (MASTER.md §44.3): a member's profile, as this viewer may see it.
+import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
+import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { actorFromToken } from "@/core/http/actor";
+import { ServiceError } from "@/core/service";
+import { viewProfile } from "@/modules/members/graph";
+import { myMembership } from "@/modules/members/service";
+import { Button, Callout, Pill } from "@/ui/primitives";
+import { getT } from "../../../i18n";
+import { memberGraphAction } from "../actions";
+
+export const dynamic = "force-dynamic";
+
+async function load(handle: string) {
+  const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+  try {
+    return { actor, profile: await viewProfile.call({ handle }, actor) };
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === "not_found") notFound();
+    throw error;
+  }
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
+  const { profile } = await load((await params).handle);
+  return {
+    title: `${profile.displayName} (@${profile.handle})`,
+    robots: profile.indexable ? undefined : { index: false, follow: false },
+  };
+}
+
+function Verb({ handle, verb, label, variant }: { handle: string; verb: string; label: string; variant?: "quiet" | "danger" }) {
+  return (
+    <form action={memberGraphAction}>
+      <input type="hidden" name="handle" value={handle} />
+      <input type="hidden" name="verb" value={verb} />
+      <Button type="submit" variant={variant}>{label}</Button>
+    </form>
+  );
+}
+
+export default async function MemberProfile({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ handle: string }>;
+  searchParams: Promise<{ error?: string; done?: string }>;
+}) {
+  const [{ handle }, query, t] = await Promise.all([params, searchParams, getT()]);
+  const { actor, profile } = await load(handle);
+  const viewer = actor.kind === "user" ? await myMembership.call({}, actor) : null;
+  const r = profile.relation;
+  const canAct = viewer?.status === "active" && !r.self;
+  return (
+    <div className="mx-auto grid max-w-2xl gap-6 px-6 py-12">
+      <header className="grid gap-2">
+        <h1 className="text-3xl font-semibold">{profile.displayName}</h1>
+        <p className="flex flex-wrap items-center gap-2 text-ink-muted">
+          <span>@{profile.handle}</span>
+          {profile.isPrivate ? <Pill>{t("members.profile.private")}</Pill> : null}
+          {r.followsYou ? <Pill>{t("members.graph.followsYou")}</Pill> : null}
+          {r.friend === "friends" && !r.self ? <Pill tone="success">{t("members.graph.friends")}</Pill> : null}
+        </p>
+        <p className="text-sm">
+          {t("members.graph.counts", { followers: profile.followers, following: profile.following, friends: profile.friends })}
+        </p>
+      </header>
+      {query.error ? <Callout tone="danger">{t("members.graph.failed")}</Callout> : null}
+      {r.blocked ? (
+        <Callout>{t("members.graph.youBlocked")}</Callout>
+      ) : (
+        <>
+          {profile.bio !== null ? <p className="whitespace-pre-line">{profile.bio}</p> : null}
+          {profile.links?.length ? (
+            <ul className="grid gap-1">
+              {profile.links.map((link) => (
+                <li key={link.url}><a className="underline" href={link.url} rel="nofollow noopener ugc">{link.label}</a></li>
+              ))}
+            </ul>
+          ) : null}
+          {profile.bio === null && profile.links === null && !r.self ? <p className="text-ink-muted">{t("members.profile.hidden")}</p> : null}
+        </>
+      )}
+      {r.self ? <a className="underline" href="/portal/member">{t("members.profile.edit")}</a> : null}
+      {canAct ? (
+        <div className="flex flex-wrap gap-3">
+          {r.youBlocked ? (
+            <Verb handle={profile.handle} verb="unblock" label={t("members.graph.unblock")} />
+          ) : (
+            <>
+              {r.following === "none" ? <Verb handle={profile.handle} verb="follow" label={t(profile.isPrivate ? "members.graph.requestFollow" : "members.graph.follow")} /> : null}
+              {r.following === "requested" ? <Verb handle={profile.handle} verb="unfollow" label={t("members.graph.cancelRequest")} variant="quiet" /> : null}
+              {r.following === "active" ? <Verb handle={profile.handle} verb="unfollow" label={t("members.graph.unfollow")} variant="quiet" /> : null}
+              {r.friend === "none" ? <Verb handle={profile.handle} verb="befriend" label={t("members.graph.addFriend")} /> : null}
+              {r.friend === "they_asked" ? <Verb handle={profile.handle} verb="befriend" label={t("members.graph.acceptFriend")} /> : null}
+              {r.friend === "you_asked" ? <Verb handle={profile.handle} verb="unfriend" label={t("members.graph.cancelFriend")} variant="quiet" /> : null}
+              {r.friend === "friends" ? <Verb handle={profile.handle} verb="unfriend" label={t("members.graph.unfriend")} variant="quiet" /> : null}
+              <Verb handle={profile.handle} verb={r.muted ? "unmute" : "mute"} label={t(r.muted ? "members.graph.unmute" : "members.graph.mute")} variant="quiet" />
+              <Verb handle={profile.handle} verb={r.restricted ? "unrestrict" : "restrict"} label={t(r.restricted ? "members.graph.unrestrict" : "members.graph.restrict")} variant="quiet" />
+              <Verb handle={profile.handle} verb="block" label={t("members.graph.block")} variant="danger" />
+            </>
+          )}
+        </div>
+      ) : null}
+      {!viewer && actor.kind === "user" ? <a className="underline" href="/join">{t("members.graph.joinToConnect")}</a> : null}
+      {actor.kind !== "user" ? <a className="underline" href="/join">{t("members.graph.joinToConnect")}</a> : null}
+    </div>
+  );
+}

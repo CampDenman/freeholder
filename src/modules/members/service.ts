@@ -19,10 +19,12 @@ import {
   HANDLE_PATTERN,
   JOIN_POLICIES,
   MEMBER_STATUSES,
+  VISIBILITIES,
   memberInvitations,
   memberProfiles,
   memberSettings,
 } from "./schema";
+import graphServices, { approvePendingFollowers, PROFILE_SETTINGS } from "./graph";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
 const RESERVED = new Set([
@@ -48,6 +50,12 @@ const profile = row({
   bio: z.string(),
   status: z.enum(MEMBER_STATUSES),
   isAdult: z.boolean(),
+  bioVisibility: z.enum(VISIBILITIES),
+  links: z.array(z.object({ label: z.string(), url: z.string() })),
+  linksVisibility: z.enum(VISIBILITIES),
+  defaultPostVisibility: z.enum(VISIBILITIES),
+  isPrivate: z.boolean(),
+  indexable: z.boolean(),
   createdAt: timestamp,
 });
 const settings = row({ joinPolicy: z.enum(JOIN_POLICIES), minimumAge: z.number().int() });
@@ -80,6 +88,12 @@ function shape(found: typeof memberProfiles.$inferSelect) {
     bio: found.bio,
     status: found.status,
     isAdult: found.isAdult,
+    bioVisibility: found.bioVisibility,
+    links: found.links,
+    linksVisibility: found.linksVisibility,
+    defaultPostVisibility: found.defaultPostVisibility,
+    isPrivate: found.isPrivate,
+    indexable: found.indexable,
     createdAt: found.createdAt,
   };
 }
@@ -217,6 +231,7 @@ export const updateMyMembership = defineService({
     bio: bio.optional(),
     handle: handleInput.optional(),
     isAdult: z.boolean().optional(),
+    ...PROFILE_SETTINGS,
   }),
   output: profile,
   handler: async (input, ctx) => {
@@ -226,6 +241,10 @@ export const updateMyMembership = defineService({
     const changes: Partial<typeof memberProfiles.$inferInsert> = { updatedAt: new Date() };
     if (input.displayName !== undefined) changes.displayName = input.displayName;
     if (input.bio !== undefined) changes.bio = input.bio;
+    for (const key of ["bioVisibility", "linksVisibility", "defaultPostVisibility", "links", "isPrivate", "indexable"] as const) {
+      if (input[key] !== undefined) Object.assign(changes, { [key]: input[key] });
+    }
+    if (input.isPrivate === false && found.isPrivate) await approvePendingFollowers(ctx, userId);
     if (input.isAdult !== undefined && input.isAdult !== found.isAdult) {
       changes.isAdult = input.isAdult;
       changes.ageAttestedAt = new Date();
@@ -363,6 +382,7 @@ export async function activeMember(ctx: ServiceContext, userId: string) {
 }
 
 export default [
+  ...graphServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

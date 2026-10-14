@@ -10290,13 +10290,36 @@ whatever is best for the people using the site.
   **F09** N/A — no jobs; membership state is ordinary rows in the one database.
   **F12** `tests/browser/members.spec.ts` joins, edits, approves and suspends in
   a real browser with axe in both themes. Changeset `members-join.md`.)*
-- [ ] **C12.02** Ship public member profiles at `/@handle` with bio, avatar,
-  links and profile sections. Every profile field and every published item
-  carries a visibility of public, followers, friends, subscribers or only me.
-  Members choose their defaults; search indexing of a profile is opt-in.
-- [ ] **C12.03** Build the social graph: one-way follow, mutual friend
+- [x] **C12.02** Ship public member profiles at `/@handle` with display name,
+  bio and links. Each profile field carries a visibility of public, followers,
+  friends, subscribers or only me, and each member sets a default visibility
+  for what they publish; accounts start private; search indexing of a profile
+  is opt-in. Avatars and profile sections are C12.20.
+  *(Evidence 2026-10-14: `src/modules/members/graph.ts` (`members.profile`,
+  `relationBetween`, `canSee`), migration `db/migrations/0026_member_graph.sql`,
+  `tests/modules/member-graph.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** `/@handle` and the privacy settings on `/portal/member`. **F05**
+  `members.profile` and `members.updateMe` on HTTP, SDK and MCP. **F07** every
+  field passes `canSee`; blocked viewers get not-found; profiles are noindex
+  unless the member opts in. **F09** N/A — no jobs. **F12** the browser
+  journey views a private profile anonymously, then as an approved follower.
+  Subscriber visibility resolves once C12.05 ships. Changeset `member-graph.md`.)*
+- [x] **C12.03** Build the social graph: one-way follow, mutual friend
   request/accept, private accounts that approve followers, block, mute and
   restrict. Blocking is enforced in every read path, not only in feeds.
+  *(Evidence 2026-10-14: `src/modules/members/graph.ts`,
+  `tests/modules/member-graph.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** follow, friend, mute, restrict and block on `/@handle`, and
+  `/portal/connections` for requests, followers, friends and undo. **F05**
+  `members.follow`, `members.unfollow`, `members.answerFollow`,
+  `members.befriend`, `members.unfriend`, `members.setRelation`,
+  `members.connections`. **F07** only active members reach others; blocks
+  hide both sides, refuse follows and friend requests, and end existing ties;
+  mutes and restrictions are private to the member who set them; rate limits
+  on follow and friend requests. **F09** N/A — no jobs. **F12** the browser
+  journey requests a follow and a friendship, approves both from
+  connections, and blocks. Later reads (posts, messages, calls) reuse
+  `relationBetween`. Changeset `member-graph.md`.)*
 - [ ] **C12.04** Build posts and feeds: text and media posts, threaded
   comments, reactions, mentions, hashtags, consent-gated tagging of people,
   reposts and quotes. The default home feed is chronological from people a
@@ -10352,6 +10375,9 @@ whatever is best for the people using the site.
 - [ ] **C12.19** Offer members passkey-first sign-in: enrol a passkey after
   the email proof, sign in with it on return, manage passkeys from the portal,
   and keep email proof as the recovery path.
+- [ ] **C12.20** Give member profiles an avatar and optional profile
+  sections (for example portfolio, services, pinned posts), each with its own
+  visibility.
 
 ---
 
