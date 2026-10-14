@@ -10275,10 +10275,21 @@ A site has many members who can publish, connect, message, call, buy and sell
 with each other. §44 is the normative specification. The standing default is
 whatever is best for the people using the site.
 
-- [ ] **C12.01** Make members first-class accounts: self-serve signup and
-  passkey-first sign-in, unique handles, roles (site admin, staff, member),
-  member-to-contact linking, age and adult-content gating, and the
-  site-admin controls for open, invite-only or approval-required membership.
+- [x] **C12.01** Make members first-class accounts: self-serve joining with a
+  unique handle under the site's rule (open, approval or invitation), roles
+  unchanged (site admin, staff, member), member-to-contact linking, and an age
+  attestation (meets the site's minimum age; adult or not) that later items
+  gate on, with no birthdate collected. Passkey sign-in for members is C12.19.
+  *(Evidence 2026-10-14: `src/modules/members/service.ts`, migration
+  `db/migrations/0025_members.sql`, `tests/modules/members.test.ts` and
+  `tests/browser/members.spec.ts`. **F04** `/join`, `/portal/member` and
+  `/admin/members`. **F05** `members.*` services projected to HTTP, the SDK
+  and MCP (`packages/sdk/src/generated.ts`). **F07** rate-limited joins and
+  handle checks, reserved handles, invitation-bound joins, scoped admin
+  services and suspension reasons, proven in `tests/modules/members.test.ts`.
+  **F09** N/A — no jobs; membership state is ordinary rows in the one database.
+  **F12** `tests/browser/members.spec.ts` joins, edits, approves and suspends in
+  a real browser with axe in both themes. Changeset `members-join.md`.)*
 - [ ] **C12.02** Ship public member profiles at `/@handle` with bio, avatar,
   links and profile sections. Every profile field and every published item
   carries a visibility of public, followers, friends, subscribers or only me.
@@ -10338,6 +10349,9 @@ whatever is best for the people using the site.
   report reaches moderation; plus a load test of feeds and messaging.
 - [ ] **C12.18** Offer opt-in ActivityPub federation so members can follow
   and be followed across the fediverse and take their audience elsewhere.
+- [ ] **C12.19** Offer members passkey-first sign-in: enrol a passkey after
+  the email proof, sign in with it on return, manage passkeys from the portal,
+  and keep email proof as the recovery path.
 
 ---
 

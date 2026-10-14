@@ -176,6 +176,13 @@
       "when": 1793310000004,
       "tag": "0024_broadcast_unsubscribe",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793310000005,
+      "tag": "0025_members",
+      "breakpoints": true
     }
   ]
 }

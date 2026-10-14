@@ -964,6 +964,15 @@ export const SERVICE_NAMES = [
   "media.upload",
   "media.uploadStatus",
   "media.usage",
+  "members.handleAvailable",
+  "members.invite",
+  "members.join",
+  "members.list",
+  "members.me",
+  "members.setStatus",
+  "members.settings",
+  "members.updateMe",
+  "members.updateSettings",
   "messaging.checkNumbers",
   "messaging.complianceEvents",
   "messaging.createKeywordRule",
@@ -5242,6 +5251,42 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { pages: number; sections: number };
   };
+  "members.handleAvailable": {
+    input: { handle: string };
+    output: { available: boolean; reason: string | null };
+  };
+  "members.invite": {
+    input: { email: string };
+    output: { ok: true };
+  };
+  "members.join": {
+    input: { handle: string; displayName: string; meetsMinimumAge: true; isAdult: boolean };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; createdAt: string; [key: string]: unknown };
+  };
+  "members.list": {
+    input: { status?: "active" | "pending" | "suspended"; search?: string; limit?: number; offset?: number };
+    output: { members: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; createdAt: string; email: string; statusReason: string | null; [key: string]: unknown }[]; total: number };
+  };
+  "members.me": {
+    input: Record<string, never>;
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; createdAt: string; [key: string]: unknown } | null;
+  };
+  "members.setStatus": {
+    input: { userId: string; status: "active" | "pending" | "suspended"; reason?: string };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; createdAt: string; [key: string]: unknown };
+  };
+  "members.settings": {
+    input: Record<string, never>;
+    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; [key: string]: unknown };
+  };
+  "members.updateMe": {
+    input: { displayName?: string; bio?: string; handle?: string; isAdult?: boolean };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; createdAt: string; [key: string]: unknown };
+  };
+  "members.updateSettings": {
+    input: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number };
+    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; [key: string]: unknown };
+  };
   "messaging.checkNumbers": {
     input: Record<string, never>;
     output: { checked: number; problems: number; [key: string]: unknown };
@@ -8042,6 +8087,17 @@ export interface FreeholderApi {
     upload: (input: ServiceCatalog["media.upload"]["input"]) => Promise<ServiceCatalog["media.upload"]["output"]>;
     uploadStatus: (input: ServiceCatalog["media.uploadStatus"]["input"]) => Promise<ServiceCatalog["media.uploadStatus"]["output"]>;
     usage: (input: ServiceCatalog["media.usage"]["input"]) => Promise<ServiceCatalog["media.usage"]["output"]>;
+  };
+  members: {
+    handleAvailable: (input: ServiceCatalog["members.handleAvailable"]["input"]) => Promise<ServiceCatalog["members.handleAvailable"]["output"]>;
+    invite: (input: ServiceCatalog["members.invite"]["input"]) => Promise<ServiceCatalog["members.invite"]["output"]>;
+    join: (input: ServiceCatalog["members.join"]["input"]) => Promise<ServiceCatalog["members.join"]["output"]>;
+    list: (input?: ServiceCatalog["members.list"]["input"]) => Promise<ServiceCatalog["members.list"]["output"]>;
+    me: (input?: ServiceCatalog["members.me"]["input"]) => Promise<ServiceCatalog["members.me"]["output"]>;
+    setStatus: (input: ServiceCatalog["members.setStatus"]["input"]) => Promise<ServiceCatalog["members.setStatus"]["output"]>;
+    settings: (input?: ServiceCatalog["members.settings"]["input"]) => Promise<ServiceCatalog["members.settings"]["output"]>;
+    updateMe: (input?: ServiceCatalog["members.updateMe"]["input"]) => Promise<ServiceCatalog["members.updateMe"]["output"]>;
+    updateSettings: (input: ServiceCatalog["members.updateSettings"]["input"]) => Promise<ServiceCatalog["members.updateSettings"]["output"]>;
   };
   messaging: {
     checkNumbers: (input?: ServiceCatalog["messaging.checkNumbers"]["input"]) => Promise<ServiceCatalog["messaging.checkNumbers"]["output"]>;

@@ -62,6 +62,7 @@ export default async function PortalLayout({
       .filter((room) => room.count > 0)
       .map((room) => ({ path: `/portal/${room.key}`, label: t(`portal.room.${room.key}`) })),
     { path: "/portal/registry", label: t("portal.nav.registry") },
+    { path: "/portal/member", label: t("portal.nav.member") },
     { path: "/portal/profile", label: t("portal.nav.profile") },
     { path: "/portal/privacy", label: t("portal.nav.privacy") },
   ];

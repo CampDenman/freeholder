@@ -165,6 +165,7 @@ export default async function AdminLayout({
               gifts: t("gifts.title"),
               printOnDemand: t("pod.title"),
               community: t("community.title"),
+              members: t("members.admin.title"),
               voiceVideo: t("voiceVideo.title"),
               marketplace: t("marketplace.title"),
               inbox: t("inbox.title"),
