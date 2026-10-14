@@ -1,24 +1,33 @@
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
-# Capture customer-facing screenshots (booking, payment, portal) against a
-# disposable database and publish them as a run artifact.
+# Living screenshots (MASTER.md C3.29): capture every screen of the current app
+# against a disposable database, then replace the `screenshots` branch with the
+# result. Pull requests that touch the capture itself run it without publishing.
 name: Screenshots
 
 on:
+  push:
+    branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
   pull_request:
     paths:
-      - tests/browser/customer-screenshots.spec.ts
+      - tests/browser/screenshots.spec.ts
+      - scripts/screenshots-index.mjs
       - .github/workflows/screenshots.yml
 
 permissions:
   contents: read
 
+concurrency:
+  group: screenshots-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  customer:
-    name: Customer screens
+  capture:
+    name: Capture every screen
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     services:
       postgres:
         image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
@@ -39,10 +48,37 @@ jobs:
       - uses: ./.github/actions/setup-project
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm exec playwright test tests/browser/customer-screenshots.spec.ts --config playwright.a11y.config.ts
-      - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - run: pnpm exec playwright test tests/browser/screenshots.spec.ts --config playwright.a11y.config.ts --retries 0
+      - run: node scripts/screenshots-index.mjs test-results/screenshots
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: customer-screenshots
+          name: screenshots
           path: test-results/screenshots
-          if-no-files-found: warn
+          if-no-files-found: error
+
+  publish:
+    name: Publish to the screenshots branch
+    needs: capture
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: screenshots
+          path: screenshots
+      - name: Replace the branch with this capture
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cd screenshots
+          git init -q -b screenshots
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Screenshots of ${GITHUB_SHA::12}"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" HEAD:screenshots
