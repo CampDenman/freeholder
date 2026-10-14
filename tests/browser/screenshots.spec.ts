@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { API_BASE } from "@/core/api/dispatch";
 import { db } from "@/core/db";
-import { users } from "@/core/auth/schema";
+import { users, totpFactors } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { THEME_COOKIE } from "@/core/design/theme";
@@ -20,7 +20,8 @@ import { calendars, calendarMemberships, availabilityRules } from "@/core/schedu
 import { bookingAudiences, bookingAudienceServices } from "@/core/scheduling/audience-schema";
 import { priceListEntries, priceLists, productVariants, products, serviceOfferings, priceRules } from "@/modules/catalog/schema";
 import { plans } from "@/modules/subscriptions/schema";
-import { seedC11Owner, C11_BASE_URL, C11_OWNER } from "./owner-session";
+import { C11_BASE_URL, C11_OWNER } from "./owner-session";
+import { resetBrowserDatabase } from "./database";
 
 const OUT = "test-results/screenshots";
 const MAX_HEIGHT = 6000;
@@ -94,6 +95,15 @@ async function contextFor(browser: Browser, token?: string): Promise<BrowserCont
   return context;
 }
 
+/** Owner only, then the demo install performs setup the way a new owner would. */
+async function seedOwner(): Promise<string> {
+  await resetBrowserDatabase();
+  await db().insert(users).values({ id: C11_OWNER.userId, email: "owner@example.test", role: "owner" });
+  await db().insert(totpFactors).values({ userId: C11_OWNER.userId, encryptedSecret: "screenshots-browser-fixture" });
+  const session = await db().transaction((tx) => createSession(tx, C11_OWNER.userId, { twoFactorVerified: true }));
+  return session.token;
+}
+
 async function installDemo(ownerToken: string): Promise<void> {
   const csrf = issueCsrfToken();
   const response = await fetch(`${C11_BASE_URL}${API_BASE}/demo.install`, {
@@ -136,7 +146,7 @@ test.describe("living screenshots", () => {
 
   test("every screen", async ({ browser }) => {
     mkdirSync(OUT, { recursive: true });
-    const ownerToken = await seedC11Owner("Aurora Coast Photography");
+    const ownerToken = await seedOwner();
     await installDemo(ownerToken);
     const data = await fixture();
     const contexts: Record<Role, BrowserContext> = {
