@@ -10384,10 +10384,29 @@ whatever is best for the people using the site.
   `TURN_SECRET` and `STUN_URLS` in `src/core/env.ts`. **F12** two real
   Chromium contexts with fake devices ring, answer, connect peer to peer,
   mute and hang up. Changeset `member-calls.md`.)*
-- [ ] **C12.08** Build the member marketplace: members list physical goods,
-  services (bookable through the scheduling engine), digital goods and rentals
-  on the existing catalog with seller ownership, with categories, search, and
-  a storefront on each seller's profile.
+- [x] **C12.08** Build the member marketplace listings: when the site turns
+  the market on, members list physical items, services, digital downloads
+  and rentals as ordinary catalog products with a seller, priced in the
+  site's price lists and taxed in its standard category; listings can wait
+  for the site's review; approved listings appear in `/market` (search and
+  type filter) and in a shop on the seller's profile, never in the site's
+  own shop. Until seller payouts (C12.09) exist, the catalog refuses to put
+  a member's listing in a cart or check it out. Booking a member's service
+  on their own calendar is C12.25.
+  *(Evidence 2026-10-14: `src/modules/members/listings.ts`,
+  `src/modules/catalog/market.ts`, the seller column and checkout guards in
+  `src/modules/catalog/`, migration `db/migrations/0030_member_listings.sql`,
+  `tests/modules/member-listings.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** `/portal/listings`, `/market`, the profile shop and the market
+  settings and review queue on `/admin/members`. **F05**
+  `members.createListing`, `members.myListings`, `members.archiveListing`,
+  `members.pendingListings`, `members.reviewListing`, `members.storefront`,
+  `catalog.marketListings`. **F07** off by default; active members only;
+  sellers act only on their own listings; review required by default;
+  member listings refused by add-to-cart and checkout; rate limits. **F09**
+  N/A — no jobs. **F12** the browser journey lists, reviews, browses the
+  market and the profile shop, and finds no add-to-cart. Changeset
+  `member-listings.md`.)*
 - [ ] **C12.09** Build multi-seller checkout and payouts: a cart across
   sellers, a connected-account payment adapter (Stripe Connect first) with
   provider-run seller verification, a site-admin platform fee that defaults
@@ -10455,6 +10474,9 @@ whatever is best for the people using the site.
   open-source SFU adapter (LiveKit first), with end-to-end media encryption
   (SFrame) so the SFU forwards media it cannot decrypt, and the same
   who-may-call rules as one-to-one calls.
+- [ ] **C12.25** Let members offer bookable services on their own calendar:
+  availability set by the seller, the site's booking flow and policies, and
+  the booking paid to the seller through C12.09.
 
 ---
 

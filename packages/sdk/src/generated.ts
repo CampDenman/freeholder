@@ -362,6 +362,7 @@ export const SERVICE_NAMES = [
   "catalog.listVisibleProducts",
   "catalog.listWishlist",
   "catalog.loadDemoFixture",
+  "catalog.marketListings",
   "catalog.moveMyBooking",
   "catalog.myBookingSelection",
   "catalog.packFulfillment",
@@ -968,6 +969,7 @@ export const SERVICE_NAMES = [
   "members.answerFollow",
   "members.answerRequest",
   "members.answerTag",
+  "members.archiveListing",
   "members.befriend",
   "members.callConfig",
   "members.callStatus",
@@ -975,6 +977,7 @@ export const SERVICE_NAMES = [
   "members.connections",
   "members.conversation",
   "members.conversations",
+  "members.createListing",
   "members.deleteComment",
   "members.deletePost",
   "members.editPost",
@@ -990,11 +993,14 @@ export const SERVICE_NAMES = [
   "members.list",
   "members.me",
   "members.muteConversation",
+  "members.myListings",
+  "members.pendingListings",
   "members.pendingTags",
   "members.post",
   "members.postsBy",
   "members.profile",
   "members.react",
+  "members.reviewListing",
   "members.sendMessage",
   "members.setRelation",
   "members.setStatus",
@@ -1002,6 +1008,7 @@ export const SERVICE_NAMES = [
   "members.signal",
   "members.startCall",
   "members.startConversation",
+  "members.storefront",
   "members.takeSignals",
   "members.unfollow",
   "members.unfriend",
@@ -2633,7 +2640,7 @@ export interface ServiceCatalog {
     output: { id: string; name: string; currency: string; kind: "retail" | "wholesale" | "member" | "sale" | "contract"; customerGroupId: string | null; segmentId: string | null; contactId: string | null; startsAt: string | null; endsAt: string | null; priority: number; active: boolean; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "catalog.createProduct": {
-    input: { name: string; slug: string; kind: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; visibility?: "public" | "unlisted" | "member_only"; subtitle?: string | null; brand?: string | null; taxCategoryId?: string | null; description?: unknown; seo?: { title?: string; description?: string } };
+    input: { name: string; slug: string; kind: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; visibility?: "public" | "unlisted" | "member_only"; subtitle?: string | null; brand?: string | null; taxCategoryId?: string | null; description?: unknown; seo?: { title?: string; description?: string }; sellerUserId?: string | null };
     output: { id: string; name: string; slug: string; kind: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; subtitle: string | null; description: unknown; brand: string | null; status: "draft" | "active" | "archived"; visibility: "public" | "unlisted" | "member_only"; taxCategoryId: string | null; seo: unknown; workingName: string | null; workingSubtitle: string | null; workingDescription: unknown | null; workingSeo: unknown | null; schemaType: string; publishedAt: string | null; archivedAt: string | null; version: number; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "catalog.createPurchaseOrder": {
@@ -2879,6 +2886,10 @@ export interface ServiceCatalog {
   "catalog.loadDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { records: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+  };
+  "catalog.marketListings": {
+    input: { sellerUserId?: string; kind?: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; term?: string; limit?: number };
+    output: { id: string; name: string; slug: string; kind: "physical" | "digital" | "service" | "rental" | "bundle" | "pass"; sellerUserId: string; priceMinor: number | null; currency: string | null; publishedAt: string | null; [key: string]: unknown }[];
   };
   "catalog.moveMyBooking": {
     input: { id: string; startsAt: string; calendarId: string };
@@ -5304,6 +5315,10 @@ export interface ServiceCatalog {
     input: { mentionId: string; approve: boolean };
     output: { ok: true };
   };
+  "members.archiveListing": {
+    input: { productId: string; archived: boolean };
+    output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; createdAt: string; [key: string]: unknown };
+  };
   "members.befriend": {
     input: { handle: string };
     output: { friend: "you_asked" | "friends" };
@@ -5331,6 +5346,10 @@ export interface ServiceCatalog {
   "members.conversations": {
     input: { box?: "inbox" | "requests" };
     output: { id: string; kind: "direct" | "group"; title: string | null; people: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; state: "active" | "requested"; muted: boolean; lastMessageAt: string; unread: boolean; [key: string]: unknown }[];
+  };
+  "members.createListing": {
+    input: { title: string; kind: "physical" | "service" | "digital" | "rental"; description?: string; price: string; currency?: string };
+    output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; createdAt: string; [key: string]: unknown };
   };
   "members.deleteComment": {
     input: { id: string };
@@ -5392,6 +5411,14 @@ export interface ServiceCatalog {
     input: { conversationId: string; muted: boolean };
     output: { ok: true };
   };
+  "members.myListings": {
+    input: Record<string, never>;
+    output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; createdAt: string; [key: string]: unknown }[];
+  };
+  "members.pendingListings": {
+    input: Record<string, never>;
+    output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; createdAt: string; sellerHandle: string; sellerName: string; [key: string]: unknown }[];
+  };
   "members.pendingTags": {
     input: Record<string, never>;
     output: { mentionId: string; post: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }; [key: string]: unknown }[];
@@ -5412,6 +5439,10 @@ export interface ServiceCatalog {
     input: { postId: string; kind: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null };
     output: { ok: true };
   };
+  "members.reviewListing": {
+    input: { productId: string; approve: boolean; note?: string };
+    output: { ok: true };
+  };
   "members.sendMessage": {
     input: { conversationId: string; body: string };
     output: { id: string };
@@ -5426,7 +5457,7 @@ export interface ServiceCatalog {
   };
   "members.settings": {
     input: Record<string, never>;
-    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; [key: string]: unknown };
+    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; [key: string]: unknown };
   };
   "members.signal": {
     input: { callId: string; kind: "offer" | "answer" | "candidate"; payload: { type: "offer" | "answer"; sdp: string } | { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null } };
@@ -5439,6 +5470,10 @@ export interface ServiceCatalog {
   "members.startConversation": {
     input: { handles: string[]; title?: string; body: string };
     output: { id: string };
+  };
+  "members.storefront": {
+    input: { handle: string };
+    output: { id: string; name: string; slug: string; kind: string; priceMinor: number | null; currency: string | null; [key: string]: unknown }[];
   };
   "members.takeSignals": {
     input: { callId: string };
@@ -5465,8 +5500,8 @@ export interface ServiceCatalog {
     output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.updateSettings": {
-    input: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number };
-    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; [key: string]: unknown };
+    input: { joinPolicy?: "open" | "approval" | "invite"; minimumAge?: number; marketplaceEnabled?: boolean; listingReview?: boolean };
+    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; [key: string]: unknown };
   };
   "members.viewPost": {
     input: { id: string };
@@ -7612,6 +7647,7 @@ export interface FreeholderApi {
     listVisibleProducts: (input?: ServiceCatalog["catalog.listVisibleProducts"]["input"]) => Promise<ServiceCatalog["catalog.listVisibleProducts"]["output"]>;
     listWishlist: (input?: ServiceCatalog["catalog.listWishlist"]["input"]) => Promise<ServiceCatalog["catalog.listWishlist"]["output"]>;
     loadDemoFixture: (input: ServiceCatalog["catalog.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["catalog.loadDemoFixture"]["output"]>;
+    marketListings: (input?: ServiceCatalog["catalog.marketListings"]["input"]) => Promise<ServiceCatalog["catalog.marketListings"]["output"]>;
     moveMyBooking: (input: ServiceCatalog["catalog.moveMyBooking"]["input"]) => Promise<ServiceCatalog["catalog.moveMyBooking"]["output"]>;
     myBookingSelection: (input: ServiceCatalog["catalog.myBookingSelection"]["input"]) => Promise<ServiceCatalog["catalog.myBookingSelection"]["output"]>;
     packFulfillment: (input: ServiceCatalog["catalog.packFulfillment"]["input"]) => Promise<ServiceCatalog["catalog.packFulfillment"]["output"]>;
@@ -8278,6 +8314,7 @@ export interface FreeholderApi {
     answerFollow: (input: ServiceCatalog["members.answerFollow"]["input"]) => Promise<ServiceCatalog["members.answerFollow"]["output"]>;
     answerRequest: (input: ServiceCatalog["members.answerRequest"]["input"]) => Promise<ServiceCatalog["members.answerRequest"]["output"]>;
     answerTag: (input: ServiceCatalog["members.answerTag"]["input"]) => Promise<ServiceCatalog["members.answerTag"]["output"]>;
+    archiveListing: (input: ServiceCatalog["members.archiveListing"]["input"]) => Promise<ServiceCatalog["members.archiveListing"]["output"]>;
     befriend: (input: ServiceCatalog["members.befriend"]["input"]) => Promise<ServiceCatalog["members.befriend"]["output"]>;
     callConfig: (input?: ServiceCatalog["members.callConfig"]["input"]) => Promise<ServiceCatalog["members.callConfig"]["output"]>;
     callStatus: (input: ServiceCatalog["members.callStatus"]["input"]) => Promise<ServiceCatalog["members.callStatus"]["output"]>;
@@ -8285,6 +8322,7 @@ export interface FreeholderApi {
     connections: (input?: ServiceCatalog["members.connections"]["input"]) => Promise<ServiceCatalog["members.connections"]["output"]>;
     conversation: (input: ServiceCatalog["members.conversation"]["input"]) => Promise<ServiceCatalog["members.conversation"]["output"]>;
     conversations: (input?: ServiceCatalog["members.conversations"]["input"]) => Promise<ServiceCatalog["members.conversations"]["output"]>;
+    createListing: (input: ServiceCatalog["members.createListing"]["input"]) => Promise<ServiceCatalog["members.createListing"]["output"]>;
     deleteComment: (input: ServiceCatalog["members.deleteComment"]["input"]) => Promise<ServiceCatalog["members.deleteComment"]["output"]>;
     deletePost: (input: ServiceCatalog["members.deletePost"]["input"]) => Promise<ServiceCatalog["members.deletePost"]["output"]>;
     editPost: (input: ServiceCatalog["members.editPost"]["input"]) => Promise<ServiceCatalog["members.editPost"]["output"]>;
@@ -8300,11 +8338,14 @@ export interface FreeholderApi {
     list: (input?: ServiceCatalog["members.list"]["input"]) => Promise<ServiceCatalog["members.list"]["output"]>;
     me: (input?: ServiceCatalog["members.me"]["input"]) => Promise<ServiceCatalog["members.me"]["output"]>;
     muteConversation: (input: ServiceCatalog["members.muteConversation"]["input"]) => Promise<ServiceCatalog["members.muteConversation"]["output"]>;
+    myListings: (input?: ServiceCatalog["members.myListings"]["input"]) => Promise<ServiceCatalog["members.myListings"]["output"]>;
+    pendingListings: (input?: ServiceCatalog["members.pendingListings"]["input"]) => Promise<ServiceCatalog["members.pendingListings"]["output"]>;
     pendingTags: (input?: ServiceCatalog["members.pendingTags"]["input"]) => Promise<ServiceCatalog["members.pendingTags"]["output"]>;
     post: (input?: ServiceCatalog["members.post"]["input"]) => Promise<ServiceCatalog["members.post"]["output"]>;
     postsBy: (input: ServiceCatalog["members.postsBy"]["input"]) => Promise<ServiceCatalog["members.postsBy"]["output"]>;
     profile: (input: ServiceCatalog["members.profile"]["input"]) => Promise<ServiceCatalog["members.profile"]["output"]>;
     react: (input: ServiceCatalog["members.react"]["input"]) => Promise<ServiceCatalog["members.react"]["output"]>;
+    reviewListing: (input: ServiceCatalog["members.reviewListing"]["input"]) => Promise<ServiceCatalog["members.reviewListing"]["output"]>;
     sendMessage: (input: ServiceCatalog["members.sendMessage"]["input"]) => Promise<ServiceCatalog["members.sendMessage"]["output"]>;
     setRelation: (input: ServiceCatalog["members.setRelation"]["input"]) => Promise<ServiceCatalog["members.setRelation"]["output"]>;
     setStatus: (input: ServiceCatalog["members.setStatus"]["input"]) => Promise<ServiceCatalog["members.setStatus"]["output"]>;
@@ -8312,13 +8353,14 @@ export interface FreeholderApi {
     signal: (input: ServiceCatalog["members.signal"]["input"]) => Promise<ServiceCatalog["members.signal"]["output"]>;
     startCall: (input: ServiceCatalog["members.startCall"]["input"]) => Promise<ServiceCatalog["members.startCall"]["output"]>;
     startConversation: (input: ServiceCatalog["members.startConversation"]["input"]) => Promise<ServiceCatalog["members.startConversation"]["output"]>;
+    storefront: (input: ServiceCatalog["members.storefront"]["input"]) => Promise<ServiceCatalog["members.storefront"]["output"]>;
     takeSignals: (input: ServiceCatalog["members.takeSignals"]["input"]) => Promise<ServiceCatalog["members.takeSignals"]["output"]>;
     unfollow: (input: ServiceCatalog["members.unfollow"]["input"]) => Promise<ServiceCatalog["members.unfollow"]["output"]>;
     unfriend: (input: ServiceCatalog["members.unfriend"]["input"]) => Promise<ServiceCatalog["members.unfriend"]["output"]>;
     unreadConversations: (input?: ServiceCatalog["members.unreadConversations"]["input"]) => Promise<ServiceCatalog["members.unreadConversations"]["output"]>;
     unsendMessage: (input: ServiceCatalog["members.unsendMessage"]["input"]) => Promise<ServiceCatalog["members.unsendMessage"]["output"]>;
     updateMe: (input?: ServiceCatalog["members.updateMe"]["input"]) => Promise<ServiceCatalog["members.updateMe"]["output"]>;
-    updateSettings: (input: ServiceCatalog["members.updateSettings"]["input"]) => Promise<ServiceCatalog["members.updateSettings"]["output"]>;
+    updateSettings: (input?: ServiceCatalog["members.updateSettings"]["input"]) => Promise<ServiceCatalog["members.updateSettings"]["output"]>;
     viewPost: (input: ServiceCatalog["members.viewPost"]["input"]) => Promise<ServiceCatalog["members.viewPost"]["output"]>;
   };
   messaging: {

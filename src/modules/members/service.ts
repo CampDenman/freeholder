@@ -28,6 +28,7 @@ import graphServices, { approvePendingFollowers, PROFILE_SETTINGS } from "./grap
 import postServices from "./posts";
 import messageServices from "./messages";
 import callServices from "./calls";
+import listingServices from "./listings";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
 const RESERVED = new Set([
@@ -62,7 +63,12 @@ const profile = row({
   readReceipts: z.boolean(),
   createdAt: timestamp,
 });
-const settings = row({ joinPolicy: z.enum(JOIN_POLICIES), minimumAge: z.number().int() });
+const settings = row({
+  joinPolicy: z.enum(JOIN_POLICIES),
+  minimumAge: z.number().int(),
+  marketplaceEnabled: z.boolean(),
+  listingReview: z.boolean(),
+});
 
 function signedInUser(actor: Actor): string {
   if (actor.kind !== "user") throw new ServiceError("permission", "Sign in to continue.");
@@ -71,7 +77,12 @@ function signedInUser(actor: Actor): string {
 
 async function readSettings(ctx: ServiceContext) {
   const [found] = await ctx.tx.select().from(memberSettings).where(eq(memberSettings.id, 1));
-  return { joinPolicy: found?.joinPolicy ?? "open", minimumAge: found?.minimumAge ?? 16 };
+  return {
+    joinPolicy: found?.joinPolicy ?? "open",
+    minimumAge: found?.minimumAge ?? 16,
+    marketplaceEnabled: found?.marketplaceEnabled ?? false,
+    listingReview: found?.listingReview ?? true,
+  };
 }
 
 async function handleProblem(ctx: ServiceContext, handle: string, exceptUserId?: string): Promise<string | null> {
@@ -105,7 +116,7 @@ function shape(found: typeof memberProfiles.$inferSelect) {
 
 export const membershipRules = defineService({
   name: "members.settings",
-  summary: "How people join this site and the minimum age to join.",
+  summary: "How people join this site, the minimum age, and whether members may sell.",
   kind: "query",
   permission: "public",
   input: z.object({}),
@@ -115,19 +126,25 @@ export const membershipRules = defineService({
 
 export const updateMembershipRules = defineService({
   name: "members.updateSettings",
-  summary: "Choose whether anyone can join, joining needs approval, or joining is by invitation, and the minimum age.",
+  summary: "Set how people join, the minimum age, whether members may sell, and whether listings are reviewed first.",
   kind: "mutation",
   permission: "scoped",
   writeClass: "write",
-  input: z.object({ joinPolicy: z.enum(JOIN_POLICIES), minimumAge: z.number().int().min(13).max(21) }),
+  input: z.object({
+    joinPolicy: z.enum(JOIN_POLICIES).optional(),
+    minimumAge: z.number().int().min(13).max(21).optional(),
+    marketplaceEnabled: z.boolean().optional(),
+    listingReview: z.boolean().optional(),
+  }),
   output: settings,
   handler: async (input, ctx) => {
+    const next = { ...(await readSettings(ctx)), ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)) };
     await ctx.tx
       .insert(memberSettings)
-      .values({ id: 1, ...input })
-      .onConflictDoUpdate({ target: memberSettings.id, set: { ...input, updatedAt: new Date() } });
+      .values({ id: 1, ...next })
+      .onConflictDoUpdate({ target: memberSettings.id, set: { ...next, updatedAt: new Date() } });
     ctx.setSubject("member_settings", "1");
-    return input;
+    return next;
   },
 });
 
@@ -391,6 +408,7 @@ export default [
   ...postServices,
   ...messageServices,
   ...callServices,
+  ...listingServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

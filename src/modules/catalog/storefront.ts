@@ -31,7 +31,7 @@
 //     projection is deliberately reduced: no contact ids, no full address,
 //     just what a confirmation page shows.
 
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { requestCustomerMagicLink } from "@/core/auth/magic-links/service";
@@ -170,6 +170,8 @@ export const purchaseOptions = defineService({
       .where(
         and(
           eq(products.status, "active"),
+          // Member listings cannot be bought until seller payouts exist (C12.09).
+          isNull(products.sellerUserId),
           input.slugs
             ? inArray(products.slug, input.slugs)
             : inArray(products.id, input.productIds!),

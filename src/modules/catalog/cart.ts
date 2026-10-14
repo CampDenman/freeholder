@@ -434,12 +434,16 @@ export const addCartItem = defineService({
       throw new ServiceError("conflict", "Only an open shopping cart can change lines.");
     }
     const [variant] = await ctx.tx
-      .select({ id: productVariants.id, status: productVariants.status })
+      .select({ id: productVariants.id, status: productVariants.status, sellerUserId: products.sellerUserId })
       .from(productVariants)
+      .innerJoin(products, eq(products.id, productVariants.productId))
       .where(eq(productVariants.id, input.variantId))
       .limit(1);
     if (!variant || variant.status !== "active") {
       throw new ServiceError("not_found", "That variant is not here.");
+    }
+    if (variant.sellerUserId) {
+      throw new ServiceError("conflict", "Buying from members is not available on this site yet.");
     }
     if (Boolean(input.galleryId) !== Boolean(input.assetId)) {
       throw new ServiceError(

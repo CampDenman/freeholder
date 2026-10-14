@@ -242,4 +242,46 @@ test.describe("members (C12.01)", () => {
     await samContext.close();
     await raeContext.close();
   });
+
+  test("listing something for sale, review, the market and the profile shop (C12.08)", async ({ browser }) => {
+    const ownerToken = await seedC11Owner("Market proof");
+    await db().insert(memberSettings).values({ id: 1, marketplaceEnabled: true, listingReview: true });
+    await db().insert(users).values({ id: MEMBER_ID, email: "rae@example.test", role: "customer" });
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date(), isPrivate: false });
+    const rae = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+
+    const seller = await browser.newContext({ baseURL: C11_BASE_URL });
+    await seller.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
+    const page = await seller.newPage();
+    await page.goto("/portal/listings");
+    await expect(page.getByRole("heading", { level: 1, name: "My listings" })).toBeVisible();
+    await axeInBothThemes(page);
+    await page.getByLabel("Title").fill("Harbour print");
+    await page.getByLabel("Price").fill("45");
+    await page.getByRole("button", { name: "Create listing" }).click();
+    await expect(page.getByText("Waiting for review")).toBeVisible();
+
+    const admin = await browser.newContext({ baseURL: C11_BASE_URL });
+    await useOwnerSession(admin, ownerToken);
+    const console = await admin.newPage();
+    await console.goto("/admin/members");
+    await expect(console.getByText("Harbour print", { exact: false })).toBeVisible();
+    await console.getByRole("button", { name: "Approve", exact: true }).first().click();
+    await expect(console.getByText("No listings are waiting for review.")).toBeVisible();
+
+    const visitor = await browser.newContext({ baseURL: C11_BASE_URL });
+    const anon = await visitor.newPage();
+    await anon.goto("/market");
+    await expect(anon.getByRole("heading", { level: 1, name: "Market" })).toBeVisible();
+    await expect(anon.getByRole("link", { name: "Harbour print" })).toBeVisible();
+    await axeInBothThemes(anon);
+    await anon.goto("/@rae");
+    await expect(anon.getByRole("heading", { level: 2, name: "Shop" })).toBeVisible();
+    await anon.getByRole("link", { name: "Harbour print" }).click();
+    await expect(anon.getByRole("heading", { level: 1, name: "Harbour print" })).toBeVisible();
+    await expect(anon.getByRole("button", { name: /add to cart/i })).toHaveCount(0);
+    await visitor.close();
+    await seller.close();
+    await admin.close();
+  });
 });

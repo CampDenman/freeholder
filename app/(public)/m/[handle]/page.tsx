@@ -9,6 +9,8 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { viewProfile } from "@/modules/members/graph";
 import { postsBy } from "@/modules/members/posts";
+import { storefront } from "@/modules/members/listings";
+import { formatMoney } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { myMembership } from "@/modules/members/service";
 import { Button, Callout, Pill } from "@/ui/primitives";
@@ -56,7 +58,7 @@ export default async function MemberProfile({
 }) {
   const [{ handle }, query, t, locale, business] = await Promise.all([params, searchParams, getT(), getLocale(), currentBusiness()]);
   const { actor, profile } = await load(handle);
-  const posts = await postsBy.call({ handle: profile.handle }, actor);
+  const [posts, shop] = await Promise.all([postsBy.call({ handle: profile.handle }, actor), storefront.call({ handle: profile.handle }, actor)]);
   const viewer = actor.kind === "user" ? await myMembership.call({}, actor) : null;
   const r = profile.relation;
   const canAct = viewer?.status === "active" && !r.self;
@@ -118,6 +120,19 @@ export default async function MemberProfile({
             </>
           )}
         </div>
+      ) : null}
+      {!r.blocked && shop.length ? (
+        <section className="grid gap-3">
+          <h2 className="text-xl font-semibold">{t("members.market.shop")}</h2>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {shop.map((l) => (
+              <li key={l.id} className="grid gap-1 rounded-lg border border-rule bg-surface p-3">
+                <a className="font-semibold underline" href={`/products/${l.slug}`}>{l.name}</a>
+                {l.priceMinor !== null && l.currency ? <span className="text-sm">{formatMoney(l.priceMinor, l.currency, locale)}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
       {!r.blocked ? (
         <section className="grid gap-4">
