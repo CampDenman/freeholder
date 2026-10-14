@@ -103,6 +103,7 @@ export default async function MemberProfile({
               {r.friend === "they_asked" ? <Verb handle={profile.handle} verb="befriend" label={t("members.graph.acceptFriend")} /> : null}
               {r.friend === "you_asked" ? <Verb handle={profile.handle} verb="unfriend" label={t("members.graph.cancelFriend")} variant="quiet" /> : null}
               {r.friend === "friends" ? <Verb handle={profile.handle} verb="unfriend" label={t("members.graph.unfriend")} variant="quiet" /> : null}
+              <a className="inline-flex items-center rounded-md border border-rule-strong px-3 py-2 text-sm underline" href={`/messages?to=${profile.handle}`}>{t("members.messages.message")}</a>
               <Verb handle={profile.handle} verb={r.muted ? "unmute" : "mute"} label={t(r.muted ? "members.graph.unmute" : "members.graph.mute")} variant="quiet" />
               <Verb handle={profile.handle} verb={r.restricted ? "unrestrict" : "restrict"} label={t(r.restricted ? "members.graph.unrestrict" : "members.graph.restrict")} variant="quiet" />
               <Verb handle={profile.handle} verb="block" label={t("members.graph.block")} variant="danger" />

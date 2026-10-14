@@ -10341,10 +10341,29 @@ whatever is best for the people using the site.
   `member-posts.md`.)*
 - [ ] **C12.05** Let members offer paid subscriptions to their own content,
   with subscriber-only visibility, through the money spine and C12.09 payouts.
-- [ ] **C12.06** Build direct messages: one-to-one and group conversations,
-  message requests from non-connections, attachments, opt-in read receipts,
-  and end-to-end encryption by default (MLS, RFC 9420), with message franking
-  so a recipient can report abuse without giving the server general access.
+- [x] **C12.06** Build direct messages: one-to-one and group conversations,
+  message requests from anyone the recipient does not follow or befriend,
+  opt-in read receipts that a member sees only while sharing their own,
+  blocks that close a conversation both ways, unsend for everyone, and bodies
+  encrypted at rest bound to each message. End-to-end encryption (MLS,
+  RFC 9420) with message franking is C12.23; attachments are C12.21. The
+  messages screen states plainly that messages are not yet end-to-end
+  encrypted.
+  *(Evidence 2026-10-14: `src/modules/members/messages.ts`,
+  `src/modules/members/message-crypto.ts`, migration
+  `db/migrations/0028_member_messages.sql`, `tests/modules/member-messages.test.ts`,
+  `tests/browser/members.spec.ts`. **F04** `/messages`, `/messages/[id]` and
+  the Message link on `/@handle`. **F05** `members.startConversation`,
+  `members.conversations`, `members.conversation`, `members.sendMessage`,
+  `members.answerRequest`, `members.leaveConversation`,
+  `members.muteConversation`, `members.unsendMessage`,
+  `members.unreadConversations`. **F07** participants only; requests cannot
+  be replied to until accepted and leak no read state; blocks close direct
+  conversations; bodies sealed with AES-256-GCM bound to the message id and
+  overwritten on unsend; rate limits. **F09** notifications for new messages
+  ride core delivery and stay quiet for requests and muted conversations.
+  **F12** the browser journey sends a request from a profile, accepts it,
+  replies, and unsends. Changeset `member-messages.md`.)*
 - [ ] **C12.07** Build private WebRTC voice and video calls between members:
   peer-to-peer for one-to-one, a self-hostable open-source SFU adapter for
   groups, TURN relay with short-lived credentials, end-to-end media encryption
@@ -10407,12 +10426,16 @@ whatever is best for the people using the site.
 - [ ] **C12.20** Give member profiles an avatar and optional profile
   sections (for example portfolio, services, pinned posts), each with its own
   visibility.
-- [ ] **C12.21** Let members attach images and video to posts and comments,
+- [ ] **C12.21** Let members attach images and video to posts, comments and messages,
   with alt text, safe processing, and the post's visibility applied to every
   file.
 - [ ] **C12.22** Add web push for member notifications (standard Web Push
   with the site's own keys, no third-party service) and member-chosen quiet
   hours that hold push and email until they end.
+- [ ] **C12.23** Make member messages end-to-end encrypted by default with
+  MLS (RFC 9420): keys only on members' devices, multi-device support,
+  history the server cannot read, and message franking so a recipient can
+  report exactly the messages they choose to moderation.
 
 ---
 

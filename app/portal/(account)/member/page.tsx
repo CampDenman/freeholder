@@ -81,6 +81,10 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
             <input type="checkbox" name="indexable" value="yes" defaultChecked={me.indexable} />
             <span>{t("members.privacy.indexable")}</span>
           </label>
+          <label className="flex items-start gap-2">
+            <input type="checkbox" name="readReceipts" value="yes" defaultChecked={me.readReceipts} />
+            <span>{t("members.privacy.readReceipts")}</span>
+          </label>
           {(["bioVisibility", "linksVisibility", "defaultPostVisibility"] as const).map((key) => (
             <Field key={key} label={t(`members.privacy.${key}`)} htmlFor={key}>
               <Select id={key} name={key} defaultValue={me[key]}>

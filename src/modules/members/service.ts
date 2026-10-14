@@ -26,6 +26,7 @@ import {
 } from "./schema";
 import graphServices, { approvePendingFollowers, PROFILE_SETTINGS } from "./graph";
 import postServices from "./posts";
+import messageServices from "./messages";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
 const RESERVED = new Set([
@@ -57,6 +58,7 @@ const profile = row({
   defaultPostVisibility: z.enum(VISIBILITIES),
   isPrivate: z.boolean(),
   indexable: z.boolean(),
+  readReceipts: z.boolean(),
   createdAt: timestamp,
 });
 const settings = row({ joinPolicy: z.enum(JOIN_POLICIES), minimumAge: z.number().int() });
@@ -95,6 +97,7 @@ function shape(found: typeof memberProfiles.$inferSelect) {
     defaultPostVisibility: found.defaultPostVisibility,
     isPrivate: found.isPrivate,
     indexable: found.indexable,
+    readReceipts: found.readReceipts,
     createdAt: found.createdAt,
   };
 }
@@ -242,7 +245,7 @@ export const updateMyMembership = defineService({
     const changes: Partial<typeof memberProfiles.$inferInsert> = { updatedAt: new Date() };
     if (input.displayName !== undefined) changes.displayName = input.displayName;
     if (input.bio !== undefined) changes.bio = input.bio;
-    for (const key of ["bioVisibility", "linksVisibility", "defaultPostVisibility", "links", "isPrivate", "indexable"] as const) {
+    for (const key of ["bioVisibility", "linksVisibility", "defaultPostVisibility", "links", "isPrivate", "indexable", "readReceipts"] as const) {
       if (input[key] !== undefined) Object.assign(changes, { [key]: input[key] });
     }
     if (input.isPrivate === false && found.isPrivate) await approvePendingFollowers(ctx, userId);
@@ -385,6 +388,7 @@ export async function activeMember(ctx: ServiceContext, userId: string) {
 export default [
   ...graphServices,
   ...postServices,
+  ...messageServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

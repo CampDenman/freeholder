@@ -58,3 +58,14 @@ from mocked payment, mail or media runs alone.
 - Tests: `tests/modules/member-notifications.test.ts` (2 cases) and the
   notifications steps in `tests/browser/members.spec.ts`. Passed locally.
 - Not yet: web push and quiet hours (C12.22).
+
+## C12.06 — direct messages (2026-10-14)
+
+- Services: `src/modules/members/messages.ts`. Bodies are sealed at rest by
+  `src/modules/members/message-crypto.ts` (AES-256-GCM, bound to the message
+  id, keyed from `CREDENTIAL_KEY` or `SESSION_SECRET`). This is not end-to-end
+  encryption; `/messages` says so. MLS end-to-end encryption is C12.23.
+- Screens: `/messages` (inbox, requests, new conversation), `/messages/[id]`,
+  Message link on `/@handle`, read-receipt setting on `/portal/member`.
+- Tests: `tests/modules/member-messages.test.ts` (4 cases) and the fourth
+  journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.

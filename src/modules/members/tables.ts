@@ -12,4 +12,7 @@ export {
   memberReactions,
   memberPostTags,
   memberMentions,
+  memberConversations,
+  memberConversationParticipants,
+  memberMessages,
 } from "./schema";

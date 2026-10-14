@@ -193,4 +193,53 @@ test.describe("members (C12.01)", () => {
     await samContext.close();
     await raeContext.close();
   });
+
+  test("message requests, conversations and unsending (C12.06)", async ({ browser }) => {
+    await seedC11Owner("Messages proof");
+    const SAM_ID = "00000000-0000-4000-8000-0000000000d2";
+    await db().insert(users).values([
+      { id: MEMBER_ID, email: "rae@example.test", role: "customer" },
+      { id: SAM_ID, email: "sam@example.test", role: "customer" },
+    ]);
+    const now = new Date();
+    await db().insert(memberProfiles).values([
+      { userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: now },
+      { userId: SAM_ID, handle: "sam", displayName: "Sam Ito", ageAttestedAt: now },
+    ]);
+    const [rae, sam] = await Promise.all([
+      db().transaction((tx) => createSession(tx, MEMBER_ID)),
+      db().transaction((tx) => createSession(tx, SAM_ID)),
+    ]);
+    const samContext = await browser.newContext({ baseURL: C11_BASE_URL });
+    await samContext.addCookies([{ name: SESSION_COOKIE, value: sam.token, url: C11_BASE_URL }]);
+    const samPage = await samContext.newPage();
+    await samPage.goto("/@rae");
+    await samPage.getByRole("link", { name: "Message", exact: true }).click();
+    await expect(samPage.getByLabel("To", { exact: true })).toHaveValue("rae");
+    await samPage.getByLabel("Message", { exact: true }).fill("Hi Rae, are you free Saturday?");
+    await samPage.getByRole("button", { name: "Send" }).click();
+    await expect(samPage.getByText("Hi Rae, are you free Saturday?")).toBeVisible();
+    await axeInBothThemes(samPage);
+
+    const raeContext = await browser.newContext({ baseURL: C11_BASE_URL });
+    await raeContext.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
+    const raePage = await raeContext.newPage();
+    await raePage.goto("/messages");
+    await expect(raePage.getByText("No conversations yet.")).toBeVisible();
+    await raePage.getByRole("link", { name: "Requests (1)" }).click();
+    await axeInBothThemes(raePage);
+    await raePage.getByRole("link", { name: "Sam Ito" }).click();
+    await raePage.getByRole("button", { name: "Accept" }).click();
+    await raePage.getByLabel("Message", { exact: true }).fill("Yes! 7am at the pier.");
+    await raePage.getByRole("button", { name: "Send" }).click();
+    await expect(raePage.getByText("Yes! 7am at the pier.")).toBeVisible();
+
+    await samPage.reload();
+    await expect(samPage.getByText("Yes! 7am at the pier.")).toBeVisible();
+    await samPage.getByRole("button", { name: "Remove for everyone" }).first().click();
+    await raePage.reload();
+    await expect(raePage.getByText("This message was removed.")).toBeVisible();
+    await samContext.close();
+    await raeContext.close();
+  });
 });

@@ -471,6 +471,7 @@ export const PROFILE_SETTINGS = {
     .optional(),
   isPrivate: z.boolean().optional(),
   indexable: z.boolean().optional(),
+  readReceipts: z.boolean().optional(),
 };
 
 /** Going public approves anyone who was waiting to follow. */

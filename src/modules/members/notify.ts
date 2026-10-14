@@ -12,7 +12,7 @@ import type { ServiceContext } from "@/core/service";
 import { relationBetween } from "./graph";
 import { memberProfiles } from "./schema";
 
-export type MemberTopic = "members.follow" | "members.friend" | "members.mention" | "members.comment" | "members.reaction";
+export type MemberTopic = "members.follow" | "members.friend" | "members.mention" | "members.comment" | "members.reaction" | "members.message";
 
 export async function notifyMember(
   ctx: ServiceContext,

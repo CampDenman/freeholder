@@ -80,6 +80,7 @@ function topicLabel(topic: string, t: Awaited<ReturnType<typeof getT>>): string 
     "members.mention": "members.notifications.topic.mention",
     "members.comment": "members.notifications.topic.comment",
     "members.reaction": "members.notifications.topic.reaction",
+    "members.message": "members.notifications.topic.message",
   };
   return t(keys[topic] ?? topic);
 }

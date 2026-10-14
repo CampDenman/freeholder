@@ -44,6 +44,8 @@ export const memberProfiles = pgTable(
     isPrivate: boolean("is_private").notNull().default(true),
     /** Search engines may index the profile only when the member says so. */
     indexable: boolean("indexable").notNull().default(false),
+    /** §44.6: read receipts are opt-in, and you only see others' if you share yours. */
+    readReceipts: boolean("read_receipts").notNull().default(false),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -232,4 +234,61 @@ export const memberMentions = pgTable(
     check("member_mentions_kind_valid", sql`${t.kind} in ('mention','tag')`),
     check("member_mentions_status_valid", sql`${t.status} in ('pending','approved','declined')`),
   ],
+);
+
+/** §44.6: a one-to-one or group conversation between members. */
+export const memberConversations = pgTable(
+  "member_conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind", { enum: ["direct", "group"] }).notNull(),
+    /** For a direct conversation, "lowId:highId", so a pair has exactly one. */
+    directKey: text("direct_key"),
+    title: text("title"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAtColumn(),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("member_conversations_direct_idx").on(t.directKey),
+    check("member_conversations_kind_valid", sql`${t.kind} in ('direct','group')`),
+    check("member_conversations_direct_key", sql`(${t.kind} = 'direct') = (${t.directKey} is not null)`),
+    check("member_conversations_title_length", sql`${t.title} is null or char_length(${t.title}) between 1 and 80`),
+  ],
+);
+
+/**
+ * Who is in a conversation. `requested` is a message request: it waits in the
+ * recipient's requests until they accept it, and the sender cannot tell
+ * whether it was read.
+ */
+export const memberConversationParticipants = pgTable(
+  "member_conversation_participants",
+  {
+    conversationId: uuid("conversation_id").notNull().references(() => memberConversations.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    state: text("state", { enum: ["active", "requested", "left"] }).notNull(),
+    lastReadAt: timestamp("last_read_at", { withTimezone: true }),
+    muted: boolean("muted").notNull().default(false),
+    joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.conversationId, t.userId] }),
+    index("member_conversation_participants_user_idx").on(t.userId, t.state),
+    check("member_conversation_participants_state_valid", sql`${t.state} in ('active','requested','left')`),
+  ],
+);
+
+/** A message. The body is encrypted at rest and bound to the message id. */
+export const memberMessages = pgTable(
+  "member_messages",
+  {
+    id: uuid("id").primaryKey(),
+    conversationId: uuid("conversation_id").notNull().references(() => memberConversations.id, { onDelete: "cascade" }),
+    senderId: uuid("sender_id").references(() => users.id, { onDelete: "set null" }),
+    bodySealed: text("body_sealed").notNull(),
+    createdAt: createdAtColumn(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("member_messages_conversation_idx").on(t.conversationId, t.createdAt)],
 );

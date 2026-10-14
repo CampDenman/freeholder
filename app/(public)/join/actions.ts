@@ -62,6 +62,7 @@ export async function updateMemberProfileAction(form: FormData): Promise<void> {
         isAdult: form.get("isAdult") === "yes",
         isPrivate: form.get("isPrivate") === "yes",
         indexable: form.get("indexable") === "yes",
+        readReceipts: form.get("readReceipts") === "yes",
         bioVisibility: visibility(text(form, "bioVisibility")),
         linksVisibility: visibility(text(form, "linksVisibility")),
         defaultPostVisibility: visibility(text(form, "defaultPostVisibility")),
