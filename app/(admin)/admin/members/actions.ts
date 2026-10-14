@@ -9,6 +9,7 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { inviteMember, setMemberStatus, updateMembershipRules } from "@/modules/members/service";
+import { reviewListing } from "@/modules/members/listings";
 
 const PATH = "/admin/members";
 
@@ -65,5 +66,23 @@ export async function setMemberStatusAction(form: FormData): Promise<void> {
         await actor(),
       ),
     back.startsWith("/admin/members") ? back : PATH,
+  );
+}
+
+export async function saveMarketRulesAction(form: FormData): Promise<void> {
+  await run(async () =>
+    updateMembershipRules.call(
+      { marketplaceEnabled: form.get("marketplaceEnabled") === "yes", listingReview: form.get("listingReview") === "yes" },
+      await actor(),
+    ),
+  );
+}
+
+export async function reviewListingAction(form: FormData): Promise<void> {
+  await run(async () =>
+    reviewListing.call(
+      { productId: text(form, "productId"), approve: text(form, "decision") === "approve", note: text(form, "note") || undefined },
+      await actor(),
+    ),
   );
 }

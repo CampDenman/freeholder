@@ -9,6 +9,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/core/auth/schema";
+import { products } from "@/modules/catalog/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 export const MEMBER_STATUSES = ["active", "pending", "suspended"] as const;
@@ -69,6 +70,10 @@ export const memberSettings = pgTable(
     id: integer("id").primaryKey().default(1),
     joinPolicy: text("join_policy", { enum: JOIN_POLICIES }).notNull().default("open"),
     minimumAge: integer("minimum_age").notNull().default(16),
+    /** §44.8: members may list things for sale. Off until the site turns it on. */
+    marketplaceEnabled: boolean("marketplace_enabled").notNull().default(false),
+    /** New listings wait for the site's review before they are public. */
+    listingReview: boolean("listing_review").notNull().default(true),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
@@ -334,5 +339,26 @@ export const memberCallSignals = pgTable(
   (t) => [
     index("member_call_signals_call_idx").on(t.callId, t.createdAt),
     check("member_call_signals_kind_valid", sql`${t.kind} in ('offer','answer','candidate')`),
+  ],
+);
+
+/**
+ * §44.8: a member's listing. The product itself lives in the catalog with
+ * `products.seller_user_id`; this keeps the site's review of it.
+ */
+export const memberListings = pgTable(
+  "member_listings",
+  {
+    productId: uuid("product_id").primaryKey().references(() => products.id, { onDelete: "cascade" }),
+    sellerId: uuid("seller_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    review: text("review", { enum: ["pending", "approved", "rejected"] }).notNull(),
+    reviewNote: text("review_note"),
+    createdAt: createdAtColumn(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("member_listings_seller_idx").on(t.sellerId, t.createdAt),
+    index("member_listings_review_idx").on(t.review, t.createdAt),
+    check("member_listings_review_valid", sql`${t.review} in ('pending','approved','rejected')`),
   ],
 );

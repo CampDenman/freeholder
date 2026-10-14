@@ -4463,21 +4463,20 @@ v2.
 - **F10** — N/A — calls need two live people; the starter seed in C12.16 adds members who can be called (`deploy/members-platform.md`).
 - **F11** — `deploy/members-platform.md` and `.changeset/member-calls.md`.
 - **F12** — `tests/browser/member-calls.spec.ts`: two real browser contexts ring, answer, connect peer to peer, mute and hang up.
-## C12.08 — Build the member marketplace: members list physical goods,
+## C12.08 — Build the member marketplace listings
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-
+- **F01** — `db/migrations/0030_member_listings.sql`: `products.seller_user_id`, market switches on member settings, and the listing review table.
+- **F02** — `tests/modules/member-listings.test.ts`: creation through catalog services, review, storefront, archive and restore, and refusals.
+- **F03** — N/A — sellers are members whose contacts were linked in C12.01 (`tests/modules/members.test.ts`).
+- **F04** — `tests/browser/members.spec.ts`: `/portal/listings`, `/admin/members` review, `/market` and the profile shop.
+- **F05** — `packages/sdk/src/generated.ts`: the six listing services and `catalog.marketListings` on HTTP, the SDK and MCP.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/portal/listings` and `/market`; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-listings.test.ts`: market off by default, owner-only edits, review by default, and add-to-cart refused for member listings.
+- **F08** — `tests/modules/member-listings.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background work; listings are catalog rows plus a review row.
+- **F10** — N/A — demo listings arrive with the starter seed in C12.16 (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-listings.md`.
+- **F12** — `tests/browser/members.spec.ts`: list, review, approve, browse the market and shop, and confirm the listing cannot be added to a cart.
 ## C12.09 — Build multi-seller checkout and payouts: a cart across
 
 - **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
@@ -4703,6 +4702,21 @@ v2.
 - **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
 
 ## C12.24 — Add group voice and video calls through a self-hostable open-source SFU adapter
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+
+## C12.25 — Let members offer bookable services on their own calendar
 
 - **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
 - **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.

@@ -310,7 +310,8 @@ interface ScopeInput {
 }
 
 function scopeConditions(input: ScopeInput): SQL[] {
-  const conditions: SQL[] = [eq(products.status, "active"), eq(products.visibility, "public")];
+  // Member listings (§44.8) live in the market, not the site's own shop.
+  const conditions: SQL[] = [eq(products.status, "active"), eq(products.visibility, "public"), isNull(products.sellerUserId)];
   if (input.collectionId) {
     conditions.push(
       sql`${products.id} in (select "product_id" from "collection_products" where "collection_id" = ${input.collectionId})`,

@@ -192,6 +192,15 @@ export const checkoutCart = defineService({
     if (basket.lines.length === 0) {
       throw new ServiceError("validation", "The cart is empty.");
     }
+    // §44.8: member listings need seller payouts (C12.09) before they can be sold.
+    const sold = await ctx.tx
+      .select({ sellerUserId: products.sellerUserId })
+      .from(productVariants)
+      .innerJoin(products, eq(products.id, productVariants.productId))
+      .where(inArray(productVariants.id, basket.lines.map((line) => line.variantId)));
+    if (sold.some((row) => row.sellerUserId)) {
+      throw new ServiceError("conflict", "Buying from members is not available on this site yet.");
+    }
     if (!basket.allPriced) {
       throw new ServiceError("validation", "Every line needs a price in this currency before checkout.");
     }

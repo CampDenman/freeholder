@@ -7,7 +7,7 @@ import { defineModule } from "@/core/module";
 export default defineModule({
   name: "members",
   version: "0.1.0",
-  requires: ["core"],
+  requires: ["core", "catalog"],
   tables: () => import("./tables"),
   services: () => import("./service"),
   events: {
@@ -27,6 +27,8 @@ export default defineModule({
       "member.tagged",
       "member.messaged",
       "member.callStarted",
+      "member.listingCreated",
+      "member.listingReviewed",
     ],
   },
 });

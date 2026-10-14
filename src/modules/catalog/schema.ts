@@ -4,6 +4,7 @@
 // pricing and inventory attach to Product in later C5 milestones; none of them
 // gets to invent a parallel notion of what the business sells.
 
+import { users } from "@/core/auth/schema";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -96,6 +97,12 @@ export const products = pgTable(
     /** First activation. Retained after archive/restore as lifecycle evidence. */
     publishedAt: timestamp("published_at", { withTimezone: true }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
+    /**
+     * §44.8: the member who sells this listing. Null means the site itself
+     * sells it. Member listings stay out of the site's own shop and cannot be
+     * checked out until seller payouts (C12.09) exist.
+     */
+    sellerUserId: uuid("seller_user_id").references(() => users.id, { onDelete: "restrict" }),
     /** Compare-and-swap token for humans, API clients and agents alike. */
     version: integer("version").notNull().default(1),
     createdAt: createdAtColumn(),
@@ -107,6 +114,7 @@ export const products = pgTable(
     index("products_visibility_updated_idx").on(t.visibility, t.updatedAt),
     index("products_kind_updated_idx").on(t.kind, t.updatedAt),
     index("products_tax_category_idx").on(t.taxCategoryId),
+    index("products_seller_idx").on(t.sellerUserId, t.status),
     check(
       "products_slug_valid",
       sql`char_length(${t.slug}) between 1 and 180 and ${t.slug} ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'`,

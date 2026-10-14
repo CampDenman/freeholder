@@ -8,7 +8,8 @@ import { listMembers, membershipRules } from "@/modules/members/service";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { getLocale, getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
-import { inviteMemberAction, saveMembershipRulesAction, setMemberStatusAction } from "./actions";
+import { inviteMemberAction, reviewListingAction, saveMarketRulesAction, saveMembershipRulesAction, setMemberStatusAction } from "./actions";
+import { pendingListings } from "@/modules/members/listings";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -32,6 +33,7 @@ export default async function MembersPage({
     membershipRules.call({}, actor),
     listMembers.call({ status, search: query.q || undefined, limit: 100 }, actor),
   ]);
+  const waiting = await pendingListings.call({}, actor);
   const back = `/admin/members?status=${status ?? "all"}${query.q ? `&q=${encodeURIComponent(query.q)}` : ""}`;
   return (
     <div className="grid gap-6">
@@ -58,6 +60,43 @@ export default async function MembersPage({
             </Field>
             <Button type="submit">{t("members.admin.saveRules")}</Button>
           </form>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("members.admin.market")} />
+        <CardBody>
+          <form action={saveMarketRulesAction} className="grid gap-3">
+            <label className="flex items-start gap-2">
+              <input type="checkbox" name="marketplaceEnabled" value="yes" defaultChecked={rules.marketplaceEnabled} />
+              <span>{t("members.admin.marketEnabled")}</span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input type="checkbox" name="listingReview" value="yes" defaultChecked={rules.listingReview} />
+              <span>{t("members.admin.listingReview")}</span>
+            </label>
+            <p className="text-sm text-ink-muted">{t("members.listings.notYetSelling")}</p>
+            <div><Button type="submit">{t("members.admin.saveRules")}</Button></div>
+          </form>
+          {waiting.length ? (
+            <ul className="mt-4 grid gap-3">
+              {waiting.map((l) => (
+                <li key={l.productId} className="grid gap-2 rounded-md border border-rule p-3">
+                  <p><strong>{l.name}</strong> · {t(`members.listings.kind.${l.kind}`)} · @{l.sellerHandle}</p>
+                  <form action={reviewListingAction} className="flex flex-wrap items-end gap-3">
+                    <input type="hidden" name="productId" value={l.productId} />
+                    <Field label={t("members.admin.listingNote")} htmlFor={`note-${l.productId}`}>
+                      <Input id={`note-${l.productId}`} name="note" maxLength={500} />
+                    </Field>
+                    <Button type="submit" name="decision" value="approve">{t("members.admin.approveListing")}</Button>
+                    <Button type="submit" name="decision" value="reject" variant="danger">{t("members.admin.rejectListing")}</Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-4 text-sm text-ink-muted">{t("members.admin.noPendingListings")}</p>
+          )}
         </CardBody>
       </Card>
 

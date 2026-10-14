@@ -86,3 +86,15 @@ from mocked payment, mail or media runs alone.
   on-page builder link likely never shows. Not changed here; the call bar
   reads the sign-in session directly.
 - Not yet: group calls (C12.24).
+
+## C12.08 — member listings (2026-10-14)
+
+- A listing is a catalog product with `seller_user_id`, created through the
+  catalog's own services (`src/modules/members/listings.ts`). The site's shop
+  (`catalog.browseProducts`) and purchase options exclude member listings;
+  `catalog.addCartItem` and `catalog.checkoutCart` refuse them until C12.09.
+- Screens: `/portal/listings`, `/market`, the profile Shop, market settings
+  and the review queue on `/admin/members`.
+- Tests: `tests/modules/member-listings.test.ts` (2 cases) and the listings
+  journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
+- Not yet: checkout and payouts (C12.09); seller-calendar services (C12.25).

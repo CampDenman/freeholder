@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Transactional product lifecycle shared by admin, HTTP and MCP (C5.09).
 
+import marketServices from "./market";
 import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
@@ -660,6 +661,8 @@ export const createProduct = defineService({
     taxCategoryId: productId.nullable().optional(),
     description: blockTreeSchema("page").default([]),
     seo,
+    /** §44.8: the member who sells it; omitted when the site sells it. */
+    sellerUserId: z.uuid().nullable().optional(),
   }),
   output: productRow,
   handler: async (input, ctx) => {
@@ -671,6 +674,7 @@ export const createProduct = defineService({
         subtitle: input.subtitle ?? null,
         brand: input.brand ?? null,
         taxCategoryId: input.taxCategoryId ?? null,
+        sellerUserId: input.sellerUserId ?? null,
         schemaType: schemaTypeFor(input.kind),
       })
       .returning()
@@ -1023,6 +1027,7 @@ registerSearchSource({
 import publicBookingServices from "./public-booking";
 
 export default [
+  ...marketServices,
   ...publicBookingServices,
   ...demoServices,
   listProducts,

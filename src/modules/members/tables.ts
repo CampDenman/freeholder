@@ -17,4 +17,5 @@ export {
   memberMessages,
   memberCalls,
   memberCallSignals,
+  memberListings,
 } from "./schema";
