@@ -1001,6 +1001,7 @@ export const SERVICE_NAMES = [
   "members.myListings",
   "members.myPayouts",
   "members.myPurchases",
+  "members.myReports",
   "members.myReviews",
   "members.mySales",
   "members.openDispute",
@@ -1014,7 +1015,10 @@ export const SERVICE_NAMES = [
   "members.profile",
   "members.react",
   "members.replyToReview",
+  "members.report",
+  "members.reports",
   "members.resolveDispute",
+  "members.resolveReport",
   "members.reviewListing",
   "members.reviews",
   "members.sale",
@@ -5466,6 +5470,10 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { orderId: string; sellerId: string; sellerHandle: string; sellerName: string; role: "buyer" | "seller" | "site"; currency: string; createdAt: string; items: { name: string; quantity: number; lineTotalMinor: number; requiresShipping: boolean; [key: string]: unknown }[]; fulfilment: "awaiting" | "shipped" | "delivered"; carrier: string | null; tracking: string | null; dispute: { id: string; reason: string; state: string; [key: string]: unknown } | null; payout: "held" | "due" | "paid" | "cancelled" | "review" | "mixed" | "none"; [key: string]: unknown }[];
   };
+  "members.myReports": {
+    input: Record<string, never>;
+    output: { id: string; targetType: "post" | "comment" | "message" | "listing" | "review" | "member"; reason: "spam" | "harassment" | "hate" | "violence" | "sexual" | "child_safety" | "scam" | "prohibited_item" | "impersonation" | "self_harm" | "other"; excerpt: string; state: "open" | "actioned" | "dismissed"; createdAt: string; [key: string]: unknown }[];
+  };
   "members.myReviews": {
     input: Record<string, never>;
     output: { written: { id: string; direction: "of_seller" | "of_buyer"; rating: number; body: string; author: { handle: string; displayName: string; [key: string]: unknown } | null; reply: string | null; createdAt: string; revealed: boolean; [key: string]: unknown }[]; received: { id: string; direction: "of_seller" | "of_buyer"; rating: number; body: string; author: { handle: string; displayName: string; [key: string]: unknown } | null; reply: string | null; createdAt: string; [key: string]: unknown }[]; waitingCount: number };
@@ -5518,9 +5526,21 @@ export interface ServiceCatalog {
     input: { id: string; body: string };
     output: { ok: true };
   };
+  "members.report": {
+    input: { targetType: "post" | "comment" | "message" | "listing" | "review" | "member"; targetId: string; reason: "spam" | "harassment" | "hate" | "violence" | "sexual" | "child_safety" | "scam" | "prohibited_item" | "impersonation" | "self_harm" | "other"; details?: string };
+    output: { ok: true };
+  };
+  "members.reports": {
+    input: { state?: "open" | "actioned" | "dismissed" };
+    output: { id: string; targetType: "post" | "comment" | "message" | "listing" | "review" | "member"; targetId: string; reason: "spam" | "harassment" | "hate" | "violence" | "sexual" | "child_safety" | "scam" | "prohibited_item" | "impersonation" | "self_harm" | "other"; details: string; excerpt: string; state: "open" | "actioned" | "dismissed"; action: ("removed" | "suspended" | "dismissed") | null; resolutionNote: string | null; subject: { userId: string; handle: string; displayName: string; status: string; [key: string]: unknown }; reporterCount: number; createdAt: string; resolvedAt: string | null; [key: string]: unknown }[];
+  };
   "members.resolveDispute": {
     input: { id: string; outcome: "release" | "refund"; note: string };
     output: { ok: true };
+  };
+  "members.resolveReport": {
+    input: { id: string; decision: "remove" | "suspend" | "remove_and_suspend" | "dismiss"; note?: string };
+    output: { resolved: number };
   };
   "members.reviewListing": {
     input: { productId: string; approve: boolean; note?: string };
@@ -8461,6 +8481,7 @@ export interface FreeholderApi {
     myListings: (input?: ServiceCatalog["members.myListings"]["input"]) => Promise<ServiceCatalog["members.myListings"]["output"]>;
     myPayouts: (input?: ServiceCatalog["members.myPayouts"]["input"]) => Promise<ServiceCatalog["members.myPayouts"]["output"]>;
     myPurchases: (input?: ServiceCatalog["members.myPurchases"]["input"]) => Promise<ServiceCatalog["members.myPurchases"]["output"]>;
+    myReports: (input?: ServiceCatalog["members.myReports"]["input"]) => Promise<ServiceCatalog["members.myReports"]["output"]>;
     myReviews: (input?: ServiceCatalog["members.myReviews"]["input"]) => Promise<ServiceCatalog["members.myReviews"]["output"]>;
     mySales: (input?: ServiceCatalog["members.mySales"]["input"]) => Promise<ServiceCatalog["members.mySales"]["output"]>;
     openDispute: (input: ServiceCatalog["members.openDispute"]["input"]) => Promise<ServiceCatalog["members.openDispute"]["output"]>;
@@ -8474,7 +8495,10 @@ export interface FreeholderApi {
     profile: (input: ServiceCatalog["members.profile"]["input"]) => Promise<ServiceCatalog["members.profile"]["output"]>;
     react: (input: ServiceCatalog["members.react"]["input"]) => Promise<ServiceCatalog["members.react"]["output"]>;
     replyToReview: (input: ServiceCatalog["members.replyToReview"]["input"]) => Promise<ServiceCatalog["members.replyToReview"]["output"]>;
+    report: (input: ServiceCatalog["members.report"]["input"]) => Promise<ServiceCatalog["members.report"]["output"]>;
+    reports: (input?: ServiceCatalog["members.reports"]["input"]) => Promise<ServiceCatalog["members.reports"]["output"]>;
     resolveDispute: (input: ServiceCatalog["members.resolveDispute"]["input"]) => Promise<ServiceCatalog["members.resolveDispute"]["output"]>;
+    resolveReport: (input: ServiceCatalog["members.resolveReport"]["input"]) => Promise<ServiceCatalog["members.resolveReport"]["output"]>;
     reviewListing: (input: ServiceCatalog["members.reviewListing"]["input"]) => Promise<ServiceCatalog["members.reviewListing"]["output"]>;
     reviews: (input: ServiceCatalog["members.reviews"]["input"]) => Promise<ServiceCatalog["members.reviews"]["output"]>;
     sale: (input: ServiceCatalog["members.sale"]["input"]) => Promise<ServiceCatalog["members.sale"]["output"]>;

@@ -136,3 +136,18 @@ from mocked payment, mail or media runs alone.
 - Reporting a review is part of C12.12's report-anything queue.
 - Tests: `tests/modules/member-reputation.test.ts` (3 cases) and the C12.11
   journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
+
+## C12.12 — reports and moderation (2026-10-14)
+
+- Services in `src/modules/members/reports.ts`; `/report?type=…&id=…` for
+  members, and the reports queue on `/admin/members` for staff.
+- The queue groups open reports by the thing reported. Removing a post,
+  comment or message soft-deletes it; a review is hidden; a listing is
+  rejected and archived, so the seller cannot simply put it back up.
+  Suspension goes through the same status change as `members.setStatus`.
+- Moderation notices use the `members.safety` notification topic.
+- Split out of the original item: prohibited-items policy (C12.28), adult
+  content (C12.29), abuse-image hash matching (C12.30, after attachments).
+- Tests: `tests/modules/member-reports.test.ts` (3 cases) and the C12.12
+  journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
+

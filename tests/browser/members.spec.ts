@@ -9,7 +9,7 @@ import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { THEME_COOKIE } from "@/core/design/theme";
-import { memberPayouts, memberProfiles, memberSaleFulfilments, memberSettings } from "@/modules/members/schema";
+import { memberPayouts, memberPosts, memberProfiles, memberSaleFulfilments, memberSettings } from "@/modules/members/schema";
 import { contacts } from "@/core/contacts/schema";
 import { orderItems, orders, productVariants, products } from "@/modules/catalog/schema";
 import { seedC11Owner, useOwnerSession, C11_BASE_URL } from "./owner-session";
@@ -443,5 +443,49 @@ test.describe("members (C12.01)", () => {
     await visitor.close();
     await seller.close();
     await buyerContext.close();
+  });
+
+  test("reporting a post, the moderation queue, and removal with a reason (C12.12)", async ({ browser }) => {
+    const ownerToken = await seedC11Owner("Safety proof");
+    const SAM_ID = "00000000-0000-4000-8000-0000000000d5";
+    await db().insert(users).values([
+      { id: MEMBER_ID, email: "rae@example.test", role: "customer" },
+      { id: SAM_ID, email: "sam@example.test", role: "customer" },
+    ]);
+    const now = new Date();
+    await db().insert(memberProfiles).values([
+      { userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: now, isPrivate: false },
+      { userId: SAM_ID, handle: "sam", displayName: "Sam Ito", ageAttestedAt: now, isPrivate: false },
+    ]);
+    const [post] = await db().insert(memberPosts).values({ authorId: SAM_ID, body: "Cheap followers at spam.example", visibility: "public" }).returning();
+    const rae = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+
+    const raeContext = await browser.newContext({ baseURL: C11_BASE_URL });
+    await raeContext.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
+    const raePage = await raeContext.newPage();
+    await raePage.goto(`/p/${post!.id}`);
+    await raePage.getByRole("link", { name: "Report" }).first().click();
+    await expect(raePage.getByRole("heading", { level: 1, name: "Report a post" })).toBeVisible();
+    await axeInBothThemes(raePage);
+    await raePage.getByLabel("What is wrong?").selectOption("spam");
+    await raePage.getByLabel(/Anything else the moderators/).fill("Spam link.");
+    await raePage.getByRole("button", { name: "Send report" }).click();
+    await expect(raePage.getByText(/Your report is with the site’s moderators/)).toBeVisible();
+
+    const admin = await browser.newContext({ baseURL: C11_BASE_URL });
+    await useOwnerSession(admin, ownerToken);
+    const console = await admin.newPage();
+    await console.goto("/admin/members");
+    await expect(console.getByText("Cheap followers at spam.example")).toBeVisible();
+    await expect(console.getByText("Reporter said: Spam link.")).toBeVisible();
+    await axeInBothThemes(console);
+    await console.getByLabel(/Reason the member will see/).fill("Spam links are not allowed here.");
+    await console.getByRole("button", { name: "Remove", exact: true }).click();
+    await expect(console.getByText("Nothing has been reported.")).toBeVisible();
+
+    await raePage.goto(`/p/${post!.id}`);
+    await expect(raePage.getByText("Cheap followers at spam.example")).toHaveCount(0);
+    await raeContext.close();
+    await admin.close();
   });
 });

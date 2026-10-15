@@ -8,9 +8,10 @@ import { listMembers, membershipRules } from "@/modules/members/service";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { getLocale, getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
-import { disputeAction, inviteMemberAction, payoutAccountAction, reviewListingAction, saveMarketRulesAction, saveMembershipRulesAction, setMemberStatusAction, settlePayoutsAction } from "./actions";
+import { disputeAction, inviteMemberAction, reportAction, payoutAccountAction, reviewListingAction, saveMarketRulesAction, saveMembershipRulesAction, setMemberStatusAction, settlePayoutsAction } from "./actions";
 import { payoutAdapters, sitePayouts } from "@/modules/members/payouts";
 import { listDisputes, saleThread } from "@/modules/members/protection";
+import { listReports } from "@/modules/members/reports";
 import { formatMoney } from "@/core/i18n";
 import { pendingListings } from "@/modules/members/listings";
 
@@ -38,7 +39,7 @@ export default async function MembersPage({
   ]);
   const [waiting, ledger] = await Promise.all([pendingListings.call({}, actor), sitePayouts.call({}, actor)]);
   const open = ledger.payouts.filter((p) => p.state === "held" || p.state === "due" || p.state === "review");
-  const disputes = await listDisputes.call({ state: "open" }, actor);
+  const [disputes, reports] = await Promise.all([listDisputes.call({ state: "open" }, actor), listReports.call({ state: "open" }, actor)]);
   const threads = await Promise.all(disputes.map((d) => saleThread.call({ orderId: d.orderId, sellerId: d.sellerId }, actor)));
   const back = `/admin/members?status=${status ?? "all"}${query.q ? `&q=${encodeURIComponent(query.q)}` : ""}`;
   return (
@@ -120,6 +121,35 @@ export default async function MembersPage({
           ) : (
             <p className="mt-4 text-sm text-ink-muted">{t("members.admin.noPendingListings")}</p>
           )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("members.admin.reports", { count: reports.length })} />
+        <CardBody>
+          {reports.length === 0 ? <p className="text-sm text-ink-muted">{t("members.admin.noReports")}</p> : null}
+          <ul className="grid gap-4">
+            {reports.map((r) => (
+              <li key={r.id} className="grid gap-2 rounded-md border border-rule p-3">
+                <p>
+                  <strong>{t(`members.report.reasons.${r.reason}`)}</strong> · {t(`members.report.targets.${r.targetType}`)} · <a className="underline" href={`/@${r.subject.handle}`}>@{r.subject.handle}</a>
+                  {r.reporterCount > 1 ? <> · {t("members.admin.reporters", { count: r.reporterCount })}</> : null}
+                </p>
+                <blockquote className="whitespace-pre-line break-words border-s-2 border-rule ps-3 text-sm">{r.excerpt}</blockquote>
+                {r.details ? <p className="text-sm text-ink-muted">{t("members.admin.reporterSaid", { details: r.details })}</p> : null}
+                <form action={reportAction} className="flex flex-wrap items-end gap-3">
+                  <input type="hidden" name="id" value={r.id} />
+                  <Field label={t("members.admin.reportNote")} htmlFor={`report-${r.id}`}>
+                    <Input id={`report-${r.id}`} name="note" maxLength={1000} />
+                  </Field>
+                  {r.targetType !== "member" ? <Button type="submit" name="decision" value="remove" variant="danger">{t("members.admin.reportRemove")}</Button> : null}
+                  {r.targetType !== "member" ? <Button type="submit" name="decision" value="remove_and_suspend" variant="danger">{t("members.admin.reportRemoveSuspend")}</Button> : null}
+                  {r.targetType === "member" ? <Button type="submit" name="decision" value="suspend" variant="danger">{t("members.admin.reportSuspend")}</Button> : null}
+                  <Button type="submit" name="decision" value="dismiss" variant="quiet">{t("members.admin.reportDismiss")}</Button>
+                </form>
+              </li>
+            ))}
+          </ul>
         </CardBody>
       </Card>
 

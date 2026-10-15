@@ -122,6 +122,7 @@ export default async function MemberProfile({
               <Verb handle={profile.handle} verb={r.muted ? "unmute" : "mute"} label={t(r.muted ? "members.graph.unmute" : "members.graph.mute")} variant="quiet" />
               <Verb handle={profile.handle} verb={r.restricted ? "unrestrict" : "restrict"} label={t(r.restricted ? "members.graph.unrestrict" : "members.graph.restrict")} variant="quiet" />
               <Verb handle={profile.handle} verb="block" label={t("members.graph.block")} variant="danger" />
+              <a className="inline-flex items-center px-3 py-2 text-sm text-ink-muted underline" href={`/report?type=member&id=${profile.userId}`}>{t("members.report.member")}</a>
             </>
           )}
         </div>
@@ -134,6 +135,7 @@ export default async function MemberProfile({
               <li key={l.id} className="grid gap-1 rounded-lg border border-rule bg-surface p-3">
                 <a className="font-semibold underline" href={`/products/${l.slug}`}>{l.name}</a>
                 {l.priceMinor !== null && l.currency ? <span className="text-sm">{formatMoney(l.priceMinor, l.currency, locale)}</span> : null}
+                {canAct ? <a className="text-sm text-ink-muted underline" href={`/report?type=listing&id=${l.id}`}>{t("members.report.action")}</a> : null}
               </li>
             ))}
           </ul>
@@ -154,6 +156,7 @@ export default async function MemberProfile({
                   {review.author ? <> · <a className="underline" href={`/@${review.author.handle}`}>{review.author.displayName}</a></> : null}
                 </p>
                 {review.body ? <p className="whitespace-pre-line break-words">{review.body}</p> : null}
+                {actor.kind === "user" && !r.self && review.author?.handle !== viewer?.handle ? <p><a className="text-sm text-ink-muted underline" href={`/report?type=review&id=${review.id}`}>{t("members.report.action")}</a></p> : null}
                 {review.reply ? <p className="border-s-2 border-rule ps-3 text-sm text-ink-muted">{t("members.reviews.replyBy", { name: profile.displayName })} {review.reply}</p> : null}
               </li>
             ))}

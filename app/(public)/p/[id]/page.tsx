@@ -62,6 +62,7 @@ export default async function PostPage({ params, searchParams }: { params: Promi
             <Button type="submit" variant="quiet">{t("members.post.deleteComment")}</Button>
           </form>
         ) : null}
+        {viewerId && viewerId !== c.author.userId ? <a className="text-sm text-ink-muted underline" href={`/report?type=comment&id=${c.id}`}>{t("members.report.action")}</a> : null}
       </div>
       {replies(c.id).length ? <ul className="grid gap-2 ps-4">{replies(c.id).map((r) => <Comment key={r.id} c={r} />)}</ul> : null}
       {me?.status === "active" && !c.parentId ? (
