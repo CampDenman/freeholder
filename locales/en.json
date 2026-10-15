@@ -7715,5 +7715,20 @@
   "members.bookings.bookTitle": "Book {name}",
   "members.bookings.minutes": "{minutes, plural, one {# minute} other {# minutes}}",
   "members.bookings.book": "See times",
-  "demo.outcome.communityVisible": "The demo community’s members and posts are visible"
+  "demo.outcome.communityVisible": "The demo community’s members and posts are visible",
+  "portal.keys.title": "Your agent",
+  "portal.keys.intro": "Make a key so an AI agent you use can act as you here, only for what you choose. It never gets the site’s staff access, and it stops working on the date you pick.",
+  "portal.keys.name": "Name",
+  "portal.keys.defaultName": "My agent",
+  "portal.keys.read": "Read my feed, profile, connections, conversations and notifications",
+  "portal.keys.post": "Post, comment and react as me",
+  "portal.keys.message": "Send messages as me",
+  "portal.keys.days": "Works for (days)",
+  "portal.keys.create": "Make key",
+  "portal.keys.shownOnce": "Copy this key into your agent now. It is shown only once.",
+  "portal.keys.endpoint": "Connect your agent to",
+  "portal.keys.stop": "Stop",
+  "portal.keys.none": "You have no agent keys.",
+  "portal.keys.expires": "works until",
+  "portal.keys.failed": "That key could not be made. Try again."
 }

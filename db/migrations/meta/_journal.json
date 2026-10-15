@@ -288,6 +288,13 @@
       "when": 1793310000020,
       "tag": "0040_member_subscription_payouts",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793310000021,
+      "tag": "0041_personal_api_keys",
+      "breakpoints": true
     }
   ]
 }

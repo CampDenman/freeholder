@@ -52,6 +52,17 @@ export async function actorFromToken(
   };
 }
 
+/** The person a personal key acts as, with their current role and grants. */
+async function personForKey(userId: string): Promise<{ userId: string; role: string; grants: { module: string; access: "view" | "manage" }[] } | null> {
+  const { db } = await import("@/core/db");
+  const { users, roleGrants } = await import("@/core/auth/schema");
+  const { eq } = await import("drizzle-orm");
+  const [user] = await db().select({ id: users.id, role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) return null;
+  const grants = await db().select({ module: roleGrants.module, access: roleGrants.access }).from(roleGrants).where(eq(roleGrants.roleKey, user.role));
+  return { userId: user.id, role: user.role, grants };
+}
+
 /**
  * The API key behind this request, if it presents a live one.
  *
@@ -70,6 +81,13 @@ export async function resolveApiKey(request: Request): Promise<Actor | undefined
   if (!key) return undefined;
 
   touchApiKey(key.id);
+  if (key.actsAsUserId) {
+    // C12.14: a person's own key acts as them, with their grants narrowed to
+    // the key's scopes (`permits` enforces that).
+    const person = await personForKey(key.actsAsUserId);
+    if (!person) return undefined;
+    return { kind: "user", ...person, keyScopes: key.scopes, request: requestMetadata(request) };
+  }
   return {
     kind: "agent",
     keyName: key.name,

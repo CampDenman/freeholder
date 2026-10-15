@@ -4,7 +4,7 @@
 // grant-filtered, no second document store.
 import { z } from "zod";
 import { listed, row, uuid } from "@/core/contract";
-import { defineService, getService, permits, type Actor } from "@/core/service";
+import { actsByKey, defineService, getService, permits, type Actor } from "@/core/service";
 import { ilikeContains, searchSources, type SearchSource } from "./registry";
 import "./sources";
 
@@ -24,7 +24,7 @@ function canSeeSource(actor: Actor, source: SearchSource): boolean {
   // leaked contact data and crossed notes/tasks/conversations grant families.
   const { def } = getService(source.readService);
   if (def.kind !== "query" || def.permission !== "scoped") return false;
-  if (actor.kind === "agent" && def.agentCallable === false) return false;
+  if (actsByKey(actor) && def.agentCallable === false) return false;
   return permits(actor, def.permission, def.name, def.kind);
 }
 

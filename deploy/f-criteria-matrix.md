@@ -4549,20 +4549,20 @@ v2.
 - **F10** — N/A — seeded demo activity arrives with the starter seed in C12.16 (`deploy/members-platform.md`).
 - **F11** — `deploy/members-platform.md` and `.changeset/member-notifications.md`.
 - **F12** — `tests/browser/members.spec.ts`: follow and friend requests appear as notifications and a topic's email mode is changed.
-## C12.14 — Expose every member capability through the service layer to
+## C12.14 — Expose every member capability and let members issue keys for their own agents
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
+- **F01** — `db/migrations/0041_personal_api_keys.sql`: a key may act as one person, and such keys must expire.
+- **F02** — `tests/core/personal-keys.test.ts`: acting as the member, scope limits, staff and human-review refusals, revocation.
+- **F03** — N/A — keys belong to logins, not contacts (`src/core/apikeys/personal.ts`).
+- **F04** — `tests/browser/members.spec.ts`: "Your agent" on `/portal/member`.
+- **F05** — `packages/sdk/src/generated.ts`: every member service, and `apikeys.createMine`, `apikeys.mine`, `apikeys.revokeMine`.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/portal/member`; strings in four locales (`locales/en.json`).
+- **F07** — `tests/core/personal-keys.test.ts`: never beyond the person, never staff, never human-review, never key minting.
+- **F08** — `tests/core/personal-keys.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background work (`src/core/apikeys/personal.ts`).
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-vibe-coding.md` and `.changeset/personal-agent-keys.md`.
+- **F12** — `tests/browser/members.spec.ts`: make a key, list its MCP tools, stop it.
 
 ## C12.15 — Guarantee member data rights
 

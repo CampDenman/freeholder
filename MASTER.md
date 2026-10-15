@@ -10539,9 +10539,29 @@ whatever is best for the people using the site.
   delivery, digests and retries ride the core notification outbox. **F12** the
   browser journey sees follow and friend requests in notifications and
   changes a topic's email setting. Changeset `member-notifications.md`.)*
-- [ ] **C12.14** Expose every member capability through the service layer to
+- [x] **C12.14** Expose every member capability through the service layer to
   HTTP, SDK and MCP, and let members issue scoped, expiring keys so their own
   agents act as them, never beyond the member's own permissions.
+  *(Evidence 2026-10-15: every member feature is a `defineService` in
+  `src/modules/members`, so HTTP, the SDK and MCP carry it
+  (`packages/sdk/src/generated.ts`); personal keys in
+  `src/core/apikeys/personal.ts`, their resolution in
+  `src/core/http/actor.ts`, the limits in `permits`/`hasModuleAccess`/
+  `actsByKey` (`src/core/service.ts`), migration
+  `db/migrations/0041_personal_api_keys.sql`, `tests/core/personal-keys.test.ts`,
+  `tests/browser/members.spec.ts`. **F04** "Your agent" on `/portal/member`
+  (read, post, message choices; 7, 30 or 90 days; shown once; stop).
+  **F05** `apikeys.createMine`, `apikeys.mine`, `apikeys.revokeMine`.
+  **F07** a personal key resolves to its person with their current role and
+  grants, narrowed to the services it names — even public reads, which as
+  the person can show followers-only content; it never passes a staff
+  (`scoped`) or system check, never carries module access, never takes a
+  human-review (`agentCallable: false`) action, cannot step up, cannot make
+  or change keys, must expire within 90 days (a database check), is
+  revoked with its person, and stays visible to owners in Admin → Access;
+  MCP lists only its tools. **F09** N/A — no background work. **F12** the
+  browser journey makes a key in the portal, lists its tools over the live
+  MCP endpoint, then stops it. Changeset `personal-agent-keys.md`.)*
 - [x] **C12.15** Guarantee member data rights: full export (profile, posts,
   purchases, sales, contacts, and message history decryptable on the member's
   own device), account deletion with stated handling of shared content, no

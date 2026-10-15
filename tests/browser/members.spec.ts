@@ -869,4 +869,39 @@ test.describe("members (C12.01)", () => {
     await visitor.close();
     await seller.close();
   });
+
+  test("a member makes a key for their own agent, which sees only what it was given (C12.14)", async ({ browser }) => {
+    await seedC11Owner("Agent keys proof");
+    await db().insert(users).values({ id: MEMBER_ID, email: "rae@example.test", role: "customer" });
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date() });
+    const rae = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+    const context = await browser.newContext({ baseURL: C11_BASE_URL });
+    await context.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
+    const page = await context.newPage();
+    await page.goto("/portal/member");
+    await page.getByLabel("Name", { exact: true }).fill("Claude at home");
+    await page.getByRole("button", { name: "Make key" }).click();
+    const token = (await page.locator("p.font-mono").first().textContent())?.trim() ?? "";
+    expect(token).toMatch(/^fh_/);
+    await expect(page.getByText("Claude at home")).toBeVisible();
+    await axeInBothThemes(page);
+
+    const response = await page.request.post("/api/mcp", {
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
+      data: { jsonrpc: "2.0", id: 1, method: "tools/list" },
+    });
+    const tools = ((await response.json()) as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name);
+    expect(tools).toContain("members_feed");
+    expect(tools).not.toContain("members_post");
+    expect(tools.some((name) => name.startsWith("apikeys_") || name.startsWith("contacts_"))).toBe(false);
+
+    await page.getByRole("button", { name: "Stop" }).click();
+    await expect(page.getByText("You have no agent keys.")).toBeVisible();
+    const after = await page.request.post("/api/mcp", {
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
+      data: { jsonrpc: "2.0", id: 2, method: "tools/list" },
+    });
+    expect(((await after.json()) as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name)).not.toContain("members_feed");
+    await context.close();
+  });
 });

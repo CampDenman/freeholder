@@ -7715,5 +7715,20 @@
   "members.bookings.bookTitle": "Réserver avec {name}",
   "members.bookings.minutes": "{minutes, plural, one {# minute} other {# minutes}}",
   "members.bookings.book": "Voir les créneaux",
-  "demo.outcome.communityVisible": "Les membres et publications de la communauté de démo sont visibles"
+  "demo.outcome.communityVisible": "Les membres et publications de la communauté de démo sont visibles",
+  "portal.keys.title": "Votre agent",
+  "portal.keys.intro": "Créez une clé pour qu’un agent IA que vous utilisez agisse en votre nom ici, uniquement pour ce que vous choisissez. Elle n’a jamais l’accès du personnel du site et cesse de fonctionner à la date choisie.",
+  "portal.keys.name": "Nom",
+  "portal.keys.defaultName": "Mon agent",
+  "portal.keys.read": "Lire mon fil, mon profil, mes relations, mes conversations et mes notifications",
+  "portal.keys.post": "Publier, commenter et réagir en mon nom",
+  "portal.keys.message": "Envoyer des messages en mon nom",
+  "portal.keys.days": "Valable (jours)",
+  "portal.keys.create": "Créer la clé",
+  "portal.keys.shownOnce": "Copiez cette clé dans votre agent maintenant. Elle n’est affichée qu’une fois.",
+  "portal.keys.endpoint": "Connectez votre agent à",
+  "portal.keys.stop": "Arrêter",
+  "portal.keys.none": "Vous n’avez aucune clé d’agent.",
+  "portal.keys.expires": "valable jusqu’au",
+  "portal.keys.failed": "Impossible de créer cette clé. Réessayez."
 }

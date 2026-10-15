@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.01: a member keeps their own profile.
 import type { Metadata } from "next";
+import { myKeys } from "@/core/apikeys/personal";
+import { MemberKeys } from "./MemberKeys";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
@@ -39,7 +41,7 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
       </div>
     );
   }
-  const [mine, sections, security] = await Promise.all([viewProfile.call({ handle: me.handle }, actor), profileSections.call({ handle: me.handle }, actor), twoFactorStatus.call({}, actor)]);
+  const [mine, sections, security, agentKeys] = await Promise.all([viewProfile.call({ handle: me.handle }, actor), profileSections.call({ handle: me.handle }, actor), twoFactorStatus.call({}, actor), myKeys.call({}, actor)]);
   return (
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold">{t("members.profile.title")}</h1>
@@ -125,6 +127,19 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
           useCode: t("portal.passkey.useCode"),
         }} />
         <p className="text-sm text-ink-muted">{t("portal.passkey.recovery")}</p>
+      </section>
+      <section className="grid gap-3" aria-labelledby="your-agent">
+        <h2 id="your-agent" className="text-xl font-semibold">{t("portal.keys.title")}</h2>
+        <p className="text-sm text-ink-muted">{t("portal.keys.intro")}</p>
+        <MemberKeys
+          endpoint="/api/mcp"
+          keys={agentKeys.map((k) => ({ id: k.id, name: k.name, prefix: k.prefix, expiresAt: k.expiresAt?.toISOString() ?? "" }))}
+          labels={{
+            name: t("portal.keys.name"), defaultName: t("portal.keys.defaultName"), read: t("portal.keys.read"), post: t("portal.keys.post"),
+            message: t("portal.keys.message"), days: t("portal.keys.days"), create: t("portal.keys.create"), shownOnce: t("portal.keys.shownOnce"),
+            stop: t("portal.keys.stop"), none: t("portal.keys.none"), expires: t("portal.keys.expires"), failed: t("portal.keys.failed"), endpoint: t("portal.keys.endpoint"),
+          }}
+        />
       </section>
       <section className="grid gap-3" aria-labelledby="your-avatar">
         <h2 id="your-avatar" className="text-xl font-semibold">{t("members.avatar.title")}</h2>

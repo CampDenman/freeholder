@@ -18,7 +18,7 @@
 //
 // **What is not a tool at all.** Credential services are excluded whatever the
 // caller's scopes say — see EXCLUDED_FAMILIES.
-import { listServices, permits, type Actor, type Service } from "@/core/service";
+import { actsByKey, listServices, permits, type Actor, type Service } from "@/core/service";
 import { toContractJsonSchema } from "@/core/contract/json-schema";
 
 /**
@@ -126,7 +126,7 @@ export function toolsFor(actor: Actor): McpTool[] {
     const { name, kind, permission, summary } = service.def;
     if (hiddenFromMcp(service)) continue;
     if (service.def.stepUp && actor.kind !== "user") continue;
-    if (service.def.agentCallable === false && actor.kind === "agent") continue;
+    if (service.def.agentCallable === false && actsByKey(actor)) continue;
     if (!permits(actor, permission, name, kind)) continue;
 
     const verb = name.split(".")[1] ?? "";
@@ -162,7 +162,7 @@ export function serviceForTool(
     if (toolName(service.def.name) !== tool) continue;
     if (hiddenFromMcp(service)) return undefined;
     if (service.def.stepUp && actor.kind !== "user") return undefined;
-    if (service.def.agentCallable === false && actor.kind === "agent") {
+    if (service.def.agentCallable === false && actsByKey(actor)) {
       return undefined;
     }
     // Resolved through the same permission check as the listing, so a tool

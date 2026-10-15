@@ -65,6 +65,11 @@ type ActorIdentity =
         twoFactorVerified: boolean;
         stepUpValid: boolean;
       };
+      /**
+       * C12.14: present when a person's own key acts for them. The key may
+       * call only these services, and never staff or system ones.
+       */
+      keyScopes?: readonly string[];
     }
   | { kind: "agent"; keyName: string; scopes: string[] }
   | { kind: "system" }
@@ -121,6 +126,11 @@ export function actorString(actor: Actor): string {
   }
 }
 
+/** An API key is acting: an agent's key, or (C12.14) a person's own key. */
+export function actsByKey(actor: Actor): boolean {
+  return actor.kind === "agent" || (actor.kind === "user" && Boolean(actor.keyScopes));
+}
+
 /**
  * The whole authorization decision, as one pure function — exported so the
  * matrix can be tested exhaustively without a database standing behind it.
@@ -136,6 +146,13 @@ export function permits(
 ): boolean {
   if (actor.kind === "system") return true;
   if (required === "system") return false;
+  if (actor.kind === "user" && actor.keyScopes) {
+    // A personal key: only what it names (even public reads, which as the
+    // person can show what only they may see), and never staff services.
+    const family = `${serviceName.split(".")[0]}.*`;
+    if (!actor.keyScopes.includes(serviceName) && !actor.keyScopes.includes(family)) return false;
+    if (required === "scoped") return false;
+  }
   if (required === "public") return true;
   if (actor.kind === "anonymous") return false;
   if (actor.kind === "agent") {
@@ -159,6 +176,8 @@ export function hasModuleAccess(
 ): boolean {
   if (actor.kind === "system") return true;
   if (actor.kind !== "user") return false;
+  // A personal key never carries its person's staff access.
+  if (actor.keyScopes) return false;
   if (
     actor.security?.twoFactorRequired &&
     (!actor.security.twoFactorEnrolled || !actor.security.twoFactorVerified)
@@ -418,7 +437,7 @@ function authorizeInput<In extends z.ZodType, Out>(
           : `Your role does not have permission to ${def.kind === "query" ? "view" : "manage"} ${def.name.split(".")[0]}.`,
     );
   }
-  if (def.agentCallable === false && actor.kind === "agent") {
+  if (def.agentCallable === false && actsByKey(actor)) {
     throw new ServiceError(
       "permission",
       "Sign in as a person to perform this human-review action.",
