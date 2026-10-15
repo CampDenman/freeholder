@@ -25,14 +25,16 @@
 //   - reports you filed stay, without your name; reports about you are closed.
 // It runs before the login is deleted, which would otherwise cascade over
 // some of this and be blocked by the sales records.
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { ServiceError, type Tx } from "@/core/service";
 import { products } from "@/modules/catalog/schema";
+import { assets } from "@/core/media/schema";
 import { openMessage, sealMessage } from "./message-crypto";
 import {
+  memberAttachments,
   memberCalls,
   memberComments,
   memberConversationParticipants,
@@ -85,6 +87,7 @@ async function exportMember(tx: Tx, userId: string) {
   return {
     profile,
     profileSections: await tx.select().from(memberProfileSections).where(eq(memberProfileSections.userId, userId)),
+    attachments: await tx.select().from(memberAttachments).where(eq(memberAttachments.ownerId, userId)),
     posts: await tx.select().from(memberPosts).where(eq(memberPosts.authorId, userId)),
     comments: await tx.select().from(memberComments).where(eq(memberComments.authorId, userId)),
     reactions: await tx.select().from(memberReactions).where(eq(memberReactions.userId, userId)),
@@ -162,6 +165,10 @@ async function eraseMember(tx: Tx, userId: string): Promise<number> {
   count(await tx.delete(memberFriendships).where(or(eq(memberFriendships.lowId, userId), eq(memberFriendships.highId, userId))).returning());
   count(await tx.delete(memberRelations).where(or(eq(memberRelations.ownerId, userId), eq(memberRelations.targetId, userId))).returning());
   count(await tx.delete(memberCalls).where(or(eq(memberCalls.callerId, userId), eq(memberCalls.calleeId, userId))).returning({ id: memberCalls.id }));
+  // Their files go with their content: detach and trash everything they uploaded.
+  count(await tx.delete(memberAttachments).where(eq(memberAttachments.ownerId, userId)).returning({ id: memberAttachments.id }));
+  // An erasure purges at the next sweep rather than after the usual trash retention.
+  count(await tx.update(assets).set({ status: "trashed", deletedAt: now, purgeAfter: now, updatedAt: now }).where(and(eq(assets.uploadedBy, `user:${userId}`), ne(assets.status, "trashed"))).returning({ id: assets.id }));
   count(await tx.delete(memberProfileSections).where(eq(memberProfileSections.userId, userId)).returning({ id: memberProfileSections.id }));
   count(await tx.delete(memberListings).where(eq(memberListings.sellerId, userId)).returning({ productId: memberListings.productId }));
   if (profile) count(await tx.delete(memberProfiles).where(eq(memberProfiles.userId, userId)).returning({ userId: memberProfiles.userId }));
@@ -173,6 +180,7 @@ registerContactPrivacySource({
   tables: [
     "member_profiles",
     "member_profile_sections",
+    "member_attachments",
     "member_follows",
     "member_friendships",
     "member_relations",

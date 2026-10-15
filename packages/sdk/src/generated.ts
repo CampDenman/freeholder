@@ -971,6 +971,7 @@ export const SERVICE_NAMES = [
   "members.answerRequest",
   "members.answerTag",
   "members.archiveListing",
+  "members.attachments",
   "members.befriend",
   "members.callConfig",
   "members.callStatus",
@@ -5361,6 +5362,10 @@ export interface ServiceCatalog {
     input: { productId: string; archived: boolean };
     output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; adult: boolean; createdAt: string; [key: string]: unknown };
   };
+  "members.attachments": {
+    input: { parentType: "post" | "comment" | "message"; parentId: string };
+    output: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[];
+  };
   "members.befriend": {
     input: { handle: string };
     output: { friend: "you_asked" | "friends" };
@@ -5374,8 +5379,8 @@ export interface ServiceCatalog {
     output: { id: string; media: "voice" | "video"; state: "ringing" | "active" | "ended" | "declined" | "missed"; role: "caller" | "callee"; other: { userId: string; handle: string; displayName: string; [key: string]: unknown }; createdAt: string; [key: string]: unknown };
   };
   "members.comment": {
-    input: { postId: string; parentId?: string; body: string };
-    output: { id: string; parentId: string | null; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; restricted: boolean; [key: string]: unknown };
+    input: { postId: string; parentId?: string; body: string; attachments?: { assetId: string; altText?: string }[] };
+    output: { id: string; parentId: string | null; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; restricted: boolean; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown };
   };
   "members.confirmDelivery": {
     input: { orderId: string; sellerId: string };
@@ -5387,7 +5392,7 @@ export interface ServiceCatalog {
   };
   "members.conversation": {
     input: { id: string; before?: string };
-    output: { conversation: { id: string; kind: "direct" | "group"; title: string | null; people: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; state: "active" | "requested"; muted: boolean; lastMessageAt: string; unread: boolean; [key: string]: unknown }; closed: boolean; messages: { id: string; sender: { userId: string; handle: string; displayName: string; [key: string]: unknown } | null; body: string | null; createdAt: string; mine: boolean; [key: string]: unknown }[]; seenBy: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; older: boolean };
+    output: { conversation: { id: string; kind: "direct" | "group"; title: string | null; people: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; state: "active" | "requested"; muted: boolean; lastMessageAt: string; unread: boolean; [key: string]: unknown }; closed: boolean; messages: { id: string; sender: { userId: string; handle: string; displayName: string; [key: string]: unknown } | null; body: string | null; createdAt: string; mine: boolean; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown }[]; seenBy: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; older: boolean };
   };
   "members.conversations": {
     input: { box?: "inbox" | "requests" };
@@ -5415,7 +5420,7 @@ export interface ServiceCatalog {
   };
   "members.editPost": {
     input: { id: string; body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me" };
-    output: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown };
+    output: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown };
   };
   "members.endCall": {
     input: { id: string };
@@ -5423,7 +5428,7 @@ export interface ServiceCatalog {
   };
   "members.feed": {
     input: { before?: string };
-    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
+    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
   };
   "members.follow": {
     input: { handle: string };
@@ -5447,7 +5452,7 @@ export interface ServiceCatalog {
   };
   "members.latest": {
     input: { before?: string; tag?: string };
-    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
+    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
   };
   "members.leaveConversation": {
     input: { conversationId: string };
@@ -5519,15 +5524,15 @@ export interface ServiceCatalog {
   };
   "members.pendingTags": {
     input: Record<string, never>;
-    output: { mentionId: string; post: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }; [key: string]: unknown }[];
+    output: { mentionId: string; post: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown }; [key: string]: unknown }[];
   };
   "members.pinPost": {
     input: { postId: string; pinned: boolean };
     output: { ok: true };
   };
   "members.post": {
-    input: { body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; repostOf?: string; tag?: string[]; adult?: boolean };
-    output: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown };
+    input: { body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; repostOf?: string; tag?: string[]; adult?: boolean; attachments?: { assetId: string; altText?: string }[] };
+    output: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown };
   };
   "members.postSaleMessage": {
     input: { orderId: string; sellerId: string; body: string };
@@ -5535,7 +5540,7 @@ export interface ServiceCatalog {
   };
   "members.postsBy": {
     input: { before?: string; handle: string };
-    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
+    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
   };
   "members.profile": {
     input: { handle: string };
@@ -5598,7 +5603,7 @@ export interface ServiceCatalog {
     output: { id: string };
   };
   "members.sendMessage": {
-    input: { conversationId: string; body: string };
+    input: { conversationId: string; body: string; attachments?: { assetId: string; altText?: string }[] };
     output: { id: string };
   };
   "members.setAvatar": {
@@ -5675,7 +5680,7 @@ export interface ServiceCatalog {
   };
   "members.viewPost": {
     input: { id: string };
-    output: { post: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }; comments: { id: string; parentId: string | null; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; restricted: boolean; [key: string]: unknown }[] };
+    output: { post: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown }; comments: { id: string; parentId: string | null; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; restricted: boolean; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown }[] };
   };
   "members.withdrawDispute": {
     input: { orderId: string; sellerId: string };
@@ -8506,6 +8511,7 @@ export interface FreeholderApi {
     answerRequest: (input: ServiceCatalog["members.answerRequest"]["input"]) => Promise<ServiceCatalog["members.answerRequest"]["output"]>;
     answerTag: (input: ServiceCatalog["members.answerTag"]["input"]) => Promise<ServiceCatalog["members.answerTag"]["output"]>;
     archiveListing: (input: ServiceCatalog["members.archiveListing"]["input"]) => Promise<ServiceCatalog["members.archiveListing"]["output"]>;
+    attachments: (input: ServiceCatalog["members.attachments"]["input"]) => Promise<ServiceCatalog["members.attachments"]["output"]>;
     befriend: (input: ServiceCatalog["members.befriend"]["input"]) => Promise<ServiceCatalog["members.befriend"]["output"]>;
     callConfig: (input?: ServiceCatalog["members.callConfig"]["input"]) => Promise<ServiceCatalog["members.callConfig"]["output"]>;
     callStatus: (input: ServiceCatalog["members.callStatus"]["input"]) => Promise<ServiceCatalog["members.callStatus"]["output"]>;

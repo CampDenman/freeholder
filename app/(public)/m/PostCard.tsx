@@ -3,6 +3,7 @@
 // C12.04: one post, with mentions and hashtags as links, reactions, and the
 // author's own controls.
 import type { ReactNode } from "react";
+import { Attachments } from "./MediaAttach";
 import { formatDateTime } from "@/core/i18n";
 import { Button, Pill } from "@/ui/primitives";
 import { createPostAction, deletePostAction, pinPostAction, reactAction } from "./post-actions";
@@ -23,6 +24,7 @@ export type Post = {
   myReaction: string | null;
   comments: number;
   tagged: { handle: string; displayName: string }[];
+  attachments?: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null }[];
 };
 
 /** Plain text with @mentions and #hashtags linked. React escapes the rest. */
@@ -74,6 +76,7 @@ export function PostCard({
         {post.adult ? <Pill tone="warning">{labels.adult}</Pill> : null}
       </header>
       {post.body ? <RichText body={post.body} /> : null}
+      {post.attachments?.length ? <Attachments items={post.attachments} /> : null}
       {post.repost ? (
         <blockquote className="grid gap-1 rounded-md border border-rule p-3 text-sm">
           <span className="text-ink-muted">{labels.reposted} <a className="underline" href={`/@${post.repost.author.handle}`}>@{post.repost.author.handle}</a></span>

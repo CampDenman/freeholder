@@ -3,6 +3,7 @@
 // C12.06: starting, answering and sending member messages.
 "use server";
 import { cookies } from "next/headers";
+import { attachmentsFrom } from "../m/attachment-form";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
@@ -54,7 +55,7 @@ export async function conversationAction(form: FormData): Promise<void> {
   let to = conversationPath(id);
   try {
     switch (verb) {
-      case "send": await sendMessage.call({ conversationId: id, body: text(form, "body") }, who); break;
+      case "send": await sendMessage.call({ conversationId: id, body: text(form, "body"), attachments: attachmentsFrom(form) }, who); break;
       case "accept": await answerMessageRequest.call({ conversationId: id, accept: true }, who); break;
       case "decline": await answerMessageRequest.call({ conversationId: id, accept: false }, who); to = "/messages"; break;
       case "leave": await leaveConversation.call({ conversationId: id }, who); to = "/messages"; break;

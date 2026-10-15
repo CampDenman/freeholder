@@ -7662,5 +7662,8 @@
   "members.notifications.quietEnd": "Until",
   "members.notifications.quietTimezone": "Times are in {timezone}.",
   "members.notifications.quietSave": "Save quiet hours",
-  "members.notifications.quietInvalid": "Quiet hours need a different start and end time."
+  "members.notifications.quietInvalid": "Quiet hours need a different start and end time.",
+  "members.attach.add": "Add photos or video",
+  "members.attach.describe": "Describe it for people who can’t see it",
+  "members.attach.remove": "Remove"
 }

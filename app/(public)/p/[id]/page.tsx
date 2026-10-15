@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.04: one post with its threaded comments.
 import type { Metadata } from "next";
+import { Attachments, MediaAttach } from "../../m/MediaAttach";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
@@ -54,6 +55,7 @@ export default async function PostPage({ params, searchParams }: { params: Promi
         {c.restricted ? <span className="text-ink-muted">{t("members.post.restrictedNote")}</span> : null}
       </p>
       <RichText body={c.body} />
+      <Attachments items={c.attachments} />
       <div className="flex flex-wrap gap-2">
         {viewerId && (viewerId === c.author.userId || viewerId === view.post.author.userId) ? (
           <form action={deleteCommentAction}>
@@ -92,6 +94,7 @@ export default async function PostPage({ params, searchParams }: { params: Promi
             <Field label={t("members.post.addComment")} htmlFor="comment-body">
               <textarea id="comment-body" name="body" required maxLength={2000} rows={2} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
             </Field>
+            <MediaAttach id="comment" labels={{ add: t("members.attach.add"), describe: t("members.attach.describe"), uploading: t("members.avatar.uploading"), failed: t("members.avatar.failed"), remove: t("members.attach.remove") }} />
             <Button type="submit">{t("members.post.sendComment")}</Button>
           </form>
         ) : null}

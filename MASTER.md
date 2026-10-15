@@ -10588,9 +10588,31 @@ whatever is best for the people using the site.
   background work. **F12** the browser journey uploads a picture, adds a
   followers-only section, pins a post, and shows a visitor only what they
   may see. Changeset `member-profile-sections.md`.)*
-- [ ] **C12.21** Let members attach images and video to posts, comments and messages,
+- [x] **C12.21** Let members attach images and video to posts, comments and messages,
   with alt text, safe processing, and the post's visibility applied to every
   file.
+  *(Evidence 2026-10-14: `src/modules/members/attachments.ts`,
+  `src/modules/members/attachment-store.ts`, `app/member-files/[id]/route.ts`,
+  migration `db/migrations/0039_member_attachments.sql`,
+  `tests/modules/member-attachments.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** "Add photos or video" with a description per file in the feed
+  composer, comments and messages; files shown on posts, comments and
+  messages. **F05** `attachments` on `members.post`, `members.comment` and
+  `members.sendMessage`, attachments on their outputs, and
+  `members.attachments`. **F07** files arrive through `media.upload`
+  (validated, malware-scanned, responsive variants); only the member's own
+  ready, cleared images and videos, each attached once; attaching makes the
+  asset private so the public media route refuses it; `/member-files/[id]`
+  asks on every request whether the viewer can see the post (visibility,
+  adult flag, blocks), comment (including restricted commenters) or message
+  (current participants), so deleting, unsending, leaving or blocking
+  revokes a URL already shared; responses are `private, no-store`,
+  sandboxed and same-origin; erasure detaches and purges the member's files.
+  Photo-only posts are allowed, so the text-or-repost database check moved
+  into the service. **F09** N/A — no background work. **F12** the browser
+  journey posts a followers-only photo, then checks the file for the owner,
+  a visitor, a non-follower, and the same person after following.
+  Changeset `member-attachments.md`.)*
 - [x] **C12.22** Add web push for member notifications (standard Web Push
   with the site's own keys, no third-party service) and member-chosen quiet
   hours that hold push and email until they end.

@@ -7662,5 +7662,8 @@
   "members.notifications.quietEnd": "Hasta",
   "members.notifications.quietTimezone": "Las horas están en {timezone}.",
   "members.notifications.quietSave": "Guardar horas de silencio",
-  "members.notifications.quietInvalid": "Las horas de silencio necesitan un inicio y un fin distintos."
+  "members.notifications.quietInvalid": "Las horas de silencio necesitan un inicio y un fin distintos.",
+  "members.attach.add": "Añadir fotos o vídeo",
+  "members.attach.describe": "Descríbela para quien no puede verla",
+  "members.attach.remove": "Quitar"
 }

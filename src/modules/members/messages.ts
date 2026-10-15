@@ -10,6 +10,7 @@
 //
 // Bodies are encrypted at rest (message-crypto.ts). End-to-end encryption is
 // C12.23; nothing here claims it.
+import { attachFiles, attachmentInput, attachmentsFor, attachmentShape } from "./attachment-store";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { and, desc, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
@@ -65,9 +66,10 @@ async function directBlocked(ctx: ServiceContext, conversationId: string, userId
   return false;
 }
 
-async function send(ctx: ServiceContext, conversationId: string, senderId: string, body: string) {
+async function send(ctx: ServiceContext, conversationId: string, senderId: string, body: string, files: z.infer<typeof attachmentInput> = []) {
   const id = randomUUID();
   await ctx.tx.insert(memberMessages).values({ id, conversationId, senderId, bodySealed: sealMessage(body, id) });
+  await attachFiles(ctx, senderId, "message", id, files);
   await ctx.tx.update(memberConversations).set({ lastMessageAt: new Date() }).where(eq(memberConversations.id, conversationId));
   await ctx.tx
     .update(memberConversationParticipants)
@@ -222,7 +224,7 @@ export const viewConversation = defineService({
   output: z.object({
     conversation: conversationSummary,
     closed: z.boolean(),
-    messages: listed(row({ id: uuid, sender: person.nullable(), body: z.string().nullable(), createdAt: timestamp, mine: z.boolean() })),
+    messages: listed(row({ id: uuid, sender: person.nullable(), body: z.string().nullable(), createdAt: timestamp, mine: z.boolean(), attachments: listed(attachmentShape) })),
     /** Who has read up to the newest message — only if you share receipts too. */
     seenBy: listed(person),
     older: z.boolean(),
@@ -264,6 +266,7 @@ export const viewConversation = defineService({
       const p = id ? byId.get(id) : undefined;
       return p ? { userId: p.userId, handle: p.handle, displayName: p.displayName } : null;
     };
+    const files = await attachmentsFor(ctx, "message", rows.map((m) => m.id));
     return {
       conversation: {
         id: conversation!.id,
@@ -282,6 +285,7 @@ export const viewConversation = defineService({
         body: m.deletedAt ? null : openMessage(m.bodySealed, m.id),
         createdAt: m.createdAt,
         mine: m.senderId === me,
+        attachments: m.deletedAt ? [] : (files.get(m.id) ?? []),
       })),
       seenBy,
       older,
@@ -296,7 +300,7 @@ export const sendMessage = defineService({
   permission: "authenticated",
   writeClass: "write",
   rateLimit: { limit: 600, windowSeconds: 3600, message: "You are sending messages very quickly. Please slow down.", subject: (_i, actor) => (actor.kind === "user" ? actor.userId : undefined) },
-  input: z.object({ conversationId: uuid, body: z.string().trim().min(1).max(10_000) }),
+  input: z.object({ conversationId: uuid, body: z.string().trim().min(1).max(10_000), attachments: attachmentInput }),
   output: z.object({ id: uuid }),
   handler: async (input, ctx) => {
     const me = await activeSelf(ctx);
@@ -306,7 +310,7 @@ export const sendMessage = defineService({
     if (conversation!.kind === "direct" && (await directBlocked(ctx, input.conversationId, me.userId))) {
       throw new ServiceError("permission", "You can no longer message this person.");
     }
-    return { id: await send(ctx, input.conversationId, me.userId, input.body) };
+    return { id: await send(ctx, input.conversationId, me.userId, input.body, input.attachments) };
   },
 });
 
