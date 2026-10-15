@@ -10607,10 +10607,34 @@ whatever is best for the people using the site.
   Everything scenario through `demo.load`, reads the feed, market and
   conversation, and purges to nothing. Changeset
   `member-demo-community.md`.)*
-- [ ] **C12.17** Prove the whole member journey end to end: two members join,
+- [x] **C12.17** Prove the whole member journey end to end: two members join,
   follow and befriend, message, call each other in Chromium and Firefox, one
   buys a service from the other, the seller is paid out, both review, and a
   report reaches moderation; plus a load test of feeds and messaging.
+  *(Evidence 2026-10-15: `tests/browser/member-journey.spec.ts` and
+  `tests/load/members-load.test.ts` (`pnpm test:load`). **F04** every member
+  screen the journey passes through. **F05** N/A — a proof item that drives
+  existing services; it adds none. **F07** each step is taken by the only
+  person allowed to (buyer, seller or staff), and moderation removes the
+  reported post. **F09** the payout arrives through the events that follow
+  the payment, as in production. **F12** one browser
+  journey through the real screens: two people join at `/join`, follow and
+  befriend, message, and video-call each other; one lists a service, the other
+  buys it at checkout, staff record the payment in `/admin/payments`, the
+  seller marks it sent, the buyer confirms, staff mark the payout paid, both
+  review and the rating shows on the profile, and a report reaches
+  `/admin/members`, where staff remove the post. Building it found and fixed
+  two call bugs in `app/(public)/call/CallRoom.tsx`: the connection
+  restarted when the call was answered (the effect depended on the initial
+  state), and one candidate a browser rejected discarded the rest of its
+  signalling batch. The load test seeds 300 members, 3,000 posts and 15,000
+  follows and measured, at ten-way concurrency, p95 44 ms for home feeds,
+  38 ms for the public feed and 206 ms for message sends, inside budgets of
+  400, 300 and 250 ms. A second test calls between Chromium and Firefox and
+  connects both ways on a workstation; it is skipped on hosted CI, where
+  Firefox gathers no ICE candidates at all (the test prints each side's
+  connection states and candidates if it ever fails).
+  Changeset `member-calls-cross-browser.md`.)*
 - [ ] **C12.18** Offer opt-in ActivityPub federation so members can follow
   and be followed across the fediverse and take their audience elsewhere.
 - [x] **C12.19** Offer members passkey-first sign-in: enrol a passkey after

@@ -4594,20 +4594,20 @@ v2.
 - **F11** — `deploy/members-vibe-coding.md` and `.changeset/member-demo-community.md`.
 - **F12** — `tests/modules/member-demo.test.ts`: the Everything scenario loads the community into the feed, market and messages, then purges.
 
-## C12.17 — Prove the whole member journey end to end: two members join,
+## C12.17 — Prove the whole member journey end to end
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
+- **F01** — N/A — a proof item; no tables (`tests/browser/member-journey.spec.ts`).
+- **F02** — `tests/load/members-load.test.ts`: feed and messaging latency budgets under load.
+- **F03** — `tests/browser/member-journey.spec.ts`: the buyer is the contact on the order and its invoice.
+- **F04** — `tests/browser/member-journey.spec.ts`: every member screen in the journey.
+- **F05** — N/A — exercises existing services (`tests/browser/member-journey.spec.ts`).
+- **F06** — N/A — accessibility is covered per screen in `tests/browser/members.spec.ts`.
+- **F07** — `tests/browser/member-journey.spec.ts`: only buyer, seller and staff act at each step; moderation removes the post.
+- **F08** — `tests/browser/member-journey.spec.ts` + `tests/load/members-load.test.ts`.
+- **F09** — `tests/browser/member-journey.spec.ts`: payouts recorded by the events after payment.
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-calls-cross-browser.md`.
+- **F12** — `tests/browser/member-journey.spec.ts`: join, connect, message, call across Chromium and Firefox, sell, pay out, review and moderate.
 
 ## C12.18 — Offer opt-in ActivityPub federation so members can follow
 
