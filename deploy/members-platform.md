@@ -176,3 +176,15 @@ from mocked payment, mail or media runs alone.
   C12.28 journey in `tests/browser/members.spec.ts`. Passed locally
   2026-10-14.
 
+## C12.15 — member data rights (2026-10-14)
+
+- `src/modules/members/data-rights.ts` registers the `members` privacy
+  source; members use the existing privacy centre (`/portal/privacy`).
+- Privacy sources now take `eraseOrder` (lowest first, default 100); members
+  runs at 10, before the login is deleted.
+- Erasure handling is stated in the file header and on `/portal/member`.
+  Sales records move to the erased-member placeholder
+  (`00000000-0000-4000-8000-00000000e5ed`, an unreachable login).
+- Tests: `tests/modules/member-data-rights.test.ts` (2 cases) and the C12.15
+  journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
+

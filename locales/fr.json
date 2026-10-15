@@ -7604,5 +7604,10 @@
   "members.policy.adminLabel": "Ce que les membres ne peuvent pas vendre",
   "members.policy.adminHint": "Laissez vide pour utiliser les règles de départ. Publier une modification crée la version {version} + 1, que les vendeurs acceptent avant leur prochaine annonce.",
   "members.policy.preview": "Voir la page publique",
-  "members.policy.publish": "Publier les règles"
+  "members.policy.publish": "Publier les règles",
+  "members.data.title": "Vos données",
+  "members.data.export": "Vous pouvez télécharger tout ce que ce site conserve sur vous en tant que membre : profil, publications, commentaires, relations, conversations, annonces, ventes, achats et avis.",
+  "members.data.erase": "Si vous supprimez votre compte, votre profil, vos publications, commentaires, relations et avis sont supprimés. Les messages que vous avez envoyés apparaissent comme retirés dans les conversations des autres. Le site conserve ses registres de ventes, sans votre nom, car il doit tenir sa comptabilité. La suppression attend que l’argent qui vous est dû soit versé et que tout litige en cours soit réglé.",
+  "members.data.noTrackers": "Ce site n’utilise aucun traceur tiers sur les pages des membres et ne vend jamais les données des membres.",
+  "members.data.manage": "Télécharger vos données ou supprimer votre compte"
 }

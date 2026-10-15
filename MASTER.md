@@ -10517,10 +10517,29 @@ whatever is best for the people using the site.
 - [ ] **C12.14** Expose every member capability through the service layer to
   HTTP, SDK and MCP, and let members issue scoped, expiring keys so their own
   agents act as them, never beyond the member's own permissions.
-- [ ] **C12.15** Guarantee member data rights: full export (profile, posts,
+- [x] **C12.15** Guarantee member data rights: full export (profile, posts,
   purchases, sales, contacts, and message history decryptable on the member's
   own device), account deletion with stated handling of shared content, no
   third-party trackers, and no sale of member data.
+  *(Evidence 2026-10-14: `src/modules/members/data-rights.ts` registered as
+  the `members` privacy source (ordered before login deletion by the new
+  `eraseOrder`), `tests/modules/member-data-rights.test.ts`,
+  `tests/browser/members.spec.ts`. **F04** "Your data" on `/portal/member`,
+  linking to the existing privacy centre. **F05** the ordinary
+  `privacy.createMyDataRequest` / `contacts.fulfillDataRequest` services.
+  **F07** export carries profile, posts, comments, reactions, connections,
+  blocks, every conversation with its messages opened for the member (the
+  site holds message keys until C12.23 makes them device-held), calls,
+  listings, payouts, sales, disputes, sale threads, reviews written, revealed
+  reviews about them and reports they filed — never unrevealed reviews or who
+  reported them; erasure waits while a payout is held or due or a dispute is
+  open, deletes their content, leaves sent messages as "removed", keeps sales
+  records under an anonymous erased member with their words destroyed, takes
+  listings down, and keeps reports they filed without their name; the
+  browser journey proves member pages load nothing from another origin; no
+  service sells or shares member data. **F09** N/A — runs inside the existing
+  privacy request. **F12** the journey checks origins and reaches the
+  privacy centre from member settings. Changeset `member-data-rights.md`.)*
 - [ ] **C12.16** Make it a starter: a new-site template and seeded demo
   members, posts, listings and conversations; the playground shows the member
   features; vibe-coding guides for Replit, Lovable and coding agents.

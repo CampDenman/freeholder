@@ -39,7 +39,7 @@ export function openMessage(envelope: string, messageId: string): string {
   if (parts.length !== 3 || parts[0] !== VERSION) throw new Error("That message has an unsupported envelope.");
   const nonce = Buffer.from(parts[1]!, "base64url");
   const sealed = Buffer.from(parts[2]!, "base64url");
-  if (nonce.length !== NONCE_BYTES || sealed.length <= TAG_BYTES) throw new Error("That message is malformed.");
+  if (nonce.length !== NONCE_BYTES || sealed.length < TAG_BYTES) throw new Error("That message is malformed.");
   const body = sealed.subarray(0, -TAG_BYTES);
   const tag = sealed.subarray(-TAG_BYTES);
   for (const candidate of material()) {
