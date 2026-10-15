@@ -7629,5 +7629,21 @@
   "members.sections.add": "Ajouter la section",
   "members.sections.remove": "Retirer",
   "members.sections.pin": "Épingler au profil",
-  "members.sections.openPost": "Ouvrir la publication"
+  "members.sections.openPost": "Ouvrir la publication",
+  "portal.passkey.heading": "Se connecter avec une clé d’accès",
+  "portal.passkey.intro": "Si vous avez ajouté une clé d’accès, utilisez votre empreinte, votre visage ou le verrouillage de l’écran. Aucun e-mail nécessaire.",
+  "portal.passkey.submit": "Se connecter avec la clé d’accès",
+  "portal.passkey.failed": "Cette clé d’accès n’a pas fonctionné. Réessayez ou recevez un lien de connexion par e-mail.",
+  "portal.passkey.manageTitle": "Clés d’accès",
+  "portal.passkey.prompt": "Ajoutez une clé d’accès et la prochaine fois, connectez-vous d’un geste, sans lien par e-mail.",
+  "portal.passkey.name": "Nommer cette clé d’accès",
+  "portal.passkey.defaultName": "Mon appareil",
+  "portal.passkey.add": "Ajouter une clé d’accès",
+  "portal.passkey.remove": "Retirer",
+  "portal.passkey.added": "Clé d’accès ajoutée. Utilisez-la lors de votre prochaine connexion.",
+  "portal.passkey.none": "Vous n’avez pas encore de clé d’accès.",
+  "portal.passkey.recovery": "Appareil perdu ? Connectez-vous avec un lien envoyé par e-mail, puis confirmez avec un de vos codes de récupération pour retirer l’ancienne clé.",
+  "portal.passkey.codesIntro": "Conservez ces codes de récupération en lieu sûr. Si vous perdez cet appareil, connectez-vous avec un lien par e-mail et utilisez-en un pour retirer l’ancienne clé. Chacun ne sert qu’une fois.",
+  "portal.passkey.recoveryCode": "Code de récupération",
+  "portal.passkey.useCode": "Confirmer avec le code, puis retirer la clé"
 }

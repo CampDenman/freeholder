@@ -661,4 +661,41 @@ test.describe("members (C12.01)", () => {
     await visitor.close();
     await context.close();
   });
+
+  test("a member adds a passkey, then signs in with it instead of an email link (C12.19)", async ({ browser }) => {
+    await seedC11Owner("Passkey proof");
+    await db().insert(users).values({ id: MEMBER_ID, email: "rae@example.test", role: "customer" });
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date() });
+    await db().insert(contacts).values({ email: "rae@example.test", name: "Rae Lane", userId: MEMBER_ID });
+    const rae = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+    const context = await browser.newContext({ baseURL: C11_BASE_URL });
+    const page = await context.newPage();
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("WebAuthn.enable");
+    await cdp.send("WebAuthn.addVirtualAuthenticator", { options: {
+      protocol: "ctap2", transport: "internal", hasResidentKey: true,
+      hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true,
+    } });
+    await context.addCookies([
+      { name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL },
+      { name: CSRF_COOKIE, value: issueCsrfToken(), url: C11_BASE_URL },
+    ]);
+    await page.goto("/portal/member");
+    await expect(page.getByText(/Add a passkey and next time/)).toBeVisible();
+    await page.getByLabel("Name this passkey").fill("Laptop");
+    await page.getByRole("button", { name: "Add a passkey" }).click();
+    await expect(page.getByText(/Passkey added/)).toBeVisible();
+    await expect(page.getByText(/Keep these recovery codes/)).toBeVisible();
+    await expect(page.getByText("Laptop", { exact: true })).toBeVisible();
+    await axeInBothThemes(page);
+
+    await context.clearCookies();
+    await page.goto("/portal/login");
+    await page.getByLabel("Email").first().fill("rae@example.test");
+    await page.getByRole("button", { name: "Sign in with passkey" }).click();
+    await page.waitForURL((url) => !url.pathname.endsWith("/login"));
+    await page.goto("/portal/member");
+    await expect(page.getByText("@rae").first()).toBeVisible();
+    await context.close();
+  });
 });

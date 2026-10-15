@@ -201,3 +201,12 @@ from mocked payment, mail or media runs alone.
   C12.20 journey in `tests/browser/members.spec.ts`. Passed locally
   2026-10-14.
 
+## C12.19 — member passkeys (2026-10-14)
+
+- Portal actions in `app/portal/passkey-actions.ts` reuse the owner's
+  passkey ceremonies; the relying party is `APP_URL`'s host.
+- Members are never required to use a second factor, so enrolling a passkey
+  leaves the email link working as the recovery path.
+- Tested with Chromium's virtual authenticator in the C12.19 journey in
+  `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
+

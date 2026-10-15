@@ -10549,9 +10549,26 @@ whatever is best for the people using the site.
   report reaches moderation; plus a load test of feeds and messaging.
 - [ ] **C12.18** Offer opt-in ActivityPub federation so members can follow
   and be followed across the fediverse and take their audience elsewhere.
-- [ ] **C12.19** Offer members passkey-first sign-in: enrol a passkey after
+- [x] **C12.19** Offer members passkey-first sign-in: enrol a passkey after
   the email proof, sign in with it on return, manage passkeys from the portal,
   and keep email proof as the recovery path.
+  *(Evidence 2026-10-14: `app/portal/passkey-actions.ts`,
+  `app/portal/login/PortalPasskeySignIn.tsx`,
+  `app/portal/(account)/member/MemberPasskeys.tsx`, `tests/browser/members.spec.ts`.
+  **F04** "Sign in with a passkey" on `/portal/login` (shown even where email
+  sign-in is not configured) and Passkeys on `/portal/member`, with an
+  add-a-passkey prompt until one exists. **F05** the existing
+  `auth.beginPasskeyLogin`, `auth.completePasskeyLogin`,
+  `auth.beginWebAuthnRegistration`, `auth.finishWebAuthnRegistration`,
+  `auth.beginWebAuthnStepUp`, `auth.finishWebAuthnStepUp`,
+  `auth.verifyStepUpCode` and `auth.removeWebAuthnFactor`. **F07** a passkey
+  never becomes a required second factor for members (only privileged roles
+  require one), so the email link always still signs them in; adding another
+  passkey or removing one needs a fresh proof with a passkey or a recovery
+  code; recovery codes are shown once after the first passkey. **F09** N/A —
+  no background work. **F12** the browser journey adds a passkey with a
+  virtual authenticator, signs out, and signs back in with it. Changeset
+  `member-passkeys.md`.)*
 - [x] **C12.20** Give member profiles an avatar and optional profile
   sections (for example portfolio, services, pinned posts), each with its own
   visibility.
