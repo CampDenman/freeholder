@@ -7645,5 +7645,22 @@
   "portal.passkey.recovery": "فقدت جهازك؟ سجّل الدخول برابط يُرسل إلى بريدك، ثم أكّد بأحد رموز الاسترداد لإزالة المفتاح القديم.",
   "portal.passkey.codesIntro": "احفظ رموز الاسترداد هذه في مكان آمن. إذا فقدت هذا الجهاز، سجّل الدخول برابط البريد واستخدم أحدها لإزالة المفتاح القديم. يعمل كل رمز مرة واحدة.",
   "portal.passkey.recoveryCode": "رمز الاسترداد",
-  "portal.passkey.useCode": "التأكيد بالرمز ثم إزالة المفتاح"
+  "portal.passkey.useCode": "التأكيد بالرمز ثم إزالة المفتاح",
+  "members.notifications.thisBrowser": "الإشعارات في هذا المتصفح",
+  "members.notifications.push.on": "الإشعارات الفورية مفعّلة في هذا المتصفح.",
+  "members.notifications.push.off": "تلقَّ الإشعارات هنا حتى عندما لا يكون الموقع مفتوحًا.",
+  "members.notifications.push.turnOn": "تفعيل",
+  "members.notifications.push.turnOff": "إيقاف",
+  "members.notifications.push.unsupported": "لا يستطيع هذا المتصفح تلقي الإشعارات الفورية.",
+  "members.notifications.push.blocked": "الإشعارات محظورة لهذا الموقع في إعدادات متصفحك.",
+  "members.notifications.push.failed": "تعذّر تفعيل الإشعارات الفورية. حاول مرة أخرى.",
+  "members.notifications.pushLabel": "فوري",
+  "members.notifications.quietTitle": "ساعات الهدوء",
+  "members.notifications.quietIntro": "خلال ساعات الهدوء، تنتظر الإشعارات الفورية والبريد حتى تنتهي. يبقى صندوق الوارد محدّثًا.",
+  "members.notifications.quietOn": "استخدام ساعات الهدوء",
+  "members.notifications.quietStart": "من",
+  "members.notifications.quietEnd": "حتى",
+  "members.notifications.quietTimezone": "الأوقات بتوقيت {timezone}.",
+  "members.notifications.quietSave": "حفظ ساعات الهدوء",
+  "members.notifications.quietInvalid": "تحتاج ساعات الهدوء إلى وقت بداية ونهاية مختلفين."
 }

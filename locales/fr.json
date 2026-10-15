@@ -7645,5 +7645,22 @@
   "portal.passkey.recovery": "Appareil perdu ? Connectez-vous avec un lien envoyé par e-mail, puis confirmez avec un de vos codes de récupération pour retirer l’ancienne clé.",
   "portal.passkey.codesIntro": "Conservez ces codes de récupération en lieu sûr. Si vous perdez cet appareil, connectez-vous avec un lien par e-mail et utilisez-en un pour retirer l’ancienne clé. Chacun ne sert qu’une fois.",
   "portal.passkey.recoveryCode": "Code de récupération",
-  "portal.passkey.useCode": "Confirmer avec le code, puis retirer la clé"
+  "portal.passkey.useCode": "Confirmer avec le code, puis retirer la clé",
+  "members.notifications.thisBrowser": "Notifications dans ce navigateur",
+  "members.notifications.push.on": "Les notifications push sont activées dans ce navigateur.",
+  "members.notifications.push.off": "Soyez prévenu ici même quand ce site n’est pas ouvert.",
+  "members.notifications.push.turnOn": "Activer",
+  "members.notifications.push.turnOff": "Désactiver",
+  "members.notifications.push.unsupported": "Ce navigateur ne peut pas recevoir de notifications push.",
+  "members.notifications.push.blocked": "Les notifications de ce site sont bloquées dans les réglages de votre navigateur.",
+  "members.notifications.push.failed": "Impossible d’activer les notifications push. Réessayez.",
+  "members.notifications.pushLabel": "Push",
+  "members.notifications.quietTitle": "Heures calmes",
+  "members.notifications.quietIntro": "Pendant les heures calmes, les notifications push et les e-mails attendent la fin de la période. Votre boîte de réception reste à jour.",
+  "members.notifications.quietOn": "Utiliser les heures calmes",
+  "members.notifications.quietStart": "De",
+  "members.notifications.quietEnd": "À",
+  "members.notifications.quietTimezone": "Heures exprimées en {timezone}.",
+  "members.notifications.quietSave": "Enregistrer les heures calmes",
+  "members.notifications.quietInvalid": "Les heures calmes doivent avoir un début et une fin différents."
 }

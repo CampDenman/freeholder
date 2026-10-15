@@ -7645,5 +7645,22 @@
   "portal.passkey.recovery": "¿Perdiste tu dispositivo? Entra con un enlace enviado a tu correo y confirma con uno de tus códigos de recuperación para quitar la llave antigua.",
   "portal.passkey.codesIntro": "Guarda estos códigos de recuperación en un lugar seguro. Si pierdes este dispositivo, entra con un enlace por correo y usa uno para quitar la llave antigua. Cada uno sirve una vez.",
   "portal.passkey.recoveryCode": "Código de recuperación",
-  "portal.passkey.useCode": "Confirmar con el código y luego quitar la llave"
+  "portal.passkey.useCode": "Confirmar con el código y luego quitar la llave",
+  "members.notifications.thisBrowser": "Notificaciones en este navegador",
+  "members.notifications.push.on": "Las notificaciones push están activadas en este navegador.",
+  "members.notifications.push.off": "Recibe avisos aquí aunque el sitio no esté abierto.",
+  "members.notifications.push.turnOn": "Activar",
+  "members.notifications.push.turnOff": "Desactivar",
+  "members.notifications.push.unsupported": "Este navegador no puede recibir notificaciones push.",
+  "members.notifications.push.blocked": "Las notificaciones de este sitio están bloqueadas en los ajustes de tu navegador.",
+  "members.notifications.push.failed": "No se pudo activar push. Inténtalo de nuevo.",
+  "members.notifications.pushLabel": "Push",
+  "members.notifications.quietTitle": "Horas de silencio",
+  "members.notifications.quietIntro": "Durante las horas de silencio, push y correo esperan a que terminen. Tu bandeja sigue actualizándose.",
+  "members.notifications.quietOn": "Usar horas de silencio",
+  "members.notifications.quietStart": "Desde",
+  "members.notifications.quietEnd": "Hasta",
+  "members.notifications.quietTimezone": "Las horas están en {timezone}.",
+  "members.notifications.quietSave": "Guardar horas de silencio",
+  "members.notifications.quietInvalid": "Las horas de silencio necesitan un inicio y un fin distintos."
 }

@@ -10591,9 +10591,31 @@ whatever is best for the people using the site.
 - [ ] **C12.21** Let members attach images and video to posts, comments and messages,
   with alt text, safe processing, and the post's visibility applied to every
   file.
-- [ ] **C12.22** Add web push for member notifications (standard Web Push
+- [x] **C12.22** Add web push for member notifications (standard Web Push
   with the site's own keys, no third-party service) and member-chosen quiet
   hours that hold push and email until they end.
+  *(Evidence 2026-10-14: `src/core/notifications/web-push.ts` (RFC 8291
+  aes128gcm encryption and RFC 8292 VAPID on `node:crypto`, no new
+  dependency), quiet hours in `src/core/notifications/service.ts`, migration
+  `db/migrations/0038_web_push_quiet_hours.sql`, `public/push-sw.js`,
+  `tests/core/web-push.test.ts`, `tests/browser/members.spec.ts`. **F04**
+  "Notifications in this browser", a Push column per topic, and Quiet hours
+  on `/portal/notifications`. **F05** `notifications.webPushKey`,
+  `notifications.subscribeWebPush`, `notifications.unsubscribeWebPush`,
+  `notifications.webPushSubscriptions`, and quiet hours on
+  `notifications.updateSettings`. **F07** the site's VAPID key pair is made
+  once and sealed at rest; payloads are encrypted to each browser so its push
+  service cannot read them; only the major browsers' push services are
+  accepted as endpoints (no server-side request to arbitrary URLs); a
+  subscription the browser abandoned (404/410) is deleted; turning push on
+  defaults topics to push unless the member chose otherwise; quiet hours hold
+  push, email and text (digests included) in the member's timezone, across
+  midnight, never critical items, never the inbox. Delivery is proven by a
+  decryption round trip and VAPID signature check with `fetch` stubbed; it
+  has not been exercised against a live browser push service in CI.
+  **F09** the existing per-minute `core.deliverNotifications` sweep releases
+  held items when quiet hours end. **F12** the browser journey loads the
+  service worker and sets quiet hours. Changeset `member-web-push.md`.)*
 - [ ] **C12.23** Make member messages end-to-end encrypted by default with
   MLS (RFC 9420): keys only on members' devices, multi-device support,
   history the server cannot read, and message franking so a recipient can

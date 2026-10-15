@@ -17,7 +17,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
-import { listed, row, timestamp, uuid } from "@/core/contract";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { notificationAdapterStatus, pushNotifications, smsNotifications } from "@/adapters/notifications";
 import { users, roleGrants } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
@@ -36,7 +36,9 @@ import {
   notificationSettings,
   notifications,
   deviceTokens,
+  webPushSubscriptions,
 } from "@/core/notifications/schema";
+import { acceptablePushEndpoint, sendWebPush, subscriptionsFor, vapidKeys } from "@/core/notifications/web-push";
 import { businessProfile } from "@/core/settings/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { translator } from "@/core/i18n";
@@ -133,6 +135,8 @@ const settingsRow = row({
   digestWeekday: z.number().int(),
   timezone: z.string().nullable(),
   escalationMinutes: z.number().int(),
+  quietStartMinute: z.number().int().nullable(),
+  quietEndMinute: z.number().int().nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -152,6 +156,8 @@ const preferenceStatus = z.object({
     digestWeekday: z.number().int(),
     timezone: z.string().nullable(),
     escalationMinutes: z.number().int(),
+    quietStartMinute: z.number().int().nullable(),
+    quietEndMinute: z.number().int().nullable(),
   }),
   email: z.object({
     provider: z.enum(["smtp", "console", "gmail", "outlook"]),
@@ -571,6 +577,8 @@ interface EffectiveSettings {
   digestWeekday: number;
   timezone: string;
   escalationMinutes: number;
+  quietStartMinute?: number | null;
+  quietEndMinute?: number | null;
 }
 
 async function effectiveSettings(
@@ -584,6 +592,8 @@ async function effectiveSettings(
       digestWeekday: 1,
       timezone: await fallbackTimezone(tx, input),
       escalationMinutes: 60,
+      quietStartMinute: null,
+      quietEndMinute: null,
     };
   }
   const condition = input.kind === "user"
@@ -600,6 +610,8 @@ async function effectiveSettings(
     digestWeekday: stored?.digestWeekday ?? 1,
     timezone: stored?.timezone ?? (await fallbackTimezone(tx, input)),
     escalationMinutes: stored?.escalationMinutes ?? 60,
+    quietStartMinute: stored?.quietStartMinute ?? null,
+    quietEndMinute: stored?.quietEndMinute ?? null,
   };
 }
 
@@ -676,6 +688,29 @@ export function nextDigestAt(now: Date, settings: EffectiveSettings): Date {
     if (candidate.getTime() > now.getTime()) return candidate;
   }
   return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+}
+
+/**
+ * Quiet hours (C12.22): when `at` falls inside the person's quiet window, the
+ * moment it ends; otherwise `at`. The window may cross midnight.
+ */
+export function afterQuietHours(at: Date, settings: EffectiveSettings): Date {
+  const { quietStartMinute: start, quietEndMinute: end } = settings;
+  if (start == null || end == null || start === end) return at;
+  let timezone = settings.timezone;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: timezone }).format(at);
+  } catch {
+    timezone = "UTC";
+  }
+  const local = localDateParts(at, timezone);
+  const minute = local.hour * 60 + local.minute;
+  const inside = start < end ? minute >= start && minute < end : minute >= start || minute < end;
+  if (!inside) return at;
+  // The window ends today, unless it crosses midnight and we are before it.
+  const endsTomorrow = start > end && minute >= start;
+  const day = new Date(Date.UTC(local.year, local.month - 1, local.day + (endsTomorrow ? 1 : 0)));
+  return localToUtc(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), end, timezone);
 }
 
 async function effectiveModes(
@@ -844,7 +879,12 @@ export async function createNotificationTx(
           : mode === "digest"
             ? ("deferred" as const)
             : ("pending" as const),
-      availableAt: mode === "digest" ? nextDigestAt(occurredAt, settings) : occurredAt,
+      // Quiet hours hold push, email and text until they end; critical items
+      // and the in-app inbox never wait.
+      availableAt:
+        channel === "in_app" || input.priority === "critical"
+          ? (mode === "digest" ? nextDigestAt(occurredAt, settings) : occurredAt)
+          : afterQuietHours(mode === "digest" ? nextDigestAt(occurredAt, settings) : occurredAt, settings),
       provider: channel === "in_app" ? "core" : null,
       deliveredAt: channel === "in_app" ? occurredAt : null,
     }));
@@ -1076,6 +1116,8 @@ export const notificationPreferenceStatus = defineService({
         digestWeekday: 1,
         timezone: business[0]?.timezone ?? "UTC",
         escalationMinutes: 60,
+        quietStartMinute: null,
+        quietEndMinute: null,
       },
       email: {
         provider: mail.configuration.transactional.provider,
@@ -1245,7 +1287,7 @@ export const updateNotificationPreferences = defineService({
 
 export const updateNotificationSettings = defineService({
   name: "notifications.updateSettings",
-  summary: "Set the personal digest clock and unread escalation delay.",
+  summary: "Set the personal digest clock, unread escalation delay, and quiet hours.",
   kind: "mutation",
   permission: "authenticated",
   input: z.object({
@@ -1254,7 +1296,13 @@ export const updateNotificationSettings = defineService({
     digestWeekday: z.number().int().min(1).max(7),
     timezone: z.string().trim().min(1).max(100),
     escalationMinutes: z.number().int().min(5).max(10080),
+    /** Quiet hours, minutes after local midnight; both null turns them off. */
+    quietStartMinute: z.number().int().min(0).max(1439).nullable().optional(),
+    quietEndMinute: z.number().int().min(0).max(1439).nullable().optional(),
   }).superRefine((input, issue) => {
+    if ((input.quietStartMinute == null) !== (input.quietEndMinute == null) || (input.quietStartMinute != null && input.quietStartMinute === input.quietEndMinute)) {
+      issue.addIssue({ code: "custom", message: "Give quiet hours a different start and end, or leave both empty.", path: ["quietEndMinute"] });
+    }
     try {
       new Intl.DateTimeFormat("en", { timeZone: input.timezone });
     } catch {
@@ -1275,6 +1323,79 @@ export const updateNotificationSettings = defineService({
       .returning();
     ctx.setSubject("notification_settings", row!.id);
     return row!;
+  },
+});
+
+export const webPushPublicKey = defineService({
+  name: "notifications.webPushKey",
+  summary: "The site's public Web Push key, for a browser to subscribe with.",
+  kind: "query",
+  permission: "public",
+  input: z.object({}),
+  output: z.object({ publicKey: z.string() }),
+  handler: async (_input, ctx) => ({ publicKey: (await vapidKeys(ctx.tx)).publicKey }),
+});
+
+export const subscribeWebPush = defineService({
+  name: "notifications.subscribeWebPush",
+  summary: "Turn on push notifications in this browser. Push starts for every topic you have not turned off.",
+  kind: "mutation",
+  permission: "authenticated",
+  writeClass: "write",
+  rateLimit: { limit: 20, windowSeconds: 3600, message: "Too many push subscriptions. Try again later.", subject: (_input, actor) => (actor.kind === "user" ? actor.userId : undefined) },
+  input: z.object({
+    endpoint: z.string().url().max(2048),
+    p256dh: z.string().min(80).max(120),
+    auth: z.string().min(16).max(40),
+  }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    if (!acceptablePushEndpoint(input.endpoint)) {
+      throw new ServiceError("validation", "That browser's push service is not supported.");
+    }
+    await ctx.tx
+      .insert(webPushSubscriptions)
+      .values({ userId: ctx.actor.userId, ...input })
+      .onConflictDoUpdate({ target: webPushSubscriptions.endpoint, set: { userId: ctx.actor.userId, p256dh: input.p256dh, auth: input.auth } });
+    // Turning push on means wanting it: default every topic to immediate push,
+    // unless the person already chose otherwise.
+    await ctx.tx
+      .insert(notificationPreferences)
+      .values({ userId: ctx.actor.userId, topic: "*", channel: "push", mode: "immediate" })
+      .onConflictDoNothing();
+    ctx.setSubject("web_push_subscription", ctx.actor.userId);
+    return { ok: true as const };
+  },
+});
+
+export const unsubscribeWebPush = defineService({
+  name: "notifications.unsubscribeWebPush",
+  summary: "Turn off push notifications in this browser.",
+  kind: "mutation",
+  permission: "authenticated",
+  writeClass: "write",
+  input: z.object({ endpoint: z.string().max(2048) }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    await ctx.tx
+      .delete(webPushSubscriptions)
+      .where(and(eq(webPushSubscriptions.endpoint, input.endpoint), eq(webPushSubscriptions.userId, ctx.actor.userId)));
+    return { ok: true as const };
+  },
+});
+
+export const myWebPushSubscriptions = defineService({
+  name: "notifications.webPushSubscriptions",
+  summary: "How many browsers you turned push on in.",
+  kind: "query",
+  permission: "authenticated",
+  input: z.object({}),
+  output: z.object({ count: z.number().int() }),
+  handler: async (_input, ctx) => {
+    requirePerson(ctx.actor);
+    return { count: (await subscriptionsFor(ctx.tx, ctx.actor.userId)).length };
   },
 });
 
@@ -1418,7 +1539,36 @@ export async function deliverDueNotifications(limit = 50) {
                   devicesForContact(tx, notification.recipientContactId!),
                 )).map((device) => device.token)
               : [];
-        if (targets.length === 0) {
+        // Browsers a signed-in person turned push on in (C12.22).
+        const browsers =
+          delivery.channel === "push" && notification.recipientUserId
+            ? await db().transaction((tx) => subscriptionsFor(tx, notification.recipientUserId!))
+            : [];
+        let browserDelivered = 0;
+        if (browsers.length) {
+          const keys = await db().transaction((tx) => vapidKeys(tx));
+          for (const browser of browsers) {
+            const sent = await sendWebPush(browser, keys, {
+              title: notification.title,
+              body: notification.body,
+              href: absoluteHref(notification.href),
+              tag: notification.dedupeKey ?? notification.id,
+            }).catch(() => "failed" as const);
+            if (sent === "gone") await db().delete(webPushSubscriptions).where(eq(webPushSubscriptions.id, browser.id));
+            if (sent === "delivered") {
+              browserDelivered += 1;
+              await db().update(webPushSubscriptions).set({ lastSuccessAt: new Date() }).where(eq(webPushSubscriptions.id, browser.id));
+            }
+          }
+        }
+        if (browsers.length && targets.length === 0) {
+          outcome = {
+            provider: "web-push",
+            providerRef: null,
+            delivers: browserDelivered > 0,
+            reason: browserDelivered > 0 ? undefined : "No browser accepted this push.",
+          };
+        } else if (targets.length === 0) {
           outcome = {
             provider: adapter.id,
             providerRef: null,
@@ -1445,8 +1595,8 @@ export async function deliverDueNotifications(limit = 50) {
           outcome = {
             provider: adapter.id,
             providerRef: delivered[0]?.providerRef ?? null,
-            delivers: delivered.length > 0,
-            reason: delivered.length > 0 ? undefined : results[0]?.reason,
+            delivers: delivered.length > 0 || browserDelivered > 0,
+            reason: delivered.length > 0 || browserDelivered > 0 ? undefined : results[0]?.reason,
           };
         }
       }
@@ -1871,4 +2021,8 @@ export default [
   updateNotificationPreference,
   updateNotificationPreferences,
   updateNotificationSettings,
+  webPushPublicKey,
+  subscribeWebPush,
+  unsubscribeWebPush,
+  myWebPushSubscriptions,
 ];

@@ -4671,18 +4671,18 @@ v2.
 
 ## C12.22 — Add web push for member notifications and quiet hours
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F01** — `db/migrations/0038_web_push_quiet_hours.sql`: browser subscriptions, the sealed VAPID key pair, and quiet hours on notification settings.
+- **F02** — `tests/core/web-push.test.ts`: encryption, VAPID, endpoint allowlist, delivery, abandoned subscriptions and quiet hours.
+- **F03** — N/A — push subscriptions belong to logins (`src/core/notifications/schema.ts`).
+- **F04** — `tests/browser/members.spec.ts`: "Notifications in this browser" and Quiet hours on `/portal/notifications`.
+- **F05** — `packages/sdk/src/generated.ts`: the four Web Push services and quiet hours on `notifications.updateSettings`.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/portal/notifications`; strings in four locales (`locales/en.json`).
+- **F07** — `tests/core/web-push.test.ts`: only browser push services are reachable, payloads only readable by the browser, critical items never held.
+- **F08** — `tests/core/web-push.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — `src/core/jobs/core-jobs.ts`: `core.deliverNotifications` releases held deliveries each minute.
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-web-push.md`.
+- **F12** — `tests/browser/members.spec.ts`: the service worker loads and quiet hours are set and kept.
 
 ## C12.23 — Make member messages end-to-end encrypted by default with MLS
 

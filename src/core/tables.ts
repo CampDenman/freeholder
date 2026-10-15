@@ -85,6 +85,8 @@ export {
   notificationReceipts,
   notificationSettings,
   notifications,
+  webPushKeys,
+  webPushSubscriptions,
 } from "@/core/notifications/schema";
 export {
   webhookSubscriptions,

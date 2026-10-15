@@ -267,6 +267,13 @@
       "when": 1793310000017,
       "tag": "0037_member_profile_avatar_sections",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793310000018,
+      "tag": "0038_web_push_quiet_hours",
+      "breakpoints": true
     }
   ]
 }
