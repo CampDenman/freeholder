@@ -10671,9 +10671,32 @@ whatever is best for the people using the site.
   open-source SFU adapter (LiveKit first), with end-to-end media encryption
   (SFrame) so the SFU forwards media it cannot decrypt, and the same
   who-may-call rules as one-to-one calls.
-- [ ] **C12.25** Let members offer bookable services on their own calendar:
+- [x] **C12.25** Let members offer bookable services on their own calendar:
   availability set by the seller, the site's booking flow and policies, and
   the booking paid to the seller through C12.09.
+  *(Evidence 2026-10-15: `src/modules/members/member-services.ts`, the
+  booking source in `members.recordInvoicePayout`
+  (`src/modules/members/member-subscriptions.ts`), the seller-aware
+  `catalog.bookableServices` and seller check in `catalog.bookService`
+  (`src/modules/catalog/public-booking.ts`), `/book?seller=…`,
+  `tests/modules/member-services.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** "Let people book this" on a live service listing, Bookings (hours
+  and upcoming bookings) on `/portal/listings`, and "Book …" on `/@handle`.
+  **F05** `members.offerBookableService`, `members.myBookingHours`,
+  `members.setBookingHours`, `members.myServiceBookings`,
+  `members.bookableServices`, and `sellerUserId` on
+  `catalog.bookableServices`. **F07** only the member's own live service
+  listing becomes bookable, on a calendar that is theirs; availability is
+  the member's weekly hours; booking, cancellation policy, rescheduling,
+  reminders and invoicing are the site's own flow; the service is open to
+  every audience that can book the site's services (a site with none gets a
+  public "Members' services" audience); members' services never mix into
+  the site's own `/book` list; bookings are refused while the member cannot
+  be paid; a paid booking invoice becomes the member's payout through the
+  §44.8 ledger, refunds adjusting it. **F09** the existing booking reminder
+  and calendar jobs apply; payouts follow `invoice.paid`. **F12** the
+  browser journey lists a service, opens it for booking, and finds times
+  from the profile. Changeset `member-bookings.md`.)*
 - [ ] **C12.26** Implement the Stripe Connect marketplace adapter for all
   three payout models: Express onboarding and status, provider-run seller
   verification, held funds with transfers on release, direct and

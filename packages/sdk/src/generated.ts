@@ -973,6 +973,7 @@ export const SERVICE_NAMES = [
   "members.archiveListing",
   "members.attachments",
   "members.befriend",
+  "members.bookableServices",
   "members.callConfig",
   "members.callStatus",
   "members.comment",
@@ -1002,13 +1003,16 @@ export const SERVICE_NAMES = [
   "members.marketPolicy",
   "members.me",
   "members.muteConversation",
+  "members.myBookingHours",
   "members.myListings",
   "members.myPayouts",
   "members.myPurchases",
   "members.myReports",
   "members.myReviews",
   "members.mySales",
+  "members.myServiceBookings",
   "members.mySubscriptionPlans",
+  "members.offerBookableService",
   "members.openDispute",
   "members.payoutAccount",
   "members.payouts",
@@ -1035,6 +1039,7 @@ export const SERVICE_NAMES = [
   "members.saveProfileSection",
   "members.sendMessage",
   "members.setAvatar",
+  "members.setBookingHours",
   "members.setPayoutAccountStatus",
   "members.setRelation",
   "members.setStatus",
@@ -2595,7 +2600,7 @@ export interface ServiceCatalog {
     output: { bookingId: string; invoiceId: string | null };
   };
   "catalog.bookableServices": {
-    input: Record<string, never>;
+    input: { sellerUserId?: string };
     output: { currency: string; services: { productId: string; offeringId: string; name: string; durationMin: number; modes: ("full" | "deposit_balance")[] }[] };
   };
   "catalog.bookingRequirements": {
@@ -5374,6 +5379,10 @@ export interface ServiceCatalog {
     input: { handle: string };
     output: { friend: "you_asked" | "friends" };
   };
+  "members.bookableServices": {
+    input: { handle: string };
+    output: { sellerUserId: string | null; services: { productId: string; name: string; durationMin: number; [key: string]: unknown }[] };
+  };
   "members.callConfig": {
     input: Record<string, never>;
     output: { iceServers: { urls: string[]; username?: string; credential?: string }[]; relayConfigured: boolean };
@@ -5490,6 +5499,10 @@ export interface ServiceCatalog {
     input: { conversationId: string; muted: boolean };
     output: { ok: true };
   };
+  "members.myBookingHours": {
+    input: Record<string, never>;
+    output: { calendarId: string | null; hours: { weekday: number; starts: string; ends: string; [key: string]: unknown }[] };
+  };
   "members.myListings": {
     input: Record<string, never>;
     output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; adult: boolean; createdAt: string; [key: string]: unknown }[];
@@ -5514,9 +5527,17 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { orderId: string; sellerId: string; sellerHandle: string; sellerName: string; role: "buyer" | "seller" | "site"; currency: string; createdAt: string; items: { name: string; quantity: number; lineTotalMinor: number; requiresShipping: boolean; [key: string]: unknown }[]; fulfilment: "awaiting" | "shipped" | "delivered"; carrier: string | null; tracking: string | null; dispute: { id: string; reason: string; state: string; [key: string]: unknown } | null; payout: "held" | "due" | "paid" | "cancelled" | "review" | "mixed" | "none"; [key: string]: unknown }[];
   };
+  "members.myServiceBookings": {
+    input: Record<string, never>;
+    output: { id: string; startsAt: string; endsAt: string; status: string; service: string | null; customer: string | null; [key: string]: unknown }[];
+  };
   "members.mySubscriptionPlans": {
     input: Record<string, never>;
     output: { id: string; name: string; interval: "month" | "year"; status: string; subscribers: number; createdAt: string; [key: string]: unknown }[];
+  };
+  "members.offerBookableService": {
+    input: { productId: string; durationMin: number; locationType?: "in_person" | "virtual" | "client_site"; hours: { weekday: number; starts: string; ends: string }[] };
+    output: { calendarId: string; offeringId: string };
   };
   "members.openDispute": {
     input: { orderId: string; sellerId: string; reason: "not_received" | "not_as_described" | "other"; details: string };
@@ -5621,6 +5642,10 @@ export interface ServiceCatalog {
   "members.setAvatar": {
     input: { assetId: string | null };
     output: { avatarUrl: string | null };
+  };
+  "members.setBookingHours": {
+    input: { hours: { weekday: number; starts: string; ends: string }[] };
+    output: { hours: number };
   };
   "members.setPayoutAccountStatus": {
     input: { userId: string; status: "ready" | "disabled" | "pending" };
@@ -8533,6 +8558,7 @@ export interface FreeholderApi {
     archiveListing: (input: ServiceCatalog["members.archiveListing"]["input"]) => Promise<ServiceCatalog["members.archiveListing"]["output"]>;
     attachments: (input: ServiceCatalog["members.attachments"]["input"]) => Promise<ServiceCatalog["members.attachments"]["output"]>;
     befriend: (input: ServiceCatalog["members.befriend"]["input"]) => Promise<ServiceCatalog["members.befriend"]["output"]>;
+    bookableServices: (input: ServiceCatalog["members.bookableServices"]["input"]) => Promise<ServiceCatalog["members.bookableServices"]["output"]>;
     callConfig: (input?: ServiceCatalog["members.callConfig"]["input"]) => Promise<ServiceCatalog["members.callConfig"]["output"]>;
     callStatus: (input: ServiceCatalog["members.callStatus"]["input"]) => Promise<ServiceCatalog["members.callStatus"]["output"]>;
     comment: (input: ServiceCatalog["members.comment"]["input"]) => Promise<ServiceCatalog["members.comment"]["output"]>;
@@ -8562,13 +8588,16 @@ export interface FreeholderApi {
     marketPolicy: (input?: ServiceCatalog["members.marketPolicy"]["input"]) => Promise<ServiceCatalog["members.marketPolicy"]["output"]>;
     me: (input?: ServiceCatalog["members.me"]["input"]) => Promise<ServiceCatalog["members.me"]["output"]>;
     muteConversation: (input: ServiceCatalog["members.muteConversation"]["input"]) => Promise<ServiceCatalog["members.muteConversation"]["output"]>;
+    myBookingHours: (input?: ServiceCatalog["members.myBookingHours"]["input"]) => Promise<ServiceCatalog["members.myBookingHours"]["output"]>;
     myListings: (input?: ServiceCatalog["members.myListings"]["input"]) => Promise<ServiceCatalog["members.myListings"]["output"]>;
     myPayouts: (input?: ServiceCatalog["members.myPayouts"]["input"]) => Promise<ServiceCatalog["members.myPayouts"]["output"]>;
     myPurchases: (input?: ServiceCatalog["members.myPurchases"]["input"]) => Promise<ServiceCatalog["members.myPurchases"]["output"]>;
     myReports: (input?: ServiceCatalog["members.myReports"]["input"]) => Promise<ServiceCatalog["members.myReports"]["output"]>;
     myReviews: (input?: ServiceCatalog["members.myReviews"]["input"]) => Promise<ServiceCatalog["members.myReviews"]["output"]>;
     mySales: (input?: ServiceCatalog["members.mySales"]["input"]) => Promise<ServiceCatalog["members.mySales"]["output"]>;
+    myServiceBookings: (input?: ServiceCatalog["members.myServiceBookings"]["input"]) => Promise<ServiceCatalog["members.myServiceBookings"]["output"]>;
     mySubscriptionPlans: (input?: ServiceCatalog["members.mySubscriptionPlans"]["input"]) => Promise<ServiceCatalog["members.mySubscriptionPlans"]["output"]>;
+    offerBookableService: (input: ServiceCatalog["members.offerBookableService"]["input"]) => Promise<ServiceCatalog["members.offerBookableService"]["output"]>;
     openDispute: (input: ServiceCatalog["members.openDispute"]["input"]) => Promise<ServiceCatalog["members.openDispute"]["output"]>;
     payoutAccount: (input?: ServiceCatalog["members.payoutAccount"]["input"]) => Promise<ServiceCatalog["members.payoutAccount"]["output"]>;
     payouts: (input?: ServiceCatalog["members.payouts"]["input"]) => Promise<ServiceCatalog["members.payouts"]["output"]>;
@@ -8595,6 +8624,7 @@ export interface FreeholderApi {
     saveProfileSection: (input: ServiceCatalog["members.saveProfileSection"]["input"]) => Promise<ServiceCatalog["members.saveProfileSection"]["output"]>;
     sendMessage: (input: ServiceCatalog["members.sendMessage"]["input"]) => Promise<ServiceCatalog["members.sendMessage"]["output"]>;
     setAvatar: (input: ServiceCatalog["members.setAvatar"]["input"]) => Promise<ServiceCatalog["members.setAvatar"]["output"]>;
+    setBookingHours: (input: ServiceCatalog["members.setBookingHours"]["input"]) => Promise<ServiceCatalog["members.setBookingHours"]["output"]>;
     setPayoutAccountStatus: (input: ServiceCatalog["members.setPayoutAccountStatus"]["input"]) => Promise<ServiceCatalog["members.setPayoutAccountStatus"]["output"]>;
     setRelation: (input: ServiceCatalog["members.setRelation"]["input"]) => Promise<ServiceCatalog["members.setRelation"]["output"]>;
     setStatus: (input: ServiceCatalog["members.setStatus"]["input"]) => Promise<ServiceCatalog["members.setStatus"]["output"]>;
