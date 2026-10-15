@@ -11,6 +11,8 @@ import { formatDateTime } from "@/core/i18n";
 import { ServiceError } from "@/core/service";
 import { currentBusiness } from "@/core/settings/read";
 import { viewConversation } from "@/modules/members/messages";
+import { activeGroupCall } from "@/modules/members/group-calls";
+import { GroupCallButtons } from "../../call/group/GroupCallRoom";
 import { Button, Callout, Pill } from "@/ui/primitives";
 import { getLocale, getT } from "../../../i18n";
 import { conversationAction } from "../actions";
@@ -46,6 +48,7 @@ export default async function ConversationPage({ params, searchParams }: { param
   const timezone = business?.timezone ?? "UTC";
   const name = c.title ?? c.people.map((p) => p.displayName).join(", ");
   if (actor.kind !== "user") notFound();
+  const groupCall = c.kind === "group" && c.e2ee && c.state === "active" ? await activeGroupCall.call({ conversationId: c.id }, actor) : null;
   const secureLabels = { loading: t("members.e2ee.decrypting"), unreadable: t("members.e2ee.unreadable"), before: t("members.e2ee.before") };
   return (
     <SecureConversation conversationId={c.id} userId={actor.userId}>
@@ -57,6 +60,14 @@ export default async function ConversationPage({ params, searchParams }: { param
       </p>
       <SecureStatus labels={{ encrypted: t("members.e2ee.on"), joining: t("members.e2ee.joining"), plaintext: t("members.e2ee.waiting"), failed: t("members.e2ee.failed") }} />
       {query.error ? <Callout tone="danger">{t("members.messages.failed")}</Callout> : null}
+      {groupCall?.available ? (
+        <GroupCallButtons
+          conversationId={c.id}
+          userId={actor.userId}
+          active={groupCall.call}
+          labels={{ voice: t("members.groupCall.startVoice"), video: t("members.groupCall.startVideo"), join: t("members.groupCall.join"), failed: t("members.groupCall.failed") }}
+        />
+      ) : null}
       {view.closed ? <Callout>{t("members.messages.closed")}</Callout> : null}
       {c.state === "requested" ? (
         <Callout>

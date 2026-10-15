@@ -10794,10 +10794,39 @@ whatever is best for the people using the site.
   plaintext, reports with a true and a doctored franking, revokes a device,
   adds a late one, and drops a member who left; the browser journey does the
   same across three browsers. Changeset `member-e2ee.md`.)*
-- [ ] **C12.24** Add group voice and video calls through a self-hostable
+- [x] **C12.24** Add group voice and video calls through a self-hostable
   open-source SFU adapter (LiveKit first), with end-to-end media encryption
   (SFrame) so the SFU forwards media it cannot decrypt, and the same
   who-may-call rules as one-to-one calls.
+  *(Evidence 2026-10-15: `src/modules/members/group-calls.ts`,
+  `src/modules/members/sfu.ts`, `members.sendCallKey` in
+  `src/modules/members/e2ee/service.ts`, `app/(public)/call/group/`,
+  migration `db/migrations/0044_member_group_calls.sql`,
+  `tests/modules/member-group-calls.test.ts`,
+  `tests/browser/member-group-calls.spec.ts`, `tests/core/csp.test.ts`.
+  **F04** "Start voice call" and "Start video call" on encrypted group
+  conversations, "Join the call going on" while one runs, and
+  `/call/group/[id]` with tiles marked end to end encrypted, mute, camera and
+  leave. **F05** `members.groupCallConfig`, `members.startGroupCall`,
+  `members.groupCall`, `members.activeGroupCall`, `members.joinGroupCall`,
+  `members.leaveGroupCall`, `members.sendCallKey`, and `calls` on
+  `members.e2eeSync`. **F07** a call needs the conversation's MLS group; the
+  starting device makes a random 32-byte media key and sends it to the group
+  as a signed MLS control message under the same exact-roster rule as
+  messages, and a device holding it re-sends it when a device joins later, so
+  the key reaches only devices in the conversation and never the server or
+  the SFU; LiveKit's frame encryption uses it (its own frame format rather
+  than RFC 9605 SFrame on the wire); only members who accepted the
+  conversation can start, are rung or can join, and only a device in the
+  group gets an SFU token (HS256, two hours, one room); the CSP admits the
+  SFU only on group call pages; start and join are not agent-callable;
+  nothing is recorded. Removing someone who leaves mid-call is C12.37.
+  **F09** N/A — no background work; calls end when the last person leaves,
+  or after twelve hours. **F12** the browser test runs a real LiveKit 1.13.7:
+  two members see each other's decoded video marked encrypted, and a third
+  whose device holds a wrong key receives the same frames and decodes none.
+  CI runs the checksum-pinned LiveKit release. Changeset
+  `member-group-calls.md`.)*
 - [x] **C12.25** Let members offer bookable services on their own calendar:
   availability set by the seller, the site's booking flow and policies, and
   the booking paid to the seller through C12.09.
@@ -10904,6 +10933,9 @@ whatever is best for the people using the site.
 - [ ] **C12.36** Encrypt attachments end to end in encrypted conversations:
   files encrypted on the sender's device with keys carried inside the MLS
   message, stored as opaque blobs.
+- [ ] **C12.37** When someone leaves a conversation during its group call,
+  remove them from the SFU room through the adapter after the leave commits,
+  and have the remaining devices switch to a fresh media key.
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
   preserving evidence and reporting through the legal path for the site's

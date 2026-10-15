@@ -8,13 +8,13 @@ import { sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { ready } from "@/core/runtime";
-import { ServiceError } from "@/core/service";
 import { joinSite, updateMyMembership } from "@/modules/members/service";
 import { followMember } from "@/modules/members/graph";
 import { leaveConversation, sendMessage, startConversation, unsendMessage, viewConversation } from "@/modules/members/messages";
 import { reportContent } from "@/modules/members/reports";
-import { claimKeyPackages, e2eeCommit, e2eeSync, publishKeyPackages, registerDevice, revokeDevice, sendEncrypted } from "@/modules/members/e2ee/service";
-import { E2eeDevice, type DeviceRecord, type E2eeStore, type E2eeTransport, type ReadMessage, type StoredKeyPackage } from "@/modules/members/e2ee/engine";
+import { e2eeSync, registerDevice, revokeDevice, sendEncrypted } from "@/modules/members/e2ee/service";
+import type { E2eeDevice } from "@/modules/members/e2ee/engine";
+import { deviceFor } from "../helpers/e2ee";
 import { memberReports } from "@/modules/members/schema";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
@@ -23,47 +23,6 @@ const RAE = CUSTOMER;
 const SAM: Member = { ...CUSTOMER, userId: "00000000-0000-4000-8000-0000000000c2" };
 const KIM: Member = { ...CUSTOMER, userId: "00000000-0000-4000-8000-0000000000c3" };
 
-function memoryStore(): E2eeStore {
-  let device: DeviceRecord | null = null;
-  const packages = new Map<string, StoredKeyPackage>();
-  const groups = new Map<string, { state: Uint8Array | null; cursor: number }>();
-  const messages = new Map<string, Map<string, ReadMessage>>();
-  return {
-    device: async () => device,
-    saveDevice: async (d) => { device = d; },
-    keyPackage: async (id) => packages.get(id) ?? null,
-    saveKeyPackages: async (list) => { for (const p of list) packages.set(p.id, p); },
-    dropKeyPackage: async (id) => { packages.delete(id); },
-    group: async (id) => groups.get(id) ?? null,
-    saveGroup: async (id, state, cursor) => { groups.set(id, { state, cursor }); },
-    messages: async (id) => new Map(messages.get(id) ?? []),
-    saveMessage: async (id, mid, m) => { messages.set(id, new Map(messages.get(id) ?? []).set(mid, m)); },
-    dropMessage: async (id, mid) => { messages.get(id)?.delete(mid); },
-    clear: async () => { device = null; packages.clear(); groups.clear(); messages.clear(); },
-  };
-}
-
-/** The services, called as the member, with errors carrying their codes as the server actions do. */
-function directTransport(actor: Member): E2eeTransport {
-  const wrap = <I, O>(service: { call(input: I, actor: Member): Promise<O> }) => async (input: I) => {
-    try {
-      return await service.call(input, actor);
-    } catch (error) {
-      if (error instanceof ServiceError) throw Object.assign(new Error(error.message), { code: error.code });
-      throw error;
-    }
-  };
-  return {
-    register: wrap(registerDevice),
-    publish: wrap(publishKeyPackages),
-    sync: wrap(e2eeSync),
-    claim: wrap(claimKeyPackages),
-    commit: wrap(e2eeCommit),
-    send: wrap(sendEncrypted),
-  };
-}
-
-const deviceFor = (actor: Member, label: string) => new E2eeDevice(actor.userId, memoryStore(), directTransport(actor), label);
 const bodies = async (device: E2eeDevice, id: string) => [...(await device.sync(id)).messages.values()].map((m) => (m.ok ? m.body : "(unreadable)"));
 
 describe.runIf(hasDatabase)("end-to-end encrypted messages (C12.23)", () => {

@@ -4701,18 +4701,18 @@ v2.
 
 ## C12.24 — Add group voice and video calls through a self-hostable open-source SFU adapter
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F01** — `db/migrations/0044_member_group_calls.sql`: group calls, who is in them, and control entries in the MLS log.
+- **F02** — `tests/modules/member-group-calls.test.ts`: who may start, be rung and join; credentials; key delivery through MLS.
+- **F03** — N/A — calls are between members, not contacts (`src/modules/members/group-calls.ts`).
+- **F04** — `tests/browser/member-group-calls.spec.ts`: start, join, tiles and leave on `/call/group/[id]`.
+- **F05** — `packages/sdk/src/generated.ts`: the six group call services, `members.sendCallKey` and `calls` on `members.e2eeSync`.
+- **F06** — `locales/en.json`: strings in four locales; call controls are labelled buttons (`app/(public)/call/group/GroupCallRoom.tsx`).
+- **F07** — `tests/browser/member-group-calls.spec.ts`: a device with the wrong key decodes nothing the SFU forwards (`tests/core/csp.test.ts` for the SFU origin).
+- **F08** — `tests/browser/member-group-calls.spec.ts`.
+- **F09** — N/A — no background work; calls end when everyone leaves (`src/modules/members/group-calls.ts`).
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-group-calls.md`.
+- **F12** — `tests/browser/member-group-calls.spec.ts`: three browsers through a real LiveKit SFU.
 
 ## C12.25 — Let members offer bookable services on their own calendar
 
@@ -4864,6 +4864,21 @@ v2.
 - **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
 
 ## C12.36 — Encrypt attachments end to end in encrypted conversations
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+
+## C12.37 — When someone leaves a conversation during its group call, remove them from the SFU room
 
 - **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
 - **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.

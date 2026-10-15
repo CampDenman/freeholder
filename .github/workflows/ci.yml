@@ -257,11 +257,23 @@ jobs:
           --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/freeholder_test
+      # C12.24: group calls run through a real SFU (LiveKit dev keys, loopback only).
+      LIVEKIT_URL: ws://127.0.0.1:7880
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: secret
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-project
+      - name: Start the LiveKit SFU (release binary, checksum pinned)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/livekit.tar.gz" https://github.com/livekit/livekit/releases/download/v1.13.7/livekit_1.13.7_linux_amd64.tar.gz
+          echo "6634aeeb2fb1366b6723708ae4320b9d5408106a4c63457c5e845ae3979c90e2  $RUNNER_TEMP/livekit.tar.gz" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/livekit.tar.gz" -C "$RUNNER_TEMP" livekit-server
+          "$RUNNER_TEMP/livekit-server" --dev --bind 127.0.0.1 --node-ip 127.0.0.1 > "$RUNNER_TEMP/livekit.log" 2>&1 &
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:7880/ > /dev/null && exit 0; sleep 1; done
+          cat "$RUNNER_TEMP/livekit.log"; exit 1
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium firefox
       - run: pnpm test:browser

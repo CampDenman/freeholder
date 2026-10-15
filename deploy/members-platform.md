@@ -344,3 +344,25 @@ from mocked payment, mail or media runs alone.
   unsending and erasure delete it. There is no pruning yet.
 - Tests: `tests/modules/member-e2ee.test.ts` (3 cases) and the C12.23 journey
   in `tests/browser/members.spec.ts`.
+
+## C12.24 — group calls through the SFU (2026-10-15)
+
+- Run your own LiveKit server (Apache-2.0; tested with 1.13.7) and set
+  `LIVEKIT_URL` (its `wss://` URL), `LIVEKIT_API_KEY` and
+  `LIVEKIT_API_SECRET`. Without them, group calls are not offered. The CSP
+  allows that origin only on `/call/group/*` pages.
+- Tokens are minted in-process (`src/modules/members/sfu.ts`, HS256, two
+  hours, one room, identity `userId:deviceId`); only a device in the
+  conversation's MLS group gets one.
+- Media keys never reach the server or the SFU: the starting device sends a
+  random 32-byte key to the conversation's MLS group as a control message,
+  and any device holding it re-sends it when a device joins the group later.
+  LiveKit's frame encryption (insertable streams, AES-GCM) uses it; this is
+  LiveKit's own frame format, not the RFC 9605 SFrame wire format.
+- The key lasts for the call. Someone who leaves the conversation mid-call
+  stays in the room, with the key, until the call ends or their two-hour
+  token lapses; removing them and rotating the key is C12.37. Every new call
+  gets a new key.
+- CI runs the LiveKit release binary (checksum pinned) for
+  `tests/browser/member-group-calls.spec.ts`; locally the test is skipped
+  unless `LIVEKIT_URL` is set (`livekit-server --dev` uses `devkey`/`secret`).

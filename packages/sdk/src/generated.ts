@@ -969,6 +969,7 @@ export const SERVICE_NAMES = [
   "media.upload",
   "media.uploadStatus",
   "media.usage",
+  "members.activeGroupCall",
   "members.answerCall",
   "members.answerFollow",
   "members.answerRequest",
@@ -998,12 +999,16 @@ export const SERVICE_NAMES = [
   "members.endCall",
   "members.feed",
   "members.follow",
+  "members.groupCall",
+  "members.groupCallConfig",
   "members.handleAvailable",
   "members.incomingCalls",
   "members.invite",
   "members.join",
+  "members.joinGroupCall",
   "members.latest",
   "members.leaveConversation",
+  "members.leaveGroupCall",
   "members.leaveReview",
   "members.list",
   "members.loadDemoFixture",
@@ -1050,6 +1055,7 @@ export const SERVICE_NAMES = [
   "members.saleThread",
   "members.savePayoutInstructions",
   "members.saveProfileSection",
+  "members.sendCallKey",
   "members.sendEncrypted",
   "members.sendMessage",
   "members.setAvatar",
@@ -1064,6 +1070,7 @@ export const SERVICE_NAMES = [
   "members.signal",
   "members.startCall",
   "members.startConversation",
+  "members.startGroupCall",
   "members.storefront",
   "members.subscriptionPlans",
   "members.takeSignals",
@@ -5379,6 +5386,10 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { pages: number; sections: number };
   };
+  "members.activeGroupCall": {
+    input: { conversationId: string };
+    output: { call: { id: string; media: "voice" | "video"; [key: string]: unknown } | null; available: boolean };
+  };
   "members.answerCall": {
     input: { id: string; accept: boolean };
     output: { id: string; media: "voice" | "video"; state: "ringing" | "active" | "ended" | "declined" | "missed"; role: "caller" | "callee"; other: { userId: string; handle: string; displayName: string; [key: string]: unknown }; createdAt: string; [key: string]: unknown };
@@ -5477,7 +5488,7 @@ export interface ServiceCatalog {
   };
   "members.e2eeSync": {
     input: { conversationId: string; deviceId: string; after?: number };
-    output: { available: boolean; missing: string[]; epoch: number | null; inGroup: boolean; roster: string[]; entitled: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; directory: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; log: { seq: number; epoch: number; kind: "commit" | "welcome" | "application"; senderDeviceId: string | null; keyPackageId: string | null; messageId: string | null; frankTag: string | null; payload: string; [key: string]: unknown }[]; more: boolean; unclaimed: number };
+    output: { available: boolean; missing: string[]; epoch: number | null; inGroup: boolean; roster: string[]; entitled: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; directory: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; log: { seq: number; epoch: number; kind: "commit" | "welcome" | "application" | "control"; senderDeviceId: string | null; keyPackageId: string | null; messageId: string | null; callId: string | null; frankTag: string | null; payload: string; [key: string]: unknown }[]; more: boolean; unclaimed: number; calls: { callId: string; needsKey: boolean; [key: string]: unknown }[] };
   };
   "members.editPost": {
     input: { id: string; body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me" };
@@ -5495,6 +5506,14 @@ export interface ServiceCatalog {
     input: { handle: string };
     output: { following: "requested" | "active" };
   };
+  "members.groupCall": {
+    input: { id: string };
+    output: { id: string; conversationId: string; media: "voice" | "video"; state: "active" | "ended"; title: string; inCall: { userId: string; handle: string; displayName: string; [key: string]: unknown }[] };
+  };
+  "members.groupCallConfig": {
+    input: Record<string, never>;
+    output: { available: boolean };
+  };
   "members.handleAvailable": {
     input: { handle: string };
     output: { available: boolean; reason: string | null };
@@ -5511,12 +5530,20 @@ export interface ServiceCatalog {
     input: { handle: string; displayName: string; meetsMinimumAge: true; isAdult: boolean };
     output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; createdAt: string; [key: string]: unknown };
   };
+  "members.joinGroupCall": {
+    input: { id: string; deviceId: string };
+    output: { url: string; token: string; room: string; media: "voice" | "video"; conversationId: string };
+  };
   "members.latest": {
     input: { before?: string; tag?: string };
     output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
   };
   "members.leaveConversation": {
     input: { conversationId: string };
+    output: { ok: true };
+  };
+  "members.leaveGroupCall": {
+    input: { id: string };
     output: { ok: true };
   };
   "members.leaveReview": {
@@ -5703,6 +5730,10 @@ export interface ServiceCatalog {
     input: { id?: string; kind: "text" | "portfolio" | "services" | "pinned"; title: string; body?: string; items?: string[]; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; position?: number };
     output: { id: string };
   };
+  "members.sendCallKey": {
+    input: { conversationId: string; deviceId: string; epoch: number; callId: string; ciphertext: string };
+    output: { ok: true };
+  };
   "members.sendEncrypted": {
     input: { conversationId: string; deviceId: string; epoch: number; ciphertext: string; frankTag: string; attachments?: { assetId: string; altText?: string }[] };
     output: { id: string };
@@ -5758,6 +5789,10 @@ export interface ServiceCatalog {
   "members.startConversation": {
     input: { handles: string[]; title?: string; body?: string };
     output: { id: string };
+  };
+  "members.startGroupCall": {
+    input: { conversationId: string; media: "voice" | "video" };
+    output: { id: string; started: boolean };
   };
   "members.storefront": {
     input: { handle: string };
@@ -8634,6 +8669,7 @@ export interface FreeholderApi {
     usage: (input: ServiceCatalog["media.usage"]["input"]) => Promise<ServiceCatalog["media.usage"]["output"]>;
   };
   members: {
+    activeGroupCall: (input: ServiceCatalog["members.activeGroupCall"]["input"]) => Promise<ServiceCatalog["members.activeGroupCall"]["output"]>;
     answerCall: (input: ServiceCatalog["members.answerCall"]["input"]) => Promise<ServiceCatalog["members.answerCall"]["output"]>;
     answerFollow: (input: ServiceCatalog["members.answerFollow"]["input"]) => Promise<ServiceCatalog["members.answerFollow"]["output"]>;
     answerRequest: (input: ServiceCatalog["members.answerRequest"]["input"]) => Promise<ServiceCatalog["members.answerRequest"]["output"]>;
@@ -8663,12 +8699,16 @@ export interface FreeholderApi {
     endCall: (input: ServiceCatalog["members.endCall"]["input"]) => Promise<ServiceCatalog["members.endCall"]["output"]>;
     feed: (input?: ServiceCatalog["members.feed"]["input"]) => Promise<ServiceCatalog["members.feed"]["output"]>;
     follow: (input: ServiceCatalog["members.follow"]["input"]) => Promise<ServiceCatalog["members.follow"]["output"]>;
+    groupCall: (input: ServiceCatalog["members.groupCall"]["input"]) => Promise<ServiceCatalog["members.groupCall"]["output"]>;
+    groupCallConfig: (input?: ServiceCatalog["members.groupCallConfig"]["input"]) => Promise<ServiceCatalog["members.groupCallConfig"]["output"]>;
     handleAvailable: (input: ServiceCatalog["members.handleAvailable"]["input"]) => Promise<ServiceCatalog["members.handleAvailable"]["output"]>;
     incomingCalls: (input?: ServiceCatalog["members.incomingCalls"]["input"]) => Promise<ServiceCatalog["members.incomingCalls"]["output"]>;
     invite: (input: ServiceCatalog["members.invite"]["input"]) => Promise<ServiceCatalog["members.invite"]["output"]>;
     join: (input: ServiceCatalog["members.join"]["input"]) => Promise<ServiceCatalog["members.join"]["output"]>;
+    joinGroupCall: (input: ServiceCatalog["members.joinGroupCall"]["input"]) => Promise<ServiceCatalog["members.joinGroupCall"]["output"]>;
     latest: (input?: ServiceCatalog["members.latest"]["input"]) => Promise<ServiceCatalog["members.latest"]["output"]>;
     leaveConversation: (input: ServiceCatalog["members.leaveConversation"]["input"]) => Promise<ServiceCatalog["members.leaveConversation"]["output"]>;
+    leaveGroupCall: (input: ServiceCatalog["members.leaveGroupCall"]["input"]) => Promise<ServiceCatalog["members.leaveGroupCall"]["output"]>;
     leaveReview: (input: ServiceCatalog["members.leaveReview"]["input"]) => Promise<ServiceCatalog["members.leaveReview"]["output"]>;
     list: (input?: ServiceCatalog["members.list"]["input"]) => Promise<ServiceCatalog["members.list"]["output"]>;
     loadDemoFixture: (input: ServiceCatalog["members.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["members.loadDemoFixture"]["output"]>;
@@ -8715,6 +8755,7 @@ export interface FreeholderApi {
     saleThread: (input: ServiceCatalog["members.saleThread"]["input"]) => Promise<ServiceCatalog["members.saleThread"]["output"]>;
     savePayoutInstructions: (input: ServiceCatalog["members.savePayoutInstructions"]["input"]) => Promise<ServiceCatalog["members.savePayoutInstructions"]["output"]>;
     saveProfileSection: (input: ServiceCatalog["members.saveProfileSection"]["input"]) => Promise<ServiceCatalog["members.saveProfileSection"]["output"]>;
+    sendCallKey: (input: ServiceCatalog["members.sendCallKey"]["input"]) => Promise<ServiceCatalog["members.sendCallKey"]["output"]>;
     sendEncrypted: (input: ServiceCatalog["members.sendEncrypted"]["input"]) => Promise<ServiceCatalog["members.sendEncrypted"]["output"]>;
     sendMessage: (input: ServiceCatalog["members.sendMessage"]["input"]) => Promise<ServiceCatalog["members.sendMessage"]["output"]>;
     setAvatar: (input: ServiceCatalog["members.setAvatar"]["input"]) => Promise<ServiceCatalog["members.setAvatar"]["output"]>;
@@ -8729,6 +8770,7 @@ export interface FreeholderApi {
     signal: (input: ServiceCatalog["members.signal"]["input"]) => Promise<ServiceCatalog["members.signal"]["output"]>;
     startCall: (input: ServiceCatalog["members.startCall"]["input"]) => Promise<ServiceCatalog["members.startCall"]["output"]>;
     startConversation: (input: ServiceCatalog["members.startConversation"]["input"]) => Promise<ServiceCatalog["members.startConversation"]["output"]>;
+    startGroupCall: (input: ServiceCatalog["members.startGroupCall"]["input"]) => Promise<ServiceCatalog["members.startGroupCall"]["output"]>;
     storefront: (input: ServiceCatalog["members.storefront"]["input"]) => Promise<ServiceCatalog["members.storefront"]["output"]>;
     subscriptionPlans: (input: ServiceCatalog["members.subscriptionPlans"]["input"]) => Promise<ServiceCatalog["members.subscriptionPlans"]["output"]>;
     takeSignals: (input: ServiceCatalog["members.takeSignals"]["input"]) => Promise<ServiceCatalog["members.takeSignals"]["output"]>;

@@ -119,3 +119,32 @@ export async function openPayload(conversationId: string, bytes: Uint8Array, sen
   const ok = await (await suite()).signature.verify(sender.signatureKey, signedPart(conversationId, parsed), unb64(parsed.sig));
   return ok ? parsed : null;
 }
+
+/** C12.24: a group call's media key, sent to the conversation's group as a control message. */
+export interface CallKeyPayload {
+  v: 1;
+  call: string;
+  key: string;
+  device: string;
+  sig: string;
+}
+
+const callKeyPart = (conversationId: string, p: Pick<CallKeyPayload, "call" | "key" | "device">) => utf8(`freeholder:callkey:v1\n${conversationId}\n${p.device}\n${p.call}\n${p.key}`);
+
+export async function sealCallKey(conversationId: string, callId: string, key: string, device: { deviceId: string; signKey: Uint8Array }): Promise<Uint8Array> {
+  const sig = await (await suite()).signature.sign(device.signKey, callKeyPart(conversationId, { call: callId, key, device: device.deviceId }));
+  const payload: CallKeyPayload = { v: 1, call: callId, key, device: device.deviceId, sig: b64(sig) };
+  return utf8(JSON.stringify(payload));
+}
+
+export async function openCallKey(conversationId: string, callId: string, bytes: Uint8Array, sender: { deviceId: string; signatureKey: Uint8Array }): Promise<string | null> {
+  let parsed: CallKeyPayload;
+  try {
+    parsed = JSON.parse(fromUtf8(bytes)) as CallKeyPayload;
+  } catch {
+    return null;
+  }
+  if (parsed?.v !== 1 || parsed.call !== callId || parsed.device !== sender.deviceId || typeof parsed.key !== "string" || typeof parsed.sig !== "string") return null;
+  const ok = await (await suite()).signature.verify(sender.signatureKey, callKeyPart(conversationId, parsed), unb64(parsed.sig));
+  return ok && unb64(parsed.key).length === 32 ? parsed.key : null;
+}

@@ -42,6 +42,7 @@ import memberServiceServices from "./member-services";
 import demoServices from "./demo";
 import federationServices from "./federation/core";
 import e2eeServices from "./e2ee/service";
+import groupCallServices from "./group-calls";
 import { applyMemberStatus } from "./status";
 // Member export and erasure through the site's privacy requests (C12.15).
 import "./data-rights";
@@ -462,6 +463,7 @@ export default [
   ...demoServices,
   ...federationServices,
   ...e2eeServices,
+  ...groupCallServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

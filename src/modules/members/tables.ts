@@ -35,4 +35,6 @@ export {
   memberMlsGroups,
   memberMlsRoster,
   memberMlsLog,
+  memberGroupCalls,
+  memberGroupCallParticipants,
 } from "./schema";

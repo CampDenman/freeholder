@@ -102,6 +102,21 @@ const UNCOUNTED = /^\/(admin|login|setup|preview|portal|api|media|og|feeds|ap|\.
 /** Owner/internal routes may look like locale-prefixed public paths, but are not. */
 const NEVER_LOCALIZED = /^\/(admin|login|setup|preview|api|media|embed)(\/|$)/;
 
+/** The SFU's signalling origin and its HTTP twin, which the client also calls. */
+function sfuOrigins(url: string | undefined): string[] {
+  if (!url) return [];
+  try {
+    const parsed = new URL(url);
+    const http = new URL(url);
+    http.protocol = parsed.protocol === "wss:" ? "https:" : parsed.protocol === "ws:" ? "http:" : parsed.protocol;
+    const ws = new URL(url);
+    ws.protocol = parsed.protocol === "https:" ? "wss:" : parsed.protocol === "http:" ? "ws:" : parsed.protocol;
+    return [...new Set([ws.origin, http.origin])];
+  } catch {
+    return [];
+  }
+}
+
 export function proxy(request: NextRequest): NextResponse {
   const headers = new Headers(request.headers);
   const path = request.nextUrl.pathname;
@@ -213,6 +228,7 @@ function requestPolicy(
       mediaOrigins: storageOrigins,
       uploadOrigins: storageOrigins,
       creativeOrigins: parseCspOrigins(runtime.CSP_THIRD_PARTY_ORIGINS),
+      callOrigins: sfuOrigins(runtime.LIVEKIT_URL),
       thirdPartyCreativeConsent: thirdPartyCreativeConsentGranted(
         request.cookies.get(THIRD_PARTY_CREATIVE_CONSENT_COOKIE)?.value,
       ),

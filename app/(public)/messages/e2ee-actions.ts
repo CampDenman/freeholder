@@ -8,7 +8,7 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { sendMessage, startConversation } from "@/modules/members/messages";
-import { claimKeyPackages, e2eeCommit, e2eeSync, publishKeyPackages, registerDevice, sendEncrypted } from "@/modules/members/e2ee/service";
+import { claimKeyPackages, e2eeCommit, e2eeSync, publishKeyPackages, registerDevice, sendCallKey, sendEncrypted } from "@/modules/members/e2ee/service";
 
 type Result<T> = { ok: T } | { error: { code: string; message: string } };
 
@@ -46,4 +46,7 @@ export async function openConversationAction(input: { handles: string[]; title?:
 /** Plaintext, only while someone in the conversation has no device; the service refuses it otherwise. */
 export async function sendPlaintextAction(input: Parameters<typeof sendMessage.call>[0]) {
   return run((actor) => sendMessage.call(input, actor));
+}
+export async function sendCallKeyAction(input: Parameters<typeof sendCallKey.call>[0]) {
+  return run((actor) => sendCallKey.call(input, actor));
 }

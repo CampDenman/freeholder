@@ -86,6 +86,16 @@ const envSchema = z.object({
   STUN_URLS: z.string().optional(),
 
   /**
+   * Group calls (§44.7, C12.24) go through the site's own SFU. LiveKit is the
+   * first adapter: the server's WebSocket URL and an API key and secret from
+   * its config. Media is end-to-end encrypted, so the SFU forwards frames it
+   * cannot read. Without these, group calls are not offered.
+   */
+  LIVEKIT_URL: z.string().url().optional(),
+  LIVEKIT_API_KEY: z.string().min(1).optional(),
+  LIVEKIT_API_SECRET: z.string().min(1).optional(),
+
+  /**
    * S3-compatible object storage (§12). One set of names for DigitalOcean
    * Spaces, Cloudflare R2, MinIO, Backblaze and AWS alike — they speak the
    * same protocol, so naming them after a vendor would be a lie the next

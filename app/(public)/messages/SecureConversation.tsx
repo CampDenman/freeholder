@@ -17,6 +17,7 @@ import {
   openConversationAction,
   publishKeyPackagesAction,
   registerDeviceAction,
+  sendCallKeyAction,
   sendEncryptedAction,
   sendPlaintextAction,
 } from "./e2ee-actions";
@@ -40,6 +41,7 @@ const transport: E2eeTransport = {
   claim: (input) => unwrap(claimKeyPackagesAction(input)),
   commit: (input) => unwrap(e2eeCommitAction(input)),
   send: (input) => unwrap(sendEncryptedAction(input)),
+  sendCallKey: (input) => unwrap(sendCallKeyAction(input)),
 };
 
 /** A name the member will recognise in their device list. */
