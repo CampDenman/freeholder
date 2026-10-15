@@ -126,7 +126,7 @@ const client = createClient({
   fetch: async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } }),
 });
 assert.equal(typeof client.api.contacts.create, "function");
-assert.deepEqual(listPresets().sort(), ["creator", "service-business", "shop"].sort());
+assert.deepEqual(listPresets().sort(), ["community", "creator", "service-business", "shop"].sort());
 const shop = preset("shop");
 assert.ok(shop.pages.some((page) => page.blocks.some((block) => block.type === "heading")));
 assert.ok(shop.emails.some((email) => email.blocks.length > 0));
