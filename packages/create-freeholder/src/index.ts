@@ -33,7 +33,7 @@ export const TARGETS = [
   "docker-selfhost",
 ] as const;
 
-export const PRESETS = ["creator", "service-business", "shop", "everything"] as const;
+export const PRESETS = ["creator", "service-business", "shop", "community", "everything"] as const;
 export const PAYMENT_CHOICES = ["stripe", "later"] as const;
 
 export interface CountryDefault {

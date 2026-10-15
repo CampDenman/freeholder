@@ -308,6 +308,7 @@ export const TEMPLATE_PRESETS = [
   "creator",
   "service-business",
   "shop",
+  "community",
   "everything",
   "custom",
 ] as const;
