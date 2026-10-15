@@ -507,8 +507,6 @@ export const memberReviews = pgTable(
     revealAt: timestamp("reveal_at", { withTimezone: true }).notNull(),
     reply: text("reply"),
     repliedAt: timestamp("replied_at", { withTimezone: true }),
-    /** Set when site staff remove the review after a report (C12.12). */
-    hiddenAt: timestamp("hidden_at", { withTimezone: true }),
     createdAt: createdAtColumn(),
   },
   (t) => [
@@ -521,40 +519,3 @@ export const memberReviews = pgTable(
     check("member_reviews_not_self", sql`${t.authorId} <> ${t.subjectId}`),
   ],
 );
-
-export const REPORT_TARGETS = ["post", "comment", "message", "listing", "review", "member"] as const;
-export const REPORT_REASONS = ["spam", "harassment", "hate", "violence", "sexual", "child_safety", "scam", "prohibited_item", "impersonation", "self_harm", "other"] as const;
-
-/**
- * §44.9 (C12.12): a member's report of something on the site. `subjectId` is
- * the member responsible for the reported thing; `excerpt` is what the reporter
- * saw, kept so the queue still shows it if the author edits or deletes it.
- */
-export const memberReports = pgTable(
-  "member_reports",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    reporterId: uuid("reporter_id").references(() => users.id, { onDelete: "set null" }),
-    targetType: text("target_type", { enum: REPORT_TARGETS }).notNull(),
-    targetId: uuid("target_id").notNull(),
-    subjectId: uuid("subject_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    reason: text("reason", { enum: REPORT_REASONS }).notNull(),
-    details: text("details").notNull().default(""),
-    excerpt: text("excerpt").notNull().default(""),
-    state: text("state", { enum: ["open", "actioned", "dismissed"] }).notNull().default("open"),
-    action: text("action", { enum: ["removed", "suspended", "dismissed"] }),
-    resolutionNote: text("resolution_note"),
-    resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
-    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
-    createdAt: createdAtColumn(),
-  },
-  (t) => [
-    uniqueIndex("member_reports_one_open_idx").on(t.reporterId, t.targetType, t.targetId).where(sql`${t.state} = 'open'`),
-    index("member_reports_queue_idx").on(t.state, t.createdAt),
-    index("member_reports_target_idx").on(t.targetType, t.targetId),
-    check("member_reports_target_valid", sql`${t.targetType} in ('post','comment','message','listing','review','member')`),
-    check("member_reports_state_valid", sql`${t.state} in ('open','actioned','dismissed')`),
-    check("member_reports_details_length", sql`char_length(${t.details}) <= 2000`),
-  ],
-);
-

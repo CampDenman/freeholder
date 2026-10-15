@@ -182,7 +182,7 @@ async function present(ctx: ServiceContext, viewerId: string | null, rows: (type
 }
 
 /** The single post, if this viewer may see it. */
-export async function visiblePost(ctx: ServiceContext, viewerId: string | null, postId: string) {
+async function visiblePost(ctx: ServiceContext, viewerId: string | null, postId: string) {
   const [post] = await ctx.tx.select().from(memberPosts).where(and(eq(memberPosts.id, postId), isNull(memberPosts.deletedAt)));
   if (!post) throw new ServiceError("not_found", "That post is not available.");
   const [writer] = await ctx.tx.select().from(memberProfiles).where(eq(memberProfiles.userId, post.authorId));

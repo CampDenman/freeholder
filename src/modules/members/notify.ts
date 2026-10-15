@@ -12,7 +12,7 @@ import type { ServiceContext } from "@/core/service";
 import { relationBetween } from "./graph";
 import { memberProfiles } from "./schema";
 
-export type MemberTopic = "members.follow" | "members.friend" | "members.mention" | "members.comment" | "members.reaction" | "members.message" | "members.call" | "members.sale" | "members.safety";
+export type MemberTopic = "members.follow" | "members.friend" | "members.mention" | "members.comment" | "members.reaction" | "members.message" | "members.call" | "members.sale";
 
 export async function notifyMember(
   ctx: ServiceContext,
@@ -29,9 +29,8 @@ export async function notifyMember(
     dedupeKey?: string;
   },
 ): Promise<void> {
-  // Self-addressed notices (a sale, a payout, a moderation outcome) come from
-  // the site, not a member.
-  const fromSite = input.to === input.from && (input.topic === "members.sale" || input.topic === "members.safety");
+  // Self-addressed notices (a sale, a payout) come from the site, not a member.
+  const fromSite = input.to === input.from && input.topic === "members.sale";
   if (input.to === input.from && !fromSite) return;
   const [recipient] = await ctx.tx
     .select({ status: memberProfiles.status })

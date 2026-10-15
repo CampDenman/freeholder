@@ -33,8 +33,6 @@ import listingServices from "./listings";
 import payoutServices, { payoutAdapters } from "./payouts";
 import protectionServices from "./protection";
 import reputationServices from "./reputation";
-import reportServices from "./reports";
-import { applyMemberStatus } from "./status";
 export { onOrderPaid, onRefundSucceeded } from "./payouts";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
@@ -375,9 +373,27 @@ export const setMemberStatus = defineService({
   }),
   output: profile,
   handler: async (input, ctx) => {
-    const updated = await applyMemberStatus(ctx, input.userId, input.status, input.reason);
+    if (input.status === "suspended" && !input.reason) {
+      throw new ServiceError("validation", "Say why this member is suspended.");
+    }
+    const [before] = await ctx.tx.select().from(memberProfiles).where(eq(memberProfiles.userId, input.userId)).for("update");
+    if (!before) throw new ServiceError("not_found", "That member does not exist.");
+    const [updated] = await ctx.tx
+      .update(memberProfiles)
+      .set({ status: input.status, statusReason: input.reason ?? null, statusChangedAt: new Date(), updatedAt: new Date() })
+      .where(eq(memberProfiles.userId, input.userId))
+      .returning();
     ctx.setSubject("member", input.userId);
-    return shape(updated);
+    if (before.status !== input.status) {
+      const event =
+        input.status === "suspended"
+          ? "member.suspended"
+          : before.status === "pending"
+            ? "member.approved"
+            : "member.reactivated";
+      ctx.queueEvent(event, { userId: input.userId, reason: input.reason ?? null });
+    }
+    return shape(updated!);
   },
 });
 
@@ -418,7 +434,6 @@ export default [
   ...payoutServices,
   ...protectionServices,
   ...reputationServices,
-  ...reportServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

@@ -128,7 +128,7 @@ export const reviewsFor = defineService({
     if (!subject) throw new ServiceError("not_found", "That member is not available.");
     const viewer = ctx.actor.kind === "user" ? ctx.actor.userId : null;
     if ((await relationBetween(ctx, viewer, subject.userId)).blocked) throw new ServiceError("not_found", "That member is not available.");
-    const visible = and(eq(memberReviews.subjectId, subject.userId), lte(memberReviews.revealAt, new Date()), isNull(memberReviews.hiddenAt));
+    const visible = and(eq(memberReviews.subjectId, subject.userId), lte(memberReviews.revealAt, new Date()));
     const summary = async (direction: "of_seller" | "of_buyer") => {
       const [r] = await ctx.tx
         .select({ average: avg(memberReviews.rating), count: count() })

@@ -10477,11 +10477,11 @@ whatever is best for the people using the site.
   only that a review exists, review back, reveal both, reply, and a visitor
   read the rating and reply on the profile. Changeset `member-reviews.md`.)*
 - [ ] **C12.12** Build trust and safety: report anything (posts, comments,
-  messages, listings, reviews, members) into one moderation queue modelled on
-  the community plugin's, where site staff remove content, suspend members or
-  dismiss, with rate limits on reporting and every moderation action on the
-  audit trail and recorded on the report. Split out: the prohibited-items
-  policy is C12.28, adult content C12.29, abuse-image hash matching C12.30.
+  messages, listings, reviews, members), a moderation queue
+  extending the community plugin's, rate limits and spam controls, a
+  prohibited-items policy, adult content that is opt-in and never shown to
+  minors, known-abuse-image hash matching with a legal reporting path, and an
+  audit trail for every moderation action.
 - [x] **C12.13** Build member notifications: in-app and email (immediate,
   daily or weekly digest, or off) for follows, friend requests, mentions,
   tags, comments, replies and reactions, with per-type controls chosen by the
@@ -10545,16 +10545,6 @@ whatever is best for the people using the site.
 - [ ] **C12.27** Add marketplace payout adapters for providers other than
   Stripe (for example PayPal, Adyen for Platforms, Mollie), selectable by the
   site owner without code changes.
-- [ ] **C12.28** Publish a prohibited-items policy: the site owner edits it
-  under Admin → Members, it is public at `/market/policy`, sellers accept it
-  before listing, and the report queue offers it as a reason.
-- [ ] **C12.29** Make adult content opt-in for adults and never shown to
-  minors: members mark posts and listings as adult, adults opt in to see
-  them, and minors and visitors never receive them from any service.
-- [ ] **C12.30** Hash-match known abuse imagery on upload, once member
-  attachments (C12.21) exist, through a provider adapter, blocking the upload,
-  preserving evidence and reporting through the legal path for the site's
-  jurisdiction.
 
 ---
 

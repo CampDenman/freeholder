@@ -24,5 +24,4 @@ export {
   memberDisputes,
   memberSaleMessages,
   memberReviews,
-  memberReports,
 } from "./schema";

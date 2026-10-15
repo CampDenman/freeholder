@@ -89,7 +89,6 @@ export const NOTIFICATION_TOPICS = [
   "members.message",
   "members.call",
   "members.sale",
-  "members.safety",
 ] as const;
 
 const notificationCreateResult = z.object({
