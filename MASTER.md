@@ -10476,12 +10476,28 @@ whatever is best for the people using the site.
   needed. **F12** the browser journey has the buyer review, the seller see
   only that a review exists, review back, reveal both, reply, and a visitor
   read the rating and reply on the profile. Changeset `member-reviews.md`.)*
-- [ ] **C12.12** Build trust and safety: report anything (posts, comments,
+- [x] **C12.12** Build trust and safety: report anything (posts, comments,
   messages, listings, reviews, members) into one moderation queue modelled on
   the community plugin's, where site staff remove content, suspend members or
   dismiss, with rate limits on reporting and every moderation action on the
   audit trail and recorded on the report. Split out: the prohibited-items
   policy is C12.28, adult content C12.29, abuse-image hash matching C12.30.
+  *(Evidence 2026-10-14: `src/modules/members/reports.ts`, the shared status
+  change in `src/modules/members/status.ts`, migration
+  `db/migrations/0034_member_reports.sql`, `tests/modules/member-reports.test.ts`,
+  `tests/browser/members.spec.ts`. **F04** `/report`, report links on posts,
+  comments, messages, listings, reviews and profiles, and the reports queue on
+  `/admin/members`. **F05** `members.report`, `members.reports`,
+  `members.resolveReport`, `members.myReports`. **F07** a member can only
+  report what they can see, and only a participant can report a message,
+  which shares that one message with staff; the reported member never learns
+  who reported them; reports on one thing are decided together; removing or
+  suspending needs a reason the member is told; every decision is a service
+  call on the audit trail and is recorded on the report; reporting is rate
+  limited, alongside the existing limits on posting, commenting, messaging,
+  calling, listing and following. **F09** N/A — no background work. **F12**
+  the browser journey reports a spam post and staff remove it with a reason.
+  Changeset `member-reports.md`.)*
 - [x] **C12.13** Build member notifications: in-app and email (immediate,
   daily or weekly digest, or off) for follows, friend requests, mentions,
   tags, comments, replies and reactions, with per-type controls chosen by the

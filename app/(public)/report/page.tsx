@@ -12,7 +12,11 @@ import { getT } from "../../i18n";
 import { reportAction } from "./actions";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { robots: { index: false, follow: false } };
+export async function generateMetadata({ searchParams }: { searchParams: Promise<{ type?: string }> }): Promise<Metadata> {
+  const [{ type }, t] = await Promise.all([searchParams, getT()]);
+  const known = (REPORT_TARGETS as readonly string[]).includes(type ?? "");
+  return { title: t(known ? `members.report.title.${type}` : "members.report.action"), robots: { index: false, follow: false } };
+}
 
 export default async function ReportPage({ searchParams }: { searchParams: Promise<{ type?: string; id?: string; sent?: string; error?: string }> }) {
   const [query, t, jar] = await Promise.all([searchParams, getT(), cookies()]);
