@@ -10,6 +10,7 @@ import { actorString, defineService, ServiceError } from "@/core/service";
 import { getBusiness } from "@/core/settings/service";
 import { products, productVariants } from "@/modules/catalog/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
+import { sellerCanSell } from "@/modules/catalog/market";
 import { registerCheckoutRequirement, registerCheckoutEligibility } from "@/modules/invoicing/checkout-requirements";
 import { invoices, paymentMethods, payments } from "@/modules/invoicing/schema";
 import { plans, subscriptions } from "./schema";
@@ -24,22 +25,24 @@ registerCheckoutEligibility("subscription", async (ctx, id) => {
 });
 const planView = z.object({ id: z.uuid(), name: z.string(), description: z.string().nullable(), currency: z.string(), amountMinor: z.number().int(), setupFeeMinor: z.number().int(), interval: z.enum(["day","week","month","year"]), intervalCount:z.number().int(), trialDays:z.number().int(), trialRequiresCard:z.boolean(), billingMode:z.enum(["manual","platform","provider"]), cancelBehaviour:z.enum(["immediate","period_end"]), termsHash:z.string(), available:z.boolean() });
 export const publicMembershipPlans = defineService({
-  name:"subscriptions.publicPlans", summary:"Public membership prices, trial and cancellation promises.",kind:"query",permission:"public",input:z.object({}),output:z.array(planView),
-  handler:async (_input,ctx)=>{
+  name:"subscriptions.publicPlans", summary:"Public membership prices, trial and cancellation promises — the site's own, or one member's (C12.05).",kind:"query",permission:"public",input:z.object({sellerUserId:z.uuid().optional()}),output:z.array(planView),
+  handler:async (input,ctx)=>{
     const business=await ctx.call(getBusiness,{});
     const contact = ctx.actor.kind === "user" ? await contactForActor(ctx).catch((error: unknown) => {
       if (error instanceof ServiceError && ["permission", "not_found"].includes(error.code)) return null;
       throw error;
     }) : null;
     const currency=business?.baseCurrency??"USD";
-    const rows=await ctx.tx.select({plan:plans,product:products,variant:productVariants.id}).from(plans).innerJoin(products,eq(products.id,plans.productId)).innerJoin(productVariants,and(eq(productVariants.productId,products.id),eq(productVariants.isDefault,true),eq(productVariants.status,"active"))).where(and(eq(plans.status,"active"),eq(products.status,"active"),eq(products.visibility,"public"))).orderBy(plans.name);
+    const rows=await ctx.tx.select({plan:plans,product:products,variant:productVariants.id}).from(plans).innerJoin(products,eq(products.id,plans.productId)).innerJoin(productVariants,and(eq(productVariants.productId,products.id),eq(productVariants.isDefault,true),eq(productVariants.status,"active"))).where(and(eq(plans.status,"active"),eq(products.status,"active"),eq(products.visibility,"public"),input.sellerUserId?eq(products.sellerUserId,input.sellerUserId):isNull(products.sellerUserId))).orderBy(plans.name);
+    // A member's plan is on sale only while that member can be paid (§44.8).
+    const sellerReady = input.sellerUserId ? await sellerCanSell(ctx, input.sellerUserId) : true;
     const result=[];
     for(const {plan,product,variant} of rows){
       const price=await ctx.callAsSystem(resolvePrice,{variantId:variant,currency,contactId:contact?.id,quantity:1});
       if(!price.available||price.amountMinor===undefined)continue;
       const promise={id:plan.id,name:plan.name,description:product.subtitle,currency,amountMinor:price.amountMinor,setupFeeMinor:plan.setupFeeMinor,interval:plan.interval,intervalCount:plan.intervalCount,trialDays:plan.trialDays,trialRequiresCard:plan.trialRequiresCard,billingMode:plan.billingMode,cancelBehaviour:plan.cancelBehaviour};
       const adapter=paymentAdapter();
-      result.push({...promise,termsHash:createHash("sha256").update(JSON.stringify({...promise,variant,updatedAt:plan.updatedAt})).digest("hex"),available:plan.billingMode==="manual" || (adapter.status.available && adapter.capabilities().savedMethods && (plan.billingMode==="provider" ? adapter.capabilities().subscriptions : adapter.capabilities().offSessionCharges))});
+      result.push({...promise,termsHash:createHash("sha256").update(JSON.stringify({...promise,variant,updatedAt:plan.updatedAt})).digest("hex"),available:sellerReady && (plan.billingMode==="manual" || (adapter.status.available && adapter.capabilities().savedMethods && (plan.billingMode==="provider" ? adapter.capabilities().subscriptions : adapter.capabilities().offSessionCharges)))});
     }
     return result;
   },
@@ -66,7 +69,8 @@ export const joinMembership = defineService({
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`membership-signup:${contact.id}:${input.planId}`}))`);
     const [prior]=await ctx.tx.select().from(subscriptions).where(and(eq(subscriptions.contactId,contact.id),eq(subscriptions.publicRequestKey,input.requestKey))).limit(1);
     if(prior){if(prior.planId!==input.planId||prior.publicTermsHash!==input.termsHash)throw new ServiceError("conflict","That request was already used for another signup.");return{id:prior.id,invoiceId:prior.signupInvoiceId,pending:prior.signupPending};}
-    const plan=(await ctx.call(publicMembershipPlans,{})).find(p=>p.id===input.planId);
+    const [seller]=await ctx.tx.select({sellerUserId:products.sellerUserId}).from(plans).innerJoin(products,eq(products.id,plans.productId)).where(eq(plans.id,input.planId)).limit(1);
+    const plan=(await ctx.call(publicMembershipPlans,{sellerUserId:seller?.sellerUserId??undefined})).find(p=>p.id===input.planId);
     if(!plan?.available)throw new ServiceError("conflict","This plan is not available for signup.");
     if(plan.termsHash!==input.termsHash)throw new ServiceError("conflict","This plan changed. Review its price and terms again.");
     const [existing]=await ctx.tx.select({id:subscriptions.id}).from(subscriptions).where(and(eq(subscriptions.contactId,contact.id),eq(subscriptions.planId,input.planId),inArray(subscriptions.status,["active","trialing","past_due","paused"]))).limit(1);

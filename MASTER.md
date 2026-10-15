@@ -10339,8 +10339,33 @@ whatever is best for the people using the site.
   **F12** the browser journey posts publicly with a hashtag and a mention,
   follows, reacts, comments and opens the hashtag page. Changeset
   `member-posts.md`.)*
-- [ ] **C12.05** Let members offer paid subscriptions to their own content,
+- [x] **C12.05** Let members offer paid subscriptions to their own content,
   with subscriber-only visibility, through the money spine and C12.09 payouts.
+  *(Evidence 2026-10-15: `src/modules/members/member-subscriptions.ts`,
+  `src/modules/members/subscriber-check.ts`, the seller-aware
+  `subscriptions.publicPlans` in `src/modules/subscriptions/public-signup.ts`,
+  migration `db/migrations/0040_member_subscription_payouts.sql`,
+  `tests/modules/member-subscriptions.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** Subscriptions on `/portal/listings` (offer, stop, subscriber
+  counts) and "Subscribe to …" on `/@handle`, which joins and takes the
+  subscriber to pay the first invoice. **F05**
+  `members.createSubscriptionPlan`, `members.mySubscriptionPlans`,
+  `members.setSubscriptionPlanStatus`, `members.subscriptionPlans`, and
+  `sellerUserId` on `subscriptions.publicPlans`. **F07** a member's plan is
+  an ordinary §4.15 plan on a product they sell, so signup, renewals,
+  dunning, cancelling and refunds are the site's existing machinery, billed
+  manually unless the site chooses card billing; member plans never appear
+  on the site's own memberships page; a plan is on sale only while the
+  member can be paid; access (the "subscribers" audience on posts and
+  profile sections, and the home feed) holds while a subscription is active,
+  trialing or past due, never while its first invoice is unpaid; every paid
+  subscription invoice becomes a payout through the §44.8 ledger (now keyed
+  by an order line or an invoice, exactly one), with the site fee and the
+  site's payout model, pre-tax, once; a refund cancels or flags it.
+  **F09** the existing renewal and dunning jobs bill members' plans; each
+  paid renewal invoice records its payout. **F12** the browser journey
+  offers a plan, subscribes, settles the first invoice and shows the
+  subscriber-only post. Changeset `member-subscriptions.md`.)*
 - [x] **C12.06** Build direct messages: one-to-one and group conversations,
   message requests from anyone the recipient does not follow or befriend,
   opt-in read receipts that a member sees only while sharing their own,

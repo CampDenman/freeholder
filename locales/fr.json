@@ -7665,5 +7665,22 @@
   "members.notifications.quietInvalid": "Les heures calmes doivent avoir un début et une fin différents.",
   "members.attach.add": "Ajouter des photos ou une vidéo",
   "members.attach.describe": "Décrivez-la pour les personnes qui ne peuvent pas la voir",
-  "members.attach.remove": "Retirer"
+  "members.attach.remove": "Retirer",
+  "members.notify.subscriptionPaid.title": "Un abonné a payé",
+  "members.notify.subscriptionPaid.body": "Un paiement d’abonnement est arrivé. Consultez ce qui vous est dû dans Paiements.",
+  "members.plans.title": "Abonnements",
+  "members.plans.intro": "Proposez un abonnement payant. Les abonnés voient vos publications et sections de profil réglées sur « Abonnés ». Vous êtes payé comme pour une vente, via Paiements.",
+  "members.plans.name": "Nom de l’offre",
+  "members.plans.every": "Facturé chaque",
+  "members.plans.interval.month": "Mois",
+  "members.plans.interval.year": "Année",
+  "members.plans.description": "Ce que reçoivent les abonnés (facultatif)",
+  "members.plans.create": "Proposer cet abonnement",
+  "members.plans.subscribers": "{count, plural, one {# abonné} other {# abonnés}}",
+  "members.plans.stop": "Ne plus proposer",
+  "members.plans.offer": "Proposer à nouveau",
+  "members.plans.subscribeTitle": "S’abonner à {name}",
+  "members.plans.subscribe": "S’abonner",
+  "members.plans.youSubscribe": "Vous êtes abonné",
+  "members.plans.price": "Prix par période"
 }

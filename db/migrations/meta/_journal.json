@@ -281,6 +281,13 @@
       "when": 1793310000019,
       "tag": "0039_member_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793310000020,
+      "tag": "0040_member_subscription_payouts",
+      "breakpoints": true
     }
   ]
 }

@@ -87,7 +87,9 @@ registerSellerGate(async (ctx, sellerIds) => {
 
 const payoutRow = row({
   id: uuid,
-  orderId: uuid,
+  /** The order line paid for, or (C12.05) null for a subscription invoice. */
+  orderId: uuid.nullable(),
+  invoiceId: uuid.nullable(),
   sellerId: uuid,
   sellerHandle: z.string(),
   currency: z.string(),
@@ -114,6 +116,7 @@ async function payoutsWhere(ctx: ServiceContext, where: ReturnType<typeof and>, 
   return rows.map(({ payout: p, handle }) => ({
     id: p.id,
     orderId: p.orderId,
+    invoiceId: p.invoiceId,
     sellerId: p.sellerId,
     sellerHandle: handle,
     currency: p.currency,
@@ -189,17 +192,20 @@ export const reversePayouts = defineService({
   output: z.object({ changed: z.number().int() }),
   handler: async (input, ctx) => {
     const { orderId, totalMinor } = await ctx.callAsSystem(orderForInvoice, { invoiceId: input.invoiceId });
-    if (!orderId) return { changed: 0 };
-    const full = totalMinor !== null && input.amountMinor >= totalMinor;
+    // A refunded subscription invoice (C12.05) is its own payout's source.
+    const [direct] = orderId ? [] : await ctx.tx.select({ grossMinor: memberPayouts.grossMinor }).from(memberPayouts).where(eq(memberPayouts.invoiceId, input.invoiceId));
+    if (!orderId && !direct) return { changed: 0 };
+    const source = orderId ? eq(memberPayouts.orderId, orderId) : eq(memberPayouts.invoiceId, input.invoiceId);
+    const full = orderId ? totalMinor !== null && input.amountMinor >= totalMinor : input.amountMinor >= direct!.grossMinor;
     const open = await ctx.tx
       .update(memberPayouts)
       .set(full ? { state: "cancelled", note: "Buyer refunded in full." } : { state: "review", note: "Buyer partly refunded; decide what the seller is owed." })
-      .where(and(eq(memberPayouts.orderId, orderId), inArray(memberPayouts.state, ["held", "due"])))
+      .where(and(source, inArray(memberPayouts.state, ["held", "due"])))
       .returning({ id: memberPayouts.id });
     const paid = await ctx.tx
       .update(memberPayouts)
       .set({ state: "review", note: "Buyer refunded after the seller was paid; recover or absorb it." })
-      .where(and(eq(memberPayouts.orderId, orderId), eq(memberPayouts.state, "paid")))
+      .where(and(source, eq(memberPayouts.state, "paid")))
       .returning({ id: memberPayouts.id });
     return { changed: open.length + paid.length };
   },

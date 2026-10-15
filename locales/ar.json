@@ -7665,5 +7665,22 @@
   "members.notifications.quietInvalid": "تحتاج ساعات الهدوء إلى وقت بداية ونهاية مختلفين.",
   "members.attach.add": "إضافة صور أو فيديو",
   "members.attach.describe": "صِفها لمن لا يستطيع رؤيتها",
-  "members.attach.remove": "إزالة"
+  "members.attach.remove": "إزالة",
+  "members.notify.subscriptionPaid.title": "دفع أحد المشتركين",
+  "members.notify.subscriptionPaid.body": "وصلت دفعة اشتراك. اطّلع على مستحقاتك في المدفوعات.",
+  "members.plans.title": "الاشتراكات",
+  "members.plans.intro": "قدّم اشتراكًا مدفوعًا. يرى المشتركون منشوراتك وأقسام ملفك المضبوطة على «المشتركون». تحصل على أموالك كما في البيع، عبر المدفوعات.",
+  "members.plans.name": "اسم الخطة",
+  "members.plans.every": "تُحصّل كل",
+  "members.plans.interval.month": "شهر",
+  "members.plans.interval.year": "سنة",
+  "members.plans.description": "ما يحصل عليه المشتركون (اختياري)",
+  "members.plans.create": "تقديم هذا الاشتراك",
+  "members.plans.subscribers": "{count, plural, one {مشترك واحد} other {# مشتركين}}",
+  "members.plans.stop": "إيقاف العرض",
+  "members.plans.offer": "العرض مجددًا",
+  "members.plans.subscribeTitle": "الاشتراك لدى {name}",
+  "members.plans.subscribe": "اشترك",
+  "members.plans.youSubscribe": "أنت مشترك",
+  "members.plans.price": "السعر لكل فترة"
 }

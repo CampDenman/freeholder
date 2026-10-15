@@ -53,20 +53,20 @@ async function ownListing(ctx: ServiceContext, productId: string, sellerId: stri
   return found;
 }
 
-function slugFor(handle: string, title: string): string {
+export function slugFor(handle: string, title: string): string {
   const base = title.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "listing";
   return `${handle.replace(/_/g, "-")}-${base}-${randomBytes(3).toString("hex")}`.replace(/-+/g, "-");
 }
 
 /** The site's standard tax category; member sales are taxed like the site's own. */
-async function standardTaxCategory(ctx: ServiceContext): Promise<string> {
+export async function standardTaxCategory(ctx: ServiceContext): Promise<string> {
   const categories = await ctx.callAsSystem(listProductTaxCategories, {});
   const standard = categories.find((c) => c.active && c.code === "standard");
   if (standard) return standard.id;
   return (await ctx.callAsSystem(createTaxCategory, { code: "standard", name: "Standard" })).id;
 }
 
-async function priceListFor(ctx: ServiceContext, currency: string): Promise<string> {
+export async function priceListFor(ctx: ServiceContext, currency: string): Promise<string> {
   const lists = await ctx.callAsSystem(listPriceLists, { currency, kind: "retail" });
   const usable = lists.find((l) => l.active && !l.customerGroupId);
   if (usable) return usable.id;
