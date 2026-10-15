@@ -101,6 +101,7 @@ export async function resolveWebhookTarget(
 export function pinnedRequestOptions(
   target: ResolvedWebhookTarget,
   headers: Record<string, string>,
+  method: "GET" | "POST" = "POST",
 ): RequestOptions {
   const originalHostname = normalizeIpAddress(target.url.hostname);
   return {
@@ -108,7 +109,7 @@ export function pinnedRequestOptions(
     hostname: target.address,
     family: target.family,
     port: target.url.port || undefined,
-    method: "POST",
+    method,
     path: `${target.url.pathname}${target.url.search}`,
     // A fresh connection ensures an agent cannot reuse a socket associated
     // with a different hostname or an address that was not just checked.
@@ -121,6 +122,21 @@ export function pinnedRequestOptions(
 export async function postWebhook(
   raw: string,
   body: string,
+  headers: Record<string, string>,
+  options: WebhookTransportOptions = {},
+): Promise<{ status: number; body: string }> {
+  return requestPinned("POST", raw, body, headers, options);
+}
+
+/**
+ * The same DNS-safe, address-pinned, redirect-refusing request for any method.
+ * C12.18 uses GET to fetch fediverse actor documents and keys, whose URLs
+ * other servers supply.
+ */
+export async function requestPinned(
+  method: "GET" | "POST",
+  raw: string,
+  body: string | null,
   headers: Record<string, string>,
   options: WebhookTransportOptions = {},
 ): Promise<{ status: number; body: string }> {
@@ -141,10 +157,10 @@ export async function postWebhook(
       operation();
     };
     const outgoing = request(
-      pinnedRequestOptions(target, {
+      pinnedRequestOptions(target, body === null ? headers : {
         ...headers,
         "content-length": String(Buffer.byteLength(body)),
-      }),
+      }, method),
       (incoming) => {
         const chunks: Buffer[] = [];
         let received = 0;
@@ -175,6 +191,6 @@ export async function postWebhook(
       outgoing.destroy(new Error(`No answer within ${timeoutMs / 1000} seconds.`));
     }, remainingMs);
     outgoing.on("error", (error) => finish(() => rejectResponse(error)));
-    outgoing.end(body);
+    outgoing.end(body ?? undefined);
   });
 }

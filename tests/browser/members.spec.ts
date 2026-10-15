@@ -558,6 +558,47 @@ test.describe("members (C12.01)", () => {
     for (const context of [admin, adaContext, deeContext, benContext, visitor]) await context.close();
   });
 
+  test("a member joins the fediverse and is findable by their address (C12.18)", async ({ browser }) => {
+    const ownerToken = await seedC11Owner("Federation proof");
+    await db().insert(users).values({ id: MEMBER_ID, email: "ada@example.test", role: "customer" });
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "ada", displayName: "Ada Lane", ageAttestedAt: new Date(), isPrivate: false });
+    const ada = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+
+    const adaContext = await browser.newContext({ baseURL: C11_BASE_URL });
+    await adaContext.addCookies([{ name: SESSION_COOKIE, value: ada.token, url: C11_BASE_URL }]);
+    const adaPage = await adaContext.newPage();
+    await adaPage.goto("/portal/member");
+    await expect(adaPage.getByRole("heading", { name: "The fediverse" })).toHaveCount(0);
+    expect((await adaPage.request.get("/ap/users/ada", { headers: { accept: "application/activity+json" } })).status()).toBe(404);
+
+    const admin = await browser.newContext({ baseURL: C11_BASE_URL });
+    await useOwnerSession(admin, ownerToken);
+    const console = await admin.newPage();
+    await console.goto("/admin/members");
+    await console.getByLabel(/Let members join the fediverse/).check();
+    await console.getByRole("button", { name: "Save rules" }).first().click();
+    await expect(console.getByLabel(/Let members join the fediverse/)).toBeChecked();
+
+    await adaPage.goto("/portal/member");
+    await adaPage.getByRole("button", { name: "Join the fediverse" }).click();
+    const address = adaPage.locator("code", { hasText: /^@ada@/ });
+    await expect(address).toBeVisible();
+    await expect(adaPage.getByText("Followers elsewhere: 0")).toBeVisible();
+    await axeInBothThemes(adaPage);
+
+    const acct = (await address.textContent())!.slice(1);
+    const jrd = await adaPage.request.get(`/.well-known/webfinger?resource=acct:${acct}`);
+    expect(jrd.headers()["content-type"]).toContain("application/jrd+json");
+    const self = ((await jrd.json()) as { links: { rel: string; href: string }[] }).links.find((l) => l.rel === "self")!.href;
+    const actor = await adaPage.request.get(new URL(self).pathname, { headers: { accept: "application/activity+json" } });
+    expect(await actor.json()).toMatchObject({ type: "Person", preferredUsername: "ada" });
+
+    await adaPage.getByRole("button", { name: "Leave the fediverse" }).click();
+    await expect(adaPage.getByRole("button", { name: "Join the fediverse" })).toBeVisible();
+    expect((await adaPage.request.get("/ap/users/ada", { headers: { accept: "application/activity+json" } })).status()).toBe(404);
+    for (const context of [admin, adaContext]) await context.close();
+  });
+
   test("the prohibited-items policy, published by the site and accepted by sellers (C12.28)", async ({ browser }) => {
     const ownerToken = await seedC11Owner("Policy proof");
     await db().insert(memberSettings).values({ id: 1, marketplaceEnabled: true, listingReview: false });

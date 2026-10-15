@@ -16,7 +16,8 @@ import { PROFILE_SECTION_KINDS } from "@/modules/members/profile-kinds";
 import { ImageUpload } from "./ImageUpload";
 import { MemberPasskeys } from "./MemberPasskeys";
 import { twoFactorStatus } from "@/core/auth/two-factor";
-import { avatarAction, deleteSectionAction, sectionAction } from "./profile-actions";
+import { avatarAction, deleteSectionAction, federationAction, sectionAction } from "./profile-actions";
+import { myRemoteFollowers, siteHost } from "@/modules/members/federation/core";
 import { Button, Callout, Field, Input, Pill, Select } from "@/ui/primitives";
 import { VISIBILITIES } from "@/modules/members/visibility";
 import { getLocale, getT } from "../../../i18n";
@@ -41,7 +42,13 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
       </div>
     );
   }
-  const [mine, sections, security, agentKeys] = await Promise.all([viewProfile.call({ handle: me.handle }, actor), profileSections.call({ handle: me.handle }, actor), twoFactorStatus.call({}, actor), myKeys.call({}, actor)]);
+  const [mine, sections, security, agentKeys, remote] = await Promise.all([
+    viewProfile.call({ handle: me.handle }, actor),
+    profileSections.call({ handle: me.handle }, actor),
+    twoFactorStatus.call({}, actor),
+    myKeys.call({}, actor),
+    rules.federation && me.federated ? myRemoteFollowers.call({}, actor) : null,
+  ]);
   return (
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold">{t("members.profile.title")}</h1>
@@ -111,6 +118,22 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
         </fieldset>
         <Button type="submit">{t("members.profile.save")}</Button>
       </form>
+      {rules.federation && me.status === "active" ? (
+        <section className="grid gap-3" aria-labelledby="your-fediverse">
+          <h2 id="your-fediverse" className="text-xl font-semibold">{t("members.federation.title")}</h2>
+          <p className="text-sm text-ink-muted">{t("members.federation.intro")}</p>
+          {me.federated ? (
+            <p>
+              {t("members.federation.address")} <code>@{me.handle}@{siteHost()}</code> · {t("members.federation.followers", { n: remote?.count ?? 0 })}
+            </p>
+          ) : null}
+          <form action={federationAction}>
+            <input type="hidden" name="federated" value={me.federated ? "no" : "yes"} />
+            <Button type="submit" variant={me.federated ? "quiet" : "primary"}>{t(me.federated ? "members.federation.leave" : "members.federation.join")}</Button>
+          </form>
+          {me.federated ? <p className="text-sm text-ink-muted">{t("members.federation.leaveNote")}</p> : null}
+        </section>
+      ) : null}
       <section className="grid gap-3" aria-labelledby="your-passkeys">
         <h2 id="your-passkeys" className="text-xl font-semibold">{t("portal.passkey.manageTitle")}</h2>
         {security.webauthn.length === 0 ? <Callout>{t("portal.passkey.prompt")}</Callout> : null}

@@ -4611,18 +4611,18 @@ v2.
 
 ## C12.18 — Offer opt-in ActivityPub federation so members can follow
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
+- **F01** — `db/migrations/0042_member_federation.sql`: site and member opt-in, actor keys, remote followers and the delivery queue.
+- **F02** — `tests/modules/member-federation.test.ts`: signatures, opt-in, inbox, delivery, Undo and leaving.
+- **F03** — N/A — remote followers are fediverse accounts, not contacts (`src/modules/members/federation/core.ts`).
+- **F04** — `tests/browser/members.spec.ts`: the admin toggle on `/admin/members` and The fediverse on `/portal/member`.
+- **F05** — `packages/sdk/src/generated.ts`: `members.setFederation`, `members.remoteFollowers` and `federation` on the rules.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/portal/member`; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-federation.test.ts`: unsigned and wrong-actor activities refused; only public, non-adult posts leave (`src/modules/members/federation/signatures.ts`).
+- **F08** — `tests/browser/members.spec.ts`.
+- **F09** — `src/modules/members/jobs.ts`: `members.deliverFederation` every minute with backoff and an eight-attempt cap.
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-federation.md`.
+- **F12** — `tests/modules/member-federation.test.ts`: a local fake remote server follows, receives signed deliveries and verifies them.
 
 ## C12.19 — Offer members passkey-first sign-in
 
@@ -4802,6 +4802,36 @@ v2.
 - **F10** — `packages/create-freeholder/src/index.ts`: `--preset community` for new sites.
 - **F11** — `deploy/members-vibe-coding.md` and `.changeset/community-preset.md`.
 - **F12** — `tests/core/templates.test.ts`: install and check the home links to join, the feed and the market.
+
+## C12.32 — Let members follow fediverse accounts from here
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+
+## C12.33 — Let members take their audience elsewhere and bring it here
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
 
 ## C12.30 — Hash-match known abuse imagery on upload
 

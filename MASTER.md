@@ -10635,8 +10635,37 @@ whatever is best for the people using the site.
   Firefox gathers no ICE candidates at all (the test prints each side's
   connection states and candidates if it ever fails).
   Changeset `member-calls-cross-browser.md`.)*
-- [ ] **C12.18** Offer opt-in ActivityPub federation so members can follow
-  and be followed across the fediverse and take their audience elsewhere.
+- [x] **C12.18** Offer opt-in ActivityPub federation so members can be
+  followed across the fediverse: site and member opt-in, WebFinger and actor
+  documents, an HTTP-signed inbox for Follow and Undo, an outbox, and signed
+  delivery of public posts to remote followers. Following remote accounts is
+  C12.32; taking an audience elsewhere is C12.33.
+  *(Evidence 2026-10-15: `src/modules/members/federation/core.ts`,
+  `src/modules/members/federation/signatures.ts`, `app/.well-known/webfinger/route.ts`,
+  `app/ap/`, migration `db/migrations/0042_member_federation.sql`,
+  `tests/modules/member-federation.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** "Let members join the fediverse" under Admin → Members; The
+  fediverse on `/portal/member` with the member's `@handle@host` address,
+  their follower count elsewhere, and Join or Leave. **F05**
+  `members.setFederation`, `members.remoteFollowers`, `federation` on
+  `members.updateRules` and `members.rules`, and `federated` on the member's
+  profile; the delivery, inbox and document services are internal. **F07**
+  nothing is published until both the site and the member opt in; only
+  public posts that are not adult reach the fediverse; the inbox accepts only
+  draft-cavage HTTP signatures (rsa-sha256 over the request target, host,
+  date and digest, twelve hours of clock skew) from a key whose owner is the
+  activity's actor, fetched through the DNS-pinned transport so another
+  server can never make this one reach a private address; bodies are capped
+  at 256 KB; each member's signing key is generated on first use and sealed
+  at rest; deleting or moderating a post sends Delete; leaving sends an actor
+  Delete and forgets every remote follower. **F09**
+  `members.deliverFederation` runs every minute and signs each delivery; a
+  failure retries with backoff (2, 4, 8 … up to 360 minutes) and stops after
+  eight attempts. **F12** the module test plays a remote server on a local
+  port: it follows, receives a signed Accept and Create that verify against
+  the member's published key, unfollows, and sees the member leave; the
+  browser journey opts in as admin and member and resolves the address
+  through WebFinger to the actor. Changeset `member-federation.md`.)*
 - [x] **C12.19** Offer members passkey-first sign-in: enrol a passkey after
   the email proof, sign in with it on return, manage passkeys from the portal,
   and keep email proof as the recovery path.
@@ -10825,6 +10854,12 @@ whatever is best for the people using the site.
   the owner's choices in Admin → Members). **F09** N/A — no background work.
   **F12** the preset test installs it and checks the pages, product and
   home links. Changeset `community-preset.md`.)*
+- [ ] **C12.32** Let members follow fediverse accounts from here: look up
+  `@user@host`, send a signed Follow, accept their public posts into the
+  member's home feed, and respect remote Delete, Update and Block.
+- [ ] **C12.33** Let members take their audience elsewhere and bring it here:
+  `alsoKnownAs` and an outgoing `Move` that remote servers follow, and
+  accepting an incoming `Move` for an account moving in.
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
   preserving evidence and reporting through the legal path for the site's

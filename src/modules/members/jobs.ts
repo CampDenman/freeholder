@@ -13,4 +13,16 @@ export const releaseDuePayouts = defineJob({
   },
 });
 
-export default [releaseDuePayouts];
+/** C12.18: signed activities to fediverse inboxes, retried with backoff. */
+export const deliverFederation = defineJob({
+  name: "members.deliverFederation",
+  summary: "Deliver queued ActivityPub activities to remote inboxes.",
+  schedule: "* * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { deliverFederation: deliver } = await import("./federation/core");
+    return deliver();
+  },
+});
+
+export default [releaseDuePayouts, deliverFederation];

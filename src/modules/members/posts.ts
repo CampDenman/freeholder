@@ -318,6 +318,7 @@ export const deletePost = defineService({
       .returning({ id: memberPosts.id });
     if (!gone) throw new ServiceError("not_found", "That post is not available.");
     ctx.setSubject("member_post", input.id);
+    ctx.queueEvent("member.postDeleted", { postId: input.id, authorId: viewerId });
     return { ok: true as const };
   },
 });

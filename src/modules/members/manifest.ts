@@ -24,6 +24,7 @@ export default defineModule({
       "member.friended",
       "member.friendRequested",
       "member.posted",
+      "member.postDeleted",
       "member.commented",
       "member.reacted",
       "member.mentioned",
@@ -39,6 +40,8 @@ export default defineModule({
       "catalog.orderPaid": "onOrderPaid",
       "refund.succeeded": "onRefundSucceeded",
       "invoice.paid": "onInvoicePaid",
+      "member.posted": "onMemberPosted",
+      "member.postDeleted": "onMemberPostDeleted",
     },
   },
 });

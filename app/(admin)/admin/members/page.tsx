@@ -70,6 +70,10 @@ export default async function MembersPage({
               <input type="checkbox" name="adultContent" value="yes" defaultChecked={rules.adultContent} />
               <span>{t("members.admin.adultContent")}</span>
             </label>
+            <label className="flex items-start gap-2 sm:col-span-3">
+              <input type="checkbox" name="federation" value="yes" defaultChecked={rules.federation} />
+              <span>{t("members.admin.federation")}</span>
+            </label>
             <Button type="submit">{t("members.admin.saveRules")}</Button>
           </form>
         </CardBody>

@@ -84,9 +84,10 @@ const LOCALE_PREFIX = /^\/([a-z]{2}(?:-[A-Za-z]{2,4})?)(\/.*)?$/;
  *
  * A deny-list rather than an allow-list of languages, because the edge still
  * cannot ask which locales exist, and `tests/core/proxy.test.ts` fails if a new
- * two-letter route appears in `app/` without being listed here.
+ * two-letter route appears in `app/` without being listed here. `ap` is the
+ * ActivityPub surface (C12.18); stripping it sent every fediverse server a 404.
  */
-const RESERVED_ROOT = /^(og|go)$/;
+const RESERVED_ROOT = /^(og|go|ap)$/;
 
 /**
  * Surfaces where a visitor identifier would be pointless or unwelcome.
@@ -96,7 +97,7 @@ const RESERVED_ROOT = /^(og|go)$/;
  * cookie whose events are filtered out later — the cheapest way to be sure a
  * number is honest is to never record it.
  */
-const UNCOUNTED = /^\/(admin|login|setup|preview|portal|api|media|og|feeds)(\/|$)|\.(xml|txt|ico|png|jpg|svg|webp|avif)$/;
+const UNCOUNTED = /^\/(admin|login|setup|preview|portal|api|media|og|feeds|ap|\.well-known)(\/|$)|\.(xml|txt|ico|png|jpg|svg|webp|avif)$/;
 
 /** Owner/internal routes may look like locale-prefixed public paths, but are not. */
 const NEVER_LOCALIZED = /^\/(admin|login|setup|preview|api|media|embed)(\/|$)/;

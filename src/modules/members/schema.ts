@@ -58,6 +58,8 @@ export const memberProfiles = pgTable(
     marketPolicyAccepted: integer("market_policy_accepted"),
     /** C12.20: the member's chosen picture, an image they uploaded. */
     avatarAssetId: uuid("avatar_asset_id").references(() => assets.id, { onDelete: "set null" }),
+    /** C12.18: this member chose to be findable and followable on the fediverse. */
+    federated: boolean("federated").notNull().default(false),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -101,6 +103,8 @@ export const memberSettings = pgTable(
     /** §44.9 (C12.28): what members may not sell. Empty means the starter default. */
     marketPolicy: text("market_policy").notNull().default(""),
     marketPolicyVersion: integer("market_policy_version").notNull().default(1),
+    /** §44.11 (C12.18): whether members may federate with the fediverse. Off by default. */
+    federation: boolean("federation").notNull().default(false),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
@@ -637,5 +641,45 @@ export const memberAttachments = pgTable(
     check("member_attachments_parent_valid", sql`${t.parentType} in ('post','comment','message')`),
     check("member_attachments_alt_length", sql`char_length(${t.altText}) <= 500`),
   ],
+);
+
+/** C12.18: a member's ActivityPub key pair; the private key is sealed at rest. */
+export const memberActorKeys = pgTable("member_actor_keys", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  publicKeyPem: text("public_key_pem").notNull(),
+  privateKeySealed: text("private_key_sealed").notNull(),
+  createdAt: createdAtColumn(),
+});
+
+/** C12.18: fediverse accounts that follow a member. */
+export const memberRemoteFollowers = pgTable(
+  "member_remote_followers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    actorUri: text("actor_uri").notNull(),
+    inboxUri: text("inbox_uri").notNull(),
+    sharedInboxUri: text("shared_inbox_uri"),
+    handle: text("handle"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [uniqueIndex("member_remote_followers_pair_idx").on(t.userId, t.actorUri), index("member_remote_followers_user_idx").on(t.userId)],
+);
+
+/** C12.18: signed activities waiting to reach a remote inbox, retried with backoff. */
+export const memberFederationDeliveries = pgTable(
+  "member_federation_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    inboxUri: text("inbox_uri").notNull(),
+    activity: jsonb("activity").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [index("member_federation_deliveries_due_idx").on(t.deliveredAt, t.nextAttemptAt)],
 );
 
