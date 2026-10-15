@@ -8,8 +8,9 @@ import { listMembers, membershipRules } from "@/modules/members/service";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { getLocale, getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
-import { inviteMemberAction, payoutAccountAction, reviewListingAction, saveMarketRulesAction, saveMembershipRulesAction, setMemberStatusAction, settlePayoutsAction } from "./actions";
+import { disputeAction, inviteMemberAction, payoutAccountAction, reviewListingAction, saveMarketRulesAction, saveMembershipRulesAction, setMemberStatusAction, settlePayoutsAction } from "./actions";
 import { payoutAdapters, sitePayouts } from "@/modules/members/payouts";
+import { listDisputes, saleThread } from "@/modules/members/protection";
 import { formatMoney } from "@/core/i18n";
 import { pendingListings } from "@/modules/members/listings";
 
@@ -37,6 +38,8 @@ export default async function MembersPage({
   ]);
   const [waiting, ledger] = await Promise.all([pendingListings.call({}, actor), sitePayouts.call({}, actor)]);
   const open = ledger.payouts.filter((p) => p.state === "held" || p.state === "due" || p.state === "review");
+  const disputes = await listDisputes.call({ state: "open" }, actor);
+  const threads = await Promise.all(disputes.map((d) => saleThread.call({ orderId: d.orderId, sellerId: d.sellerId }, actor)));
   const back = `/admin/members?status=${status ?? "all"}${query.q ? `&q=${encodeURIComponent(query.q)}` : ""}`;
   return (
     <div className="grid gap-6">
@@ -117,6 +120,34 @@ export default async function MembersPage({
           ) : (
             <p className="mt-4 text-sm text-ink-muted">{t("members.admin.noPendingListings")}</p>
           )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("members.admin.disputes", { count: disputes.length })} />
+        <CardBody>
+          {disputes.length === 0 ? <p className="text-sm text-ink-muted">{t("members.admin.noDisputes")}</p> : null}
+          <ul className="grid gap-4">
+            {disputes.map((d, i) => (
+              <li key={d.id} className="grid gap-2 rounded-md border border-rule p-3">
+                <p><strong>{t(`members.sales.reasons.${d.reason}`)}</strong> · @{d.sellerHandle}</p>
+                <ol className="grid gap-1 text-sm">
+                  {threads[i]!.map((m) => <li key={m.id}><span className="text-ink-muted">{t(`members.sales.role.${m.role}`)}:</span> {m.body}</li>)}
+                </ol>
+                <form action={disputeAction} className="flex flex-wrap items-end gap-3">
+                  <input type="hidden" name="id" value={d.id} />
+                  <input type="hidden" name="orderId" value={d.orderId} />
+                  <input type="hidden" name="sellerId" value={d.sellerId} />
+                  <Field label={t("members.admin.disputeNote")} htmlFor={`dispute-${d.id}`}>
+                    <Input id={`dispute-${d.id}`} name="note" required minLength={3} maxLength={2000} />
+                  </Field>
+                  <Button type="submit" name="outcome" value="message" variant="quiet">{t("members.admin.disputeReply")}</Button>
+                  <Button type="submit" name="outcome" value="release">{t("members.admin.disputeRelease")}</Button>
+                  <Button type="submit" name="outcome" value="refund" variant="danger">{t("members.admin.disputeRefund")}</Button>
+                </form>
+              </li>
+            ))}
+          </ul>
         </CardBody>
       </Card>
 

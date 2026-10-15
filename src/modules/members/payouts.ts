@@ -217,7 +217,15 @@ export const releaseDuePayouts = defineService({
     const released = await ctx.tx
       .update(memberPayouts)
       .set({ state: "due", releasedAt: new Date() })
-      .where(and(eq(memberPayouts.state, "held"), isNotNull(memberPayouts.releaseAt), lte(memberPayouts.releaseAt, new Date())))
+      .where(
+        and(
+          eq(memberPayouts.state, "held"),
+          isNotNull(memberPayouts.releaseAt),
+          lte(memberPayouts.releaseAt, new Date()),
+          // An open dispute freezes the sale until the site resolves it (C12.10).
+          sql`not exists (select 1 from member_disputes d where d.order_id = ${memberPayouts.orderId} and d.seller_id = ${memberPayouts.sellerId} and d.state = 'open')`,
+        ),
+      )
       .returning({ id: memberPayouts.id });
     return { released: released.length };
   },
@@ -374,7 +382,16 @@ export const settlePayouts = defineService({
     const changed = await ctx.tx
       .update(memberPayouts)
       .set(set)
-      .where(and(inArray(memberPayouts.id, input.ids), inArray(memberPayouts.state, from)))
+      .where(
+        and(
+          inArray(memberPayouts.id, input.ids),
+          inArray(memberPayouts.state, from),
+          // Paying or releasing a disputed sale waits for the dispute (C12.10).
+          input.action === "release" || input.action === "paid"
+            ? sql`not exists (select 1 from member_disputes d where d.order_id = ${memberPayouts.orderId} and d.seller_id = ${memberPayouts.sellerId} and d.state = 'open')`
+            : undefined,
+        ),
+      )
       .returning({ id: memberPayouts.id, sellerId: memberPayouts.sellerId });
     for (const row of changed) {
       ctx.setSubject("member_payout", row.id);

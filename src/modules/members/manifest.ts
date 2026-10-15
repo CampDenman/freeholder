@@ -31,6 +31,7 @@ export default defineModule({
       "member.listingCreated",
       "member.listingReviewed",
       "member.payoutsRecorded",
+      "member.disputeOpened",
     ],
     listens: {
       "catalog.orderPaid": "onOrderPaid",

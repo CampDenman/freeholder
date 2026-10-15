@@ -425,3 +425,65 @@ export const memberPayouts = pgTable(
     check("member_payouts_amounts", sql`${t.feeMinor} >= 0 and ${t.netMinor} = ${t.grossMinor} - ${t.feeMinor}`),
   ],
 );
+
+/** §44.8: one seller's part of one order — how it reached the buyer. */
+export const memberSaleFulfilments = pgTable(
+  "member_sale_fulfilments",
+  {
+    orderId: uuid("order_id").notNull(),
+    sellerId: uuid("seller_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+    state: text("state", { enum: ["awaiting", "shipped", "delivered"] }).notNull().default("awaiting"),
+    carrier: text("carrier"),
+    tracking: text("tracking"),
+    shippedAt: timestamp("shipped_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    /** Who settled delivery: the buyer, the site, or the holding window. */
+    deliveredBy: text("delivered_by", { enum: ["buyer", "site", "window"] }),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orderId, t.sellerId] }),
+    check("member_sale_fulfilments_state_valid", sql`${t.state} in ('awaiting','shipped','delivered')`),
+  ],
+);
+
+/** §44.8: a buyer's dispute about one seller's part of an order. */
+export const memberDisputes = pgTable(
+  "member_disputes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id").notNull(),
+    sellerId: uuid("seller_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+    buyerUserId: uuid("buyer_user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+    reason: text("reason", { enum: ["not_received", "not_as_described", "other"] }).notNull(),
+    state: text("state", { enum: ["open", "released", "refunded", "withdrawn"] }).notNull().default("open"),
+    resolutionNote: text("resolution_note"),
+    createdAt: createdAtColumn(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("member_disputes_order_idx").on(t.orderId, t.sellerId),
+    index("member_disputes_state_idx").on(t.state, t.createdAt),
+    uniqueIndex("member_disputes_one_open_idx").on(t.orderId, t.sellerId).where(sql`${t.state} = 'open'`),
+    check("member_disputes_reason_valid", sql`${t.reason} in ('not_received','not_as_described','other')`),
+    check("member_disputes_state_valid", sql`${t.state} in ('open','released','refunded','withdrawn')`),
+  ],
+);
+
+/** §44.8: the buyer, the seller and the site talking about one sale. Sealed at rest. */
+export const memberSaleMessages = pgTable(
+  "member_sale_messages",
+  {
+    id: uuid("id").primaryKey(),
+    orderId: uuid("order_id").notNull(),
+    sellerId: uuid("seller_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+    authorUserId: uuid("author_user_id").references(() => users.id, { onDelete: "set null" }),
+    role: text("role", { enum: ["buyer", "seller", "site"] }).notNull(),
+    bodySealed: text("body_sealed").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    index("member_sale_messages_sale_idx").on(t.orderId, t.sellerId, t.createdAt),
+    check("member_sale_messages_role_valid", sql`${t.role} in ('buyer','seller','site')`),
+  ],
+);

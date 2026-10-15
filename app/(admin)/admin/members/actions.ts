@@ -11,6 +11,7 @@ import { ServiceError } from "@/core/service";
 import { inviteMember, setMemberStatus, updateMembershipRules } from "@/modules/members/service";
 import { reviewListing } from "@/modules/members/listings";
 import { setPayoutAccountStatus, settlePayouts } from "@/modules/members/payouts";
+import { postSaleMessage, resolveDispute } from "@/modules/members/protection";
 
 const PATH = "/admin/members";
 
@@ -120,4 +121,14 @@ export async function reviewListingAction(form: FormData): Promise<void> {
       await actor(),
     ),
   );
+}
+
+export async function disputeAction(form: FormData): Promise<void> {
+  const outcome = text(form, "outcome");
+  await run(async () => {
+    if (outcome === "message") {
+      return postSaleMessage.call({ orderId: text(form, "orderId"), sellerId: text(form, "sellerId"), body: text(form, "note") }, await actor());
+    }
+    return resolveDispute.call({ id: text(form, "id"), outcome: outcome === "refund" ? "refund" : "release", note: text(form, "note") }, await actor());
+  });
 }

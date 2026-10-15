@@ -9,7 +9,9 @@ import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { THEME_COOKIE } from "@/core/design/theme";
-import { memberProfiles, memberSettings } from "@/modules/members/schema";
+import { memberPayouts, memberProfiles, memberSettings } from "@/modules/members/schema";
+import { contacts } from "@/core/contacts/schema";
+import { orderItems, orders, productVariants, products } from "@/modules/catalog/schema";
 import { seedC11Owner, useOwnerSession, C11_BASE_URL } from "./owner-session";
 
 const MEMBER_ID = "00000000-0000-4000-8000-0000000000d1";
@@ -329,5 +331,54 @@ test.describe("members (C12.01)", () => {
     await visitor.close();
     await seller.close();
     await admin.close();
+  });
+
+  test("shipping, the sale conversation and the buyer confirming delivery (C12.10)", async ({ browser }) => {
+    await seedC11Owner("Protection proof");
+    const BUYER_ID = "00000000-0000-4000-8000-0000000000d3";
+    await db().insert(memberSettings).values({ id: 1, marketplaceEnabled: true, listingReview: false });
+    await db().insert(users).values([
+      { id: MEMBER_ID, email: "rae@example.test", role: "customer" },
+      { id: BUYER_ID, email: "buyer@example.test", role: "customer" },
+    ]);
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date() });
+    const [buyer] = await db().insert(contacts).values({ email: "buyer@example.test", name: "Bea Buyer", userId: BUYER_ID }).returning();
+    const [product] = await db().insert(products).values({ name: "Harbour print", slug: "rae-harbour-print-test", kind: "physical", status: "active", publishedAt: new Date(), sellerUserId: MEMBER_ID }).returning();
+    const [variant] = await db().insert(productVariants).values({ productId: product!.id, sku: "rae-harbour-print-test", combinationKey: "default", isDefault: true }).returning();
+    const [order] = await db().insert(orders).values({ contactId: buyer!.id, currency: "CAD", status: "paid", subtotalMinor: 4500, totalMinor: 4500 }).returning();
+    const [line] = await db().insert(orderItems).values({ orderId: order!.id, variantId: variant!.id, quantity: 1, unitAmountMinor: 4500, lineTotalMinor: 4500 }).returning();
+    await db().insert(memberPayouts).values({ orderId: order!.id, orderItemId: line!.id, sellerId: MEMBER_ID, currency: "CAD", grossMinor: 4500, feeMinor: 0, netMinor: 4500, state: "held", model: "hold", releaseAt: new Date(Date.now() + 14 * 86_400_000) });
+    const [rae, bea] = await Promise.all([
+      db().transaction((tx) => createSession(tx, MEMBER_ID)),
+      db().transaction((tx) => createSession(tx, BUYER_ID)),
+    ]);
+
+    const seller = await browser.newContext({ baseURL: C11_BASE_URL });
+    await seller.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
+    const sp = await seller.newPage();
+    await sp.goto("/portal/sales");
+    await sp.getByRole("link", { name: /Harbour print/ }).click();
+    await axeInBothThemes(sp);
+    await sp.getByLabel("Carrier").fill("Canada Post");
+    await sp.getByLabel("Tracking number").fill("CP123");
+    await sp.getByRole("button", { name: "Mark as shipped" }).click();
+    await expect(sp.getByText("Sent with Canada Post, tracking CP123")).toBeVisible();
+    await sp.getByLabel("Message").fill("On its way!");
+    await sp.getByRole("button", { name: "Send" }).click();
+
+    const buyerContext = await browser.newContext({ baseURL: C11_BASE_URL });
+    await buyerContext.addCookies([{ name: SESSION_COOKIE, value: bea.token, url: C11_BASE_URL }]);
+    const bp = await buyerContext.newPage();
+    await bp.goto("/portal/purchases");
+    await bp.getByRole("link", { name: /Harbour print/ }).click();
+    await expect(bp.getByText("On its way!")).toBeVisible();
+    await axeInBothThemes(bp);
+    await bp.getByRole("button", { name: "I received it" }).click();
+    await expect(bp.getByText("Delivered", { exact: true })).toBeVisible();
+
+    await sp.reload();
+    await expect(sp.getByText("Payment due to you")).toBeVisible();
+    await seller.close();
+    await buyerContext.close();
   });
 });
