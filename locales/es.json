@@ -7629,5 +7629,21 @@
   "members.sections.add": "Añadir sección",
   "members.sections.remove": "Quitar",
   "members.sections.pin": "Fijar en el perfil",
-  "members.sections.openPost": "Abrir publicación"
+  "members.sections.openPost": "Abrir publicación",
+  "portal.passkey.heading": "Iniciar sesión con una llave de acceso",
+  "portal.passkey.intro": "Si añadiste una llave de acceso, usa tu huella, tu cara o el bloqueo de pantalla. Sin correo.",
+  "portal.passkey.submit": "Entrar con llave de acceso",
+  "portal.passkey.failed": "Esa llave de acceso no funcionó. Inténtalo de nuevo o recibe un enlace por correo.",
+  "portal.passkey.manageTitle": "Llaves de acceso",
+  "portal.passkey.prompt": "Añade una llave de acceso y la próxima vez entrarás con un toque, sin enlace por correo.",
+  "portal.passkey.name": "Nombre de esta llave",
+  "portal.passkey.defaultName": "Mi dispositivo",
+  "portal.passkey.add": "Añadir llave de acceso",
+  "portal.passkey.remove": "Quitar",
+  "portal.passkey.added": "Llave añadida. Úsala la próxima vez que entres.",
+  "portal.passkey.none": "Aún no tienes llaves de acceso.",
+  "portal.passkey.recovery": "¿Perdiste tu dispositivo? Entra con un enlace enviado a tu correo y confirma con uno de tus códigos de recuperación para quitar la llave antigua.",
+  "portal.passkey.codesIntro": "Guarda estos códigos de recuperación en un lugar seguro. Si pierdes este dispositivo, entra con un enlace por correo y usa uno para quitar la llave antigua. Cada uno sirve una vez.",
+  "portal.passkey.recoveryCode": "Código de recuperación",
+  "portal.passkey.useCode": "Confirmar con el código y luego quitar la llave"
 }

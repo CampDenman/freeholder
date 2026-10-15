@@ -4626,18 +4626,18 @@ v2.
 
 ## C12.19 — Offer members passkey-first sign-in
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F01** — N/A — passkeys use the existing `webauthn_credentials` store (`src/core/auth/schema.ts`).
+- **F02** — `tests/browser/members.spec.ts`: enrolment, sign-in and management through the real WebAuthn ceremonies.
+- **F03** — N/A — sign-in concerns logins, not contacts (`app/portal/passkey-actions.ts`).
+- **F04** — `tests/browser/members.spec.ts`: `/portal/login` and Passkeys on `/portal/member`.
+- **F05** — `packages/sdk/src/generated.ts`: the existing `auth.*Passkey*` and `auth.*WebAuthn*` services.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/portal/member`; strings in four locales (`locales/en.json`).
+- **F07** — `tests/browser/members.spec.ts`: email stays a way in; adding or removing passkeys needs fresh proof (`src/core/auth/two-factor.ts`).
+- **F08** — `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background work (`app/portal/passkey-actions.ts`).
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-passkeys.md`.
+- **F12** — `tests/browser/members.spec.ts`: add a passkey, sign out, and sign back in with it.
 
 ## C12.20 — Give member profiles an avatar and optional profile sections
 

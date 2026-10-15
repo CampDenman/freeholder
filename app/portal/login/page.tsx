@@ -13,6 +13,7 @@ import { redirect } from "next/navigation";
 import { customerSignInStatus } from "@/core/portal/sign-in";
 import { safeCustomerReturnPath } from "@/core/portal/return-path";
 import { MagicLinkForm } from "./MagicLinkForm";
+import { PortalPasskeySignIn } from "./PortalPasskeySignIn";
 import { PortalLocaleChooser } from "../PortalLocaleChooser";
 
 export const dynamic = "force-dynamic";
@@ -63,13 +64,22 @@ export default async function PortalLoginPage({ searchParams }: { searchParams: 
           </a>
         </Callout>
       ) : (
-        availability.available ? <MagicLinkForm returnTo={returnTo} labels={{
+        <>
+        <PortalPasskeySignIn returnTo={returnTo} labels={{
+          heading: t("portal.passkey.heading"),
+          intro: t("portal.passkey.intro"),
+          email: t("portal.login.email"),
+          submit: t("portal.passkey.submit"),
+          failed: t("portal.passkey.failed"),
+        }} />
+        {availability.available ? <MagicLinkForm returnTo={returnTo} labels={{
           name: t("portal.profile.name"),
           email: t("portal.login.email"),
           submit: t("portal.login.submit"),
           pending: t("portal.login.pending"),
           sent: t("portal.login.sent"),
-        }} /> : <Callout>{t("portal.login.unavailable")}</Callout>
+        }} /> : <Callout>{t("portal.login.unavailable")}</Callout>}
+        </>
       )}
     </main>
   );

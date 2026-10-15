@@ -7629,5 +7629,21 @@
   "members.sections.add": "Add section",
   "members.sections.remove": "Remove",
   "members.sections.pin": "Pin to profile",
-  "members.sections.openPost": "Open post"
+  "members.sections.openPost": "Open post",
+  "portal.passkey.heading": "Sign in with a passkey",
+  "portal.passkey.intro": "If you added a passkey, use your fingerprint, face or screen lock. No email needed.",
+  "portal.passkey.submit": "Sign in with passkey",
+  "portal.passkey.failed": "That passkey did not work. Try again, or get a sign-in link by email.",
+  "portal.passkey.manageTitle": "Passkeys",
+  "portal.passkey.prompt": "Add a passkey and next time you can sign in with one tap, no email link needed.",
+  "portal.passkey.name": "Name this passkey",
+  "portal.passkey.defaultName": "My device",
+  "portal.passkey.add": "Add a passkey",
+  "portal.passkey.remove": "Remove",
+  "portal.passkey.added": "Passkey added. Use it next time you sign in.",
+  "portal.passkey.none": "You have no passkeys yet.",
+  "portal.passkey.recovery": "Lost your device? Sign in with a link sent to your email, then confirm with one of your recovery codes to remove the old passkey.",
+  "portal.passkey.codesIntro": "Keep these recovery codes somewhere safe. If you lose this device, sign in with an email link and use one to remove the old passkey. Each works once.",
+  "portal.passkey.recoveryCode": "Recovery code",
+  "portal.passkey.useCode": "Confirm with code, then remove the passkey"
 }

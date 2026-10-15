@@ -12,6 +12,8 @@ import { viewProfile } from "@/modules/members/graph";
 import { profileSections } from "@/modules/members/profile";
 import { PROFILE_SECTION_KINDS } from "@/modules/members/profile-kinds";
 import { ImageUpload } from "./ImageUpload";
+import { MemberPasskeys } from "./MemberPasskeys";
+import { twoFactorStatus } from "@/core/auth/two-factor";
 import { avatarAction, deleteSectionAction, sectionAction } from "./profile-actions";
 import { Button, Callout, Field, Input, Pill, Select } from "@/ui/primitives";
 import { VISIBILITIES } from "@/modules/members/visibility";
@@ -37,7 +39,7 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
       </div>
     );
   }
-  const [mine, sections] = await Promise.all([viewProfile.call({ handle: me.handle }, actor), profileSections.call({ handle: me.handle }, actor)]);
+  const [mine, sections, security] = await Promise.all([viewProfile.call({ handle: me.handle }, actor), profileSections.call({ handle: me.handle }, actor), twoFactorStatus.call({}, actor)]);
   return (
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold">{t("members.profile.title")}</h1>
@@ -107,6 +109,23 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
         </fieldset>
         <Button type="submit">{t("members.profile.save")}</Button>
       </form>
+      <section className="grid gap-3" aria-labelledby="your-passkeys">
+        <h2 id="your-passkeys" className="text-xl font-semibold">{t("portal.passkey.manageTitle")}</h2>
+        {security.webauthn.length === 0 ? <Callout>{t("portal.passkey.prompt")}</Callout> : null}
+        <MemberPasskeys passkeys={security.webauthn.map((p) => ({ id: p.id, name: p.name }))} labels={{
+          name: t("portal.passkey.name"),
+          defaultName: t("portal.passkey.defaultName"),
+          add: t("portal.passkey.add"),
+          remove: t("portal.passkey.remove"),
+          added: t("portal.passkey.added"),
+          failed: t("portal.passkey.failed"),
+          none: t("portal.passkey.none"),
+          codesIntro: t("portal.passkey.codesIntro"),
+          recoveryCode: t("portal.passkey.recoveryCode"),
+          useCode: t("portal.passkey.useCode"),
+        }} />
+        <p className="text-sm text-ink-muted">{t("portal.passkey.recovery")}</p>
+      </section>
       <section className="grid gap-3" aria-labelledby="your-avatar">
         <h2 id="your-avatar" className="text-xl font-semibold">{t("members.avatar.title")}</h2>
         {mine?.avatarUrl ? <img src={mine.avatarUrl} alt={t("members.avatar.current")} width={96} height={96} className="h-24 w-24 rounded-full object-cover" /> : null}

@@ -7629,5 +7629,21 @@
   "members.sections.add": "إضافة القسم",
   "members.sections.remove": "إزالة",
   "members.sections.pin": "تثبيت في الملف",
-  "members.sections.openPost": "فتح المنشور"
+  "members.sections.openPost": "فتح المنشور",
+  "portal.passkey.heading": "تسجيل الدخول بمفتاح مرور",
+  "portal.passkey.intro": "إذا أضفت مفتاح مرور، فاستخدم بصمتك أو وجهك أو قفل الشاشة. لا حاجة إلى البريد الإلكتروني.",
+  "portal.passkey.submit": "الدخول بمفتاح المرور",
+  "portal.passkey.failed": "لم ينجح مفتاح المرور. حاول مرة أخرى أو احصل على رابط دخول عبر البريد الإلكتروني.",
+  "portal.passkey.manageTitle": "مفاتيح المرور",
+  "portal.passkey.prompt": "أضف مفتاح مرور لتسجّل الدخول في المرة القادمة بلمسة واحدة دون رابط بريد إلكتروني.",
+  "portal.passkey.name": "اسم مفتاح المرور",
+  "portal.passkey.defaultName": "جهازي",
+  "portal.passkey.add": "إضافة مفتاح مرور",
+  "portal.passkey.remove": "إزالة",
+  "portal.passkey.added": "أُضيف مفتاح المرور. استخدمه عند تسجيل دخولك القادم.",
+  "portal.passkey.none": "ليس لديك مفاتيح مرور بعد.",
+  "portal.passkey.recovery": "فقدت جهازك؟ سجّل الدخول برابط يُرسل إلى بريدك، ثم أكّد بأحد رموز الاسترداد لإزالة المفتاح القديم.",
+  "portal.passkey.codesIntro": "احفظ رموز الاسترداد هذه في مكان آمن. إذا فقدت هذا الجهاز، سجّل الدخول برابط البريد واستخدم أحدها لإزالة المفتاح القديم. يعمل كل رمز مرة واحدة.",
+  "portal.passkey.recoveryCode": "رمز الاسترداد",
+  "portal.passkey.useCode": "التأكيد بالرمز ثم إزالة المفتاح"
 }
