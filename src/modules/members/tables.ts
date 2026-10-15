@@ -30,4 +30,9 @@ export {
   memberActorKeys,
   memberRemoteFollowers,
   memberFederationDeliveries,
+  memberDevices,
+  memberKeyPackages,
+  memberMlsGroups,
+  memberMlsRoster,
+  memberMlsLog,
 } from "./schema";

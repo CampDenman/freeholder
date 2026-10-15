@@ -10,7 +10,7 @@ import { users } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { THEME_COOKIE } from "@/core/design/theme";
-import { memberPayoutAccounts, memberPayouts, memberPosts, memberProfiles, memberSaleFulfilments, memberSettings } from "@/modules/members/schema";
+import { memberDevices, memberFollows, memberMessages, memberMlsLog, memberPayoutAccounts, memberPayouts, memberPosts, memberProfiles, memberReports, memberSaleFulfilments, memberSettings } from "@/modules/members/schema";
 import { contacts } from "@/core/contacts/schema";
 import { orderItems, orders, productVariants, products } from "@/modules/catalog/schema";
 import { invoices } from "@/modules/invoicing/schema";
@@ -247,6 +247,76 @@ test.describe("members (C12.01)", () => {
     await expect(raePage.getByText("This message was removed.")).toBeVisible();
     await samContext.close();
     await raeContext.close();
+  });
+
+  test("messages are end-to-end encrypted between every device, and franked when reported (C12.23)", async ({ browser }) => {
+    await seedC11Owner("Encryption proof");
+    const SAM_ID = "00000000-0000-4000-8000-0000000000d2";
+    await db().insert(users).values([
+      { id: MEMBER_ID, email: "rae@example.test", role: "customer" },
+      { id: SAM_ID, email: "sam@example.test", role: "customer" },
+    ]);
+    const now = new Date();
+    await db().insert(memberProfiles).values([
+      { userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: now, isPrivate: false },
+      { userId: SAM_ID, handle: "sam", displayName: "Sam Ito", ageAttestedAt: now, isPrivate: false },
+    ]);
+    await db().insert(memberFollows).values([{ followerId: MEMBER_ID, followeeId: SAM_ID, status: "active" as const }, { followerId: SAM_ID, followeeId: MEMBER_ID, status: "active" as const }]);
+    const [rae, sam, samAgain] = await Promise.all([MEMBER_ID, SAM_ID, SAM_ID].map((id) => db().transaction((tx) => createSession(tx, id))));
+    const open = async (token: string) => {
+      const context = await browser.newContext({ baseURL: C11_BASE_URL });
+      await context.addCookies([{ name: SESSION_COOKIE, value: token, url: C11_BASE_URL }]);
+      return { context, page: await context.newPage() };
+    };
+
+    // Both open their messages, which sets up a device in each browser.
+    const samSide = await open(sam!.token);
+    await samSide.page.goto("/messages");
+    const raeSide = await open(rae!.token);
+    await raeSide.page.goto("/messages?to=sam");
+    await expect.poll(async () => (await db().select().from(memberDevices)).length).toBe(1);
+    await raeSide.page.getByLabel("Message", { exact: true }).fill("The spare key is under the blue pot");
+    await raeSide.page.getByRole("button", { name: "Send" }).click();
+    await expect(raeSide.page.getByText("End-to-end encrypted. Only the devices of the people here can read these messages.", { exact: true })).toBeVisible();
+    await expect(raeSide.page.getByText("The spare key is under the blue pot")).toBeVisible();
+
+    await samSide.page.goto("/messages");
+    await samSide.page.getByRole("link", { name: "Rae Lane" }).click();
+    await expect(samSide.page.getByText("The spare key is under the blue pot")).toBeVisible();
+    await samSide.page.getByLabel("Message", { exact: true }).fill("Got it, thanks");
+    await samSide.page.getByRole("button", { name: "Send" }).click();
+    await expect(samSide.page.getByText("Got it, thanks")).toBeVisible();
+    await axeInBothThemes(samSide.page);
+    await raeSide.page.reload();
+    await expect(raeSide.page.getByText("Got it, thanks")).toBeVisible();
+
+    // The server holds ciphertext only.
+    const stored = JSON.stringify(await db().select().from(memberMessages)) + JSON.stringify(await db().select().from(memberMlsLog));
+    expect(stored).not.toContain("blue pot");
+
+    // Sam reports Rae's message; the report carries exactly what Sam's device read.
+    await samSide.page.reload();
+    await samSide.page.getByRole("link", { name: "Report" }).first().click();
+    await expect(samSide.page.getByText("The spare key is under the blue pot")).toBeVisible();
+    await samSide.page.getByRole("button", { name: "Send report" }).click();
+    await expect(samSide.page.getByText(/^Thank you\. Your report is with/)).toBeVisible();
+    expect((await db().select({ excerpt: memberReports.excerpt }).from(memberReports)).map((r) => r.excerpt)).toEqual(["The spare key is under the blue pot"]);
+
+    // A second browser for Sam is a new device: added on Rae's next send, it reads from then on.
+    const samTablet = await open(samAgain!.token);
+    await samTablet.page.goto("/messages");
+    await samTablet.page.getByRole("link", { name: "Rae Lane" }).click();
+    await expect(samTablet.page.getByText(/not in this encrypted conversation yet/)).toBeVisible();
+    await raeSide.page.getByLabel("Message", { exact: true }).fill("Dinner at 8?");
+    await raeSide.page.getByRole("button", { name: "Send" }).click();
+    await expect(raeSide.page.getByText("Dinner at 8?")).toBeVisible();
+    await samTablet.page.reload();
+    await expect(samTablet.page.getByText("Dinner at 8?")).toBeVisible();
+    await expect(samTablet.page.getByText("Sent before this device joined the conversation.").first()).toBeVisible();
+    await samSide.page.goto("/portal/member");
+    await expect(samSide.page.getByRole("heading", { name: "Your devices for encrypted messages" })).toBeVisible();
+    await expect(samSide.page.getByRole("button", { name: "Remove device" })).toHaveCount(2);
+    for (const side of [samSide, raeSide, samTablet]) await side.context.close();
   });
 
   test("listing something for sale, review, the market and the profile shop (C12.08)", async ({ browser }) => {

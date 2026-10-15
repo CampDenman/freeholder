@@ -2,7 +2,7 @@
   "name": "freeholder",
   "private": true,
   "version": "0.2.0-beta.3",
-  "description": "The open-source operating system for a one-person business (active development, not a release candidate) \u2014 the deployable monolith: public site + CMS, admin, unified CRM spine, commerce, booking, galleries, mail, analytics, MCP server",
+  "description": "The open-source operating system for a one-person business (active development, not a release candidate) — the deployable monolith: public site + CMS, admin, unified CRM spine, commerce, booking, galleries, mail, analytics, MCP server",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {
@@ -55,6 +55,7 @@
     "@formatjs/icu-messageformat-parser": "^3.5.20",
     "@freeholder/plugin-kit": "workspace:*",
     "@freeholder/templates": "workspace:*",
+    "@noble/hashes": "2.4.0",
     "@phosphor-icons/react": "^2.1.10",
     "@replit/object-storage": "^1.0.0",
     "@simplewebauthn/browser": "^14.0.0",
@@ -73,6 +74,7 @@
     "react": "^19.2.8",
     "react-dom": "19.3.0",
     "sharp": "^0.35.5",
+    "ts-mls": "1.6.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {

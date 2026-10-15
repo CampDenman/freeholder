@@ -16,7 +16,9 @@ import { PROFILE_SECTION_KINDS } from "@/modules/members/profile-kinds";
 import { ImageUpload } from "./ImageUpload";
 import { MemberPasskeys } from "./MemberPasskeys";
 import { twoFactorStatus } from "@/core/auth/two-factor";
-import { avatarAction, deleteSectionAction, federationAction, sectionAction } from "./profile-actions";
+import { avatarAction, deleteSectionAction, federationAction, revokeDeviceAction, sectionAction } from "./profile-actions";
+import { myDevices } from "@/modules/members/e2ee/service";
+import { formatDateTime } from "@/core/i18n";
 import { myRemoteFollowers, siteHost } from "@/modules/members/federation/core";
 import { Button, Callout, Field, Input, Pill, Select } from "@/ui/primitives";
 import { VISIBILITIES } from "@/modules/members/visibility";
@@ -42,12 +44,13 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
       </div>
     );
   }
-  const [mine, sections, security, agentKeys, remote] = await Promise.all([
+  const [mine, sections, security, agentKeys, remote, devices] = await Promise.all([
     viewProfile.call({ handle: me.handle }, actor),
     profileSections.call({ handle: me.handle }, actor),
     twoFactorStatus.call({}, actor),
     myKeys.call({}, actor),
     rules.federation && me.federated ? myRemoteFollowers.call({}, actor) : null,
+    me.status === "active" ? myDevices.call({}, actor) : { devices: [] },
   ]);
   return (
     <div className="grid gap-6">
@@ -150,6 +153,20 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
           useCode: t("portal.passkey.useCode"),
         }} />
         <p className="text-sm text-ink-muted">{t("portal.passkey.recovery")}</p>
+      </section>
+      <section className="grid gap-3" aria-labelledby="your-devices">
+        <h2 id="your-devices" className="text-xl font-semibold">{t("members.e2ee.devicesTitle")}</h2>
+        <p className="text-sm text-ink-muted">{t("members.e2ee.devicesIntro")}</p>
+        {devices.devices.length === 0 ? <p className="text-sm">{t("members.e2ee.noDevices")}</p> : (
+          <ul className="grid gap-2">
+            {devices.devices.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-rule p-3">
+                <span><strong>{d.label}</strong> · {t("members.e2ee.lastUsed", { when: formatDateTime(d.lastSeenAt, business?.timezone ?? "UTC", locale) })}</span>
+                <form action={revokeDeviceAction}><input type="hidden" name="deviceId" value={d.id} /><Button type="submit" variant="quiet">{t("members.e2ee.removeDevice")}</Button></form>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
       <section className="grid gap-3" aria-labelledby="your-agent">
         <h2 id="your-agent" className="text-xl font-semibold">{t("portal.keys.title")}</h2>

@@ -7,7 +7,7 @@
 // someone, a member profile is something the person keeps about themselves.
 // The link to the spine is the user's own contact row (`contacts.user_id`).
 import { sql } from "drizzle-orm";
-import { boolean, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, bigserial, boolean, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/core/auth/schema";
 import { products } from "@/modules/catalog/schema";
 import { assets } from "@/core/media/schema";
@@ -328,10 +328,17 @@ export const memberMessages = pgTable(
     conversationId: uuid("conversation_id").notNull().references(() => memberConversations.id, { onDelete: "cascade" }),
     senderId: uuid("sender_id").references(() => users.id, { onDelete: "set null" }),
     bodySealed: text("body_sealed").notNull(),
+    /** C12.23: end-to-end encrypted; the body is only on members' devices. */
+    e2ee: boolean("e2ee").notNull().default(false),
+    /** C12.23: HMAC of the body under a key only the devices hold, for franked reports. */
+    frankTag: text("frank_tag"),
     createdAt: createdAtColumn(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [index("member_messages_conversation_idx").on(t.conversationId, t.createdAt)],
+  (t) => [
+    index("member_messages_conversation_idx").on(t.conversationId, t.createdAt),
+    check("member_messages_frank_tag", sql`${t.e2ee} = (${t.frankTag} is not null) or ${t.deletedAt} is not null`),
+  ],
 );
 
 /** §44.7: a private call between two members. Media never touches the server. */
@@ -683,3 +690,83 @@ export const memberFederationDeliveries = pgTable(
   (t) => [index("member_federation_deliveries_due_idx").on(t.deliveredAt, t.nextAttemptAt)],
 );
 
+
+/**
+ * C12.23: one of a member's devices for end-to-end encrypted messages. The
+ * device makes its own keys; the server records only the public signature
+ * key, which every key package and payload from the device must match.
+ */
+export const memberDevices = pgTable(
+  "member_devices",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    signatureKey: text("signature_key").notNull(),
+    createdAt: createdAtColumn(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [index("member_devices_user_idx").on(t.userId), check("member_devices_label_length", sql`char_length(${t.label}) between 1 and 80`)],
+);
+
+/** C12.23: MLS key packages a device publishes so others can add it to a conversation. */
+export const memberKeyPackages = pgTable(
+  "member_key_packages",
+  {
+    id: uuid("id").primaryKey(),
+    deviceId: uuid("device_id").notNull().references(() => memberDevices.id, { onDelete: "cascade" }),
+    keyPackage: text("key_package").notNull(),
+    /** Used when the device's one-time packages run out; never consumed. */
+    lastResort: boolean("last_resort").notNull().default(false),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    claimedBy: uuid("claimed_by"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [index("member_key_packages_device_idx").on(t.deviceId, t.claimedAt)],
+);
+
+/** C12.23: a conversation's MLS group: its current epoch, ordered by the server. */
+export const memberMlsGroups = pgTable("member_mls_groups", {
+  conversationId: uuid("conversation_id").primaryKey().references(() => memberConversations.id, { onDelete: "cascade" }),
+  epoch: bigint("epoch", { mode: "number" }).notNull(),
+  createdAt: createdAtColumn(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** C12.23: the devices in a conversation's group, as each commit declared them. */
+export const memberMlsRoster = pgTable(
+  "member_mls_roster",
+  {
+    conversationId: uuid("conversation_id").notNull().references(() => memberConversations.id, { onDelete: "cascade" }),
+    deviceId: uuid("device_id").notNull().references(() => memberDevices.id, { onDelete: "cascade" }),
+    /** The log position of the device's welcome; it reads only what follows. */
+    joinedSeq: bigint("joined_seq", { mode: "number" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.conversationId, t.deviceId] })],
+);
+
+/**
+ * C12.23: the delivery log. Commits and application messages for every device
+ * in the group, and welcomes for the device each one adds, all ciphertext.
+ */
+export const memberMlsLog = pgTable(
+  "member_mls_log",
+  {
+    seq: bigserial("seq", { mode: "number" }).primaryKey(),
+    conversationId: uuid("conversation_id").notNull().references(() => memberConversations.id, { onDelete: "cascade" }),
+    epoch: bigint("epoch", { mode: "number" }).notNull(),
+    kind: text("kind", { enum: ["commit", "welcome", "application"] }).notNull(),
+    senderDeviceId: uuid("sender_device_id").references(() => memberDevices.id, { onDelete: "set null" }),
+    targetDeviceId: uuid("target_device_id").references(() => memberDevices.id, { onDelete: "cascade" }),
+    keyPackageId: uuid("key_package_id"),
+    messageId: uuid("message_id").references(() => memberMessages.id, { onDelete: "cascade" }),
+    payload: text("payload").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    index("member_mls_log_conversation_idx").on(t.conversationId, t.seq),
+    check("member_mls_log_kind_valid", sql`${t.kind} in ('commit','welcome','application')`),
+    check("member_mls_log_welcome_target", sql`(${t.kind} = 'welcome') = (${t.targetDeviceId} is not null)`),
+  ],
+);

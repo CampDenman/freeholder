@@ -10,6 +10,7 @@ import { REPORT_REASONS, REPORT_TARGETS } from "@/modules/members/report-kinds";
 import { Button, Callout, Field, Select } from "@/ui/primitives";
 import { getT } from "../../i18n";
 import { reportAction } from "./actions";
+import { FrankingFields } from "../messages/SecureConversation";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata({ searchParams }: { searchParams: Promise<{ type?: string }> }): Promise<Metadata> {
@@ -18,7 +19,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   return { title: t(known ? `members.report.title.${type}` : "members.report.action"), robots: { index: false, follow: false } };
 }
 
-export default async function ReportPage({ searchParams }: { searchParams: Promise<{ type?: string; id?: string; sent?: string; error?: string }> }) {
+export default async function ReportPage({ searchParams }: { searchParams: Promise<{ type?: string; id?: string; in?: string; sent?: string; error?: string }> }) {
   const [query, t, jar] = await Promise.all([searchParams, getT(), cookies()]);
   const type = query.type ?? "";
   if (!(REPORT_TARGETS as readonly string[]).includes(type) || !/^[0-9a-f-]{36}$/.test(query.id ?? "")) notFound();
@@ -32,12 +33,14 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
         <p><a className="underline" href="/join">{t("members.report.signIn")}</a></p>
       ) : (
         <>
-          {query.error ? <Callout tone="danger">{t(query.error === "not_found" ? "members.report.gone" : "members.report.failed")}</Callout> : null}
+          {query.error ? <Callout tone="danger">{t(query.error === "not_found" ? "members.report.gone" : query.error === "validation" && type === "message" ? "members.report.unverified" : "members.report.failed")}</Callout> : null}
           <p className="text-ink-muted">{t("members.report.intro")}</p>
           {type === "listing" ? <p className="text-sm"><a className="underline" href="/market/policy">{t("members.policy.link")}</a></p> : null}
           <form action={reportAction} className="grid gap-4">
             <input type="hidden" name="type" value={type} />
             <input type="hidden" name="id" value={query.id} />
+            {query.in && /^[0-9a-f-]{36}$/.test(query.in) ? <input type="hidden" name="in" value={query.in} /> : null}
+            {type === "message" && /^[0-9a-f-]{36}$/.test(query.in ?? "") ? <FrankingFields conversationId={query.in!} messageId={query.id!} userId={actor.userId} /> : null}
             <Field label={t("members.report.reason")} htmlFor="reason">
               <Select id="reason" name="reason">
                 {REPORT_REASONS.map((r) => <option key={r} value={r}>{t(`members.report.reasons.${r}`)}</option>)}

@@ -9,9 +9,10 @@ import { formatDateTime } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { listConversations, unreadConversations } from "@/modules/members/messages";
 import { myMembership } from "@/modules/members/service";
-import { Button, Callout, Field, Input } from "@/ui/primitives";
+import { Callout, Field, Input } from "@/ui/primitives";
 import { getLocale, getT } from "../../i18n";
 import { startConversationAction } from "./actions";
+import { NewConversation } from "./SecureConversation";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -43,7 +44,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
         <a className="underline" href="/messages?box=requests" aria-current={box === "requests" ? "page" : undefined}>{t("members.messages.requests", { count: counts.requests })}</a>
       </nav>
       {query.error ? <Callout tone="danger">{t("members.messages.failed")}</Callout> : null}
-      <form action={startConversationAction} className="grid gap-3 rounded-lg border border-rule bg-surface p-4">
+      <NewConversation userId={me.userId} fallback={startConversationAction} labels={{ send: t("members.messages.send"), sending: t("members.e2ee.sending"), failed: t("members.messages.failed") }}>
         <Field label={t("members.messages.to")} htmlFor="message-to" hint={t("members.messages.toHint")}>
           <Input id="message-to" name="to" required defaultValue={query.to ?? ""} maxLength={2000} />
         </Field>
@@ -53,8 +54,7 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
         <Field label={t("members.messages.body")} htmlFor="message-body">
           <textarea id="message-body" name="body" required maxLength={10000} rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
         </Field>
-        <Button type="submit">{t("members.messages.send")}</Button>
-      </form>
+      </NewConversation>
       {box === "requests" ? <p className="text-sm text-ink-muted">{t("members.messages.requestsExplain")}</p> : null}
       {conversations.length === 0 ? <p className="text-ink-muted">{t("members.messages.empty")}</p> : null}
       <ul className="grid gap-2">

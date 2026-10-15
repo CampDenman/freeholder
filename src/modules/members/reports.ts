@@ -14,6 +14,7 @@ import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { archiveProduct, getProduct } from "@/modules/catalog/service";
 import { openMessage } from "./message-crypto";
+import { frankTag, sameTag, unb64 } from "./e2ee/wire";
 import { notifyMember } from "./notify";
 import { applyMemberStatus } from "./status";
 import { visiblePost } from "./posts";
@@ -35,7 +36,7 @@ const unavailable = () => new ServiceError("not_found", "That is not available t
 const clip = (text: string) => (text.length > 500 ? `${text.slice(0, 499)}…` : text);
 
 /** Who is responsible for a target, and what the reporter saw, if the reporter can see it. */
-async function resolveTarget(ctx: ServiceContext, me: string, type: Target, id: string): Promise<{ subjectId: string; excerpt: string }> {
+async function resolveTarget(ctx: ServiceContext, me: string, type: Target, id: string, franking?: { body: string; key: string }): Promise<{ subjectId: string; excerpt: string }> {
   switch (type) {
     case "post": {
       const { post } = await visiblePost(ctx, me, id).catch(() => { throw unavailable(); });
@@ -57,6 +58,20 @@ async function resolveTarget(ctx: ServiceContext, me: string, type: Target, id: 
         .from(memberConversationParticipants)
         .where(and(eq(memberConversationParticipants.conversationId, message.conversationId), eq(memberConversationParticipants.userId, me)));
       if (!seat || seat.state === "left") throw unavailable();
+      if (message.e2ee) {
+        // C12.23: the site cannot read this message. The reporter's device
+        // reveals the body and its franking key, and the tag stored when it
+        // was sent proves that is exactly what the sender sent.
+        if (!franking) throw new ServiceError("validation", "Report this message from the device you read it on.");
+        let tag: string;
+        try {
+          tag = await frankTag(unb64(franking.key), message.conversationId, message.senderId, franking.body);
+        } catch {
+          throw new ServiceError("validation", "That message could not be verified.");
+        }
+        if (!message.frankTag || !sameTag(tag, message.frankTag)) throw new ServiceError("validation", "That message could not be verified.");
+        return { subjectId: message.senderId, excerpt: clip(franking.body) };
+      }
       return { subjectId: message.senderId, excerpt: clip(openMessage(message.bodySealed, message.id)) };
     }
     case "listing": {
@@ -91,6 +106,8 @@ export const reportContent = defineService({
     targetId: uuid,
     reason: z.enum(REPORT_REASONS),
     details: z.string().trim().max(2000).default(""),
+    /** C12.23: for an end-to-end encrypted message, what the reporter's device read and its franking key. */
+    franking: z.object({ body: z.string().max(10_000), key: z.string().max(100) }).optional(),
   }),
   output: okResult,
   handler: async (input, ctx) => {
@@ -98,7 +115,7 @@ export const reportContent = defineService({
     const me = ctx.actor.userId;
     const [reporter] = await ctx.tx.select({ status: memberProfiles.status }).from(memberProfiles).where(eq(memberProfiles.userId, me));
     if (reporter?.status !== "active") throw new ServiceError("permission", "Join the site to report something.");
-    const target = await resolveTarget(ctx, me, input.targetType, input.targetId);
+    const target = await resolveTarget(ctx, me, input.targetType, input.targetId, input.franking);
     if (target.subjectId === me) throw new ServiceError("validation", "You cannot report your own content.");
     const [created] = await ctx.tx
       .insert(memberReports)

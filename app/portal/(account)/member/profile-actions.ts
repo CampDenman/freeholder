@@ -9,6 +9,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { deleteProfileSection, saveProfileSection, setAvatar } from "@/modules/members/profile";
 import { setMyFederation } from "@/modules/members/federation/core";
+import { revokeDevice } from "@/modules/members/e2ee/service";
 import { PROFILE_SECTION_KINDS } from "@/modules/members/profile-kinds";
 import { VISIBILITIES, type Visibility } from "@/modules/members/visibility";
 
@@ -60,4 +61,9 @@ export async function deleteSectionAction(form: FormData): Promise<void> {
 // C12.18: join or leave the fediverse.
 export async function federationAction(form: FormData): Promise<void> {
   await run((actor) => setMyFederation.call({ federated: form.get("federated") === "yes" }, actor));
+}
+
+// C12.23: take a device out of every encrypted conversation.
+export async function revokeDeviceAction(form: FormData): Promise<void> {
+  await run((actor) => revokeDevice.call({ deviceId: text(form, "deviceId") }, actor));
 }
