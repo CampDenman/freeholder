@@ -163,9 +163,14 @@ test.describe("canvas image upload, crop and focal point", () => {
     });
 
     await test.step("mark the subject and crop to a square on the canvas", async () => {
-      await hero.getByRole("button", { name: "Crop & focus" }).click();
       const tool = page.getByRole("dialog", { name: "Crop and focal point" });
-      await expect(tool).toBeVisible();
+      // The canvas re-renders the image block once the new asset settles,
+      // which can detach the button mid-click; retry until the tool opens.
+      await expect(async () => {
+        await hero.hover();
+        await hero.getByRole("button", { name: "Crop & focus" }).click({ timeout: 3_000 });
+        await expect(tool).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 30_000 });
 
       // Click the picture a quarter of the way across: the subject.
       const stage = tool.locator("[data-crop-stage]");
