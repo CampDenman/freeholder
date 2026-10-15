@@ -12,6 +12,7 @@ import { inviteMember, setMemberStatus, updateMembershipRules } from "@/modules/
 import { reviewListing } from "@/modules/members/listings";
 import { setPayoutAccountStatus, settlePayouts } from "@/modules/members/payouts";
 import { postSaleMessage, resolveDispute } from "@/modules/members/protection";
+import { resolveReport } from "@/modules/members/reports";
 
 const PATH = "/admin/members";
 
@@ -131,4 +132,16 @@ export async function disputeAction(form: FormData): Promise<void> {
     }
     return resolveDispute.call({ id: text(form, "id"), outcome: outcome === "refund" ? "refund" : "release", note: text(form, "note") }, await actor());
   });
+}
+
+const DECISIONS = ["remove", "suspend", "remove_and_suspend", "dismiss"] as const;
+
+export async function reportAction(form: FormData): Promise<void> {
+  const decision = text(form, "decision");
+  await run(async () =>
+    resolveReport.call(
+      { id: text(form, "id"), decision: (DECISIONS as readonly string[]).includes(decision) ? (decision as (typeof DECISIONS)[number]) : "dismiss", note: text(form, "note") },
+      await actor(),
+    ),
+  );
 }

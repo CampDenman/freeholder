@@ -59,7 +59,7 @@ export function PostCard({
   back: string;
   timezone: string;
   locale: string;
-  labels: { visibility: string; edited: string; comments: string; delete: string; repost: string; reactions: Record<string, string>; reposted: string; with: string };
+  labels: { visibility: string; edited: string; comments: string; delete: string; repost: string; report: string; reactions: Record<string, string>; reposted: string; with: string };
 }) {
   const mine = viewerId === post.author.userId;
   return (
@@ -102,6 +102,7 @@ export function PostCard({
             <Button type="submit" variant="quiet">{labels.repost}</Button>
           </form>
         ) : null}
+        {viewerId && !mine ? <a className="text-sm text-ink-muted underline" href={`/report?type=post&id=${post.id}`}>{labels.report}</a> : null}
         {mine ? (
           <form action={deletePostAction}>
             <input type="hidden" name="id" value={post.id} />
@@ -123,6 +124,7 @@ export function postLabels(t: T, post: Pick<Post, "visibility" | "comments">) {
     comments: t("members.post.comments", { count: post.comments }),
     delete: t("members.post.delete"),
     repost: t("members.post.repost"),
+    report: t("members.report.action"),
     reposted: t("members.post.reposted"),
     with: t("members.post.with"),
     reactions: Object.fromEntries(REACTIONS.map((k) => [k, t(`members.reaction.${k}`)])),

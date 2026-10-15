@@ -26,9 +26,8 @@ import {
   memberProfiles,
   memberReports,
   memberReviews,
-  REPORT_REASONS,
-  REPORT_TARGETS,
 } from "./schema";
+import { REPORT_REASONS, REPORT_TARGETS } from "./report-kinds";
 
 type Target = (typeof REPORT_TARGETS)[number];
 

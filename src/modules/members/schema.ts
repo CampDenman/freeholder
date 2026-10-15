@@ -11,6 +11,7 @@ import { boolean, check, index, integer, jsonb, pgTable, primaryKey, text, times
 import { users } from "@/core/auth/schema";
 import { products } from "@/modules/catalog/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import { REPORT_REASONS, REPORT_TARGETS } from "./report-kinds";
 
 export const MEMBER_STATUSES = ["active", "pending", "suspended"] as const;
 export const JOIN_POLICIES = ["open", "approval", "invite"] as const;
@@ -522,8 +523,6 @@ export const memberReviews = pgTable(
   ],
 );
 
-export const REPORT_TARGETS = ["post", "comment", "message", "listing", "review", "member"] as const;
-export const REPORT_REASONS = ["spam", "harassment", "hate", "violence", "sexual", "child_safety", "scam", "prohibited_item", "impersonation", "self_harm", "other"] as const;
 
 /**
  * §44.9 (C12.12): a member's report of something on the site. `subjectId` is

@@ -78,6 +78,7 @@ export default async function ConversationPage({ params, searchParams }: { param
                 <Button type="submit" variant="quiet">{t("members.messages.unsend")}</Button>
               </form>
             ) : null}
+            {!m.mine && m.body !== null && m.sender ? <p><a className="text-sm text-ink-muted underline" href={`/report?type=message&id=${m.id}`}>{t("members.report.action")}</a></p> : null}
           </li>
         ))}
       </ol>
