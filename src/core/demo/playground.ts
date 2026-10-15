@@ -19,7 +19,8 @@ export async function initializePlayground(): Promise<void> {
   await db().transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(1946127)`);
     const existing = await tx.select({ email: users.email }).from(users);
-    if (existing.some((user) => ![OWNER, VISITOR].includes(user.email))) {
+    // Marked demo members (C12.16) are part of the playground's demo content.
+    if (existing.some((user) => ![OWNER, VISITOR].includes(user.email) && !user.email.endsWith("@demo.freeholder.test"))) {
       throw new Error("Playground mode requires a disposable database with no real users.");
     }
     await seedDefaultRoles(tx);

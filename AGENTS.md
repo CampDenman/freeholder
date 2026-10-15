@@ -5,7 +5,7 @@ Read `CLAUDE.md` and `MASTER.md` before changing product code. `MASTER.md` §43
 is the only product/status authority. Use the shared services for all business
 operations; UI, HTTP and MCP must have the same permissions and audit trail.
 
-For a new launch, follow `deploy/agent-launch.md`. The owner keeps their hosting
+For a new launch, follow `deploy/agent-launch.md`. To build on the member features (profiles, posts, messages, calls, market), read `deploy/members-vibe-coding.md`. The owner keeps their hosting
 account and approves spending. Use the provider's tools to provision Postgres
 and private object storage; do not substitute in-memory or workspace storage.
 Run `pnpm launch:prepare --target replit --url https://THE-PUBLISHED-SITE` to

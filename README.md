@@ -28,6 +28,9 @@ history all hang off one CRM timeline.
   `npx create-freeholder@next my-business` after publication. No stable release
   is available yet.
 - [Read the contributor guide](CONTRIBUTING.md) to help improve the project.
+- [Build a member site with an AI builder](deploy/members-vibe-coding.md):
+  demo community, the member services, and prompts for Replit, Lovable and
+  coding agents.
 - [Launch with a coding agent](deploy/agent-launch.md): prepare private
   configuration for Replit, complete owner setup with a passkey, then connect
   your assistant at `/admin/connect`. Lovable connects to a hosted Freeholder

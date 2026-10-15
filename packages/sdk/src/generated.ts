@@ -999,6 +999,7 @@ export const SERVICE_NAMES = [
   "members.leaveConversation",
   "members.leaveReview",
   "members.list",
+  "members.loadDemoFixture",
   "members.markShipped",
   "members.marketPolicy",
   "members.me",
@@ -1024,6 +1025,7 @@ export const SERVICE_NAMES = [
   "members.postsBy",
   "members.profile",
   "members.profileSections",
+  "members.purgeDemoFixture",
   "members.react",
   "members.replyToReview",
   "members.report",
@@ -1059,6 +1061,7 @@ export const SERVICE_NAMES = [
   "members.updateMarketPolicy",
   "members.updateMe",
   "members.updateSettings",
+  "members.verifyDemoFixture",
   "members.viewPost",
   "members.withdrawDispute",
   "messaging.checkNumbers",
@@ -5483,6 +5486,10 @@ export interface ServiceCatalog {
     input: { status?: "active" | "pending" | "suspended"; search?: string; limit?: number; offset?: number };
     output: { members: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; createdAt: string; email: string; statusReason: string | null; [key: string]: unknown }[]; total: number };
   };
+  "members.loadDemoFixture": {
+    input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+    output: { records: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+  };
   "members.markShipped": {
     input: { orderId: string; sellerId: string; carrier?: string; tracking?: string };
     output: { ok: true };
@@ -5582,6 +5589,10 @@ export interface ServiceCatalog {
   "members.profileSections": {
     input: { handle: string };
     output: { id: string; kind: "text" | "portfolio" | "services" | "pinned"; title: string; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; images: { id: string; url: string; altText: string | null; [key: string]: unknown }[]; posts: { id: string; body: string; createdAt: string; [key: string]: unknown }[]; [key: string]: unknown }[];
+  };
+  "members.purgeDemoFixture": {
+    input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+    output: { purged: { subjectType: string; subjectId: string }[] };
   };
   "members.react": {
     input: { postId: string; kind: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null };
@@ -5722,6 +5733,10 @@ export interface ServiceCatalog {
   "members.updateSettings": {
     input: { joinPolicy?: "open" | "approval" | "invite"; minimumAge?: number; marketplaceEnabled?: boolean; listingReview?: boolean; payoutModel?: "hold" | "seller_merchant" | "instant"; holdDays?: number; siteFeeBps?: number; payoutAdapter?: string; adultContent?: boolean };
     output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; adultContent: boolean; [key: string]: unknown };
+  };
+  "members.verifyDemoFixture": {
+    input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+    output: { outcomes: { key: string; achieved: boolean; detail?: string }[] };
   };
   "members.viewPost": {
     input: { id: string };
@@ -8584,6 +8599,7 @@ export interface FreeholderApi {
     leaveConversation: (input: ServiceCatalog["members.leaveConversation"]["input"]) => Promise<ServiceCatalog["members.leaveConversation"]["output"]>;
     leaveReview: (input: ServiceCatalog["members.leaveReview"]["input"]) => Promise<ServiceCatalog["members.leaveReview"]["output"]>;
     list: (input?: ServiceCatalog["members.list"]["input"]) => Promise<ServiceCatalog["members.list"]["output"]>;
+    loadDemoFixture: (input: ServiceCatalog["members.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["members.loadDemoFixture"]["output"]>;
     markShipped: (input: ServiceCatalog["members.markShipped"]["input"]) => Promise<ServiceCatalog["members.markShipped"]["output"]>;
     marketPolicy: (input?: ServiceCatalog["members.marketPolicy"]["input"]) => Promise<ServiceCatalog["members.marketPolicy"]["output"]>;
     me: (input?: ServiceCatalog["members.me"]["input"]) => Promise<ServiceCatalog["members.me"]["output"]>;
@@ -8609,6 +8625,7 @@ export interface FreeholderApi {
     postsBy: (input: ServiceCatalog["members.postsBy"]["input"]) => Promise<ServiceCatalog["members.postsBy"]["output"]>;
     profile: (input: ServiceCatalog["members.profile"]["input"]) => Promise<ServiceCatalog["members.profile"]["output"]>;
     profileSections: (input: ServiceCatalog["members.profileSections"]["input"]) => Promise<ServiceCatalog["members.profileSections"]["output"]>;
+    purgeDemoFixture: (input: ServiceCatalog["members.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["members.purgeDemoFixture"]["output"]>;
     react: (input: ServiceCatalog["members.react"]["input"]) => Promise<ServiceCatalog["members.react"]["output"]>;
     replyToReview: (input: ServiceCatalog["members.replyToReview"]["input"]) => Promise<ServiceCatalog["members.replyToReview"]["output"]>;
     report: (input: ServiceCatalog["members.report"]["input"]) => Promise<ServiceCatalog["members.report"]["output"]>;
@@ -8644,6 +8661,7 @@ export interface FreeholderApi {
     updateMarketPolicy: (input: ServiceCatalog["members.updateMarketPolicy"]["input"]) => Promise<ServiceCatalog["members.updateMarketPolicy"]["output"]>;
     updateMe: (input?: ServiceCatalog["members.updateMe"]["input"]) => Promise<ServiceCatalog["members.updateMe"]["output"]>;
     updateSettings: (input?: ServiceCatalog["members.updateSettings"]["input"]) => Promise<ServiceCatalog["members.updateSettings"]["output"]>;
+    verifyDemoFixture: (input: ServiceCatalog["members.verifyDemoFixture"]["input"]) => Promise<ServiceCatalog["members.verifyDemoFixture"]["output"]>;
     viewPost: (input: ServiceCatalog["members.viewPost"]["input"]) => Promise<ServiceCatalog["members.viewPost"]["output"]>;
     withdrawDispute: (input: ServiceCatalog["members.withdrawDispute"]["input"]) => Promise<ServiceCatalog["members.withdrawDispute"]["output"]>;
   };

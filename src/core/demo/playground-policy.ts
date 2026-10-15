@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.38: a public playground grants content access, never operator authority.
 export const PLAYGROUND_MANAGE = ["cms", "forms", "contacts", "catalog", "notes", "tasks"] as const;
-export const PLAYGROUND_VIEW = ["admin", "settings", "events", "analytics", "search", "media", "guidance", "notifications"] as const;
+// C12.16: "members" so the playground shows the member admin beside the demo community.
+export const PLAYGROUND_VIEW = ["admin", "settings", "events", "analytics", "search", "media", "guidance", "notifications", "members"] as const;
 
 // Explicit opt-in: future services (including CMS email/SMS delivery) must not
 // silently inherit permission to run in a publicly editable instance.

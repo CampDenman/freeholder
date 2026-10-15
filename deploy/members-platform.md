@@ -272,3 +272,12 @@ from mocked payment, mail or media runs alone.
 - Tests: `tests/modules/member-services.test.ts` (2 cases) and the C12.25
   journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-15.
 
+## C12.16 — starter and demo community (2026-10-15)
+
+- `members.demo-community` (v1) joins `seed.creator` and `seed.everything`.
+  Demo logins use `@demo.freeholder.test`; the playground accepts them.
+- Guide: `deploy/members-vibe-coding.md`.
+- A dedicated community preset is C12.31.
+- Tests: `tests/modules/member-demo.test.ts` and
+  `tests/core/demo-scenarios.test.ts`. Passed locally 2026-10-15.
+
