@@ -10933,9 +10933,30 @@ whatever is best for the people using the site.
 - [ ] **C12.36** Encrypt attachments end to end in encrypted conversations:
   files encrypted on the sender's device with keys carried inside the MLS
   message, stored as opaque blobs.
-- [ ] **C12.37** When someone leaves a conversation during its group call,
+- [x] **C12.37** When someone leaves a conversation during its group call,
   remove them from the SFU room through the adapter after the leave commits,
   and have the remaining devices switch to a fresh media key.
+  *(Evidence 2026-10-15: `src/modules/members/call-seats.ts`, `participants`
+  and `remove` on the adapter in `src/modules/members/sfu.ts`, generations in
+  `members.sendCallKey` and `members.e2eeSync`, migration
+  `db/migrations/0045_member_call_key_generations.sql`,
+  `tests/modules/member-group-calls.test.ts`,
+  `tests/browser/member-group-calls.spec.ts`. **F04** the person removed sees
+  "You are no longer in this call."; the others' tiles drop them. **F05**
+  `generation` and `fresh` on `members.sendCallKey`, `generation` on
+  `members.e2eeSync` calls; the `member.callSeatLost` event. **F07** leaving
+  the conversation or removing a device bumps the call's key generation in
+  the same transaction and queues `member.callSeatLost`; after commit the
+  listener asks the SFU (LiveKit's room service, a one-minute room-admin
+  token) to disconnect that person's devices or that device; a remaining
+  device that held the previous key makes the new one only after its sync
+  has taken the leaver's devices out of the MLS group, and the server
+  accepts one fresh key per generation, so the new key never reaches the
+  person who left. **F09** `member.callSeatLost` is handled after commit;
+  a failed SFU call does not undo the leave. **F12** the module test leaves
+  and revokes mid-call against a recording SFU adapter; the browser test has
+  a member leave mid-call through the real LiveKit and checks the others keep
+  decoding on the new key. Changeset `member-call-removal.md`.)*
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
   preserving evidence and reporting through the legal path for the site's

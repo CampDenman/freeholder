@@ -359,10 +359,10 @@ from mocked payment, mail or media runs alone.
   and any device holding it re-sends it when a device joins the group later.
   LiveKit's frame encryption (insertable streams, AES-GCM) uses it; this is
   LiveKit's own frame format, not the RFC 9605 SFrame wire format.
-- The key lasts for the call. Someone who leaves the conversation mid-call
-  stays in the room, with the key, until the call ends or their two-hour
-  token lapses; removing them and rotating the key is C12.37. Every new call
-  gets a new key.
+- Each call has a key generation. Leaving the conversation or removing a
+  device mid-call bumps it, the SFU disconnects that person or device (room
+  service API, after commit), and a remaining device sends a new key the
+  leaver never receives (C12.37). Every new call gets a new key.
 - CI runs the LiveKit release binary (checksum pinned) for
   `tests/browser/member-group-calls.spec.ts`; locally the test is skipped
   unless `LIVEKIT_URL` is set (`livekit-server --dev` uses `devkey`/`secret`).

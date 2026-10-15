@@ -763,6 +763,8 @@ export const memberMlsLog = pgTable(
     messageId: uuid("message_id").references(() => memberMessages.id, { onDelete: "cascade" }),
     /** C12.24: a `control` entry carrying a group call's media key, for this call. */
     callId: uuid("call_id"),
+    /** C12.37: which of the call's keys it carries. */
+    callGeneration: integer("call_generation"),
     payload: text("payload").notNull(),
     createdAt: createdAtColumn(),
   },
@@ -786,6 +788,8 @@ export const memberGroupCalls = pgTable(
     startedBy: uuid("started_by").references(() => users.id, { onDelete: "set null" }),
     media: text("media", { enum: ["voice", "video"] }).notNull(),
     state: text("state", { enum: ["active", "ended"] }).notNull().default("active"),
+    /** C12.37: bumped when someone must stop hearing the call; devices then switch to a new key. */
+    keyGeneration: integer("key_generation").notNull().default(0),
     createdAt: createdAtColumn(),
     endedAt: timestamp("ended_at", { withTimezone: true }),
   },

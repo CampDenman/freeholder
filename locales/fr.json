@@ -7342,6 +7342,7 @@
   "members.groupCall.leave": "Quitter l’appel",
   "members.groupCall.you": "Vous",
   "members.groupCall.alone": "En attente des autres participants.",
+  "members.groupCall.removed": "Vous n’êtes plus dans cet appel.",
   "members.groupCall.startVoice": "Lancer un appel audio",
   "members.groupCall.startVideo": "Lancer un appel vidéo",
   "members.groupCall.join": "Rejoindre l’appel en cours",

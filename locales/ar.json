@@ -7342,6 +7342,7 @@
   "members.groupCall.leave": "مغادرة المكالمة",
   "members.groupCall.you": "أنت",
   "members.groupCall.alone": "بانتظار انضمام الآخرين.",
+  "members.groupCall.removed": "لم تعد في هذه المكالمة.",
   "members.groupCall.startVoice": "بدء مكالمة صوتية",
   "members.groupCall.startVideo": "بدء مكالمة فيديو",
   "members.groupCall.join": "الانضمام إلى المكالمة الجارية",

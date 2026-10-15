@@ -50,6 +50,7 @@ import { siteAllowsAdult } from "./adult";
 export { onOrderPaid, onRefundSucceeded } from "./payouts";
 export { onInvoicePaid } from "./member-subscriptions";
 export { onMemberPosted, onMemberPostDeleted } from "./federation/core";
+export { onCallSeatLost } from "./call-seats";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
 const RESERVED = new Set([

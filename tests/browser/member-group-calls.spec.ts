@@ -33,6 +33,10 @@ async function signedIn(browser: Browser, userId: string): Promise<{ context: Br
 const decodedWidth = (page: Page, userId: string) =>
   page.locator(`[data-participant^="${userId}:"] video`).evaluate((v: HTMLVideoElement) => v.videoWidth).catch(() => 0);
 
+/** Frames decoded so far in that participant's tile; it grows while their media decodes. */
+const decodedFrames = (page: Page, userId: string) =>
+  page.locator(`[data-participant^="${userId}:"] video`).evaluate((v: HTMLVideoElement) => v.getVideoPlaybackQuality().totalVideoFrames).catch(() => 0);
+
 test.describe("group calls (C12.24)", () => {
   test.setTimeout(180_000);
   test.skip(!process.env.LIVEKIT_URL && !process.env.CI, "needs a LiveKit server (LIVEKIT_URL)");
@@ -94,8 +98,21 @@ test.describe("group calls (C12.24)", () => {
     expect(await decodedWidth(kim.page, RAE)).toBe(0);
     expect(await decodedWidth(sam.page, RAE)).toBeGreaterThan(0);
 
+    // C12.37: Kim leaves the conversation mid-call. The SFU drops Kim, the
+    // others move to a new key Kim never receives, and they keep decoding.
+    const kimConversation = await kim.context.newPage();
+    await kimConversation.goto(`/messages/${call!.conversationId}`);
+    await kimConversation.getByRole("button", { name: "Leave conversation" }).click();
+    await expect(kim.page.getByText("You are no longer in this call.")).toBeVisible({ timeout: 30_000 });
+    await expect(rae.page.locator(`[data-participant^="${KIM}:"]`)).toHaveCount(0, { timeout: 30_000 });
+    await expect.poll(async () => (await db().select({ g: memberGroupCalls.keyGeneration }).from(memberGroupCalls).where(eq(memberGroupCalls.id, call!.id)))[0]?.g).toBe(1);
+    await rae.page.waitForTimeout(8_000);
+    const before = await decodedFrames(sam.page, RAE);
+    await sam.page.waitForTimeout(3_000);
+    expect(await decodedFrames(sam.page, RAE)).toBeGreaterThan(before);
+
     // Leaving ends the call once everyone has gone.
-    for (const side of [kim, sam, rae]) await side.page.getByRole("button", { name: "Leave call" }).click();
+    for (const side of [sam, rae]) await side.page.getByRole("button", { name: "Leave call" }).click();
     await expect.poll(async () => (await db().select({ state: memberGroupCalls.state }).from(memberGroupCalls).where(eq(memberGroupCalls.id, call!.id)))[0]?.state).toBe("ended");
     for (const side of [rae, sam, kim]) await side.context.close();
   });

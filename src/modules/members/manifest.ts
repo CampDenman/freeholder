@@ -25,6 +25,7 @@ export default defineModule({
       "member.friendRequested",
       "member.posted",
       "member.postDeleted",
+      "member.callSeatLost",
       "member.commented",
       "member.reacted",
       "member.mentioned",
@@ -42,6 +43,7 @@ export default defineModule({
       "invoice.paid": "onInvoicePaid",
       "member.posted": "onMemberPosted",
       "member.postDeleted": "onMemberPostDeleted",
+      "member.callSeatLost": "onCallSeatLost",
     },
   },
 });
