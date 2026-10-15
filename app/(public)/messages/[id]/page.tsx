@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.06: one conversation.
 import type { Metadata } from "next";
+import { Attachments, MediaAttach } from "../../m/MediaAttach";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
@@ -70,6 +71,7 @@ export default async function ConversationPage({ params, searchParams }: { param
               {m.sender ? m.sender.displayName : t("members.messages.formerMember")} · {formatDateTime(m.createdAt, timezone, locale)}
             </p>
             {m.body === null ? <p className="italic text-ink-muted">{t("members.messages.removed")}</p> : <p className="whitespace-pre-line break-words">{m.body}</p>}
+            <Attachments items={m.attachments} />
             {m.mine && m.body !== null ? (
               <form action={conversationAction}>
                 <input type="hidden" name="conversationId" value={c.id} />
@@ -90,6 +92,7 @@ export default async function ConversationPage({ params, searchParams }: { param
           <Field label={t("members.messages.body")} htmlFor="reply-body">
             <textarea id="reply-body" name="body" required maxLength={10000} rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
           </Field>
+          <MediaAttach id="message" labels={{ add: t("members.attach.add"), describe: t("members.attach.describe"), uploading: t("members.avatar.uploading"), failed: t("members.avatar.failed"), remove: t("members.attach.remove") }} />
           <Button type="submit">{t("members.messages.send")}</Button>
         </form>
       ) : null}

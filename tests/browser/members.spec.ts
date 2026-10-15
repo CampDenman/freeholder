@@ -724,4 +724,49 @@ test.describe("members (C12.01)", () => {
     await axeInBothThemes(page);
     await context.close();
   });
+
+  test("a followers-only photo post shows its photo to followers and nobody else (C12.21)", async ({ browser }) => {
+    await seedC11Owner("Attachments proof");
+    const SAM_ID = "00000000-0000-4000-8000-0000000000d8";
+    await db().insert(users).values([
+      { id: MEMBER_ID, email: "rae@example.test", role: "customer" },
+      { id: SAM_ID, email: "sam@example.test", role: "customer" },
+    ]);
+    await db().insert(memberProfiles).values([
+      { userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date(), isPrivate: false },
+      { userId: SAM_ID, handle: "sam", displayName: "Sam Ito", ageAttestedAt: new Date(), isPrivate: false },
+    ]);
+    const [rae, sam] = await Promise.all([MEMBER_ID, SAM_ID].map((id) => db().transaction((tx) => createSession(tx, id))));
+    const context = await browser.newContext({ baseURL: C11_BASE_URL });
+    await context.addCookies([
+      { name: SESSION_COOKIE, value: rae!.token, url: C11_BASE_URL },
+      { name: CSRF_COOKIE, value: issueCsrfToken(), url: C11_BASE_URL },
+    ]);
+    const page = await context.newPage();
+    await page.goto("/feed");
+    const sharp = (await import("sharp")).default;
+    const jpeg = await sharp({ create: { width: 640, height: 480, channels: 3, background: { r: 30, g: 90, b: 160 } } }).jpeg().toBuffer();
+    await page.getByLabel("Add photos or video").setInputFiles({ name: "harbour.jpg", mimeType: "image/jpeg", buffer: jpeg });
+    await page.getByLabel(/Describe it for people/).fill("Boats in the harbour at dawn");
+    await page.getByLabel("Who can see this").selectOption("followers");
+    await page.getByRole("button", { name: "Post", exact: true }).click();
+    const image = page.getByAltText("Boats in the harbour at dawn");
+    await expect(image).toBeVisible();
+    const src = await image.getAttribute("src");
+    expect(src).toMatch(/^\/member-files\//);
+    expect((await page.request.get(src!)).status()).toBe(200);
+    await axeInBothThemes(page);
+
+    const visitor = await browser.newContext({ baseURL: C11_BASE_URL });
+    expect((await visitor.request.get(src!)).status()).toBe(404);
+    const other = await browser.newContext({ baseURL: C11_BASE_URL });
+    await other.addCookies([{ name: SESSION_COOKIE, value: sam!.token, url: C11_BASE_URL }]);
+    expect((await other.request.get(src!)).status()).toBe(404);
+    const samPage = await other.newPage();
+    await samPage.goto("/@rae");
+    await samPage.getByRole("button", { name: "Follow", exact: true }).click();
+    await expect(samPage.getByRole("button", { name: "Unfollow" })).toBeVisible();
+    expect((await other.request.get(src!)).status()).toBe(200);
+    for (const c of [context, visitor, other]) await c.close();
+  });
 });

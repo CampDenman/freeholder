@@ -16,6 +16,7 @@ import { and, asc, desc, eq, inArray, isNull, lt, or, sql, type SQL } from "driz
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Actor, type ServiceContext } from "@/core/service";
 import { assertMayMarkAdult, seesAdult } from "./adult";
+import { attachFiles, attachmentInput, attachmentsFor, attachmentShape } from "./attachment-store";
 import { canSee, relationBetween, type Relation } from "./graph";
 import { notifyMember } from "./notify";
 import {
@@ -123,6 +124,7 @@ const postShape = row({
   myReaction: z.enum(REACTIONS).nullable(),
   comments: z.number().int(),
   tagged: listed(author),
+  attachments: listed(attachmentShape),
 });
 type PostShape = z.infer<typeof postShape>;
 
@@ -167,6 +169,7 @@ async function present(ctx: ServiceContext, viewerId: string | null, rows: (type
       .where(and(inArray(memberMentions.postId, ids), eq(memberMentions.kind, "tag"), eq(memberMentions.status, "approved"))),
   ]);
   const byId = new Map(authors.map((a) => [a.userId, a]));
+  const files = await attachmentsFor(ctx, "post", ids);
   const visibleOriginal = new Map<string, (typeof originals)[number]>();
   const adultOk = await seesAdult(ctx, viewerId);
   for (const original of originals) {
@@ -191,6 +194,7 @@ async function present(ctx: ServiceContext, viewerId: string | null, rows: (type
       myReaction: mine.find((r) => r.postId === p.id)?.kind ?? null,
       comments: commentCounts.find((c) => c.postId === p.id)?.n ?? 0,
       tagged: tags.filter((t) => t.postId === p.id).map(({ userId, handle, displayName }) => ({ userId, handle, displayName })),
+      attachments: files.get(p.id) ?? [],
     };
   });
 }
@@ -236,11 +240,13 @@ export const createPost = defineService({
     tag: z.array(z.string().trim().toLowerCase().max(60)).max(10).default([]),
     /** Adult content (C12.29): only adults may mark it, and only where the site allows it. */
     adult: z.boolean().default(false),
+    /** Images or videos you uploaded, each with a description for people who cannot see it. */
+    attachments: attachmentInput,
   }),
   output: postShape,
   handler: async (input, ctx) => {
     const me = await activeAuthor(ctx);
-    if (!input.body && !input.repostOf) throw new ServiceError("validation", "Write something to post.");
+    if (!input.body && !input.repostOf && input.attachments.length === 0) throw new ServiceError("validation", "Write something or add a photo to post.");
     let visibility = input.visibility ?? me.defaultPostVisibility;
     let adult = input.adult;
     if (adult) await assertMayMarkAdult(ctx, me.userId);
@@ -256,6 +262,7 @@ export const createPost = defineService({
       .insert(memberPosts)
       .values({ authorId: me.userId, body: input.body, visibility, adult, repostOf: input.repostOf ?? null })
       .returning();
+    await attachFiles(ctx, me.userId, "post", created!.id, input.attachments);
     await writeDerived(ctx, created!.id, me.userId, input.body, input.tag, adult);
     ctx.setSubject("member_post", created!.id);
     ctx.queueEvent("member.posted", { postId: created!.id, authorId: me.userId, visibility });
@@ -409,6 +416,7 @@ const commentShape = row({
   createdAt: timestamp,
   /** Only the commenter and the post's author see a restricted member's comments. */
   restricted: z.boolean(),
+  attachments: listed(attachmentShape),
 });
 
 export const viewPost = defineService({
@@ -448,8 +456,11 @@ export const viewPost = defineService({
         body: r.comment.body,
         createdAt: r.comment.createdAt,
         restricted,
+        attachments: [] as z.infer<typeof attachmentShape>[],
       });
     }
+    const commentFiles = await attachmentsFor(ctx, "comment", comments.map((c) => c.id));
+    for (const c of comments) c.attachments = commentFiles.get(c.id) ?? [];
     return { post: (await present(ctx, viewer, [post]))[0]!, comments };
   },
 });
@@ -461,7 +472,7 @@ export const commentOnPost = defineService({
   permission: "authenticated",
   writeClass: "write",
   rateLimit: { limit: 120, windowSeconds: 3600, message: "You are commenting very quickly. Please slow down.", subject: (_i, actor) => viewerOf(actor) ?? undefined },
-  input: z.object({ postId: uuid, parentId: uuid.optional(), body: z.string().trim().min(1).max(2000) }),
+  input: z.object({ postId: uuid, parentId: uuid.optional(), body: z.string().trim().min(1).max(2000), attachments: attachmentInput }),
   output: commentShape,
   handler: async (input, ctx) => {
     const me = await activeAuthor(ctx);
@@ -480,6 +491,7 @@ export const commentOnPost = defineService({
       .insert(memberComments)
       .values({ postId: post.id, authorId: me.userId, parentId: input.parentId ?? null, body: input.body })
       .returning();
+    await attachFiles(ctx, me.userId, "comment", created!.id, input.attachments);
     const mentioned = await reachableHandles(ctx, me.userId, mentions(input.body));
     if (mentioned.length) {
       await ctx.tx
@@ -507,6 +519,7 @@ export const commentOnPost = defineService({
       body: created!.body,
       createdAt: created!.createdAt,
       restricted: Boolean(restriction),
+      attachments: (await attachmentsFor(ctx, "comment", [created!.id])).get(created!.id) ?? [],
     };
   },
 });

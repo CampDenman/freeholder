@@ -10,6 +10,7 @@ import { ServiceError } from "@/core/service";
 import { answerTag, commentOnPost, createPost, deleteComment, deletePost, reactToPost } from "@/modules/members/posts";
 import { VISIBILITIES, type Visibility } from "@/modules/members/visibility";
 import { pinPost } from "@/modules/members/profile";
+import { attachmentsFrom } from "./attachment-form";
 
 const REACTIONS = ["like", "love", "laugh", "wow", "sad", "thanks"] as const;
 
@@ -44,6 +45,7 @@ export async function createPostAction(form: FormData): Promise<void> {
         visibility: (VISIBILITIES as readonly string[]).includes(visibility) ? (visibility as Visibility) : undefined,
         repostOf: text(form, "repostOf") || undefined,
         adult: form.get("adult") === "yes",
+        attachments: attachmentsFrom(form),
         tag: text(form, "tag").split(/[\s,]+/).map((h) => h.replace(/^@/, "")).filter(Boolean),
       },
       actor,
@@ -61,7 +63,7 @@ export async function deletePostAction(form: FormData): Promise<void> {
 
 export async function commentAction(form: FormData): Promise<void> {
   await run(form, (actor) =>
-    commentOnPost.call({ postId: text(form, "postId"), parentId: text(form, "parentId") || undefined, body: text(form, "body") }, actor),
+    commentOnPost.call({ postId: text(form, "postId"), parentId: text(form, "parentId") || undefined, body: text(form, "body"), attachments: attachmentsFrom(form) }, actor),
   );
 }
 

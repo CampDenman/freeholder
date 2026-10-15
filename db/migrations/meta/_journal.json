@@ -274,6 +274,13 @@
       "when": 1793310000018,
       "tag": "0038_web_push_quiet_hours",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1793310000019,
+      "tag": "0039_member_attachments",
+      "breakpoints": true
     }
   ]
 }

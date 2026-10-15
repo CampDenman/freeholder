@@ -196,6 +196,9 @@ const CALLER_AUTHORIZED_PHASES = [
   "media.rescanSource",
   "media.signUploadClaim",
   "media.uploadStatusSource",
+  // C12.21: the member file route asks this on every request; it returns a
+  // storage key, so it never leaves the process.
+  "members.fileAccess",
   "signupContactImports.applyOAuthCompletion",
   "signupContactImports.applyProviderContacts",
   "signupContactImports.claimOAuthCompletion",

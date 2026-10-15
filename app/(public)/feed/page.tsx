@@ -3,6 +3,7 @@
 // C12.04 (MASTER.md §44.2, §44.4): the home feed — people you follow and your
 // friends, newest first — and the plainly labelled latest public posts.
 import type { Metadata } from "next";
+import { MediaAttach } from "../m/MediaAttach";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
@@ -43,8 +44,9 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         <form action={createPostAction} className="grid gap-3 rounded-lg border border-rule bg-surface p-4">
           <input type="hidden" name="back" value="/feed" />
           <Field label={t("members.post.body")} htmlFor="post-body">
-            <textarea id="post-body" name="body" required maxLength={5000} rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
+            <textarea id="post-body" name="body" maxLength={5000} rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
           </Field>
+          <MediaAttach id="post" labels={{ add: t("members.attach.add"), describe: t("members.attach.describe"), uploading: t("members.avatar.uploading"), failed: t("members.avatar.failed"), remove: t("members.attach.remove") }} />
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t("members.post.visibility")} htmlFor="post-visibility">
               <Select id="post-visibility" name="visibility" defaultValue={me.defaultPostVisibility}>

@@ -7662,5 +7662,8 @@
   "members.notifications.quietEnd": "حتى",
   "members.notifications.quietTimezone": "الأوقات بتوقيت {timezone}.",
   "members.notifications.quietSave": "حفظ ساعات الهدوء",
-  "members.notifications.quietInvalid": "تحتاج ساعات الهدوء إلى وقت بداية ونهاية مختلفين."
+  "members.notifications.quietInvalid": "تحتاج ساعات الهدوء إلى وقت بداية ونهاية مختلفين.",
+  "members.attach.add": "إضافة صور أو فيديو",
+  "members.attach.describe": "صِفها لمن لا يستطيع رؤيتها",
+  "members.attach.remove": "إزالة"
 }

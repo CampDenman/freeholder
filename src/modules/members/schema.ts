@@ -205,7 +205,6 @@ export const memberPosts = pgTable(
     index("member_posts_repost_idx").on(t.repostOf),
     check("member_posts_visibility_valid", sql`${t.visibility} in ('public','followers','friends','subscribers','only_me')`),
     check("member_posts_body_length", sql`char_length(${t.body}) <= 5000`),
-    check("member_posts_has_content", sql`char_length(${t.body}) > 0 or ${t.repostOf} is not null`),
   ],
 );
 
@@ -604,6 +603,33 @@ export const memberProfileSections = pgTable(
     check("member_profile_sections_visibility_valid", sql`${t.visibility} in ('public','followers','friends','subscribers','only_me')`),
     check("member_profile_sections_title_length", sql`char_length(${t.title}) between 1 and 80`),
     check("member_profile_sections_body_length", sql`char_length(${t.body}) <= 5000`),
+  ],
+);
+
+export const ATTACHMENT_PARENTS = ["post", "comment", "message"] as const;
+
+/**
+ * §44.4 (C12.21): an image or video a member attached to a post, comment or
+ * message. The asset is private once attached; it is served only through the
+ * members file route, to people who can see its parent.
+ */
+export const memberAttachments = pgTable(
+  "member_attachments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id").notNull().references(() => assets.id, { onDelete: "cascade" }),
+    parentType: text("parent_type", { enum: ATTACHMENT_PARENTS }).notNull(),
+    parentId: uuid("parent_id").notNull(),
+    altText: text("alt_text").notNull().default(""),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("member_attachments_asset_idx").on(t.assetId),
+    index("member_attachments_parent_idx").on(t.parentType, t.parentId, t.position),
+    check("member_attachments_parent_valid", sql`${t.parentType} in ('post','comment','message')`),
+    check("member_attachments_alt_length", sql`char_length(${t.altText}) <= 500`),
   ],
 );
 

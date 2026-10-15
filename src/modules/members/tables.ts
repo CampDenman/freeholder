@@ -26,4 +26,5 @@ export {
   memberReviews,
   memberReports,
   memberProfileSections,
+  memberAttachments,
 } from "./schema";

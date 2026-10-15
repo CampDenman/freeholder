@@ -7662,5 +7662,8 @@
   "members.notifications.quietEnd": "À",
   "members.notifications.quietTimezone": "Heures exprimées en {timezone}.",
   "members.notifications.quietSave": "Enregistrer les heures calmes",
-  "members.notifications.quietInvalid": "Les heures calmes doivent avoir un début et une fin différents."
+  "members.notifications.quietInvalid": "Les heures calmes doivent avoir un début et une fin différents.",
+  "members.attach.add": "Ajouter des photos ou une vidéo",
+  "members.attach.describe": "Décrivez-la pour les personnes qui ne peuvent pas la voir",
+  "members.attach.remove": "Retirer"
 }

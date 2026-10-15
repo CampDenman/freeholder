@@ -227,3 +227,19 @@ from mocked payment, mail or media runs alone.
 - Tests: `tests/core/web-push.test.ts` (6 cases) and the C12.22 journey in
   `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
 
+## C12.21 — attachments (2026-10-14)
+
+- `src/modules/members/attachments.ts` (services) and
+  `attachment-store.ts` (shapes and storage, a leaf module so posts and
+  messages can load without a cycle).
+- Attached assets are `is_private`; `/member-files/[id]` streams them through
+  the app after `members.fileAccess` checks the viewer, on every request.
+- With public S3 storage, private objects are still addressable by key at
+  the bucket; keys are unguessable but not access-checked there. Use private
+  storage when members share followers-only or private files (the same
+  caveat as galleries and documents).
+- Video is served whole, without range requests; the proxied upload limit
+  (25 MB) keeps clips short.
+- Tests: `tests/modules/member-attachments.test.ts` (3 cases) and the C12.21
+  journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
+
