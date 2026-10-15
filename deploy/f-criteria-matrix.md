@@ -4507,18 +4507,18 @@ v2.
 - **F12** — `tests/browser/members.spec.ts`: the seller ships, both talk, and the buyer confirms delivery so the payout becomes due.
 ## C12.11 — Build reputation: buyer and seller reviews only after a
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
+- **F01** — `db/migrations/0033_member_reviews.sql`: one review per author per sale, a direction, a 1–5 rating, a reveal time and one reply.
+- **F02** — `tests/modules/member-reputation.test.ts`: completion gating, the double-blind reveal both ways, averages, and the single reply.
+- **F03** — `tests/modules/member-reputation.test.ts`: the reviewed buyer is the order's contact, matched to their member profile.
+- **F04** — `tests/browser/members.spec.ts`: the review card on the sale page and the reviews section on `/@handle`.
+- **F05** — `packages/sdk/src/generated.ts`: the five reputation services on HTTP, the SDK and MCP.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on the buyer's sale page and the profile; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-reputation.test.ts`: only the two parties of a completed sale review it; hidden until both write or 14 days pass; only the subject replies, once.
+- **F08** — `tests/modules/member-reputation.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — N/A — reveal is compared at read time (`src/modules/members/reputation.ts`), so there is no background work.
+- **F10** — N/A — demo reviews arrive with the starter seed in C12.16 (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-reviews.md`.
+- **F12** — `tests/browser/members.spec.ts`: buyer and seller review each other, both reveal, the seller replies, and a visitor reads it on the profile.
 
 ## C12.12 — Build trust and safety: report anything, a moderation queue
 

@@ -9,6 +9,7 @@ import { formatDateTime, formatMoney } from "@/core/i18n";
 import { ServiceError } from "@/core/service";
 import { currentBusiness } from "@/core/settings/read";
 import { DISPUTE_REASONS, saleThread, viewSale } from "@/modules/members/protection";
+import { saleReviews } from "@/modules/members/reputation";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { getLocale, getT } from "../../../i18n";
 import { saleAction } from "./actions";
@@ -17,9 +18,13 @@ export async function SaleView({ orderId, sellerId, side, query }: { orderId: st
   if (!/^[0-9a-f-]{36}$/.test(orderId) || !/^[0-9a-f-]{36}$/.test(sellerId)) notFound();
   const [t, locale, business, jar] = await Promise.all([getT(), getLocale(), currentBusiness(), cookies()]);
   const actor = await actorFromToken(jar.get(SESSION_COOKIE)?.value);
-  let sale, thread;
+  let sale, thread, reviews;
   try {
-    [sale, thread] = await Promise.all([viewSale.call({ orderId, sellerId }, actor), saleThread.call({ orderId, sellerId }, actor)]);
+    [sale, thread, reviews] = await Promise.all([
+      viewSale.call({ orderId, sellerId }, actor),
+      saleThread.call({ orderId, sellerId }, actor),
+      saleReviews.call({ orderId, sellerId }, actor),
+    ]);
   } catch (error) {
     if (error instanceof ServiceError) notFound();
     throw error;
@@ -85,6 +90,55 @@ export async function SaleView({ orderId, sellerId, side, query }: { orderId: st
       ) : null}
       {side === "buyer" && openDispute ? (
         <form action={saleAction}>{hidden("withdraw")}<Button type="submit" variant="quiet">{t("members.sales.withdraw")}</Button></form>
+      ) : null}
+      {reviews.canReview || reviews.mine || reviews.theyWrote ? (
+        <Card>
+          <CardHeader title={t(side === "buyer" ? "members.reviews.ofSellerTitle" : "members.reviews.ofBuyerTitle")} />
+          <CardBody>
+            <div className="grid gap-3">
+              <p className="text-sm text-ink-muted">{t("members.reviews.blindIntro")}</p>
+              {reviews.canReview ? (
+                <form action={saleAction} className="grid gap-3">
+                  {hidden("review")}
+                  <Field label={t("members.reviews.rating")} htmlFor="rating">
+                    <Select id="rating" name="rating" defaultValue="5">
+                      {[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{t("members.reviews.stars", { count: n })}</option>)}
+                    </Select>
+                  </Field>
+                  <Field label={t("members.reviews.body")} htmlFor="review-body">
+                    <textarea id="review-body" name="body" maxLength={2000} rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
+                  </Field>
+                  <div><Button type="submit">{t("members.reviews.submit")}</Button></div>
+                </form>
+              ) : null}
+              {reviews.mine ? (
+                <p className="text-sm">
+                  {t("members.reviews.yours", { count: reviews.mine.rating })} {reviews.mine.revealed ? null : <Pill>{t("members.reviews.hiddenUntil")}</Pill>}
+                </p>
+              ) : null}
+              {reviews.theyWrote && !reviews.theirs ? <p className="text-sm">{t("members.reviews.theyWrote")}</p> : null}
+              {reviews.theirs ? (
+                <div className="grid gap-2 rounded-md border border-rule p-3">
+                  <p className="text-sm font-semibold">{t("members.reviews.theirs", { count: reviews.theirs.rating })}</p>
+                  {reviews.theirs.body ? <p className="whitespace-pre-line break-words">{reviews.theirs.body}</p> : null}
+                  {reviews.theirs.reply ? (
+                    <p className="text-sm text-ink-muted">{t("members.reviews.yourReply")} {reviews.theirs.reply}</p>
+                  ) : (
+                    <form action={saleAction} className="grid gap-2">
+                      {hidden("reply")}
+                      <input type="hidden" name="reviewId" value={reviews.theirs.id} />
+                      <Field label={t("members.reviews.reply")} htmlFor="review-reply">
+                        <textarea id="review-reply" name="body" required maxLength={2000} rows={2} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
+                      </Field>
+                      <p className="text-xs text-ink-muted">{t("members.reviews.replyOnce")}</p>
+                      <div><Button type="submit" variant="quiet">{t("members.reviews.postReply")}</Button></div>
+                    </form>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </CardBody>
+        </Card>
       ) : null}
       <section className="grid gap-3">
         <h2 className="text-xl font-semibold">{t("members.sales.thread")}</h2>

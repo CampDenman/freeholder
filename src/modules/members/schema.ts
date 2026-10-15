@@ -487,3 +487,35 @@ export const memberSaleMessages = pgTable(
     check("member_sale_messages_role_valid", sql`${t.role} in ('buyer','seller','site')`),
   ],
 );
+
+/**
+ * §44.8: buyer and seller review each other after a completed sale. Reviews
+ * are double-blind: each is revealed when both are written, or when the
+ * window passes, so neither side can answer the other's rating in kind.
+ */
+export const memberReviews = pgTable(
+  "member_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id").notNull(),
+    sellerId: uuid("seller_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    direction: text("direction", { enum: ["of_seller", "of_buyer"] }).notNull(),
+    rating: integer("rating").notNull(),
+    body: text("body").notNull().default(""),
+    revealAt: timestamp("reveal_at", { withTimezone: true }).notNull(),
+    reply: text("reply"),
+    repliedAt: timestamp("replied_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("member_reviews_one_per_side_idx").on(t.orderId, t.sellerId, t.authorId),
+    index("member_reviews_subject_idx").on(t.subjectId, t.revealAt),
+    check("member_reviews_rating_range", sql`${t.rating} between 1 and 5`),
+    check("member_reviews_direction_valid", sql`${t.direction} in ('of_seller','of_buyer')`),
+    check("member_reviews_body_length", sql`char_length(${t.body}) <= 2000`),
+    check("member_reviews_reply_length", sql`${t.reply} is null or char_length(${t.reply}) <= 2000`),
+    check("member_reviews_not_self", sql`${t.authorId} <> ${t.subjectId}`),
+  ],
+);

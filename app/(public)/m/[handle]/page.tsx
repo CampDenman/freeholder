@@ -10,6 +10,7 @@ import { ServiceError } from "@/core/service";
 import { viewProfile } from "@/modules/members/graph";
 import { postsBy } from "@/modules/members/posts";
 import { storefront } from "@/modules/members/listings";
+import { reviewsFor } from "@/modules/members/reputation";
 import { formatMoney } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { myMembership } from "@/modules/members/service";
@@ -58,9 +59,13 @@ export default async function MemberProfile({
 }) {
   const [{ handle }, query, t, locale, business] = await Promise.all([params, searchParams, getT(), getLocale(), currentBusiness()]);
   const { actor, profile } = await load(handle);
-  const [posts, shop] = await Promise.all([postsBy.call({ handle: profile.handle }, actor), storefront.call({ handle: profile.handle }, actor)]);
-  const viewer = actor.kind === "user" ? await myMembership.call({}, actor) : null;
   const r = profile.relation;
+  const [posts, shop, reviews] = await Promise.all([
+    postsBy.call({ handle: profile.handle }, actor),
+    storefront.call({ handle: profile.handle }, actor),
+    r.blocked ? null : reviewsFor.call({ handle: profile.handle }, actor),
+  ]);
+  const viewer = actor.kind === "user" ? await myMembership.call({}, actor) : null;
   const canAct = viewer?.status === "active" && !r.self;
   return (
     <div className="mx-auto grid max-w-2xl gap-6 px-6 py-12">
@@ -129,6 +134,27 @@ export default async function MemberProfile({
               <li key={l.id} className="grid gap-1 rounded-lg border border-rule bg-surface p-3">
                 <a className="font-semibold underline" href={`/products/${l.slug}`}>{l.name}</a>
                 {l.priceMinor !== null && l.currency ? <span className="text-sm">{formatMoney(l.priceMinor, l.currency, locale)}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {reviews && reviews.reviews.length ? (
+        <section className="grid gap-3" aria-labelledby="reviews">
+          <h2 id="reviews" className="text-xl font-semibold">{t("members.reviews.title")}</h2>
+          <p className="flex flex-wrap gap-2 text-sm">
+            {reviews.asSeller.count ? <Pill>{t("members.reviews.asSeller", { average: reviews.asSeller.average ?? 0, count: reviews.asSeller.count })}</Pill> : null}
+            {reviews.asBuyer.count ? <Pill>{t("members.reviews.asBuyer", { average: reviews.asBuyer.average ?? 0, count: reviews.asBuyer.count })}</Pill> : null}
+          </p>
+          <ul className="grid gap-3">
+            {reviews.reviews.map((review) => (
+              <li key={review.id} className="grid gap-1 rounded-lg border border-rule bg-surface p-3">
+                <p className="text-sm font-semibold">
+                  {t("members.reviews.stars", { count: review.rating })} · {t(review.direction === "of_seller" ? "members.reviews.fromBuyer" : "members.reviews.fromSeller")}
+                  {review.author ? <> · <a className="underline" href={`/@${review.author.handle}`}>{review.author.displayName}</a></> : null}
+                </p>
+                {review.body ? <p className="whitespace-pre-line break-words">{review.body}</p> : null}
+                {review.reply ? <p className="border-s-2 border-rule ps-3 text-sm text-ink-muted">{t("members.reviews.replyBy", { name: profile.displayName })} {review.reply}</p> : null}
               </li>
             ))}
           </ul>

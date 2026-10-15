@@ -32,6 +32,7 @@ import callServices from "./calls";
 import listingServices from "./listings";
 import payoutServices, { payoutAdapters } from "./payouts";
 import protectionServices from "./protection";
+import reputationServices from "./reputation";
 export { onOrderPaid, onRefundSucceeded } from "./payouts";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
@@ -432,6 +433,7 @@ export default [
   ...listingServices,
   ...payoutServices,
   ...protectionServices,
+  ...reputationServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,
