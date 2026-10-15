@@ -698,4 +698,30 @@ test.describe("members (C12.01)", () => {
     await expect(page.getByText("@rae").first()).toBeVisible();
     await context.close();
   });
+
+  test("push in this browser and quiet hours that hold push and email (C12.22)", async ({ browser }) => {
+    await seedC11Owner("Push proof");
+    await db().insert(users).values({ id: MEMBER_ID, email: "rae@example.test", role: "customer" });
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date() });
+    const rae = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+    const context = await browser.newContext({ baseURL: C11_BASE_URL, permissions: ["notifications"] });
+    await context.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
+    const page = await context.newPage();
+    const worker = await page.request.get("/push-sw.js");
+    expect(worker.ok()).toBe(true);
+    expect(await worker.text()).toContain("showNotification");
+
+    await page.goto("/portal/notifications");
+    // Headless browsers report notifications as blocked; a real one offers "Turn on".
+    await expect(page.getByText(/Get notified here|blocked for this site|can’t receive push/)).toBeVisible();
+    await page.getByLabel("Use quiet hours").check();
+    await page.getByLabel("From").fill("22:00");
+    await page.getByLabel("Until").fill("07:00");
+    await page.getByRole("button", { name: "Save quiet hours" }).click();
+    await expect(page.getByText(/saved/i).first()).toBeVisible();
+    await expect(page.getByLabel("Use quiet hours")).toBeChecked();
+    await expect(page.getByLabel("From")).toHaveValue("22:00");
+    await axeInBothThemes(page);
+    await context.close();
+  });
 });

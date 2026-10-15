@@ -1102,10 +1102,14 @@ export const SERVICE_NAMES = [
   "notifications.preferences",
   "notifications.registerDevice",
   "notifications.revokeDevice",
+  "notifications.subscribeWebPush",
   "notifications.unreadCount",
+  "notifications.unsubscribeWebPush",
   "notifications.updatePreference",
   "notifications.updatePreferences",
   "notifications.updateSettings",
+  "notifications.webPushKey",
+  "notifications.webPushSubscriptions",
   "paywalls.evaluate",
   "paywalls.list",
   "paywalls.save",
@@ -5871,7 +5875,7 @@ export interface ServiceCatalog {
   };
   "notifications.preferences": {
     input: Record<string, never>;
-    output: { topics: string[]; preferences: { topic: string; channel: "in_app" | "email" | "sms" | "push"; mode: "immediate" | "digest" | "off"; [key: string]: unknown }[]; settings: { digestCadence: "daily" | "weekly"; digestMinute: number; digestWeekday: number; timezone: string | null; escalationMinutes: number; [key: string]: unknown }; email: { provider: "smtp" | "console" | "gmail" | "outlook"; ready: boolean }; adapters: { channel: "sms" | "push"; provider: string; available: boolean; message: string }[] };
+    output: { topics: string[]; preferences: { topic: string; channel: "in_app" | "email" | "sms" | "push"; mode: "immediate" | "digest" | "off"; [key: string]: unknown }[]; settings: { digestCadence: "daily" | "weekly"; digestMinute: number; digestWeekday: number; timezone: string | null; escalationMinutes: number; quietStartMinute: number | null; quietEndMinute: number | null; [key: string]: unknown }; email: { provider: "smtp" | "console" | "gmail" | "outlook"; ready: boolean }; adapters: { channel: "sms" | "push"; provider: string; available: boolean; message: string }[] };
   };
   "notifications.registerDevice": {
     input: { token: string; platform: "ios" | "android"; appVersion: string; contractVersion: number };
@@ -5881,9 +5885,17 @@ export interface ServiceCatalog {
     input: { token: string };
     output: { revoked: boolean };
   };
+  "notifications.subscribeWebPush": {
+    input: { endpoint: string; p256dh: string; auth: string };
+    output: { ok: true };
+  };
   "notifications.unreadCount": {
     input: Record<string, never>;
     output: number;
+  };
+  "notifications.unsubscribeWebPush": {
+    input: { endpoint: string };
+    output: { ok: true };
   };
   "notifications.updatePreference": {
     input: { topic: string; channel: "in_app" | "email" | "sms" | "push"; mode: "immediate" | "digest" | "off" };
@@ -5894,8 +5906,16 @@ export interface ServiceCatalog {
     output: { saved: number };
   };
   "notifications.updateSettings": {
-    input: { digestCadence: "daily" | "weekly"; digestMinute: number; digestWeekday: number; timezone: string; escalationMinutes: number };
-    output: { id: string; userId: string | null; contactId: string | null; digestCadence: "daily" | "weekly"; digestMinute: number; digestWeekday: number; timezone: string | null; escalationMinutes: number; createdAt: string; updatedAt: string; [key: string]: unknown };
+    input: { digestCadence: "daily" | "weekly"; digestMinute: number; digestWeekday: number; timezone: string; escalationMinutes: number; quietStartMinute?: number | null; quietEndMinute?: number | null };
+    output: { id: string; userId: string | null; contactId: string | null; digestCadence: "daily" | "weekly"; digestMinute: number; digestWeekday: number; timezone: string | null; escalationMinutes: number; quietStartMinute: number | null; quietEndMinute: number | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "notifications.webPushKey": {
+    input: Record<string, never>;
+    output: { publicKey: string };
+  };
+  "notifications.webPushSubscriptions": {
+    input: Record<string, never>;
+    output: { count: number };
   };
   "paywalls.evaluate": {
     input: { paywallId?: string; kind?: "page" | "post" | "gallery" | "collection" | "tag" | "product"; selector: string; anonId?: string | null };
@@ -8625,10 +8645,14 @@ export interface FreeholderApi {
     preferences: (input?: ServiceCatalog["notifications.preferences"]["input"]) => Promise<ServiceCatalog["notifications.preferences"]["output"]>;
     registerDevice: (input: ServiceCatalog["notifications.registerDevice"]["input"]) => Promise<ServiceCatalog["notifications.registerDevice"]["output"]>;
     revokeDevice: (input: ServiceCatalog["notifications.revokeDevice"]["input"]) => Promise<ServiceCatalog["notifications.revokeDevice"]["output"]>;
+    subscribeWebPush: (input: ServiceCatalog["notifications.subscribeWebPush"]["input"]) => Promise<ServiceCatalog["notifications.subscribeWebPush"]["output"]>;
     unreadCount: (input?: ServiceCatalog["notifications.unreadCount"]["input"]) => Promise<ServiceCatalog["notifications.unreadCount"]["output"]>;
+    unsubscribeWebPush: (input: ServiceCatalog["notifications.unsubscribeWebPush"]["input"]) => Promise<ServiceCatalog["notifications.unsubscribeWebPush"]["output"]>;
     updatePreference: (input: ServiceCatalog["notifications.updatePreference"]["input"]) => Promise<ServiceCatalog["notifications.updatePreference"]["output"]>;
     updatePreferences: (input: ServiceCatalog["notifications.updatePreferences"]["input"]) => Promise<ServiceCatalog["notifications.updatePreferences"]["output"]>;
     updateSettings: (input: ServiceCatalog["notifications.updateSettings"]["input"]) => Promise<ServiceCatalog["notifications.updateSettings"]["output"]>;
+    webPushKey: (input?: ServiceCatalog["notifications.webPushKey"]["input"]) => Promise<ServiceCatalog["notifications.webPushKey"]["output"]>;
+    webPushSubscriptions: (input?: ServiceCatalog["notifications.webPushSubscriptions"]["input"]) => Promise<ServiceCatalog["notifications.webPushSubscriptions"]["output"]>;
   };
   paywalls: {
     evaluate: (input: ServiceCatalog["paywalls.evaluate"]["input"]) => Promise<ServiceCatalog["paywalls.evaluate"]["output"]>;

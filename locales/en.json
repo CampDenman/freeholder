@@ -7645,5 +7645,22 @@
   "portal.passkey.recovery": "Lost your device? Sign in with a link sent to your email, then confirm with one of your recovery codes to remove the old passkey.",
   "portal.passkey.codesIntro": "Keep these recovery codes somewhere safe. If you lose this device, sign in with an email link and use one to remove the old passkey. Each works once.",
   "portal.passkey.recoveryCode": "Recovery code",
-  "portal.passkey.useCode": "Confirm with code, then remove the passkey"
+  "portal.passkey.useCode": "Confirm with code, then remove the passkey",
+  "members.notifications.thisBrowser": "Notifications in this browser",
+  "members.notifications.push.on": "Push notifications are on in this browser.",
+  "members.notifications.push.off": "Get notified here even when this site isn’t open.",
+  "members.notifications.push.turnOn": "Turn on",
+  "members.notifications.push.turnOff": "Turn off",
+  "members.notifications.push.unsupported": "This browser can’t receive push notifications.",
+  "members.notifications.push.blocked": "Notifications are blocked for this site in your browser settings.",
+  "members.notifications.push.failed": "Push could not be turned on. Try again.",
+  "members.notifications.pushLabel": "Push",
+  "members.notifications.quietTitle": "Quiet hours",
+  "members.notifications.quietIntro": "During quiet hours, push and email wait until they end. Your inbox still updates.",
+  "members.notifications.quietOn": "Use quiet hours",
+  "members.notifications.quietStart": "From",
+  "members.notifications.quietEnd": "Until",
+  "members.notifications.quietTimezone": "Times are in {timezone}.",
+  "members.notifications.quietSave": "Save quiet hours",
+  "members.notifications.quietInvalid": "Quiet hours need a different start and end time."
 }

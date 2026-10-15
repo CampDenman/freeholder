@@ -210,3 +210,20 @@ from mocked payment, mail or media runs alone.
 - Tested with Chromium's virtual authenticator in the C12.19 journey in
   `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
 
+## C12.22 — web push and quiet hours (2026-10-14)
+
+- `src/core/notifications/web-push.ts` implements RFC 8291 and RFC 8292
+  with `node:crypto`. The VAPID key pair is created on first use and kept in
+  `web_push_keys`, sealed with `CREDENTIAL_KEY`; rotating that key without
+  re-sealing means re-subscribing browsers.
+- Endpoints are limited to the browsers' push services (Google, Mozilla,
+  Apple, Microsoft). Add a host there before supporting another browser.
+- The service worker is `public/push-sw.js`; CSP already allows
+  `worker-src 'self'`.
+- Quiet hours set `availableAt` to the end of the window; the per-minute
+  delivery sweep sends them then.
+- Not yet exercised against a live push service in CI (headless browsers
+  report notifications as blocked); check on a real browser after deploy.
+- Tests: `tests/core/web-push.test.ts` (6 cases) and the C12.22 journey in
+  `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
+
