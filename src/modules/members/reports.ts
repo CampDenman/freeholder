@@ -174,7 +174,11 @@ export const listReports = defineService({
 async function removeTarget(ctx: ServiceContext, type: Target, id: string, note: string): Promise<void> {
   const now = new Date();
   switch (type) {
-    case "post": await ctx.tx.update(memberPosts).set({ deletedAt: now }).where(eq(memberPosts.id, id)); return;
+    case "post": {
+      const [post] = await ctx.tx.update(memberPosts).set({ deletedAt: now }).where(eq(memberPosts.id, id)).returning({ authorId: memberPosts.authorId });
+      if (post) ctx.queueEvent("member.postDeleted", { postId: id, authorId: post.authorId });
+      return;
+    }
     case "comment": await ctx.tx.update(memberComments).set({ deletedAt: now }).where(eq(memberComments.id, id)); return;
     case "message": await ctx.tx.update(memberMessages).set({ deletedAt: now }).where(eq(memberMessages.id, id)); return;
     case "review": await ctx.tx.update(memberReviews).set({ hiddenAt: now }).where(eq(memberReviews.id, id)); return;

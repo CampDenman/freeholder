@@ -40,12 +40,14 @@ import attachmentServices from "./attachments";
 import subscriptionServices from "./member-subscriptions";
 import memberServiceServices from "./member-services";
 import demoServices from "./demo";
+import federationServices from "./federation/core";
 import { applyMemberStatus } from "./status";
 // Member export and erasure through the site's privacy requests (C12.15).
 import "./data-rights";
 import { siteAllowsAdult } from "./adult";
 export { onOrderPaid, onRefundSucceeded } from "./payouts";
 export { onInvoicePaid } from "./member-subscriptions";
+export { onMemberPosted, onMemberPostDeleted } from "./federation/core";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
 const RESERVED = new Set([
@@ -79,6 +81,7 @@ const profile = row({
   indexable: z.boolean(),
   readReceipts: z.boolean(),
   showAdult: z.boolean(),
+  federated: z.boolean(),
   createdAt: timestamp,
 });
 const settings = row({
@@ -91,6 +94,7 @@ const settings = row({
   siteFeeBps: z.number().int(),
   payoutAdapter: z.string(),
   adultContent: z.boolean(),
+  federation: z.boolean(),
 });
 
 function signedInUser(actor: Actor): string {
@@ -110,6 +114,7 @@ async function readSettings(ctx: ServiceContext) {
     siteFeeBps: found?.siteFeeBps ?? 0,
     payoutAdapter: found?.payoutAdapter ?? "manual",
     adultContent: found?.adultContent ?? false,
+    federation: found?.federation ?? false,
   };
 }
 
@@ -139,6 +144,7 @@ function shape(found: typeof memberProfiles.$inferSelect) {
     indexable: found.indexable,
     readReceipts: found.readReceipts,
     showAdult: found.showAdult,
+    federated: found.federated,
     createdAt: found.createdAt,
   };
 }
@@ -169,6 +175,8 @@ export const updateMembershipRules = defineService({
     siteFeeBps: z.number().int().min(0).max(5000).optional(),
     payoutAdapter: z.string().trim().min(1).max(60).optional(),
     adultContent: z.boolean().optional(),
+    /** C12.18: let members federate with the fediverse. */
+    federation: z.boolean().optional(),
   }),
   output: settings,
   handler: async (input, ctx) => {
@@ -451,6 +459,7 @@ export default [
   ...subscriptionServices,
   ...memberServiceServices,
   ...demoServices,
+  ...federationServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

@@ -1030,6 +1030,7 @@ export const SERVICE_NAMES = [
   "members.profileSections",
   "members.purgeDemoFixture",
   "members.react",
+  "members.remoteFollowers",
   "members.replyToReview",
   "members.report",
   "members.reports",
@@ -1045,6 +1046,7 @@ export const SERVICE_NAMES = [
   "members.sendMessage",
   "members.setAvatar",
   "members.setBookingHours",
+  "members.setFederation",
   "members.setPayoutAccountStatus",
   "members.setRelation",
   "members.setStatus",
@@ -5483,7 +5485,7 @@ export interface ServiceCatalog {
   };
   "members.join": {
     input: { handle: string; displayName: string; meetsMinimumAge: true; isAdult: boolean };
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; createdAt: string; [key: string]: unknown };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.latest": {
     input: { before?: string; tag?: string };
@@ -5499,7 +5501,7 @@ export interface ServiceCatalog {
   };
   "members.list": {
     input: { status?: "active" | "pending" | "suspended"; search?: string; limit?: number; offset?: number };
-    output: { members: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; createdAt: string; email: string; statusReason: string | null; [key: string]: unknown }[]; total: number };
+    output: { members: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; createdAt: string; email: string; statusReason: string | null; [key: string]: unknown }[]; total: number };
   };
   "members.loadDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
@@ -5515,7 +5517,7 @@ export interface ServiceCatalog {
   };
   "members.me": {
     input: Record<string, never>;
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; createdAt: string; [key: string]: unknown } | null;
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; createdAt: string; [key: string]: unknown } | null;
   };
   "members.muteConversation": {
     input: { conversationId: string; muted: boolean };
@@ -5613,6 +5615,10 @@ export interface ServiceCatalog {
     input: { postId: string; kind: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null };
     output: { ok: true };
   };
+  "members.remoteFollowers": {
+    input: Record<string, never>;
+    output: { count: number; handles: string[] };
+  };
   "members.replyToReview": {
     input: { id: string; body: string };
     output: { ok: true };
@@ -5673,6 +5679,10 @@ export interface ServiceCatalog {
     input: { hours: { weekday: number; starts: string; ends: string }[] };
     output: { hours: number };
   };
+  "members.setFederation": {
+    input: { federated: boolean };
+    output: { federated: boolean; address: string | null };
+  };
   "members.setPayoutAccountStatus": {
     input: { userId: string; status: "ready" | "disabled" | "pending" };
     output: { ok: true };
@@ -5683,7 +5693,7 @@ export interface ServiceCatalog {
   };
   "members.setStatus": {
     input: { userId: string; status: "active" | "pending" | "suspended"; reason?: string };
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; createdAt: string; [key: string]: unknown };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.setSubscriptionPlanStatus": {
     input: { planId: string; offered: boolean };
@@ -5691,7 +5701,7 @@ export interface ServiceCatalog {
   };
   "members.settings": {
     input: Record<string, never>;
-    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; adultContent: boolean; [key: string]: unknown };
+    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; adultContent: boolean; federation: boolean; [key: string]: unknown };
   };
   "members.settlePayouts": {
     input: { ids: string[]; action: "release" | "paid" | "cancel" | "owe"; reference?: string; note?: string };
@@ -5743,11 +5753,11 @@ export interface ServiceCatalog {
   };
   "members.updateMe": {
     input: { displayName?: string; bio?: string; handle?: string; isAdult?: boolean; showAdult?: boolean; bioVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; linksVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; links?: { label: string; url: string }[]; isPrivate?: boolean; indexable?: boolean; readReceipts?: boolean };
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; createdAt: string; [key: string]: unknown };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.updateSettings": {
-    input: { joinPolicy?: "open" | "approval" | "invite"; minimumAge?: number; marketplaceEnabled?: boolean; listingReview?: boolean; payoutModel?: "hold" | "seller_merchant" | "instant"; holdDays?: number; siteFeeBps?: number; payoutAdapter?: string; adultContent?: boolean };
-    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; adultContent: boolean; [key: string]: unknown };
+    input: { joinPolicy?: "open" | "approval" | "invite"; minimumAge?: number; marketplaceEnabled?: boolean; listingReview?: boolean; payoutModel?: "hold" | "seller_merchant" | "instant"; holdDays?: number; siteFeeBps?: number; payoutAdapter?: string; adultContent?: boolean; federation?: boolean };
+    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; adultContent: boolean; federation: boolean; [key: string]: unknown };
   };
   "members.verifyDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
@@ -8645,6 +8655,7 @@ export interface FreeholderApi {
     profileSections: (input: ServiceCatalog["members.profileSections"]["input"]) => Promise<ServiceCatalog["members.profileSections"]["output"]>;
     purgeDemoFixture: (input: ServiceCatalog["members.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["members.purgeDemoFixture"]["output"]>;
     react: (input: ServiceCatalog["members.react"]["input"]) => Promise<ServiceCatalog["members.react"]["output"]>;
+    remoteFollowers: (input?: ServiceCatalog["members.remoteFollowers"]["input"]) => Promise<ServiceCatalog["members.remoteFollowers"]["output"]>;
     replyToReview: (input: ServiceCatalog["members.replyToReview"]["input"]) => Promise<ServiceCatalog["members.replyToReview"]["output"]>;
     report: (input: ServiceCatalog["members.report"]["input"]) => Promise<ServiceCatalog["members.report"]["output"]>;
     reports: (input?: ServiceCatalog["members.reports"]["input"]) => Promise<ServiceCatalog["members.reports"]["output"]>;
@@ -8660,6 +8671,7 @@ export interface FreeholderApi {
     sendMessage: (input: ServiceCatalog["members.sendMessage"]["input"]) => Promise<ServiceCatalog["members.sendMessage"]["output"]>;
     setAvatar: (input: ServiceCatalog["members.setAvatar"]["input"]) => Promise<ServiceCatalog["members.setAvatar"]["output"]>;
     setBookingHours: (input: ServiceCatalog["members.setBookingHours"]["input"]) => Promise<ServiceCatalog["members.setBookingHours"]["output"]>;
+    setFederation: (input: ServiceCatalog["members.setFederation"]["input"]) => Promise<ServiceCatalog["members.setFederation"]["output"]>;
     setPayoutAccountStatus: (input: ServiceCatalog["members.setPayoutAccountStatus"]["input"]) => Promise<ServiceCatalog["members.setPayoutAccountStatus"]["output"]>;
     setRelation: (input: ServiceCatalog["members.setRelation"]["input"]) => Promise<ServiceCatalog["members.setRelation"]["output"]>;
     setStatus: (input: ServiceCatalog["members.setStatus"]["input"]) => Promise<ServiceCatalog["members.setStatus"]["output"]>;

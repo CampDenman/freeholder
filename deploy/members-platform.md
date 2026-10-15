@@ -312,3 +312,16 @@ from mocked payment, mail or media runs alone.
   Sending is the slowest path (sealing and notifying each recipient); watch
   it as conversations grow.
 
+## C12.18 — ActivityPub federation (2026-10-15)
+
+- Off by default: Admin → Members, "Let members join the fediverse", then
+  each member opts in from `/portal/member`.
+- Endpoints: `/.well-known/webfinger`, `/ap/users/<handle>` (actor; browsers
+  asking for HTML are redirected to `/@handle`), `/outbox`, `/followers`
+  (count only), `/inbox` (POST, signed), and `/ap/notes/<id>`. Addresses use
+  the site's public origin, so set it before members opt in; changing the
+  domain later orphans existing followers until C12.33 (Move).
+- Deliveries go through the DNS-pinned webhook transport; in production it
+  refuses private addresses.
+- Tests: `tests/modules/member-federation.test.ts` (3 cases) and the C12.18
+  journey in `tests/browser/members.spec.ts`.

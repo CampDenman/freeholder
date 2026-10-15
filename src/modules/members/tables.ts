@@ -27,4 +27,7 @@ export {
   memberReports,
   memberProfileSections,
   memberAttachments,
+  memberActorKeys,
+  memberRemoteFollowers,
+  memberFederationDeliveries,
 } from "./schema";

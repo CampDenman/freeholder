@@ -31,6 +31,7 @@ describe("locale prefixes versus route roots", () => {
     // The whole bug: these used to arrive at the route as "/services" and "/abc".
     expect(rewrittenTo("/og/services")).not.toBe("/services");
     expect(rewrittenTo("/go/abc")).not.toBe("/abc");
+    expect(rewrittenTo("/ap/users/ada")).not.toBe("/users/ada");
   });
 
   // A deny-list only works while it is complete, and the edge cannot read the

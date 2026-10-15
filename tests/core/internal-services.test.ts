@@ -69,6 +69,11 @@ const INTERNAL = [
   "members.recordInvoicePayout",
   "members.releaseDuePayouts",
   "members.reversePayouts",
+  // C12.18: federation runs on nobody's behalf. Posting and deleting queue
+  // activities; the inbox route applies only signature-verified activities.
+  "members.federateDelete",
+  "members.federatePost",
+  "members.federationInbox",
   "catalogue.applyRefresh",
   "catalogue.refreshSource",
   "entitlements.issuePass",
@@ -202,6 +207,9 @@ const CALLER_AUTHORIZED_PHASES = [
   // C12.21: the member file route asks this on every request; it returns a
   // storage key, so it never leaves the process.
   "members.fileAccess",
+  // C12.18: the ActivityPub routes render these documents; the fediverse
+  // reaches them over HTTP, not through the service API.
+  "members.federationDocument",
   "signupContactImports.applyOAuthCompletion",
   "signupContactImports.applyProviderContacts",
   "signupContactImports.claimOAuthCompletion",

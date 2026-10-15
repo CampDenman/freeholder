@@ -8,6 +8,7 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { deleteProfileSection, saveProfileSection, setAvatar } from "@/modules/members/profile";
+import { setMyFederation } from "@/modules/members/federation/core";
 import { PROFILE_SECTION_KINDS } from "@/modules/members/profile-kinds";
 import { VISIBILITIES, type Visibility } from "@/modules/members/visibility";
 
@@ -54,4 +55,9 @@ export async function sectionAction(form: FormData): Promise<void> {
 
 export async function deleteSectionAction(form: FormData): Promise<void> {
   await run((actor) => deleteProfileSection.call({ id: text(form, "id") }, actor));
+}
+
+// C12.18: join or leave the fediverse.
+export async function federationAction(form: FormData): Promise<void> {
+  await run((actor) => setMyFederation.call({ federated: form.get("federated") === "yes" }, actor));
 }
