@@ -4579,20 +4579,20 @@ v2.
 - **F11** — `deploy/members-platform.md` and `.changeset/member-data-rights.md`.
 - **F12** — `tests/browser/members.spec.ts`: member pages request nothing from other origins, and data rights are one click from member settings.
 
-## C12.16 — Make it a starter: a new-site template and seeded demo
+## C12.16 — Make it a starter
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
+- **F01** — N/A — no new tables; the fixture uses member, catalog and demo-run tables (`src/modules/members/demo.ts`).
+- **F02** — `tests/modules/member-demo.test.ts`: the community loads, reads correctly and purges exactly.
+- **F03** — N/A — demo members are logins, not contacts (`src/modules/members/demo.ts`).
+- **F04** — `tests/modules/member-demo.test.ts`: Admin → Demo scenarios' `demo.load` and the member pages' services.
+- **F05** — `packages/sdk/src/generated.ts`: the three demo fixture services.
+- **F06** — `locales/en.json`: the outcome label and demo copy in English, French and Spanish.
+- **F07** — `tests/core/demo-scenarios.test.ts`: tracked records only; purge leaves no demo logins.
+- **F08** — `tests/modules/member-demo.test.ts` + `tests/core/demo-scenarios.test.ts`.
+- **F09** — N/A — loads through the existing demo run (`src/core/demo/service.ts`).
+- **F10** — `src/modules/members/onboarding.ts`: the community joins the Creator and Everything scenarios.
+- **F11** — `deploy/members-vibe-coding.md` and `.changeset/member-demo-community.md`.
+- **F12** — `tests/modules/member-demo.test.ts`: the Everything scenario loads the community into the feed, market and messages, then purges.
 
 ## C12.17 — Prove the whole member journey end to end: two members join,
 
@@ -4787,6 +4787,21 @@ v2.
 - **F10** — N/A — the switch is off in seeds and demos (`deploy/members-platform.md`).
 - **F11** — `deploy/members-platform.md` and `.changeset/member-adult-content.md`.
 - **F12** — `tests/browser/members.spec.ts`: the owner allows it, an adult posts, a minor and a visitor never see it, and another adult sees it after opting in.
+
+## C12.31 — Add a community new-site preset
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
 
 ## C12.30 — Hash-match known abuse imagery on upload
 

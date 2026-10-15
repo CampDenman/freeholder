@@ -178,6 +178,11 @@ suite("deterministic demo scenarios", () => {
         "sitting",
         "studio",
         "thread",
+        // C12.16: the demo community.
+        "ada",
+        "ben",
+        "cy",
+        "listing",
       ].sort(),
     );
     expect(
@@ -186,7 +191,7 @@ suite("deterministic demo scenarios", () => {
       ),
     ).toBe(true);
     expect((await db().select().from(invoices))[0]?.status).toBe("overdue");
-    expect((await db().select().from(products))[0]?.slug).toBe("freeholder-demo-print");
+    expect(await db().select().from(products).where(eq(products.slug, "freeholder-demo-print"))).toHaveLength(1);
 
     const again = await loadDemoScenario.call({ key: "seed.creator", locale: "en" }, OWNER);
     expect(again.action).toBe("unchanged");

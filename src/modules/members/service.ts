@@ -39,6 +39,7 @@ import profileServices from "./profile";
 import attachmentServices from "./attachments";
 import subscriptionServices from "./member-subscriptions";
 import memberServiceServices from "./member-services";
+import demoServices from "./demo";
 import { applyMemberStatus } from "./status";
 // Member export and erasure through the site's privacy requests (C12.15).
 import "./data-rights";
@@ -449,6 +450,7 @@ export default [
   ...attachmentServices,
   ...subscriptionServices,
   ...memberServiceServices,
+  ...demoServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

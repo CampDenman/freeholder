@@ -7714,5 +7714,6 @@
   "members.bookings.status.cancelled": "Cancelled",
   "members.bookings.bookTitle": "Book {name}",
   "members.bookings.minutes": "{minutes, plural, one {# minute} other {# minutes}}",
-  "members.bookings.book": "See times"
+  "members.bookings.book": "See times",
+  "demo.outcome.communityVisible": "The demo community’s members and posts are visible"
 }

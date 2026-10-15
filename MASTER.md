@@ -10565,9 +10565,28 @@ whatever is best for the people using the site.
   service sells or shares member data. **F09** N/A — runs inside the existing
   privacy request. **F12** the journey checks origins and reaches the
   privacy centre from member settings. Changeset `member-data-rights.md`.)*
-- [ ] **C12.16** Make it a starter: a new-site template and seeded demo
-  members, posts, listings and conversations; the playground shows the member
-  features; vibe-coding guides for Replit, Lovable and coding agents.
+- [x] **C12.16** Make it a starter: seeded demo members, posts, listings and
+  conversations; the playground shows the member features; vibe-coding guides
+  for Replit, Lovable and coding agents. A dedicated community new-site
+  preset is C12.31.
+  *(Evidence 2026-10-15: `src/modules/members/demo.ts` and
+  `src/modules/members/onboarding.ts` (the `members.demo-community` fixture in
+  the Creator and Everything scenarios), playground changes in
+  `src/core/demo/playground.ts` and `playground-policy.ts`,
+  `deploy/members-vibe-coding.md` (linked from `README.md` and `AGENTS.md`),
+  `tests/modules/member-demo.test.ts`, `tests/core/demo-scenarios.test.ts`.
+  **F04** Admin → Demo scenarios loads the community; it shows on `/feed`,
+  `/@demo_ada` and `/market`. **F05** `members.loadDemoFixture`,
+  `members.purgeDemoFixture`, `members.verifyDemoFixture`. **F07** three
+  marked `[Demo]` members on the reserved `demo.freeholder.test` domain, in
+  English, French or Spanish, with public and followers-only posts, follows,
+  a sealed conversation and a priced listing; purge removes exactly the
+  tracked records and their logins; the playground accepts these marked
+  members and gives its visitor read access to Members. **F09** N/A — loads
+  through the existing demo run. **F12** the module test loads the real
+  Everything scenario through `demo.load`, reads the feed, market and
+  conversation, and purges to nothing. Changeset
+  `member-demo-community.md`.)*
 - [ ] **C12.17** Prove the whole member journey end to end: two members join,
   follow and befriend, message, call each other in Chromium and Firefox, one
   buys a service from the other, the seller is paid out, both review, and a
@@ -10745,6 +10764,10 @@ whatever is best for the people using the site.
   journey has the owner allow it, an adult post adult content, a minor and a
   visitor never see it, and another adult see it only after opting in.
   Changeset `member-adult-content.md`.)*
+- [ ] **C12.31** Add a community new-site preset: Bench tokens, pages
+  (home around the feed, market, join), navigation and emails for a site
+  whose product is its members, installable from setup like the business
+  presets.
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
   preserving evidence and reporting through the legal path for the site's
