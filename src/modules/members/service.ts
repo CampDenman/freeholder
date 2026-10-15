@@ -37,11 +37,13 @@ import reportServices from "./reports";
 import policyServices from "./policy";
 import profileServices from "./profile";
 import attachmentServices from "./attachments";
+import subscriptionServices from "./member-subscriptions";
 import { applyMemberStatus } from "./status";
 // Member export and erasure through the site's privacy requests (C12.15).
 import "./data-rights";
 import { siteAllowsAdult } from "./adult";
 export { onOrderPaid, onRefundSucceeded } from "./payouts";
+export { onInvoicePaid } from "./member-subscriptions";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
 const RESERVED = new Set([
@@ -444,6 +446,7 @@ export default [
   ...policyServices,
   ...profileServices,
   ...attachmentServices,
+  ...subscriptionServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

@@ -415,13 +415,17 @@ export const memberPayoutAccounts = pgTable(
   (t) => [check("member_payout_accounts_status_valid", sql`${t.status} in ('pending','ready','disabled')`)],
 );
 
-/** §44.8: what the site owes each seller for each order line. */
+/**
+ * §44.8: what the site owes each seller, for one order line or (C12.05) one
+ * paid subscription invoice — exactly one of the two.
+ */
 export const memberPayouts = pgTable(
   "member_payouts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    orderId: uuid("order_id").notNull(),
-    orderItemId: uuid("order_item_id").notNull(),
+    orderId: uuid("order_id"),
+    orderItemId: uuid("order_item_id"),
+    invoiceId: uuid("invoice_id"),
     sellerId: uuid("seller_id").notNull().references(() => users.id, { onDelete: "restrict" }),
     currency: text("currency").notNull(),
     grossMinor: integer("gross_minor").notNull(),
@@ -438,6 +442,8 @@ export const memberPayouts = pgTable(
   },
   (t) => [
     uniqueIndex("member_payouts_order_item_idx").on(t.orderItemId),
+    uniqueIndex("member_payouts_invoice_idx").on(t.invoiceId).where(sql`${t.invoiceId} is not null`),
+    check("member_payouts_one_source", sql`(${t.orderItemId} is not null and ${t.orderId} is not null and ${t.invoiceId} is null) or (${t.orderItemId} is null and ${t.orderId} is null and ${t.invoiceId} is not null)`),
     index("member_payouts_seller_idx").on(t.sellerId, t.state),
     index("member_payouts_release_idx").on(t.state, t.releaseAt),
     check("member_payouts_state_valid", sql`${t.state} in ('held','due','paid','cancelled','review')`),

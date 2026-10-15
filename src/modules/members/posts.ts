@@ -11,6 +11,7 @@
 // feed query restates them in SQL so a page of posts is one query; the test
 // suite holds the two to the same answers.
 import { randomUUID } from "node:crypto";
+import { subscribesSql } from "./subscriber-check";
 import { z } from "zod";
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
@@ -335,14 +336,16 @@ export const homeFeed = defineService({
     const friends = sql`exists (select 1 from ${memberFriendships} m where m.status = 'accepted' and ((m.low_id = ${viewer} and m.high_id = ${memberPosts.authorId}) or (m.high_id = ${viewer} and m.low_id = ${memberPosts.authorId})))`;
     const blocked = sql`exists (select 1 from ${memberRelations} r where r.kind = 'block' and ((r.owner_id = ${viewer} and r.target_id = ${memberPosts.authorId}) or (r.owner_id = ${memberPosts.authorId} and r.target_id = ${viewer})))`;
     const muted = sql`exists (select 1 from ${memberRelations} r where r.kind = 'mute' and r.owner_id = ${viewer} and r.target_id = ${memberPosts.authorId})`;
+    const subscribed = subscribesSql(viewer, memberPosts.authorId);
     const others = and(
-      or(follows, friends),
+      or(follows, friends, subscribed),
       sql`not ${blocked}`,
       sql`not ${muted}`,
       or(
         eq(memberPosts.visibility, "public"),
         and(eq(memberPosts.visibility, "followers"), or(follows, friends)),
         and(eq(memberPosts.visibility, "friends"), friends),
+        and(eq(memberPosts.visibility, "subscribers"), subscribed),
       ),
     );
     const rows = await ctx.tx

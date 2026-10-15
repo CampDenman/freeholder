@@ -10,7 +10,7 @@
 // paying the seller or by cancelling the payout so the buyer is refunded.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { defineService, hasModuleAccess, ServiceError, type ServiceContext } from "@/core/service";
@@ -143,11 +143,12 @@ export const mySales = defineService({
     const orders = await ctx.tx
       .selectDistinct({ orderId: memberPayouts.orderId, createdAt: memberPayouts.createdAt })
       .from(memberPayouts)
-      .where(eq(memberPayouts.sellerId, sellerId))
+      // Subscription payouts have no order and appear under Payouts instead.
+      .where(and(eq(memberPayouts.sellerId, sellerId), isNotNull(memberPayouts.orderId)))
       .orderBy(desc(memberPayouts.createdAt))
       .limit(100);
     const out = [];
-    for (const o of [...new Map(orders.map((x) => [x.orderId, x])).values()]) out.push(await shape(ctx, o.orderId, sellerId));
+    for (const o of [...new Map(orders.map((x) => [x.orderId!, x])).values()]) out.push(await shape(ctx, o.orderId!, sellerId));
     return out;
   },
 });

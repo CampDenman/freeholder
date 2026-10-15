@@ -243,3 +243,18 @@ from mocked payment, mail or media runs alone.
 - Tests: `tests/modules/member-attachments.test.ts` (3 cases) and the C12.21
   journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
 
+## C12.05 — member subscriptions (2026-10-15)
+
+- Services in `src/modules/members/member-subscriptions.ts`; the members
+  module now requires `invoicing` and `subscriptions`, and listens to
+  `invoice.paid` to record subscription payouts.
+- A member plan is a `digital` product with `seller_user_id` and an active,
+  manually billed plan. Owners can switch a plan to card billing in Admin →
+  Subscriptions.
+- `subscriptions.publicPlans` without a seller lists only the site's own
+  plans; with `sellerUserId` it lists that member's.
+- Payouts are pre-tax (the site files the tax), less the site fee.
+- Tests: `tests/modules/member-subscriptions.test.ts` (2 cases) and the
+  C12.05 journey in `tests/browser/members.spec.ts`. Passed locally
+  2026-10-15.
+

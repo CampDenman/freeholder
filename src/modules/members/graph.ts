@@ -7,6 +7,7 @@
 // enforced in one place rather than remembered by each screen. Blocking is
 // symmetric for visibility: neither side can see or reach the other.
 import { avatarUrlFor } from "./profile";
+import { subscribes } from "./subscriber-check";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
@@ -101,7 +102,7 @@ export async function relationBetween(ctx: ServiceContext, viewerId: string | nu
           : "they_asked",
     muted: mine("mute"),
     restricted: mine("restrict"),
-    subscriber: false,
+    subscriber: await subscribes(ctx, viewerId, subjectId),
   };
 }
 

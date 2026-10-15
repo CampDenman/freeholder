@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.02 (MASTER.md §44.3): a member's profile, as this viewer may see it.
 import type { Metadata } from "next";
+import { randomUUID } from "node:crypto";
+import { joinMembershipAction } from "../../memberships/actions";
+import { memberPlans } from "@/modules/members/member-subscriptions";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
@@ -61,11 +64,12 @@ export default async function MemberProfile({
   const [{ handle }, query, t, locale, business] = await Promise.all([params, searchParams, getT(), getLocale(), currentBusiness()]);
   const { actor, profile } = await load(handle);
   const r = profile.relation;
-  const [posts, shop, reviews, sections] = await Promise.all([
+  const [posts, shop, reviews, sections, offers] = await Promise.all([
     postsBy.call({ handle: profile.handle }, actor),
     storefront.call({ handle: profile.handle }, actor),
     r.blocked ? null : reviewsFor.call({ handle: profile.handle }, actor),
     profileSections.call({ handle: profile.handle }, actor),
+    memberPlans.call({ handle: profile.handle }, actor),
   ]);
   const viewer = actor.kind === "user" ? await myMembership.call({}, actor) : null;
   const canAct = viewer?.status === "active" && !r.self;
@@ -130,6 +134,30 @@ export default async function MemberProfile({
           )}
         </div>
       ) : null}
+      {!r.self && !r.blocked && !offers.subscribed && offers.plans.length ? (
+        <section className="grid gap-3" aria-labelledby="subscribe">
+          <h2 id="subscribe" className="text-xl font-semibold">{t("members.plans.subscribeTitle", { name: profile.displayName })}</h2>
+          {(offers.plans as { id: string; name: string; description: string | null; currency: string; amountMinor: number; interval: string; intervalCount: number; termsHash: string; available: boolean }[]).map((plan) => (
+            <div key={plan.id} className="grid gap-2 rounded-lg border border-rule bg-surface p-4">
+              <p className="font-semibold">{plan.name}</p>
+              {plan.description ? <p className="text-sm text-ink-muted">{plan.description}</p> : null}
+              <p>{t("memberships.price", { amount: formatMoney(plan.amountMinor, plan.currency, locale), count: plan.intervalCount, interval: t(`memberships.interval.${plan.interval}`) })}</p>
+              {!plan.available ? <p className="text-sm text-ink-muted">{t("memberships.unavailable")}</p> : actor.kind !== "user" ? (
+                <a className="underline" href={`/portal/login?returnTo=${encodeURIComponent(`/@${profile.handle}`)}`}>{t("memberships.signIn")}</a>
+              ) : (
+                <form action={joinMembershipAction} className="grid gap-2">
+                  <input type="hidden" name="planId" value={plan.id} />
+                  <input type="hidden" name="termsHash" value={plan.termsHash} />
+                  <input type="hidden" name="requestKey" value={randomUUID()} />
+                  <label className="flex items-start gap-2"><input type="checkbox" name="acceptedTerms" value="yes" required /><span>{t("memberships.accept")}</span></label>
+                  <div><Button type="submit">{t("members.plans.subscribe")}</Button></div>
+                </form>
+              )}
+            </div>
+          ))}
+        </section>
+      ) : null}
+      {offers.subscribed && !r.self ? <p className="text-sm"><Pill tone="success">{t("members.plans.youSubscribe")}</Pill></p> : null}
       {sections.map((section) => (
         <section key={section.id} className="grid gap-3" aria-labelledby={`section-${section.id}`}>
           <h2 id={`section-${section.id}`} className="text-xl font-semibold">{section.title}</h2>

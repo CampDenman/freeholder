@@ -7,7 +7,8 @@ import { defineModule } from "@/core/module";
 export default defineModule({
   name: "members",
   version: "0.1.0",
-  requires: ["core", "catalog"],
+  // `subscriptions` and `invoicing` carry member subscriptions (C12.05).
+  requires: ["core", "catalog", "invoicing", "subscriptions"],
   tables: () => import("./tables"),
   services: () => import("./service"),
   jobs: () => import("./jobs"),
@@ -36,6 +37,7 @@ export default defineModule({
     listens: {
       "catalog.orderPaid": "onOrderPaid",
       "refund.succeeded": "onRefundSucceeded",
+      "invoice.paid": "onInvoicePaid",
     },
   },
 });

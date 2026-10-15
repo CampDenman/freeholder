@@ -7665,5 +7665,22 @@
   "members.notifications.quietInvalid": "Quiet hours need a different start and end time.",
   "members.attach.add": "Add photos or video",
   "members.attach.describe": "Describe it for people who can’t see it",
-  "members.attach.remove": "Remove"
+  "members.attach.remove": "Remove",
+  "members.notify.subscriptionPaid.title": "A subscriber paid",
+  "members.notify.subscriptionPaid.body": "A subscription payment came in. See what you are owed in Payouts.",
+  "members.plans.title": "Subscriptions",
+  "members.plans.intro": "Offer a paid subscription. Subscribers see your posts and profile sections set to “Subscribers”. You are paid like a sale, through Payouts.",
+  "members.plans.name": "Plan name",
+  "members.plans.every": "Billed every",
+  "members.plans.interval.month": "Month",
+  "members.plans.interval.year": "Year",
+  "members.plans.description": "What subscribers get (optional)",
+  "members.plans.create": "Offer this subscription",
+  "members.plans.subscribers": "{count, plural, one {# subscriber} other {# subscribers}}",
+  "members.plans.stop": "Stop offering",
+  "members.plans.offer": "Offer again",
+  "members.plans.subscribeTitle": "Subscribe to {name}",
+  "members.plans.subscribe": "Subscribe",
+  "members.plans.youSubscribe": "You subscribe",
+  "members.plans.price": "Price each period"
 }

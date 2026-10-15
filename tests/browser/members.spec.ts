@@ -10,9 +10,12 @@ import { users } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { THEME_COOKIE } from "@/core/design/theme";
-import { memberPayouts, memberPosts, memberProfiles, memberSaleFulfilments, memberSettings } from "@/modules/members/schema";
+import { memberPayoutAccounts, memberPayouts, memberPosts, memberProfiles, memberSaleFulfilments, memberSettings } from "@/modules/members/schema";
 import { contacts } from "@/core/contacts/schema";
 import { orderItems, orders, productVariants, products } from "@/modules/catalog/schema";
+import { invoices } from "@/modules/invoicing/schema";
+import { subscriptions } from "@/modules/subscriptions/schema";
+import { eq } from "drizzle-orm";
 import { seedC11Owner, useOwnerSession, C11_BASE_URL } from "./owner-session";
 
 const MEMBER_ID = "00000000-0000-4000-8000-0000000000d1";
@@ -260,7 +263,7 @@ test.describe("members (C12.01)", () => {
     await expect(page.getByRole("heading", { level: 1, name: "My listings" })).toBeVisible();
     await axeInBothThemes(page);
     await page.getByLabel("Title").fill("Harbour print");
-    await page.getByLabel("Price").fill("45");
+    await page.getByLabel("Price", { exact: true }).fill("45");
     await page.getByLabel(/I have read and accept the market policy/).check();
     await page.getByRole("button", { name: "Create listing" }).click();
     await expect(page.getByText("Waiting for review")).toBeVisible();
@@ -301,7 +304,7 @@ test.describe("members (C12.01)", () => {
     await page.goto("/portal/listings");
     await page.getByLabel("Title").fill("Harbour print download");
     await page.getByLabel("Type").selectOption("digital");
-    await page.getByLabel("Price").fill("45");
+    await page.getByLabel("Price", { exact: true }).fill("45");
     await page.getByLabel(/I have read and accept the market policy/).check();
     await page.getByRole("button", { name: "Create listing" }).click();
     await expect(page.getByText("Listed", { exact: true })).toBeVisible();
@@ -768,5 +771,62 @@ test.describe("members (C12.01)", () => {
     await expect(samPage.getByRole("button", { name: "Unfollow" })).toBeVisible();
     expect((await other.request.get(src!)).status()).toBe(200);
     for (const c of [context, visitor, other]) await c.close();
+  });
+
+  test("a member offers a subscription; a subscriber pays and sees subscriber-only posts (C12.05)", async ({ browser }) => {
+    await seedC11Owner("Subscriptions proof");
+    const SAM_ID = "00000000-0000-4000-8000-0000000000d9";
+    await db().insert(memberSettings).values({ id: 1, marketplaceEnabled: true, listingReview: false });
+    await db().insert(users).values([
+      { id: MEMBER_ID, email: "rae@example.test", role: "customer" },
+      { id: SAM_ID, email: "sam@example.test", role: "customer" },
+    ]);
+    await db().insert(memberProfiles).values([
+      { userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date(), isPrivate: false },
+      { userId: SAM_ID, handle: "sam", displayName: "Sam Ito", ageAttestedAt: new Date(), isPrivate: false },
+    ]);
+    await db().insert(contacts).values([
+      { email: "rae@example.test", name: "Rae Lane", userId: MEMBER_ID },
+      { email: "sam@example.test", name: "Sam Ito", userId: SAM_ID },
+    ]);
+    await db().insert(memberPayoutAccounts).values({ userId: MEMBER_ID, status: "ready", adapter: "manual" });
+    await db().insert(memberPosts).values({ authorId: MEMBER_ID, body: "Raw edit for subscribers", visibility: "subscribers" });
+    const [rae, sam] = await Promise.all([MEMBER_ID, SAM_ID].map((id) => db().transaction((tx) => createSession(tx, id))));
+
+    const seller = await browser.newContext({ baseURL: C11_BASE_URL });
+    await seller.addCookies([{ name: SESSION_COOKIE, value: rae!.token, url: C11_BASE_URL }]);
+    const sp = await seller.newPage();
+    await sp.goto("/portal/listings");
+    await sp.getByLabel("Plan name").fill("Behind the scenes");
+    await sp.locator("#plan-price").fill("5");
+    await sp.getByRole("button", { name: "Offer this subscription" }).click();
+    await expect(sp.getByText("Behind the scenes")).toBeVisible();
+    await axeInBothThemes(sp);
+
+    const buyer = await browser.newContext({ baseURL: C11_BASE_URL });
+    await buyer.addCookies([{ name: SESSION_COOKIE, value: sam!.token, url: C11_BASE_URL }]);
+    const bp = await buyer.newPage();
+    await bp.goto("/@rae");
+    await expect(bp.getByText("Raw edit for subscribers")).toHaveCount(0);
+    await expect(bp.getByRole("heading", { name: "Subscribe to Rae Lane" })).toBeVisible();
+    await axeInBothThemes(bp);
+    await bp.getByLabel(/I agree to this membership/).check();
+    await bp.getByRole("button", { name: "Subscribe", exact: true }).click();
+    await bp.waitForURL(/\/portal\/invoices\//);
+    const invoiceId = new URL(bp.url()).pathname.split("/").pop()!;
+
+    // Settling the first invoice and activating the signup are proven in
+    // tests/modules/member-subscriptions.test.ts; here the result is applied.
+    const [invoice] = await db().select().from(invoices).where(eq(invoices.id, invoiceId));
+    await db().update(invoices).set({ status: "paid", paidMinor: invoice!.totalMinor, paidAt: new Date() }).where(eq(invoices.id, invoiceId));
+    await db().update(subscriptions).set({ status: "active", signupPending: false, pausedAt: null }).where(eq(subscriptions.signupInvoiceId, invoiceId));
+
+    await bp.goto("/@rae");
+    await expect(bp.getByText("Raw edit for subscribers")).toBeVisible();
+    await expect(bp.getByText("You subscribe")).toBeVisible();
+    await sp.goto("/portal/listings");
+    await expect(sp.getByText("1 subscriber")).toBeVisible();
+    await seller.close();
+    await buyer.close();
   });
 });

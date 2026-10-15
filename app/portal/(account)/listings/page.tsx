@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.08 (MASTER.md §44.8): what a member sells.
 import type { Metadata } from "next";
+import { planAction } from "./plan-actions";
+import { myMemberPlans } from "@/modules/members/member-subscriptions";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
@@ -37,7 +39,7 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
       </div>
     );
   }
-  const [listings, policy] = await Promise.all([myListings.call({}, actor), marketPolicy.call({}, actor)]);
+  const [listings, policy, plans] = await Promise.all([myListings.call({}, actor), marketPolicy.call({}, actor), myMemberPlans.call({}, actor)]);
   return (
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold">{t("members.listings.title")}</h1>
@@ -106,6 +108,39 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
           ))}
         </ul>
       </section>
+      <Card>
+        <CardHeader title={t("members.plans.title")} />
+        <CardBody>
+          <p className="mb-3 text-sm text-ink-muted">{t("members.plans.intro")}</p>
+          <ul className="mb-4 grid gap-2">
+            {plans.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-rule p-3">
+                <span><strong>{p.name}</strong> · {t(`members.plans.interval.${p.interval}`)} · {t("members.plans.subscribers", { count: p.subscribers })}</span>
+                <form action={planAction}>
+                  <input type="hidden" name="planId" value={p.id} />
+                  <input type="hidden" name="verb" value={p.status === "active" ? "stop" : "offer"} />
+                  <Button type="submit" variant="quiet">{t(p.status === "active" ? "members.plans.stop" : "members.plans.offer")}</Button>
+                </form>
+              </li>
+            ))}
+          </ul>
+          <form action={planAction} className="grid gap-3">
+            <input type="hidden" name="verb" value="create" />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label={t("members.plans.name")} htmlFor="plan-name"><Input id="plan-name" name="name" required minLength={2} maxLength={80} /></Field>
+              <Field label={t("members.plans.price")} htmlFor="plan-price"><Input id="plan-price" name="price" required inputMode="decimal" pattern="\d{1,7}(\.\d{1,2})?" /></Field>
+              <Field label={t("members.plans.every")} htmlFor="plan-interval">
+                <Select id="plan-interval" name="interval" defaultValue="month">
+                  <option value="month">{t("members.plans.interval.month")}</option>
+                  <option value="year">{t("members.plans.interval.year")}</option>
+                </Select>
+              </Field>
+            </div>
+            <Field label={t("members.plans.description")} htmlFor="plan-description"><Input id="plan-description" name="description" maxLength={500} /></Field>
+            <div><Button type="submit">{t("members.plans.create")}</Button></div>
+          </form>
+        </CardBody>
+      </Card>
     </div>
   );
 }

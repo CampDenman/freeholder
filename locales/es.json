@@ -7665,5 +7665,22 @@
   "members.notifications.quietInvalid": "Las horas de silencio necesitan un inicio y un fin distintos.",
   "members.attach.add": "Añadir fotos o vídeo",
   "members.attach.describe": "Descríbela para quien no puede verla",
-  "members.attach.remove": "Quitar"
+  "members.attach.remove": "Quitar",
+  "members.notify.subscriptionPaid.title": "Un suscriptor ha pagado",
+  "members.notify.subscriptionPaid.body": "Ha llegado un pago de suscripción. Consulta lo que se te debe en Pagos.",
+  "members.plans.title": "Suscripciones",
+  "members.plans.intro": "Ofrece una suscripción de pago. Los suscriptores ven tus publicaciones y secciones del perfil configuradas como «Suscriptores». Cobras como en una venta, mediante Pagos.",
+  "members.plans.name": "Nombre del plan",
+  "members.plans.every": "Se cobra cada",
+  "members.plans.interval.month": "Mes",
+  "members.plans.interval.year": "Año",
+  "members.plans.description": "Qué reciben los suscriptores (opcional)",
+  "members.plans.create": "Ofrecer esta suscripción",
+  "members.plans.subscribers": "{count, plural, one {# suscriptor} other {# suscriptores}}",
+  "members.plans.stop": "Dejar de ofrecer",
+  "members.plans.offer": "Volver a ofrecer",
+  "members.plans.subscribeTitle": "Suscribirse a {name}",
+  "members.plans.subscribe": "Suscribirse",
+  "members.plans.youSubscribe": "Estás suscrito",
+  "members.plans.price": "Precio por periodo"
 }
