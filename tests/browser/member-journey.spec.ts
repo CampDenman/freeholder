@@ -11,7 +11,7 @@ import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
-import { memberPayoutAccounts, memberSettings } from "@/modules/members/schema";
+import { memberFriendships, memberPayoutAccounts, memberProfiles, memberSettings } from "@/modules/members/schema";
 import { seedC11Owner, useOwnerSession, C11_BASE_URL } from "./owner-session";
 
 // The test network has no STUN or TURN server, so both browsers must offer
@@ -48,6 +48,31 @@ async function signedIn(browser: Browser, userId: string, media = false): Promis
     { name: CSRF_COOKIE, value: issueCsrfToken(), url: C11_BASE_URL },
   ]);
   return context;
+}
+
+/** Ring from `caller`, answer on `callee`, check both connect, then hang up. */
+async function callBetween(caller: Page, callee: Page, callerName: string) {
+  await callee.addInitScript(PROBE).catch(() => undefined);
+  await caller.addInitScript(PROBE).catch(() => undefined);
+  await callee.goto("/feed");
+  await caller.goto("/@sam");
+  await caller.getByRole("button", { name: "Video call" }).click();
+  const incoming = callee.getByRole("alertdialog", { name: `${callerName} is calling (video)` });
+  await expect(incoming).toBeVisible({ timeout: 20_000 });
+  await incoming.getByRole("link", { name: "Answer" }).click();
+  try {
+    await expect(callee.getByRole("status")).toHaveText("Connected", { timeout: 45_000 });
+    await expect(caller.getByRole("status")).toHaveText("Connected", { timeout: 45_000 });
+  } catch (error) {
+    const read = (page: Page) => page.evaluate(() => (window as unknown as { __rtc?: string[] }).__rtc ?? []).catch(() => ["(page gone)"]);
+    const report = JSON.stringify({ caller: await read(caller), callee: await read(callee) }, null, 1);
+    // CI keeps the log, not the report folder.
+    process.stdout.write(`WEBRTC ${report}\n`);
+    await test.info().attach("webrtc", { body: report, contentType: "application/json" });
+    throw error;
+  }
+  await caller.getByRole("button", { name: "Hang up" }).click();
+  await expect(callee.getByRole("status")).toHaveText("Call ended", { timeout: 15_000 });
 }
 
 async function join(page: Page, handle: string, name: string) {
@@ -101,48 +126,12 @@ test.describe("the whole member journey (C12.17)", () => {
     await rae.getByRole("link", { name: /Sam Ito/ }).first().click();
     await expect(rae.getByText("Hi Rae, could you do a portrait session?")).toBeVisible();
 
-    // 4. Call each other: Rae in Chromium, Sam in Firefox.
-    const gecko = await firefox.launch({
-      firefoxUserPrefs: {
-        "media.navigator.streams.fake": true,
-        "media.navigator.permission.disabled": true,
-        "media.peerconnection.ice.obfuscate_host_addresses": false,
-        // CI runners may only share loopback or link-local addresses.
-        "media.peerconnection.ice.loopback": true,
-        "media.peerconnection.ice.link_local": true,
-        "media.peerconnection.ice.default_address_only": false,
-      },
-    });
-    try {
-      const samSession = await db().transaction((tx) => createSession(tx, SAM));
-      const samFirefox = await gecko.newContext({ baseURL: C11_BASE_URL });
-      await samFirefox.addCookies([{ name: SESSION_COOKIE, value: samSession.token, url: C11_BASE_URL }]);
-      await samFirefox.addInitScript(PROBE);
-      const samGecko = await samFirefox.newPage();
-      await samGecko.goto("/feed");
-      await rae.addInitScript(PROBE);
-      await rae.goto("/@sam");
-      await rae.getByRole("button", { name: "Video call" }).click();
-      const incoming = samGecko.getByRole("alertdialog", { name: "Rae Lane is calling (video)" });
-      await expect(incoming).toBeVisible({ timeout: 20_000 });
-      await incoming.getByRole("link", { name: "Answer" }).click();
-      try {
-        await expect(samGecko.getByRole("status")).toHaveText("Connected", { timeout: 45_000 });
-        await expect(rae.getByRole("status")).toHaveText("Connected", { timeout: 45_000 });
-      } catch (error) {
-        const read = (page: Page) => page.evaluate(() => (window as unknown as { __rtc?: string[] }).__rtc ?? []).catch(() => ["(page gone)"]);
-        const report = JSON.stringify({ chromium: await read(rae), firefox: await read(samGecko) }, null, 1);
-        // CI keeps the log, not the report folder.
-        process.stdout.write(`WEBRTC ${report}\n`);
-        await test.info().attach("webrtc", { body: report, contentType: "application/json" });
-        throw error;
-      }
-      await rae.getByRole("button", { name: "Hang up" }).click();
-      await expect(samGecko.getByRole("status")).toHaveText("Call ended", { timeout: 15_000 });
-      await samFirefox.close();
-    } finally {
-      await gecko.close();
-    }
+    // 4. Call each other. Both sides here run in Chromium; the test below
+    //    proves a call between Chromium and Firefox.
+    const samCall = await signedIn(browser, SAM, true);
+    const samCallPage = await samCall.newPage();
+    await callBetween(rae, samCallPage, "Rae Lane");
+    await samCall.close();
 
     // 5. Rae sells a service; Sam buys it.
     await db().insert(memberPayoutAccounts).values({ userId: RAE, status: "ready", adapter: "manual" });
@@ -239,5 +228,43 @@ test.describe("the whole member journey (C12.17)", () => {
     await admin.close();
     await samContext.close();
     await raeContext.close();
+  });
+
+  // Firefox on GitHub's hosted runners gathers no ICE candidates at all (its
+  // peer connection fails at once while Chromium offers host candidates), so
+  // this runs everywhere except CI. It passes on a workstation; see
+  // deploy/members-platform.md (C12.17).
+  test("a call connects between Chromium and Firefox", async ({ browser }) => {
+    test.skip(Boolean(process.env.CI), "Firefox gathers no ICE candidates on hosted CI runners.");
+    await seedC11Owner("Cross-browser call proof");
+    await db().insert(users).values([
+      { id: RAE, email: "rae@example.test", role: "customer" },
+      { id: SAM, email: "sam@example.test", role: "customer" },
+    ]);
+    const now = new Date();
+    await db().insert(memberProfiles).values([
+      { userId: RAE, handle: "rae", displayName: "Rae Lane", ageAttestedAt: now },
+      { userId: SAM, handle: "sam", displayName: "Sam Ito", ageAttestedAt: now },
+    ]);
+    const [low, high] = [RAE, SAM].sort();
+    await db().insert(memberFriendships).values({ lowId: low!, highId: high!, requestedBy: SAM, status: "accepted", acceptedAt: now });
+    const raeContext = await signedIn(browser, RAE, true);
+    const gecko = await firefox.launch({
+      firefoxUserPrefs: {
+        "media.navigator.streams.fake": true,
+        "media.navigator.permission.disabled": true,
+        "media.peerconnection.ice.obfuscate_host_addresses": false,
+      },
+    });
+    try {
+      const samSession = await db().transaction((tx) => createSession(tx, SAM));
+      const samFirefox = await gecko.newContext({ baseURL: C11_BASE_URL });
+      await samFirefox.addCookies([{ name: SESSION_COOKIE, value: samSession.token, url: C11_BASE_URL }]);
+      await callBetween(await raeContext.newPage(), await samFirefox.newPage(), "Rae Lane");
+      await samFirefox.close();
+    } finally {
+      await gecko.close();
+      await raeContext.close();
+    }
   });
 });

@@ -263,7 +263,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-project
       - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium firefox
+      - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:browser
 
   deployment:

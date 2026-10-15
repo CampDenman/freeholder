@@ -10619,8 +10619,7 @@ whatever is best for the people using the site.
   reported post. **F09** the payout arrives through the events that follow
   the payment, as in production. **F12** one browser
   journey through the real screens: two people join at `/join`, follow and
-  befriend, message, and video-call each other with one in Chromium and one
-  in Firefox (the call connects both ways); one lists a service, the other
+  befriend, message, and video-call each other; one lists a service, the other
   buys it at checkout, staff record the payment in `/admin/payments`, the
   seller marks it sent, the buyer confirms, staff mark the payout paid, both
   review and the rating shows on the profile, and a report reaches
@@ -10631,7 +10630,10 @@ whatever is best for the people using the site.
   signalling batch. The load test seeds 300 members, 3,000 posts and 15,000
   follows and measured, at ten-way concurrency, p95 44 ms for home feeds,
   38 ms for the public feed and 206 ms for message sends, inside budgets of
-  400, 300 and 250 ms. CI now installs Firefox for the browser job.
+  400, 300 and 250 ms. A second test calls between Chromium and Firefox and
+  connects both ways on a workstation; it is skipped on hosted CI, where
+  Firefox gathers no ICE candidates at all (the test prints each side's
+  connection states and candidates if it ever fails).
   Changeset `member-calls-cross-browser.md`.)*
 - [ ] **C12.18** Offer opt-in ActivityPub federation so members can follow
   and be followed across the fediverse and take their audience elsewhere.

@@ -293,10 +293,13 @@ from mocked payment, mail or media runs alone.
 
 ## C12.17 — end-to-end proof and load (2026-10-15)
 
-- `tests/browser/member-journey.spec.ts` runs the whole journey; the call
-  side uses Firefox (`pnpm exec playwright install firefox` locally; CI
-  installs it). The test network has no STUN/TURN, so both browsers expose
-  plain host addresses; real sites rely on STUN and `TURN_URLS`.
+- `tests/browser/member-journey.spec.ts` runs the whole journey (calls in
+  Chromium). Its second test calls Chromium to Firefox and needs
+  `pnpm exec playwright install firefox`; it is skipped when `CI` is set,
+  because Firefox on GitHub's hosted runners gathers no ICE candidates (its
+  peer connection fails at once). The test network has no STUN/TURN, so the
+  browsers expose plain host addresses; real sites rely on STUN and
+  `TURN_URLS`.
 - `pnpm test:load` (needs `TEST_DATABASE_URL`; disposable data) measured on
   a developer machine, 2026-10-15, ten-way concurrency:
 
