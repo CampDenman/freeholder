@@ -33,11 +33,8 @@ import listingServices from "./listings";
 import payoutServices, { payoutAdapters } from "./payouts";
 import protectionServices from "./protection";
 import reputationServices from "./reputation";
-<<<<<<< HEAD
 import reportServices from "./reports";
 import { applyMemberStatus } from "./status";
-=======
->>>>>>> origin/main
 export { onOrderPaid, onRefundSucceeded } from "./payouts";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
@@ -421,10 +418,7 @@ export default [
   ...payoutServices,
   ...protectionServices,
   ...reputationServices,
-<<<<<<< HEAD
   ...reportServices,
-=======
->>>>>>> origin/main
   membershipRules,
   updateMembershipRules,
   handleAvailability,
