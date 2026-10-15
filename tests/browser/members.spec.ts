@@ -260,6 +260,7 @@ test.describe("members (C12.01)", () => {
     await axeInBothThemes(page);
     await page.getByLabel("Title").fill("Harbour print");
     await page.getByLabel("Price").fill("45");
+    await page.getByLabel(/I have read and accept the market policy/).check();
     await page.getByRole("button", { name: "Create listing" }).click();
     await expect(page.getByText("Waiting for review")).toBeVisible();
 
@@ -300,6 +301,7 @@ test.describe("members (C12.01)", () => {
     await page.getByLabel("Title").fill("Harbour print download");
     await page.getByLabel("Type").selectOption("digital");
     await page.getByLabel("Price").fill("45");
+    await page.getByLabel(/I have read and accept the market policy/).check();
     await page.getByRole("button", { name: "Create listing" }).click();
     await expect(page.getByText("Listed", { exact: true })).toBeVisible();
 
@@ -550,5 +552,41 @@ test.describe("members (C12.01)", () => {
     await anon.goto("/feed?view=latest");
     await expect(anon.getByText("Late-night figure study")).toHaveCount(0);
     for (const context of [admin, adaContext, deeContext, benContext, visitor]) await context.close();
+  });
+
+  test("the prohibited-items policy, published by the site and accepted by sellers (C12.28)", async ({ browser }) => {
+    const ownerToken = await seedC11Owner("Policy proof");
+    await db().insert(memberSettings).values({ id: 1, marketplaceEnabled: true, listingReview: false });
+    await db().insert(users).values({ id: MEMBER_ID, email: "rae@example.test", role: "customer" });
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date(), marketPolicyAccepted: 1 });
+    const rae = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+
+    const visitor = await browser.newContext({ baseURL: C11_BASE_URL });
+    const anon = await visitor.newPage();
+    await anon.goto("/market");
+    await anon.getByRole("link", { name: "What you can’t sell here" }).click();
+    await expect(anon.getByRole("heading", { level: 1, name: "What you can’t sell here" })).toBeVisible();
+    await expect(anon.getByText(/Weapons, ammunition/)).toBeVisible();
+    await axeInBothThemes(anon);
+
+    const seller = await browser.newContext({ baseURL: C11_BASE_URL });
+    await seller.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
+    const page = await seller.newPage();
+    await page.goto("/portal/listings");
+    await expect(page.getByLabel(/accept the market policy/)).toHaveCount(0);
+
+    const admin = await browser.newContext({ baseURL: C11_BASE_URL });
+    await useOwnerSession(admin, ownerToken);
+    const console = await admin.newPage();
+    await console.goto("/admin/members");
+    await console.getByLabel("What members may not sell").fill("No weapons. No live animals. Handmade goods only.");
+    await console.getByRole("button", { name: "Publish policy" }).click();
+    await expect(console.getByText("Saved.")).toBeVisible();
+
+    await anon.reload();
+    await expect(anon.getByText("No weapons. No live animals. Handmade goods only.")).toBeVisible();
+    await page.reload();
+    await expect(page.getByLabel(/The market policy has changed/)).toBeVisible();
+    for (const context of [visitor, seller, admin]) await context.close();
   });
 });

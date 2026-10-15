@@ -34,6 +34,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
         <>
           {query.error ? <Callout tone="danger">{t(query.error === "not_found" ? "members.report.gone" : "members.report.failed")}</Callout> : null}
           <p className="text-ink-muted">{t("members.report.intro")}</p>
+          {type === "listing" ? <p className="text-sm"><a className="underline" href="/market/policy">{t("members.policy.link")}</a></p> : null}
           <form action={reportAction} className="grid gap-4">
             <input type="hidden" name="type" value={type} />
             <input type="hidden" name="id" value={query.id} />

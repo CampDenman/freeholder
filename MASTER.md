@@ -10561,9 +10561,23 @@ whatever is best for the people using the site.
 - [ ] **C12.27** Add marketplace payout adapters for providers other than
   Stripe (for example PayPal, Adyen for Platforms, Mollie), selectable by the
   site owner without code changes.
-- [ ] **C12.28** Publish a prohibited-items policy: the site owner edits it
+- [x] **C12.28** Publish a prohibited-items policy: the site owner edits it
   under Admin → Members, it is public at `/market/policy`, sellers accept it
   before listing, and the report queue offers it as a reason.
+  *(Evidence 2026-10-14: `src/modules/members/policy.ts`, migration
+  `db/migrations/0036_member_market_policy.sql`,
+  `tests/modules/member-listings.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** `/market/policy` (linked from `/market` and the listing report
+  page), the acceptance checkbox on `/portal/listings`, and the editor on
+  `/admin/members`. **F05** `members.marketPolicy`,
+  `members.updateMarketPolicy`, and `acceptPolicy` on
+  `members.createListing`. **F07** a starter policy applies until the owner
+  writes one; every published change is a new version; a seller must accept
+  the current version before listing, again after each change; only staff
+  publish; "something that is not allowed to be sold" is a report reason.
+  **F09** N/A — no background work. **F12** the browser journey reads the
+  starter policy, publishes a custom one, and shows the seller the changed
+  policy to accept. Changeset `member-market-policy.md`.)*
 - [x] **C12.29** Make adult content opt-in for adults and never shown to
   minors: members mark posts and listings as adult, adults opt in to see
   them, and minors and visitors never receive them from any service.

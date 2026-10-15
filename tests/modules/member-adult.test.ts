@@ -94,9 +94,9 @@ describe.runIf(hasDatabase)("adult content (C12.29)", () => {
   it("keeps adult listings out of the market and product pages for anyone not opted in", async () => {
     await updateMembershipRules.call({ adultContent: true, marketplaceEnabled: true, listingReview: false }, OWNER);
     await updateMyMembership.call({ showAdult: true }, BEN);
-    expect((await failure(createListing.call({ title: "Boudoir session", kind: "service", price: "200", adult: true }, DEE))).code).toBe("permission");
-    const listing = await createListing.call({ title: "Boudoir session", kind: "service", price: "200", adult: true }, ADA);
-    await createListing.call({ title: "Portrait session", kind: "service", price: "150" }, ADA);
+    expect((await failure(createListing.call({ acceptPolicy: true, title: "Boudoir session", kind: "service", price: "200", adult: true }, DEE))).code).toBe("permission");
+    const listing = await createListing.call({ acceptPolicy: true, title: "Boudoir session", kind: "service", price: "200", adult: true }, ADA);
+    await createListing.call({ acceptPolicy: true, title: "Portrait session", kind: "service", price: "150" }, ADA);
     const names = async (actor: Actor) => (await marketListings.call({}, actor)).map((l) => l.name).sort();
     expect(await names(BEN)).toEqual(["Boudoir session", "Portrait session"]);
     expect(await names(ADA)).toEqual(["Boudoir session", "Portrait session"]);

@@ -165,3 +165,14 @@ from mocked payment, mail or media runs alone.
 - Tests: `tests/modules/member-adult.test.ts` (4 cases) and the C12.29
   journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
 
+## C12.28 — prohibited-items policy (2026-10-14)
+
+- Services in `src/modules/members/policy.ts`; the public page is
+  `/market/policy`; the editor is on `/admin/members`.
+- An empty policy means the starter list in the locale catalogs. Each
+  published change bumps `member_settings.market_policy_version`, and
+  `members.createListing` refuses until the seller accepts the current one.
+- Tests: the C12.28 case in `tests/modules/member-listings.test.ts` and the
+  C12.28 journey in `tests/browser/members.spec.ts`. Passed locally
+  2026-10-14.
+

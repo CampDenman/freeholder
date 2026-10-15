@@ -253,6 +253,13 @@
       "when": 1793310000015,
       "tag": "0035_member_adult_content",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793310000016,
+      "tag": "0036_member_market_policy",
+      "breakpoints": true
     }
   ]
 }

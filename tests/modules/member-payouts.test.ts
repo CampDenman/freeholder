@@ -57,8 +57,8 @@ describe.runIf(hasDatabase)("member payouts (C12.09)", () => {
   afterAll(closeDb);
 
   it("refuses unpayable sellers, records shares less the fee, releases and pays", async () => {
-    const print = await createListing.call({ title: "Harbour print (download)", kind: "digital", price: "40" }, RAE);
-    const lesson = await createListing.call({ title: "Lesson", kind: "service", price: "100" }, SAM);
+    const print = await createListing.call({ acceptPolicy: true, title: "Harbour print (download)", kind: "digital", price: "40" }, RAE);
+    const lesson = await createListing.call({ acceptPolicy: true, title: "Lesson", kind: "service", price: "100" }, SAM);
     const { contact: buyer } = await resolveContact.call({ email: "buyer@example.test", name: "Buyer" }, OWNER);
     const cart = await getOrCreateCart.call({ currency: "CAD", contactId: buyer.id }, OWNER);
     const add = (variantId: string) => addCartItem.call({ cartId: cart.cart.id, cartToken: cart.cart.token ?? undefined, variantId }, ANONYMOUS);
@@ -106,7 +106,7 @@ describe.runIf(hasDatabase)("member payouts (C12.09)", () => {
     expect((await failure(updateMembershipRules.call({ payoutModel: "seller_merchant" }, OWNER))).code).toBe("validation");
     expect((await failure(updateMembershipRules.call({ payoutAdapter: "nonexistent" }, OWNER))).code).toBe("validation");
     expect((await updateMembershipRules.call({ payoutModel: "instant" }, OWNER)).payoutModel).toBe("instant");
-    const print = await createListing.call({ title: "Print (download)", kind: "digital", price: "20" }, RAE);
+    const print = await createListing.call({ acceptPolicy: true, title: "Print (download)", kind: "digital", price: "20" }, RAE);
     await savePayoutInstructions.call({ instructions: "Interac e-transfer" }, RAE);
     await setPayoutAccountStatus.call({ userId: RAE.userId, status: "ready" }, OWNER);
     const { contact: buyer } = await resolveContact.call({ email: "buyer@example.test", name: "Buyer" }, OWNER);

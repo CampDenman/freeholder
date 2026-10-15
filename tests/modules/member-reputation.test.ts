@@ -29,7 +29,7 @@ const BUYER = { ...CUSTOMER, userId: "00000000-0000-4000-8000-0000000000c2" };
 const OTHER = { ...CUSTOMER, userId: "00000000-0000-4000-8000-0000000000c3" };
 
 async function buy(title: string) {
-  const listing = await createListing.call({ title, kind: "digital", price: "50" }, SELLER);
+  const listing = await createListing.call({ acceptPolicy: true, title, kind: "digital", price: "50" }, SELLER);
   const variantId = (await getProductVariants.call({ productId: listing.productId }, OWNER)).variants[0]!.id;
   const [buyerContact] = await db().select().from(contacts).where(eq(contacts.userId, BUYER.userId));
   const cart = await getOrCreateCart.call({ currency: "CAD", contactId: buyerContact!.id }, OWNER);
