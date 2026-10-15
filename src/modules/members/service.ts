@@ -35,6 +35,7 @@ import protectionServices from "./protection";
 import reputationServices from "./reputation";
 import reportServices from "./reports";
 import policyServices from "./policy";
+import profileServices from "./profile";
 import { applyMemberStatus } from "./status";
 // Member export and erasure through the site's privacy requests (C12.15).
 import "./data-rights";
@@ -440,6 +441,7 @@ export default [
   ...reputationServices,
   ...reportServices,
   ...policyServices,
+  ...profileServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

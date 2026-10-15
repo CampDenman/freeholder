@@ -10,8 +10,10 @@ import { sql } from "drizzle-orm";
 import { boolean, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/core/auth/schema";
 import { products } from "@/modules/catalog/schema";
+import { assets } from "@/core/media/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import { REPORT_REASONS, REPORT_TARGETS } from "./report-kinds";
+import { PROFILE_SECTION_KINDS } from "./profile-kinds";
 
 export const MEMBER_STATUSES = ["active", "pending", "suspended"] as const;
 export const JOIN_POLICIES = ["open", "approval", "invite"] as const;
@@ -54,6 +56,8 @@ export const memberProfiles = pgTable(
     showAdult: boolean("show_adult").notNull().default(false),
     /** C12.28: the market policy version this member accepted before listing. */
     marketPolicyAccepted: integer("market_policy_accepted"),
+    /** C12.20: the member's chosen picture, an image they uploaded. */
+    avatarAssetId: uuid("avatar_asset_id").references(() => assets.id, { onDelete: "set null" }),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -569,6 +573,37 @@ export const memberReports = pgTable(
     check("member_reports_target_valid", sql`${t.targetType} in ('post','comment','message','listing','review','member')`),
     check("member_reports_state_valid", sql`${t.state} in ('open','actioned','dismissed')`),
     check("member_reports_details_length", sql`char_length(${t.details}) <= 2000`),
+  ],
+);
+
+export { PROFILE_SECTION_KINDS } from "./profile-kinds";
+
+/**
+ * §44.3 (C12.20): optional sections on a profile — a portfolio of images, the
+ * services a member offers, pinned posts, or free text — each with its own
+ * visibility.
+ */
+export const memberProfileSections = pgTable(
+  "member_profile_sections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: PROFILE_SECTION_KINDS }).notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull().default(""),
+    /** Post ids for a pinned section, asset ids for a portfolio. */
+    items: jsonb("items").$type<string[]>().notNull().default([]),
+    visibility: text("visibility", { enum: VISIBILITIES }).notNull().default("public"),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("member_profile_sections_user_idx").on(t.userId, t.position),
+    check("member_profile_sections_kind_valid", sql`${t.kind} in ('text','portfolio','services','pinned')`),
+    check("member_profile_sections_visibility_valid", sql`${t.visibility} in ('public','followers','friends','subscribers','only_me')`),
+    check("member_profile_sections_title_length", sql`char_length(${t.title}) between 1 and 80`),
+    check("member_profile_sections_body_length", sql`char_length(${t.body}) <= 5000`),
   ],
 );
 

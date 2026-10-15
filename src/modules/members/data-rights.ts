@@ -45,6 +45,7 @@ import {
   memberPayouts,
   memberPosts,
   memberProfiles,
+  memberProfileSections,
   memberReactions,
   memberRelations,
   memberReports,
@@ -83,6 +84,7 @@ async function exportMember(tx: Tx, userId: string) {
   const now = new Date();
   return {
     profile,
+    profileSections: await tx.select().from(memberProfileSections).where(eq(memberProfileSections.userId, userId)),
     posts: await tx.select().from(memberPosts).where(eq(memberPosts.authorId, userId)),
     comments: await tx.select().from(memberComments).where(eq(memberComments.authorId, userId)),
     reactions: await tx.select().from(memberReactions).where(eq(memberReactions.userId, userId)),
@@ -160,6 +162,7 @@ async function eraseMember(tx: Tx, userId: string): Promise<number> {
   count(await tx.delete(memberFriendships).where(or(eq(memberFriendships.lowId, userId), eq(memberFriendships.highId, userId))).returning());
   count(await tx.delete(memberRelations).where(or(eq(memberRelations.ownerId, userId), eq(memberRelations.targetId, userId))).returning());
   count(await tx.delete(memberCalls).where(or(eq(memberCalls.callerId, userId), eq(memberCalls.calleeId, userId))).returning({ id: memberCalls.id }));
+  count(await tx.delete(memberProfileSections).where(eq(memberProfileSections.userId, userId)).returning({ id: memberProfileSections.id }));
   count(await tx.delete(memberListings).where(eq(memberListings.sellerId, userId)).returning({ productId: memberListings.productId }));
   if (profile) count(await tx.delete(memberProfiles).where(eq(memberProfiles.userId, userId)).returning({ userId: memberProfiles.userId }));
   return affected;
@@ -169,6 +172,7 @@ registerContactPrivacySource({
   scope: "members",
   tables: [
     "member_profiles",
+    "member_profile_sections",
     "member_follows",
     "member_friendships",
     "member_relations",

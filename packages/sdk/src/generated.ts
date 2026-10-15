@@ -982,6 +982,7 @@ export const SERVICE_NAMES = [
   "members.createListing",
   "members.deleteComment",
   "members.deletePost",
+  "members.deleteProfileSection",
   "members.disputes",
   "members.editPost",
   "members.endCall",
@@ -1010,10 +1011,12 @@ export const SERVICE_NAMES = [
   "members.payouts",
   "members.pendingListings",
   "members.pendingTags",
+  "members.pinPost",
   "members.post",
   "members.postSaleMessage",
   "members.postsBy",
   "members.profile",
+  "members.profileSections",
   "members.react",
   "members.replyToReview",
   "members.report",
@@ -1026,7 +1029,9 @@ export const SERVICE_NAMES = [
   "members.saleReviews",
   "members.saleThread",
   "members.savePayoutInstructions",
+  "members.saveProfileSection",
   "members.sendMessage",
+  "members.setAvatar",
   "members.setPayoutAccountStatus",
   "members.setRelation",
   "members.setStatus",
@@ -5396,6 +5401,10 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { ok: true };
   };
+  "members.deleteProfileSection": {
+    input: { id: string };
+    output: { ok: true };
+  };
   "members.disputes": {
     input: { state?: "open" | "released" | "refunded" | "withdrawn" };
     output: { id: string; orderId: string; sellerId: string; sellerHandle: string; reason: string; state: string; createdAt: string; [key: string]: unknown }[];
@@ -5508,6 +5517,10 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { mentionId: string; post: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }; [key: string]: unknown }[];
   };
+  "members.pinPost": {
+    input: { postId: string; pinned: boolean };
+    output: { ok: true };
+  };
   "members.post": {
     input: { body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; repostOf?: string; tag?: string[]; adult?: boolean };
     output: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown };
@@ -5522,7 +5535,11 @@ export interface ServiceCatalog {
   };
   "members.profile": {
     input: { handle: string };
-    output: { userId: string; handle: string; displayName: string; isPrivate: boolean; indexable: boolean; bio: string | null; links: { label: string; url: string }[] | null; followers: number; following: number; friends: number; relation: { self: boolean; blocked: boolean; youBlocked: boolean; following: "none" | "requested" | "active"; followsYou: boolean; friend: "none" | "you_asked" | "they_asked" | "friends"; muted: boolean; restricted: boolean; subscriber: boolean }; [key: string]: unknown };
+    output: { userId: string; handle: string; displayName: string; isPrivate: boolean; indexable: boolean; bio: string | null; links: { label: string; url: string }[] | null; followers: number; following: number; friends: number; avatarUrl: string | null; relation: { self: boolean; blocked: boolean; youBlocked: boolean; following: "none" | "requested" | "active"; followsYou: boolean; friend: "none" | "you_asked" | "they_asked" | "friends"; muted: boolean; restricted: boolean; subscriber: boolean }; [key: string]: unknown };
+  };
+  "members.profileSections": {
+    input: { handle: string };
+    output: { id: string; kind: "text" | "portfolio" | "services" | "pinned"; title: string; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; images: { id: string; url: string; altText: string | null; [key: string]: unknown }[]; posts: { id: string; body: string; createdAt: string; [key: string]: unknown }[]; [key: string]: unknown }[];
   };
   "members.react": {
     input: { postId: string; kind: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null };
@@ -5572,9 +5589,17 @@ export interface ServiceCatalog {
     input: { instructions: string };
     output: { ok: true };
   };
+  "members.saveProfileSection": {
+    input: { id?: string; kind: "text" | "portfolio" | "services" | "pinned"; title: string; body?: string; items?: string[]; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; position?: number };
+    output: { id: string };
+  };
   "members.sendMessage": {
     input: { conversationId: string; body: string };
     output: { id: string };
+  };
+  "members.setAvatar": {
+    input: { assetId: string | null };
+    output: { avatarUrl: string | null };
   };
   "members.setPayoutAccountStatus": {
     input: { userId: string; status: "ready" | "disabled" | "pending" };
@@ -8472,6 +8497,7 @@ export interface FreeholderApi {
     createListing: (input: ServiceCatalog["members.createListing"]["input"]) => Promise<ServiceCatalog["members.createListing"]["output"]>;
     deleteComment: (input: ServiceCatalog["members.deleteComment"]["input"]) => Promise<ServiceCatalog["members.deleteComment"]["output"]>;
     deletePost: (input: ServiceCatalog["members.deletePost"]["input"]) => Promise<ServiceCatalog["members.deletePost"]["output"]>;
+    deleteProfileSection: (input: ServiceCatalog["members.deleteProfileSection"]["input"]) => Promise<ServiceCatalog["members.deleteProfileSection"]["output"]>;
     disputes: (input?: ServiceCatalog["members.disputes"]["input"]) => Promise<ServiceCatalog["members.disputes"]["output"]>;
     editPost: (input: ServiceCatalog["members.editPost"]["input"]) => Promise<ServiceCatalog["members.editPost"]["output"]>;
     endCall: (input: ServiceCatalog["members.endCall"]["input"]) => Promise<ServiceCatalog["members.endCall"]["output"]>;
@@ -8500,10 +8526,12 @@ export interface FreeholderApi {
     payouts: (input?: ServiceCatalog["members.payouts"]["input"]) => Promise<ServiceCatalog["members.payouts"]["output"]>;
     pendingListings: (input?: ServiceCatalog["members.pendingListings"]["input"]) => Promise<ServiceCatalog["members.pendingListings"]["output"]>;
     pendingTags: (input?: ServiceCatalog["members.pendingTags"]["input"]) => Promise<ServiceCatalog["members.pendingTags"]["output"]>;
+    pinPost: (input: ServiceCatalog["members.pinPost"]["input"]) => Promise<ServiceCatalog["members.pinPost"]["output"]>;
     post: (input?: ServiceCatalog["members.post"]["input"]) => Promise<ServiceCatalog["members.post"]["output"]>;
     postSaleMessage: (input: ServiceCatalog["members.postSaleMessage"]["input"]) => Promise<ServiceCatalog["members.postSaleMessage"]["output"]>;
     postsBy: (input: ServiceCatalog["members.postsBy"]["input"]) => Promise<ServiceCatalog["members.postsBy"]["output"]>;
     profile: (input: ServiceCatalog["members.profile"]["input"]) => Promise<ServiceCatalog["members.profile"]["output"]>;
+    profileSections: (input: ServiceCatalog["members.profileSections"]["input"]) => Promise<ServiceCatalog["members.profileSections"]["output"]>;
     react: (input: ServiceCatalog["members.react"]["input"]) => Promise<ServiceCatalog["members.react"]["output"]>;
     replyToReview: (input: ServiceCatalog["members.replyToReview"]["input"]) => Promise<ServiceCatalog["members.replyToReview"]["output"]>;
     report: (input: ServiceCatalog["members.report"]["input"]) => Promise<ServiceCatalog["members.report"]["output"]>;
@@ -8516,7 +8544,9 @@ export interface FreeholderApi {
     saleReviews: (input: ServiceCatalog["members.saleReviews"]["input"]) => Promise<ServiceCatalog["members.saleReviews"]["output"]>;
     saleThread: (input: ServiceCatalog["members.saleThread"]["input"]) => Promise<ServiceCatalog["members.saleThread"]["output"]>;
     savePayoutInstructions: (input: ServiceCatalog["members.savePayoutInstructions"]["input"]) => Promise<ServiceCatalog["members.savePayoutInstructions"]["output"]>;
+    saveProfileSection: (input: ServiceCatalog["members.saveProfileSection"]["input"]) => Promise<ServiceCatalog["members.saveProfileSection"]["output"]>;
     sendMessage: (input: ServiceCatalog["members.sendMessage"]["input"]) => Promise<ServiceCatalog["members.sendMessage"]["output"]>;
+    setAvatar: (input: ServiceCatalog["members.setAvatar"]["input"]) => Promise<ServiceCatalog["members.setAvatar"]["output"]>;
     setPayoutAccountStatus: (input: ServiceCatalog["members.setPayoutAccountStatus"]["input"]) => Promise<ServiceCatalog["members.setPayoutAccountStatus"]["output"]>;
     setRelation: (input: ServiceCatalog["members.setRelation"]["input"]) => Promise<ServiceCatalog["members.setRelation"]["output"]>;
     setStatus: (input: ServiceCatalog["members.setStatus"]["input"]) => Promise<ServiceCatalog["members.setStatus"]["output"]>;

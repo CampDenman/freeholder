@@ -8,6 +8,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
+import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { THEME_COOKIE } from "@/core/design/theme";
 import { memberPayouts, memberPosts, memberProfiles, memberSaleFulfilments, memberSettings } from "@/modules/members/schema";
 import { contacts } from "@/core/contacts/schema";
@@ -615,6 +616,49 @@ test.describe("members (C12.01)", () => {
     await axeInBothThemes(page);
     await page.getByRole("link", { name: "Download your data or delete your account" }).click();
     await expect(page).toHaveURL(/\/portal\/privacy/);
+    await context.close();
+  });
+
+  test("an avatar, profile sections with their own audience, and a pinned post (C12.20)", async ({ browser }) => {
+    await seedC11Owner("Profile proof");
+    await db().insert(users).values({ id: MEMBER_ID, email: "rae@example.test", role: "customer" });
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date(), isPrivate: false });
+    await db().insert(memberPosts).values({ authorId: MEMBER_ID, body: "My best harbour shot", visibility: "public" });
+    const rae = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+    const context = await browser.newContext({ baseURL: C11_BASE_URL });
+    await context.addCookies([
+      { name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL },
+      { name: CSRF_COOKIE, value: issueCsrfToken(), url: C11_BASE_URL },
+    ]);
+    const page = await context.newPage();
+    await page.goto("/portal/member");
+    const sharp = (await import("sharp")).default;
+    const png = await sharp({ create: { width: 400, height: 400, channels: 3, background: { r: 200, g: 120, b: 60 } } }).png().toBuffer();
+    await page.getByLabel("Choose a picture").setInputFiles({ name: "rae.png", mimeType: "image/png", buffer: png });
+    await expect(page.getByAltText("Your current picture")).toBeVisible();
+
+    await page.getByLabel("Kind of section").selectOption("services");
+    await page.getByLabel("Heading").fill("Rates");
+    await page.getByLabel("Text", { exact: true }).fill("Portraits from $150");
+    await page.getByLabel("Who can see this").selectOption("followers");
+    await page.getByRole("button", { name: "Add section" }).click();
+    await expect(page.getByText("Rates", { exact: true })).toBeVisible();
+    await axeInBothThemes(page);
+
+    await page.goto("/@rae");
+    await page.getByRole("button", { name: "Pin to profile" }).click();
+    await page.goto("/@rae");
+    await expect(page.getByRole("heading", { name: "Pinned" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Rates" })).toBeVisible();
+
+    const visitor = await browser.newContext({ baseURL: C11_BASE_URL });
+    const anon = await visitor.newPage();
+    await anon.goto("/@rae");
+    await expect(anon.locator("header img")).toBeVisible();
+    await expect(anon.getByRole("heading", { name: "Pinned" })).toBeVisible();
+    await expect(anon.getByRole("heading", { name: "Rates" })).toHaveCount(0);
+    await axeInBothThemes(anon);
+    await visitor.close();
     await context.close();
   });
 });

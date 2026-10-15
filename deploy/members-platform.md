@@ -188,3 +188,16 @@ from mocked payment, mail or media runs alone.
 - Tests: `tests/modules/member-data-rights.test.ts` (2 cases) and the C12.15
   journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
 
+## C12.20 — avatars and profile sections (2026-10-14)
+
+- Services in `src/modules/members/profile.ts`. Images are ordinary
+  `media.upload` assets the member uploaded (`uploaded_by = user:<id>`),
+  ready and cleared by the scanner; URLs come from the storage adapter's
+  webp variants.
+- The member uploader (`app/portal/(account)/member/ImageUpload.tsx`) posts
+  to `/api/media` with the portal's CSRF token, then saves through a server
+  action.
+- Tests: `tests/modules/member-profile-sections.test.ts` (2 cases) and the
+  C12.20 journey in `tests/browser/members.spec.ts`. Passed locally
+  2026-10-14.
+

@@ -11,6 +11,7 @@ import { viewProfile } from "@/modules/members/graph";
 import { postsBy } from "@/modules/members/posts";
 import { storefront } from "@/modules/members/listings";
 import { reviewsFor } from "@/modules/members/reputation";
+import { profileSections } from "@/modules/members/profile";
 import { formatMoney } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { myMembership } from "@/modules/members/service";
@@ -60,16 +61,18 @@ export default async function MemberProfile({
   const [{ handle }, query, t, locale, business] = await Promise.all([params, searchParams, getT(), getLocale(), currentBusiness()]);
   const { actor, profile } = await load(handle);
   const r = profile.relation;
-  const [posts, shop, reviews] = await Promise.all([
+  const [posts, shop, reviews, sections] = await Promise.all([
     postsBy.call({ handle: profile.handle }, actor),
     storefront.call({ handle: profile.handle }, actor),
     r.blocked ? null : reviewsFor.call({ handle: profile.handle }, actor),
+    profileSections.call({ handle: profile.handle }, actor),
   ]);
   const viewer = actor.kind === "user" ? await myMembership.call({}, actor) : null;
   const canAct = viewer?.status === "active" && !r.self;
   return (
     <div className="mx-auto grid max-w-2xl gap-6 px-6 py-12">
       <header className="grid gap-2">
+        {profile.avatarUrl ? <img src={profile.avatarUrl} alt="" width={96} height={96} className="h-24 w-24 rounded-full object-cover" /> : null}
         <h1 className="text-3xl font-semibold">{profile.displayName}</h1>
         <p className="flex flex-wrap items-center gap-2 text-ink-muted">
           <span>@{profile.handle}</span>
@@ -127,6 +130,26 @@ export default async function MemberProfile({
           )}
         </div>
       ) : null}
+      {sections.map((section) => (
+        <section key={section.id} className="grid gap-3" aria-labelledby={`section-${section.id}`}>
+          <h2 id={`section-${section.id}`} className="text-xl font-semibold">{section.title}</h2>
+          {section.body ? <p className="whitespace-pre-line break-words">{section.body}</p> : null}
+          {section.images.length ? (
+            <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {section.images.map((img) => (
+                <li key={img.id}><img src={img.url} alt={img.altText ?? ""} loading="lazy" className="aspect-square w-full rounded-md object-cover" /></li>
+              ))}
+            </ul>
+          ) : null}
+          {section.posts.length ? (
+            <ul className="grid gap-2">
+              {section.posts.map((p) => (
+                <li key={p.id} className="rounded-md border border-rule p-3"><a className="underline" href={`/p/${p.id}`}>{p.body.slice(0, 140) || t("members.sections.openPost")}</a></li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ))}
       {!r.blocked && shop.length ? (
         <section className="grid gap-3">
           <h2 className="text-xl font-semibold">{t("members.market.shop")}</h2>

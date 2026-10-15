@@ -5,7 +5,7 @@
 import type { ReactNode } from "react";
 import { formatDateTime } from "@/core/i18n";
 import { Button, Pill } from "@/ui/primitives";
-import { createPostAction, deletePostAction, reactAction } from "./post-actions";
+import { createPostAction, deletePostAction, pinPostAction, reactAction } from "./post-actions";
 
 const REACTIONS = ["like", "love", "laugh", "wow", "sad", "thanks"] as const;
 const SYMBOL: Record<(typeof REACTIONS)[number], string> = { like: "👍", love: "❤️", laugh: "😄", wow: "😮", sad: "😢", thanks: "🙏" };
@@ -60,7 +60,7 @@ export function PostCard({
   back: string;
   timezone: string;
   locale: string;
-  labels: { visibility: string; edited: string; comments: string; delete: string; repost: string; report: string; adult: string; reactions: Record<string, string>; reposted: string; with: string };
+  labels: { visibility: string; edited: string; comments: string; delete: string; repost: string; report: string; adult: string; pin: string; reactions: Record<string, string>; reposted: string; with: string };
 }) {
   const mine = viewerId === post.author.userId;
   return (
@@ -106,6 +106,13 @@ export function PostCard({
         ) : null}
         {viewerId && !mine ? <a className="text-sm text-ink-muted underline" href={`/report?type=post&id=${post.id}`}>{labels.report}</a> : null}
         {mine ? (
+          <form action={pinPostAction}>
+            <input type="hidden" name="id" value={post.id} />
+            <input type="hidden" name="back" value={back} />
+            <Button type="submit" variant="quiet">{labels.pin}</Button>
+          </form>
+        ) : null}
+        {mine ? (
           <form action={deletePostAction}>
             <input type="hidden" name="id" value={post.id} />
             <Button type="submit" variant="danger">{labels.delete}</Button>
@@ -128,6 +135,7 @@ export function postLabels(t: T, post: Pick<Post, "visibility" | "comments">) {
     repost: t("members.post.repost"),
     report: t("members.report.action"),
     adult: t("members.adult.badge"),
+    pin: t("members.sections.pin"),
     reposted: t("members.post.reposted"),
     with: t("members.post.with"),
     reactions: Object.fromEntries(REACTIONS.map((k) => [k, t(`members.reaction.${k}`)])),

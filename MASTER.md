@@ -10552,9 +10552,25 @@ whatever is best for the people using the site.
 - [ ] **C12.19** Offer members passkey-first sign-in: enrol a passkey after
   the email proof, sign in with it on return, manage passkeys from the portal,
   and keep email proof as the recovery path.
-- [ ] **C12.20** Give member profiles an avatar and optional profile
+- [x] **C12.20** Give member profiles an avatar and optional profile
   sections (for example portfolio, services, pinned posts), each with its own
   visibility.
+  *(Evidence 2026-10-14: `src/modules/members/profile.ts`, migration
+  `db/migrations/0037_member_profile_avatar_sections.sql`,
+  `tests/modules/member-profile-sections.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** the picture and sections editors on `/portal/member`, Pin to
+  profile on a member's own posts, and the avatar and sections on `/@handle`.
+  **F05** `members.setAvatar`, `members.saveProfileSection`,
+  `members.deleteProfileSection`, `members.profileSections`,
+  `members.pinPost`, and `avatarUrl` on `members.profile`. **F07** avatars
+  and portfolio images must be the member's own ready, cleared uploads
+  through `media.upload`; each section shows only to its audience; a pinned
+  post is checked against its own visibility (and adult flag) so pinning
+  never widens it; ten sections, 24 items each; blocked viewers see none;
+  sections are part of the member's export and erasure. **F09** N/A — no
+  background work. **F12** the browser journey uploads a picture, adds a
+  followers-only section, pins a post, and shows a visitor only what they
+  may see. Changeset `member-profile-sections.md`.)*
 - [ ] **C12.21** Let members attach images and video to posts, comments and messages,
   with alt text, safe processing, and the post's visibility applied to every
   file.

@@ -4641,18 +4641,18 @@ v2.
 
 ## C12.20 — Give member profiles an avatar and optional profile sections
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F01** — `db/migrations/0037_member_profile_avatar_sections.sql`: the avatar reference and profile sections with their own visibility.
+- **F02** — `tests/modules/member-profile-sections.test.ts`: avatars, sections, audiences and pinned posts.
+- **F03** — N/A — profile sections belong to members, not contacts (`src/modules/members/profile.ts`).
+- **F04** — `tests/browser/members.spec.ts`: the editors on `/portal/member`, Pin to profile, and `/@handle`.
+- **F05** — `packages/sdk/src/generated.ts`: the five profile services and `avatarUrl` on `members.profile`.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/portal/member` and `/@handle`; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-profile-sections.test.ts`: only the member's own images; sections and pinned posts never shown beyond their audience.
+- **F08** — `tests/modules/member-profile-sections.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background work (`src/modules/members/profile.ts`).
+- **F10** — N/A — demo profiles arrive with the starter seed in C12.16 (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-profile-sections.md`.
+- **F12** — `tests/browser/members.spec.ts`: upload a picture, add a followers-only section, pin a post, and check what a visitor sees.
 
 ## C12.21 — Let members attach images and video to posts, comments and messages
 
