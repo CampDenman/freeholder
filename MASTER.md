@@ -10755,10 +10755,45 @@ whatever is best for the people using the site.
   **F09** the existing per-minute `core.deliverNotifications` sweep releases
   held items when quiet hours end. **F12** the browser journey loads the
   service worker and sets quiet hours. Changeset `member-web-push.md`.)*
-- [ ] **C12.23** Make member messages end-to-end encrypted by default with
-  MLS (RFC 9420): keys only on members' devices, multi-device support,
-  history the server cannot read, and message franking so a recipient can
-  report exactly the messages they choose to moderation.
+- [x] **C12.23** Make member messages end-to-end encrypted by default with
+  MLS (RFC 9420): keys only on members' devices, every current device of
+  every participant in the conversation's group, history the server cannot
+  read, and message franking so a recipient can report exactly the messages
+  they choose to moderation. Split 2026-10-15: earlier history on a newly
+  added device is C12.34, verifying devices is C12.35, and encrypted
+  attachments are C12.36.
+  *(Evidence 2026-10-15: `src/modules/members/e2ee/` (`wire.ts`, `engine.ts`,
+  `service.ts`, `idb-store.ts`), `app/(public)/messages/SecureConversation.tsx`,
+  migration `db/migrations/0043_member_e2ee.sql`,
+  `tests/modules/member-e2ee.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** "End-to-end encrypted" on encrypted conversations, notices while a
+  device joins or someone has no device, "Not end-to-end encrypted" on any
+  plaintext message in an encrypted conversation, decryption in the page, and
+  "Your devices for encrypted messages" with Remove device on
+  `/portal/member`; the report form shows what the device read. **F05**
+  `members.registerDevice`, `members.publishKeyPackages`, `members.devices`,
+  `members.revokeDevice`, `members.e2eeSync`, `members.claimKeyPackages`,
+  `members.e2eeCommit`, `members.sendEncrypted`, `encrypted` on messages and
+  `e2ee` on `members.conversation`, `franking` on `members.report`, and
+  `body` now optional on `members.startConversation`. **F07** MLS ciphersuite 1
+  through `ts-mls`; every device is one leaf whose credential is
+  `userId:deviceId` with the Ed25519 key the server recorded, and devices
+  accept only credentials and payload signatures the directory vouches for;
+  the server orders commits by epoch and refuses an encrypted message unless
+  the group holds exactly the current devices of everyone still in the
+  conversation, so a removed device or a person who left reads nothing new;
+  only revoked devices and those of people who left can be removed; the
+  sender's ratchet advances before a message leaves the device; franking
+  tags are HMAC-SHA256 under a per-message key bound to conversation and
+  sender, and a report must reveal a body and key that match; plaintext is
+  refused once everyone has a device, except from the member's own agent;
+  the device services are not agent-callable; unsending and erasure delete
+  the ciphertext. **F09** N/A — no background work; devices top up key
+  packages when they run low. **F12** the module test runs real devices on
+  the shared engine (two for one member), checks the database for any
+  plaintext, reports with a true and a doctored franking, revokes a device,
+  adds a late one, and drops a member who left; the browser journey does the
+  same across three browsers. Changeset `member-e2ee.md`.)*
 - [ ] **C12.24** Add group voice and video calls through a self-hostable
   open-source SFU adapter (LiveKit first), with end-to-end media encryption
   (SFrame) so the SFU forwards media it cannot decrypt, and the same
@@ -10860,6 +10895,15 @@ whatever is best for the people using the site.
 - [ ] **C12.33** Let members take their audience elsewhere and bring it here:
   `alsoKnownAs` and an outgoing `Move` that remote servers follow, and
   accepting an incoming `Move` for an account moving in.
+- [ ] **C12.34** Bring earlier end-to-end encrypted history to a member's
+  newly added device, sent device to device so the server still cannot read
+  it.
+- [ ] **C12.35** Let members verify the devices in an encrypted conversation
+  (a device list and comparable safety numbers), so a device the server
+  added without the person's knowledge is visible.
+- [ ] **C12.36** Encrypt attachments end to end in encrypted conversations:
+  files encrypted on the sender's device with keys carried inside the MLS
+  message, stored as opaque blobs.
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
   preserving evidence and reporting through the legal path for the site's
@@ -10931,6 +10975,13 @@ not connected. Messages are end-to-end encrypted by default using MLS
 with cryptographic message franking, so moderation sees exactly what was
 reported and nothing else. Read receipts are opt-in. Owner-to-customer
 messaging in §4.14 is unchanged and separate.
+
+*Decided 2026-10-15 (C12.23):* each browser where a member opens messages is
+a device with its own keys. A conversation is encrypted as soon as everyone in
+it has a device; until then it is encrypted at rest and says it is not yet end
+to end. A member's own agent (C12.14) holds no device keys, so its messages
+are plaintext and labelled as such, and it can never register a device.
+Sale threads (§44.8) stay readable by the site, because disputes need them.
 
 ### 44.7 Voice and video calls
 

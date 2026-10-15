@@ -34,21 +34,26 @@ import { products } from "@/modules/catalog/schema";
 import { assets } from "@/core/media/schema";
 import { openMessage, sealMessage } from "./message-crypto";
 import {
+  memberActorKeys,
   memberAttachments,
   memberCalls,
   memberComments,
   memberConversationParticipants,
+  memberDevices,
   memberDisputes,
+  memberFederationDeliveries,
   memberFollows,
   memberFriendships,
   memberListings,
   memberMentions,
   memberMessages,
+  memberMlsLog,
   memberPayouts,
   memberPosts,
   memberProfiles,
   memberProfileSections,
   memberReactions,
+  memberRemoteFollowers,
   memberRelations,
   memberReports,
   memberReviews,
@@ -99,8 +104,11 @@ async function exportMember(tx: Tx, userId: string) {
       ...seat,
       messages: messages
         .filter((m) => m.conversationId === seat.conversationId)
-        .map((m) => ({ id: m.id, senderId: m.senderId, createdAt: m.createdAt, body: m.deletedAt ? null : openMessage(m.bodySealed, m.id) })),
+        // C12.23: an end-to-end encrypted body exists only on members' devices.
+        .map((m) => ({ id: m.id, senderId: m.senderId, createdAt: m.createdAt, endToEndEncrypted: m.e2ee, body: m.deletedAt || m.e2ee ? null : openMessage(m.bodySealed, m.id) })),
     })),
+    messageDevices: (await tx.select().from(memberDevices).where(eq(memberDevices.userId, userId))).map(({ id, label, createdAt, lastSeenAt, revokedAt }) => ({ id, label, createdAt, lastSeenAt, revokedAt })),
+    fediverseFollowers: (await tx.select().from(memberRemoteFollowers).where(eq(memberRemoteFollowers.userId, userId))).map(({ actorUri, handle, createdAt }) => ({ actorUri, handle, createdAt })),
     calls: await tx.select().from(memberCalls).where(or(eq(memberCalls.callerId, userId), eq(memberCalls.calleeId, userId))),
     listings: await tx.select().from(memberListings).where(eq(memberListings.sellerId, userId)),
     payouts: await tx.select().from(memberPayouts).where(eq(memberPayouts.sellerId, userId)),
@@ -136,6 +144,12 @@ async function eraseMember(tx: Tx, userId: string): Promise<number> {
     await tx.update(memberMessages).set({ bodySealed: sealMessage("", m.id), deletedAt: now, senderId: null }).where(eq(memberMessages.id, m.id));
   }
   affected += sent.length;
+  if (sent.length) count(await tx.delete(memberMlsLog).where(inArray(memberMlsLog.messageId, sent.map((m) => m.id))).returning({ seq: memberMlsLog.seq }));
+  // Their devices, key packages and group seats (C12.23), and their presence on the fediverse (C12.18).
+  count(await tx.delete(memberDevices).where(eq(memberDevices.userId, userId)).returning({ id: memberDevices.id }));
+  count(await tx.delete(memberRemoteFollowers).where(eq(memberRemoteFollowers.userId, userId)).returning({ id: memberRemoteFollowers.id }));
+  count(await tx.delete(memberFederationDeliveries).where(eq(memberFederationDeliveries.userId, userId)).returning({ id: memberFederationDeliveries.id }));
+  count(await tx.delete(memberActorKeys).where(eq(memberActorKeys.userId, userId)).returning({ userId: memberActorKeys.userId }));
   count(await tx.delete(memberConversationParticipants).where(eq(memberConversationParticipants.userId, userId)).returning());
 
   // Sales records are the site's books: keep them, anonymously.
@@ -202,6 +216,13 @@ registerContactPrivacySource({
     "member_sale_messages",
     "member_reviews",
     "member_reports",
+    "member_devices",
+    "member_key_packages",
+    "member_mls_roster",
+    "member_mls_log",
+    "member_actor_keys",
+    "member_remote_followers",
+    "member_federation_deliveries",
   ],
   eraseOrder: 10,
   exportData: async (tx, contactId) => {

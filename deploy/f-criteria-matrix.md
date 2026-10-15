@@ -4686,18 +4686,18 @@ v2.
 
 ## C12.23 — Make member messages end-to-end encrypted by default with MLS
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F01** — `db/migrations/0043_member_e2ee.sql`: devices, key packages, groups, rosters, the delivery log, and franking tags on messages.
+- **F02** — `tests/modules/member-e2ee.test.ts`: real devices through the services, with the database searched for plaintext.
+- **F03** — N/A — devices belong to members, not contacts (`src/modules/members/e2ee/service.ts`).
+- **F04** — `tests/browser/members.spec.ts`: encrypted conversations, the report form, and devices on `/portal/member`.
+- **F05** — `packages/sdk/src/generated.ts`: the eight device and delivery services, `encrypted`, `e2ee` and `franking`.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on an encrypted conversation; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-e2ee.test.ts`: exact-roster sends, removal, franking checks, plaintext refusal and agent refusal (`src/modules/members/e2ee/engine.ts`).
+- **F08** — `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background work; devices replenish their own key packages (`src/modules/members/e2ee/engine.ts`).
+- **F10** — N/A — demo conversations stay encrypted at rest until members open them on a device (`src/modules/members/demo.ts`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-e2ee.md`.
+- **F12** — `tests/browser/members.spec.ts`: three browsers exchange, report, and add a late device.
 
 ## C12.24 — Add group voice and video calls through a self-hostable open-source SFU adapter
 
@@ -4819,6 +4819,51 @@ v2.
 - **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
 
 ## C12.33 — Let members take their audience elsewhere and bring it here
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+
+## C12.34 — Bring earlier end-to-end encrypted history to a member's newly added device
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+
+## C12.35 — Let members verify the devices in an encrypted conversation
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+
+## C12.36 — Encrypt attachments end to end in encrypted conversations
 
 - **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
 - **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.

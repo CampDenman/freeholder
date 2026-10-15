@@ -979,6 +979,7 @@ export const SERVICE_NAMES = [
   "members.bookableServices",
   "members.callConfig",
   "members.callStatus",
+  "members.claimKeyPackages",
   "members.comment",
   "members.confirmDelivery",
   "members.connections",
@@ -989,7 +990,10 @@ export const SERVICE_NAMES = [
   "members.deleteComment",
   "members.deletePost",
   "members.deleteProfileSection",
+  "members.devices",
   "members.disputes",
+  "members.e2eeCommit",
+  "members.e2eeSync",
   "members.editPost",
   "members.endCall",
   "members.feed",
@@ -1028,8 +1032,10 @@ export const SERVICE_NAMES = [
   "members.postsBy",
   "members.profile",
   "members.profileSections",
+  "members.publishKeyPackages",
   "members.purgeDemoFixture",
   "members.react",
+  "members.registerDevice",
   "members.remoteFollowers",
   "members.replyToReview",
   "members.report",
@@ -1038,11 +1044,13 @@ export const SERVICE_NAMES = [
   "members.resolveReport",
   "members.reviewListing",
   "members.reviews",
+  "members.revokeDevice",
   "members.sale",
   "members.saleReviews",
   "members.saleThread",
   "members.savePayoutInstructions",
   "members.saveProfileSection",
+  "members.sendEncrypted",
   "members.sendMessage",
   "members.setAvatar",
   "members.setBookingHours",
@@ -5411,6 +5419,10 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { id: string; media: "voice" | "video"; state: "ringing" | "active" | "ended" | "declined" | "missed"; role: "caller" | "callee"; other: { userId: string; handle: string; displayName: string; [key: string]: unknown }; createdAt: string; [key: string]: unknown };
   };
+  "members.claimKeyPackages": {
+    input: { conversationId: string; deviceId: string; devices: string[] };
+    output: { packages: { deviceId: string; keyPackageId: string; keyPackage: string; [key: string]: unknown }[] };
+  };
   "members.comment": {
     input: { postId: string; parentId?: string; body: string; attachments?: { assetId: string; altText?: string }[] };
     output: { id: string; parentId: string | null; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; restricted: boolean; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown };
@@ -5425,7 +5437,7 @@ export interface ServiceCatalog {
   };
   "members.conversation": {
     input: { id: string; before?: string };
-    output: { conversation: { id: string; kind: "direct" | "group"; title: string | null; people: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; state: "active" | "requested"; muted: boolean; lastMessageAt: string; unread: boolean; [key: string]: unknown }; closed: boolean; messages: { id: string; sender: { userId: string; handle: string; displayName: string; [key: string]: unknown } | null; body: string | null; createdAt: string; mine: boolean; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown }[]; seenBy: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; older: boolean };
+    output: { conversation: { id: string; kind: "direct" | "group"; title: string | null; people: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; state: "active" | "requested"; muted: boolean; lastMessageAt: string; unread: boolean; e2ee: boolean; [key: string]: unknown }; closed: boolean; messages: { id: string; sender: { userId: string; handle: string; displayName: string; [key: string]: unknown } | null; body: string | null; encrypted: boolean; createdAt: string; mine: boolean; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown }[]; seenBy: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; older: boolean };
   };
   "members.conversations": {
     input: { box?: "inbox" | "requests" };
@@ -5451,9 +5463,21 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { ok: true };
   };
+  "members.devices": {
+    input: Record<string, never>;
+    output: { devices: { id: string; label: string; createdAt: string; lastSeenAt: string; unclaimed: number; [key: string]: unknown }[] };
+  };
   "members.disputes": {
     input: { state?: "open" | "released" | "refunded" | "withdrawn" };
     output: { id: string; orderId: string; sellerId: string; sellerHandle: string; reason: string; state: string; createdAt: string; [key: string]: unknown }[];
+  };
+  "members.e2eeCommit": {
+    input: { conversationId: string; deviceId: string; create?: boolean; fromEpoch: number; commit: string; welcome?: string; added?: { deviceId: string; keyPackageId: string }[]; removed?: string[] };
+    output: { epoch: number };
+  };
+  "members.e2eeSync": {
+    input: { conversationId: string; deviceId: string; after?: number };
+    output: { available: boolean; missing: string[]; epoch: number | null; inGroup: boolean; roster: string[]; entitled: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; directory: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; log: { seq: number; epoch: number; kind: "commit" | "welcome" | "application"; senderDeviceId: string | null; keyPackageId: string | null; messageId: string | null; frankTag: string | null; payload: string; [key: string]: unknown }[]; more: boolean; unclaimed: number };
   };
   "members.editPost": {
     input: { id: string; body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me" };
@@ -5607,6 +5631,10 @@ export interface ServiceCatalog {
     input: { handle: string };
     output: { id: string; kind: "text" | "portfolio" | "services" | "pinned"; title: string; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; images: { id: string; url: string; altText: string | null; [key: string]: unknown }[]; posts: { id: string; body: string; createdAt: string; [key: string]: unknown }[]; [key: string]: unknown }[];
   };
+  "members.publishKeyPackages": {
+    input: { deviceId: string; keyPackages: { id: string; keyPackage: string }[] };
+    output: { unclaimed: number };
+  };
   "members.purgeDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { purged: { subjectType: string; subjectId: string }[] };
@@ -5614,6 +5642,10 @@ export interface ServiceCatalog {
   "members.react": {
     input: { postId: string; kind: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null };
     output: { ok: true };
+  };
+  "members.registerDevice": {
+    input: { deviceId: string; label: string; signatureKey: string; keyPackages: { id: string; keyPackage: string }[]; lastResort: { id: string; keyPackage: string } };
+    output: { deviceId: string };
   };
   "members.remoteFollowers": {
     input: Record<string, never>;
@@ -5624,7 +5656,7 @@ export interface ServiceCatalog {
     output: { ok: true };
   };
   "members.report": {
-    input: { targetType: "post" | "comment" | "message" | "listing" | "review" | "member"; targetId: string; reason: "spam" | "harassment" | "hate" | "violence" | "sexual" | "child_safety" | "scam" | "prohibited_item" | "impersonation" | "self_harm" | "other"; details?: string };
+    input: { targetType: "post" | "comment" | "message" | "listing" | "review" | "member"; targetId: string; reason: "spam" | "harassment" | "hate" | "violence" | "sexual" | "child_safety" | "scam" | "prohibited_item" | "impersonation" | "self_harm" | "other"; details?: string; franking?: { body: string; key: string } };
     output: { ok: true };
   };
   "members.reports": {
@@ -5647,6 +5679,10 @@ export interface ServiceCatalog {
     input: { handle: string };
     output: { asSeller: { average: number | null; count: number; [key: string]: unknown }; asBuyer: { average: number | null; count: number; [key: string]: unknown }; reviews: { id: string; direction: "of_seller" | "of_buyer"; rating: number; body: string; author: { handle: string; displayName: string; [key: string]: unknown } | null; reply: string | null; createdAt: string; [key: string]: unknown }[] };
   };
+  "members.revokeDevice": {
+    input: { deviceId: string };
+    output: { ok: true };
+  };
   "members.sale": {
     input: { orderId: string; sellerId: string };
     output: { orderId: string; sellerId: string; sellerHandle: string; sellerName: string; role: "buyer" | "seller" | "site"; currency: string; createdAt: string; items: { name: string; quantity: number; lineTotalMinor: number; requiresShipping: boolean; [key: string]: unknown }[]; fulfilment: "awaiting" | "shipped" | "delivered"; carrier: string | null; tracking: string | null; dispute: { id: string; reason: string; state: string; [key: string]: unknown } | null; payout: "held" | "due" | "paid" | "cancelled" | "review" | "mixed" | "none"; [key: string]: unknown };
@@ -5665,6 +5701,10 @@ export interface ServiceCatalog {
   };
   "members.saveProfileSection": {
     input: { id?: string; kind: "text" | "portfolio" | "services" | "pinned"; title: string; body?: string; items?: string[]; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; position?: number };
+    output: { id: string };
+  };
+  "members.sendEncrypted": {
+    input: { conversationId: string; deviceId: string; epoch: number; ciphertext: string; frankTag: string; attachments?: { assetId: string; altText?: string }[] };
     output: { id: string };
   };
   "members.sendMessage": {
@@ -5716,7 +5756,7 @@ export interface ServiceCatalog {
     output: { id: string; media: "voice" | "video"; state: "ringing" | "active" | "ended" | "declined" | "missed"; role: "caller" | "callee"; other: { userId: string; handle: string; displayName: string; [key: string]: unknown }; createdAt: string; [key: string]: unknown };
   };
   "members.startConversation": {
-    input: { handles: string[]; title?: string; body: string };
+    input: { handles: string[]; title?: string; body?: string };
     output: { id: string };
   };
   "members.storefront": {
@@ -8604,6 +8644,7 @@ export interface FreeholderApi {
     bookableServices: (input: ServiceCatalog["members.bookableServices"]["input"]) => Promise<ServiceCatalog["members.bookableServices"]["output"]>;
     callConfig: (input?: ServiceCatalog["members.callConfig"]["input"]) => Promise<ServiceCatalog["members.callConfig"]["output"]>;
     callStatus: (input: ServiceCatalog["members.callStatus"]["input"]) => Promise<ServiceCatalog["members.callStatus"]["output"]>;
+    claimKeyPackages: (input: ServiceCatalog["members.claimKeyPackages"]["input"]) => Promise<ServiceCatalog["members.claimKeyPackages"]["output"]>;
     comment: (input: ServiceCatalog["members.comment"]["input"]) => Promise<ServiceCatalog["members.comment"]["output"]>;
     confirmDelivery: (input: ServiceCatalog["members.confirmDelivery"]["input"]) => Promise<ServiceCatalog["members.confirmDelivery"]["output"]>;
     connections: (input?: ServiceCatalog["members.connections"]["input"]) => Promise<ServiceCatalog["members.connections"]["output"]>;
@@ -8614,7 +8655,10 @@ export interface FreeholderApi {
     deleteComment: (input: ServiceCatalog["members.deleteComment"]["input"]) => Promise<ServiceCatalog["members.deleteComment"]["output"]>;
     deletePost: (input: ServiceCatalog["members.deletePost"]["input"]) => Promise<ServiceCatalog["members.deletePost"]["output"]>;
     deleteProfileSection: (input: ServiceCatalog["members.deleteProfileSection"]["input"]) => Promise<ServiceCatalog["members.deleteProfileSection"]["output"]>;
+    devices: (input?: ServiceCatalog["members.devices"]["input"]) => Promise<ServiceCatalog["members.devices"]["output"]>;
     disputes: (input?: ServiceCatalog["members.disputes"]["input"]) => Promise<ServiceCatalog["members.disputes"]["output"]>;
+    e2eeCommit: (input: ServiceCatalog["members.e2eeCommit"]["input"]) => Promise<ServiceCatalog["members.e2eeCommit"]["output"]>;
+    e2eeSync: (input: ServiceCatalog["members.e2eeSync"]["input"]) => Promise<ServiceCatalog["members.e2eeSync"]["output"]>;
     editPost: (input: ServiceCatalog["members.editPost"]["input"]) => Promise<ServiceCatalog["members.editPost"]["output"]>;
     endCall: (input: ServiceCatalog["members.endCall"]["input"]) => Promise<ServiceCatalog["members.endCall"]["output"]>;
     feed: (input?: ServiceCatalog["members.feed"]["input"]) => Promise<ServiceCatalog["members.feed"]["output"]>;
@@ -8653,8 +8697,10 @@ export interface FreeholderApi {
     postsBy: (input: ServiceCatalog["members.postsBy"]["input"]) => Promise<ServiceCatalog["members.postsBy"]["output"]>;
     profile: (input: ServiceCatalog["members.profile"]["input"]) => Promise<ServiceCatalog["members.profile"]["output"]>;
     profileSections: (input: ServiceCatalog["members.profileSections"]["input"]) => Promise<ServiceCatalog["members.profileSections"]["output"]>;
+    publishKeyPackages: (input: ServiceCatalog["members.publishKeyPackages"]["input"]) => Promise<ServiceCatalog["members.publishKeyPackages"]["output"]>;
     purgeDemoFixture: (input: ServiceCatalog["members.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["members.purgeDemoFixture"]["output"]>;
     react: (input: ServiceCatalog["members.react"]["input"]) => Promise<ServiceCatalog["members.react"]["output"]>;
+    registerDevice: (input: ServiceCatalog["members.registerDevice"]["input"]) => Promise<ServiceCatalog["members.registerDevice"]["output"]>;
     remoteFollowers: (input?: ServiceCatalog["members.remoteFollowers"]["input"]) => Promise<ServiceCatalog["members.remoteFollowers"]["output"]>;
     replyToReview: (input: ServiceCatalog["members.replyToReview"]["input"]) => Promise<ServiceCatalog["members.replyToReview"]["output"]>;
     report: (input: ServiceCatalog["members.report"]["input"]) => Promise<ServiceCatalog["members.report"]["output"]>;
@@ -8663,11 +8709,13 @@ export interface FreeholderApi {
     resolveReport: (input: ServiceCatalog["members.resolveReport"]["input"]) => Promise<ServiceCatalog["members.resolveReport"]["output"]>;
     reviewListing: (input: ServiceCatalog["members.reviewListing"]["input"]) => Promise<ServiceCatalog["members.reviewListing"]["output"]>;
     reviews: (input: ServiceCatalog["members.reviews"]["input"]) => Promise<ServiceCatalog["members.reviews"]["output"]>;
+    revokeDevice: (input: ServiceCatalog["members.revokeDevice"]["input"]) => Promise<ServiceCatalog["members.revokeDevice"]["output"]>;
     sale: (input: ServiceCatalog["members.sale"]["input"]) => Promise<ServiceCatalog["members.sale"]["output"]>;
     saleReviews: (input: ServiceCatalog["members.saleReviews"]["input"]) => Promise<ServiceCatalog["members.saleReviews"]["output"]>;
     saleThread: (input: ServiceCatalog["members.saleThread"]["input"]) => Promise<ServiceCatalog["members.saleThread"]["output"]>;
     savePayoutInstructions: (input: ServiceCatalog["members.savePayoutInstructions"]["input"]) => Promise<ServiceCatalog["members.savePayoutInstructions"]["output"]>;
     saveProfileSection: (input: ServiceCatalog["members.saveProfileSection"]["input"]) => Promise<ServiceCatalog["members.saveProfileSection"]["output"]>;
+    sendEncrypted: (input: ServiceCatalog["members.sendEncrypted"]["input"]) => Promise<ServiceCatalog["members.sendEncrypted"]["output"]>;
     sendMessage: (input: ServiceCatalog["members.sendMessage"]["input"]) => Promise<ServiceCatalog["members.sendMessage"]["output"]>;
     setAvatar: (input: ServiceCatalog["members.setAvatar"]["input"]) => Promise<ServiceCatalog["members.setAvatar"]["output"]>;
     setBookingHours: (input: ServiceCatalog["members.setBookingHours"]["input"]) => Promise<ServiceCatalog["members.setBookingHours"]["output"]>;

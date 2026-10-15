@@ -8,8 +8,10 @@
 // both directions. Read receipts are opt-in, and a member only sees other
 // people's receipts while sharing their own.
 //
-// Bodies are encrypted at rest (message-crypto.ts). End-to-end encryption is
-// C12.23; nothing here claims it.
+// Bodies are encrypted at rest (message-crypto.ts). Once every participant
+// has a device, messages are end-to-end encrypted with MLS (C12.23,
+// e2ee/service.ts) and the server keeps only ciphertext; plaintext is then
+// accepted only from a member's own agent, and is labelled as such.
 import { attachFiles, attachmentInput, attachmentsFor, attachmentShape } from "./attachment-store";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -19,7 +21,7 @@ import { defineService, ServiceError, type Actor, type ServiceContext } from "@/
 import { relationBetween } from "./graph";
 import { notifyMember } from "./notify";
 import { openMessage, sealMessage } from "./message-crypto";
-import { memberConversationParticipants, memberConversations, memberMessages, memberProfiles } from "./schema";
+import { memberConversationParticipants, memberConversations, memberDevices, memberMessages, memberMlsGroups, memberMlsLog, memberProfiles } from "./schema";
 
 const MAX_GROUP = 50;
 const PAGE = 50;
@@ -29,7 +31,7 @@ function viewerOf(actor: Actor): string {
   return actor.userId;
 }
 
-async function activeSelf(ctx: ServiceContext) {
+export async function activeSelf(ctx: ServiceContext) {
   const userId = viewerOf(ctx.actor);
   const [found] = await ctx.tx.select().from(memberProfiles).where(eq(memberProfiles.userId, userId));
   if (!found) throw new ServiceError("permission", "Join the site first.");
@@ -43,7 +45,7 @@ async function arrival(ctx: ServiceContext, recipientId: string, senderId: strin
   return relation.following === "active" || relation.friend === "friends" ? "active" : "requested";
 }
 
-async function participant(ctx: ServiceContext, conversationId: string, userId: string) {
+export async function participant(ctx: ServiceContext, conversationId: string, userId: string) {
   const [found] = await ctx.tx
     .select()
     .from(memberConversationParticipants)
@@ -53,7 +55,7 @@ async function participant(ctx: ServiceContext, conversationId: string, userId: 
 }
 
 /** A direct conversation is closed when either side blocked the other or left the site. */
-async function directBlocked(ctx: ServiceContext, conversationId: string, userId: string): Promise<boolean> {
+export async function directBlocked(ctx: ServiceContext, conversationId: string, userId: string): Promise<boolean> {
   const others = await ctx.tx
     .select({ userId: memberConversationParticipants.userId, status: memberProfiles.status })
     .from(memberConversationParticipants)
@@ -66,9 +68,37 @@ async function directBlocked(ctx: ServiceContext, conversationId: string, userId
   return false;
 }
 
-async function send(ctx: ServiceContext, conversationId: string, senderId: string, body: string, files: z.infer<typeof attachmentInput> = []) {
+/**
+ * Whether plaintext may be sent here. Once a conversation's MLS group exists,
+ * or every participant has a device that could join one, only a member's own
+ * agent (which holds no device keys) may still send plaintext.
+ */
+async function assertPlaintextAllowed(ctx: ServiceContext, conversationId: string | null, userIds: string[]): Promise<void> {
+  if (ctx.actor.kind === "user" && ctx.actor.keyScopes) return;
+  const refuse = () => new ServiceError("validation", "This conversation is end-to-end encrypted. Send from a browser where you use the site.");
+  if (conversationId) {
+    const [group] = await ctx.tx.select({ epoch: memberMlsGroups.epoch }).from(memberMlsGroups).where(eq(memberMlsGroups.conversationId, conversationId));
+    if (group) throw refuse();
+  }
+  const withDevices = await ctx.tx
+    .selectDistinct({ userId: memberDevices.userId })
+    .from(memberDevices)
+    .where(and(inArray(memberDevices.userId, userIds), isNull(memberDevices.revokedAt)));
+  if (withDevices.length === new Set(userIds).size) throw refuse();
+}
+
+async function currentPeople(ctx: ServiceContext, conversationId: string): Promise<string[]> {
+  const rows = await ctx.tx
+    .select({ userId: memberConversationParticipants.userId })
+    .from(memberConversationParticipants)
+    .where(and(eq(memberConversationParticipants.conversationId, conversationId), ne(memberConversationParticipants.state, "left")));
+  return rows.map((r) => r.userId);
+}
+
+/** Store a message and tell the others. An end-to-end encrypted one carries only its franking tag. */
+export async function send(ctx: ServiceContext, conversationId: string, senderId: string, body: string, files: z.infer<typeof attachmentInput> = [], encrypted?: { frankTag: string }) {
   const id = randomUUID();
-  await ctx.tx.insert(memberMessages).values({ id, conversationId, senderId, bodySealed: sealMessage(body, id) });
+  await ctx.tx.insert(memberMessages).values({ id, conversationId, senderId, bodySealed: sealMessage(encrypted ? "" : body, id), e2ee: Boolean(encrypted), frankTag: encrypted?.frankTag ?? null });
   await attachFiles(ctx, senderId, "message", id, files);
   await ctx.tx.update(memberConversations).set({ lastMessageAt: new Date() }).where(eq(memberConversations.id, conversationId));
   await ctx.tx
@@ -107,6 +137,10 @@ const conversationSummary = row({
   lastMessageAt: timestamp,
   unread: z.boolean(),
 });
+const conversationDetail = conversationSummary.extend({
+  /** C12.23: the conversation has an MLS group; new messages are end-to-end encrypted. */
+  e2ee: z.boolean(),
+});
 
 export const startConversation = defineService({
   name: "members.startConversation",
@@ -118,18 +152,24 @@ export const startConversation = defineService({
   input: z.object({
     handles: z.array(z.string().trim().toLowerCase().max(60)).min(1).max(MAX_GROUP),
     title: z.string().trim().min(1).max(80).optional(),
-    body: z.string().trim().min(1).max(10_000),
+    /** Leave out to start the conversation and send the first message encrypted from a device. */
+    body: z.string().trim().min(1).max(10_000).optional(),
   }),
   output: z.object({ id: uuid }),
   handler: async (input, ctx) => {
     const me = await activeSelf(ctx);
+    const deliver = async (conversationId: string, existing: boolean) => {
+      if (input.body === undefined) return;
+      await assertPlaintextAllowed(ctx, existing ? conversationId : null, existing ? await currentPeople(ctx, conversationId) : [me.userId, ...reachable.map((p) => p.userId)]);
+      await send(ctx, conversationId, me.userId, input.body);
+    };
     const handles = [...new Set(input.handles)].filter((h) => h !== me.handle);
     if (handles.length === 0) throw new ServiceError("validation", "Choose someone to message.");
     const people = await ctx.tx
       .select()
       .from(memberProfiles)
       .where(and(inArray(memberProfiles.handle, handles), eq(memberProfiles.status, "active")));
-    const reachable = [];
+    const reachable: (typeof people)[number][] = [];
     for (const p of people) if (!(await relationBetween(ctx, me.userId, p.userId)).blocked) reachable.push(p);
     if (reachable.length !== handles.length) throw new ServiceError("not_found", "One of those members is not available.");
 
@@ -146,7 +186,7 @@ export const startConversation = defineService({
           .update(memberConversationParticipants)
           .set({ state: sql`case when ${memberConversationParticipants.state} = 'left' then ${await arrival(ctx, other.userId, me.userId)} else ${memberConversationParticipants.state} end` })
           .where(and(eq(memberConversationParticipants.conversationId, existing.id), eq(memberConversationParticipants.userId, other.userId)));
-        await send(ctx, existing.id, me.userId, input.body);
+        await deliver(existing.id, true);
         return { id: existing.id };
       }
       const [created] = await ctx.tx.insert(memberConversations).values({ kind: "direct", directKey, createdBy: me.userId }).returning();
@@ -154,7 +194,7 @@ export const startConversation = defineService({
         { conversationId: created!.id, userId: me.userId, state: "active" },
         { conversationId: created!.id, userId: other.userId, state: await arrival(ctx, other.userId, me.userId) },
       ]);
-      await send(ctx, created!.id, me.userId, input.body);
+      await deliver(created!.id, false);
       ctx.setSubject("member_conversation", created!.id);
       return { id: created!.id };
     }
@@ -166,7 +206,7 @@ export const startConversation = defineService({
     const rows = [{ conversationId: created!.id, userId: me.userId, state: "active" as const }];
     for (const p of reachable) rows.push({ conversationId: created!.id, userId: p.userId, state: (await arrival(ctx, p.userId, me.userId)) as "active" });
     await ctx.tx.insert(memberConversationParticipants).values(rows);
-    await send(ctx, created!.id, me.userId, input.body);
+    await deliver(created!.id, false);
     ctx.setSubject("member_conversation", created!.id);
     return { id: created!.id };
   },
@@ -222,9 +262,13 @@ export const viewConversation = defineService({
   permission: "authenticated",
   input: z.object({ id: uuid, before: z.coerce.date().optional() }),
   output: z.object({
-    conversation: conversationSummary,
+    conversation: conversationDetail,
     closed: z.boolean(),
-    messages: listed(row({ id: uuid, sender: person.nullable(), body: z.string().nullable(), createdAt: timestamp, mine: z.boolean(), attachments: listed(attachmentShape) })),
+    /**
+     * `body` is null when the message was removed or is end-to-end encrypted;
+     * `encrypted` says which. An encrypted body is read on the member's device.
+     */
+    messages: listed(row({ id: uuid, sender: person.nullable(), body: z.string().nullable(), encrypted: z.boolean(), createdAt: timestamp, mine: z.boolean(), attachments: listed(attachmentShape) })),
     /** Who has read up to the newest message — only if you share receipts too. */
     seenBy: listed(person),
     older: z.boolean(),
@@ -267,6 +311,7 @@ export const viewConversation = defineService({
       return p ? { userId: p.userId, handle: p.handle, displayName: p.displayName } : null;
     };
     const files = await attachmentsFor(ctx, "message", rows.map((m) => m.id));
+    const [group] = await ctx.tx.select({ epoch: memberMlsGroups.epoch }).from(memberMlsGroups).where(eq(memberMlsGroups.conversationId, input.id));
     return {
       conversation: {
         id: conversation!.id,
@@ -277,12 +322,14 @@ export const viewConversation = defineService({
         muted: part.muted,
         lastMessageAt: conversation!.lastMessageAt,
         unread: false,
+        e2ee: Boolean(group),
       },
       closed,
       messages: rows.map((m) => ({
         id: m.id,
         sender: sender(m.senderId),
-        body: m.deletedAt ? null : openMessage(m.bodySealed, m.id),
+        body: m.deletedAt || m.e2ee ? null : openMessage(m.bodySealed, m.id),
+        encrypted: m.e2ee && !m.deletedAt,
         createdAt: m.createdAt,
         mine: m.senderId === me,
         attachments: m.deletedAt ? [] : (files.get(m.id) ?? []),
@@ -310,6 +357,7 @@ export const sendMessage = defineService({
     if (conversation!.kind === "direct" && (await directBlocked(ctx, input.conversationId, me.userId))) {
       throw new ServiceError("permission", "You can no longer message this person.");
     }
+    await assertPlaintextAllowed(ctx, input.conversationId, await currentPeople(ctx, input.conversationId));
     return { id: await send(ctx, input.conversationId, me.userId, input.body, input.attachments) };
   },
 });
@@ -389,6 +437,9 @@ export const unsendMessage = defineService({
       .where(and(eq(memberMessages.id, input.id), eq(memberMessages.senderId, me), isNull(memberMessages.deletedAt)))
       .returning({ id: memberMessages.id });
     if (!gone) throw new ServiceError("not_found", "That message is not available.");
+    // An end-to-end encrypted message's ciphertext goes too, so no device that
+    // has not fetched it yet ever can.
+    await ctx.tx.delete(memberMlsLog).where(eq(memberMlsLog.messageId, input.id));
     return { ok: true as const };
   },
 });

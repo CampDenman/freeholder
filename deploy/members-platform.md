@@ -325,3 +325,22 @@ from mocked payment, mail or media runs alone.
   refuses private addresses.
 - Tests: `tests/modules/member-federation.test.ts` (3 cases) and the C12.18
   journey in `tests/browser/members.spec.ts`.
+
+## C12.23 — end-to-end encrypted messages (2026-10-15)
+
+- MLS (RFC 9420) through `ts-mls` 1.6.4, ciphersuite 1 (X25519,
+  AES-128-GCM, SHA-256, Ed25519). `ts-mls` has **not had an independent
+  security audit** (its README says so). Commission a review of the library
+  and of `src/modules/members/e2ee/` before telling members their messages
+  are safe against a compromised server. `@noble/hashes` is a direct
+  dependency only because `ts-mls` imports it without declaring it.
+- The server is the delivery service and the device directory. It cannot
+  read messages, but whoever runs it could register a device in a member's
+  name; device verification (C12.35) is what makes that visible.
+- Device state lives in the browser's IndexedDB (`freeholder-e2ee`). Clearing
+  site data drops that device; history on it is gone, and new devices read
+  only from when they join until C12.34.
+- The delivery log keeps ciphertext so offline devices can catch up;
+  unsending and erasure delete it. There is no pruning yet.
+- Tests: `tests/modules/member-e2ee.test.ts` (3 cases) and the C12.23 journey
+  in `tests/browser/members.spec.ts`.

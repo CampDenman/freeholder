@@ -15,16 +15,30 @@ function text(form: FormData, key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** Untrimmed: a franked body must match byte for byte. */
+function exact(form: FormData, key: string): string {
+  const value = form.get(key);
+  return typeof value === "string" ? value : "";
+}
+
 export async function reportAction(form: FormData): Promise<void> {
   const type = text(form, "type");
   const id = text(form, "id");
   const reason = text(form, "reason");
-  const here = `/report?type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`;
+  const conversation = text(form, "in");
+  const here = `/report?type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}${/^[0-9a-f-]{36}$/.test(conversation) ? `&in=${conversation}` : ""}`;
   if (!(REPORT_TARGETS as readonly string[]).includes(type) || !(REPORT_REASONS as readonly string[]).includes(reason)) redirect(`${here}&error=validation`);
   const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
   try {
     await reportContent.call(
-      { targetType: type as (typeof REPORT_TARGETS)[number], targetId: id, reason: reason as (typeof REPORT_REASONS)[number], details: text(form, "details") },
+      {
+        targetType: type as (typeof REPORT_TARGETS)[number],
+        targetId: id,
+        reason: reason as (typeof REPORT_REASONS)[number],
+        details: text(form, "details"),
+        // C12.23: an encrypted message, as the reporter's device read it.
+        franking: form.has("frankKey") ? { body: exact(form, "frankBody"), key: text(form, "frankKey") } : undefined,
+      },
       actor,
     );
   } catch (error) {
