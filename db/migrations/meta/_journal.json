@@ -260,6 +260,13 @@
       "when": 1793310000016,
       "tag": "0036_member_market_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1793310000017,
+      "tag": "0037_member_profile_avatar_sections",
+      "breakpoints": true
     }
   ]
 }

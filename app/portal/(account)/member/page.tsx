@@ -8,6 +8,11 @@ import { actorFromToken } from "@/core/http/actor";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { currentBusiness } from "@/core/settings/read";
 import { membershipRules, myMembership } from "@/modules/members/service";
+import { viewProfile } from "@/modules/members/graph";
+import { profileSections } from "@/modules/members/profile";
+import { PROFILE_SECTION_KINDS } from "@/modules/members/profile-kinds";
+import { ImageUpload } from "./ImageUpload";
+import { avatarAction, deleteSectionAction, sectionAction } from "./profile-actions";
 import { Button, Callout, Field, Input, Pill, Select } from "@/ui/primitives";
 import { VISIBILITIES } from "@/modules/members/visibility";
 import { getLocale, getT } from "../../../i18n";
@@ -32,6 +37,7 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
       </div>
     );
   }
+  const [mine, sections] = await Promise.all([viewProfile.call({ handle: me.handle }, actor), profileSections.call({ handle: me.handle }, actor)]);
   return (
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold">{t("members.profile.title")}</h1>
@@ -101,6 +107,51 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
         </fieldset>
         <Button type="submit">{t("members.profile.save")}</Button>
       </form>
+      <section className="grid gap-3" aria-labelledby="your-avatar">
+        <h2 id="your-avatar" className="text-xl font-semibold">{t("members.avatar.title")}</h2>
+        {mine?.avatarUrl ? <img src={mine.avatarUrl} alt={t("members.avatar.current")} width={96} height={96} className="h-24 w-24 rounded-full object-cover" /> : null}
+        <form action={avatarAction} className="grid gap-2">
+          <ImageUpload name="avatar" label={t("members.avatar.choose")} busyLabel={t("members.avatar.uploading")} failedLabel={t("members.avatar.failed")} />
+        </form>
+        {mine?.avatarUrl ? (
+          <form action={avatarAction}><input type="hidden" name="remove" value="yes" /><Button type="submit" variant="quiet">{t("members.avatar.remove")}</Button></form>
+        ) : null}
+      </section>
+      <section className="grid gap-3" aria-labelledby="your-sections">
+        <h2 id="your-sections" className="text-xl font-semibold">{t("members.sections.title")}</h2>
+        <p className="text-sm text-ink-muted">{t("members.sections.intro")}</p>
+        <ul className="grid gap-2">
+          {sections.map((s) => (
+            <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-rule p-3">
+              <span><strong>{s.title}</strong> · {t(`members.sections.kind.${s.kind}`)} · {t(`members.visibility.${s.visibility}`)}</span>
+              <form action={deleteSectionAction}><input type="hidden" name="id" value={s.id} /><Button type="submit" variant="quiet">{t("members.sections.remove")}</Button></form>
+            </li>
+          ))}
+        </ul>
+        <form action={sectionAction} className="grid gap-3 rounded-md border border-rule p-3">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label={t("members.sections.kindLabel")} htmlFor="section-kind">
+              <Select id="section-kind" name="kind" defaultValue="text">
+                {PROFILE_SECTION_KINDS.filter((k) => k !== "pinned").map((k) => <option key={k} value={k}>{t(`members.sections.kind.${k}`)}</option>)}
+              </Select>
+            </Field>
+            <Field label={t("members.sections.titleLabel")} htmlFor="section-title">
+              <Input id="section-title" name="title" required maxLength={80} />
+            </Field>
+            <Field label={t("members.post.visibility")} htmlFor="section-visibility">
+              <Select id="section-visibility" name="visibility" defaultValue="public">
+                {VISIBILITIES.map((v) => <option key={v} value={v}>{t(`members.visibility.${v}`)}</option>)}
+              </Select>
+            </Field>
+          </div>
+          <Field label={t("members.sections.bodyLabel")} htmlFor="section-body">
+            <textarea id="section-body" name="body" maxLength={5000} rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
+          </Field>
+          <ImageUpload name="items" multiple label={t("members.sections.images")} busyLabel={t("members.avatar.uploading")} failedLabel={t("members.avatar.failed")} />
+          <input type="hidden" name="position" value={sections.length} />
+          <div><Button type="submit">{t("members.sections.add")}</Button></div>
+        </form>
+      </section>
       <section className="grid gap-2" aria-labelledby="your-data">
         <h2 id="your-data" className="text-xl font-semibold">{t("members.data.title")}</h2>
         <p className="text-sm">{t("members.data.export")}</p>

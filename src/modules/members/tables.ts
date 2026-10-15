@@ -25,4 +25,5 @@ export {
   memberSaleMessages,
   memberReviews,
   memberReports,
+  memberProfileSections,
 } from "./schema";

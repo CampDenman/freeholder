@@ -9,6 +9,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { answerTag, commentOnPost, createPost, deleteComment, deletePost, reactToPost } from "@/modules/members/posts";
 import { VISIBILITIES, type Visibility } from "@/modules/members/visibility";
+import { pinPost } from "@/modules/members/profile";
 
 const REACTIONS = ["like", "love", "laugh", "wow", "sad", "thanks"] as const;
 
@@ -48,6 +49,10 @@ export async function createPostAction(form: FormData): Promise<void> {
       actor,
     ),
   );
+}
+
+export async function pinPostAction(form: FormData): Promise<void> {
+  await run(form, (actor) => pinPost.call({ postId: text(form, "id"), pinned: true }, actor));
 }
 
 export async function deletePostAction(form: FormData): Promise<void> {

@@ -6,6 +6,7 @@
 // and `canSee`, so a block, a private account or a field's visibility is
 // enforced in one place rather than remembered by each screen. Blocking is
 // symmetric for visibility: neither side can see or reach the other.
+import { avatarUrlFor } from "./profile";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
@@ -195,6 +196,7 @@ export const viewProfile = defineService({
     followers: z.number().int(),
     following: z.number().int(),
     friends: z.number().int(),
+    avatarUrl: z.string().nullable(),
     relation: relationShape,
   }),
   handler: async (input, ctx) => {
@@ -215,6 +217,7 @@ export const viewProfile = defineService({
       bio: visible && canSee(found.bioVisibility, relation) ? found.bio : null,
       links: visible && canSee(found.linksVisibility, relation) ? found.links : null,
       ...(await counts(ctx, found.userId)),
+      avatarUrl: visible ? await avatarUrlFor(ctx, found.avatarAssetId, found.userId) : null,
       relation,
     };
   },
