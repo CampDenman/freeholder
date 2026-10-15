@@ -126,6 +126,30 @@ describe.runIf(hasDatabase)("end-to-end encrypted messages (C12.23)", () => {
     expect(view.messages.map((m) => [m.body, m.encrypted])).toEqual([[null, true], [null, true], ["Reminder from Rae's assistant", false]]);
   });
 
+  it("shows everyone the same safety number, and a new device changes it visibly (C12.35)", { timeout: 60_000 }, async () => {
+    const rae = deviceFor(RAE, "Rae");
+    const sam = deviceFor(SAM, "Sam");
+    await Promise.all([rae.device(), sam.device()]);
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await rae.send(id, "hello");
+    const first = (await rae.verification(id))!;
+    expect(first.devices.map((d) => d.userId).sort()).toEqual([RAE.userId, SAM.userId].sort());
+    expect(first.number).toMatch(/^(\d{5} ){11}\d{5}$/);
+    expect((await sam.verification(id))!.number).toBe(first.number);
+    expect(first.changed).toEqual({ added: [], removed: [] });
+
+    // A device joins Sam's account — as one the server added on its own would.
+    const extra = deviceFor(SAM, "Unknown device");
+    const extraId = (await extra.device()).deviceId;
+    await rae.send(id, "who else is here?");
+    const after = (await rae.verification(id))!;
+    expect(after.number).not.toBe(first.number);
+    expect((await sam.verification(id))!.number).toBe(after.number);
+    expect(after.changed.added).toEqual([`${SAM.userId}:${extraId}`]);
+    await rae.confirmDevices(id);
+    expect((await rae.verification(id))!.changed).toEqual({ added: [], removed: [] });
+  });
+
   it("stays plaintext, and says so, until everyone has a device", async () => {
     const rae = deviceFor(RAE, "Rae");
     await rae.device();

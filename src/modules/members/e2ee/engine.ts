@@ -71,6 +71,9 @@ export interface E2eeStore {
   /** C12.24: a group call's media key, base64. */
   callKey(callId: string): Promise<string | null>;
   saveCallKey(callId: string, key: string): Promise<void>;
+  /** C12.35: the devices this member last saw verified in a conversation. */
+  seenDevices(conversationId: string): Promise<string[] | null>;
+  saveSeenDevices(conversationId: string, devices: string[]): Promise<void>;
   /** Forget everything: the device was removed. */
   clear(): Promise<void>;
 }
@@ -116,6 +119,31 @@ export interface ConversationState {
 const BATCH = 50;
 const LOW_WATER = 10;
 const RETRIES = 4;
+
+export interface VerifiedDevice {
+  userId: string;
+  deviceId: string;
+  signatureKey: string;
+  /** Groups of five digits identifying this one device's key. */
+  fingerprint: string;
+}
+
+export interface Verification {
+  /** Groups of five digits; the same for everyone who sees the same devices. */
+  number: string;
+  devices: VerifiedDevice[];
+  changed: { added: string[]; removed: string[] };
+}
+
+/** Five-digit groups from a digest, as in other messengers' safety numbers. */
+function groups(bytes: Uint8Array, count: number): string {
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const n = ((bytes[(i * 2) % bytes.length]! << 16) | (bytes[(i * 2 + 1) % bytes.length]! << 8) | bytes[(i * 2 + 2) % bytes.length]!) % 100000;
+    out.push(String(n).padStart(5, "0"));
+  }
+  return out.join(" ");
+}
 
 /** Where a call's key for one generation is kept on the device. */
 const keySlot = (callId: string, generation: number) => (generation === 0 ? callId : `${callId}#${generation}`);
@@ -430,6 +458,48 @@ export class E2eeDevice {
 
   async callKey(conversationId: string, callId: string): Promise<string | null> {
     return (await this.currentCallKey(conversationId, callId)).key;
+  }
+
+  /**
+   * C12.35: who is really in this conversation's group, read from this
+   * device's own MLS tree — not from what the server says — with a safety
+   * number two people can compare. The number is the same on every device
+   * of every person iff they all see the same set of devices and keys, so a
+   * device added without someone's knowledge changes it for everyone.
+   * `changed` lists devices that came or went since this member last
+   * confirmed what they saw.
+   */
+  async verification(conversationId: string): Promise<Verification | null> {
+    await this.sync(conversationId);
+    const { state } = await this.load(conversationId, []);
+    if (!state) return null;
+    const devices: VerifiedDevice[] = [];
+    for (const node of state.ratchetTree) {
+      if (node?.nodeType !== "leaf" || node.leaf.credential.credentialType !== "basic") continue;
+      const who = parseIdentity(node.leaf.credential.identity);
+      if (!who) continue;
+      devices.push({ userId: who.userId, deviceId: who.deviceId, signatureKey: b64(node.leaf.signaturePublicKey), fingerprint: "" });
+    }
+    devices.sort((a, b) => (a.userId + a.deviceId).localeCompare(b.userId + b.deviceId));
+    const digest = async (text: string) => new Uint8Array(await crypto.subtle.digest("SHA-256", utf8(text) as BufferSource));
+    for (const d of devices) d.fingerprint = groups(await digest(`freeholder:device:v1\n${d.userId}\n${d.deviceId}\n${d.signatureKey}`), 4);
+    const number = groups(await digest(`freeholder:safety:v1\n${conversationId}\n${devices.map((d) => `${d.userId}:${d.deviceId}:${d.signatureKey}`).join("\n")}`), 12);
+    const current = devices.map((d) => `${d.userId}:${d.deviceId}`);
+    const seen = await this.store.seenDevices(conversationId);
+    if (!seen) await this.store.saveSeenDevices(conversationId, current);
+    const before = new Set(seen ?? current);
+    const now = new Set(current);
+    return {
+      number,
+      devices,
+      changed: { added: current.filter((d) => !before.has(d)), removed: [...before].filter((d) => !now.has(d)) },
+    };
+  }
+
+  /** C12.35: the member has looked at the devices and accepts them as they are. */
+  async confirmDevices(conversationId: string): Promise<void> {
+    const v = await this.verification(conversationId);
+    if (v) await this.store.saveSeenDevices(conversationId, v.devices.map((d) => `${d.userId}:${d.deviceId}`));
   }
 
   /** Encrypt and send. Returns the message id, or null if the conversation cannot be encrypted. */

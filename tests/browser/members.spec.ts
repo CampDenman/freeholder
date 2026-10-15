@@ -313,6 +313,17 @@ test.describe("members (C12.01)", () => {
     await samTablet.page.reload();
     await expect(samTablet.page.getByText("Dinner at 8?")).toBeVisible();
     await expect(samTablet.page.getByText("Sent before this device joined the conversation.").first()).toBeVisible();
+
+    // C12.35: Rae is told a device joined, and both see the same safety number.
+    await raeSide.page.reload();
+    await expect(raeSide.page.getByText("The devices in this conversation changed since you last checked.")).toBeVisible();
+    await raeSide.page.getByText("Verify devices").click();
+    const raeNumber = await raeSide.page.locator("[data-safety-number]").textContent();
+    await samSide.page.goto(raeSide.page.url());
+    await samSide.page.getByText("Verify devices").click();
+    await expect(samSide.page.locator("[data-safety-number]")).toHaveText(raeNumber!);
+    await raeSide.page.getByRole("button", { name: "I have checked them" }).click();
+    await expect(raeSide.page.getByText("The devices in this conversation changed since you last checked.")).toHaveCount(0);
     await samSide.page.goto("/portal/member");
     await expect(samSide.page.getByRole("heading", { name: "Your devices for encrypted messages" })).toBeVisible();
     await expect(samSide.page.getByRole("button", { name: "Remove device" })).toHaveCount(2);
