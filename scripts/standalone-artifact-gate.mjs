@@ -31,8 +31,11 @@ import path from "node:path";
 // enough above organic growth that a release is not blocked by shipping a
 // feature, close enough that a traced repository or a dependency explosion —
 // which arrive as a doubling, not as a drift — still trips it. Raised from
-// 12,000 when an ordinary eleven-file module crossed it.
-const MAX_FILES = 18_000;
+// 12,000 when an ordinary eleven-file module crossed it, and to 27,000
+// (1.5x the 18,094 files measured on 2026-10-14) when the member platform's
+// routes (§44: members, profiles, feeds, messages, calls, market, payouts)
+// crossed 18,000.
+const MAX_FILES = 27_000;
 const MAX_BYTES = 512 * 1024 * 1024;
 const STANDALONE = path.resolve(".next", "standalone");
 const FORBIDDEN_ROOTS = new Set([

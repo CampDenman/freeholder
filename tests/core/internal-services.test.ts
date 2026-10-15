@@ -57,6 +57,14 @@ const INTERNAL = [
   // Provider work is split around short system-only snapshot/apply services.
   // These names are implementation seams for workers, never public verbs.
   "catalog.recomputeCollectionMembership",
+  // The member payout ledger (§44.8, C12.09). The catalog answers which
+  // member sold each order line; the ledger is written from catalog.orderPaid
+  // and refund.succeeded and released by a job, on nobody's behalf.
+  "catalog.orderForInvoice",
+  "catalog.orderSellers",
+  "members.recordPayouts",
+  "members.releaseDuePayouts",
+  "members.reversePayouts",
   "catalogue.applyRefresh",
   "catalogue.refreshSource",
   "entitlements.issuePass",

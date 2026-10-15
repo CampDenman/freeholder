@@ -218,6 +218,13 @@
       "when": 1793310000010,
       "tag": "0030_member_listings",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793310000011,
+      "tag": "0031_member_payouts",
+      "breakpoints": true
     }
   ]
 }

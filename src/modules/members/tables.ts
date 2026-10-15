@@ -18,4 +18,6 @@ export {
   memberCalls,
   memberCallSignals,
   memberListings,
+  memberPayoutAccounts,
+  memberPayouts,
 } from "./schema";

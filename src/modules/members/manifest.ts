@@ -10,6 +10,7 @@ export default defineModule({
   requires: ["core", "catalog"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  jobs: () => import("./jobs"),
   events: {
     emits: [
       "member.joined",
@@ -29,6 +30,11 @@ export default defineModule({
       "member.callStarted",
       "member.listingCreated",
       "member.listingReviewed",
+      "member.payoutsRecorded",
     ],
+    listens: {
+      "catalog.orderPaid": "onOrderPaid",
+      "refund.succeeded": "onRefundSucceeded",
+    },
   },
 });

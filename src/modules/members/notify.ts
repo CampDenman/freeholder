@@ -12,7 +12,7 @@ import type { ServiceContext } from "@/core/service";
 import { relationBetween } from "./graph";
 import { memberProfiles } from "./schema";
 
-export type MemberTopic = "members.follow" | "members.friend" | "members.mention" | "members.comment" | "members.reaction" | "members.message" | "members.call";
+export type MemberTopic = "members.follow" | "members.friend" | "members.mention" | "members.comment" | "members.reaction" | "members.message" | "members.call" | "members.sale";
 
 export async function notifyMember(
   ctx: ServiceContext,
@@ -29,7 +29,9 @@ export async function notifyMember(
     dedupeKey?: string;
   },
 ): Promise<void> {
-  if (input.to === input.from) return;
+  // Self-addressed notices (a sale, a payout) come from the site, not a member.
+  const fromSite = input.to === input.from && input.topic === "members.sale";
+  if (input.to === input.from && !fromSite) return;
   const [recipient] = await ctx.tx
     .select({ status: memberProfiles.status })
     .from(memberProfiles)
@@ -40,8 +42,10 @@ export async function notifyMember(
     .from(memberProfiles)
     .where(eq(memberProfiles.userId, input.from));
   if (!sender) return;
-  const relation = await relationBetween(ctx, input.to, input.from);
-  if (relation.blocked || relation.muted) return;
+  if (!fromSite) {
+    const relation = await relationBetween(ctx, input.to, input.from);
+    if (relation.blocked || relation.muted) return;
+  }
   await ctx.callAsSystem(createNotification, {
     recipient: { kind: "user", id: input.to },
     topic: input.topic,

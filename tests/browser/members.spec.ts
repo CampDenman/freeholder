@@ -284,4 +284,50 @@ test.describe("members (C12.01)", () => {
     await seller.close();
     await admin.close();
   });
+
+  test("payout details, confirmation, and a listing becoming buyable (C12.09)", async ({ browser }) => {
+    const ownerToken = await seedC11Owner("Payout proof");
+    await db().insert(memberSettings).values({ id: 1, marketplaceEnabled: true, listingReview: false });
+    await db().insert(users).values({ id: MEMBER_ID, email: "rae@example.test", role: "customer" });
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date(), isPrivate: false });
+    const rae = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+    const seller = await browser.newContext({ baseURL: C11_BASE_URL });
+    await seller.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
+    const page = await seller.newPage();
+    await page.goto("/portal/listings");
+    await page.getByLabel("Title").fill("Harbour print download");
+    await page.getByLabel("Type").selectOption("digital");
+    await page.getByLabel("Price").fill("45");
+    await page.getByRole("button", { name: "Create listing" }).click();
+    await expect(page.getByText("Listed", { exact: true })).toBeVisible();
+
+    const visitor = await browser.newContext({ baseURL: C11_BASE_URL });
+    const anon = await visitor.newPage();
+    await anon.goto("/market");
+    await anon.getByRole("link", { name: "Harbour print download" }).click();
+    await expect(anon.getByRole("button", { name: /add to cart/i })).toHaveCount(0);
+
+    await page.goto("/portal/payouts");
+    await expect(page.getByRole("heading", { level: 1, name: "Payouts" })).toBeVisible();
+    await axeInBothThemes(page);
+    await page.getByLabel("Payout details").fill("Interac e-transfer to rae@example.test");
+    await page.getByRole("button", { name: "Save payout details" }).click();
+    await expect(page.getByText("Waiting for the site")).toBeVisible();
+
+    const admin = await browser.newContext({ baseURL: C11_BASE_URL });
+    await useOwnerSession(admin, ownerToken);
+    const console = await admin.newPage();
+    await console.goto("/admin/members");
+    await expect(console.getByText("Interac e-transfer to rae@example.test")).toBeVisible();
+    await console.getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(console.getByText("Saved.")).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText("Ready to sell")).toBeVisible();
+    await anon.reload();
+    await expect(anon.getByRole("button", { name: /add to cart/i })).toBeVisible();
+    await visitor.close();
+    await seller.close();
+    await admin.close();
+  });
 });

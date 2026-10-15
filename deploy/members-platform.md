@@ -98,3 +98,18 @@ from mocked payment, mail or media runs alone.
 - Tests: `tests/modules/member-listings.test.ts` (2 cases) and the listings
   journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
 - Not yet: checkout and payouts (C12.09); seller-calendar services (C12.25).
+
+## C12.09 — checkout and payouts (2026-10-14)
+
+- Owner decision 2026-10-14: hold-until-delivery by default; owners may
+  choose instant payout, or seller-as-merchant where the payout provider
+  supports it; providers plug in behind `registerPayoutAdapter`.
+- The catalog asks `registerSellerGate` before a member listing goes in a
+  cart or to checkout; with nothing registered it refuses.
+- The ledger (`member_payouts`) is written from `catalog.orderPaid` and
+  adjusted from `refund.succeeded`. Each row is idempotent per order line.
+- Only the manual adapter ships: the site pays sellers itself and records the
+  reference. Stripe Connect is C12.26; other providers C12.27; buyer-
+  confirmed release is C12.10.
+- The standalone artifact file cap was raised from 18,000 to 27,000 (1.5x
+  the 18,094 measured) in `scripts/standalone-artifact-gate.mjs`.

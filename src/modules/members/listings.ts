@@ -20,7 +20,7 @@ import {
   getProduct,
   restoreProduct,
 } from "@/modules/catalog/service";
-import { applyVariantMatrix, getProductVariants } from "@/modules/catalog/variants";
+import { applyVariantMatrix, getProductVariants, setVariantShipping } from "@/modules/catalog/variants";
 import { createPriceList, listPriceLists, setPriceListEntry } from "@/modules/catalog/pricing";
 import { marketListings } from "@/modules/catalog/market";
 import { listProductTaxCategories } from "@/modules/catalog/service";
@@ -130,6 +130,10 @@ export const createListing = defineService({
     const variants = await ctx.callAsSystem(getProductVariants, { productId: product.id });
     const variant = variants.variants.find((v) => v.isDefault) ?? variants.variants[0];
     if (!variant) throw new Error("A listing was created without a variant.");
+    // Only physical items travel; downloads, services and rentals need no address.
+    if (input.kind !== "physical") {
+      await ctx.callAsSystem(setVariantShipping, { variantId: variant.id, requiresShipping: false });
+    }
     await ctx.callAsSystem(setPriceListEntry, { priceListId: await priceListFor(ctx, currency), variantId: variant.id, amount: input.price });
     const review = policy.review ? "pending" : "approved";
     const [listing] = await ctx.tx

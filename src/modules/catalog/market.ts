@@ -3,11 +3,11 @@
 // The member market (MASTER.md §44.8, C12.08): active, public listings sold by
 // members, newest first. The site's own shop never includes them.
 import { z } from "zod";
-import { and, desc, eq, ilike, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNotNull, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineService } from "@/core/service";
+import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { PRODUCT_KINDS } from "./contract";
-import { priceListEntries, priceLists, productVariants, products } from "./schema";
+import { orderItems, orders, priceListEntries, priceLists, productVariants, products } from "./schema";
 
 const listing = row({
   id: uuid,
@@ -70,4 +70,82 @@ export const marketListings = defineService({
   },
 });
 
-export default [marketListings];
+/**
+ * §44.8: whether member listings may be sold right now. The members module
+ * registers the answer (payouts configured, sellers ready, payout model);
+ * the catalog only asks. With nothing registered, member listings are never
+ * sold — money must not be collected for a seller the site cannot pay.
+ */
+export type SellerGate = (ctx: ServiceContext, sellerIds: (string | null)[]) => Promise<string | null>;
+let gate: SellerGate | null = null;
+
+export function registerSellerGate(next: SellerGate): void {
+  gate = next;
+}
+
+/** Whether one seller's listings can be bought right now (null is the site). */
+export async function sellerCanSell(ctx: ServiceContext, sellerUserId: string | null): Promise<boolean> {
+  if (sellerUserId === null) return true;
+  return gate ? (await gate(ctx, [sellerUserId])) === null : false;
+}
+
+/** Refuse with a ServiceError when these variants cannot be sold together. */
+export async function assertSellable(ctx: ServiceContext, variantIds: string[]): Promise<void> {
+  if (variantIds.length === 0) return;
+  const rows = await ctx.tx
+    .select({ sellerUserId: products.sellerUserId })
+    .from(productVariants)
+    .innerJoin(products, eq(products.id, productVariants.productId))
+    .where(inArray(productVariants.id, variantIds));
+  const sellers = [...new Set(rows.map((r) => r.sellerUserId))];
+  if (sellers.every((s) => s === null)) return;
+  const refusal = gate ? await gate(ctx, sellers) : "Buying from members is not available on this site yet.";
+  if (refusal) throw new ServiceError("conflict", refusal);
+}
+
+export const orderSellers = defineService({
+  name: "catalog.orderSellers",
+  summary: "Which member sold each line of an order, for the payout ledger.",
+  kind: "query",
+  permission: "system",
+  input: z.object({ orderId: uuid }),
+  output: z.object({
+    orderId: uuid,
+    invoiceId: uuid.nullable(),
+    currency: z.string(),
+    status: z.string(),
+    lines: listed(row({ orderItemId: uuid, sellerUserId: uuid, lineTotalMinor: z.number().int() })),
+  }),
+  handler: async (input, ctx) => {
+    const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.orderId));
+    if (!order) throw new ServiceError("not_found", "That order does not exist.");
+    const lines = await ctx.tx
+      .select({ orderItemId: orderItems.id, sellerUserId: products.sellerUserId, lineTotalMinor: orderItems.lineTotalMinor })
+      .from(orderItems)
+      .innerJoin(productVariants, eq(productVariants.id, orderItems.variantId))
+      .innerJoin(products, eq(products.id, productVariants.productId))
+      .where(and(eq(orderItems.orderId, order.id), isNotNull(products.sellerUserId)));
+    return {
+      orderId: order.id,
+      invoiceId: order.invoiceId,
+      currency: order.currency,
+      status: order.status,
+      lines: lines.map((l) => ({ ...l, sellerUserId: l.sellerUserId! })),
+    };
+  },
+});
+
+export const orderForInvoice = defineService({
+  name: "catalog.orderForInvoice",
+  summary: "The order an invoice belongs to, if any.",
+  kind: "query",
+  permission: "system",
+  input: z.object({ invoiceId: uuid }),
+  output: z.object({ orderId: uuid.nullable(), totalMinor: z.number().int().nullable() }),
+  handler: async (input, ctx) => {
+    const [order] = await ctx.tx.select({ id: orders.id, totalMinor: orders.totalMinor }).from(orders).where(eq(orders.invoiceId, input.invoiceId));
+    return { orderId: order?.id ?? null, totalMinor: order?.totalMinor ?? null };
+  },
+});
+
+export default [marketListings, orderSellers, orderForInvoice];

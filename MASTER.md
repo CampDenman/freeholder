@@ -10407,11 +10407,35 @@ whatever is best for the people using the site.
   N/A — no jobs. **F12** the browser journey lists, reviews, browses the
   market and the profile shop, and finds no add-to-cart. Changeset
   `member-listings.md`.)*
-- [ ] **C12.09** Build multi-seller checkout and payouts: a cart across
-  sellers, a connected-account payment adapter (Stripe Connect first) with
-  provider-run seller verification, a site-admin platform fee that defaults
-  to zero, funds released on delivery confirmation or after a stated window,
-  refunds, and a payout ledger per seller on the Invoice → Payment spine.
+- [x] **C12.09** Build multi-seller checkout and payouts: a cart across
+  sellers paid with one invoice, a payout ledger line per seller per order
+  line less a site-admin fee that defaults to zero, a payout model the site
+  owner chooses (hold until delivery by default; instant payout; seller as
+  merchant where the provider supports it), a provider-neutral marketplace
+  payout adapter seam with a manual adapter, held funds released after the
+  window or by the site, refunds that cancel or flag what is owed, and a
+  seller-facing record of every amount. Member listings are buyable only
+  while their seller can be paid. Buyer-confirmed release is C12.10; Stripe
+  Connect (including seller as merchant) is C12.26; other providers C12.27.
+  *(Evidence 2026-10-14: `src/modules/members/payouts.ts`, the seller gate
+  and order-seller lookups in `src/modules/catalog/market.ts`,
+  `catalog.setVariantShipping`, migration `db/migrations/0031_member_payouts.sql`,
+  `tests/modules/member-payouts.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** `/portal/payouts` and the payout settings, seller accounts and
+  open payouts on `/admin/members`. **F05** `members.payoutAccount`,
+  `members.savePayoutInstructions`, `members.myPayouts`, `members.payouts`,
+  `members.setPayoutAccountStatus`, `members.settlePayouts` (system:
+  `members.recordPayouts`, `members.reversePayouts`,
+  `members.releaseDuePayouts`). **F07** the catalog sells a member listing
+  only through the registered seller gate; payout details sealed at rest and
+  re-confirmed after every change; the owner cannot pick a model the provider
+  cannot run; paid-out refunds go to review rather than vanishing; money
+  write class on every ledger change. **F09** `members.releaseDuePayouts`
+  runs every 15 minutes; ledger rows come from the `catalog.orderPaid` and
+  `refund.succeeded` events and are idempotent per order line. **F12** the
+  database journey buys from two sellers, settles, holds, releases, pays and
+  refunds; the browser journey sets payout details, confirms them and sees
+  the listing become buyable. Changeset `member-payouts.md`.)*
 - [ ] **C12.10** Build buyer protection: order conversations, delivery
   confirmation, a dispute workflow with site-admin mediation, and refund or
   release outcomes recorded on the ledger.
@@ -10477,6 +10501,14 @@ whatever is best for the people using the site.
 - [ ] **C12.25** Let members offer bookable services on their own calendar:
   availability set by the seller, the site's booking flow and policies, and
   the booking paid to the seller through C12.09.
+- [ ] **C12.26** Implement the Stripe Connect marketplace adapter for all
+  three payout models: Express onboarding and status, provider-run seller
+  verification, held funds with transfers on release, direct and
+  destination charges, application fees, refunds and transfer reversals, and
+  signed webhooks.
+- [ ] **C12.27** Add marketplace payout adapters for providers other than
+  Stripe (for example PayPal, Adyen for Platforms, Mollie), selectable by the
+  site owner without code changes.
 
 ---
 
@@ -10561,11 +10593,21 @@ Members sell physical goods, services bookable through the scheduling engine
 (§4.4), digital goods and rentals. Listings reuse the catalog (§4.2) with a
 seller dimension; each seller's storefront appears on their profile.
 
-Checkout supports carts across sellers through a connected-account payment
-adapter (Stripe Connect first), with seller verification run by the provider.
-Each seller's share becomes its own invoice on the Invoice → Payment spine.
-The site fee is set by the site admin and defaults to zero. Funds are held
-until the buyer confirms delivery or a stated window passes, then paid out.
+Checkout supports carts across sellers. The buyer pays one invoice on the
+Invoice → Payment spine, and each seller's share of each line is recorded on a
+payout ledger, less the site fee, which the site admin sets and which
+defaults to zero.
+
+*Owner decision 2026-10-14:* the default payout model holds funds — the site
+charges the buyer, keeps the money until the buyer confirms delivery or a
+stated window passes, then pays the seller — because that is what protects
+buyers. Site owners can switch, in one setting, to **seller as merchant**
+(charges go straight to the seller; the site only takes its fee) or
+**instant payout** (the site charges and routes funds to the seller at once).
+Money moves through a provider-neutral marketplace payout adapter (§2.5):
+Stripe Connect is the first, with seller verification run by the provider;
+other providers plug into the same seam, and a manual adapter lets a site
+pay sellers by hand while the ledger keeps every amount owed.
 Disputes go to site-admin mediation. Reviews are possible only after a
 completed transaction and are revealed to both sides together.
 

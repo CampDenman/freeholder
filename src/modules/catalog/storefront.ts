@@ -31,7 +31,8 @@
 //     projection is deliberately reduced: no contact ids, no full address,
 //     just what a confirmation page shows.
 
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { sellerCanSell } from "./market";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { requestCustomerMagicLink } from "@/core/auth/magic-links/service";
@@ -170,8 +171,6 @@ export const purchaseOptions = defineService({
       .where(
         and(
           eq(products.status, "active"),
-          // Member listings cannot be bought until seller payouts exist (C12.09).
-          isNull(products.sellerUserId),
           input.slugs
             ? inArray(products.slug, input.slugs)
             : inArray(products.id, input.productIds!),
@@ -179,6 +178,10 @@ export const purchaseOptions = defineService({
       )
       .orderBy(asc(products.name))
       .limit(24);
+    // §44.8: a member's listing is purchasable only while its seller can be paid.
+    for (let i = rows.length - 1; i >= 0; i -= 1) {
+      if (!(await sellerCanSell(ctx, rows[i]!.sellerUserId))) rows.splice(i, 1);
+    }
     if (rows.length === 0) return [];
 
     // The same visibility gate the product detail block applies: public and

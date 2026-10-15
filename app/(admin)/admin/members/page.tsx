@@ -8,7 +8,9 @@ import { listMembers, membershipRules } from "@/modules/members/service";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { getLocale, getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
-import { inviteMemberAction, reviewListingAction, saveMarketRulesAction, saveMembershipRulesAction, setMemberStatusAction } from "./actions";
+import { inviteMemberAction, payoutAccountAction, reviewListingAction, saveMarketRulesAction, saveMembershipRulesAction, setMemberStatusAction, settlePayoutsAction } from "./actions";
+import { payoutAdapters, sitePayouts } from "@/modules/members/payouts";
+import { formatMoney } from "@/core/i18n";
 import { pendingListings } from "@/modules/members/listings";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +35,8 @@ export default async function MembersPage({
     membershipRules.call({}, actor),
     listMembers.call({ status, search: query.q || undefined, limit: 100 }, actor),
   ]);
-  const waiting = await pendingListings.call({}, actor);
+  const [waiting, ledger] = await Promise.all([pendingListings.call({}, actor), sitePayouts.call({}, actor)]);
+  const open = ledger.payouts.filter((p) => p.state === "held" || p.state === "due" || p.state === "review");
   const back = `/admin/members?status=${status ?? "all"}${query.q ? `&q=${encodeURIComponent(query.q)}` : ""}`;
   return (
     <div className="grid gap-6">
@@ -75,7 +78,24 @@ export default async function MembersPage({
               <input type="checkbox" name="listingReview" value="yes" defaultChecked={rules.listingReview} />
               <span>{t("members.admin.listingReview")}</span>
             </label>
-            <p className="text-sm text-ink-muted">{t("members.listings.notYetSelling")}</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t("members.admin.payoutModel")} htmlFor="payoutModel" hint={t("members.admin.payoutModelHint")}>
+                <Select id="payoutModel" name="payoutModel" defaultValue={rules.payoutModel}>
+                  {(["hold", "instant", "seller_merchant"] as const).map((m) => <option key={m} value={m}>{t(`members.admin.model.${m}`)}</option>)}
+                </Select>
+              </Field>
+              <Field label={t("members.admin.payoutAdapter")} htmlFor="payoutAdapter">
+                <Select id="payoutAdapter" name="payoutAdapter" defaultValue={rules.payoutAdapter}>
+                  {payoutAdapters().map((a) => <option key={a.id} value={a.id}>{t(`members.admin.adapter.${a.id}`)}</option>)}
+                </Select>
+              </Field>
+              <Field label={t("members.admin.holdDays")} htmlFor="holdDays">
+                <Input id="holdDays" name="holdDays" type="number" min={1} max={90} defaultValue={rules.holdDays} />
+              </Field>
+              <Field label={t("members.admin.siteFee")} htmlFor="siteFeePercent" hint={t("members.admin.siteFeeHint")}>
+                <Input id="siteFeePercent" name="siteFeePercent" type="number" min={0} max={50} step={0.1} defaultValue={rules.siteFeeBps / 100} />
+              </Field>
+            </div>
             <div><Button type="submit">{t("members.admin.saveRules")}</Button></div>
           </form>
           {waiting.length ? (
@@ -96,6 +116,51 @@ export default async function MembersPage({
             </ul>
           ) : (
             <p className="mt-4 text-sm text-ink-muted">{t("members.admin.noPendingListings")}</p>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("members.admin.payouts")} />
+        <CardBody>
+          <h3 className="mb-2 font-semibold">{t("members.admin.sellerAccounts")}</h3>
+          {ledger.accounts.length === 0 ? <p className="text-sm text-ink-muted">{t("members.admin.noSellerAccounts")}</p> : null}
+          <ul className="mb-6 grid gap-2">
+            {ledger.accounts.map((a) => (
+              <li key={a.userId} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rule p-3">
+                <span>@{a.handle} · <span className="text-sm">{a.instructions}</span></span>
+                <form action={payoutAccountAction} className="flex items-center gap-2">
+                  <input type="hidden" name="userId" value={a.userId} />
+                  <Pill tone={a.status === "ready" ? "success" : "warning"}>{t(`members.payouts.account.${a.status}`)}</Pill>
+                  {a.status !== "ready" ? <Button type="submit" name="status" value="ready">{t("members.admin.confirmAccount")}</Button> : <Button type="submit" name="status" value="disabled" variant="quiet">{t("members.admin.disableAccount")}</Button>}
+                </form>
+              </li>
+            ))}
+          </ul>
+          <h3 className="mb-2 font-semibold">{t("members.admin.openPayouts")}</h3>
+          {open.length === 0 ? <p className="text-sm text-ink-muted">{t("members.admin.noOpenPayouts")}</p> : (
+            <form action={settlePayoutsAction} className="grid gap-3">
+              <ul className="grid gap-2">
+                {open.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm">
+                    <input type="checkbox" name="ids" value={p.id} id={`payout-${p.id}`} />
+                    <label htmlFor={`payout-${p.id}`}>@{p.sellerHandle} · {formatMoney(p.netMinor, p.currency, locale)}</label>
+                    <Pill>{t(`members.payouts.state.${p.state}`)}</Pill>
+                    {p.note ? <span className="text-ink-muted">{p.note}</span> : null}
+                  </li>
+                ))}
+              </ul>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t("members.admin.payoutReference")} htmlFor="payout-reference"><Input id="payout-reference" name="reference" maxLength={200} /></Field>
+                <Field label={t("members.admin.payoutNote")} htmlFor="payout-note"><Input id="payout-note" name="note" maxLength={500} /></Field>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" name="action" value="release" variant="quiet">{t("members.admin.releasePayouts")}</Button>
+                <Button type="submit" name="action" value="paid">{t("members.admin.markPaid")}</Button>
+                <Button type="submit" name="action" value="owe" variant="quiet">{t("members.admin.stillOwed")}</Button>
+                <Button type="submit" name="action" value="cancel" variant="danger">{t("members.admin.cancelPayouts")}</Button>
+              </div>
+            </form>
           )}
         </CardBody>
       </Card>

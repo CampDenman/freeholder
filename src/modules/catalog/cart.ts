@@ -27,6 +27,7 @@ import { CART_KINDS, CART_STATUSES } from "./contract";
 import { availability, releaseReservation, reserveStock } from "./inventory";
 import { resolvePrice } from "./pricing";
 import { cartItems, carts, productVariants, products, wishlistItems, wishlists } from "./schema";
+import { assertSellable } from "./market";
 import { hashCatalogShareToken, newCatalogShareToken } from "./tokens";
 
 const id = z.string().uuid();
@@ -443,7 +444,9 @@ export const addCartItem = defineService({
       throw new ServiceError("not_found", "That variant is not here.");
     }
     if (variant.sellerUserId) {
-      throw new ServiceError("conflict", "Buying from members is not available on this site yet.");
+      // §44.8: the seller must be payable, and the payout model may limit a cart to one seller.
+      const existing = await ctx.tx.select({ variantId: cartItems.variantId }).from(cartItems).where(eq(cartItems.cartId, input.cartId));
+      await assertSellable(ctx, [...existing.map((row) => row.variantId), variant.id]);
     }
     if (Boolean(input.galleryId) !== Boolean(input.assetId)) {
       throw new ServiceError(
