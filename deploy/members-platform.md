@@ -291,3 +291,21 @@ from mocked payment, mail or media runs alone.
 - Tests: `tests/core/personal-keys.test.ts` (3 cases) and the C12.14 journey
   in `tests/browser/members.spec.ts`. Passed locally 2026-10-15.
 
+## C12.17 — end-to-end proof and load (2026-10-15)
+
+- `tests/browser/member-journey.spec.ts` runs the whole journey; the call
+  side uses Firefox (`pnpm exec playwright install firefox` locally; CI
+  installs it). The test network has no STUN/TURN, so both browsers expose
+  plain host addresses; real sites rely on STUN and `TURN_URLS`.
+- `pnpm test:load` (needs `TEST_DATABASE_URL`; disposable data) measured on
+  a developer machine, 2026-10-15, ten-way concurrency:
+
+  | Operation | n | p50 | p95 | budget (p95) |
+  | --- | --- | --- | --- | --- |
+  | home feed | 100 | 30 ms | 44 ms | 400 ms |
+  | public feed | 100 | 27 ms | 38 ms | 300 ms |
+  | send message | 200 | 133 ms | 206 ms | 250 ms |
+
+  Sending is the slowest path (sealing and notifying each recipient); watch
+  it as conversations grow.
+

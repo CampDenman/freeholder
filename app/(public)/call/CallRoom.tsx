@@ -16,6 +16,10 @@ export function CallRoom({ id, role, media, initialState, labels }: {
   id: string; role: "caller" | "callee"; media: "voice" | "video"; initialState: string; labels: Labels;
 }) {
   const [state, setState] = useState(initialState);
+  // Read once: the page re-renders with a new state when the call is
+  // answered, and restarting the connection then would drop a working call.
+  const startedAs = useRef(initialState);
+  const labelsRef = useRef(labels);
   const [phase, setPhase] = useState<"setup" | "connecting" | "connected" | "done">("setup");
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
@@ -32,14 +36,14 @@ export function CallRoom({ id, role, media, initialState, labels }: {
     const pending: RTCIceCandidateInit[] = [];
 
     async function start() {
-      if (role === "callee" && initialState === "ringing") await answer(id, true);
+      if (role === "callee" && startedAs.current === "ringing") await answer(id, true);
       const config = await callConfig();
       setDirectOnly(!config.relayConfigured);
       let mine: MediaStream;
       try {
         mine = await navigator.mediaDevices.getUserMedia({ audio: true, video: media === "video" });
       } catch {
-        setProblem(labels.noDevice);
+        setProblem(labelsRef.current.noDevice);
         await hangUp(id);
         setPhase("done");
         return;
@@ -53,7 +57,7 @@ export function CallRoom({ id, role, media, initialState, labels }: {
       peer.onicecandidate = (event) => { if (event.candidate) void signal(id, "candidate", event.candidate.toJSON()); };
       peer.onconnectionstatechange = () => {
         if (peer.connectionState === "connected") setPhase("connected");
-        if (peer.connectionState === "failed") setProblem(labels.directOnly);
+        if (peer.connectionState === "failed") setProblem(labelsRef.current.directOnly);
       };
       setPhase("connecting");
       if (role === "caller") {
@@ -73,18 +77,27 @@ export function CallRoom({ id, role, media, initialState, labels }: {
         if (got.state !== "ringing" && got.state !== "active") { finish(); return; }
         for (const s of got.signals) {
           if (!peer) break;
-          if (s.kind === "offer" || s.kind === "answer") {
-            await peer.setRemoteDescription(s.payload as RTCSessionDescriptionInit);
-            for (const c of pending.splice(0)) await peer.addIceCandidate(c);
-            if (s.kind === "offer") {
-              const reply = await peer.createAnswer();
-              await peer.setLocalDescription(reply);
-              await signal(id, "answer", { type: "answer", sdp: reply.sdp ?? "" });
+          // Each signal stands alone: browsers reject some of each other's
+          // candidates (Firefox and Chromium differ), and one unusable
+          // candidate must not lose the rest of the batch, which the server
+          // has already handed over.
+          try {
+            if (s.kind === "offer" || s.kind === "answer") {
+              await peer.setRemoteDescription(s.payload as RTCSessionDescriptionInit);
+              for (const c of pending.splice(0)) await peer.addIceCandidate(c).catch(() => undefined);
+              if (s.kind === "offer") {
+                const reply = await peer.createAnswer();
+                await peer.setLocalDescription(reply);
+                await signal(id, "answer", { type: "answer", sdp: reply.sdp ?? "" });
+              }
+            } else if (peer.remoteDescription) {
+              await peer.addIceCandidate(s.payload as RTCIceCandidateInit).catch(() => undefined);
+            } else {
+              pending.push(s.payload as RTCIceCandidateInit);
             }
-          } else if (peer.remoteDescription) {
-            await peer.addIceCandidate(s.payload as RTCIceCandidateInit);
-          } else {
-            pending.push(s.payload as RTCIceCandidateInit);
+          } catch {
+            // A description that cannot be applied leaves the call to its
+            // connection-state handling; the next poll carries on.
           }
         }
       } catch {
@@ -107,7 +120,7 @@ export function CallRoom({ id, role, media, initialState, labels }: {
       pc.current?.close();
       stream.current?.getTracks().forEach((t) => t.stop());
     };
-  }, [id, role, media, initialState, labels.noDevice, labels.directOnly]);
+  }, [id, role, media]);
 
   const status =
     phase === "done"
