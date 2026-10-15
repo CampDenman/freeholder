@@ -147,7 +147,6 @@ export function GroupCallRoom({ callId, conversationId, userId, media, labels }:
 
 /** On a group conversation: start a call (making and sending its key), or join the one going on. */
 export function GroupCallButtons({ conversationId, userId, active, labels }: { conversationId: string; userId: string; active: { id: string; media: "voice" | "video" } | null; labels: { voice: string; video: string; join: string; failed: string } }) {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   async function start(media: "voice" | "video") {
@@ -157,7 +156,8 @@ export function GroupCallButtons({ conversationId, userId, active, labels }: { c
       const { id, started } = await unwrap(startGroupCallAction({ conversationId, media }));
       // Only the device that started the call makes its key; anyone else joins the one already going.
       if (started) await deviceFor(userId).startCallKey(conversationId, id);
-      router.push(`/call/group/${id}`);
+      // A full load, so the call page's own policy (which admits the SFU) applies.
+      window.location.assign(`/call/group/${id}`);
     } catch {
       setFailed(true);
       setBusy(false);

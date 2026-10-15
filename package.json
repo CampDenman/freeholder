@@ -19,7 +19,7 @@
     "postbuild": "node scripts/standalone-artifact-gate.mjs --scrub",
     "start": "node scripts/start.mjs",
     "start:replit": "node scripts/start-replit.mjs",
-    "lint": "eslint .",
+    "lint": "NODE_OPTIONS=--max-old-space-size=8192 eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "gates": "node scripts/fast-gates.mjs",

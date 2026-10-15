@@ -97,11 +97,10 @@ describe.runIf(hasDatabase)("group calls (C12.24)", () => {
     const samLaptop = deviceFor(SAM, "Sam laptop");
     expect((await failure(joinGroupCall.call({ id, deviceId: (await samLaptop.device()).deviceId }, SAM))).code).toBe("permission");
 
-    // Once the laptop is in the group, the next sync of a device holding the key sends it again.
+    // The device that adds the laptop to the group sends it the key in the same sync.
     await rae.send(conversationId, "Sam, your laptop is in now");
-    expect(await samLaptop.callKey(conversationId, id)).toBeNull();
-    await rae.sync(conversationId);
     expect(await samLaptop.callKey(conversationId, id)).toBe(key);
+    expect(await db().select().from(memberMlsLog).where(and(eq(memberMlsLog.callId, id), eq(memberMlsLog.kind, "control")))).toHaveLength(2);
     expect((await joinGroupCall.call({ id, deviceId: (await samLaptop.device()).deviceId }, SAM)).room).toBe(`freeholder-${id}`);
 
     expect((await viewGroupCall.call({ id }, RAE)).inCall.map((p) => p.handle)).toEqual(["sam"]);

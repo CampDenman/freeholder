@@ -57,6 +57,15 @@ describe("the Content Security Policy contract", () => {
     expect(policy).toContain("upgrade-insecure-requests");
   });
 
+  it("lets only group call pages reach the site's SFU (C12.24)", () => {
+    const sfu = ["wss://sfu.example.test", "https://sfu.example.test"];
+    const call = contentSecurityPolicy({ nonce: "n", path: "/call/group/0b54", production: true, callOrigins: sfu });
+    expect(directive(call, "connect-src")).toBe("connect-src 'self' https://sfu.example.test wss://sfu.example.test");
+    for (const path of ["/messages/0b54", "/call/0b54", "/admin"]) {
+      expect(directive(contentSecurityPolicy({ nonce: "n", path, production: true, callOrigins: sfu }), "connect-src")).toBe("connect-src 'self'");
+    }
+  });
+
   it("permits embedding only the same-origin editor preview", () => {
     const preview = contentSecurityPolicy({
       nonce: "preview",
