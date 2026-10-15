@@ -10,11 +10,13 @@ import { createGmailMail } from "@/adapters/mail/gmail";
 import { createOutlookMail } from "@/adapters/mail/outlook";
 import type {
   MailAdapter,
+  MailPermission,
   MailProvider,
   OutboundEmail,
   SenderVerification,
+  TransactionalReason,
 } from "@/adapters/mail/types";
-import { MailAdapterError } from "@/adapters/mail/types";
+import { MailAdapterError, TRANSACTIONAL_REASONS } from "@/adapters/mail/types";
 import { users } from "@/core/auth/schema";
 import { db } from "@/core/db";
 import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy";
@@ -45,6 +47,7 @@ const senderProvider = z.enum([
   "resend",
   "postmark",
   "ses",
+  "paradise",
 ]);
 
 const mailProvider = z.enum([
@@ -55,6 +58,7 @@ const mailProvider = z.enum([
   "resend",
   "postmark",
   "ses",
+  "paradise",
   "none",
 ]);
 
@@ -69,6 +73,7 @@ const mailSenderRow = row({
     "resend",
     "postmark",
     "ses",
+    "paradise",
   ]),
   connectedAccountId: uuid.nullable(),
   email: z.string(),
@@ -128,7 +133,7 @@ const mailSuppressionRow = row({
 
 const mailConfiguration = z.object({
   transactional: z.object({
-    provider: z.enum(["smtp", "console", "gmail", "outlook"]),
+    provider: z.enum(["smtp", "console", "gmail", "outlook", "paradise"]),
     delivers: z.boolean(),
     missing: z.array(z.string()),
     fromAddress: z.string().nullable(),
@@ -141,7 +146,7 @@ const mailConfiguration = z.object({
     }),
   ),
   bulk: z.object({
-    provider: z.enum(["resend", "postmark", "ses", "none"]),
+    provider: z.enum(["resend", "postmark", "ses", "paradise", "none"]),
     sendConfigured: z.boolean(),
     feedbackConfigured: z.boolean(),
     missing: z.array(z.string()),
@@ -335,6 +340,14 @@ export interface MailSendOptions {
   requireDelivery?: boolean;
   /** Bulk campaigns recheck this contact's consent immediately before I/O. */
   marketingContactId?: string;
+  /**
+   * Why a transactional message is being sent (C3.30). A provider that
+   * checks permission receives it with the event behind the message — the
+   * idempotency key when there is one. Unset is `service_notification`.
+   */
+  transactionalReason?: TransactionalReason;
+  /** The event behind the message, when it is not the idempotency key. */
+  eventRef?: string;
 }
 
 export interface MailSendResult {
@@ -358,6 +371,9 @@ const stagedMessage = z
       "List-Unsubscribe-Post": z.literal("List-Unsubscribe=One-Click").optional(),
     }).strict().optional(),
     marketingContactId: uuid.optional(),
+    transactionalReason: z.enum(TRANSACTIONAL_REASONS).optional(),
+    /** The business event behind a transactional message. */
+    eventRef: z.string().min(1).max(1000).optional(),
   })
   .strict();
 type StagedMessage = z.output<typeof stagedMessage>;
@@ -493,6 +509,14 @@ export async function sendMail(
 
   const finalMessage: StagedMessage = {
     ...prepared,
+    // Only a permission-checking route stores these (C3.30), so a rollback to
+    // the previous release can still read every other queued message.
+    ...(purpose === "transactional" && route.provider === "paradise"
+      ? stagedMessage.pick({ transactionalReason: true, eventRef: true }).parse({
+          transactionalReason: options.transactionalReason,
+          eventRef: options.eventRef ?? options.idempotencyKey,
+        })
+      : {}),
     from:
       prepared.from ??
       (sender
@@ -639,7 +663,23 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
         "The configured mail route changed after this message was queued.",
       );
     }
-    const result = await adapter.send({ ...message, deliveryId });
+    const { marketingContactId, transactionalReason, eventRef, ...outbound } = message;
+    const permission: MailPermission | undefined =
+      adapter.id !== "paradise"
+        ? undefined
+        : queued.delivery.purpose === "bulk"
+          ? {
+              purpose: "marketing",
+              evidence: marketingContactId
+                ? await (await import("@/core/paradise/consent")).marketingEvidence(marketingContactId)
+                : null,
+            }
+          : {
+              purpose: "transactional",
+              reason: transactionalReason ?? "service_notification",
+              eventRef: eventRef ?? `mail-delivery:${deliveryId}`,
+            };
+    const result = await adapter.send({ ...outbound, deliveryId, ...(permission ? { permission } : {}) });
     await finishQueuedMail(deliveryId, {
       providerRef: result.providerRef,
       status: adapter.delivers ? "submitted" : "failed",
@@ -707,6 +747,7 @@ export const mailStatus = defineService({
           "resend",
           "postmark",
           "ses",
+          "paradise",
         ]),
         email: z.string(),
         displayName: z.string().nullable(),
@@ -804,10 +845,10 @@ export const registerMailSender = defineService({
         `This deployment is configured for ${configured.id}, not ${input.provider}.`,
       );
     }
-    if (input.purpose === "bulk" && !["resend", "postmark", "ses"].includes(input.provider)) {
-      throw new ServiceError("validation", "Bulk mail requires Resend, Postmark, or Amazon SES.");
+    if (input.purpose === "bulk" && !["resend", "postmark", "ses", "paradise"].includes(input.provider)) {
+      throw new ServiceError("validation", "Bulk mail requires Resend, Postmark, Amazon SES, or Paradise Modern.");
     }
-    if (input.purpose === "transactional" && input.provider !== "smtp") {
+    if (input.purpose === "transactional" && input.provider !== "smtp" && input.provider !== "paradise") {
       throw new ServiceError("validation", "Connect Gmail or Microsoft through OAuth instead.");
     }
     const configuration = mailConfigurationStatus();
@@ -833,7 +874,7 @@ export const registerMailSender = defineService({
         ...input,
         verificationStatus: input.purpose === "transactional" ? "verified" : "pending",
         verificationDetail:
-          input.provider === "smtp"
+          input.provider === "smtp" || (input.provider === "paradise" && input.purpose === "transactional")
             ? {
                 transportConfigured: true,
                 dnsOwnershipVerified: false,

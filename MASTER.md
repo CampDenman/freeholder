@@ -1684,7 +1684,7 @@ export interface MailAdapter {
 }
 ```
 
-**Routing rule:** transactional mail (receipts, OTPs, booking confirmations, quote notifications) goes through the owner's connected Gmail/Outlook. Bulk (campaigns) requires a bulk adapter (Resend/SES/Postmark) — the email-marketing module refuses to broadcast through a personal mailbox, protecting the owner's domain reputation from themselves.
+**Routing rule:** transactional mail (receipts, OTPs, booking confirmations, quote notifications) goes through the owner's connected Gmail/Outlook. Bulk (campaigns) requires a bulk adapter (Resend/SES/Postmark) — the email-marketing module refuses to broadcast through a personal mailbox, protecting the owner's domain reputation from themselves. Paradise Modern is an optional provider for either route (C3.30): every message carries a permission basis — a transactional reason with its event, or the recipient's recorded marketing opt-in — and campaign mail keeps the site's own one-click unsubscribe.
 
 Same pattern for storage, calendar (2-way sync w/ webhook or polling fallback), sms, ai, **tax** (§4.12 — `quote(order) → TaxLine[]`, whose default implementation is the built-in engine; no Stripe Tax / Avalara / TaxJar adapter), **carrier** (`none` until a live-rate plugin exists), **accounting** (export shapes for QuickBooks, Xero and plain CSV — not an adapter family), and **agent** (§37). There is no FX adapter family. The `none/` implementations let every optional family be absent without null-checks scattered through modules.
 
@@ -2354,7 +2354,7 @@ last. These are core entities, not a plugin.
 
 An optional module (`growth/assistant`), **off by default, enabled by a setting in admin** — when on, the public site gets a chat assistant that answers as the business: hours, services, pricing, availability, policies — and can *act* within tight, owner-granted scopes (start a booking, capture a lead, request a quote) via the same permission-scoped service layer as everything else.
 
-**LLM selection follows the adapter pattern (`adapters/ai`):** owner picks provider + model + key in admin. **On the Replit recipe, this defaults to Replit's hosted model providers** (platform-billed, zero extra signup — the assistant works minutes after deploy); on other targets it's BYO key (Anthropic/OpenAI/etc.) with a "none" fallback that simply hides the assistant.
+**LLM selection follows the adapter pattern (`adapters/ai`):** owner picks provider + model + key in admin. **On the Replit recipe, this defaults to Replit's hosted model providers** (platform-billed, zero extra signup — the assistant works minutes after deploy); on other targets it's BYO key (Anthropic/OpenAI/etc., or PM Brain through a Paradise Modern site key and billing project, C3.33) with a "none" fallback that simply hides the assistant.
 
 **Knowledge base, easily edited in admin:**
 - **Auto-grounded:** the assistant's retrieval index is built from what the site already knows — published pages, service descriptions, product catalog, locations/hours, public policies. Publish a change → index updates. No copy-paste maintenance.
@@ -4959,6 +4959,61 @@ deployments are portable, testable and incapable of silently forking the truth.
   business plus a signed-in customer, in light and dark at desktop and mobile
   sizes, publishes them to the repository's `screenshots` branch, and updates
   the gallery on freeholder.ai. Owner standing rule, 2026-10-14.
+- [ ] **C3.30** Offer Paradise Modern mail as an optional transactional and
+  campaign provider (`MAIL_ADAPTER=paradise`, `MAIL_BULK_ADAPTER=paradise`,
+  owner approval 2026-10-15): `POST /api/site-self/email/send` with the site
+  key; every message declares PM's `permission` — transactional reason plus
+  the event behind it from the delivery worker, or `marketing` under
+  `PARADISEMODERN_MAIL_TOPIC` with the recipient's retained opt-in, refused
+  before any request when none is recorded or the site's one-click
+  unsubscribe is missing; consent PM has not seen is recorded from
+  `consent_records` evidence (double opt-in, preference centre, signed form —
+  never imports, verbal or system records) and the send retried once as a
+  distinct request; withdrawals mirrored through the outbox; sender
+  verification against the PM sending domain; widened provider checks in
+  `0043_paradise_mail_provider.sql`. Implemented with mocked-HTTP coverage
+  (`src/adapters/mail/paradise.ts`, `src/core/paradise/consent.ts`,
+  `tests/core/paradise-mail.test.ts`; `deploy/paradise-modern.md`). Open
+  until a live send of each kind against production PM: PM has no
+  delivery-event webhook, so bounces and complaints are applied by PM rather
+  than reflected in Freeholder's suppression list.
+- [ ] **C3.31** Offer Paradise Modern measurement and consented conversions
+  (`PARADISEMODERN_ANALYTICS=on`, site id, `pm.<domain>` edge origin):
+  PM's `track.js` and `capi.js` load from the site's own edge, and the CSP
+  opens that origin, only for a visitor whose explicit choice is "allow"
+  under a policy that collects — the opt-out default's implied state never
+  qualifies — and the choice discloses the measurement service without
+  naming it; an accepted form submission sends one deduplicated `lead`
+  event to `/api/capi/{site}/event` after the response, with nothing about
+  the visitor persisted. Implemented with mocked-HTTP coverage
+  (`src/modules/analytics/paradise.ts`, `tests/core/paradise-analytics.test.ts`;
+  `deploy/analytics-governance.md`). Open until verified in a real browser
+  against a live edge host.
+- [ ] **C3.32** Offer PM Shield screening and PM lead capture for public
+  forms (`PARADISEMODERN_SHIELD=on`, `PARADISEMODERN_LEADS=on`): the form
+  action asks `/api/shield/assess` before the submission transaction and
+  hands `forms.submit` an HMAC-sealed verdict bound to the form and answers,
+  which can only add a quarantine reason beside §36's traps; PM unreachable
+  seals "unavailable" and the site's own traps decide; an unsealed anonymous
+  API submission is quarantined, never rejected; accepted submissions are
+  copied to `/api/collect/lead` by an outbox listener that retries
+  transient failures. Implemented with mocked-HTTP and database coverage
+  (`src/modules/forms/paradise.ts`, `tests/core/paradise-forms.test.ts`,
+  `tests/core/forms.test.ts`). Open until a live assessment and lead copy
+  against production PM.
+- [ ] **C3.33** Offer PM Brain as an `adapters.ai` provider and as the
+  assistant's provider (`pm_brain`): OpenAI-compatible
+  `/v1/chat/completions` with `x-api-key`, `x-pm-project` from
+  `PARADISEMODERN_BILLING_PROJECT` (PM answers 400 for an unregistered slug,
+  so each site's slug must be registered in PM first), lane
+  `PARADISEMODERN_BRAIN_MODEL` defaulting to `pm-brain`, and
+  `x-pm-fallback-policy` only when set (unset is PM's normal routing, the
+  owner's choice for public-site AI). The §37 builder and the workforce
+  gateway share the same headers and base-URL normalization and now send the
+  billing project too. Implemented with mocked-HTTP coverage
+  (`src/adapters/ai/pm-brain.ts`, `src/adapters/paradise/config.ts`,
+  `tests/core/paradise-brain.test.ts`). Open until a live completion with a
+  registered project.
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

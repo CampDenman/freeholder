@@ -23,6 +23,8 @@ import {
 import { mergeContacts } from "@/core/contacts/service";
 import { HONEYPOT_FIELD, issueStamp, inspect, STAMP_FIELD } from "@/modules/forms/antispam";
 import { fieldsSchema, submissionSchema } from "@/modules/forms/fields";
+import { sealScreening } from "@/modules/forms/paradise";
+import { resetEnvForTests } from "@/core/env";
 import type { FormField } from "@/modules/forms/fields";
 import {
   ANONYMOUS,
@@ -210,6 +212,48 @@ describe.runIf(hasDatabase)("submitting", () => {
     // And nothing reached the CRM: no contact, no timeline, no event.
     expect(await db().select().from(contacts)).toHaveLength(0);
     expect(await db().select().from(timelineEvents)).toHaveLength(0);
+  });
+
+  it("adds PM Shield's sealed verdict to the traps without ever dropping a submission (C3.32)", async () => {
+    const prior = {
+      shield: process.env.PARADISEMODERN_SHIELD,
+      key: process.env.PARADISEMODERN_API_KEY,
+    };
+    process.env.PARADISEMODERN_SHIELD = "on";
+    process.env.PARADISEMODERN_API_KEY = "test-site-key";
+    resetEnvForTests();
+    try {
+      await contactForm();
+      const allowed = answers({ email: "allowed@example.test" });
+      await submitForm.call(
+        { slug: "contact", values: allowed, screening: sealScreening("allow", "contact", allowed) },
+        ANONYMOUS,
+      );
+      const blocked = answers({ email: "blocked@example.test" });
+      await submitForm.call(
+        { slug: "contact", values: blocked, screening: sealScreening("blocked", "contact", blocked) },
+        ANONYMOUS,
+      );
+      // The public API, skipping the form: no verdict to claim.
+      await submitForm.call(
+        { slug: "contact", values: answers({ email: "direct@example.test" }) },
+        ANONYMOUS,
+      );
+      const rows = await db().select().from(formSubmissions);
+      const byEmail = (email: string) =>
+        rows.find((row) => (row.data as { email?: string }).email === email);
+      expect(byEmail("allowed@example.test")?.status).toBe("received");
+      expect(byEmail("blocked@example.test")?.status).toBe("spam");
+      expect(byEmail("blocked@example.test")?.spamReasons).toContain("was flagged by the site's spam screening");
+      expect(byEmail("direct@example.test")?.status).toBe("spam");
+      expect(rows).toHaveLength(3);
+    } finally {
+      if (prior.shield === undefined) delete process.env.PARADISEMODERN_SHIELD;
+      else process.env.PARADISEMODERN_SHIELD = prior.shield;
+      if (prior.key === undefined) delete process.env.PARADISEMODERN_API_KEY;
+      else process.env.PARADISEMODERN_API_KEY = prior.key;
+      resetEnvForTests();
+    }
   });
 
   it("rescues a false positive, and puts the person on the spine then", async () => {

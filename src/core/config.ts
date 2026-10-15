@@ -22,13 +22,13 @@ export const configSchema = z.object({
     .object({
       payments: z.enum(CONFIGURABLE_PAYMENT_PROVIDER_IDS).default("manual"),
       mailTransactional: z
-        .enum(["gmail", "outlook", "smtp", "console"])
+        .enum(["gmail", "outlook", "smtp", "console", "paradise"])
         .default("console"),
-      mailBulk: z.enum(["resend", "postmark", "ses", "none"]).default("none"),
+      mailBulk: z.enum(["resend", "postmark", "ses", "paradise", "none"]).default("none"),
       storage: z.enum(["s3", "replit", "local"]).default("local"),
       calendar: z.enum(["google", "microsoft", "none"]).default("none"),
       sms: z.enum(["twilio", "none"]).default("none"),
-      ai: z.enum(["anthropic", "openai", "none"]).default("none"),
+      ai: z.enum(["anthropic", "openai", "pm_brain", "none"]).default("none"),
       /**
        * The builder that changes this site on the owner's instruction (§37).
        * Deliberately separate from `ai`: that one grounds answers and drafts

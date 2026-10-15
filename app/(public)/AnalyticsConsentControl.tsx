@@ -41,14 +41,24 @@ export function AnalyticsConsentControl({
   retentionDays,
   returnTo,
   t,
+  partner = false,
 }: {
   policy: AnalyticsConsentPolicy;
   state: AnalyticsConsentState | null;
   retentionDays: number;
   returnTo: string;
   t: Translate;
+  /**
+   * The owner also measures through a partner service that only an explicit
+   * "allow" switches on (C3.31). The choice then says so in its own words,
+   * and an opt-out visitor gets a way to give that explicit permission.
+   */
+  partner?: boolean;
 }) {
   if (policy === "disabled") return null;
+  const partnerNote = partner ? (
+    <p className="mt-1 text-sm text-ink-muted">{t("analytics.consent.partnerExplanation")}</p>
+  ) : null;
   const needsChoice = policy === "opt_in" && state !== "granted" && state !== "denied";
   if (needsChoice) {
     return (
@@ -61,9 +71,15 @@ export function AnalyticsConsentControl({
           <p className="mt-1 text-sm text-ink-muted">
             {t("analytics.consent.explanation", { days: retentionDays })}
           </p>
+          {partnerNote}
         </div>
         <div className="flex flex-wrap gap-2">
-          <ChoiceForm decision="grant" returnTo={returnTo} label={t("analytics.consent.allow")} primary />
+          <ChoiceForm
+            decision="grant"
+            returnTo={returnTo}
+            label={t(partner ? "analytics.consent.allowWithPartner" : "analytics.consent.allow")}
+            primary
+          />
           <ChoiceForm decision="deny" returnTo={returnTo} label={t("analytics.consent.decline")} />
         </div>
       </aside>
@@ -80,6 +96,17 @@ export function AnalyticsConsentControl({
         <p className="text-xs text-ink-muted">
           {t("analytics.consent.explanation", { days: retentionDays })}
         </p>
+        {partner ? (
+          <p className="text-xs text-ink-muted">{t("analytics.consent.partnerExplanation")}</p>
+        ) : null}
+        {partner && enabled && state !== "granted" ? (
+          <ChoiceForm
+            decision="grant"
+            returnTo={returnTo}
+            label={t("analytics.consent.allowWithPartner")}
+            primary
+          />
+        ) : null}
         <ChoiceForm
           decision={enabled ? "deny" : "grant"}
           returnTo={returnTo}

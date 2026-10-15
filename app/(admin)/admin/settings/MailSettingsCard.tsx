@@ -39,11 +39,12 @@ type Provider =
   | "console"
   | "resend"
   | "postmark"
-  | "ses";
+  | "ses"
+  | "paradise";
 
 export interface MailConfigurationView {
   transactional: {
-    provider: "smtp" | "console" | "gmail" | "outlook";
+    provider: "smtp" | "console" | "gmail" | "outlook" | "paradise";
     delivers: boolean;
     missing: string[];
     fromAddress: string | null;
@@ -54,7 +55,7 @@ export interface MailConfigurationView {
     missing: string[];
   }>;
   bulk: {
-    provider: "resend" | "postmark" | "ses" | "none";
+    provider: "resend" | "postmark" | "ses" | "paradise" | "none";
     sendConfigured: boolean;
     feedbackConfigured: boolean;
     missing: string[];
@@ -330,7 +331,7 @@ function RouteLane({
       ? configuration.transactional.provider
       : configuration.bulk.provider;
   const registerable =
-    (purpose === "transactional" && environmentProvider === "smtp") ||
+    (purpose === "transactional" && (environmentProvider === "smtp" || environmentProvider === "paradise")) ||
     (purpose === "bulk" && environmentProvider !== "none");
 
   return (
@@ -399,7 +400,7 @@ function RouteLane({
       {canManage && registerable && configuredFrom ? (
         <RegisterSenderForm
           purpose={purpose}
-          provider={environmentProvider as "smtp" | "resend" | "postmark" | "ses"}
+          provider={environmentProvider as "smtp" | "resend" | "postmark" | "ses" | "paradise"}
           email={configuredFrom}
           labels={labels}
         />
@@ -445,7 +446,7 @@ function RegisterSenderForm({
   labels,
 }: {
   purpose: Purpose;
-  provider: "smtp" | "resend" | "postmark" | "ses";
+  provider: "smtp" | "resend" | "postmark" | "ses" | "paradise";
   email: string;
   labels: MailLabels;
 }) {
@@ -752,6 +753,7 @@ function providerLabel(provider: string): string {
     resend: "Resend",
     postmark: "Postmark",
     ses: "Amazon SES",
+    paradise: "Paradise Modern",
     none: "—",
     manual: "Freeholder",
   };

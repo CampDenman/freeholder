@@ -5,7 +5,7 @@
 // Separate from `schema.ts` so a screen can name a provider or an outcome
 // without importing a Drizzle table — `app/**` is barred from module schemas
 // (§15.5), and a value list is not a database.
-export const ASSISTANT_PROVIDERS = ["none", "anthropic", "openai"] as const;
+export const ASSISTANT_PROVIDERS = ["none", "anthropic", "openai", "pm_brain"] as const;
 export type AssistantProvider = (typeof ASSISTANT_PROVIDERS)[number];
 
 export const ASSISTANT_SPEND_PERIODS = ["day", "week", "month"] as const;

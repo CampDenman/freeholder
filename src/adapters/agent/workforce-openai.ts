@@ -4,6 +4,7 @@
 // Modern's gateway, which speaks the same chat-completions wire format with a
 // different host, auth header and token-limit field. Raw HTTP like every
 // other adapter — the vendor boundary carries no vendor SDK.
+import { paradiseBaseUrl, pmBrainGatewayHeaders } from "@/adapters/paradise/config";
 import type {
   WorkforceAdapterId,
   WorkforceAgentAdapter,
@@ -90,18 +91,18 @@ export function openAiCompatibleWorkforceAdapter(options: {
       const timeout = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS);
       let response: Response;
       try {
-        const base = (
-          options.baseUrl ??
-          (gateway ? "https://paradisemodern.com" : "https://api.openai.com")
-        ).replace(/\/+$/, "");
+        const base = gateway
+          ? paradiseBaseUrl(options.baseUrl ?? undefined)
+          : (options.baseUrl ?? "https://api.openai.com").replace(/\/+$/, "");
         response = await (fetchImpl ?? fetch)(`${base}/v1/chat/completions`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            // The gateway authenticates like the §37 builder does; OpenAI
-            // itself takes a bearer token.
+            // The gateway authenticates like the §37 builder does, and carries
+            // the billing project PM requires (C3.33); OpenAI itself takes a
+            // bearer token.
             ...(gateway
-              ? { "x-api-key": options.apiKey }
+              ? pmBrainGatewayHeaders(options.apiKey)
               : { authorization: `Bearer ${options.apiKey}` }),
           },
           body: JSON.stringify({

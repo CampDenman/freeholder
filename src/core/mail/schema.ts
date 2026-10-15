@@ -37,6 +37,7 @@ export const mailSenders = pgTable(
         "resend",
         "postmark",
         "ses",
+        "paradise",
       ],
     }).notNull(),
     /** Required for personal OAuth senders; null for env-backed providers. */
@@ -82,7 +83,7 @@ export const mailSenders = pgTable(
     check("mail_senders_purpose_allowed", sql`${t.purpose} in ('transactional', 'bulk')`),
     check(
       "mail_senders_provider_allowed",
-      sql`${t.provider} in ('gmail', 'outlook', 'smtp', 'console', 'resend', 'postmark', 'ses')`,
+      sql`${t.provider} in ('gmail', 'outlook', 'smtp', 'console', 'resend', 'postmark', 'ses', 'paradise')`,
     ),
     check(
       "mail_senders_verification_allowed",
@@ -96,7 +97,7 @@ export const mailSenders = pgTable(
     check("mail_senders_email_bounded", sql`length(${t.email}) <= 320`),
     check(
       "mail_senders_provider_purpose",
-      sql`(${t.purpose} = 'transactional' and ${t.provider} in ('gmail', 'outlook', 'smtp', 'console')) or (${t.purpose} = 'bulk' and ${t.provider} in ('resend', 'postmark', 'ses'))`,
+      sql`(${t.purpose} = 'transactional' and ${t.provider} in ('gmail', 'outlook', 'smtp', 'console', 'paradise')) or (${t.purpose} = 'bulk' and ${t.provider} in ('resend', 'postmark', 'ses', 'paradise'))`,
     ),
     check(
       "mail_senders_connection_consistent",
@@ -171,6 +172,7 @@ export const mailDeliveries = pgTable(
         "resend",
         "postmark",
         "ses",
+        "paradise",
         "none",
       ],
     }).notNull(),
@@ -216,7 +218,7 @@ export const mailDeliveries = pgTable(
     check("mail_deliveries_purpose_allowed", sql`${t.purpose} in ('transactional', 'bulk')`),
     check(
       "mail_deliveries_provider_allowed",
-      sql`${t.provider} in ('gmail', 'outlook', 'smtp', 'console', 'resend', 'postmark', 'ses', 'none')`,
+      sql`${t.provider} in ('gmail', 'outlook', 'smtp', 'console', 'resend', 'postmark', 'ses', 'paradise', 'none')`,
     ),
     check(
       "mail_deliveries_status_allowed",
@@ -224,7 +226,7 @@ export const mailDeliveries = pgTable(
     ),
     check(
       "mail_deliveries_provider_purpose",
-      sql`(${t.purpose} = 'transactional' and ${t.provider} in ('gmail', 'outlook', 'smtp', 'console')) or (${t.purpose} = 'bulk' and ${t.provider} in ('resend', 'postmark', 'ses', 'none'))`,
+      sql`(${t.purpose} = 'transactional' and ${t.provider} in ('gmail', 'outlook', 'smtp', 'console', 'paradise')) or (${t.purpose} = 'bulk' and ${t.provider} in ('resend', 'postmark', 'ses', 'paradise', 'none'))`,
     ),
     check("mail_deliveries_recipient_lower", sql`${t.recipient} = lower(${t.recipient})`),
     check("mail_deliveries_recipient_bounded", sql`length(${t.recipient}) <= 320`),

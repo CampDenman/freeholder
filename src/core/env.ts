@@ -117,7 +117,7 @@ const envSchema = z.object({
    * instance can walk a password reset with no account anywhere, and says
    * loudly in production that nothing is arriving.
    */
-  MAIL_ADAPTER: z.enum(["smtp", "console", "gmail", "outlook"]).optional(),
+  MAIL_ADAPTER: z.enum(["smtp", "console", "gmail", "outlook", "paradise"]).optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.string().optional(),
   SMTP_USER: z.string().optional(),
@@ -150,9 +150,19 @@ const envSchema = z.object({
 
   /** Bulk mail is separate so personal Gmail/Outlook can never broadcast. */
   MAIL_BULK_ADAPTER: z
-    .enum(["resend", "postmark", "ses", "none"])
+    .enum(["resend", "postmark", "ses", "paradise", "none"])
     .optional(),
   MAIL_BULK_FROM: z.string().optional(),
+  /**
+   * The Paradise Modern subscription topic campaign mail is sent under
+   * (C3.30). Freeholder records one marketing-email consent per contact, so
+   * one topic is the honest mapping; PM checks its own opt-in record for it.
+   */
+  PARADISEMODERN_MAIL_TOPIC: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9][a-z0-9._-]{0,199}$/)
+    .optional(),
   RESEND_API_KEY: z.string().optional(),
   RESEND_WEBHOOK_SECRET: z.string().optional(),
   POSTMARK_SERVER_TOKEN: z.string().optional(),
@@ -253,6 +263,46 @@ const envSchema = z.object({
   /** Purpose-bound Paradise Modern site credential for the PM Brain adapter. */
   PARADISEMODERN_API_KEY: z.string().trim().min(1).optional(),
   PARADISEMODERN_URL: z.string().url().optional(),
+  /**
+   * Optional Paradise Modern capabilities (C3.30–C3.33). Every one is off
+   * until switched on here, and the site key above stays server-side for all
+   * of them. The site id and edge origin are public by design: they are what
+   * the site's own `pm.<domain>` host serves its scripts with.
+   */
+  PARADISEMODERN_SITE_ID: z.string().trim().uuid().optional(),
+  PARADISEMODERN_EDGE_URL: z
+    .string()
+    .url()
+    .refine((value) => {
+      const url = new URL(value);
+      return url.protocol === "https:" && url.pathname === "/" && !url.search && !url.username;
+    }, "must be one https origin, such as https://pm.example.com")
+    .optional(),
+  /** First-party measurement and consented conversion events (C3.31). */
+  PARADISEMODERN_ANALYTICS: z.enum(["on", "off"]).optional(),
+  /** PM Shield screening of public form submissions (C3.32). */
+  PARADISEMODERN_SHIELD: z.enum(["on", "off"]).optional(),
+  /** Forward accepted form submissions to PM as leads (C3.32). */
+  PARADISEMODERN_LEADS: z.enum(["on", "off"]).optional(),
+  /**
+   * PM bills every model call to a registered project and refuses an unknown
+   * one with HTTP 400, so the slug must exist in PM before this is set.
+   */
+  PARADISEMODERN_BILLING_PROJECT: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .optional(),
+  /** Unset is PM's normal routing; a pinned policy errors instead of falling back. */
+  PARADISEMODERN_FALLBACK_POLICY: z
+    .enum(["allow", "none", "runpod-only", "self-hosted-only"])
+    .optional(),
+  /** PM Brain lane for instance-wide drafting (C3.33). Defaults to `pm-brain`. */
+  PARADISEMODERN_BRAIN_MODEL: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/)
+    .optional(),
   /** Visible, hard monthly cap for builder model usage. */
   BUILDER_MONTHLY_TOKEN_BUDGET: z.string().regex(/^\d+$/).default("250000"),
   /** Per-proposal output ceiling; the adapter never gets an open-ended call. */

@@ -1649,6 +1649,65 @@ v2.
 - **F10** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
 - **F11** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
 - **F12** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+## C3.30 — Offer Paradise Modern mail as an optional transactional and campaign provider
+
+- **F01** — `tests/core/paradise-mail.test.ts`: Pending — adapter, permission declaration, consent mirror and sender verification are covered with mocked HTTP; a live send of each kind against production PM is not yet run.
+- **F02** — `tests/core/paradise-mail.test.ts`: Pending — adapter, permission declaration, consent mirror and sender verification are covered with mocked HTTP; a live send of each kind against production PM is not yet run.
+- **F03** — `tests/core/paradise-mail.test.ts`: Pending — adapter, permission declaration, consent mirror and sender verification are covered with mocked HTTP; a live send of each kind against production PM is not yet run.
+- **F04** — `tests/core/paradise-mail.test.ts`: Pending — adapter, permission declaration, consent mirror and sender verification are covered with mocked HTTP; a live send of each kind against production PM is not yet run.
+- **F05** — `tests/core/paradise-mail.test.ts`: Pending — adapter, permission declaration, consent mirror and sender verification are covered with mocked HTTP; a live send of each kind against production PM is not yet run.
+- **F06** — `tests/core/paradise-mail.test.ts`: Pending — adapter, permission declaration, consent mirror and sender verification are covered with mocked HTTP; a live send of each kind against production PM is not yet run.
+- **F07** — `tests/core/paradise-mail.test.ts`: Pending — adapter, permission declaration, consent mirror and sender verification are covered with mocked HTTP; a live send of each kind against production PM is not yet run.
+- **F08** — `tests/core/paradise-mail.test.ts`: Pending — adapter, permission declaration, consent mirror and sender verification are covered with mocked HTTP; a live send of each kind against production PM is not yet run.
+- **F09** — `tests/core/paradise-mail.test.ts`: Pending — adapter, permission declaration, consent mirror and sender verification are covered with mocked HTTP; a live send of each kind against production PM is not yet run.
+- **F10** — `tests/core/paradise-mail.test.ts`: Pending — adapter, permission declaration, consent mirror and sender verification are covered with mocked HTTP; a live send of each kind against production PM is not yet run.
+- **F11** — `tests/core/paradise-mail.test.ts`: Pending — adapter, permission declaration, consent mirror and sender verification are covered with mocked HTTP; a live send of each kind against production PM is not yet run.
+- **F12** — `tests/core/paradise-mail.test.ts`: Pending — adapter, permission declaration, consent mirror and sender verification are covered with mocked HTTP; a live send of each kind against production PM is not yet run.
+
+## C3.31 — Offer Paradise Modern measurement and consented conversions
+
+- **F01** — `tests/core/paradise-analytics.test.ts`: Pending — consent gating, CSP origin and the lead conversion body are covered with mocked HTTP; real-browser verification against a live edge host is not yet run.
+- **F02** — `tests/core/paradise-analytics.test.ts`: Pending — consent gating, CSP origin and the lead conversion body are covered with mocked HTTP; real-browser verification against a live edge host is not yet run.
+- **F03** — `tests/core/paradise-analytics.test.ts`: Pending — consent gating, CSP origin and the lead conversion body are covered with mocked HTTP; real-browser verification against a live edge host is not yet run.
+- **F04** — `tests/core/paradise-analytics.test.ts`: Pending — consent gating, CSP origin and the lead conversion body are covered with mocked HTTP; real-browser verification against a live edge host is not yet run.
+- **F05** — `tests/core/paradise-analytics.test.ts`: Pending — consent gating, CSP origin and the lead conversion body are covered with mocked HTTP; real-browser verification against a live edge host is not yet run.
+- **F06** — `tests/core/paradise-analytics.test.ts`: Pending — consent gating, CSP origin and the lead conversion body are covered with mocked HTTP; real-browser verification against a live edge host is not yet run.
+- **F07** — `tests/core/paradise-analytics.test.ts`: Pending — consent gating, CSP origin and the lead conversion body are covered with mocked HTTP; real-browser verification against a live edge host is not yet run.
+- **F08** — `tests/core/paradise-analytics.test.ts`: Pending — consent gating, CSP origin and the lead conversion body are covered with mocked HTTP; real-browser verification against a live edge host is not yet run.
+- **F09** — `tests/core/paradise-analytics.test.ts`: Pending — consent gating, CSP origin and the lead conversion body are covered with mocked HTTP; real-browser verification against a live edge host is not yet run.
+- **F10** — `tests/core/paradise-analytics.test.ts`: Pending — consent gating, CSP origin and the lead conversion body are covered with mocked HTTP; real-browser verification against a live edge host is not yet run.
+- **F11** — `tests/core/paradise-analytics.test.ts`: Pending — consent gating, CSP origin and the lead conversion body are covered with mocked HTTP; real-browser verification against a live edge host is not yet run.
+- **F12** — `tests/core/paradise-analytics.test.ts`: Pending — consent gating, CSP origin and the lead conversion body are covered with mocked HTTP; real-browser verification against a live edge host is not yet run.
+
+## C3.32 — Offer PM Shield screening and PM lead capture for public forms
+
+- **F01** — `tests/core/paradise-forms.test.ts`: Pending — sealed verdicts, fail-safe assessment and lead mapping are covered with mocked HTTP and `tests/core/forms.test.ts`; a live assessment and lead copy against production PM are not yet run.
+- **F02** — `tests/core/paradise-forms.test.ts`: Pending — sealed verdicts, fail-safe assessment and lead mapping are covered with mocked HTTP and `tests/core/forms.test.ts`; a live assessment and lead copy against production PM are not yet run.
+- **F03** — `tests/core/paradise-forms.test.ts`: Pending — sealed verdicts, fail-safe assessment and lead mapping are covered with mocked HTTP and `tests/core/forms.test.ts`; a live assessment and lead copy against production PM are not yet run.
+- **F04** — `tests/core/paradise-forms.test.ts`: Pending — sealed verdicts, fail-safe assessment and lead mapping are covered with mocked HTTP and `tests/core/forms.test.ts`; a live assessment and lead copy against production PM are not yet run.
+- **F05** — `tests/core/paradise-forms.test.ts`: Pending — sealed verdicts, fail-safe assessment and lead mapping are covered with mocked HTTP and `tests/core/forms.test.ts`; a live assessment and lead copy against production PM are not yet run.
+- **F06** — `tests/core/paradise-forms.test.ts`: Pending — sealed verdicts, fail-safe assessment and lead mapping are covered with mocked HTTP and `tests/core/forms.test.ts`; a live assessment and lead copy against production PM are not yet run.
+- **F07** — `tests/core/paradise-forms.test.ts`: Pending — sealed verdicts, fail-safe assessment and lead mapping are covered with mocked HTTP and `tests/core/forms.test.ts`; a live assessment and lead copy against production PM are not yet run.
+- **F08** — `tests/core/paradise-forms.test.ts`: Pending — sealed verdicts, fail-safe assessment and lead mapping are covered with mocked HTTP and `tests/core/forms.test.ts`; a live assessment and lead copy against production PM are not yet run.
+- **F09** — `tests/core/paradise-forms.test.ts`: Pending — sealed verdicts, fail-safe assessment and lead mapping are covered with mocked HTTP and `tests/core/forms.test.ts`; a live assessment and lead copy against production PM are not yet run.
+- **F10** — `tests/core/paradise-forms.test.ts`: Pending — sealed verdicts, fail-safe assessment and lead mapping are covered with mocked HTTP and `tests/core/forms.test.ts`; a live assessment and lead copy against production PM are not yet run.
+- **F11** — `tests/core/paradise-forms.test.ts`: Pending — sealed verdicts, fail-safe assessment and lead mapping are covered with mocked HTTP and `tests/core/forms.test.ts`; a live assessment and lead copy against production PM are not yet run.
+- **F12** — `tests/core/paradise-forms.test.ts`: Pending — sealed verdicts, fail-safe assessment and lead mapping are covered with mocked HTTP and `tests/core/forms.test.ts`; a live assessment and lead copy against production PM are not yet run.
+
+## C3.33 — Offer PM Brain as an adapters.ai and assistant provider
+
+- **F01** — `tests/core/paradise-brain.test.ts`: Pending — gateway headers, billing project and lane are covered with mocked HTTP; a live completion with a registered billing project is not yet run.
+- **F02** — `tests/core/paradise-brain.test.ts`: Pending — gateway headers, billing project and lane are covered with mocked HTTP; a live completion with a registered billing project is not yet run.
+- **F03** — `tests/core/paradise-brain.test.ts`: Pending — gateway headers, billing project and lane are covered with mocked HTTP; a live completion with a registered billing project is not yet run.
+- **F04** — `tests/core/paradise-brain.test.ts`: Pending — gateway headers, billing project and lane are covered with mocked HTTP; a live completion with a registered billing project is not yet run.
+- **F05** — `tests/core/paradise-brain.test.ts`: Pending — gateway headers, billing project and lane are covered with mocked HTTP; a live completion with a registered billing project is not yet run.
+- **F06** — `tests/core/paradise-brain.test.ts`: Pending — gateway headers, billing project and lane are covered with mocked HTTP; a live completion with a registered billing project is not yet run.
+- **F07** — `tests/core/paradise-brain.test.ts`: Pending — gateway headers, billing project and lane are covered with mocked HTTP; a live completion with a registered billing project is not yet run.
+- **F08** — `tests/core/paradise-brain.test.ts`: Pending — gateway headers, billing project and lane are covered with mocked HTTP; a live completion with a registered billing project is not yet run.
+- **F09** — `tests/core/paradise-brain.test.ts`: Pending — gateway headers, billing project and lane are covered with mocked HTTP; a live completion with a registered billing project is not yet run.
+- **F10** — `tests/core/paradise-brain.test.ts`: Pending — gateway headers, billing project and lane are covered with mocked HTTP; a live completion with a registered billing project is not yet run.
+- **F11** — `tests/core/paradise-brain.test.ts`: Pending — gateway headers, billing project and lane are covered with mocked HTTP; a live completion with a registered billing project is not yet run.
+- **F12** — `tests/core/paradise-brain.test.ts`: Pending — gateway headers, billing project and lane are covered with mocked HTTP; a live completion with a registered billing project is not yet run.
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/agents-board.test.ts`.

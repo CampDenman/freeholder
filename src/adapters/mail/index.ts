@@ -7,6 +7,7 @@ import config from "../../../freeholder.config";
 import { env } from "@/core/env";
 import { createConsoleMail } from "@/adapters/mail/console";
 import { createNoBulkMail } from "@/adapters/mail/none";
+import { createParadiseMail } from "@/adapters/mail/paradise";
 import { createPostmarkMail } from "@/adapters/mail/postmark";
 import { createResendMail } from "@/adapters/mail/resend";
 import { createSesMail } from "@/adapters/mail/ses";
@@ -15,7 +16,7 @@ import type { MailAdapter } from "@/adapters/mail/types";
 
 export interface MailConfigurationStatus {
   transactional: {
-    provider: "smtp" | "console" | "gmail" | "outlook";
+    provider: "smtp" | "console" | "gmail" | "outlook" | "paradise";
     delivers: boolean;
     missing: string[];
     fromAddress: string | null;
@@ -26,7 +27,7 @@ export interface MailConfigurationStatus {
     missing: string[];
   }>;
   bulk: {
-    provider: "resend" | "postmark" | "ses" | "none";
+    provider: "resend" | "postmark" | "ses" | "paradise" | "none";
     sendConfigured: boolean;
     feedbackConfigured: boolean;
     missing: string[];
@@ -67,7 +68,9 @@ export function mailConfigurationStatus(): MailConfigurationStatus {
               ["MICROSOFT_OAUTH_CLIENT_SECRET", current.MICROSOFT_OAUTH_CLIENT_SECRET],
               ["CREDENTIAL_KEY", current.CREDENTIAL_KEY],
             ] as const)
-          : [];
+          : transactional === "paradise"
+            ? ([["PARADISEMODERN_API_KEY", current.PARADISEMODERN_API_KEY]] as const)
+            : [];
   const transactionalMissing = transactionalRequired
     .filter(([, value]) => !value)
     .map(([name]) => name);
@@ -130,7 +133,20 @@ export function mailConfigurationStatus(): MailConfigurationStatus {
               ] as const,
               path: "/api/mail/webhooks/ses",
             }
-          : { send: [] as const, feedback: [] as const, path: null };
+          : bulk === "paradise"
+            ? {
+                send: [
+                  ["MAIL_BULK_FROM", current.MAIL_BULK_FROM],
+                  ["PARADISEMODERN_API_KEY", current.PARADISEMODERN_API_KEY],
+                ] as const,
+                // Provider-managed (C3.30): PM applies bounces, complaints and
+                // its own unsubscribe withdrawals before every send and has no
+                // delivery-event webhook to give Freeholder, so there is no
+                // feedback credential to configure here.
+                feedback: [] as const,
+                path: null,
+              }
+            : { send: [] as const, feedback: [] as const, path: null };
   const sendMissing = bulkRequirements.send
     .filter(([, value]) => !value)
     .map(([name]) => name);
@@ -188,6 +204,16 @@ function build(): MailAdapter {
         from: e.MAIL_FROM!,
       });
     }
+    case "paradise": {
+      if (!e.PARADISEMODERN_API_KEY) {
+        throw new Error('Mail is set to "paradise" but PARADISEMODERN_API_KEY is not set. See .env.example.');
+      }
+      return createParadiseMail({
+        kind: "transactional",
+        from: e.MAIL_FROM,
+        topic: e.PARADISEMODERN_MAIL_TOPIC ?? "newsletter",
+      });
+    }
     case "gmail":
     case "outlook":
       throw new Error(
@@ -210,6 +236,14 @@ export function bulkMail(): MailAdapter {
   if (choice === "resend") {
     if (!e.RESEND_API_KEY) throw new Error("RESEND_API_KEY is not set.");
     return createResendMail({ apiKey: e.RESEND_API_KEY, from: e.MAIL_BULK_FROM });
+  }
+  if (choice === "paradise") {
+    if (!e.PARADISEMODERN_API_KEY) throw new Error("PARADISEMODERN_API_KEY is not set.");
+    return createParadiseMail({
+      kind: "bulk",
+      from: e.MAIL_BULK_FROM,
+      topic: e.PARADISEMODERN_MAIL_TOPIC ?? "newsletter",
+    });
   }
   if (choice === "postmark") {
     if (!e.POSTMARK_SERVER_TOKEN) throw new Error("POSTMARK_SERVER_TOKEN is not set.");

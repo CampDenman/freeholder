@@ -26,6 +26,19 @@ outlives the configured retention period or 180 days, whichever is shorter.
 Changing policy takes effect on the server immediately. A stale browser choice
 is reconciled through `/api/analytics/consent`; cross-site posts are refused.
 
+## Optional Paradise Modern measurement
+
+Everything above stays true when an owner also turns on Paradise Modern
+measurement (`PARADISEMODERN_ANALYTICS=on`, C3.31). It is a separate,
+deliberately stricter path: PM's scripts load from the site's own edge host,
+and a consented form enquiry is sent to PM as a `lead` conversion, only for a
+visitor whose explicit choice is "allow" under a policy that collects. The
+opt-out default's implied state never qualifies, and **Collection disabled**
+turns it off. The choice then discloses that the site's measurement service
+records the visit and may share an enquiry with the advertising service that
+referred the visitor. Freeholder still stores none of the address, user agent
+or click IDs it forwards. See [`paradise-modern.md`](paradise-modern.md).
+
 ## Retention and pruning
 
 Person-level events and campaign projections may be retained for 30–730 days;

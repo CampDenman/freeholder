@@ -113,6 +113,7 @@ export const requestPasswordReset = defineService({
       }, {
         requestedBy: actorString(ctx.actor),
         idempotencyKey: `password-reset:${tokenHash}`,
+        transactionalReason: "authentication",
       });
     } catch {
       // A provider or suppression failure must not reveal that this address

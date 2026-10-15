@@ -240,3 +240,15 @@ export async function onAnyEvent(
     scoreForEvent(eventName, payload, context?.eventId),
   ]);
 }
+
+/** C3.30: mirror a marketing-email withdrawal to Paradise Modern. */
+export async function onParadiseConsentChanged(payload: unknown): Promise<void> {
+  const { onConsentChanged } = await import("@/core/paradise/consent");
+  await onConsentChanged(payload);
+}
+
+/** C3.32: copy an accepted form submission into Paradise Modern as a lead. */
+export async function onParadiseFormSubmitted(payload: unknown): Promise<void> {
+  const { forwardLead } = await import("@/modules/forms/paradise");
+  await forwardLead(payload);
+}

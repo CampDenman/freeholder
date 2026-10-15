@@ -29,7 +29,40 @@ export interface OutboundEmail {
     "List-Unsubscribe"?: string;
     "List-Unsubscribe-Post"?: "List-Unsubscribe=One-Click";
   };
+  /**
+   * Why this message may be sent (C3.30). Set by the delivery worker, never
+   * by a module: transactional mail names its reason and the event behind
+   * it; campaign mail carries the recipient's recorded opt-in, or `null`
+   * when there is none a provider could accept. Adapters that do not check
+   * permission ignore it.
+   */
+  permission?: MailPermission;
 }
+
+/** The transactional reasons a permission-checking provider understands. */
+export const TRANSACTIONAL_REASONS = [
+  "authentication",
+  "receipt",
+  "account_notice",
+  "requested_reply",
+  "service_notification",
+] as const;
+export type TransactionalReason = (typeof TRANSACTIONAL_REASONS)[number];
+
+/** A marketing opt-in as retained evidence, never a bare assertion. */
+export interface MarketingConsentEvidence {
+  collectedAt: string;
+  method: "unchecked_checkbox" | "double_opt_in" | "signed_form";
+  statement: string;
+  source: string;
+  /** Points at the Freeholder consent record that holds the proof. */
+  evidenceRef: string;
+  recipientIp?: string;
+}
+
+export type MailPermission =
+  | { purpose: "transactional"; reason: TransactionalReason; eventRef: string }
+  | { purpose: "marketing"; evidence: MarketingConsentEvidence | null };
 
 export type MailProvider =
   | "smtp"
@@ -39,6 +72,7 @@ export type MailProvider =
   | "resend"
   | "postmark"
   | "ses"
+  | "paradise"
   | "none";
 
 export interface SenderVerification {

@@ -42,6 +42,11 @@ import { AnalyticsRuntime } from "./AnalyticsRuntime";
 import { IncomingCall } from "./call/IncomingCall";
 import { myMembership } from "@/modules/members/service";
 import { AnalyticsConsentControl } from "./AnalyticsConsentControl";
+import {
+  paradiseMeasurement,
+  paradiseMeasurementAllowed,
+  paradiseScriptSources,
+} from "@/modules/analytics/paradise";
 import { SkipLink } from "@/ui/SkipLink";
 import { actorFromToken } from "@/core/http/actor";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
@@ -72,6 +77,12 @@ export default async function PublicLayout({
   const consent = parseAnalyticsConsentState(
     cookieJar.get(ANALYTICS_CONSENT_COOKIE)?.value,
   );
+  // C3.31: the owner's optional PM measurement, for explicit consent only.
+  const measurement = paradiseMeasurement();
+  const measurementScripts =
+    measurement && paradiseMeasurementAllowed(analytics.consentPolicy, consent)
+      ? paradiseScriptSources(measurement)
+      : [];
   const publicActor = await actorFromToken(
     cookieJar.get(SESSION_COOKIE_NAME)?.value,
   );
@@ -209,7 +220,16 @@ export default async function PublicLayout({
         retentionDays={analytics.retentionDays}
         returnTo={requestHeaders.get(REQUEST_TARGET_HEADER) ?? "/"}
         t={t}
+        partner={measurement !== null}
       />
+      {measurementScripts.map((src) => (
+        <script
+          key={src}
+          src={src}
+          async
+          nonce={requestHeaders.get(CSP_NONCE_HEADER) ?? undefined}
+        />
+      ))}
       {member?.status === "active" ? (
         <IncomingCall
           labels={{

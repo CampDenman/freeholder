@@ -122,6 +122,9 @@ whole story, which is the point.
 - [`content-security-policy.md`](content-security-policy.md) — per-request
   nonces, editor and upload boundaries, separately consented creative origins,
   privacy-bounded violation reporting, retention, and verification.
+- [`paradise-modern.md`](paradise-modern.md) — the optional Paradise Modern
+  mail, measurement, PM Shield/lead capture and PM Brain capabilities, their
+  consent gates, failure behavior, and the billing-project prerequisite.
 
 ## Known gaps
 

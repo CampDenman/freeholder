@@ -18,7 +18,14 @@ export default defineModule({
     // webhook subscriptions and personal notification inboxes. It goes through the ordinary manifest
     // mechanism rather than a special case in boot, so the listener shows up
     // in the boot report like any other.
-    listens: { "*": "onAnyEvent" },
+    listens: {
+      "*": "onAnyEvent",
+      // Optional Paradise Modern mirrors (C3.30, C3.32). Their own listeners,
+      // so a PM outage retries these alone and never re-runs webhook fan-out.
+      // Both return at once unless the owner switched the capability on.
+      "contact.consentChanged": "onParadiseConsentChanged",
+      "forms.submitted": "onParadiseFormSubmitted",
+    },
     emits: [
       "contact.created",
       "contact.merged",

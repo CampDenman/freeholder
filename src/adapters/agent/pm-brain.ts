@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Paradise Modern's OpenAI-compatible gateway, used only for §37 proposals.
 import { env } from "@/core/env";
+import { paradiseBaseUrl, pmBrainGatewayHeaders } from "@/adapters/paradise/config";
 import type {
   AgentProposalRequest,
   AgentProposalResult,
@@ -44,15 +45,13 @@ export function pmBrainAdapter(): BuilderAgentAdapter {
       const timeout = setTimeout(() => controller.abort(), 120_000);
       let response: Response;
       try {
-        const base = env().PARADISEMODERN_URL ?? "https://paradisemodern.com";
+        // Shared with the generation adapter (C3.33): PM refuses a gateway
+        // call that names no billing project.
         response = await (fetchImpl ?? fetch)(
-          `${base.replace(/\/+$/, "")}/v1/chat/completions`,
+          `${paradiseBaseUrl()}/v1/chat/completions`,
           {
             method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-api-key": apiKey,
-            },
+            headers: pmBrainGatewayHeaders(apiKey),
             body: JSON.stringify({
               model: "pm-brain:quality",
               messages: [

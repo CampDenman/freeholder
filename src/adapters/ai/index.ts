@@ -5,12 +5,14 @@ import { AdapterRegistry } from "../registry";
 import { createAnthropicAi } from "./anthropic";
 import { createNoAi } from "./none";
 import { createOpenAiAi } from "./openai";
+import { createPmBrainAi } from "./pm-brain";
 import type { AiAdapter } from "./types";
 
 export * from "./types";
 export { createNoAi } from "./none";
 export { createAnthropicAi } from "./anthropic";
 export { createOpenAiAi } from "./openai";
+export { createPmBrainAi } from "./pm-brain";
 
 /**
  * The instance-wide registry, keyed the way `freeholder.config.ts` names
@@ -37,5 +39,12 @@ export const aiAdapters = new AdapterRegistry<AiAdapter>("ai", [
     apiKey: process.env.OPENAI_API_KEY,
     model: process.env.OPENAI_MODEL ?? null,
     baseUrl: process.env.OPENAI_BASE_URL ?? null,
+  }),
+  // The billing project and fallback policy are read per call, so the env
+  // parse they need never runs at import.
+  createPmBrainAi({
+    apiKey: process.env.PARADISEMODERN_API_KEY,
+    model: process.env.PARADISEMODERN_BRAIN_MODEL ?? null,
+    baseUrl: process.env.PARADISEMODERN_URL ?? null,
   }),
 ]);

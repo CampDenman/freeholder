@@ -14,9 +14,28 @@
 // public surface stays plain server-rendered HTML with no client component and
 // no hydration boundary — which is what §5 and the SEO gate both rest on.
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { after } from "next/server";
 import { submitForm } from "@/modules/forms/service";
+import {
+  acceptedSubmissionIdentity,
+  screenPublicSubmission,
+} from "@/modules/forms/paradise";
+import {
+  clickIdsFromCookie,
+  PARADISE_CLICK_ID_COOKIE,
+  paradiseMeasurement,
+  paradiseMeasurementAllowed,
+  sendLeadConversion,
+} from "@/modules/analytics/paradise";
+import { currentAnalyticsSettings } from "@/modules/analytics/read";
+import {
+  ANALYTICS_CONSENT_COOKIE,
+  parseAnalyticsConsentState,
+} from "@/modules/analytics/visitor";
+import { env } from "@/core/env";
 import { PATH_HEADER } from "@/core/http/headers";
+import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale } from "../i18n";
@@ -52,17 +71,53 @@ export async function submitPublicForm(form: FormData): Promise<void> {
     values[key] = value === "on" ? true : value;
   }
 
+  // C3.32: PM Shield, when the owner turned it on, before the submission's
+  // transaction opens. It returns a sealed verdict or nothing; PM being down
+  // seals "unavailable" and the site's own traps decide alone.
+  const request = requestMetadataFromHeaders(requestHeaders);
+  const screening = await screenPublicSubmission({ slug, values, request });
+
+  let submissionId: string;
   try {
-    await submitForm.call(
-      { slug, values, sourceUrl: path },
+    ({ submissionId } = await submitForm.call(
+      { slug, values, sourceUrl: path, ...(screening ? { screening } : {}) },
       ANONYMOUS,
-    );
+    ));
   } catch {
     // Deliberately not distinguishing between validation, rate limiting and a
     // genuine fault in the redirect: a public form that reports *why* it
     // refused a submission is also telling a script how to get past it.
     // The owner sees the real reason in the audit log either way.
     redirect(`${path}?formError=${encodeURIComponent(slug)}`);
+  }
+
+  // C3.31: a `lead` conversion, only for a visitor who explicitly allowed
+  // measurement, and only after the response is on its way — the visitor
+  // never waits for it, and nothing about them is stored to send it later.
+  const cookieJar = await cookies();
+  const consent = parseAnalyticsConsentState(cookieJar.get(ANALYTICS_CONSENT_COOKIE)?.value);
+  if (
+    paradiseMeasurement() &&
+    paradiseMeasurementAllowed((await currentAnalyticsSettings()).consentPolicy, consent)
+  ) {
+    const clickIds = clickIdsFromCookie(cookieJar.get(PARADISE_CLICK_ID_COOKIE)?.value);
+    const sourceUrl = new URL(path, env().APP_URL).href;
+    after(async () => {
+      try {
+        const identity = await acceptedSubmissionIdentity(submissionId);
+        if (!identity) return;
+        await sendLeadConversion({
+          submissionId,
+          ...identity,
+          ip: request.trustedIp ?? request.ip,
+          userAgent: request.userAgent,
+          sourceUrl,
+          clickIds,
+        });
+      } catch {
+        // Attribution is best effort; the enquiry itself is already safe.
+      }
+    });
   }
 
   redirect(`${path}?sent=${encodeURIComponent(slug)}`);

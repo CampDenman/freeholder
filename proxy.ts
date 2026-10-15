@@ -216,6 +216,15 @@ function requestPolicy(
       thirdPartyCreativeConsent: thirdPartyCreativeConsentGranted(
         request.cookies.get(THIRD_PARTY_CREATIVE_CONSENT_COOKIE)?.value,
       ),
+      // C3.31: PM's measurement edge, only after this visitor's explicit
+      // "allow". The layout applies the owner's policy before it renders
+      // the scripts; this only lets them reach their own edge.
+      measurementOrigins:
+        runtime.PARADISEMODERN_ANALYTICS === "on" &&
+        runtime.PARADISEMODERN_EDGE_URL &&
+        parseAnalyticsConsentState(request.cookies.get(ANALYTICS_CONSENT_COOKIE)?.value) === "granted"
+          ? [new URL(runtime.PARADISEMODERN_EDGE_URL).origin]
+          : [],
     }),
   };
 }

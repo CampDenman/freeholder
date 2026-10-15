@@ -23,7 +23,7 @@
 // The admin screen therefore says exactly which variable it is looking for and
 // whether it found it, rather than failing at the first visitor question.
 import { env } from "@/core/env";
-import { createAnthropicAi, createOpenAiAi, type AiAdapter } from "@/adapters/ai";
+import { createAnthropicAi, createOpenAiAi, createPmBrainAi, type AiAdapter } from "@/adapters/ai";
 import type { AssistantProvider } from "./contract";
 import type { AssistantSettings } from "./schema";
 
@@ -31,6 +31,7 @@ import type { AssistantSettings } from "./schema";
 const DEFAULT_CREDENTIAL_REF: Record<Exclude<AssistantProvider, "none">, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
+  pm_brain: "PARADISEMODERN_API_KEY",
 };
 
 export function credentialRefFor(settings: {
@@ -91,6 +92,19 @@ export function assistantAdapter(settings: AssistantSettings): AdapterResolution
     };
   }
   const options = { apiKey, model: settings.model, baseUrl: settings.baseUrl };
+  if (settings.provider === "pm_brain") {
+    // C3.33: the billing project and fallback policy are deployment settings,
+    // not owner data — PM refuses an unregistered project, so the deploy that
+    // registered it is the one that names it. Unset policy is PM's normal
+    // routing, which is the right default for a public assistant.
+    if (!env().PARADISEMODERN_BILLING_PROJECT) {
+      return {
+        unconfigured:
+          "PM Brain is chosen, but PARADISEMODERN_BILLING_PROJECT is not set in this deployment's environment.",
+      };
+    }
+    return { adapter: createPmBrainAi(options) };
+  }
   return {
     adapter:
       settings.provider === "anthropic"
