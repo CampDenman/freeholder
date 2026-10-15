@@ -508,8 +508,11 @@ export const memberReviews = pgTable(
     revealAt: timestamp("reveal_at", { withTimezone: true }).notNull(),
     reply: text("reply"),
     repliedAt: timestamp("replied_at", { withTimezone: true }),
+<<<<<<< HEAD
     /** Set when site staff remove the review after a report (C12.12). */
     hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+=======
+>>>>>>> origin/main
     createdAt: createdAtColumn(),
   },
   (t) => [
@@ -522,6 +525,7 @@ export const memberReviews = pgTable(
     check("member_reviews_not_self", sql`${t.authorId} <> ${t.subjectId}`),
   ],
 );
+<<<<<<< HEAD
 
 
 /**
@@ -557,3 +561,5 @@ export const memberReports = pgTable(
   ],
 );
 
+=======
+>>>>>>> origin/main
