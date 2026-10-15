@@ -25,4 +25,16 @@ export const deliverFederation = defineJob({
   },
 });
 
-export default [releaseDuePayouts, deliverFederation];
+/** C12.36: encrypted files that were removed, or uploaded and never sent. */
+export const purgeSealedBlobs = defineJob({
+  name: "members.purgeSealedBlobs",
+  summary: "Delete removed and abandoned end-to-end encrypted files from storage.",
+  schedule: "*/10 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { purgeSealedBlobs: purge } = await import("./sealed-blobs");
+    return purge();
+  },
+});
+
+export default [releaseDuePayouts, deliverFederation, purgeSealedBlobs];

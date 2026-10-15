@@ -10,7 +10,7 @@ import { users } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { THEME_COOKIE } from "@/core/design/theme";
-import { memberDevices, memberFollows, memberMessages, memberMlsLog, memberPayoutAccounts, memberPayouts, memberPosts, memberProfiles, memberReports, memberSaleFulfilments, memberSettings } from "@/modules/members/schema";
+import { memberDevices, memberFollows, memberMessages, memberMlsLog, memberSealedBlobs, memberPayoutAccounts, memberPayouts, memberPosts, memberProfiles, memberReports, memberSaleFulfilments, memberSettings } from "@/modules/members/schema";
 import { contacts } from "@/core/contacts/schema";
 import { orderItems, orders, productVariants, products } from "@/modules/catalog/schema";
 import { invoices } from "@/modules/invoicing/schema";
@@ -265,7 +265,11 @@ test.describe("members (C12.01)", () => {
     const [rae, sam, samAgain] = await Promise.all([MEMBER_ID, SAM_ID, SAM_ID].map((id) => db().transaction((tx) => createSession(tx, id))));
     const open = async (token: string) => {
       const context = await browser.newContext({ baseURL: C11_BASE_URL });
-      await context.addCookies([{ name: SESSION_COOKIE, value: token, url: C11_BASE_URL }]);
+      // As after a real sign-in: the session, and the CSRF token uploads carry.
+      await context.addCookies([
+        { name: SESSION_COOKIE, value: token, url: C11_BASE_URL },
+        { name: CSRF_COOKIE, value: issueCsrfToken(), url: C11_BASE_URL },
+      ]);
       return { context, page: await context.newPage() };
     };
 
@@ -293,6 +297,21 @@ test.describe("members (C12.01)", () => {
     // The server holds ciphertext only.
     const stored = JSON.stringify(await db().select().from(memberMessages)) + JSON.stringify(await db().select().from(memberMlsLog));
     expect(stored).not.toContain("blue pot");
+
+    // C12.36: a photo is encrypted in Rae's browser; Sam's opens it.
+    const sharp = (await import("sharp")).default;
+    const photo = await sharp({ create: { width: 320, height: 240, channels: 3, background: { r: 40, g: 140, b: 90 } } }).jpeg().toBuffer();
+    await raeSide.page.getByLabel("Add photos or video (end-to-end encrypted)").setInputFiles({ name: "pot.jpg", mimeType: "image/jpeg", buffer: photo });
+    await raeSide.page.getByLabel("Describe them for people who cannot see them").fill("The blue pot by the door");
+    await raeSide.page.getByLabel("Message", { exact: true }).fill("This one");
+    await raeSide.page.getByRole("button", { name: "Send" }).click();
+    await expect(raeSide.page.getByAltText("The blue pot by the door")).toBeVisible();
+    await samSide.page.reload();
+    const shown = samSide.page.getByAltText("The blue pot by the door");
+    await expect(shown).toBeVisible();
+    expect(await shown.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(320);
+    const [blobRow] = await db().select().from(memberSealedBlobs);
+    expect(blobRow!.size).toBe(photo.length + 16);
 
     // Sam reports Rae's message; the report carries exactly what Sam's device read.
     await samSide.page.reload();

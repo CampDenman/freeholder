@@ -367,3 +367,15 @@ from mocked payment, mail or media runs alone.
 - CI runs the LiveKit release binary (checksum pinned) for
   `tests/browser/member-group-calls.spec.ts`; locally the test is skipped
   unless `LIVEKIT_URL` is set (`livekit-server --dev` uses `devkey`/`secret`).
+
+## C12.36 — encrypted attachments (2026-10-15)
+
+- Files in encrypted conversations are AES-256-GCM ciphertext under
+  `member-sealed/<conversation>/<id>` in the site's storage; keys exist only
+  inside MLS messages. 25 MB per file, four per message.
+- The server cannot scan, resize or hash-match these files. That includes
+  abuse-image matching (C12.30): it can only apply to files the site can
+  read. Reports cover message text, not files.
+- `members.purgeSealedBlobs` (every ten minutes) deletes unsent uploads
+  after a day, and files whose message was removed or whose sender erased
+  their data.

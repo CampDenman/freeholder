@@ -37,4 +37,5 @@ export {
   memberMlsLog,
   memberGroupCalls,
   memberGroupCallParticipants,
+  memberSealedBlobs,
 } from "./schema";

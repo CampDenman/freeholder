@@ -8,6 +8,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useRouter } from "next/navigation";
 import { E2eeDevice, type E2eeTransport, type ReadMessage, type Verification } from "@/modules/members/e2ee/engine";
 import { browserStore } from "@/modules/members/e2ee/idb-store";
+import { openFile, SEALED_TYPES, sealFile, type SealedFile } from "@/modules/members/e2ee/wire";
 import { Button, Callout, Field } from "@/ui/primitives";
 import { attachmentsFrom } from "../m/attachment-form";
 import {
@@ -64,7 +65,7 @@ interface Secure {
   messages: Map<string, ReadMessage>;
   missing: string[];
   refresh: () => Promise<void>;
-  send: (body: string, attachments: { assetId: string; altText: string }[]) => Promise<"sent" | "plaintext">;
+  send: (body: string, attachments: { assetId: string; altText: string }[], files?: SealedFile[]) => Promise<"sent" | "plaintext">;
 }
 const SecureContext = createContext<Secure | null>(null);
 
@@ -88,8 +89,8 @@ export function SecureConversation({ conversationId, userId, children }: { conve
     document.addEventListener("visibilitychange", again);
     return () => document.removeEventListener("visibilitychange", again);
   }, [refresh]);
-  const send = useCallback(async (body: string, attachments: { assetId: string; altText: string }[]) => {
-    const id = await deviceFor(userId).send(conversationId, body, attachments);
+  const send = useCallback(async (body: string, attachments: { assetId: string; altText: string }[], files: SealedFile[] = []) => {
+    const id = await deviceFor(userId).send(conversationId, body, attachments, files);
     await refresh();
     return id ? "sent" : "plaintext";
   }, [conversationId, userId, refresh]);
@@ -105,17 +106,70 @@ export function SecureStatus({ labels }: { labels: { encrypted: string; joining:
   return <Callout tone="danger">{labels.failed}</Callout>;
 }
 
+function csrf(): string {
+  for (const part of document.cookie.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (name === "freeholder_csrf") return decodeURIComponent(rest.join("="));
+  }
+  return "";
+}
+
+/** C12.36: encrypt each chosen file here, and upload only the ciphertext. */
+async function sealAndUpload(conversationId: string, files: File[], alt: string): Promise<SealedFile[]> {
+  const sealed: SealedFile[] = [];
+  for (const file of files.slice(0, 4)) {
+    if (!(SEALED_TYPES as readonly string[]).includes(file.type)) throw new Error("That kind of file cannot be sent here.");
+    const { ciphertext, key, iv } = await sealFile(new Uint8Array(await file.arrayBuffer()));
+    const response = await fetch(`/api/member-blobs?conversation=${conversationId}`, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream", "x-csrf-token": csrf() },
+      body: ciphertext as BodyInit,
+    });
+    const body = (await response.json().catch(() => null)) as { id?: string } | null;
+    if (!response.ok || !body?.id) throw new Error("A file could not be uploaded.");
+    sealed.push({ blob: body.id, key, iv, name: file.name.slice(0, 200), type: file.type, size: file.size, alt: alt.slice(0, 500) });
+  }
+  return sealed;
+}
+
+/** One encrypted file, fetched as ciphertext and opened on this device. */
+function SealedMedia({ file }: { file: SealedFile }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let made: string | null = null;
+    void (async () => {
+      const response = await fetch(`/member-blobs/${file.blob}`);
+      if (!response.ok) return;
+      const plain = await openFile(new Uint8Array(await response.arrayBuffer()), file);
+      made = URL.createObjectURL(new Blob([plain as BlobPart], { type: file.type }));
+      setUrl(made);
+    })().catch(() => undefined);
+    return () => { if (made) URL.revokeObjectURL(made); };
+  }, [file]);
+  if (!(SEALED_TYPES as readonly string[]).includes(file.type) || !url) return null;
+  return file.type.startsWith("video/")
+    ? <video src={url} controls className="max-h-96 rounded-md" aria-label={file.alt || file.name} data-sealed-file={file.blob} />
+    : <img src={url} alt={file.alt} className="max-h-96 rounded-md" data-sealed-file={file.blob} />;
+}
+
 /** The body of an encrypted message, as this device read it. */
 export function SecureBody({ id, labels }: { id: string; labels: { loading: string; unreadable: string; before: string } }) {
   const secure = useContext(SecureContext);
   const read = secure?.messages.get(id);
-  if (read?.ok) return <p className="whitespace-pre-line break-words" data-secure-body={id}>{read.body}</p>;
+  if (read?.ok) {
+    return (
+      <>
+        <p className="whitespace-pre-line break-words" data-secure-body={id}>{read.body}</p>
+        {read.files?.length ? <div className="flex flex-wrap gap-2">{read.files.map((f) => <SealedMedia key={f.blob} file={f} />)}</div> : null}
+      </>
+    );
+  }
   const text = !secure || secure.phase === "loading" ? labels.loading : read ? labels.unreadable : labels.before;
   return <p className="italic text-ink-muted">{text}</p>;
 }
 
 /** The reply box. Encrypts on this device; plaintext only while someone has no device yet. */
-export function SecureComposer({ conversationId, fallback, labels, children }: { conversationId: string; fallback: (form: FormData) => Promise<void>; labels: { body: string; send: string; sending: string; failed: string }; children?: ReactNode }) {
+export function SecureComposer({ conversationId, fallback, labels, children }: { conversationId: string; fallback: (form: FormData) => Promise<void>; labels: { body: string; send: string; sending: string; failed: string; files: string; describe: string }; children?: ReactNode }) {
   const secure = useContext(SecureContext);
   const router = useRouter();
   const form = useRef<HTMLFormElement>(null);
@@ -130,7 +184,9 @@ export function SecureComposer({ conversationId, fallback, labels, children }: {
     setBusy(true);
     setFailed(false);
     try {
-      const outcome = await secure.send(body, attachmentsFrom(data));
+      const chosen = data.getAll("sealed").filter((f): f is File => f instanceof File && f.size > 0);
+      const files = chosen.length ? await sealAndUpload(conversationId, chosen, field(data, "sealedAlt")) : [];
+      const outcome = await secure.send(body, attachmentsFrom(data), files);
       if (outcome === "plaintext") await unwrap(sendPlaintextAction({ conversationId, body, attachments: attachmentsFrom(data) }));
       form.current?.reset();
       router.refresh();
@@ -149,7 +205,16 @@ export function SecureComposer({ conversationId, fallback, labels, children }: {
       <Field label={labels.body} htmlFor="reply-body">
         <textarea id="reply-body" name="body" required maxLength={10000} rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
       </Field>
-      {children}
+      {secure?.phase === "ready" ? (
+        <div className="grid gap-2">
+          <Field label={labels.files} htmlFor="sealed-files">
+            <input id="sealed-files" name="sealed" type="file" multiple accept={SEALED_TYPES.join(",")} className="text-sm" />
+          </Field>
+          <Field label={labels.describe} htmlFor="sealed-alt">
+            <input id="sealed-alt" name="sealedAlt" maxLength={500} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
+          </Field>
+        </div>
+      ) : children}
       <Button type="submit" disabled={busy || blocked}>{busy ? labels.sending : labels.send}</Button>
     </form>
   );

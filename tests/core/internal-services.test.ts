@@ -74,6 +74,9 @@ const INTERNAL = [
   "members.federateDelete",
   "members.federatePost",
   "members.federationInbox",
+  // C12.36: the sweep that deletes removed and abandoned encrypted files.
+  "members.dueSealedBlobs",
+  "members.forgetSealedBlobs",
   "catalogue.applyRefresh",
   "catalogue.refreshSource",
   "entitlements.issuePass",
@@ -210,6 +213,11 @@ const CALLER_AUTHORIZED_PHASES = [
   // C12.18: the ActivityPub routes render these documents; the fediverse
   // reaches them over HTTP, not through the service API.
   "members.federationDocument",
+  // C12.36: halves of members.uploadSealedBlob, and the check behind
+  // /member-blobs/[id]; the bytes route is the only way in.
+  "members.claimSealedBlob",
+  "members.confirmSealedBlob",
+  "members.sealedBlobAccess",
   "signupContactImports.applyOAuthCompletion",
   "signupContactImports.applyProviderContacts",
   "signupContactImports.claimOAuthCompletion",

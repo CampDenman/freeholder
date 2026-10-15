@@ -128,9 +128,8 @@ export default async function ConversationPage({ params, searchParams }: { param
       </ol>
       {view.seenBy.length ? <p className="text-sm text-ink-muted">{t("members.messages.seenBy", { names: view.seenBy.map((p) => p.displayName).join(", ") })}</p> : null}
       {c.state === "active" && !view.closed ? (
-        <SecureComposer conversationId={c.id} fallback={conversationAction} labels={{ body: t("members.messages.body"), send: t("members.messages.send"), sending: t("members.e2ee.sending"), failed: t("members.messages.failed") }}>
+        <SecureComposer conversationId={c.id} fallback={conversationAction} labels={{ body: t("members.messages.body"), send: t("members.messages.send"), sending: t("members.e2ee.sending"), failed: t("members.messages.failed"), files: t("members.e2ee.files"), describe: t("members.e2ee.describeFiles") }}>
           <MediaAttach id="message" labels={{ add: t("members.attach.add"), describe: t("members.attach.describe"), uploading: t("members.avatar.uploading"), failed: t("members.avatar.failed"), remove: t("members.attach.remove") }} />
-          {c.e2ee ? <p className="text-sm text-ink-muted">{t("members.e2ee.attachmentsNote")}</p> : null}
         </SecureComposer>
       ) : null}
       <div className="flex flex-wrap gap-2">

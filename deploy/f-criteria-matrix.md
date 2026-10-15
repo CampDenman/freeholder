@@ -4865,18 +4865,18 @@ v2.
 
 ## C12.36 — Encrypt attachments end to end in encrypted conversations
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F01** — `db/migrations/0046_member_sealed_blobs.sql`: encrypted files, their conversation and message.
+- **F02** — `tests/modules/member-e2ee.test.ts`: round trip, ciphertext at rest, access, single use, unsend and purge.
+- **F03** — N/A — files belong to members' messages, not contacts (`src/modules/members/sealed-blobs.ts`).
+- **F04** — `tests/browser/members.spec.ts`: the encrypted file picker and the decrypted photo in another browser.
+- **F05** — `packages/sdk/src/generated.ts`: `members.uploadSealedBlob` and `sealedFiles` on `members.sendEncrypted`.
+- **F06** — `locales/en.json`: strings in four locales; files carry their description as alt text (`app/(public)/messages/SecureConversation.tsx`).
+- **F07** — `tests/modules/member-e2ee.test.ts`: stored bytes are ciphertext; only people in the conversation can fetch them (`app/member-blobs/[id]/route.ts`).
+- **F08** — `tests/browser/members.spec.ts`.
+- **F09** — `src/modules/members/jobs.ts`: `members.purgeSealedBlobs` every ten minutes.
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-sealed-attachments.md`.
+- **F12** — `tests/browser/members.spec.ts`: a photo encrypted in one browser and opened in another.
 
 ## C12.37 — When someone leaves a conversation during its group call, remove them from the SFU room
 
