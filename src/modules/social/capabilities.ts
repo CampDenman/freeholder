@@ -30,6 +30,7 @@ export const NORMAL_SOCIAL_PRESETS = [
   "creator",
   "service-business",
   "shop",
+  "community",
   "everything",
 ] as const;
 

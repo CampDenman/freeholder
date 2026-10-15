@@ -172,7 +172,7 @@ function receiptEmail(prefix: string): PresetEmail {
   };
 }
 
-export const PRESETS: Record<"creator" | "service-business" | "shop", BusinessPreset> = {
+export const PRESETS: Record<"creator" | "service-business" | "shop" | "community", BusinessPreset> = {
   creator: {
     name: "Creator",
     tokens: { ...BENCH_TOKENS, measure: "narrow" },
@@ -341,6 +341,71 @@ export const PRESETS: Record<"creator" | "service-business" | "shop", BusinessPr
       },
     ],
     emails: [receiptEmail("shop")],
+    forms: [CONTACT_FORM],
+    seed: { pages: 4, contacts: 0 },
+    social: SOCIAL_SURFACE,
+  },
+  // C12.31: a site whose product is its members (MASTER.md §44).
+  community: {
+    name: "Community",
+    tokens: { ...BENCH_TOKENS, radius: "lg" },
+    pages: [
+      {
+        slug: "home",
+        title: "Home",
+        blocks: [
+          heading("community-home-h1", "A place for people who make things"),
+          body(
+            "community-home-intro",
+            "Join to post your work, follow people you like, talk privately, call each other, and buy and sell among members. Say who this community is for; this is only a start.",
+          ),
+          button("community-home-join", "Join", "/join"),
+          button("community-home-feed", "See what members are sharing", "/feed?view=latest"),
+          button("community-home-market", "Visit the market", "/market"),
+        ],
+      },
+      {
+        slug: "guidelines",
+        title: "Community guidelines",
+        blocks: [
+          heading("community-guidelines-h1", "How we look after each other"),
+          body(
+            "community-guidelines-body",
+            "Be kind, keep private things private, and sell only what you have the right to sell. Anything can be reported, and the site's moderators decide. What may not be sold is set out at /market/policy. Write your own rules here.",
+          ),
+        ],
+      },
+      {
+        slug: "about",
+        title: "About",
+        blocks: [
+          heading("community-about-h1", "About this community"),
+          body("community-about-body", "Who runs it, why it exists, and how members are welcomed."),
+        ],
+      },
+      {
+        slug: "contact",
+        title: "Contact",
+        blocks: [
+          heading("community-contact-h1", "Contact the organisers"),
+          formBlock("community-contact-form", "contact"),
+        ],
+      },
+    ],
+    entities: [
+      {
+        type: "product",
+        template: "product-page",
+        name: "Supporter pass",
+        slug: "supporter-pass",
+        kind: "digital",
+        description: [
+          heading("community-product-h1", "Support the community", 2),
+          body("community-product-body", "What a supporter's contribution pays for, and what they receive."),
+        ],
+      },
+    ],
+    emails: [welcomeEmail("community")],
     forms: [CONTACT_FORM],
     seed: { pages: 4, contacts: 0 },
     social: SOCIAL_SURFACE,

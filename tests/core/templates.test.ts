@@ -127,6 +127,16 @@ describe.runIf(hasDatabase)("seed.installPreset (C3.15)", { timeout: 30_000 }, (
     expect(email?.variables).toEqual(expect.arrayContaining(["booking.starts_at_local"]));
   });
 
+  it("installs the community preset around joining, the feed and the market (C12.31)", async () => {
+    await business();
+    const result = await installPreset.call({ preset: "community" }, OWNER);
+    expect(result.pages).toEqual(expect.arrayContaining(["", "guidelines", "about", "contact"]));
+    expect(result.entities).toEqual(["supporter-pass"]);
+    const home = (await listPages.call({}, OWNER)).find((page) => page.slug === "");
+    const hrefs = (home?.blocks as { type: string; props?: { href?: string } }[]).filter((b) => b.type === "button").map((b) => b.props?.href);
+    expect(hrefs).toEqual(["/join", "/feed?view=latest", "/market"]);
+  });
+
   it("installs a shop product, products index and order-receipt email", async () => {
     await business();
     const result = await installPreset.call({ preset: "shop" }, OWNER);

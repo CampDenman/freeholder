@@ -8,6 +8,9 @@ instance is covered in `deploy/agent-launch.md`; this picks up after launch.
 
 ## See it working first
 
+Starting fresh? `create-freeholder my-site --preset community` scaffolds a site
+whose home page is built around joining, the member feed and the market.
+
 1. In **Admin → Demo scenarios**, load **Everything** or **Creator**. Both
    include the demo community: three `[Demo]` members (`@demo_ada`,
    `@demo_ben`, `@demo_cy`) who follow each other, post, talk and sell a

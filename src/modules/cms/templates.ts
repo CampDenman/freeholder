@@ -106,6 +106,19 @@ const COPY: Record<
     emailTitle: "Hello {{contact.first_name}}",
     emailBody: "A receipt or a dispatch note starts here. Variable slots stay as written until send time.",
   },
+  community: {
+    landingTitle: "A place for people who make things",
+    landingBody: "Say who this community is for. Members post, follow, talk, call and trade with each other here.",
+    landingCta: "Join",
+    postTitle: "News from the organisers",
+    postBody: "Announcements, events and changes to the guidelines start here.",
+    productTitle: "Support the community",
+    productBody: "What a supporter's contribution pays for, and what they receive.",
+    serviceTitle: "A community session",
+    serviceBody: "A workshop or meet-up people can book.",
+    emailTitle: "Welcome, {{contact.first_name}}",
+    emailBody: "A welcome for new members. Variable slots stay as written until send time.",
+  },
   everything: {
     landingTitle: "Welcome",
     landingBody:
@@ -144,7 +157,7 @@ export function seedTemplates(preset: TemplatePreset): SeedTemplate[] {
     button(
       `${preset}-landing-cta`,
       copy.landingCta,
-      preset === "shop" ? "/products" : "/contact",
+      preset === "shop" ? "/products" : preset === "community" ? "/join" : "/contact",
     ),
   ];
   if (preset === "shop") {

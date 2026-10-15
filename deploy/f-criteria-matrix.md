@@ -4790,18 +4790,18 @@ v2.
 
 ## C12.31 — Add a community new-site preset
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F01** — N/A — presets install through existing tables (`packages/templates/src/presets.ts`).
+- **F02** — `tests/core/templates.test.ts`: the community preset's pages, product, email and links.
+- **F03** — N/A — the preset creates no contacts (`packages/templates/src/presets.ts`).
+- **F04** — `tests/core/templates.test.ts`: the installed home, guidelines, about and contact pages.
+- **F05** — `packages/sdk/src/generated.ts`: `seed.installPreset` accepts `community`.
+- **F06** — N/A — preset copy is the owner's starting text, edited in the builder (`src/modules/cms/templates.ts`).
+- **F07** — `tests/core/templates.test.ts`: installs through ordinary services only.
+- **F08** — `tests/core/templates.test.ts`.
+- **F09** — N/A — no background work (`src/modules/seed/preset-install.ts`).
+- **F10** — `packages/create-freeholder/src/index.ts`: `--preset community` for new sites.
+- **F11** — `deploy/members-vibe-coding.md` and `.changeset/community-preset.md`.
+- **F12** — `tests/core/templates.test.ts`: install and check the home links to join, the feed and the market.
 
 ## C12.30 — Hash-match known abuse imagery on upload
 

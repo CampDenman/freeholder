@@ -10806,10 +10806,23 @@ whatever is best for the people using the site.
   journey has the owner allow it, an adult post adult content, a minor and a
   visitor never see it, and another adult see it only after opting in.
   Changeset `member-adult-content.md`.)*
-- [ ] **C12.31** Add a community new-site preset: Bench tokens, pages
+- [x] **C12.31** Add a community new-site preset: Bench tokens, pages
   (home around the feed, market, join), navigation and emails for a site
   whose product is its members, installable from setup like the business
   presets.
+  *(Evidence 2026-10-15: the `community` preset in
+  `packages/templates/src/presets.ts` (home with Join, the member feed and
+  the market; community guidelines pointing to `/market/policy`; about;
+  contact; a Supporter pass product; a welcome email), the template copy in
+  `src/modules/cms/templates.ts`, and `community` in the config, CMS
+  template presets, social defaults and `create-freeholder --preset`;
+  `tests/core/templates.test.ts`. **F04** the installed pages. **F05**
+  `seed.installPreset` with `preset: "community"`. **F07** installs through
+  ordinary CMS, catalog and forms services; nothing about members is
+  switched on by the preset itself (joining, selling and adult content stay
+  the owner's choices in Admin → Members). **F09** N/A — no background work.
+  **F12** the preset test installs it and checks the pages, product and
+  home links. Changeset `community-preset.md`.)*
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
   preserving evidence and reporting through the legal path for the site's

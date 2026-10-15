@@ -3246,7 +3246,7 @@ export interface ServiceCatalog {
     output: { earlier: { id: string; label: string; title: string }; later: { id: string; label: string; title: string }; titleChanged: boolean; blocks: { added: { id: string; type: string }[]; removed: { id: string; type: string }[]; changed: { id: string; type: string }[]; unchanged: number } };
   };
   "cms.createFromTemplate": {
-    input: { key: string; title: string; slug?: string; preset?: "creator" | "service-business" | "shop" | "everything" | "custom"; locale?: string };
+    input: { key: string; title: string; slug?: string; preset?: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; locale?: string };
     output: { kind: "page" | "post" | "product" | "service" | "email" | "sms"; templateKey: string; blocks: unknown; page: { id: string; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; createdAt: string; updatedAt: string; [key: string]: unknown } | null };
   };
   "cms.createPage": {
@@ -3330,8 +3330,8 @@ export interface ServiceCatalog {
     output: { id: string; key: string; locale: string; name: string; kind: "chrome" | "reusable"; blocks: unknown; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
   };
   "cms.getTemplate": {
-    input: { key: string; preset?: "creator" | "service-business" | "shop" | "everything" | "custom"; locale?: string };
-    output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
+    input: { key: string; preset?: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; locale?: string };
+    output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
   };
   "cms.heartbeatPresence": {
     input: { pageId: string; editing?: boolean };
@@ -3390,8 +3390,8 @@ export interface ServiceCatalog {
     output: { id: string; key: string; locale: string; name: string; kind: "chrome" | "reusable"; blocks: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
   "cms.listTemplates": {
-    input: { kind?: "page" | "post" | "product" | "service" | "email" | "sms"; preset?: "creator" | "service-business" | "shop" | "everything" | "custom"; locale?: string };
-    output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+    input: { kind?: "page" | "post" | "product" | "service" | "email" | "sms"; preset?: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; locale?: string };
+    output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
   "cms.loadDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
@@ -3426,8 +3426,8 @@ export interface ServiceCatalog {
     output: { templateId: string; locale: string; timezone: string; body: string; variables: { [key: string]: string }; estimatedSegments: number; [key: string]: unknown };
   };
   "cms.previewTemplate": {
-    input: { key: string; preset?: "creator" | "service-business" | "shop" | "everything" | "custom"; locale?: string };
-    output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown };
+    input: { key: string; preset?: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; locale?: string };
+    output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.publishPage": {
     input: { id: string; published: boolean; expectedVersion?: number };
@@ -3478,8 +3478,8 @@ export interface ServiceCatalog {
     output: { id: string; pageId: string; revisionId: string | null; blockId: string | null; parentId: string | null; body: string; mentions: string[]; kind: "comment" | "review_request"; reviewer: string | null; reviewState: "none" | "requested" | "approved" | "changes_requested"; resolvedAt: string | null; resolvedBy: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.resetTemplate": {
-    input: { key: string; preset?: "creator" | "service-business" | "shop" | "everything" | "custom"; locale?: string };
-    output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown };
+    input: { key: string; preset?: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; locale?: string };
+    output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.resolvePage": {
     input: { slug: string; locale?: string };
@@ -3562,8 +3562,8 @@ export interface ServiceCatalog {
     output: { id: string; key: string; locale: string; name: string; kind: "chrome" | "reusable"; blocks: unknown; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.updateTemplate": {
-    input: { key: string; preset?: "creator" | "service-business" | "shop" | "everything" | "custom"; locale?: string; name?: string; blocks: unknown; variables?: string[] };
-    output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown };
+    input: { key: string; preset?: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; locale?: string; name?: string; blocks: unknown; variables?: string[] };
+    output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.verifyDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
@@ -6862,8 +6862,8 @@ export interface ServiceCatalog {
     output: { kind: string; id: string; title: string; href: string; snippet: string | null; contactId: string | null; module: string; [key: string]: unknown }[];
   };
   "seed.installPreset": {
-    input: { preset: "creator" | "service-business" | "shop"; locale?: string };
-    output: { preset: "creator" | "service-business" | "shop"; pages: string[]; entities: string[]; emails: string[]; tokensApplied: boolean };
+    input: { preset: "creator" | "service-business" | "shop" | "community"; locale?: string };
+    output: { preset: "creator" | "service-business" | "shop" | "community"; pages: string[]; entities: string[]; emails: string[]; tokensApplied: boolean };
   };
   "segments.capture": {
     input: { id: string };
