@@ -7575,5 +7575,10 @@
   "members.admin.reportRemove": "Remove",
   "members.admin.reportRemoveSuspend": "Remove and suspend",
   "members.admin.reportSuspend": "Suspend member",
-  "members.admin.reportDismiss": "Dismiss"
+  "members.admin.reportDismiss": "Dismiss",
+  "members.adult.badge": "18+",
+  "members.adult.showAdult": "Show me adult (18+) posts and listings. Off unless you turn it on.",
+  "members.adult.markPost": "This post is adult content (18+). Only adults who chose to see adult content will see it.",
+  "members.adult.markListing": "This listing is adult content (18+). Only adults who chose to see adult content will see it.",
+  "members.admin.adultContent": "Allow adult (18+) content. Adult members can mark posts and listings as adult; only adults who opt in ever see them, and minors and visitors never do."
 }

@@ -27,6 +27,7 @@ export async function createListingAction(form: FormData): Promise<void> {
         kind: (LISTING_KINDS as readonly string[]).includes(kind) ? (kind as (typeof LISTING_KINDS)[number]) : "physical",
         description: text(form, "description"),
         price: text(form, "price"),
+        adult: form.get("adult") === "yes",
       },
       await actor(),
     );

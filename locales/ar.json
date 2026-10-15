@@ -7575,5 +7575,10 @@
   "members.admin.reportRemove": "إزالة",
   "members.admin.reportRemoveSuspend": "إزالة وتعليق",
   "members.admin.reportSuspend": "تعليق العضو",
-  "members.admin.reportDismiss": "تجاهل"
+  "members.admin.reportDismiss": "تجاهل",
+  "members.adult.badge": "18+",
+  "members.adult.showAdult": "أظهر لي المنشورات والإعلانات للبالغين (18+). مُعطّل ما لم تفعّله.",
+  "members.adult.markPost": "هذا المنشور محتوى للبالغين (18+). لن يراه إلا البالغون الذين اختاروا رؤية هذا المحتوى.",
+  "members.adult.markListing": "هذا الإعلان محتوى للبالغين (18+). لن يراه إلا البالغون الذين اختاروا رؤية هذا المحتوى.",
+  "members.admin.adultContent": "السماح بمحتوى البالغين (18+). يمكن للأعضاء البالغين وسم المنشورات والإعلانات كمحتوى للبالغين؛ ولا يراها إلا البالغون الذين يختارون ذلك، ولا يراها القاصرون أو الزوار أبدًا."
 }

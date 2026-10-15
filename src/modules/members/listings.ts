@@ -25,6 +25,7 @@ import { createPriceList, listPriceLists, setPriceListEntry } from "@/modules/ca
 import { marketListings } from "@/modules/catalog/market";
 import { listProductTaxCategories } from "@/modules/catalog/service";
 import { createTaxCategory } from "@/modules/invoicing/tax-service";
+import { assertMayMarkAdult } from "./adult";
 import { memberListings, memberProfiles, memberSettings } from "./schema";
 
 export const LISTING_KINDS = ["physical", "service", "digital", "rental"] as const;
@@ -80,6 +81,7 @@ const listingRow = row({
   status: z.enum(["draft", "active", "archived"]),
   review: z.enum(["pending", "approved", "rejected"]),
   reviewNote: z.string().nullable(),
+  adult: z.boolean(),
   createdAt: timestamp,
 });
 
@@ -93,6 +95,7 @@ async function present(ctx: ServiceContext, listing: typeof memberListings.$infe
     status: product.status,
     review: listing.review,
     reviewNote: listing.reviewNote,
+    adult: listing.adult,
     createdAt: listing.createdAt,
   };
 }
@@ -110,10 +113,13 @@ export const createListing = defineService({
     description: z.string().trim().max(5000).default(""),
     price: z.string().trim().regex(/^\d{1,9}(\.\d{1,2})?$/, "Use a price like 25 or 25.50."),
     currency: z.string().trim().length(3).toUpperCase().optional(),
+    /** Adult content (C12.29): only adults may mark it, and only where the site allows it. */
+    adult: z.boolean().default(false),
   }),
   output: listingRow,
   handler: async (input, ctx) => {
     const me = await activeSeller(ctx);
+    if (input.adult) await assertMayMarkAdult(ctx, me.userId);
     const policy = await rules(ctx);
     const business = await ctx.callAsSystem(getBusiness, {});
     const currency = input.currency ?? business?.baseCurrency ?? "USD";
@@ -138,7 +144,7 @@ export const createListing = defineService({
     const review = policy.review ? "pending" : "approved";
     const [listing] = await ctx.tx
       .insert(memberListings)
-      .values({ productId: product.id, sellerId: me.userId, review, reviewedAt: policy.review ? null : new Date() })
+      .values({ productId: product.id, sellerId: me.userId, review, adult: input.adult, reviewedAt: policy.review ? null : new Date() })
       .returning();
     if (review === "approved") await ctx.callAsSystem(activateProduct, { id: product.id, expectedVersion: withVariant.version });
     ctx.setSubject("member_listing", product.id);

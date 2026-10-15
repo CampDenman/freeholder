@@ -10564,9 +10564,29 @@ whatever is best for the people using the site.
 - [ ] **C12.28** Publish a prohibited-items policy: the site owner edits it
   under Admin → Members, it is public at `/market/policy`, sellers accept it
   before listing, and the report queue offers it as a reason.
-- [ ] **C12.29** Make adult content opt-in for adults and never shown to
+- [x] **C12.29** Make adult content opt-in for adults and never shown to
   minors: members mark posts and listings as adult, adults opt in to see
   them, and minors and visitors never receive them from any service.
+  *(Evidence 2026-10-14: `src/modules/members/adult.ts`, the listing view
+  gate in `src/modules/catalog/listing-gate.ts`, migration
+  `db/migrations/0035_member_adult_content.sql`,
+  `tests/modules/member-adult.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** the site switch on `/admin/members`, the opt-in on `/portal/member`,
+  the adult checkbox in the composer and on `/portal/listings`, and an 18+
+  badge on posts. **F05** `adult` on `members.post` and
+  `members.createListing`, `showAdult` on `members.updateMe`, `adultContent`
+  on `members.updateSettings`. **F07** off unless the site owner allows it;
+  only self-attested adults may mark or opt in, and saying you are not an
+  adult turns the opt-in off (a database check enforces it); every post read
+  (feeds, profiles, single posts, reposts, pending tags) and every catalog
+  path (market, storefront options, product pages, the public product list
+  behind `llms.txt` and page blocks, cart and checkout) leaves adult items out for minors, visitors and adults who have
+  not opted in; minors are never mentioned or tagged into adult posts;
+  authors see their own; turning the site switch off hides everything
+  already marked. **F09** N/A — no background work. **F12** the browser
+  journey has the owner allow it, an adult post adult content, a minor and a
+  visitor never see it, and another adult see it only after opting in.
+  Changeset `member-adult-content.md`.)*
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
   preserving evidence and reporting through the legal path for the site's

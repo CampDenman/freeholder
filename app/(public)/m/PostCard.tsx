@@ -15,6 +15,7 @@ export type Post = {
   author: { userId: string; handle: string; displayName: string };
   body: string;
   visibility: string;
+  adult?: boolean;
   createdAt: Date;
   editedAt: Date | null;
   repost: { id: string; author: { handle: string; displayName: string }; body: string; createdAt: Date } | null;
@@ -59,7 +60,7 @@ export function PostCard({
   back: string;
   timezone: string;
   locale: string;
-  labels: { visibility: string; edited: string; comments: string; delete: string; repost: string; report: string; reactions: Record<string, string>; reposted: string; with: string };
+  labels: { visibility: string; edited: string; comments: string; delete: string; repost: string; report: string; adult: string; reactions: Record<string, string>; reposted: string; with: string };
 }) {
   const mine = viewerId === post.author.userId;
   return (
@@ -70,6 +71,7 @@ export function PostCard({
         <a className="text-ink-muted underline" href={`/p/${post.id}`}>{formatDateTime(post.createdAt, timezone, locale)}</a>
         {post.editedAt ? <span className="text-ink-muted">{labels.edited}</span> : null}
         <Pill>{labels.visibility}</Pill>
+        {post.adult ? <Pill tone="warning">{labels.adult}</Pill> : null}
       </header>
       {post.body ? <RichText body={post.body} /> : null}
       {post.repost ? (
@@ -125,6 +127,7 @@ export function postLabels(t: T, post: Pick<Post, "visibility" | "comments">) {
     delete: t("members.post.delete"),
     repost: t("members.post.repost"),
     report: t("members.report.action"),
+    adult: t("members.adult.badge"),
     reposted: t("members.post.reposted"),
     with: t("members.post.with"),
     reactions: Object.fromEntries(REACTIONS.map((k) => [k, t(`members.reaction.${k}`)])),

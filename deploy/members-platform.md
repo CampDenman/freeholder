@@ -151,3 +151,17 @@ from mocked payment, mail or media runs alone.
 - Tests: `tests/modules/member-reports.test.ts` (3 cases) and the C12.12
   journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
 
+## C12.29 — adult content (2026-10-14)
+
+- Off by default (`member_settings.adult_content`). Helpers and the listing
+  gate are in `src/modules/members/adult.ts`; the catalog asks through
+  `src/modules/catalog/listing-gate.ts` on the market, storefront options,
+  product pages, the public product list (`llms.txt`, page blocks), the
+  cart and checkout.
+- A member receives adult content only while the site allows it, they are
+  active, they attested they are an adult, and they opted in. A database
+  check keeps the opt-in from outliving the adult attestation.
+- Seeds and demos keep the switch off.
+- Tests: `tests/modules/member-adult.test.ts` (4 cases) and the C12.29
+  journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
+

@@ -5348,7 +5348,7 @@ export interface ServiceCatalog {
   };
   "members.archiveListing": {
     input: { productId: string; archived: boolean };
-    output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; createdAt: string; [key: string]: unknown };
+    output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; adult: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.befriend": {
     input: { handle: string };
@@ -5383,8 +5383,8 @@ export interface ServiceCatalog {
     output: { id: string; kind: "direct" | "group"; title: string | null; people: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; state: "active" | "requested"; muted: boolean; lastMessageAt: string; unread: boolean; [key: string]: unknown }[];
   };
   "members.createListing": {
-    input: { title: string; kind: "physical" | "service" | "digital" | "rental"; description?: string; price: string; currency?: string };
-    output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; createdAt: string; [key: string]: unknown };
+    input: { title: string; kind: "physical" | "service" | "digital" | "rental"; description?: string; price: string; currency?: string; adult?: boolean };
+    output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; adult: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.deleteComment": {
     input: { id: string };
@@ -5400,7 +5400,7 @@ export interface ServiceCatalog {
   };
   "members.editPost": {
     input: { id: string; body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me" };
-    output: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown };
+    output: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown };
   };
   "members.endCall": {
     input: { id: string };
@@ -5408,7 +5408,7 @@ export interface ServiceCatalog {
   };
   "members.feed": {
     input: { before?: string };
-    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
+    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
   };
   "members.follow": {
     input: { handle: string };
@@ -5428,11 +5428,11 @@ export interface ServiceCatalog {
   };
   "members.join": {
     input: { handle: string; displayName: string; meetsMinimumAge: true; isAdult: boolean };
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; createdAt: string; [key: string]: unknown };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.latest": {
     input: { before?: string; tag?: string };
-    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
+    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
   };
   "members.leaveConversation": {
     input: { conversationId: string };
@@ -5444,7 +5444,7 @@ export interface ServiceCatalog {
   };
   "members.list": {
     input: { status?: "active" | "pending" | "suspended"; search?: string; limit?: number; offset?: number };
-    output: { members: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; createdAt: string; email: string; statusReason: string | null; [key: string]: unknown }[]; total: number };
+    output: { members: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; createdAt: string; email: string; statusReason: string | null; [key: string]: unknown }[]; total: number };
   };
   "members.markShipped": {
     input: { orderId: string; sellerId: string; carrier?: string; tracking?: string };
@@ -5452,7 +5452,7 @@ export interface ServiceCatalog {
   };
   "members.me": {
     input: Record<string, never>;
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; createdAt: string; [key: string]: unknown } | null;
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; createdAt: string; [key: string]: unknown } | null;
   };
   "members.muteConversation": {
     input: { conversationId: string; muted: boolean };
@@ -5460,7 +5460,7 @@ export interface ServiceCatalog {
   };
   "members.myListings": {
     input: Record<string, never>;
-    output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; createdAt: string; [key: string]: unknown }[];
+    output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; adult: boolean; createdAt: string; [key: string]: unknown }[];
   };
   "members.myPayouts": {
     input: Record<string, never>;
@@ -5496,15 +5496,15 @@ export interface ServiceCatalog {
   };
   "members.pendingListings": {
     input: Record<string, never>;
-    output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; createdAt: string; sellerHandle: string; sellerName: string; [key: string]: unknown }[];
+    output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; adult: boolean; createdAt: string; sellerHandle: string; sellerName: string; [key: string]: unknown }[];
   };
   "members.pendingTags": {
     input: Record<string, never>;
-    output: { mentionId: string; post: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }; [key: string]: unknown }[];
+    output: { mentionId: string; post: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }; [key: string]: unknown }[];
   };
   "members.post": {
-    input: { body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; repostOf?: string; tag?: string[] };
-    output: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown };
+    input: { body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; repostOf?: string; tag?: string[]; adult?: boolean };
+    output: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown };
   };
   "members.postSaleMessage": {
     input: { orderId: string; sellerId: string; body: string };
@@ -5512,7 +5512,7 @@ export interface ServiceCatalog {
   };
   "members.postsBy": {
     input: { before?: string; handle: string };
-    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
+    output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
   };
   "members.profile": {
     input: { handle: string };
@@ -5580,11 +5580,11 @@ export interface ServiceCatalog {
   };
   "members.setStatus": {
     input: { userId: string; status: "active" | "pending" | "suspended"; reason?: string };
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; createdAt: string; [key: string]: unknown };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.settings": {
     input: Record<string, never>;
-    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; [key: string]: unknown };
+    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; adultContent: boolean; [key: string]: unknown };
   };
   "members.settlePayouts": {
     input: { ids: string[]; action: "release" | "paid" | "cancel" | "owe"; reference?: string; note?: string };
@@ -5627,16 +5627,16 @@ export interface ServiceCatalog {
     output: { ok: true };
   };
   "members.updateMe": {
-    input: { displayName?: string; bio?: string; handle?: string; isAdult?: boolean; bioVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; linksVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; links?: { label: string; url: string }[]; isPrivate?: boolean; indexable?: boolean; readReceipts?: boolean };
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; createdAt: string; [key: string]: unknown };
+    input: { displayName?: string; bio?: string; handle?: string; isAdult?: boolean; showAdult?: boolean; bioVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; linksVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; links?: { label: string; url: string }[]; isPrivate?: boolean; indexable?: boolean; readReceipts?: boolean };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.updateSettings": {
-    input: { joinPolicy?: "open" | "approval" | "invite"; minimumAge?: number; marketplaceEnabled?: boolean; listingReview?: boolean; payoutModel?: "hold" | "seller_merchant" | "instant"; holdDays?: number; siteFeeBps?: number; payoutAdapter?: string };
-    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; [key: string]: unknown };
+    input: { joinPolicy?: "open" | "approval" | "invite"; minimumAge?: number; marketplaceEnabled?: boolean; listingReview?: boolean; payoutModel?: "hold" | "seller_merchant" | "instant"; holdDays?: number; siteFeeBps?: number; payoutAdapter?: string; adultContent?: boolean };
+    output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; adultContent: boolean; [key: string]: unknown };
   };
   "members.viewPost": {
     input: { id: string };
-    output: { post: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }; comments: { id: string; parentId: string | null; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; restricted: boolean; [key: string]: unknown }[] };
+    output: { post: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; [key: string]: unknown }; comments: { id: string; parentId: string | null; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; restricted: boolean; [key: string]: unknown }[] };
   };
   "members.withdrawDispute": {
     input: { orderId: string; sellerId: string };

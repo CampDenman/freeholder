@@ -488,4 +488,67 @@ test.describe("members (C12.01)", () => {
     await raeContext.close();
     await admin.close();
   });
+
+  test("adult content is opt-in for adults and never shown to minors (C12.29)", async ({ browser }) => {
+    const ownerToken = await seedC11Owner("Adult proof");
+    const BEN_ID = "00000000-0000-4000-8000-0000000000d6";
+    const DEE_ID = "00000000-0000-4000-8000-0000000000d7";
+    await db().insert(users).values([
+      { id: MEMBER_ID, email: "ada@example.test", role: "customer" },
+      { id: BEN_ID, email: "ben@example.test", role: "customer" },
+      { id: DEE_ID, email: "dee@example.test", role: "customer" },
+    ]);
+    const now = new Date();
+    await db().insert(memberProfiles).values([
+      { userId: MEMBER_ID, handle: "ada", displayName: "Ada Lane", ageAttestedAt: now, isAdult: true, isPrivate: false },
+      { userId: BEN_ID, handle: "ben", displayName: "Ben Ito", ageAttestedAt: now, isAdult: true, isPrivate: false },
+      { userId: DEE_ID, handle: "dee", displayName: "Dee Young", ageAttestedAt: now, isAdult: false, isPrivate: false },
+    ]);
+    const [ada, ben, dee] = await Promise.all([MEMBER_ID, BEN_ID, DEE_ID].map((id) => db().transaction((tx) => createSession(tx, id))));
+
+    const admin = await browser.newContext({ baseURL: C11_BASE_URL });
+    await useOwnerSession(admin, ownerToken);
+    const console = await admin.newPage();
+    await console.goto("/admin/members");
+    await console.getByLabel(/Allow adult \(18\+\) content/).check();
+    await console.getByRole("button", { name: "Save rules" }).first().click();
+    await expect(console.getByLabel(/Allow adult \(18\+\) content/)).toBeChecked();
+
+    const adaContext = await browser.newContext({ baseURL: C11_BASE_URL });
+    await adaContext.addCookies([{ name: SESSION_COOKIE, value: ada!.token, url: C11_BASE_URL }]);
+    const adaPage = await adaContext.newPage();
+    await adaPage.goto("/feed");
+    await adaPage.getByLabel("What’s new?").fill("Late-night figure study");
+    await adaPage.getByLabel("Who can see this").selectOption("public");
+    await adaPage.getByLabel(/This post is adult content/).check();
+    await adaPage.getByRole("button", { name: "Post", exact: true }).click();
+    await expect(adaPage.getByText("Late-night figure study")).toBeVisible();
+    await expect(adaPage.getByText("18+", { exact: true })).toBeVisible();
+
+    const deeContext = await browser.newContext({ baseURL: C11_BASE_URL });
+    await deeContext.addCookies([{ name: SESSION_COOKIE, value: dee!.token, url: C11_BASE_URL }]);
+    const deePage = await deeContext.newPage();
+    await deePage.goto("/@ada");
+    await expect(deePage.getByText("Late-night figure study")).toHaveCount(0);
+    await deePage.goto("/portal/member");
+    await expect(deePage.getByLabel(/Show me adult/)).toHaveCount(0);
+
+    const benContext = await browser.newContext({ baseURL: C11_BASE_URL });
+    await benContext.addCookies([{ name: SESSION_COOKIE, value: ben!.token, url: C11_BASE_URL }]);
+    const benPage = await benContext.newPage();
+    await benPage.goto("/@ada");
+    await expect(benPage.getByText("Late-night figure study")).toHaveCount(0);
+    await benPage.goto("/portal/member");
+    await benPage.getByLabel(/Show me adult/).check();
+    await benPage.getByRole("button", { name: "Save profile" }).click();
+    await benPage.goto("/@ada");
+    await expect(benPage.getByText("Late-night figure study")).toBeVisible();
+    await axeInBothThemes(benPage);
+
+    const visitor = await browser.newContext({ baseURL: C11_BASE_URL });
+    const anon = await visitor.newPage();
+    await anon.goto("/feed?view=latest");
+    await expect(anon.getByText("Late-night figure study")).toHaveCount(0);
+    for (const context of [admin, adaContext, deeContext, benContext, visitor]) await context.close();
+  });
 });
