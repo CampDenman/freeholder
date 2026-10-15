@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.02 (MASTER.md §44.3): a member's profile, as this viewer may see it.
 import type { Metadata } from "next";
+import { memberServices } from "@/modules/members/member-services";
 import { randomUUID } from "node:crypto";
 import { joinMembershipAction } from "../../memberships/actions";
 import { memberPlans } from "@/modules/members/member-subscriptions";
@@ -64,12 +65,13 @@ export default async function MemberProfile({
   const [{ handle }, query, t, locale, business] = await Promise.all([params, searchParams, getT(), getLocale(), currentBusiness()]);
   const { actor, profile } = await load(handle);
   const r = profile.relation;
-  const [posts, shop, reviews, sections, offers] = await Promise.all([
+  const [posts, shop, reviews, sections, offers, bookable] = await Promise.all([
     postsBy.call({ handle: profile.handle }, actor),
     storefront.call({ handle: profile.handle }, actor),
     r.blocked ? null : reviewsFor.call({ handle: profile.handle }, actor),
     profileSections.call({ handle: profile.handle }, actor),
     memberPlans.call({ handle: profile.handle }, actor),
+    memberServices.call({ handle: profile.handle }, actor),
   ]);
   const viewer = actor.kind === "user" ? await myMembership.call({}, actor) : null;
   const canAct = viewer?.status === "active" && !r.self;
@@ -158,6 +160,19 @@ export default async function MemberProfile({
         </section>
       ) : null}
       {offers.subscribed && !r.self ? <p className="text-sm"><Pill tone="success">{t("members.plans.youSubscribe")}</Pill></p> : null}
+      {!r.blocked && bookable.sellerUserId && bookable.services.length ? (
+        <section className="grid gap-3" aria-labelledby="book">
+          <h2 id="book" className="text-xl font-semibold">{t("members.bookings.bookTitle", { name: profile.displayName })}</h2>
+          <ul className="grid gap-2">
+            {bookable.services.map((s) => (
+              <li key={s.productId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rule bg-surface p-3">
+                <span>{s.name} · {t("members.bookings.minutes", { minutes: s.durationMin })}</span>
+                <a className="underline" href={`/book?${new URLSearchParams({ seller: bookable.sellerUserId, service: s.productId })}`}>{t("members.bookings.book")}</a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {sections.map((section) => (
         <section key={section.id} className="grid gap-3" aria-labelledby={`section-${section.id}`}>
           <h2 id={`section-${section.id}`} className="text-xl font-semibold">{section.title}</h2>

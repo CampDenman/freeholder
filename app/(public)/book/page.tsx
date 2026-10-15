@@ -17,12 +17,14 @@ import { getLocale, getT } from "../../i18n";
 import { bookServiceAction, moveBookingAction } from "./actions";
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> { const t=await getT(); return { title:t("publicBooking.title"), robots:{index:false,follow:true} }; }
-type Query = { service?: string; date?: string; mode?: string; seats?: string; error?: string; move?: string };
+type Query = { service?: string; date?: string; mode?: string; seats?: string; error?: string; move?: string; seller?: string };
 export default async function PublicBooking({ searchParams }: { searchParams: Promise<Query> }) {
   const [q,t,locale,business,jar] = await Promise.all([searchParams,getT(),getLocale(),currentBusiness(),cookies()]);
   const actor = await actorFromToken(jar.get(SESSION_COOKIE)?.value);
   const href = (path:string) => business ? localizeCustomerHref(path,locale,business) : path;
-  const catalog = await bookableServices.call({}, actor);
+  // C12.25: a member's services are booked here with ?seller=<their user id>.
+  const seller = /^[0-9a-f-]{36}$/.test(q.seller ?? "") ? q.seller : undefined;
+  const catalog = await bookableServices.call({ sellerUserId: seller }, actor);
   const moving = q.move && actor.kind === "user" ? await myBookingSelection.call({id:q.move},actor).catch(()=>null) : null;
   if (q.move && actor.kind === "user" && !moving) notFound();
   const selected = catalog.services.find(s=>s.productId===(moving?.productId??q.service)) ?? catalog.services[0];
@@ -37,13 +39,14 @@ export default async function PublicBooking({ searchParams }: { searchParams: Pr
     if (!moving) quote = await publicBookingQuote.call({productId:selected.productId,currency:catalog.currency,mode,seats},actor);
     slots = await availableSlots.call({productId:selected.productId,serviceOfferingId:selected.offeringId,from:date,to:date,seats,excludeBookingId:moving?q.move:undefined,limit:500},actor);
   } catch { unavailable=true; }
-  const returnTo = `/book?${new URLSearchParams({service:selected?.productId??"",date,mode,seats:String(seats),...(q.move?{move:q.move}:{})})}`;
+  const returnTo = `/book?${new URLSearchParams({service:selected?.productId??"",date,mode,seats:String(seats),...(q.move?{move:q.move}:{}),...(seller?{seller}:{})})}`;
   const requestKey = randomUUID();
   const inZone = (d:Date) => new Intl.DateTimeFormat(locale,{timeZone:business?.timezone??"UTC",dateStyle:"medium",timeStyle:"short"}).format(d);
   return <div className="mx-auto grid max-w-3xl gap-6 px-6 py-12"><h1 className="text-3xl font-semibold">{t(moving?"portal.record.reschedule":"publicBooking.title")}</h1><p className="text-ink-muted">{t("publicBooking.intro")}</p>
     {!selected ? <Callout>{t("publicBooking.empty")}</Callout> : <>
       <form method="get" className="grid gap-4 rounded-lg border border-rule bg-surface p-6 md:grid-cols-2">
         {moving?<input type="hidden" name="move" value={q.move}/>:null}
+        {seller?<input type="hidden" name="seller" value={seller}/>:null}
         <Field label={t("publicBooking.service")} htmlFor="service"><Select id="service" name="service" defaultValue={selected.productId}>{catalog.services.map(s=><option key={s.productId} value={s.productId}>{s.name}</option>)}</Select></Field>
         <Field label={t("publicBooking.date")} htmlFor="date"><Input type="date" name="date" id="date" defaultValue={date} required /></Field>
         <Field label={t("publicBooking.seats")} htmlFor="seats"><Input type="number" name="seats" id="seats" min={1} max={100} defaultValue={seats} required /></Field>
@@ -55,7 +58,7 @@ export default async function PublicBooking({ searchParams }: { searchParams: Pr
         {!profile ? <Callout><a className="underline" href={href(`/portal/login?returnTo=${encodeURIComponent(returnTo)}`)}>{t("publicBooking.signIn")}</a></Callout> : <p>{t("publicBooking.as",{email:profile.email??""})}</p>}
         <section className="grid gap-4" aria-label={t("publicBooking.times")}><h2 className="text-xl font-semibold">{t("publicBooking.times")}</h2><p className="text-sm text-ink-muted">{business?.timezone??"UTC"}</p>{slots.length ? slots.map(slot=><form key={`${slot.calendarId}:${slot.startsAt.toISOString()}`} action={moving?moveBookingAction:bookServiceAction} className="grid gap-3 rounded-lg border border-rule bg-surface p-4">
           {moving?<input type="hidden" name="move" value={q.move}/>:null}
-          {Object.entries({productId:selected.productId,currency:quote?.currency??catalog.currency,mode,seats:String(seats),date,calendarId:slot.calendarId,startsAt:slot.startsAt.toISOString(),termsHash:quote?.termsHash??"",requestKey}).map(([name,value])=><input key={name} type="hidden" name={name} value={value} />)}
+          {Object.entries({productId:selected.productId,currency:quote?.currency??catalog.currency,mode,seats:String(seats),date,calendarId:slot.calendarId,startsAt:slot.startsAt.toISOString(),termsHash:quote?.termsHash??"",requestKey,seller:seller??""}).map(([name,value])=><input key={name} type="hidden" name={name} value={value} />)}
           <p className="font-medium">{inZone(slot.startsAt)} · {slot.calendarName}</p>{profile ? <><label className="flex items-start gap-2"><input type="checkbox" name="acceptedTerms" required /><span>{t(moving?"publicBooking.acceptMove":"publicBooking.accept")}</span></label><Button type="submit">{t(moving?"portal.record.reschedule":"publicBooking.reserve")}</Button></> : null}
         </form>) : <p>{t("publicBooking.noTimes")}</p>}</section>
       </> : null}

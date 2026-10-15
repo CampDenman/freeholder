@@ -20,7 +20,7 @@ export async function bookServiceAction(form: FormData) {
     const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
     result = await bookPublicService.call({ productId: text("productId"), currency: text("currency"), mode: text("mode") as "full" | "deposit_balance", seats: Number(text("seats")), calendarId: text("calendarId"), startsAt: text("startsAt"), termsHash: text("termsHash"), acceptedTerms: (form.get("acceptedTerms") === "on") as true, requestKey: text("requestKey") }, { ...actor, request: requestMetadataFromHeaders(await headers()) });
   } catch (error) {
-    const q = new URLSearchParams({ service: text("productId"), date: text("date"), mode: text("mode"), seats: text("seats"), error: error instanceof ServiceError ? error.code : "failed" });
+    const q = new URLSearchParams({ service: text("productId"), date: text("date"), mode: text("mode"), seats: text("seats"), error: error instanceof ServiceError ? error.code : "failed", ...(/^[0-9a-f-]{36}$/.test(text("seller")) ? { seller: text("seller") } : {}) });
     redirect(href(`/book?${q}`));
   }
   redirect(href(`/portal/records/bookings/${result.bookingId}?booked=1`));

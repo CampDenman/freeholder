@@ -16,8 +16,9 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { activateProduct, createProduct } from "@/modules/catalog/service";
 import { applyVariantMatrix, getProductVariants, setVariantShipping } from "@/modules/catalog/variants";
 import { setPriceListEntry } from "@/modules/catalog/pricing";
-import { products } from "@/modules/catalog/schema";
+import { products, serviceOfferings } from "@/modules/catalog/schema";
 import { invoices } from "@/modules/invoicing/schema";
+import { bookings } from "@/core/scheduling/schema";
 import { savePlan } from "@/modules/subscriptions/service";
 import { publicMembershipPlans } from "@/modules/subscriptions/public-signup";
 import { plans, subscriptions } from "@/modules/subscriptions/schema";
@@ -172,9 +173,33 @@ export const memberPlans = defineService({
   },
 });
 
-export const recordSubscriptionPayout = defineService({
-  name: "members.recordSubscriptionPayout",
-  summary: "Record what a member is owed for one paid subscription invoice.",
+/** The member a paid invoice is owed to: a subscription to their plan (C12.05) or a booking of their service (C12.25). */
+async function sellerForInvoice(ctx: ServiceContext, invoice: typeof invoices.$inferSelect): Promise<string | null> {
+  if (!invoice.sourceId) return null;
+  if (invoice.sourceType === "subscription") {
+    const [row] = await ctx.tx
+      .select({ sellerUserId: products.sellerUserId })
+      .from(subscriptions)
+      .innerJoin(plans, eq(plans.id, subscriptions.planId))
+      .innerJoin(products, eq(products.id, plans.productId))
+      .where(eq(subscriptions.id, invoice.sourceId.split(":")[0]!));
+    return row?.sellerUserId ?? null;
+  }
+  if (invoice.sourceType === "booking") {
+    const [row] = await ctx.tx
+      .select({ sellerUserId: products.sellerUserId })
+      .from(bookings)
+      .innerJoin(serviceOfferings, eq(serviceOfferings.id, bookings.serviceOfferingId))
+      .innerJoin(products, eq(products.id, serviceOfferings.productId))
+      .where(eq(bookings.id, invoice.sourceId));
+    return row?.sellerUserId ?? null;
+  }
+  return null;
+}
+
+export const recordInvoicePayout = defineService({
+  name: "members.recordInvoicePayout",
+  summary: "Record what a member is owed for one paid invoice for their subscription or bookable service.",
   kind: "mutation",
   permission: "system",
   writeClass: "money",
@@ -182,15 +207,11 @@ export const recordSubscriptionPayout = defineService({
   output: z.object({ recorded: z.boolean() }),
   handler: async (input, ctx) => {
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId));
-    if (!invoice || invoice.sourceType !== "subscription" || invoice.status !== "paid" || !invoice.sourceId) return { recorded: false };
-    const subscriptionId = invoice.sourceId.split(":")[0]!;
-    const [seller] = await ctx.tx
-      .select({ sellerUserId: products.sellerUserId })
-      .from(subscriptions)
-      .innerJoin(plans, eq(plans.id, subscriptions.planId))
-      .innerJoin(products, eq(products.id, plans.productId))
-      .where(eq(subscriptions.id, subscriptionId));
-    if (!seller?.sellerUserId) return { recorded: false };
+    if (invoice?.status !== "paid") return { recorded: false };
+    const sellerUserId = await sellerForInvoice(ctx, invoice);
+    if (!sellerUserId) return { recorded: false };
+    const seller = { sellerUserId };
+    const subscription = invoice.sourceType === "subscription";
     const rules = await marketRules(ctx);
     // Tax collected belongs to the site, which files it; the seller's share is the pre-tax amount.
     const gross = invoice.totalMinor - invoice.taxMinor;
@@ -217,9 +238,9 @@ export const recordSubscriptionPayout = defineService({
       to: seller.sellerUserId,
       from: seller.sellerUserId,
       topic: "members.sale",
-      key: "members.notify.subscriptionPaid",
+      key: subscription ? "members.notify.subscriptionPaid" : "members.notify.bookingPaid",
       href: "/portal/payouts",
-      idempotencyKey: `member-subscription-paid:${invoice.id}`,
+      idempotencyKey: `member-invoice-paid:${invoice.id}`,
     });
     ctx.setSubject("member_payout", created.id);
     return { recorded: true };
@@ -229,7 +250,7 @@ export const recordSubscriptionPayout = defineService({
 export async function onInvoicePaid(payload: unknown): Promise<void> {
   const invoiceId = (payload as { invoiceId?: string } | null)?.invoiceId;
   if (!invoiceId) return;
-  await recordSubscriptionPayout.call({ invoiceId }, { kind: "system" });
+  await recordInvoicePayout.call({ invoiceId }, { kind: "system" });
 }
 
-export default [createMemberPlan, myMemberPlans, setMemberPlanStatus, memberPlans, recordSubscriptionPayout];
+export default [createMemberPlan, myMemberPlans, setMemberPlanStatus, memberPlans, recordInvoicePayout];

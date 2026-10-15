@@ -258,3 +258,17 @@ from mocked payment, mail or media runs alone.
   C12.05 journey in `tests/browser/members.spec.ts`. Passed locally
   2026-10-15.
 
+## C12.25 — members' bookable services (2026-10-15)
+
+- Services in `src/modules/members/member-services.ts`. Each member gets one
+  `person` calendar (slug `member-<handle>`) in the site's timezone.
+- Bookings are gated by audiences: offering a service adds it to every
+  enabled public or signed-in audience, creating a public "Members'
+  services" audience if the site has none.
+- `/book?seller=<user id>` books a member's services; `/book` alone lists
+  only the site's own.
+- Paid booking invoices (`source_type = 'booking'`) become payouts through
+  `members.recordInvoicePayout`, alongside subscriptions.
+- Tests: `tests/modules/member-services.test.ts` (2 cases) and the C12.25
+  journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-15.
+

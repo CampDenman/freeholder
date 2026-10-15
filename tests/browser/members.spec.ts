@@ -829,4 +829,44 @@ test.describe("members (C12.01)", () => {
     await seller.close();
     await buyer.close();
   });
+
+  test("a member opens a service for booking and visitors find times from the profile (C12.25)", async ({ browser }) => {
+    await seedC11Owner("Member bookings proof");
+    await db().insert(memberSettings).values({ id: 1, marketplaceEnabled: true, listingReview: false });
+    await db().insert(users).values({ id: MEMBER_ID, email: "rae@example.test", role: "customer" });
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date(), isPrivate: false, marketPolicyAccepted: 1 });
+    await db().insert(memberPayoutAccounts).values({ userId: MEMBER_ID, status: "ready", adapter: "manual" });
+    const rae = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+    const seller = await browser.newContext({ baseURL: C11_BASE_URL });
+    await seller.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
+    const page = await seller.newPage();
+    await page.goto("/portal/listings");
+    await page.getByLabel("Title").fill("Portrait session");
+    await page.getByLabel("Type").selectOption("service");
+    await page.getByLabel("Price", { exact: true }).fill("80");
+    await page.getByRole("button", { name: "Create listing" }).click();
+    await page.getByText("Let people book this").click();
+    for (const day of ["Sat", "Sun"]) await page.getByLabel(day, { exact: true }).first().check();
+    await page.getByRole("button", { name: "Open for booking" }).click();
+    await expect(page.getByRole("heading", { name: "Bookings" })).toBeVisible();
+    await expect(page.getByText("No bookings yet.")).toBeVisible();
+    await axeInBothThemes(page);
+
+    const visitor = await browser.newContext({ baseURL: C11_BASE_URL });
+    const anon = await visitor.newPage();
+    await anon.goto("/@rae");
+    await expect(anon.getByRole("heading", { name: "Book Rae Lane" })).toBeVisible();
+    await anon.getByRole("link", { name: "See times" }).click();
+    await expect(anon).toHaveURL(/\/book\?.*seller=/);
+    const day = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+    await anon.getByLabel("Date").fill(day);
+    await anon.getByRole("button", { name: /find/i }).click();
+    await expect(anon.getByRole("heading", { name: "Portrait session" })).toBeVisible();
+    await expect(anon.locator("form").filter({ hasText: "Rae Lane" }).first()).toBeVisible();
+    await axeInBothThemes(anon);
+    await anon.goto("/book");
+    await expect(anon.getByRole("heading", { name: "Portrait session" })).toHaveCount(0);
+    await visitor.close();
+    await seller.close();
+  });
 });

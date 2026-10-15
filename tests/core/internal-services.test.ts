@@ -64,8 +64,9 @@ const INTERNAL = [
   "catalog.orderForInvoice",
   "catalog.orderSellers",
   "members.recordPayouts",
-  // C12.05: a paid member-subscription invoice becomes the member's payout.
-  "members.recordSubscriptionPayout",
+  // C12.05 / C12.25: a paid invoice for a member's subscription or booked
+  // service becomes the member's payout.
+  "members.recordInvoicePayout",
   "members.releaseDuePayouts",
   "members.reversePayouts",
   "catalogue.applyRefresh",

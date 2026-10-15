@@ -13,7 +13,8 @@ import { createBooking, rescheduleBooking } from "@/core/scheduling/bookings";
 import { bookings, calendars } from "@/core/scheduling/schema";
 import { createDraftInvoice, issueInvoice } from "@/modules/invoicing/invoice-service";
 import { createPaymentPlan } from "@/modules/invoicing/advanced-money-service";
-import { serviceOfferings } from "./schema";
+import { products as productTable, serviceOfferings } from "./schema";
+import { sellerCanSell } from "./market";
 import { bookingTerms, getServiceOffering, listPriceRules, quoteServicePayment } from "./offerings";
 
 const selection = z.object({ productId: z.uuid(), currency: z.string().length(3), mode: z.enum(["full", "deposit_balance"]).default("full"), seats: z.number().int().min(1).max(100).default(1) });
@@ -36,12 +37,16 @@ export const publicBookingQuote = defineService({
 });
 
 export const bookableServices = defineService({
-  name: "catalog.bookableServices", summary: "Active public services and their offered booking payment modes.", kind: "query", permission: "public", input: z.object({}),
+  name: "catalog.bookableServices", summary: "Active public services and their offered booking payment modes — the site's own, or one member's (C12.25).", kind: "query", permission: "public", input: z.object({ sellerUserId: z.uuid().optional() }),
   output: z.object({ currency: z.string(), services: z.array(z.object({ productId: z.uuid(), offeringId: z.uuid(), name: z.string(), durationMin: z.number().int(), modes: z.array(z.enum(["full", "deposit_balance"])) })) }),
-  handler: async (_input, ctx) => {
+  handler: async (input, ctx) => {
     const business = await ctx.call(getBusiness, {});
     const { listVisibleProducts } = await import("./service");
-    const products = (await ctx.call(listVisibleProducts, { limit: 500 })).filter(p=>p.kind==="service");
+    const listed = (await ctx.call(listVisibleProducts, { limit: 500 })).filter(p=>p.kind==="service");
+    // A member's services are booked from their own page, and only while they can be paid.
+    const sellers = listed.length ? new Map((await ctx.tx.select({ id: productTable.id, seller: productTable.sellerUserId }).from(productTable).where(inArray(productTable.id, listed.map(p=>p.id)))).map(r=>[r.id, r.seller])) : new Map<string, string | null>();
+    const products = listed.filter(p => (sellers.get(p.id) ?? null) === (input.sellerUserId ?? null));
+    if (input.sellerUserId && !(await sellerCanSell(ctx, input.sellerUserId))) return { currency: business?.baseCurrency ?? "USD", services: [] };
     const services = [];
     for (const product of products) {
       const offering = await ctx.call(getServiceOffering, { productId: product.id });
@@ -69,6 +74,8 @@ export const bookPublicService = defineService({
       if (prior.serviceOfferingId !== priorProduct?.id || prior.calendarId !== input.calendarId || prior.startsAt.getTime() !== new Date(input.startsAt).getTime() || prior.capacityUsed !== input.seats || (prior.meta as {publicTermsHash?:string})?.publicTermsHash !== input.termsHash) throw new ServiceError("conflict", "This request was already used for a different reservation.");
       return { bookingId: prior.id, invoiceId: prior.invoiceId };
     }
+    const [owner] = await ctx.tx.select({ seller: productTable.sellerUserId }).from(productTable).where(eq(productTable.id, input.productId)).limit(1);
+    if (owner?.seller && !(await sellerCanSell(ctx, owner.seller))) throw new ServiceError("conflict", "This member cannot take bookings yet.");
     const quote = await ctx.call(publicBookingQuote, input);
     if (quote.termsHash !== input.termsHash) throw new ServiceError("conflict", "The price or terms changed. Review them before booking.");
     const business = await ctx.call(getBusiness, {});
