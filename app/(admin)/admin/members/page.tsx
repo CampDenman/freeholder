@@ -65,6 +65,10 @@ export default async function MembersPage({
             <Field label={t("members.admin.minimumAge")} htmlFor="minimumAge">
               <Input id="minimumAge" name="minimumAge" type="number" min={13} max={21} defaultValue={rules.minimumAge} />
             </Field>
+            <label className="flex items-start gap-2 sm:col-span-3">
+              <input type="checkbox" name="adultContent" value="yes" defaultChecked={rules.adultContent} />
+              <span>{t("members.admin.adultContent")}</span>
+            </label>
             <Button type="submit">{t("members.admin.saveRules")}</Button>
           </form>
         </CardBody>

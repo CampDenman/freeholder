@@ -4774,18 +4774,19 @@ v2.
 - **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
 ## C12.29 — Make adult content opt-in for adults and never shown to minors
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F01** — `db/migrations/0035_member_adult_content.sql`: the site switch, the member opt-in with a check that only adults hold it, and adult flags on posts and listings.
+- **F02** — `tests/modules/member-adult.test.ts`: the site switch, who may mark and opt in, and every post and listing read for each kind of viewer.
+- **F03** — N/A — adult content concerns members and their content, not contacts (`src/modules/members/adult.ts`).
+- **F04** — `tests/browser/members.spec.ts`: the switch on `/admin/members`, the opt-in on `/portal/member`, the composer checkbox and the 18+ badge.
+- **F05** — `packages/sdk/src/generated.ts`: the new fields on `members.post`, `members.createListing`, `members.updateMe` and `members.updateSettings`.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on a profile showing an adult post; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-adult.test.ts`: minors, visitors and adults who have not opted in never receive adult posts or listings, nor mentions into them.
+- **F08** — `tests/modules/member-adult.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — N/A — filtering happens on every read; there is no background work (`src/modules/members/adult.ts`).
+- **F10** — N/A — the switch is off in seeds and demos (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-adult-content.md`.
+- **F12** — `tests/browser/members.spec.ts`: the owner allows it, an adult posts, a minor and a visitor never see it, and another adult sees it after opting in.
+
 ## C12.30 — Hash-match known abuse imagery on upload
 
 - **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.

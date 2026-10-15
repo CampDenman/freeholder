@@ -8,6 +8,8 @@ import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { PRODUCT_KINDS } from "./contract";
 import { orderItems, orders, priceListEntries, priceLists, productVariants, products } from "./schema";
+import { hiddenListings } from "./listing-gate";
+
 
 const listing = row({
   id: uuid,
@@ -66,7 +68,8 @@ export const marketListings = defineService({
       )
       .orderBy(desc(products.publishedAt), desc(products.id))
       .limit(input.limit);
-    return rows.map((r) => ({ ...r, sellerUserId: r.sellerUserId! }));
+    const hidden = await hiddenListings(ctx, rows.map((r) => r.id));
+    return rows.filter((r) => !hidden.has(r.id)).map((r) => ({ ...r, sellerUserId: r.sellerUserId! }));
   },
 });
 
@@ -93,12 +96,15 @@ export async function sellerCanSell(ctx: ServiceContext, sellerUserId: string | 
 export async function assertSellable(ctx: ServiceContext, variantIds: string[]): Promise<void> {
   if (variantIds.length === 0) return;
   const rows = await ctx.tx
-    .select({ sellerUserId: products.sellerUserId })
+    .select({ productId: products.id, sellerUserId: products.sellerUserId })
     .from(productVariants)
     .innerJoin(products, eq(products.id, productVariants.productId))
     .where(inArray(productVariants.id, variantIds));
   const sellers = [...new Set(rows.map((r) => r.sellerUserId))];
   if (sellers.every((s) => s === null)) return;
+  if ((await hiddenListings(ctx, rows.filter((r) => r.sellerUserId !== null).map((r) => r.productId))).size) {
+    throw new ServiceError("not_found", "That product is not available.");
+  }
   const refusal = gate ? await gate(ctx, sellers) : "Buying from members is not available on this site yet.";
   if (refusal) throw new ServiceError("conflict", refusal);
 }

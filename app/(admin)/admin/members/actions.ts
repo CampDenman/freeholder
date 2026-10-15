@@ -45,6 +45,7 @@ export async function saveMembershipRulesAction(form: FormData): Promise<void> {
       {
         joinPolicy: policy === "approval" || policy === "invite" ? policy : "open",
         minimumAge: Number(text(form, "minimumAge")),
+        adultContent: form.get("adultContent") === "yes",
       },
       await actor(),
     ),

@@ -7575,5 +7575,10 @@
   "members.admin.reportRemove": "Retirer",
   "members.admin.reportRemoveSuspend": "Retirer et suspendre",
   "members.admin.reportSuspend": "Suspendre le membre",
-  "members.admin.reportDismiss": "Classer"
+  "members.admin.reportDismiss": "Classer",
+  "members.adult.badge": "18+",
+  "members.adult.showAdult": "Me montrer les publications et annonces pour adultes (18+). Désactivé tant que vous ne l’activez pas.",
+  "members.adult.markPost": "Cette publication est réservée aux adultes (18+). Seuls les adultes qui ont choisi de voir ce contenu la verront.",
+  "members.adult.markListing": "Cette annonce est réservée aux adultes (18+). Seuls les adultes qui ont choisi de voir ce contenu la verront.",
+  "members.admin.adultContent": "Autoriser le contenu pour adultes (18+). Les membres adultes peuvent marquer des publications et annonces comme réservées aux adultes ; seuls les adultes qui l’acceptent les voient, jamais les mineurs ni les visiteurs."
 }

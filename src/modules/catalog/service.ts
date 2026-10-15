@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Transactional product lifecycle shared by admin, HTTP and MCP (C5.09).
 
+import { hiddenListings } from "./listing-gate";
 import marketServices from "./market";
 import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -221,6 +222,7 @@ import "./portal";
 import "./reporting";
 // The funnel stages this module answers for (§4.7, C9.07).
 import "./funnel";
+
 
 export {
   abandonStaleCarts,
@@ -606,7 +608,8 @@ export const listVisibleProducts = defineService({
       .where(and(eq(products.status, "active"), eq(products.visibility, "public")))
       .orderBy(desc(products.updatedAt), asc(products.name))
       .limit(input.limit);
-    return rows.map(publicProduct);
+    const hidden = await hiddenListings(ctx, rows.filter((r) => r.sellerUserId !== null).map((r) => r.id));
+    return rows.filter((r) => !hidden.has(r.id)).map(publicProduct);
   },
 });
 
@@ -624,6 +627,7 @@ export const resolveVisibleProduct = defineService({
       .where(eq(products.slug, input.slug))
       .limit(1);
     if (!product || product.status !== "active") return null;
+    if (product.sellerUserId !== null && (await hiddenListings(ctx, [product.id])).has(product.id)) return null;
     if (product.visibility === "member_only") {
       const { contactHasAccess } = await import("@/core/entitlements/access");
       const { contacts } = await import("@/core/contacts/schema");

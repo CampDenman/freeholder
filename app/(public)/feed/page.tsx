@@ -8,7 +8,7 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { currentBusiness } from "@/core/settings/read";
 import { homeFeed, latestPublic, pendingTags } from "@/modules/members/posts";
-import { myMembership } from "@/modules/members/service";
+import { membershipRules, myMembership } from "@/modules/members/service";
 import { VISIBILITIES } from "@/modules/members/visibility";
 import { Button, Callout, Field, Input, Select } from "@/ui/primitives";
 import { getLocale, getT } from "../../i18n";
@@ -23,7 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function FeedPage({ searchParams }: { searchParams: Promise<{ view?: string; before?: string; error?: string }> }) {
   const [t, locale, business, jar, query] = await Promise.all([getT(), getLocale(), currentBusiness(), cookies(), searchParams]);
   const actor = await actorFromToken(jar.get(SESSION_COOKIE)?.value);
-  const me = actor.kind === "user" ? await myMembership.call({}, actor) : null;
+  const [me, rules] = await Promise.all([actor.kind === "user" ? myMembership.call({}, actor) : null, membershipRules.call({}, actor)]);
   const latest = query.view === "latest" || !me || me.status !== "active";
   const page = latest ? await latestPublic.call({ before: query.before }, actor) : await homeFeed.call({ before: query.before }, actor);
   const tags = me?.status === "active" ? await pendingTags.call({}, actor) : [];
@@ -55,6 +55,12 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
               <Input id="post-tag" name="tag" maxLength={300} />
             </Field>
           </div>
+          {rules.adultContent && me.isAdult ? (
+            <label className="flex items-start gap-2">
+              <input type="checkbox" name="adult" value="yes" />
+              <span>{t("members.adult.markPost")}</span>
+            </label>
+          ) : null}
           <Button type="submit">{t("members.post.publish")}</Button>
         </form>
       ) : null}

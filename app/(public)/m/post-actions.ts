@@ -42,6 +42,7 @@ export async function createPostAction(form: FormData): Promise<void> {
         body: text(form, "body"),
         visibility: (VISIBILITIES as readonly string[]).includes(visibility) ? (visibility as Visibility) : undefined,
         repostOf: text(form, "repostOf") || undefined,
+        adult: form.get("adult") === "yes",
         tag: text(form, "tag").split(/[\s,]+/).map((h) => h.replace(/^@/, "")).filter(Boolean),
       },
       actor,

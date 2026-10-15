@@ -15,6 +15,7 @@ import { z } from "zod";
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Actor, type ServiceContext } from "@/core/service";
+import { assertMayMarkAdult, seesAdult } from "./adult";
 import { canSee, relationBetween, type Relation } from "./graph";
 import { notifyMember } from "./notify";
 import {
@@ -77,14 +78,16 @@ async function reachableHandles(ctx: ServiceContext, fromId: string, handles: st
   return out;
 }
 
-async function writeDerived(ctx: ServiceContext, postId: string, authorId: string, body: string, tagged: string[]) {
+async function writeDerived(ctx: ServiceContext, postId: string, authorId: string, body: string, tagged: string[], adult = false) {
   await ctx.tx.delete(memberPostTags).where(eq(memberPostTags.postId, postId));
   const tags = hashtags(body);
   if (tags.length) await ctx.tx.insert(memberPostTags).values(tags.map((tag) => ({ postId, tag })));
   await ctx.tx
     .delete(memberMentions)
     .where(and(eq(memberMentions.postId, postId), isNull(memberMentions.commentId), eq(memberMentions.kind, "mention")));
-  const mentioned = await reachableHandles(ctx, authorId, mentions(body));
+  // Nobody is pointed at adult content they would not be shown (C12.29).
+  const admit = async (ids: string[]) => (adult ? (await Promise.all(ids.map(async (id) => ((await seesAdult(ctx, id)) ? id : null)))).filter((id): id is string => id !== null) : ids);
+  const mentioned = await admit(await reachableHandles(ctx, authorId, mentions(body)));
   if (mentioned.length) {
     await ctx.tx
       .insert(memberMentions)
@@ -94,7 +97,7 @@ async function writeDerived(ctx: ServiceContext, postId: string, authorId: strin
       await notifyMember(ctx, { to, from: authorId, topic: "members.mention", key: "members.notify.mentioned", href: `/p/${postId}`, idempotencyKey: `member-mention:${postId}:${to}:${randomUUID()}` });
     }
   }
-  const people = await reachableHandles(ctx, authorId, tagged);
+  const people = await admit(await reachableHandles(ctx, authorId, tagged));
   if (people.length) {
     await ctx.tx
       .insert(memberMentions)
@@ -112,6 +115,7 @@ const postShape = row({
   author,
   body: z.string(),
   visibility: z.enum(VISIBILITIES),
+  adult: z.boolean(),
   createdAt: timestamp,
   editedAt: timestamp.nullable(),
   repost: row({ id: uuid, author, body: z.string(), createdAt: timestamp }).nullable(),
@@ -121,6 +125,13 @@ const postShape = row({
   tagged: listed(author),
 });
 type PostShape = z.infer<typeof postShape>;
+
+/** Adult posts are left out unless this viewer receives adult content. */
+async function adultFilter(ctx: ServiceContext, viewerId: string | null, keepOwn = false): Promise<SQL | undefined> {
+  if (await seesAdult(ctx, viewerId)) return undefined;
+  const notAdult = eq(memberPosts.adult, false);
+  return keepOwn && viewerId ? or(notAdult, eq(memberPosts.authorId, viewerId)) : notAdult;
+}
 
 /** Shape a page of visible posts for one viewer. */
 async function present(ctx: ServiceContext, viewerId: string | null, rows: (typeof memberPosts.$inferSelect)[]): Promise<PostShape[]> {
@@ -157,7 +168,9 @@ async function present(ctx: ServiceContext, viewerId: string | null, rows: (type
   ]);
   const byId = new Map(authors.map((a) => [a.userId, a]));
   const visibleOriginal = new Map<string, (typeof originals)[number]>();
+  const adultOk = await seesAdult(ctx, viewerId);
   for (const original of originals) {
+    if (original.adult && !adultOk && original.authorId !== viewerId) continue;
     const relation = await relationBetween(ctx, viewerId, original.authorId);
     if (canSee(original.visibility, relation)) visibleOriginal.set(original.id, original);
   }
@@ -168,6 +181,7 @@ async function present(ctx: ServiceContext, viewerId: string | null, rows: (type
       author: byId.get(p.authorId)!,
       body: p.body,
       visibility: p.visibility,
+      adult: p.adult,
       createdAt: p.createdAt,
       editedAt: p.editedAt,
       repost: original
@@ -189,6 +203,7 @@ export async function visiblePost(ctx: ServiceContext, viewerId: string | null, 
   if (!writer || (writer.status !== "active" && writer.userId !== viewerId)) throw new ServiceError("not_found", "That post is not available.");
   const relation = await relationBetween(ctx, viewerId, post.authorId);
   if (!canSee(post.visibility, relation)) throw new ServiceError("not_found", "That post is not available.");
+  if (post.adult && post.authorId !== viewerId && !(await seesAdult(ctx, viewerId))) throw new ServiceError("not_found", "That post is not available.");
   return { post, relation };
 }
 
@@ -219,23 +234,29 @@ export const createPost = defineService({
     visibility: z.enum(VISIBILITIES).optional(),
     repostOf: uuid.optional(),
     tag: z.array(z.string().trim().toLowerCase().max(60)).max(10).default([]),
+    /** Adult content (C12.29): only adults may mark it, and only where the site allows it. */
+    adult: z.boolean().default(false),
   }),
   output: postShape,
   handler: async (input, ctx) => {
     const me = await activeAuthor(ctx);
     if (!input.body && !input.repostOf) throw new ServiceError("validation", "Write something to post.");
     let visibility = input.visibility ?? me.defaultPostVisibility;
+    let adult = input.adult;
+    if (adult) await assertMayMarkAdult(ctx, me.userId);
     if (input.repostOf) {
       const { post } = await visiblePost(ctx, me.userId, input.repostOf);
+      // Sharing adult content keeps it adult.
+      adult ||= post.adult;
       // Only public posts travel: a repost must never widen who sees something.
       if (post.visibility !== "public") throw new ServiceError("permission", "Only public posts can be shared.");
       if (!input.body) visibility = input.visibility ?? "public";
     }
     const [created] = await ctx.tx
       .insert(memberPosts)
-      .values({ authorId: me.userId, body: input.body, visibility, repostOf: input.repostOf ?? null })
+      .values({ authorId: me.userId, body: input.body, visibility, adult, repostOf: input.repostOf ?? null })
       .returning();
-    await writeDerived(ctx, created!.id, me.userId, input.body, input.tag);
+    await writeDerived(ctx, created!.id, me.userId, input.body, input.tag, adult);
     ctx.setSubject("member_post", created!.id);
     ctx.queueEvent("member.posted", { postId: created!.id, authorId: me.userId, visibility });
     return (await present(ctx, me.userId, [created!]))[0]!;
@@ -265,7 +286,7 @@ export const editPost = defineService({
       .set({ body, visibility: input.visibility ?? post.visibility, editedAt: new Date() })
       .where(eq(memberPosts.id, post.id))
       .returning();
-    if (input.body !== undefined) await writeDerived(ctx, post.id, me.userId, body, []);
+    if (input.body !== undefined) await writeDerived(ctx, post.id, me.userId, body, [], post.adult);
     ctx.setSubject("member_post", post.id);
     return (await present(ctx, me.userId, [updated!]))[0]!;
   },
@@ -321,7 +342,7 @@ export const homeFeed = defineService({
       .select({ post: memberPosts })
       .from(memberPosts)
       .innerJoin(memberProfiles, and(eq(memberProfiles.userId, memberPosts.authorId), eq(memberProfiles.status, "active")))
-      .where(and(isNull(memberPosts.deletedAt), cursorFilter(input.before), or(eq(memberPosts.authorId, viewer), others)))
+      .where(and(isNull(memberPosts.deletedAt), cursorFilter(input.before), or(eq(memberPosts.authorId, viewer), and(others, await adultFilter(ctx, viewer)))))
       .orderBy(desc(memberPosts.createdAt), desc(memberPosts.id))
       .limit(PAGE);
     const posts = rows.map((r) => r.post);
@@ -348,7 +369,7 @@ export const latestPublic = defineService({
       .select({ post: memberPosts })
       .from(memberPosts)
       .innerJoin(memberProfiles, and(eq(memberProfiles.userId, memberPosts.authorId), eq(memberProfiles.status, "active")))
-      .where(and(isNull(memberPosts.deletedAt), eq(memberPosts.visibility, "public"), sql`not ${hidden}`, tagged, cursorFilter(input.before)))
+      .where(and(isNull(memberPosts.deletedAt), eq(memberPosts.visibility, "public"), sql`not ${hidden}`, tagged, cursorFilter(input.before), await adultFilter(ctx, viewer, true)))
       .orderBy(desc(memberPosts.createdAt), desc(memberPosts.id))
       .limit(PAGE);
     const posts = rows.map((r) => r.post);
@@ -373,7 +394,7 @@ export const postsBy = defineService({
     const rows = await ctx.tx
       .select()
       .from(memberPosts)
-      .where(and(eq(memberPosts.authorId, writer.userId), isNull(memberPosts.deletedAt), inArray(memberPosts.visibility, allowed), cursorFilter(input.before)))
+      .where(and(eq(memberPosts.authorId, writer.userId), isNull(memberPosts.deletedAt), inArray(memberPosts.visibility, allowed), cursorFilter(input.before), relation.self ? undefined : await adultFilter(ctx, viewer)))
       .orderBy(desc(memberPosts.createdAt), desc(memberPosts.id))
       .limit(PAGE);
     return { posts: await present(ctx, viewer, rows), next: nextCursor(rows) };
@@ -562,7 +583,7 @@ export const pendingTags = defineService({
       .select({ mention: memberMentions, post: memberPosts })
       .from(memberMentions)
       .innerJoin(memberPosts, eq(memberPosts.id, memberMentions.postId))
-      .where(and(eq(memberMentions.userId, viewer), eq(memberMentions.kind, "tag"), eq(memberMentions.status, "pending"), isNull(memberPosts.deletedAt)))
+      .where(and(eq(memberMentions.userId, viewer), eq(memberMentions.kind, "tag"), eq(memberMentions.status, "pending"), isNull(memberPosts.deletedAt), await adultFilter(ctx, viewer)))
       .orderBy(desc(memberMentions.createdAt));
     const shaped = await present(ctx, viewer, rows.map((r) => r.post));
     return rows.map((r, i) => ({ mentionId: r.mention.id, post: shaped[i]! }));

@@ -35,6 +35,7 @@ import protectionServices from "./protection";
 import reputationServices from "./reputation";
 import reportServices from "./reports";
 import { applyMemberStatus } from "./status";
+import { siteAllowsAdult } from "./adult";
 export { onOrderPaid, onRefundSucceeded } from "./payouts";
 
 /** Handles that would read as the site itself, or collide with its own paths. */
@@ -68,6 +69,7 @@ const profile = row({
   isPrivate: z.boolean(),
   indexable: z.boolean(),
   readReceipts: z.boolean(),
+  showAdult: z.boolean(),
   createdAt: timestamp,
 });
 const settings = row({
@@ -79,6 +81,7 @@ const settings = row({
   holdDays: z.number().int(),
   siteFeeBps: z.number().int(),
   payoutAdapter: z.string(),
+  adultContent: z.boolean(),
 });
 
 function signedInUser(actor: Actor): string {
@@ -97,6 +100,7 @@ async function readSettings(ctx: ServiceContext) {
     holdDays: found?.holdDays ?? 14,
     siteFeeBps: found?.siteFeeBps ?? 0,
     payoutAdapter: found?.payoutAdapter ?? "manual",
+    adultContent: found?.adultContent ?? false,
   };
 }
 
@@ -125,6 +129,7 @@ function shape(found: typeof memberProfiles.$inferSelect) {
     isPrivate: found.isPrivate,
     indexable: found.indexable,
     readReceipts: found.readReceipts,
+    showAdult: found.showAdult,
     createdAt: found.createdAt,
   };
 }
@@ -154,6 +159,7 @@ export const updateMembershipRules = defineService({
     holdDays: z.number().int().min(1).max(90).optional(),
     siteFeeBps: z.number().int().min(0).max(5000).optional(),
     payoutAdapter: z.string().trim().min(1).max(60).optional(),
+    adultContent: z.boolean().optional(),
   }),
   output: settings,
   handler: async (input, ctx) => {
@@ -277,6 +283,8 @@ export const updateMyMembership = defineService({
     bio: bio.optional(),
     handle: handleInput.optional(),
     isAdult: z.boolean().optional(),
+    /** C12.29: see adult posts and listings. Only adults, and only where the site allows it. */
+    showAdult: z.boolean().optional(),
     ...PROFILE_SETTINGS,
   }),
   output: profile,
@@ -294,6 +302,15 @@ export const updateMyMembership = defineService({
     if (input.isAdult !== undefined && input.isAdult !== found.isAdult) {
       changes.isAdult = input.isAdult;
       changes.ageAttestedAt = new Date();
+      // Someone who says they are not an adult stops receiving adult content at once.
+      if (!input.isAdult) changes.showAdult = false;
+    }
+    if (input.showAdult === true) {
+      if (!(changes.isAdult ?? found.isAdult)) throw new ServiceError("permission", "Only adults can choose to see adult content.");
+      if (!(await siteAllowsAdult(ctx))) throw new ServiceError("validation", "This site does not allow adult content.");
+      changes.showAdult = true;
+    } else if (input.showAdult === false) {
+      changes.showAdult = false;
     }
     if (input.handle !== undefined && input.handle !== found.handle) {
       const last = found.handleChangedAt?.getTime() ?? 0;

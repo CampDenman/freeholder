@@ -50,6 +50,8 @@ export const memberProfiles = pgTable(
     indexable: boolean("indexable").notNull().default(false),
     /** §44.6: read receipts are opt-in, and you only see others' if you share yours. */
     readReceipts: boolean("read_receipts").notNull().default(false),
+    /** §44.9 (C12.29): an adult's choice to see adult posts and listings. Off by default. */
+    showAdult: boolean("show_adult").notNull().default(false),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -58,6 +60,7 @@ export const memberProfiles = pgTable(
     check("member_profiles_bio_visibility_valid", sql`${t.bioVisibility} in ('public','followers','friends','subscribers','only_me')`),
     check("member_profiles_links_visibility_valid", sql`${t.linksVisibility} in ('public','followers','friends','subscribers','only_me')`),
     check("member_profiles_default_post_visibility_valid", sql`${t.defaultPostVisibility} in ('public','followers','friends','subscribers','only_me')`),
+    check("member_profiles_show_adult_needs_adult", sql`not ${t.showAdult} or ${t.isAdult}`),
     index("member_profiles_status_idx").on(t.status, t.createdAt),
     check("member_profiles_handle_format", sql`${t.handle} ~ '^[a-z0-9_]{3,30}$'`),
     check("member_profiles_status_valid", sql`${t.status} in ('active','pending','suspended')`),
@@ -87,6 +90,8 @@ export const memberSettings = pgTable(
     siteFeeBps: integer("site_fee_bps").notNull().default(0),
     /** Which marketplace payout adapter moves money to sellers. */
     payoutAdapter: text("payout_adapter").notNull().default("manual"),
+    /** §44.9 (C12.29): whether members may post or list adult content at all. Off by default. */
+    adultContent: boolean("adult_content").notNull().default(false),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
@@ -178,6 +183,8 @@ export const memberPosts = pgTable(
     body: text("body").notNull().default(""),
     visibility: text("visibility", { enum: VISIBILITIES }).notNull(),
     repostOf: uuid("repost_of"),
+    /** Adult content (C12.29): only adults who opted in, and the author, see it. */
+    adult: boolean("adult").notNull().default(false),
     createdAt: createdAtColumn(),
     editedAt: timestamp("edited_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -369,6 +376,8 @@ export const memberListings = pgTable(
     sellerId: uuid("seller_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     review: text("review", { enum: ["pending", "approved", "rejected"] }).notNull(),
     reviewNote: text("review_note"),
+    /** Adult content (C12.29): only adults who opted in, and the seller, see it. */
+    adult: boolean("adult").notNull().default(false),
     createdAt: createdAtColumn(),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   },

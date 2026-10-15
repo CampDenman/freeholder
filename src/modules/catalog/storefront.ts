@@ -33,6 +33,7 @@
 
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { sellerCanSell } from "./market";
+import { hiddenListings } from "./listing-gate";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { requestCustomerMagicLink } from "@/core/auth/magic-links/service";
@@ -181,6 +182,10 @@ export const purchaseOptions = defineService({
     // §44.8: a member's listing is purchasable only while its seller can be paid.
     for (let i = rows.length - 1; i >= 0; i -= 1) {
       if (!(await sellerCanSell(ctx, rows[i]!.sellerUserId))) rows.splice(i, 1);
+    }
+    const hiddenIds = await hiddenListings(ctx, rows.filter((r) => r.sellerUserId !== null).map((r) => r.id));
+    for (let i = rows.length - 1; i >= 0; i -= 1) {
+      if (hiddenIds.has(rows[i]!.id)) rows.splice(i, 1);
     }
     if (rows.length === 0) return [];
 

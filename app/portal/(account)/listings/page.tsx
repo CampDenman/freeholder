@@ -63,6 +63,12 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
             <Field label={t("members.listings.field.description")} htmlFor="listing-description">
               <textarea id="listing-description" name="description" maxLength={5000} rows={4} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
             </Field>
+            {rules.adultContent && me.isAdult ? (
+            <label className="flex items-start gap-2">
+              <input type="checkbox" name="adult" value="yes" />
+              <span>{t("members.adult.markListing")}</span>
+            </label>
+          ) : null}
             <p className="text-sm text-ink-muted">{t(rules.listingReview ? "members.listings.reviewed" : "members.listings.immediate")}</p>
             <Button type="submit">{t("members.listings.create")}</Button>
           </form>

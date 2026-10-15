@@ -7,7 +7,7 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { currentBusiness } from "@/core/settings/read";
-import { myMembership } from "@/modules/members/service";
+import { membershipRules, myMembership } from "@/modules/members/service";
 import { Button, Callout, Field, Input, Pill, Select } from "@/ui/primitives";
 import { VISIBILITIES } from "@/modules/members/visibility";
 import { getLocale, getT } from "../../../i18n";
@@ -21,7 +21,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function MemberProfilePage({ searchParams }: { searchParams: Promise<{ saved?: string; joined?: string; error?: string }> }) {
   const [t, locale, business, jar, query] = await Promise.all([getT(), getLocale(), currentBusiness(), cookies(), searchParams]);
   const actor = await actorFromToken(jar.get(SESSION_COOKIE)?.value);
-  const me = actor.kind === "user" ? await myMembership.call({}, actor) : null;
+  const [me, rules] = await Promise.all([actor.kind === "user" ? myMembership.call({}, actor) : null, membershipRules.call({}, actor)]);
   const href = (path: string) => (business ? localizeCustomerHref(path, locale, business) : path);
   if (!me) {
     return (
@@ -71,6 +71,12 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
           <input type="checkbox" name="isAdult" value="yes" defaultChecked={me.isAdult} />
           <span>{t("members.field.isAdult")}</span>
         </label>
+        {rules.adultContent && me.isAdult ? (
+          <label className="flex items-start gap-2">
+            <input type="checkbox" name="showAdult" value="yes" defaultChecked={me.showAdult} />
+            <span>{t("members.adult.showAdult")}</span>
+          </label>
+        ) : null}
         <fieldset className="grid gap-3">
           <legend className="font-medium">{t("members.privacy.title")}</legend>
           <label className="flex items-start gap-2">
