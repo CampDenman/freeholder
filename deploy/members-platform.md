@@ -124,3 +124,15 @@ from mocked payment, mail or media runs alone.
   the manual payment provider).
 - Tests: `tests/modules/member-protection.test.ts` (2 cases) and the C12.10
   journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
+
+## C12.11 — reputation (2026-10-14)
+
+- Services in `src/modules/members/reputation.ts`; the review card is on the
+  shared sale page and the reviews section on `/@handle`.
+- A review is allowed once the sale is delivered or its dispute is resolved,
+  once per side. Each review's `reveal_at` is 14 days out and drops to now
+  for both reviews when the second side writes; every read compares against
+  it, so no job is needed.
+- Reporting a review is part of C12.12's report-anything queue.
+- Tests: `tests/modules/member-reputation.test.ts` (3 cases) and the C12.11
+  journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.

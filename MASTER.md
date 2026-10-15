@@ -10458,9 +10458,26 @@ whatever is best for the people using the site.
   N/A — no new jobs; the release job skips disputed sales. **F12** the
   browser journey ships with tracking, messages, and has the buyer confirm
   delivery, releasing the payout. Changeset `member-protection.md`.)*
-- [ ] **C12.11** Build reputation: buyer and seller reviews only after a
-  completed transaction, double-blind reveal, public replies and reporting.
-- [ ] **C12.12** Build trust and safety: report anything, a moderation queue
+- [x] **C12.11** Build reputation: buyer and seller reviews only after a
+  completed transaction, double-blind reveal, and public replies. Reporting a
+  review moves to C12.12, whose report-anything queue covers reviews too.
+  *(Evidence 2026-10-14: `src/modules/members/reputation.ts`, migration
+  `db/migrations/0033_member_reviews.sql`,
+  `tests/modules/member-reputation.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** the review card on the shared sale page and the reviews section on
+  `/@handle`. **F05** `members.leaveReview`, `members.reviews`,
+  `members.replyToReview`, `members.myReviews`, `members.saleReviews`.
+  **F07** only the buyer and seller of a delivered sale, or one whose dispute
+  was resolved, may review it, once each; a review stays hidden from its
+  subject and the public until both sides have written or 14 days pass; only
+  the subject replies, once, and only after reveal; blocked viewers get no
+  reviews; the notification says a review exists, never what it says.
+  **F09** N/A — reveal is a timestamp compared at read time, so no job is
+  needed. **F12** the browser journey has the buyer review, the seller see
+  only that a review exists, review back, reveal both, reply, and a visitor
+  read the rating and reply on the profile. Changeset `member-reviews.md`.)*
+- [ ] **C12.12** Build trust and safety: report anything (posts, comments,
+  messages, listings, reviews, members), a moderation queue
   extending the community plugin's, rate limits and spam controls, a
   prohibited-items policy, adult content that is opt-in and never shown to
   minors, known-abuse-image hash matching with a legal reporting path, and an

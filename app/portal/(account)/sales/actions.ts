@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
+import { leaveReview, replyToReview } from "@/modules/members/reputation";
 import { confirmDelivery, DISPUTE_REASONS, markShipped, postSaleMessage, raiseDispute, withdrawDispute } from "@/modules/members/protection";
 
 function text(form: FormData, key: string): string {
@@ -31,6 +32,8 @@ export async function saleAction(form: FormData): Promise<void> {
         await raiseDispute.call({ ...sale, reason: (DISPUTE_REASONS as readonly string[]).includes(reason) ? (reason as (typeof DISPUTE_REASONS)[number]) : "other", details: text(form, "details") }, actor);
         break;
       case "withdraw": await withdrawDispute.call(sale, actor); break;
+      case "review": await leaveReview.call({ ...sale, rating: Number(text(form, "rating")), body: text(form, "body") }, actor); break;
+      case "reply": await replyToReview.call({ id: text(form, "reviewId"), body: text(form, "body") }, actor); break;
       default: throw new ServiceError("validation", "Unknown action.");
     }
   } catch (error) {

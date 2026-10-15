@@ -232,6 +232,13 @@
       "when": 1793310000012,
       "tag": "0032_member_buyer_protection",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793310000013,
+      "tag": "0033_member_reviews",
+      "breakpoints": true
     }
   ]
 }

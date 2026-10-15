@@ -23,4 +23,5 @@ export {
   memberSaleFulfilments,
   memberDisputes,
   memberSaleMessages,
+  memberReviews,
 } from "./schema";

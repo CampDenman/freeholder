@@ -9,7 +9,7 @@ import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { THEME_COOKIE } from "@/core/design/theme";
-import { memberPayouts, memberProfiles, memberSettings } from "@/modules/members/schema";
+import { memberPayouts, memberProfiles, memberSaleFulfilments, memberSettings } from "@/modules/members/schema";
 import { contacts } from "@/core/contacts/schema";
 import { orderItems, orders, productVariants, products } from "@/modules/catalog/schema";
 import { seedC11Owner, useOwnerSession, C11_BASE_URL } from "./owner-session";
@@ -378,6 +378,69 @@ test.describe("members (C12.01)", () => {
 
     await sp.reload();
     await expect(sp.getByText("Payment due to you")).toBeVisible();
+    await seller.close();
+    await buyerContext.close();
+  });
+
+  test("double-blind reviews after a completed sale, with a public reply (C12.11)", async ({ browser }) => {
+    await seedC11Owner("Reputation proof");
+    const BUYER_ID = "00000000-0000-4000-8000-0000000000d4";
+    await db().insert(memberSettings).values({ id: 1, marketplaceEnabled: true, listingReview: false });
+    await db().insert(users).values([
+      { id: MEMBER_ID, email: "rae@example.test", role: "customer" },
+      { id: BUYER_ID, email: "buyer@example.test", role: "customer" },
+    ]);
+    await db().insert(memberProfiles).values([
+      { userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date() },
+      { userId: BUYER_ID, handle: "bea", displayName: "Bea Buyer", ageAttestedAt: new Date() },
+    ]);
+    const [buyer] = await db().insert(contacts).values({ email: "buyer@example.test", name: "Bea Buyer", userId: BUYER_ID }).returning();
+    const [product] = await db().insert(products).values({ name: "Harbour print", slug: "rae-harbour-print-review", kind: "physical", status: "active", publishedAt: new Date(), sellerUserId: MEMBER_ID }).returning();
+    const [variant] = await db().insert(productVariants).values({ productId: product!.id, sku: "rae-harbour-print-review", combinationKey: "default", isDefault: true }).returning();
+    const [order] = await db().insert(orders).values({ contactId: buyer!.id, currency: "CAD", status: "paid", subtotalMinor: 4500, totalMinor: 4500 }).returning();
+    const [line] = await db().insert(orderItems).values({ orderId: order!.id, variantId: variant!.id, quantity: 1, unitAmountMinor: 4500, lineTotalMinor: 4500 }).returning();
+    await db().insert(memberPayouts).values({ orderId: order!.id, orderItemId: line!.id, sellerId: MEMBER_ID, currency: "CAD", grossMinor: 4500, feeMinor: 0, netMinor: 4500, state: "due", model: "hold", releaseAt: new Date() });
+    await db().insert(memberSaleFulfilments).values({ orderId: order!.id, sellerId: MEMBER_ID, state: "delivered" });
+    const [rae, bea] = await Promise.all([
+      db().transaction((tx) => createSession(tx, MEMBER_ID)),
+      db().transaction((tx) => createSession(tx, BUYER_ID)),
+    ]);
+
+    const buyerContext = await browser.newContext({ baseURL: C11_BASE_URL });
+    await buyerContext.addCookies([{ name: SESSION_COOKIE, value: bea.token, url: C11_BASE_URL }]);
+    const bp = await buyerContext.newPage();
+    await bp.goto("/portal/purchases");
+    await bp.getByRole("link", { name: /Harbour print/ }).click();
+    await bp.getByLabel("Rating").selectOption("4");
+    await bp.getByLabel(/What should others know/).fill("Lovely print, slow post.");
+    await bp.getByRole("button", { name: "Post review" }).click();
+    await expect(bp.getByText("Hidden until they review you or two weeks pass")).toBeVisible();
+    await axeInBothThemes(bp);
+
+    const visitor = await browser.newContext({ baseURL: C11_BASE_URL });
+    const anon = await visitor.newPage();
+    await anon.goto("/@rae");
+    await expect(anon.getByRole("heading", { name: "Reviews" })).toHaveCount(0);
+
+    const seller = await browser.newContext({ baseURL: C11_BASE_URL });
+    await seller.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
+    const sp = await seller.newPage();
+    await sp.goto("/portal/sales");
+    await sp.getByRole("link", { name: /Harbour print/ }).click();
+    await expect(sp.getByText("They reviewed you. Write yours to see it.")).toBeVisible();
+    await expect(sp.getByText("Lovely print, slow post.")).toHaveCount(0);
+    await sp.getByRole("button", { name: "Post review" }).click();
+    await expect(sp.getByText("Lovely print, slow post.")).toBeVisible();
+    await sp.getByLabel("Reply publicly").fill("Thanks Bea! Sorry about the post.");
+    await sp.getByRole("button", { name: "Post reply" }).click();
+    await expect(sp.getByText("Thanks Bea! Sorry about the post.")).toBeVisible();
+
+    await anon.reload();
+    await expect(anon.getByRole("heading", { name: "Reviews" })).toBeVisible();
+    await expect(anon.getByText("As a seller: 4 of 5 (1)")).toBeVisible();
+    await expect(anon.getByText("Thanks Bea! Sorry about the post.")).toBeVisible();
+    await axeInBothThemes(anon);
+    await visitor.close();
     await seller.close();
     await buyerContext.close();
   });
