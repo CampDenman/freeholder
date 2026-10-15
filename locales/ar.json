@@ -7715,5 +7715,20 @@
   "members.bookings.bookTitle": "احجز مع {name}",
   "members.bookings.minutes": "{minutes, plural, one {دقيقة واحدة} other {# دقائق}}",
   "members.bookings.book": "عرض المواعيد",
-  "demo.outcome.communityVisible": "أعضاء ومنشورات المجتمع التجريبي ظاهرة"
+  "demo.outcome.communityVisible": "أعضاء ومنشورات المجتمع التجريبي ظاهرة",
+  "portal.keys.title": "وكيلك",
+  "portal.keys.intro": "أنشئ مفتاحًا ليعمل وكيل ذكاء اصطناعي تستخدمه نيابةً عنك هنا، فقط فيما تختاره. لا يحصل أبدًا على صلاحيات فريق الموقع، ويتوقف في التاريخ الذي تحدده.",
+  "portal.keys.name": "الاسم",
+  "portal.keys.defaultName": "وكيلي",
+  "portal.keys.read": "قراءة خلاصتي وملفي وعلاقاتي ومحادثاتي وإشعاراتي",
+  "portal.keys.post": "النشر والتعليق والتفاعل باسمي",
+  "portal.keys.message": "إرسال الرسائل باسمي",
+  "portal.keys.days": "صالح لمدة (أيام)",
+  "portal.keys.create": "إنشاء المفتاح",
+  "portal.keys.shownOnce": "انسخ هذا المفتاح إلى وكيلك الآن. يُعرض مرة واحدة فقط.",
+  "portal.keys.endpoint": "اربط وكيلك بـ",
+  "portal.keys.stop": "إيقاف",
+  "portal.keys.none": "ليس لديك مفاتيح وكيل.",
+  "portal.keys.expires": "صالح حتى",
+  "portal.keys.failed": "تعذّر إنشاء المفتاح. حاول مرة أخرى."
 }

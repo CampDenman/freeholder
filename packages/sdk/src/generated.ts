@@ -90,8 +90,11 @@ export const SERVICE_NAMES = [
   "analytics.track",
   "analytics.webVitals",
   "apikeys.create",
+  "apikeys.createMine",
   "apikeys.list",
+  "apikeys.mine",
   "apikeys.revoke",
+  "apikeys.revokeMine",
   "apikeys.scopes",
   "assessments.close",
   "assessments.create",
@@ -1850,13 +1853,25 @@ export interface ServiceCatalog {
     input: { name: string; scopes?: string[]; expiresInDays?: number };
     output: { id: string; name: string; tokenHash: string; prefix: string; scopes: string[]; createdBy: string | null; lastUsedAt: string | null; expiresAt: string | null; revokedAt: string | null; createdAt: string; updatedAt: string; token: string; [key: string]: unknown };
   };
+  "apikeys.createMine": {
+    input: { name: string; scopes: string[]; expiresInDays?: number };
+    output: { id: string; name: string; prefix: string; scopes: string[]; lastUsedAt: string | null; expiresAt: string | null; createdAt: string; token: string; [key: string]: unknown };
+  };
   "apikeys.list": {
     input: { includeRevoked?: boolean };
     output: { id: string; name: string; prefix: string; scopes: string[]; lastUsedAt: string | null; expiresAt: string | null; revokedAt: string | null; createdAt: string; [key: string]: unknown }[];
   };
+  "apikeys.mine": {
+    input: Record<string, never>;
+    output: { id: string; name: string; prefix: string; scopes: string[]; lastUsedAt: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }[];
+  };
   "apikeys.revoke": {
     input: { id: string };
     output: { id: string; name: string; [key: string]: unknown };
+  };
+  "apikeys.revokeMine": {
+    input: { id: string };
+    output: { ok: true };
   };
   "apikeys.scopes": {
     input: Record<string, never>;
@@ -7602,8 +7617,11 @@ export interface FreeholderApi {
   };
   apikeys: {
     create: (input: ServiceCatalog["apikeys.create"]["input"]) => Promise<ServiceCatalog["apikeys.create"]["output"]>;
+    createMine: (input: ServiceCatalog["apikeys.createMine"]["input"]) => Promise<ServiceCatalog["apikeys.createMine"]["output"]>;
     list: (input?: ServiceCatalog["apikeys.list"]["input"]) => Promise<ServiceCatalog["apikeys.list"]["output"]>;
+    mine: (input?: ServiceCatalog["apikeys.mine"]["input"]) => Promise<ServiceCatalog["apikeys.mine"]["output"]>;
     revoke: (input: ServiceCatalog["apikeys.revoke"]["input"]) => Promise<ServiceCatalog["apikeys.revoke"]["output"]>;
+    revokeMine: (input: ServiceCatalog["apikeys.revokeMine"]["input"]) => Promise<ServiceCatalog["apikeys.revokeMine"]["output"]>;
     scopes: (input?: ServiceCatalog["apikeys.scopes"]["input"]) => Promise<ServiceCatalog["apikeys.scopes"]["output"]>;
   };
   assessments: {

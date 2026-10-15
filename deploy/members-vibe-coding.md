@@ -68,8 +68,9 @@ import this repository). Connect MCP as in `deploy/agent-launch.md`, then:
 Public pages can read through a **server-side** integration with a read-only
 key. Anything a member does as themselves (posting, messaging, buying)
 happens in their own signed-in Freeholder session. Never give a front end an
-admin key to act for members. Member-issued, scoped keys for a member's own
-agent are planned (C12.14) and do not exist yet.
+admin key to act for members. A member who wants their own agent to act as
+them makes a personal key under **Your agent** in member settings; it is
+limited to what they choose and to what they could do themselves.
 
 ## Coding agents (Claude Code, Codex and others)
 

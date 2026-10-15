@@ -7715,5 +7715,20 @@
   "members.bookings.bookTitle": "Reservar con {name}",
   "members.bookings.minutes": "{minutes, plural, one {# minuto} other {# minutos}}",
   "members.bookings.book": "Ver horarios",
-  "demo.outcome.communityVisible": "Los miembros y publicaciones de la comunidad de demostración están visibles"
+  "demo.outcome.communityVisible": "Los miembros y publicaciones de la comunidad de demostración están visibles",
+  "portal.keys.title": "Tu agente",
+  "portal.keys.intro": "Crea una clave para que un agente de IA que uses actúe como tú aquí, solo para lo que elijas. Nunca tiene el acceso del personal del sitio y deja de funcionar en la fecha que elijas.",
+  "portal.keys.name": "Nombre",
+  "portal.keys.defaultName": "Mi agente",
+  "portal.keys.read": "Leer mi feed, perfil, contactos, conversaciones y notificaciones",
+  "portal.keys.post": "Publicar, comentar y reaccionar como yo",
+  "portal.keys.message": "Enviar mensajes como yo",
+  "portal.keys.days": "Válida durante (días)",
+  "portal.keys.create": "Crear clave",
+  "portal.keys.shownOnce": "Copia esta clave en tu agente ahora. Solo se muestra una vez.",
+  "portal.keys.endpoint": "Conecta tu agente a",
+  "portal.keys.stop": "Detener",
+  "portal.keys.none": "No tienes claves de agente.",
+  "portal.keys.expires": "válida hasta",
+  "portal.keys.failed": "No se pudo crear la clave. Inténtalo de nuevo."
 }

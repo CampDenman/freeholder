@@ -281,3 +281,13 @@ from mocked payment, mail or media runs alone.
 - Tests: `tests/modules/member-demo.test.ts` and
   `tests/core/demo-scenarios.test.ts`. Passed locally 2026-10-15.
 
+## C12.14 — personal agent keys (2026-10-15)
+
+- `api_keys.acts_as_user_id` marks a personal key; `resolveApiKey` turns it
+  into the person's user actor with `keyScopes`.
+- `permits` requires the service to be named by the key and refuses
+  `scoped` services; `hasModuleAccess` is false; `actsByKey` applies
+  `agentCallable: false` to personal keys as to agent keys.
+- Tests: `tests/core/personal-keys.test.ts` (3 cases) and the C12.14 journey
+  in `tests/browser/members.spec.ts`. Passed locally 2026-10-15.
+
