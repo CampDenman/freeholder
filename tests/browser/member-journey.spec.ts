@@ -24,6 +24,22 @@ test.use({
 const RAE = "00000000-0000-4000-8000-0000000000f1";
 const SAM = "00000000-0000-4000-8000-0000000000f2";
 
+/** Records each peer connection's states and candidates, for a failure report. */
+const PROBE = () => {
+  const Native = window.RTCPeerConnection;
+  const seen: string[] = [];
+  (window as unknown as { __rtc: string[] }).__rtc = seen;
+  window.RTCPeerConnection = class extends Native {
+    constructor(config?: RTCConfiguration) {
+      super(config);
+      const log = (what: string) => seen.push(`${what} c=${this.connectionState} i=${this.iceConnectionState} s=${this.signalingState}`);
+      this.addEventListener("connectionstatechange", () => log("conn"));
+      this.addEventListener("iceconnectionstatechange", () => log("ice"));
+      this.addEventListener("icecandidate", (e) => seen.push(`cand ${e.candidate?.candidate ?? "end"}`));
+    }
+  };
+};
+
 async function signedIn(browser: Browser, userId: string, media = false): Promise<BrowserContext> {
   const session = await db().transaction((tx) => createSession(tx, userId));
   const context = await browser.newContext({ baseURL: C11_BASE_URL, ...(media ? { permissions: ["camera", "microphone"] } : {}) });
@@ -87,21 +103,40 @@ test.describe("the whole member journey (C12.17)", () => {
 
     // 4. Call each other: Rae in Chromium, Sam in Firefox.
     const gecko = await firefox.launch({
-      firefoxUserPrefs: { "media.navigator.streams.fake": true, "media.navigator.permission.disabled": true, "media.peerconnection.ice.obfuscate_host_addresses": false },
+      firefoxUserPrefs: {
+        "media.navigator.streams.fake": true,
+        "media.navigator.permission.disabled": true,
+        "media.peerconnection.ice.obfuscate_host_addresses": false,
+        // CI runners may only share loopback or link-local addresses.
+        "media.peerconnection.ice.loopback": true,
+        "media.peerconnection.ice.link_local": true,
+        "media.peerconnection.ice.default_address_only": false,
+      },
     });
     try {
       const samSession = await db().transaction((tx) => createSession(tx, SAM));
       const samFirefox = await gecko.newContext({ baseURL: C11_BASE_URL });
       await samFirefox.addCookies([{ name: SESSION_COOKIE, value: samSession.token, url: C11_BASE_URL }]);
+      await samFirefox.addInitScript(PROBE);
       const samGecko = await samFirefox.newPage();
       await samGecko.goto("/feed");
+      await rae.addInitScript(PROBE);
       await rae.goto("/@sam");
       await rae.getByRole("button", { name: "Video call" }).click();
       const incoming = samGecko.getByRole("alertdialog", { name: "Rae Lane is calling (video)" });
       await expect(incoming).toBeVisible({ timeout: 20_000 });
       await incoming.getByRole("link", { name: "Answer" }).click();
-      await expect(samGecko.getByRole("status")).toHaveText("Connected", { timeout: 45_000 });
-      await expect(rae.getByRole("status")).toHaveText("Connected", { timeout: 45_000 });
+      try {
+        await expect(samGecko.getByRole("status")).toHaveText("Connected", { timeout: 45_000 });
+        await expect(rae.getByRole("status")).toHaveText("Connected", { timeout: 45_000 });
+      } catch (error) {
+        const read = (page: Page) => page.evaluate(() => (window as unknown as { __rtc?: string[] }).__rtc ?? []).catch(() => ["(page gone)"]);
+        const report = JSON.stringify({ chromium: await read(rae), firefox: await read(samGecko) }, null, 1);
+        // CI keeps the log, not the report folder.
+        process.stdout.write(`WEBRTC ${report}\n`);
+        await test.info().attach("webrtc", { body: report, contentType: "application/json" });
+        throw error;
+      }
       await rae.getByRole("button", { name: "Hang up" }).click();
       await expect(samGecko.getByRole("status")).toHaveText("Call ended", { timeout: 15_000 });
       await samFirefox.close();
