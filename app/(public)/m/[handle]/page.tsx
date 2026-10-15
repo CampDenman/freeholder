@@ -163,27 +163,6 @@ export default async function MemberProfile({
           </ul>
         </section>
       ) : null}
-      {reviews && reviews.reviews.length ? (
-        <section className="grid gap-3" aria-labelledby="reviews">
-          <h2 id="reviews" className="text-xl font-semibold">{t("members.reviews.title")}</h2>
-          <p className="flex flex-wrap gap-2 text-sm">
-            {reviews.asSeller.count ? <Pill>{t("members.reviews.asSeller", { average: reviews.asSeller.average ?? 0, count: reviews.asSeller.count })}</Pill> : null}
-            {reviews.asBuyer.count ? <Pill>{t("members.reviews.asBuyer", { average: reviews.asBuyer.average ?? 0, count: reviews.asBuyer.count })}</Pill> : null}
-          </p>
-          <ul className="grid gap-3">
-            {reviews.reviews.map((review) => (
-              <li key={review.id} className="grid gap-1 rounded-lg border border-rule bg-surface p-3">
-                <p className="text-sm font-semibold">
-                  {t("members.reviews.stars", { count: review.rating })} · {t(review.direction === "of_seller" ? "members.reviews.fromBuyer" : "members.reviews.fromSeller")}
-                  {review.author ? <> · <a className="underline" href={`/@${review.author.handle}`}>{review.author.displayName}</a></> : null}
-                </p>
-                {review.body ? <p className="whitespace-pre-line break-words">{review.body}</p> : null}
-                {review.reply ? <p className="border-s-2 border-rule ps-3 text-sm text-ink-muted">{t("members.reviews.replyBy", { name: profile.displayName })} {review.reply}</p> : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
       {!r.blocked ? (
         <section className="grid gap-4">
           <h2 className="text-xl font-semibold">{t("members.feed.posts")}</h2>
