@@ -277,7 +277,7 @@ test.describe("members (C12.01)", () => {
     await expect.poll(async () => (await db().select().from(memberDevices)).length).toBe(1);
     await raeSide.page.getByLabel("Message", { exact: true }).fill("The spare key is under the blue pot");
     await raeSide.page.getByRole("button", { name: "Send" }).click();
-    await expect(raeSide.page.getByText("End-to-end encrypted.", { exact: false })).toBeVisible();
+    await expect(raeSide.page.getByText("End-to-end encrypted. Only the devices of the people here can read these messages.", { exact: true })).toBeVisible();
     await expect(raeSide.page.getByText("The spare key is under the blue pot")).toBeVisible();
 
     await samSide.page.goto("/messages");
@@ -299,7 +299,7 @@ test.describe("members (C12.01)", () => {
     await samSide.page.getByRole("link", { name: "Report" }).first().click();
     await expect(samSide.page.getByText("The spare key is under the blue pot")).toBeVisible();
     await samSide.page.getByRole("button", { name: "Send report" }).click();
-    await expect(samSide.page.getByText(/sent to the moderators|Thank you/i)).toBeVisible();
+    await expect(samSide.page.getByText(/^Thank you\. Your report is with/)).toBeVisible();
     expect((await db().select({ excerpt: memberReports.excerpt }).from(memberReports)).map((r) => r.excerpt)).toEqual(["The spare key is under the blue pot"]);
 
     // A second browser for Sam is a new device: added on Rae's next send, it reads from then on.
