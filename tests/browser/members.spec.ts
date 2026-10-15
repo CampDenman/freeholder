@@ -589,4 +589,32 @@ test.describe("members (C12.01)", () => {
     await expect(page.getByLabel(/The market policy has changed/)).toBeVisible();
     for (const context of [visitor, seller, admin]) await context.close();
   });
+
+  test("member pages load nothing from other origins, and data rights are one click away (C12.15)", async ({ browser }) => {
+    await seedC11Owner("Rights proof");
+    await db().insert(memberSettings).values({ id: 1, marketplaceEnabled: true, listingReview: false });
+    await db().insert(users).values({ id: MEMBER_ID, email: "rae@example.test", role: "customer" });
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: new Date(), isPrivate: false });
+    const rae = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+    const context = await browser.newContext({ baseURL: C11_BASE_URL });
+    await context.addCookies([{ name: SESSION_COOKIE, value: rae.token, url: C11_BASE_URL }]);
+    const page = await context.newPage();
+    const origin = new URL(C11_BASE_URL).origin;
+    const elsewhere: string[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.protocol.startsWith("http") && url.origin !== origin) elsewhere.push(url.origin);
+    });
+    for (const path of ["/@rae", "/feed", "/market", "/messages", "/portal/member", "/market/policy"]) {
+      await page.goto(path);
+      await page.waitForLoadState("load");
+    }
+    expect([...new Set(elsewhere)]).toEqual([]);
+    await page.goto("/portal/member");
+    await expect(page.getByRole("heading", { name: "Your data" })).toBeVisible();
+    await axeInBothThemes(page);
+    await page.getByRole("link", { name: "Download your data or delete your account" }).click();
+    await expect(page).toHaveURL(/\/portal\/privacy/);
+    await context.close();
+  });
 });

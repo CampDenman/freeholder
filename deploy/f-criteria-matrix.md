@@ -4564,20 +4564,20 @@ v2.
 - **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
 - **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
 
-## C12.15 — Guarantee member data rights: full export (profile, posts,
+## C12.15 — Guarantee member data rights
 
-- **F01** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified in MASTER.md §44 on 2026-10-14; no implementation is claimed.
+- **F01** — N/A — no new tables; the source covers the existing member tables (`src/modules/members/data-rights.ts`).
+- **F02** — `tests/modules/member-data-rights.test.ts`: export contents and erasure, including the refusal while money is moving.
+- **F03** — `tests/modules/member-data-rights.test.ts`: the request is about the member's contact and reaches their login.
+- **F04** — `tests/browser/members.spec.ts`: "Your data" on `/portal/member` and the privacy centre it opens.
+- **F05** — `packages/sdk/src/generated.ts`: the existing privacy request services carry member data.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/portal/member`; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-data-rights.test.ts`: content erased, sent messages removed, sales books kept anonymously, unrevealed reviews never exported.
+- **F08** — `tests/modules/member-data-rights.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — N/A — runs inside the existing privacy request (`src/core/privacy/service.ts`).
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-data-rights.md`.
+- **F12** — `tests/browser/members.spec.ts`: member pages request nothing from other origins, and data rights are one click from member settings.
 
 ## C12.16 — Make it a starter: a new-site template and seeded demo
 

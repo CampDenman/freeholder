@@ -132,6 +132,11 @@ export interface ContactPrivacySource {
   tables: readonly string[];
   /** Parent stores inherit holds for children they would cascade-delete. */
   retentionScopes?: readonly string[];
+  /**
+   * Erasure order, lowest first (default 100). A source whose rows the login
+   * deletion would cascade over or be blocked by runs before it.
+   */
+  eraseOrder?: number;
   exportData: (tx: Tx, contactId: string) => Promise<unknown>;
   erase: (
     tx: Tx,
@@ -1440,7 +1445,8 @@ async function eraseContact(
   ).filter((item) => !item.expiresAt || item.expiresAt > now);
   const byScope = new Map(exceptions.map((item) => [item.scope, item]));
   const outcomes: Array<Record<string, unknown>> = [];
-  for (const source of privacySourceRegistry) {
+  const ordered = [...privacySourceRegistry].sort((a, b) => (a.eraseOrder ?? 100) - (b.eraseOrder ?? 100));
+  for (const source of ordered) {
     const exception = [source.scope, ...(source.retentionScopes ?? [])].map(scope => byScope.get(scope)).find(Boolean);
     if (exception) {
       outcomes.push({

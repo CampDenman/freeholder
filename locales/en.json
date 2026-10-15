@@ -7604,5 +7604,10 @@
   "members.policy.adminLabel": "What members may not sell",
   "members.policy.adminHint": "Leave empty to use the starter policy. Publishing a change makes it version {version} + 1, and sellers accept it before their next listing.",
   "members.policy.preview": "See the public page",
-  "members.policy.publish": "Publish policy"
+  "members.policy.publish": "Publish policy",
+  "members.data.title": "Your data",
+  "members.data.export": "You can download everything this site holds about you as a member: your profile, posts, comments, connections, conversations, listings, sales, purchases and reviews.",
+  "members.data.erase": "If you delete your account, your profile, posts, comments, connections and reviews are deleted. Messages you sent show as removed in other people’s conversations. The site keeps its sales records, without your name, because it must keep its books. Deletion waits until money owed to you is paid and any open dispute is settled.",
+  "members.data.noTrackers": "This site uses no third-party trackers on member pages and never sells member data.",
+  "members.data.manage": "Download your data or delete your account"
 }

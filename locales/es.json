@@ -7604,5 +7604,10 @@
   "members.policy.adminLabel": "Lo que los miembros no pueden vender",
   "members.policy.adminHint": "Déjalo vacío para usar la política inicial. Publicar un cambio crea la versión {version} + 1, que los vendedores aceptan antes de su próximo anuncio.",
   "members.policy.preview": "Ver la página pública",
-  "members.policy.publish": "Publicar política"
+  "members.policy.publish": "Publicar política",
+  "members.data.title": "Tus datos",
+  "members.data.export": "Puedes descargar todo lo que este sitio guarda sobre ti como miembro: perfil, publicaciones, comentarios, contactos, conversaciones, anuncios, ventas, compras y reseñas.",
+  "members.data.erase": "Si eliminas tu cuenta, se eliminan tu perfil, publicaciones, comentarios, contactos y reseñas. Los mensajes que enviaste aparecen como retirados en las conversaciones de otras personas. El sitio conserva sus registros de ventas, sin tu nombre, porque debe llevar su contabilidad. La eliminación espera a que se te pague lo que se te debe y a que se resuelva cualquier disputa abierta.",
+  "members.data.noTrackers": "Este sitio no usa rastreadores de terceros en las páginas de miembros y nunca vende datos de miembros.",
+  "members.data.manage": "Descargar tus datos o eliminar tu cuenta"
 }

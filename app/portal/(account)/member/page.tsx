@@ -101,6 +101,13 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
         </fieldset>
         <Button type="submit">{t("members.profile.save")}</Button>
       </form>
+      <section className="grid gap-2" aria-labelledby="your-data">
+        <h2 id="your-data" className="text-xl font-semibold">{t("members.data.title")}</h2>
+        <p className="text-sm">{t("members.data.export")}</p>
+        <p className="text-sm">{t("members.data.erase")}</p>
+        <p className="text-sm text-ink-muted">{t("members.data.noTrackers")}</p>
+        <p><a className="underline" href={href("/portal/privacy")}>{t("members.data.manage")}</a></p>
+      </section>
     </div>
   );
 }

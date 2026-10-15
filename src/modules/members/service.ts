@@ -36,6 +36,8 @@ import reputationServices from "./reputation";
 import reportServices from "./reports";
 import policyServices from "./policy";
 import { applyMemberStatus } from "./status";
+// Member export and erasure through the site's privacy requests (C12.15).
+import "./data-rights";
 import { siteAllowsAdult } from "./adult";
 export { onOrderPaid, onRefundSucceeded } from "./payouts";
 
