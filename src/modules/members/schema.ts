@@ -756,17 +756,53 @@ export const memberMlsLog = pgTable(
     seq: bigserial("seq", { mode: "number" }).primaryKey(),
     conversationId: uuid("conversation_id").notNull().references(() => memberConversations.id, { onDelete: "cascade" }),
     epoch: bigint("epoch", { mode: "number" }).notNull(),
-    kind: text("kind", { enum: ["commit", "welcome", "application"] }).notNull(),
+    kind: text("kind", { enum: ["commit", "welcome", "application", "control"] }).notNull(),
     senderDeviceId: uuid("sender_device_id").references(() => memberDevices.id, { onDelete: "set null" }),
     targetDeviceId: uuid("target_device_id").references(() => memberDevices.id, { onDelete: "cascade" }),
     keyPackageId: uuid("key_package_id"),
     messageId: uuid("message_id").references(() => memberMessages.id, { onDelete: "cascade" }),
+    /** C12.24: a `control` entry carrying a group call's media key, for this call. */
+    callId: uuid("call_id"),
     payload: text("payload").notNull(),
     createdAt: createdAtColumn(),
   },
   (t) => [
     index("member_mls_log_conversation_idx").on(t.conversationId, t.seq),
-    check("member_mls_log_kind_valid", sql`${t.kind} in ('commit','welcome','application')`),
+    check("member_mls_log_kind_valid", sql`${t.kind} in ('commit','welcome','application','control')`),
     check("member_mls_log_welcome_target", sql`(${t.kind} = 'welcome') = (${t.targetDeviceId} is not null)`),
   ],
+);
+
+/**
+ * C12.24: a group call in a conversation, through the site's SFU. Media is
+ * end-to-end encrypted with a key that travels inside the conversation's MLS
+ * group, so the SFU forwards frames it cannot read. Nothing is recorded.
+ */
+export const memberGroupCalls = pgTable(
+  "member_group_calls",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id").notNull().references(() => memberConversations.id, { onDelete: "cascade" }),
+    startedBy: uuid("started_by").references(() => users.id, { onDelete: "set null" }),
+    media: text("media", { enum: ["voice", "video"] }).notNull(),
+    state: text("state", { enum: ["active", "ended"] }).notNull().default("active"),
+    createdAt: createdAtColumn(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("member_group_calls_conversation_idx").on(t.conversationId, t.state),
+    check("member_group_calls_media_valid", sql`${t.media} in ('voice','video')`),
+    check("member_group_calls_state_valid", sql`${t.state} in ('active','ended')`),
+  ],
+);
+
+export const memberGroupCallParticipants = pgTable(
+  "member_group_call_participants",
+  {
+    callId: uuid("call_id").notNull().references(() => memberGroupCalls.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+    leftAt: timestamp("left_at", { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.callId, t.userId] })],
 );

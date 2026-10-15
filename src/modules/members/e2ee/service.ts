@@ -18,7 +18,7 @@ import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { attachmentInput } from "../attachment-store";
 import { activeSelf, directBlocked, participant, send } from "../messages";
-import { memberConversationParticipants, memberConversations, memberDevices, memberKeyPackages, memberMessages, memberMlsGroups, memberMlsLog, memberMlsRoster } from "../schema";
+import { memberConversationParticipants, memberConversations, memberDevices, memberGroupCalls, memberKeyPackages, memberMessages, memberMlsGroups, memberMlsLog, memberMlsRoster } from "../schema";
 import { b64, readKeyPackage, unb64 } from "./wire";
 
 const MAX_DEVICES = 20;
@@ -199,10 +199,16 @@ export const e2eeSync = defineService({
      * must carry. A device the directory does not vouch for is never accepted.
      */
     directory: listed(deviceShape),
-    log: listed(row({ seq: z.number().int(), epoch: z.number().int(), kind: z.enum(["commit", "welcome", "application"]), senderDeviceId: uuid.nullable(), keyPackageId: uuid.nullable(), messageId: uuid.nullable(), frankTag: z.string().nullable(), payload: z.string() })),
+    log: listed(row({ seq: z.number().int(), epoch: z.number().int(), kind: z.enum(["commit", "welcome", "application", "control"]), senderDeviceId: uuid.nullable(), keyPackageId: uuid.nullable(), messageId: uuid.nullable(), callId: uuid.nullable(), frankTag: z.string().nullable(), payload: z.string() })),
     more: z.boolean(),
     /** One-time key packages this device still has published. */
     unclaimed: z.number().int(),
+    /**
+     * C12.24: calls going on here. `needsKey` is true when a device in the
+     * group joined after the call's key was last sent, so whoever holds it
+     * should send it again.
+     */
+    calls: listed(row({ callId: uuid, needsKey: z.boolean() })),
   }),
   handler: async (input, ctx) => {
     const me = await activeSelf(ctx);
@@ -245,12 +251,27 @@ export const e2eeSync = defineService({
       roster: roster.map((r) => r.deviceId),
       entitled: devices.map(shape),
       directory: [...devices, ...extra].map(shape),
-      log: page.map(({ entry: e, frankTag }) => ({ seq: e.seq, epoch: e.epoch, kind: e.kind, senderDeviceId: e.senderDeviceId, keyPackageId: e.keyPackageId, messageId: e.messageId, frankTag, payload: e.payload })),
+      log: page.map(({ entry: e, frankTag }) => ({ seq: e.seq, epoch: e.epoch, kind: e.kind, senderDeviceId: e.senderDeviceId, keyPackageId: e.keyPackageId, messageId: e.messageId, callId: e.callId, frankTag, payload: e.payload })),
       more: entries.length > LOG_PAGE,
       unclaimed,
+      calls: await callsNeedingKeys(ctx, input.conversationId, roster),
     };
   },
 });
+
+async function callsNeedingKeys(ctx: ServiceContext, conversationId: string, roster: { deviceId: string; joinedSeq: number }[]) {
+  const calls = await ctx.tx.select({ id: memberGroupCalls.id }).from(memberGroupCalls).where(and(eq(memberGroupCalls.conversationId, conversationId), eq(memberGroupCalls.state, "active")));
+  const result = [];
+  for (const call of calls) {
+    const [last] = await ctx.tx
+      .select({ seq: sql<number>`max(${memberMlsLog.seq})::int` })
+      .from(memberMlsLog)
+      .where(and(eq(memberMlsLog.conversationId, conversationId), eq(memberMlsLog.kind, "control"), eq(memberMlsLog.callId, call.id)));
+    const keySeq = last?.seq ?? 0;
+    result.push({ callId: call.id, needsKey: keySeq === 0 || roster.some((r) => r.joinedSeq > keySeq) });
+  }
+  return result;
+}
 
 export const claimKeyPackages = defineService({
   name: "members.claimKeyPackages",
@@ -400,4 +421,32 @@ export const sendEncrypted = defineService({
   },
 });
 
-export default [registerDevice, publishKeyPackages, myDevices, revokeDevice, e2eeSync, claimKeyPackages, e2eeCommit, sendEncrypted];
+export const sendCallKey = defineService({
+  name: "members.sendCallKey",
+  summary: "Send a group call's media key, encrypted, to every device in the conversation's group.",
+  kind: "mutation",
+  permission: "authenticated",
+  agentCallable: false,
+  writeClass: "write",
+  input: z.object({ conversationId: uuid, deviceId: uuid, epoch: z.number().int().min(1), callId: uuid, ciphertext: base64.max(20_000) }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    const me = await activeSelf(ctx);
+    const seat = await participant(ctx, input.conversationId, me.userId);
+    if (seat.state !== "active") throw new ServiceError("permission", "Accept this conversation before joining its calls.");
+    await myDevice(ctx, me.userId, input.deviceId);
+    await ctx.tx.select({ id: memberConversations.id }).from(memberConversations).where(eq(memberConversations.id, input.conversationId)).for("update");
+    const [call] = await ctx.tx.select().from(memberGroupCalls).where(and(eq(memberGroupCalls.id, input.callId), eq(memberGroupCalls.conversationId, input.conversationId), eq(memberGroupCalls.state, "active")));
+    if (!call) throw new ServiceError("not_found", "That call has ended.");
+    const [group] = await ctx.tx.select().from(memberMlsGroups).where(eq(memberMlsGroups.conversationId, input.conversationId));
+    if (!group || group.epoch !== input.epoch) throw membershipChanged();
+    // The same rule as messages: the key reaches exactly the devices that should have it.
+    const roster = new Set((await rosterOf(ctx, input.conversationId)).map((r) => r.deviceId));
+    const { devices } = await entitledDevices(ctx, input.conversationId);
+    if (!roster.has(input.deviceId) || roster.size !== devices.length || devices.some((d) => !roster.has(d.id))) throw membershipChanged();
+    await ctx.tx.insert(memberMlsLog).values({ conversationId: input.conversationId, epoch: input.epoch, kind: "control", senderDeviceId: input.deviceId, callId: input.callId, payload: input.ciphertext });
+    return { ok: true as const };
+  },
+});
+
+export default [registerDevice, publishKeyPackages, myDevices, revokeDevice, e2eeSync, claimKeyPackages, e2eeCommit, sendEncrypted, sendCallKey];
