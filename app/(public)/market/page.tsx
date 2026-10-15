@@ -26,7 +26,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
   return (
     <div className="mx-auto grid max-w-4xl gap-6 px-6 py-12">
       <h1 className="text-3xl font-semibold">{t("members.market.title")}</h1>
-      <p className="text-ink-muted">{t("members.market.intro")}</p>
+      <p className="text-ink-muted">{t("members.market.intro")} <a className="underline" href="/market/policy">{t("members.policy.link")}</a></p>
       <form className="flex flex-wrap items-end gap-3" action="/market">
         <Field label={t("members.market.search")} htmlFor="market-q">
           <Input id="market-q" name="q" defaultValue={query.q ?? ""} maxLength={100} />

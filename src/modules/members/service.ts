@@ -34,6 +34,7 @@ import payoutServices, { payoutAdapters } from "./payouts";
 import protectionServices from "./protection";
 import reputationServices from "./reputation";
 import reportServices from "./reports";
+import policyServices from "./policy";
 import { applyMemberStatus } from "./status";
 import { siteAllowsAdult } from "./adult";
 export { onOrderPaid, onRefundSucceeded } from "./payouts";
@@ -436,6 +437,7 @@ export default [
   ...protectionServices,
   ...reputationServices,
   ...reportServices,
+  ...policyServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

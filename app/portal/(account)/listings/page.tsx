@@ -7,6 +7,7 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { LISTING_KINDS, myListings } from "@/modules/members/listings";
 import { membershipRules, myMembership } from "@/modules/members/service";
+import { marketPolicy } from "@/modules/members/policy";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { archiveListingAction, createListingAction } from "./actions";
@@ -36,7 +37,7 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
       </div>
     );
   }
-  const listings = await myListings.call({}, actor);
+  const [listings, policy] = await Promise.all([myListings.call({}, actor), marketPolicy.call({}, actor)]);
   return (
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold">{t("members.listings.title")}</h1>
@@ -69,6 +70,12 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
               <span>{t("members.adult.markListing")}</span>
             </label>
           ) : null}
+            {policy.acceptedByYou ? null : (
+              <label className="flex items-start gap-2">
+                <input type="checkbox" name="acceptPolicy" value="yes" required />
+                <span>{t(policy.version > 1 ? "members.policy.acceptChanged" : "members.policy.accept")} <a className="underline" href="/market/policy" target="_blank" rel="noopener">{t("members.policy.read")}</a></span>
+              </label>
+            )}
             <p className="text-sm text-ink-muted">{t(rules.listingReview ? "members.listings.reviewed" : "members.listings.immediate")}</p>
             <Button type="submit">{t("members.listings.create")}</Button>
           </form>

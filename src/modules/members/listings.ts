@@ -26,6 +26,7 @@ import { marketListings } from "@/modules/catalog/market";
 import { listProductTaxCategories } from "@/modules/catalog/service";
 import { createTaxCategory } from "@/modules/invoicing/tax-service";
 import { assertMayMarkAdult } from "./adult";
+import { requireAcceptedPolicy } from "./policy";
 import { memberListings, memberProfiles, memberSettings } from "./schema";
 
 export const LISTING_KINDS = ["physical", "service", "digital", "rental"] as const;
@@ -115,11 +116,14 @@ export const createListing = defineService({
     currency: z.string().trim().length(3).toUpperCase().optional(),
     /** Adult content (C12.29): only adults may mark it, and only where the site allows it. */
     adult: z.boolean().default(false),
+    /** C12.28: accepts the current market policy, needed once per policy version. */
+    acceptPolicy: z.boolean().default(false),
   }),
   output: listingRow,
   handler: async (input, ctx) => {
     const me = await activeSeller(ctx);
     if (input.adult) await assertMayMarkAdult(ctx, me.userId);
+    await requireAcceptedPolicy(ctx, me.userId, input.acceptPolicy);
     const policy = await rules(ctx);
     const business = await ctx.callAsSystem(getBusiness, {});
     const currency = input.currency ?? business?.baseCurrency ?? "USD";

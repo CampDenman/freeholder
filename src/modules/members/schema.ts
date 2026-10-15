@@ -52,6 +52,8 @@ export const memberProfiles = pgTable(
     readReceipts: boolean("read_receipts").notNull().default(false),
     /** §44.9 (C12.29): an adult's choice to see adult posts and listings. Off by default. */
     showAdult: boolean("show_adult").notNull().default(false),
+    /** C12.28: the market policy version this member accepted before listing. */
+    marketPolicyAccepted: integer("market_policy_accepted"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -92,12 +94,16 @@ export const memberSettings = pgTable(
     payoutAdapter: text("payout_adapter").notNull().default("manual"),
     /** §44.9 (C12.29): whether members may post or list adult content at all. Off by default. */
     adultContent: boolean("adult_content").notNull().default(false),
+    /** §44.9 (C12.28): what members may not sell. Empty means the starter default. */
+    marketPolicy: text("market_policy").notNull().default(""),
+    marketPolicyVersion: integer("market_policy_version").notNull().default(1),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
     check("member_settings_singleton", sql`${t.id} = 1`),
     check("member_settings_join_policy_valid", sql`${t.joinPolicy} in ('open','approval','invite')`),
     check("member_settings_minimum_age_range", sql`${t.minimumAge} between 13 and 21`),
+    check("member_settings_market_policy_length", sql`char_length(${t.marketPolicy}) <= 20000`),
     check("member_settings_payout_model_valid", sql`${t.payoutModel} in ('hold','seller_merchant','instant')`),
     check("member_settings_hold_days_range", sql`${t.holdDays} between 1 and 90`),
     check("member_settings_site_fee_range", sql`${t.siteFeeBps} between 0 and 5000`),

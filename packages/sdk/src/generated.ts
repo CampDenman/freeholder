@@ -996,6 +996,7 @@ export const SERVICE_NAMES = [
   "members.leaveReview",
   "members.list",
   "members.markShipped",
+  "members.marketPolicy",
   "members.me",
   "members.muteConversation",
   "members.myListings",
@@ -1040,6 +1041,7 @@ export const SERVICE_NAMES = [
   "members.unfriend",
   "members.unreadConversations",
   "members.unsendMessage",
+  "members.updateMarketPolicy",
   "members.updateMe",
   "members.updateSettings",
   "members.viewPost",
@@ -5383,7 +5385,7 @@ export interface ServiceCatalog {
     output: { id: string; kind: "direct" | "group"; title: string | null; people: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; state: "active" | "requested"; muted: boolean; lastMessageAt: string; unread: boolean; [key: string]: unknown }[];
   };
   "members.createListing": {
-    input: { title: string; kind: "physical" | "service" | "digital" | "rental"; description?: string; price: string; currency?: string; adult?: boolean };
+    input: { title: string; kind: "physical" | "service" | "digital" | "rental"; description?: string; price: string; currency?: string; adult?: boolean; acceptPolicy?: boolean };
     output: { productId: string; name: string; slug: string; kind: string; status: "draft" | "active" | "archived"; review: "pending" | "approved" | "rejected"; reviewNote: string | null; adult: boolean; createdAt: string; [key: string]: unknown };
   };
   "members.deleteComment": {
@@ -5449,6 +5451,10 @@ export interface ServiceCatalog {
   "members.markShipped": {
     input: { orderId: string; sellerId: string; carrier?: string; tracking?: string };
     output: { ok: true };
+  };
+  "members.marketPolicy": {
+    input: Record<string, never>;
+    output: { text: string; custom: boolean; version: number; acceptedByYou: boolean };
   };
   "members.me": {
     input: Record<string, never>;
@@ -5625,6 +5631,10 @@ export interface ServiceCatalog {
   "members.unsendMessage": {
     input: { id: string };
     output: { ok: true };
+  };
+  "members.updateMarketPolicy": {
+    input: { text: string };
+    output: { ok: true; version: number };
   };
   "members.updateMe": {
     input: { displayName?: string; bio?: string; handle?: string; isAdult?: boolean; showAdult?: boolean; bioVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; linksVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; links?: { label: string; url: string }[]; isPrivate?: boolean; indexable?: boolean; readReceipts?: boolean };
@@ -8476,6 +8486,7 @@ export interface FreeholderApi {
     leaveReview: (input: ServiceCatalog["members.leaveReview"]["input"]) => Promise<ServiceCatalog["members.leaveReview"]["output"]>;
     list: (input?: ServiceCatalog["members.list"]["input"]) => Promise<ServiceCatalog["members.list"]["output"]>;
     markShipped: (input: ServiceCatalog["members.markShipped"]["input"]) => Promise<ServiceCatalog["members.markShipped"]["output"]>;
+    marketPolicy: (input?: ServiceCatalog["members.marketPolicy"]["input"]) => Promise<ServiceCatalog["members.marketPolicy"]["output"]>;
     me: (input?: ServiceCatalog["members.me"]["input"]) => Promise<ServiceCatalog["members.me"]["output"]>;
     muteConversation: (input: ServiceCatalog["members.muteConversation"]["input"]) => Promise<ServiceCatalog["members.muteConversation"]["output"]>;
     myListings: (input?: ServiceCatalog["members.myListings"]["input"]) => Promise<ServiceCatalog["members.myListings"]["output"]>;
@@ -8520,6 +8531,7 @@ export interface FreeholderApi {
     unfriend: (input: ServiceCatalog["members.unfriend"]["input"]) => Promise<ServiceCatalog["members.unfriend"]["output"]>;
     unreadConversations: (input?: ServiceCatalog["members.unreadConversations"]["input"]) => Promise<ServiceCatalog["members.unreadConversations"]["output"]>;
     unsendMessage: (input: ServiceCatalog["members.unsendMessage"]["input"]) => Promise<ServiceCatalog["members.unsendMessage"]["output"]>;
+    updateMarketPolicy: (input: ServiceCatalog["members.updateMarketPolicy"]["input"]) => Promise<ServiceCatalog["members.updateMarketPolicy"]["output"]>;
     updateMe: (input?: ServiceCatalog["members.updateMe"]["input"]) => Promise<ServiceCatalog["members.updateMe"]["output"]>;
     updateSettings: (input?: ServiceCatalog["members.updateSettings"]["input"]) => Promise<ServiceCatalog["members.updateSettings"]["output"]>;
     viewPost: (input: ServiceCatalog["members.viewPost"]["input"]) => Promise<ServiceCatalog["members.viewPost"]["output"]>;

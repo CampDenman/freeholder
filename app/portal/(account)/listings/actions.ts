@@ -28,6 +28,7 @@ export async function createListingAction(form: FormData): Promise<void> {
         description: text(form, "description"),
         price: text(form, "price"),
         adult: form.get("adult") === "yes",
+        acceptPolicy: form.get("acceptPolicy") === "yes",
       },
       await actor(),
     );

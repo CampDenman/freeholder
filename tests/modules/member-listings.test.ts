@@ -11,6 +11,7 @@ import { ready } from "@/core/runtime";
 import { updateBusiness } from "@/core/settings/service";
 import { joinSite, updateMembershipRules } from "@/modules/members/service";
 import { archiveListing, createListing, myListings, pendingListings, reviewListing, storefront } from "@/modules/members/listings";
+import { marketPolicy, updateMarketPolicy } from "@/modules/members/policy";
 import { browseProducts } from "@/modules/catalog/browse";
 import { marketListings } from "@/modules/catalog/market";
 import { addCartItem, getOrCreateCart } from "@/modules/catalog/cart";
@@ -19,7 +20,7 @@ import { ANONYMOUS, closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpin
 
 const RAE = CUSTOMER;
 const SAM = { ...CUSTOMER, userId: "00000000-0000-4000-8000-0000000000c2" };
-const print = { title: "Harbour print, 8×10", kind: "physical" as const, description: "Signed giclée print.", price: "45" };
+const print = { title: "Harbour print, 8×10", kind: "physical" as const, description: "Signed giclée print.", price: "45", acceptPolicy: true };
 
 describe.runIf(hasDatabase)("member listings (C12.08)", () => {
   beforeAll(async () => { await ready(); }, 60_000);
@@ -67,5 +68,21 @@ describe.runIf(hasDatabase)("member listings (C12.08)", () => {
     expect((await myListings.call({}, RAE)).map((l) => l.name)).toEqual(["Portrait session"]);
     expect((await failure(createListing.call({ ...print, price: "free" }, RAE))).code).toBe("validation");
     expect((await failure(createListing.call(print, ANONYMOUS))).code).toBe("permission");
+  });
+
+  it("publishes a prohibited-items policy that sellers accept once per version (C12.28)", async () => {
+    await updateMembershipRules.call({ marketplaceEnabled: true, listingReview: false }, OWNER);
+    expect(await marketPolicy.call({}, ANONYMOUS)).toMatchObject({ custom: false, version: 1, acceptedByYou: false });
+    expect((await failure(createListing.call({ ...print, acceptPolicy: false }, RAE))).code).toBe("conflict");
+    await createListing.call(print, RAE);
+    expect((await marketPolicy.call({}, RAE)).acceptedByYou).toBe(true);
+    await createListing.call({ ...print, title: "Second print", acceptPolicy: false }, RAE);
+
+    expect((await failure(updateMarketPolicy.call({ text: "No weapons." }, RAE))).code).toBe("permission");
+    expect((await updateMarketPolicy.call({ text: "No weapons, no live animals." }, OWNER)).version).toBe(2);
+    expect(await marketPolicy.call({}, RAE)).toMatchObject({ text: "No weapons, no live animals.", custom: true, version: 2, acceptedByYou: false });
+    expect((await failure(createListing.call({ ...print, title: "Third print", acceptPolicy: false }, RAE))).code).toBe("conflict");
+    await createListing.call({ ...print, title: "Third print" }, RAE);
+    expect((await updateMarketPolicy.call({ text: "No weapons, no live animals." }, OWNER)).version).toBe(2);
   });
 });

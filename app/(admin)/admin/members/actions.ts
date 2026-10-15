@@ -13,6 +13,7 @@ import { reviewListing } from "@/modules/members/listings";
 import { setPayoutAccountStatus, settlePayouts } from "@/modules/members/payouts";
 import { postSaleMessage, resolveDispute } from "@/modules/members/protection";
 import { resolveReport } from "@/modules/members/reports";
+import { updateMarketPolicy } from "@/modules/members/policy";
 
 const PATH = "/admin/members";
 
@@ -145,4 +146,8 @@ export async function reportAction(form: FormData): Promise<void> {
       await actor(),
     ),
   );
+}
+
+export async function marketPolicyAction(form: FormData): Promise<void> {
+  await run(async () => updateMarketPolicy.call({ text: text(form, "policy") }, await actor()));
 }

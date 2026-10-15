@@ -4760,18 +4760,19 @@ v2.
 - **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
 ## C12.28 — Publish a prohibited-items policy
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F01** — `db/migrations/0036_member_market_policy.sql`: the policy text and version on site settings, and each member's accepted version.
+- **F02** — `tests/modules/member-listings.test.ts`: the starter policy, publishing versions, and acceptance before listing.
+- **F03** — N/A — the policy concerns sellers, not contacts (`src/modules/members/policy.ts`).
+- **F04** — `tests/browser/members.spec.ts`: `/market/policy`, the acceptance checkbox on `/portal/listings`, and the editor on `/admin/members`.
+- **F05** — `packages/sdk/src/generated.ts`: `members.marketPolicy`, `members.updateMarketPolicy`, and `acceptPolicy` on `members.createListing`.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/market/policy`; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-listings.test.ts`: only staff publish; sellers cannot list without accepting the current version.
+- **F08** — `tests/modules/member-listings.test.ts` + `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background work (`src/modules/members/policy.ts`).
+- **F10** — N/A — seeds use the starter policy (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-market-policy.md`.
+- **F12** — `tests/browser/members.spec.ts`: a visitor reads the starter policy, staff publish a new one, and the seller is asked to accept it.
+
 ## C12.29 — Make adult content opt-in for adults and never shown to minors
 
 - **F01** — `db/migrations/0035_member_adult_content.sql`: the site switch, the member opt-in with a check that only adults hold it, and adult flags on posts and listings.

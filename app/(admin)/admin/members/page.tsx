@@ -8,10 +8,11 @@ import { listMembers, membershipRules } from "@/modules/members/service";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { getLocale, getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
-import { disputeAction, inviteMemberAction, reportAction, payoutAccountAction, reviewListingAction, saveMarketRulesAction, saveMembershipRulesAction, setMemberStatusAction, settlePayoutsAction } from "./actions";
+import { disputeAction, inviteMemberAction, marketPolicyAction, reportAction, payoutAccountAction, reviewListingAction, saveMarketRulesAction, saveMembershipRulesAction, setMemberStatusAction, settlePayoutsAction } from "./actions";
 import { payoutAdapters, sitePayouts } from "@/modules/members/payouts";
 import { listDisputes, saleThread } from "@/modules/members/protection";
 import { listReports } from "@/modules/members/reports";
+import { marketPolicy } from "@/modules/members/policy";
 import { formatMoney } from "@/core/i18n";
 import { pendingListings } from "@/modules/members/listings";
 
@@ -39,7 +40,7 @@ export default async function MembersPage({
   ]);
   const [waiting, ledger] = await Promise.all([pendingListings.call({}, actor), sitePayouts.call({}, actor)]);
   const open = ledger.payouts.filter((p) => p.state === "held" || p.state === "due" || p.state === "review");
-  const [disputes, reports] = await Promise.all([listDisputes.call({ state: "open" }, actor), listReports.call({ state: "open" }, actor)]);
+  const [disputes, reports, policy] = await Promise.all([listDisputes.call({ state: "open" }, actor), listReports.call({ state: "open" }, actor), marketPolicy.call({}, actor)]);
   const threads = await Promise.all(disputes.map((d) => saleThread.call({ orderId: d.orderId, sellerId: d.sellerId }, actor)));
   const back = `/admin/members?status=${status ?? "all"}${query.q ? `&q=${encodeURIComponent(query.q)}` : ""}`;
   return (
@@ -125,6 +126,19 @@ export default async function MembersPage({
           ) : (
             <p className="mt-4 text-sm text-ink-muted">{t("members.admin.noPendingListings")}</p>
           )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("members.policy.adminTitle")} />
+        <CardBody>
+          <form action={marketPolicyAction} className="grid gap-3">
+            <Field label={t("members.policy.adminLabel")} htmlFor="market-policy" hint={t("members.policy.adminHint", { version: policy.version })}>
+              <textarea id="market-policy" name="policy" maxLength={20000} rows={8} defaultValue={policy.text} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
+            </Field>
+            <p className="text-sm"><a className="underline" href="/market/policy">{t("members.policy.preview")}</a></p>
+            <div><Button type="submit">{t("members.policy.publish")}</Button></div>
+          </form>
         </CardBody>
       </Card>
 
