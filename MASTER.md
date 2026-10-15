@@ -10436,9 +10436,28 @@ whatever is best for the people using the site.
   database journey buys from two sellers, settles, holds, releases, pays and
   refunds; the browser journey sets payout details, confirms them and sees
   the listing become buyable. Changeset `member-payouts.md`.)*
-- [ ] **C12.10** Build buyer protection: order conversations, delivery
-  confirmation, a dispute workflow with site-admin mediation, and refund or
-  release outcomes recorded on the ledger.
+- [x] **C12.10** Build buyer protection: sellers record shipment and tracking;
+  buyers confirm delivery, which releases held funds early; a private thread
+  per sale for the buyer, the seller and the site; disputes while money is
+  held or due, which freeze that sale's payouts until a site admin pays the
+  seller or cancels the payout for a refund, recorded on the ledger.
+  *(Evidence 2026-10-14: `src/modules/members/protection.ts`, the dispute
+  freeze in `src/modules/members/payouts.ts`, migration
+  `db/migrations/0032_member_buyer_protection.sql`,
+  `tests/modules/member-protection.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** `/portal/sales`, `/portal/purchases`, the shared sale page, and
+  disputes on `/admin/members`. **F05** `members.sale`, `members.mySales`,
+  `members.myPurchases`, `members.markShipped`, `members.confirmDelivery`,
+  `members.openDispute`, `members.withdrawDispute`, `members.disputes`,
+  `members.resolveDispute`, `members.saleThread`, `members.postSaleMessage`.
+  **F07** only the buyer, the seller and site staff can see a sale; only the
+  seller ships and only the buyer confirms or disputes; one open dispute per
+  sale; open disputes block release and payment; thread messages sealed at
+  rest; money write class. A refund decision cancels the payout; the money
+  returns to the buyer through the site's ordinary invoice refund. **F09**
+  N/A — no new jobs; the release job skips disputed sales. **F12** the
+  browser journey ships with tracking, messages, and has the buyer confirm
+  delivery, releasing the payout. Changeset `member-protection.md`.)*
 - [ ] **C12.11** Build reputation: buyer and seller reviews only after a
   completed transaction, double-blind reveal, public replies and reporting.
 - [ ] **C12.12** Build trust and safety: report anything, a moderation queue

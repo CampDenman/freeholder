@@ -20,4 +20,7 @@ export {
   memberListings,
   memberPayoutAccounts,
   memberPayouts,
+  memberSaleFulfilments,
+  memberDisputes,
+  memberSaleMessages,
 } from "./schema";

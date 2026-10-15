@@ -112,15 +112,24 @@ export const orderSellers = defineService({
   output: z.object({
     orderId: uuid,
     invoiceId: uuid.nullable(),
+    contactId: uuid,
     currency: z.string(),
     status: z.string(),
-    lines: listed(row({ orderItemId: uuid, sellerUserId: uuid, lineTotalMinor: z.number().int() })),
+    createdAt: timestamp,
+    lines: listed(row({ orderItemId: uuid, sellerUserId: uuid, lineTotalMinor: z.number().int(), name: z.string(), quantity: z.number().int(), requiresShipping: z.boolean() })),
   }),
   handler: async (input, ctx) => {
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.orderId));
     if (!order) throw new ServiceError("not_found", "That order does not exist.");
     const lines = await ctx.tx
-      .select({ orderItemId: orderItems.id, sellerUserId: products.sellerUserId, lineTotalMinor: orderItems.lineTotalMinor })
+      .select({
+        orderItemId: orderItems.id,
+        sellerUserId: products.sellerUserId,
+        lineTotalMinor: orderItems.lineTotalMinor,
+        name: products.name,
+        quantity: orderItems.quantity,
+        requiresShipping: productVariants.requiresShipping,
+      })
       .from(orderItems)
       .innerJoin(productVariants, eq(productVariants.id, orderItems.variantId))
       .innerJoin(products, eq(products.id, productVariants.productId))
@@ -128,8 +137,10 @@ export const orderSellers = defineService({
     return {
       orderId: order.id,
       invoiceId: order.invoiceId,
+      contactId: order.contactId,
       currency: order.currency,
       status: order.status,
+      createdAt: order.createdAt,
       lines: lines.map((l) => ({ ...l, sellerUserId: l.sellerUserId! })),
     };
   },
@@ -148,4 +159,25 @@ export const orderForInvoice = defineService({
   },
 });
 
-export default [marketListings, orderSellers, orderForInvoice];
+export const memberOrdersForContact = defineService({
+  name: "catalog.memberOrdersForContact",
+  summary: "Orders by one contact that include something a member sold.",
+  kind: "query",
+  permission: "system",
+  input: z.object({ contactId: uuid }),
+  output: listed(uuid),
+  handler: async (input, ctx) => {
+    const rows = await ctx.tx
+      .selectDistinct({ id: orders.id, createdAt: orders.createdAt })
+      .from(orders)
+      .innerJoin(orderItems, eq(orderItems.orderId, orders.id))
+      .innerJoin(productVariants, eq(productVariants.id, orderItems.variantId))
+      .innerJoin(products, eq(products.id, productVariants.productId))
+      .where(and(eq(orders.contactId, input.contactId), isNotNull(products.sellerUserId)))
+      .orderBy(desc(orders.createdAt))
+      .limit(200);
+    return rows.map((r) => r.id);
+  },
+});
+
+export default [marketListings, orderSellers, orderForInvoice, memberOrdersForContact];

@@ -60,6 +60,7 @@ const INTERNAL = [
   // The member payout ledger (§44.8, C12.09). The catalog answers which
   // member sold each order line; the ledger is written from catalog.orderPaid
   // and refund.succeeded and released by a job, on nobody's behalf.
+  "catalog.memberOrdersForContact",
   "catalog.orderForInvoice",
   "catalog.orderSellers",
   "members.recordPayouts",

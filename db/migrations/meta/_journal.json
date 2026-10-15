@@ -225,6 +225,13 @@
       "when": 1793310000011,
       "tag": "0031_member_payouts",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793310000012,
+      "tag": "0032_member_buyer_protection",
+      "breakpoints": true
     }
   ]
 }

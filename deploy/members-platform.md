@@ -113,3 +113,14 @@ from mocked payment, mail or media runs alone.
   confirmed release is C12.10.
 - The standalone artifact file cap was raised from 18,000 to 27,000 (1.5x
   the 18,094 measured) in `scripts/standalone-artifact-gate.mjs`.
+
+## C12.10 — buyer protection (2026-10-14)
+
+- A sale is one seller's part of one order. Services in
+  `src/modules/members/protection.ts`; screens `/portal/sales`,
+  `/portal/purchases`, the shared sale page, and disputes on `/admin/members`.
+- Resolving a dispute for the buyer cancels the seller's payout; the money
+  goes back through the site's ordinary invoice refund (a manual step with
+  the manual payment provider).
+- Tests: `tests/modules/member-protection.test.ts` (2 cases) and the C12.10
+  journey in `tests/browser/members.spec.ts`. Passed locally 2026-10-14.
