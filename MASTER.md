@@ -10949,9 +10949,35 @@ whatever is best for the people using the site.
   device changes it and is reported until confirmed; the browser journey
   compares the numbers across two browsers after a device joins.
   Changeset `member-device-verification.md`.)*
-- [ ] **C12.36** Encrypt attachments end to end in encrypted conversations:
+- [x] **C12.36** Encrypt attachments end to end in encrypted conversations:
   files encrypted on the sender's device with keys carried inside the MLS
   message, stored as opaque blobs.
+  *(Evidence 2026-10-15: `src/modules/members/sealed-blobs.ts`,
+  `sealFile`/`openFile` and `files` in `src/modules/members/e2ee/wire.ts`,
+  `app/api/member-blobs/route.ts`, `app/member-blobs/[id]/route.ts`,
+  migration `db/migrations/0046_member_sealed_blobs.sql`,
+  `tests/modules/member-e2ee.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** "Add photos or video (end-to-end encrypted)" with a description in
+  encrypted conversations, and the files shown decrypted in the thread.
+  **F05** `members.uploadSealedBlob` (also `POST /api/member-blobs`) and
+  `sealedFiles` on `members.sendEncrypted`. **F07** each file gets a fresh
+  AES-256-GCM key and nonce on the sender's device; only ciphertext is
+  uploaded, and the key, nonce, name, type and description travel inside
+  the signed MLS payload; a file is served (as `application/octet-stream`,
+  `private, no-store`, sandboxed, same-origin) only to people still in its
+  conversation and only while its message stands; only its uploader can
+  attach it, once; only image and video types are shown; 25 MB per file and
+  four per message. Because the server cannot read these files, it cannot
+  scan, resize or hash-match them (C12.30 cannot apply to them), and
+  franked reports cover the text of a message, not its files. **F09**
+  `members.purgeSealedBlobs` every ten minutes deletes removed files and
+  ones uploaded but never sent within a day, with storage I/O outside any
+  transaction. **F12** the module test round-trips a file between devices,
+  checks the stored bytes are not the file, that someone outside the
+  conversation is refused and a file cannot be reused, and that unsending
+  and the sweep delete it; the browser journey sends a photo from one
+  browser and shows it decoded in another. Changeset
+  `member-sealed-attachments.md`.)*
 - [x] **C12.37** When someone leaves a conversation during its group call,
   remove them from the SFU room through the adapter after the leave commits,
   and have the remaining devices switch to a fresh media key.

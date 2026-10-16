@@ -1081,6 +1081,7 @@ export const SERVICE_NAMES = [
   "members.updateMarketPolicy",
   "members.updateMe",
   "members.updateSettings",
+  "members.uploadSealedBlob",
   "members.verifyDemoFixture",
   "members.viewPost",
   "members.withdrawDispute",
@@ -5735,7 +5736,7 @@ export interface ServiceCatalog {
     output: { ok: true };
   };
   "members.sendEncrypted": {
-    input: { conversationId: string; deviceId: string; epoch: number; ciphertext: string; frankTag: string; attachments?: { assetId: string; altText?: string }[] };
+    input: { conversationId: string; deviceId: string; epoch: number; ciphertext: string; frankTag: string; attachments?: { assetId: string; altText?: string }[]; sealedFiles?: string[] };
     output: { id: string };
   };
   "members.sendMessage": {
@@ -5833,6 +5834,10 @@ export interface ServiceCatalog {
   "members.updateSettings": {
     input: { joinPolicy?: "open" | "approval" | "invite"; minimumAge?: number; marketplaceEnabled?: boolean; listingReview?: boolean; payoutModel?: "hold" | "seller_merchant" | "instant"; holdDays?: number; siteFeeBps?: number; payoutAdapter?: string; adultContent?: boolean; federation?: boolean };
     output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; adultContent: boolean; federation: boolean; [key: string]: unknown };
+  };
+  "members.uploadSealedBlob": {
+    input: { conversationId: string; bytes: unknown };
+    output: { id: string };
   };
   "members.verifyDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
@@ -8781,6 +8786,7 @@ export interface FreeholderApi {
     updateMarketPolicy: (input: ServiceCatalog["members.updateMarketPolicy"]["input"]) => Promise<ServiceCatalog["members.updateMarketPolicy"]["output"]>;
     updateMe: (input?: ServiceCatalog["members.updateMe"]["input"]) => Promise<ServiceCatalog["members.updateMe"]["output"]>;
     updateSettings: (input?: ServiceCatalog["members.updateSettings"]["input"]) => Promise<ServiceCatalog["members.updateSettings"]["output"]>;
+    uploadSealedBlob: (input: ServiceCatalog["members.uploadSealedBlob"]["input"]) => Promise<ServiceCatalog["members.uploadSealedBlob"]["output"]>;
     verifyDemoFixture: (input: ServiceCatalog["members.verifyDemoFixture"]["input"]) => Promise<ServiceCatalog["members.verifyDemoFixture"]["output"]>;
     viewPost: (input: ServiceCatalog["members.viewPost"]["input"]) => Promise<ServiceCatalog["members.viewPost"]["output"]>;
     withdrawDispute: (input: ServiceCatalog["members.withdrawDispute"]["input"]) => Promise<ServiceCatalog["members.withdrawDispute"]["output"]>;

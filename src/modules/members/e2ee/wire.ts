@@ -87,10 +87,24 @@ export function sameTag(a: string, b: string): boolean {
   return diff === 0;
 }
 
+/** C12.36: an encrypted file, as only the devices in the conversation know it. */
+export interface SealedFile {
+  /** The stored ciphertext. */
+  blob: string;
+  /** AES-256-GCM key and nonce, base64. */
+  key: string;
+  iv: string;
+  name: string;
+  type: string;
+  size: number;
+  alt: string;
+}
+
 /** What travels inside an MLS application message. */
 export interface Payload {
   v: 1;
   body: string;
+  files?: SealedFile[];
   /** The franking key, base64. */
   fk: string;
   /** The sending device, which signs `signedPart`. */
@@ -98,13 +112,37 @@ export interface Payload {
   sig: string;
 }
 
-const signedPart = (conversationId: string, p: Pick<Payload, "body" | "fk" | "device">) => utf8(`freeholder:payload:v1\n${conversationId}\n${p.device}\n${p.fk}\n${p.body}`);
+const signedPart = (conversationId: string, p: Pick<Payload, "body" | "fk" | "device" | "files">) =>
+  utf8(`freeholder:payload:v1\n${conversationId}\n${p.device}\n${p.fk}\n${p.files?.length ? `${JSON.stringify(p.files)}\n` : ""}${p.body}`);
 
-export async function sealPayload(conversationId: string, body: string, device: { deviceId: string; signKey: Uint8Array }): Promise<{ bytes: Uint8Array; fk: string }> {
+export async function sealPayload(conversationId: string, body: string, device: { deviceId: string; signKey: Uint8Array }, files: SealedFile[] = []): Promise<{ bytes: Uint8Array; fk: string }> {
   const fk = b64(crypto.getRandomValues(new Uint8Array(32)));
-  const sig = await (await suite()).signature.sign(device.signKey, signedPart(conversationId, { body, fk, device: device.deviceId }));
-  const payload: Payload = { v: 1, body, fk, device: device.deviceId, sig: b64(sig) };
+  const content = { body, fk, device: device.deviceId, ...(files.length ? { files } : {}) };
+  const sig = await (await suite()).signature.sign(device.signKey, signedPart(conversationId, content));
+  const payload: Payload = { v: 1, ...content, sig: b64(sig) };
   return { bytes: utf8(JSON.stringify(payload)), fk };
+}
+
+function isSealedFile(f: unknown): f is SealedFile {
+  const x = f as SealedFile;
+  return Boolean(x) && [x.blob, x.key, x.iv, x.name, x.type, x.alt].every((v) => typeof v === "string") && typeof x.size === "number";
+}
+
+/** File types a conversation shows inline; anything else is not rendered. */
+export const SEALED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "video/mp4", "video/webm"] as const;
+
+/** Encrypt one file on this device. */
+export async function sealFile(bytes: Uint8Array): Promise<{ ciphertext: Uint8Array; key: string; iv: string }> {
+  const raw = crypto.getRandomValues(new Uint8Array(32));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await crypto.subtle.importKey("raw", raw as BufferSource, "AES-GCM", false, ["encrypt"]);
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv as BufferSource }, key, bytes as BufferSource));
+  return { ciphertext, key: b64(raw), iv: b64(iv) };
+}
+
+export async function openFile(ciphertext: Uint8Array, file: Pick<SealedFile, "key" | "iv">): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey("raw", unb64(file.key) as BufferSource, "AES-GCM", false, ["decrypt"]);
+  return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(file.iv) as BufferSource }, key, ciphertext as BufferSource));
 }
 
 /** The payload, if it is well formed and signed by the device the server says sent it. */
@@ -116,6 +154,7 @@ export async function openPayload(conversationId: string, bytes: Uint8Array, sen
     return null;
   }
   if (parsed?.v !== 1 || typeof parsed.body !== "string" || typeof parsed.fk !== "string" || typeof parsed.sig !== "string" || parsed.device !== sender.deviceId) return null;
+  if (parsed.files !== undefined && !(Array.isArray(parsed.files) && parsed.files.length <= 4 && parsed.files.every(isSealedFile))) return null;
   const ok = await (await suite()).signature.verify(sender.signatureKey, signedPart(conversationId, parsed), unb64(parsed.sig));
   return ok ? parsed : null;
 }

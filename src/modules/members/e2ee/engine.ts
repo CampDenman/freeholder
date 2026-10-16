@@ -29,7 +29,7 @@ import {
   type PrivateKeyPackage,
 } from "ts-mls";
 import { defaultClientConfig } from "ts-mls/clientConfig.js";
-import { b64, frankTag, identityOf, openCallKey, openPayload, parseIdentity, sameTag, sealCallKey, sealPayload, suite, unb64, utf8 } from "./wire";
+import { b64, frankTag, identityOf, openCallKey, openPayload, parseIdentity, sameTag, sealCallKey, sealPayload, suite, unb64, utf8, type SealedFile } from "./wire";
 
 export interface DeviceRecord {
   deviceId: string;
@@ -55,6 +55,8 @@ export interface ReadMessage {
   senderUserId: string;
   /** False when it failed to decrypt or did not match its franking tag. */
   ok: boolean;
+  /** C12.36: encrypted files, with the keys to open them. */
+  files?: SealedFile[];
 }
 
 export interface E2eeStore {
@@ -101,7 +103,7 @@ export interface E2eeTransport {
   sync(input: { conversationId: string; deviceId: string; after: number }): Promise<SyncResult>;
   claim(input: { conversationId: string; deviceId: string; devices: string[] }): Promise<{ packages: { deviceId: string; keyPackageId: string; keyPackage: string }[] }>;
   commit(input: { conversationId: string; deviceId: string; create: boolean; fromEpoch: number; commit: string; welcome?: string; added: { deviceId: string; keyPackageId: string }[]; removed: string[] }): Promise<{ epoch: number }>;
-  send(input: { conversationId: string; deviceId: string; epoch: number; ciphertext: string; frankTag: string; attachments: { assetId: string; altText: string }[] }): Promise<{ id: string }>;
+  send(input: { conversationId: string; deviceId: string; epoch: number; ciphertext: string; frankTag: string; attachments: { assetId: string; altText: string }[]; sealedFiles?: string[] }): Promise<{ id: string }>;
   sendCallKey(input: { conversationId: string; deviceId: string; epoch: number; callId: string; generation: number; fresh: boolean; ciphertext: string }): Promise<unknown>;
 }
 
@@ -315,7 +317,7 @@ export class E2eeDevice {
               const sender = entry.senderDeviceId ? keys.get(entry.senderDeviceId) : undefined;
               const payload = sender ? await openPayload(conversationId, processed.message, { deviceId: sender.deviceId, signatureKey: unb64(sender.signatureKey) }) : null;
               const matches = Boolean(payload && sender && entry.frankTag && sameTag(await frankTag(unb64(payload.fk), conversationId, sender.userId, payload.body), entry.frankTag));
-              await this.store.saveMessage(conversationId, entry.messageId, matches ? { body: payload!.body, fk: payload!.fk, senderUserId: sender!.userId, ok: true } : { body: "", fk: "", senderUserId: sender?.userId ?? "", ok: false });
+              await this.store.saveMessage(conversationId, entry.messageId, matches ? { body: payload!.body, fk: payload!.fk, senderUserId: sender!.userId, ok: true, ...(payload!.files ? { files: payload!.files } : {}) } : { body: "", fk: "", senderUserId: sender?.userId ?? "", ok: false });
             }
           }
         } catch {
@@ -503,7 +505,7 @@ export class E2eeDevice {
   }
 
   /** Encrypt and send. Returns the message id, or null if the conversation cannot be encrypted. */
-  async send(conversationId: string, body: string, attachments: { assetId: string; altText: string }[] = []): Promise<string | null> {
+  async send(conversationId: string, body: string, attachments: { assetId: string; altText: string }[] = [], files: SealedFile[] = []): Promise<string | null> {
     const device = await this.device();
     for (let attempt = 0; attempt < RETRIES; attempt++) {
       const status = await this.sync(conversationId);
@@ -514,7 +516,7 @@ export class E2eeDevice {
           const cs = await suite();
           const { state, cursor } = await this.load(conversationId, []);
           if (!state) throw Object.assign(new Error("not ready"), { code: "conflict" });
-          const sealed = await sealPayload(conversationId, body, device);
+          const sealed = await sealPayload(conversationId, body, device, files);
           const message = await createApplicationMessage(state, sealed.bytes, cs);
           // The ratchet moves forward before anything leaves the device, so a
           // key is never used twice even if the server refuses this message.
@@ -526,8 +528,9 @@ export class E2eeDevice {
             ciphertext: b64(encodeMlsMessage({ privateMessage: message.privateMessage, wireformat: "mls_private_message", version: "mls10" })),
             frankTag: await frankTag(unb64(sealed.fk), conversationId, this.userId, body),
             attachments,
+            sealedFiles: files.map((f) => f.blob),
           });
-          await this.store.saveMessage(conversationId, id, { body, fk: sealed.fk, senderUserId: this.userId, ok: true });
+          await this.store.saveMessage(conversationId, id, { body, fk: sealed.fk, senderUserId: this.userId, ok: true, ...(files.length ? { files } : {}) });
           return id;
         });
       } catch (error) {

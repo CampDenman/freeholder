@@ -22,7 +22,7 @@ import { relationBetween } from "./graph";
 import { notifyMember } from "./notify";
 import { dropFromCalls } from "./call-seats";
 import { openMessage, sealMessage } from "./message-crypto";
-import { memberConversationParticipants, memberConversations, memberDevices, memberMessages, memberMlsGroups, memberMlsLog, memberProfiles } from "./schema";
+import { memberConversationParticipants, memberConversations, memberDevices, memberMessages, memberMlsGroups, memberMlsLog, memberProfiles, memberSealedBlobs } from "./schema";
 
 const MAX_GROUP = 50;
 const PAGE = 50;
@@ -443,6 +443,8 @@ export const unsendMessage = defineService({
     // An end-to-end encrypted message's ciphertext goes too, so no device that
     // has not fetched it yet ever can.
     await ctx.tx.delete(memberMlsLog).where(eq(memberMlsLog.messageId, input.id));
+    // C12.36: its encrypted files stop being served now and are purged soon.
+    await ctx.tx.update(memberSealedBlobs).set({ deletedAt: new Date() }).where(eq(memberSealedBlobs.messageId, input.id));
     return { ok: true as const };
   },
 });

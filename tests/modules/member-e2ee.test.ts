@@ -15,7 +15,10 @@ import { reportContent } from "@/modules/members/reports";
 import { e2eeSync, registerDevice, revokeDevice, sendEncrypted } from "@/modules/members/e2ee/service";
 import type { E2eeDevice } from "@/modules/members/e2ee/engine";
 import { deviceFor } from "../helpers/e2ee";
-import { memberReports } from "@/modules/members/schema";
+import { memberReports, memberSealedBlobs } from "@/modules/members/schema";
+import { purgeSealedBlobs, sealedBlobAccess, uploadSealedBlob } from "@/modules/members/sealed-blobs";
+import { openFile, sealFile } from "@/modules/members/e2ee/wire";
+import { storage } from "@/adapters/storage";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 type Member = typeof CUSTOMER;
@@ -148,6 +151,35 @@ describe.runIf(hasDatabase)("end-to-end encrypted messages (C12.23)", () => {
     expect(after.changed.added).toEqual([`${SAM.userId}:${extraId}`]);
     await rae.confirmDevices(id);
     expect((await rae.verification(id))!.changed).toEqual({ added: [], removed: [] });
+  });
+
+  it("encrypts files on the device, serves only ciphertext to people in the conversation, and purges them (C12.36)", { timeout: 60_000 }, async () => {
+    const rae = deviceFor(RAE, "Rae");
+    const sam = deviceFor(SAM, "Sam");
+    await Promise.all([rae.device(), sam.device()]);
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await rae.send(id, "first");
+    const photo = new Uint8Array(4096).map((_, i) => (i * 7) % 251);
+    const sealed = await sealFile(photo);
+    const { id: blob } = await uploadSealedBlob.call({ conversationId: id, bytes: sealed.ciphertext }, RAE);
+    const messageId = await rae.send(id, "the view from the top", [], [{ blob, key: sealed.key, iv: sealed.iv, name: "summit.jpg", type: "image/jpeg", size: photo.length, alt: "A ridge above the clouds" }]);
+
+    // Sam's device gets the file's key inside the message, and the server holds only ciphertext.
+    const read = (await sam.sync(id)).messages.get(messageId!)!;
+    expect(read.files?.map((f) => [f.name, f.alt])).toEqual([["summit.jpg", "A ridge above the clouds"]]);
+    const access = await sealedBlobAccess.call({ id: blob }, SAM);
+    const stored = await storage().get(access!.storageKey);
+    expect(Buffer.from(stored!).equals(Buffer.from(photo))).toBe(false);
+    expect(Buffer.from(await openFile(stored!, read.files![0]!)).equals(Buffer.from(photo))).toBe(true);
+    expect(await sealedBlobAccess.call({ id: blob }, KIM)).toBeNull();
+
+    // A file can be attached once, by its uploader, and unsending stops serving it; the sweep deletes it.
+    await expect(sam.send(id, "reusing it", [], [{ ...read.files![0]! }])).rejects.toThrow();
+    await unsendMessage.call({ id: messageId! }, RAE);
+    expect(await sealedBlobAccess.call({ id: blob }, SAM)).toBeNull();
+    expect((await purgeSealedBlobs()).purged).toBe(1);
+    expect(await storage().get(access!.storageKey)).toBeUndefined();
+    expect(await db().select().from(memberSealedBlobs)).toEqual([]);
   });
 
   it("stays plaintext, and says so, until everyone has a device", async () => {

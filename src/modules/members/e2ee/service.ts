@@ -21,6 +21,7 @@ import { activeSelf, directBlocked, participant, send } from "../messages";
 import { memberConversationParticipants, memberConversations, memberDevices, memberGroupCalls, memberKeyPackages, memberMessages, memberMlsGroups, memberMlsLog, memberMlsRoster } from "../schema";
 import { b64, readKeyPackage, unb64 } from "./wire";
 import { assertGeneration, dropFromCalls } from "../call-seats";
+import { attachSealedBlobs } from "../sealed-blobs";
 
 const MAX_DEVICES = 20;
 const MAX_UNCLAIMED = 200;
@@ -405,6 +406,8 @@ export const sendEncrypted = defineService({
     ciphertext: base64.max(120_000),
     frankTag: z.string().regex(/^[A-Za-z0-9+/]{43}=$/),
     attachments: attachmentInput,
+    /** C12.36: encrypted files this device uploaded; their keys are inside the ciphertext. */
+    sealedFiles: z.array(uuid).max(4).default([]),
   }),
   output: z.object({ id: uuid }),
   handler: async (input, ctx) => {
@@ -422,6 +425,7 @@ export const sendEncrypted = defineService({
     const { devices } = await entitledDevices(ctx, input.conversationId);
     if (!roster.has(input.deviceId) || roster.size !== devices.length || devices.some((d) => !roster.has(d.id))) throw membershipChanged();
     const id = await send(ctx, input.conversationId, me.userId, "", input.attachments, { frankTag: input.frankTag });
+    await attachSealedBlobs(ctx, me.userId, input.conversationId, id, input.sealedFiles);
     await ctx.tx.insert(memberMlsLog).values({ conversationId: input.conversationId, epoch: input.epoch, kind: "application", senderDeviceId: input.deviceId, messageId: id, payload: input.ciphertext });
     await ctx.tx.update(memberDevices).set({ lastSeenAt: new Date() }).where(eq(memberDevices.id, input.deviceId));
     return { id };

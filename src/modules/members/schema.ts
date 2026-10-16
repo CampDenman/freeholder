@@ -810,3 +810,28 @@ export const memberGroupCallParticipants = pgTable(
   },
   (t) => [primaryKey({ columns: [t.callId, t.userId] })],
 );
+
+/**
+ * C12.36: a file in an end-to-end encrypted conversation. The sender's device
+ * encrypts it with a key that travels only inside the MLS message, so what is
+ * stored here is ciphertext the server cannot open, scan or resize.
+ */
+export const memberSealedBlobs = pgTable(
+  "member_sealed_blobs",
+  {
+    id: uuid("id").primaryKey(),
+    ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id").notNull().references(() => memberConversations.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id").references(() => memberMessages.id, { onDelete: "set null" }),
+    storageKey: text("storage_key").notNull(),
+    size: integer("size").notNull(),
+    state: text("state", { enum: ["pending", "ready"] }).notNull().default("pending"),
+    createdAt: createdAtColumn(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("member_sealed_blobs_message_idx").on(t.messageId),
+    index("member_sealed_blobs_purge_idx").on(t.deletedAt, t.createdAt),
+    check("member_sealed_blobs_state_valid", sql`${t.state} in ('pending','ready')`),
+  ],
+);
