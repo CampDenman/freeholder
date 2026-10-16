@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// `freeholder update` (MASTER.md §39.10, C10.21).
+// `freeholder update` (MASTER.md §39.10, C10.21) and `freeholder launch`
+// (C3.30, src/launch/).
 //
 // A thin client, like `scripts/doctor.mjs` and for the same reason: the update
 // logic lives in the instance because it has to touch that instance's
@@ -32,6 +33,7 @@
 import { createHmac } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { launch } from "./launch/command.js";
 
 export const EXIT = {
   ok: 0,
@@ -248,9 +250,10 @@ export function exitFor(posture: Status["posture"]): number {
 }
 
 export async function run(argv: readonly string[], out = console): Promise<number> {
+  if (argv.find((entry) => !entry.startsWith("--")) === "launch") return launch(argv, out);
   const { command, action, options } = parseArgs(argv);
   if (command && command !== "update") {
-    out.error(`freeholder: unknown command "${command}". The only command is "update".`);
+    out.error(`freeholder: unknown command "${command}". The commands are "update" and "launch".`);
     return EXIT.security;
   }
   let call: Caller;

@@ -1,7 +1,7 @@
 {
   "name": "@freeholder/cli",
   "version": "0.2.0-beta.3",
-  "description": "freeholder update \u2014 check, preflight, apply and roll back a Freeholder instance from a terminal or a cron job",
+  "description": "freeholder update and freeholder launch: keep a Freeholder site current, or stand up a new hosted one, from a terminal",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {
@@ -18,11 +18,12 @@
   },
   "files": [
     "dist",
+    "recipes",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/copy-recipe.mjs && tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --test"
   }
