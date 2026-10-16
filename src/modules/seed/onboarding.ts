@@ -215,7 +215,8 @@ const contribution: OnboardingModuleExport = {
     },
     {
       key: "seed.creator",
-      version: 1,
+      // 2: the member community (C12.16) joined this scenario; version 1 is stored as it was.
+      version: 2,
       titleKey: "demo.scenario.creator.title",
       descriptionKey: "demo.scenario.creator.description",
       preset: "creator",
@@ -257,7 +258,8 @@ const contribution: OnboardingModuleExport = {
     },
     {
       key: "seed.everything",
-      version: 1,
+      // 2: the member community (C12.16) joined this scenario; version 1 is stored as it was.
+      version: 2,
       titleKey: "demo.scenario.everything.title",
       descriptionKey: "demo.scenario.everything.description",
       preset: "everything",
