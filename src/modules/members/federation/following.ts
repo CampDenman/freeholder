@@ -34,23 +34,39 @@ function parseAddress(address: string): { user: string; host: string } | null {
   return match ? { user: match[1]!, host: match[2]!.toLowerCase() } : null;
 }
 
-/** HTML from another server, reduced to plain text. Nothing of it is ever rendered as markup. */
+/**
+ * HTML from another server, reduced to plain text. Nothing of it is ever
+ * rendered as markup. One left-to-right scan: everything from a "<" to its
+ * ">" is dropped (script and style contents with it), so no "<" survives,
+ * however tags are nested or split; entities are decoded only afterwards,
+ * so decoded text is never parsed again.
+ */
 export function plainText(html: string): string {
-  // Strip until nothing changes, so a tag split around another
-  // (`<scr<script>ipt>`) cannot reassemble after one pass.
-  let stripped = html;
-  for (let previous = ""; previous !== stripped; ) {
-    previous = stripped;
-    stripped = stripped
-      .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
-      .replace(/<\s*br\s*\/?>/gi, "\n")
-      .replace(/<\/\s*p\s*>/gi, "\n\n")
-      .replace(/<[^>]*>/g, "");
+  const lower = html.toLowerCase();
+  let out = "";
+  let i = 0;
+  while (i < html.length) {
+    if (html[i] !== "<") {
+      out += html[i];
+      i++;
+      continue;
+    }
+    const end = html.indexOf(">", i + 1);
+    if (end === -1) break;
+    const tag = lower.slice(i + 1, end).trim();
+    const closing = tag.startsWith("/");
+    const name = /^\/?\s*([a-z][a-z0-9]*)/.exec(tag)?.[1] ?? "";
+    if (!closing && (name === "script" || name === "style")) {
+      const close = lower.indexOf(`</${name}`, end);
+      const after = close === -1 ? -1 : html.indexOf(">", close);
+      i = after === -1 ? html.length : after + 1;
+      continue;
+    }
+    if (name === "br") out += "\n";
+    else if (closing && name === "p") out += "\n\n";
+    i = end + 1;
   }
-  // Any "<" left can no longer open a tag; entities are decoded only now,
-  // so decoded text is never parsed again.
-  const text = stripped
-    .replace(/</g, "")
+  const text = out
     .replace(/&nbsp;/g, " ")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")

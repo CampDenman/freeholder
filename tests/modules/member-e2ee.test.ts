@@ -189,7 +189,7 @@ describe.runIf(hasDatabase)("end-to-end encrypted messages (C12.23)", () => {
     const sam = deviceFor(SAM, "Sam phone");
     await Promise.all([rae.device(), sam.device()]);
     const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
-    await rae.send(id, "The code for the gate is 4417");
+    await rae.send(id, "The gate word is opal-lantern");
     await sam.send(id, "Thanks");
     const tablet = deviceFor(SAM, "Sam tablet");
     const tabletDevice = await tablet.device();
@@ -208,9 +208,10 @@ describe.runIf(hasDatabase)("end-to-end encrypted messages (C12.23)", () => {
     expect(await tablet.takeHistory()).toBe(0);
     expect(await sam.giveHistory(ask!)).toBeGreaterThanOrEqual(3);
     const sealed = JSON.stringify(await db().select().from(memberHistoryTransfers));
-    expect(sealed).not.toContain("4417");
+    // A hyphenated word cannot occur by chance in base64 or hex ids.
+    expect(sealed).not.toContain("opal-lantern");
     expect(await tablet.takeHistory()).toBe(2);
-    expect(await bodies(tablet, id)).toEqual(expect.arrayContaining(["The code for the gate is 4417", "Thanks", "And bring snacks"]));
+    expect(await bodies(tablet, id)).toEqual(expect.arrayContaining(["The gate word is opal-lantern", "Thanks", "And bring snacks"]));
     expect(await db().select().from(memberHistoryTransfers)).toEqual([]);
     expect(await sam.historyAsks()).toEqual([]);
   });
