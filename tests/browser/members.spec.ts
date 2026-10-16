@@ -10,7 +10,7 @@ import { users } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { THEME_COOKIE } from "@/core/design/theme";
-import { memberDevices, memberFollows, memberMessages, memberMlsLog, memberSealedBlobs, memberPayoutAccounts, memberPayouts, memberPosts, memberProfiles, memberReports, memberSaleFulfilments, memberSettings } from "@/modules/members/schema";
+import { memberDevices, memberFollows, memberMessages, memberMlsLog, memberRemoteFollows, memberRemotePosts, memberSealedBlobs, memberPayoutAccounts, memberPayouts, memberPosts, memberProfiles, memberReports, memberSaleFulfilments, memberSettings } from "@/modules/members/schema";
 import { contacts } from "@/core/contacts/schema";
 import { orderItems, orders, productVariants, products } from "@/modules/catalog/schema";
 import { invoices } from "@/modules/invoicing/schema";
@@ -710,6 +710,38 @@ test.describe("members (C12.01)", () => {
     await expect(adaPage.getByRole("button", { name: "Join the fediverse" })).toBeVisible();
     expect((await adaPage.request.get("/ap/users/ada", { headers: { accept: "application/activity+json" } })).status()).toBe(404);
     for (const context of [admin, adaContext]) await context.close();
+  });
+
+  test("posts from accounts followed elsewhere appear in the home feed as plain text (C12.32)", async ({ browser }) => {
+    await seedC11Owner("Fediverse following proof");
+    await db().insert(users).values({ id: MEMBER_ID, email: "ada@example.test", role: "customer" });
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "ada", displayName: "Ada Lane", ageAttestedAt: new Date(), isPrivate: false, federated: true });
+    await db().insert(memberSettings).values({ id: 1, federation: true }).onConflictDoUpdate({ target: memberSettings.id, set: { federation: true } });
+    await db().insert(memberRemoteFollows).values({ userId: MEMBER_ID, actorUri: "https://remote.example/users/sam", inboxUri: "https://remote.example/users/sam/inbox", handle: "sam@remote.example", followId: "x", state: "accepted" });
+    await db().insert(memberRemotePosts).values({ actorUri: "https://remote.example/users/sam", objectId: "https://remote.example/notes/1", url: "https://remote.example/@sam/1", text: "<b>Sunrise</b> over the bay", publishedAt: new Date() });
+    const ada = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+    const context = await browser.newContext({ baseURL: C11_BASE_URL });
+    await context.addCookies([{ name: SESSION_COOKIE, value: ada.token, url: C11_BASE_URL }]);
+    const page = await context.newPage();
+    await page.goto("/feed");
+    const post = page.locator("[data-remote-post]");
+    await expect(post).toContainText("@sam@remote.example");
+    await expect(post).toContainText("from the fediverse");
+    // Remote text is shown as text, never as markup.
+    await expect(post.getByText("<b>Sunrise</b> over the bay")).toBeVisible();
+    await expect(post.locator("b")).toHaveCount(0);
+    await axeInBothThemes(page);
+
+    await page.goto("/portal/member");
+    await expect(page.getByText("@sam@remote.example · following")).toBeVisible();
+    await page.getByLabel("Follow someone on another server").fill("not an address");
+    await page.getByRole("button", { name: "Follow", exact: true }).click();
+    await expect(page).toHaveURL(/error=validation/);
+    await page.getByRole("button", { name: "Unfollow" }).click();
+    await expect(page.getByText("@sam@remote.example · following")).toHaveCount(0);
+    await page.goto("/feed");
+    await expect(page.locator("[data-remote-post]")).toHaveCount(0);
+    await context.close();
   });
 
   test("the prohibited-items policy, published by the site and accepted by sellers (C12.28)", async ({ browser }) => {

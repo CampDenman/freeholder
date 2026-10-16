@@ -9,6 +9,8 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { currentBusiness } from "@/core/settings/read";
 import { homeFeed, latestPublic, pendingTags } from "@/modules/members/posts";
+import { remoteFeed } from "@/modules/members/federation/following";
+import { formatDateTime } from "@/core/i18n";
 import { membershipRules, myMembership } from "@/modules/members/service";
 import { VISIBILITIES } from "@/modules/members/visibility";
 import { Button, Callout, Field, Input, Select } from "@/ui/primitives";
@@ -28,6 +30,14 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
   const latest = query.view === "latest" || !me || me.status !== "active";
   const page = latest ? await latestPublic.call({ before: query.before }, actor) : await homeFeed.call({ before: query.before }, actor);
   const tags = me?.status === "active" ? await pendingTags.call({}, actor) : [];
+  // C12.32: posts from fediverse accounts the member follows, in the same window of time as this page.
+  const before = query.before?.split("|")[0];
+  const oldest = page.next ? page.posts.at(-1)?.createdAt : undefined;
+  const elsewhere = latest ? [] : (await remoteFeed.call({ before: before ? new Date(before) : undefined, after: oldest }, actor)).posts;
+  const items = [
+    ...page.posts.map((post) => ({ at: new Date(post.createdAt).getTime(), post, remote: null })),
+    ...elsewhere.map((remote) => ({ at: new Date(remote.publishedAt).getTime(), post: null, remote })),
+  ].sort((a, b) => b.at - a.at);
   const timezone = business?.timezone ?? "UTC";
   const viewerId = actor.kind === "user" ? actor.userId : null;
   return (
@@ -83,10 +93,18 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         </section>
       ) : null}
       <section className="grid gap-4" aria-label={t("members.feed.posts")}>
-        {page.posts.length === 0 ? <p className="text-ink-muted">{t("members.feed.empty")}</p> : null}
-        {page.posts.map((post) => (
-          <PostCard key={post.id} post={post} viewerId={viewerId} back="/feed" timezone={timezone} locale={locale} labels={postLabels(t, post)} />
-        ))}
+        {items.length === 0 ? <p className="text-ink-muted">{t("members.feed.empty")}</p> : null}
+        {items.map(({ post, remote }) =>
+          post ? (
+            <PostCard key={post.id} post={post} viewerId={viewerId} back="/feed" timezone={timezone} locale={locale} labels={postLabels(t, post)} />
+          ) : remote ? (
+            <article key={remote.id} className="grid gap-2 rounded-lg border border-rule bg-surface p-4" data-remote-post>
+              <p className="text-sm text-ink-muted">@{remote.handle} · {formatDateTime(remote.publishedAt, timezone, locale)} · {t("members.fediverse.elsewhere")}</p>
+              <p className="whitespace-pre-line break-words">{remote.text}</p>
+              {remote.url ? <p><a className="text-sm underline" href={remote.url} rel="nofollow noopener noreferrer">{t("members.fediverse.original")}</a></p> : null}
+            </article>
+          ) : null,
+        )}
       </section>
       {page.next ? <a className="underline" href={`/feed?${latest ? "view=latest&" : ""}before=${encodeURIComponent(page.next)}`}>{t("members.feed.older")}</a> : null}
     </div>

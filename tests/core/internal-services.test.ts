@@ -215,6 +215,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "members.federationDocument",
   // C12.36: halves of members.uploadSealedBlob, and the check behind
   // /member-blobs/[id]; the bytes route is the only way in.
+  // C12.32: the apply half of members.followRemote, after the lookup.
+  "members.addRemoteFollow",
   "members.claimSealedBlob",
   "members.confirmSealedBlob",
   "members.sealedBlobAccess",

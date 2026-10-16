@@ -45,6 +45,7 @@ import e2eeServices from "./e2ee/service";
 import groupCallServices from "./group-calls";
 import sealedBlobServices from "./sealed-blobs";
 import historyServices from "./e2ee/history";
+import followingServices from "./federation/following";
 import { applyMemberStatus } from "./status";
 // Member export and erasure through the site's privacy requests (C12.15).
 import "./data-rights";
@@ -469,6 +470,7 @@ export default [
   ...groupCallServices,
   ...sealedBlobServices,
   ...historyServices,
+  ...followingServices,
   membershipRules,
   updateMembershipRules,
   handleAvailability,

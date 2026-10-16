@@ -55,6 +55,7 @@ import {
   memberProfileSections,
   memberReactions,
   memberRemoteFollowers,
+  memberRemoteFollows,
   memberRelations,
   memberReports,
   memberReviews,
@@ -111,6 +112,7 @@ async function exportMember(tx: Tx, userId: string) {
     })),
     messageDevices: (await tx.select().from(memberDevices).where(eq(memberDevices.userId, userId))).map(({ id, label, createdAt, lastSeenAt, revokedAt }) => ({ id, label, createdAt, lastSeenAt, revokedAt })),
     fediverseFollowers: (await tx.select().from(memberRemoteFollowers).where(eq(memberRemoteFollowers.userId, userId))).map(({ actorUri, handle, createdAt }) => ({ actorUri, handle, createdAt })),
+    fediverseFollowing: (await tx.select().from(memberRemoteFollows).where(eq(memberRemoteFollows.userId, userId))).map(({ actorUri, handle, state, createdAt }) => ({ actorUri, handle, state, createdAt })),
     calls: await tx.select().from(memberCalls).where(or(eq(memberCalls.callerId, userId), eq(memberCalls.calleeId, userId))),
     listings: await tx.select().from(memberListings).where(eq(memberListings.sellerId, userId)),
     payouts: await tx.select().from(memberPayouts).where(eq(memberPayouts.sellerId, userId)),
@@ -154,6 +156,7 @@ async function eraseMember(tx: Tx, userId: string): Promise<number> {
   // Their devices, key packages and group seats (C12.23), and their presence on the fediverse (C12.18).
   count(await tx.delete(memberDevices).where(eq(memberDevices.userId, userId)).returning({ id: memberDevices.id }));
   count(await tx.delete(memberRemoteFollowers).where(eq(memberRemoteFollowers.userId, userId)).returning({ id: memberRemoteFollowers.id }));
+  count(await tx.delete(memberRemoteFollows).where(eq(memberRemoteFollows.userId, userId)).returning({ id: memberRemoteFollows.id }));
   count(await tx.delete(memberFederationDeliveries).where(eq(memberFederationDeliveries.userId, userId)).returning({ id: memberFederationDeliveries.id }));
   count(await tx.delete(memberActorKeys).where(eq(memberActorKeys.userId, userId)).returning({ userId: memberActorKeys.userId }));
   count(await tx.delete(memberConversationParticipants).where(eq(memberConversationParticipants.userId, userId)).returning());
@@ -232,6 +235,7 @@ registerContactPrivacySource({
     "member_sealed_blobs",
     "member_history_requests",
     "member_history_transfers",
+    "member_remote_follows",
   ],
   eraseOrder: 10,
   exportData: async (tx, contactId) => {

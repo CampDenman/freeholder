@@ -16,7 +16,8 @@ import { PROFILE_SECTION_KINDS } from "@/modules/members/profile-kinds";
 import { ImageUpload } from "./ImageUpload";
 import { MemberPasskeys } from "./MemberPasskeys";
 import { twoFactorStatus } from "@/core/auth/two-factor";
-import { avatarAction, deleteSectionAction, federationAction, revokeDeviceAction, sectionAction } from "./profile-actions";
+import { avatarAction, deleteSectionAction, federationAction, followRemoteAction, revokeDeviceAction, sectionAction, unfollowRemoteAction } from "./profile-actions";
+import { remoteFollows } from "@/modules/members/federation/following";
 import { myDevices } from "@/modules/members/e2ee/service";
 import { formatDateTime } from "@/core/i18n";
 import { myRemoteFollowers, siteHost } from "@/modules/members/federation/core";
@@ -44,13 +45,14 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
       </div>
     );
   }
-  const [mine, sections, security, agentKeys, remote, devices] = await Promise.all([
+  const [mine, sections, security, agentKeys, remote, devices, following] = await Promise.all([
     viewProfile.call({ handle: me.handle }, actor),
     profileSections.call({ handle: me.handle }, actor),
     twoFactorStatus.call({}, actor),
     myKeys.call({}, actor),
     rules.federation && me.federated ? myRemoteFollowers.call({}, actor) : null,
     me.status === "active" ? myDevices.call({}, actor) : { devices: [] },
+    rules.federation && me.federated ? remoteFollows.call({}, actor) : { follows: [] },
   ]);
   return (
     <div className="grid gap-6">
@@ -135,6 +137,26 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
             <Button type="submit" variant={me.federated ? "quiet" : "primary"}>{t(me.federated ? "members.federation.leave" : "members.federation.join")}</Button>
           </form>
           {me.federated ? <p className="text-sm text-ink-muted">{t("members.federation.leaveNote")}</p> : null}
+          {me.federated ? (
+            <div className="grid gap-2">
+              <form action={followRemoteAction} className="flex flex-wrap items-end gap-2">
+                <Field label={t("members.fediverse.follow")} htmlFor="remote-address" hint={t("members.fediverse.followHint")}>
+                  <Input id="remote-address" name="address" required maxLength={320} />
+                </Field>
+                <Button type="submit">{t("members.fediverse.followButton")}</Button>
+              </form>
+              {following.follows.length ? (
+                <ul className="grid gap-2" aria-label={t("members.fediverse.following")}>
+                  {following.follows.map((f) => (
+                    <li key={f.actorUri} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-rule p-3">
+                      <span>@{f.handle} · {t(f.state === "accepted" ? "members.fediverse.accepted" : "members.fediverse.pending")}</span>
+                      <form action={unfollowRemoteAction}><input type="hidden" name="actorUri" value={f.actorUri} /><Button type="submit" variant="quiet">{t("members.fediverse.unfollow")}</Button></form>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       ) : null}
       <section className="grid gap-3" aria-labelledby="your-passkeys">

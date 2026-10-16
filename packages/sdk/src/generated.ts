@@ -1001,6 +1001,7 @@ export const SERVICE_NAMES = [
   "members.endCall",
   "members.feed",
   "members.follow",
+  "members.followRemote",
   "members.groupCall",
   "members.groupCallConfig",
   "members.handleAvailable",
@@ -1045,7 +1046,9 @@ export const SERVICE_NAMES = [
   "members.react",
   "members.receivedHistory",
   "members.registerDevice",
+  "members.remoteFeed",
   "members.remoteFollowers",
+  "members.remoteFollows",
   "members.replyToReview",
   "members.report",
   "members.reports",
@@ -1081,6 +1084,7 @@ export const SERVICE_NAMES = [
   "members.subscriptionPlans",
   "members.takeSignals",
   "members.unfollow",
+  "members.unfollowRemote",
   "members.unfriend",
   "members.unreadConversations",
   "members.unsendMessage",
@@ -5521,6 +5525,10 @@ export interface ServiceCatalog {
     input: { handle: string };
     output: { following: "requested" | "active" };
   };
+  "members.followRemote": {
+    input: { address: string };
+    output: { handle: string };
+  };
   "members.groupCall": {
     input: { id: string };
     output: { id: string; conversationId: string; media: "voice" | "video"; state: "active" | "ended"; title: string; inCall: { userId: string; handle: string; displayName: string; [key: string]: unknown }[] };
@@ -5697,9 +5705,17 @@ export interface ServiceCatalog {
     input: { deviceId: string; label: string; signatureKey: string; keyPackages: { id: string; keyPackage: string }[]; lastResort: { id: string; keyPackage: string } };
     output: { deviceId: string };
   };
+  "members.remoteFeed": {
+    input: { before?: string; after?: string; limit?: number };
+    output: { posts: { id: string; handle: string; url: string | null; text: string; publishedAt: string; [key: string]: unknown }[] };
+  };
   "members.remoteFollowers": {
     input: Record<string, never>;
     output: { count: number; handles: string[] };
+  };
+  "members.remoteFollows": {
+    input: Record<string, never>;
+    output: { follows: { actorUri: string; handle: string; state: "pending" | "accepted"; [key: string]: unknown }[] };
   };
   "members.replyToReview": {
     input: { id: string; body: string };
@@ -5839,6 +5855,10 @@ export interface ServiceCatalog {
   };
   "members.unfollow": {
     input: { handle: string };
+    output: { ok: true };
+  };
+  "members.unfollowRemote": {
+    input: { actorUri: string };
     output: { ok: true };
   };
   "members.unfriend": {
@@ -8736,6 +8756,7 @@ export interface FreeholderApi {
     endCall: (input: ServiceCatalog["members.endCall"]["input"]) => Promise<ServiceCatalog["members.endCall"]["output"]>;
     feed: (input?: ServiceCatalog["members.feed"]["input"]) => Promise<ServiceCatalog["members.feed"]["output"]>;
     follow: (input: ServiceCatalog["members.follow"]["input"]) => Promise<ServiceCatalog["members.follow"]["output"]>;
+    followRemote: (input: ServiceCatalog["members.followRemote"]["input"]) => Promise<ServiceCatalog["members.followRemote"]["output"]>;
     groupCall: (input: ServiceCatalog["members.groupCall"]["input"]) => Promise<ServiceCatalog["members.groupCall"]["output"]>;
     groupCallConfig: (input?: ServiceCatalog["members.groupCallConfig"]["input"]) => Promise<ServiceCatalog["members.groupCallConfig"]["output"]>;
     handleAvailable: (input: ServiceCatalog["members.handleAvailable"]["input"]) => Promise<ServiceCatalog["members.handleAvailable"]["output"]>;
@@ -8780,7 +8801,9 @@ export interface FreeholderApi {
     react: (input: ServiceCatalog["members.react"]["input"]) => Promise<ServiceCatalog["members.react"]["output"]>;
     receivedHistory: (input: ServiceCatalog["members.receivedHistory"]["input"]) => Promise<ServiceCatalog["members.receivedHistory"]["output"]>;
     registerDevice: (input: ServiceCatalog["members.registerDevice"]["input"]) => Promise<ServiceCatalog["members.registerDevice"]["output"]>;
+    remoteFeed: (input?: ServiceCatalog["members.remoteFeed"]["input"]) => Promise<ServiceCatalog["members.remoteFeed"]["output"]>;
     remoteFollowers: (input?: ServiceCatalog["members.remoteFollowers"]["input"]) => Promise<ServiceCatalog["members.remoteFollowers"]["output"]>;
+    remoteFollows: (input?: ServiceCatalog["members.remoteFollows"]["input"]) => Promise<ServiceCatalog["members.remoteFollows"]["output"]>;
     replyToReview: (input: ServiceCatalog["members.replyToReview"]["input"]) => Promise<ServiceCatalog["members.replyToReview"]["output"]>;
     report: (input: ServiceCatalog["members.report"]["input"]) => Promise<ServiceCatalog["members.report"]["output"]>;
     reports: (input?: ServiceCatalog["members.reports"]["input"]) => Promise<ServiceCatalog["members.reports"]["output"]>;
@@ -8816,6 +8839,7 @@ export interface FreeholderApi {
     subscriptionPlans: (input: ServiceCatalog["members.subscriptionPlans"]["input"]) => Promise<ServiceCatalog["members.subscriptionPlans"]["output"]>;
     takeSignals: (input: ServiceCatalog["members.takeSignals"]["input"]) => Promise<ServiceCatalog["members.takeSignals"]["output"]>;
     unfollow: (input: ServiceCatalog["members.unfollow"]["input"]) => Promise<ServiceCatalog["members.unfollow"]["output"]>;
+    unfollowRemote: (input: ServiceCatalog["members.unfollowRemote"]["input"]) => Promise<ServiceCatalog["members.unfollowRemote"]["output"]>;
     unfriend: (input: ServiceCatalog["members.unfriend"]["input"]) => Promise<ServiceCatalog["members.unfriend"]["output"]>;
     unreadConversations: (input?: ServiceCatalog["members.unreadConversations"]["input"]) => Promise<ServiceCatalog["members.unreadConversations"]["output"]>;
     unsendMessage: (input: ServiceCatalog["members.unsendMessage"]["input"]) => Promise<ServiceCatalog["members.unsendMessage"]["output"]>;
