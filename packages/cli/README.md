@@ -3,7 +3,7 @@ Copyright (C) 2026 Tony Aly
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# `freeholder update`
+# `freeholder update` and `freeholder launch`
 
 Check, preflight, apply and roll back a [Freeholder](https://github.com/CampDenman/freeholder)
 instance from a terminal or a cron job.
@@ -57,6 +57,71 @@ look broken.
 
 `--json` prints the raw service response for anything that consumes it;
 `--quiet` suppresses the status summary.
+
+## `freeholder launch`
+
+Stand up a new hosted Freeholder site with one command, ending in a one-click
+owner claim link. DigitalOcean first: a droplet running the
+[`digitalocean-droplet` recipe](https://github.com/CampDenman/freeholder/tree/main/deploy/digitalocean-droplet),
+with media and nightly backups in Spaces.
+
+```sh
+export DIGITALOCEAN_TOKEN=...      # or rely on your current `doctl` context
+freeholder launch --provider digitalocean --domain example.com --dry-run
+freeholder launch --provider digitalocean --domain example.com
+```
+
+It checks the account, SSH key, region and size; creates `<name>-media` and a
+versioned `<name>-backups` bucket with a key scoped to just those two; creates
+an Ubuntu 24.04 droplet from the recipe's cloud-init and waits until it has
+really finished; generates `BOOTSTRAP_SECRET`, `SESSION_SECRET`,
+`CREDENTIAL_KEY` and `POSTGRES_PASSWORD`; installs and starts the stack;
+waits until `/setup` answers over a valid certificate; schedules nightly
+backups and confirms a first one; and prints
+`https://<host>/setup#claim=…`. The owner opens that once and chooses their
+own email and password or passkey; the CLI never creates the owner.
+
+| Flag | Default | |
+|---|---|---|
+| `--domain` | (required) | The site's domain |
+| `--name` | from the domain | Names the droplet, buckets and local files |
+| `--region` / `--size` | `nyc3` / `s-2vcpu-2gb` | |
+| `--ssh-key` | the account's only key | DigitalOcean key id or fingerprint |
+| `--ssh-identity` | your ssh default | Private key file for that key |
+| `--image` | current `edge`, pinned | Must be `ghcr.io/campdenman/freeholder@sha256:…` |
+| `--temporary-host` | off | Use `<ip>.sslip.io` even if DNS is ready |
+| `--paradisemodern-key`, `--paradisemodern-site-id` | | Or `PARADISEMODERN_API_KEY` / `PARADISEMODERN_SITE_ID` in the environment |
+| `--context` | current | A named `doctl` context |
+| `--dry-run` | | Print the plan and stop |
+| `--json` | | Machine-readable summary; no secrets except the claim link |
+| `--non-interactive`, `--no-open` | | Never prompt; never open a browser |
+
+**Secrets** go only to `~/.config/freeholder/<name>/freeholder.env` (mode
+600), never to the terminal. **Back that file up.** Losing `CREDENTIAL_KEY`
+means reconnecting every account the site connects to.
+
+**Until DNS points at the server**, the site runs at `<ip>.sslip.io` so it has
+a certificate at once. Add the `A` records the summary prints, then:
+
+```sh
+freeholder launch --cutover --name example-com --domain example.com
+```
+
+**Re-running** the same command continues where it stopped: each step is
+recorded in `~/.config/freeholder/<name>/state.json`, so nothing is created
+twice. **Tearing down** removes what that record names, after you type the
+site name (or pass `--confirm <name>`):
+
+```sh
+freeholder launch --destroy --name example-com
+```
+
+The droplet and the site's Spaces key are deleted; a bucket is deleted only
+if it is empty, because media and backups are your data.
+
+Exit codes follow `freeholder update`: `0` done, `2` a step failed (the
+message says how to recover), `3` DigitalOcean could not be reached or
+refused the token.
 
 ## Licence
 

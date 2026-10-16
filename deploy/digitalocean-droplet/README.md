@@ -9,6 +9,19 @@ event.
 It runs on a `s-1vcpu-2gb` ($12) if the database stays small, but Postgres and
 the app are sharing that RAM.
 
+## One command
+
+```bash
+npm install -g @freeholder/cli@next
+freeholder launch --provider digitalocean --domain yourdomain.com
+```
+
+`freeholder launch` does every step below — buckets, the scoped key, the
+droplet, secrets, the stack, readiness and backups — then prints a one-click
+owner claim link. It resumes if interrupted and can tear down what it made.
+See [`packages/cli/README.md`](../../packages/cli/README.md). The steps below
+are what it does, for doing it by hand.
+
 ## Before you start
 
 - A domain you can point at an IP address.

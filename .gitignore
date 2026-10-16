@@ -46,3 +46,6 @@ __pycache__/
 
 # Private launch credentials and owner claim link
 .freeholder-launch/
+
+# Copied from deploy/digitalocean-droplet/infra at build time (packages/cli/scripts/copy-recipe.mjs).
+packages/cli/recipes/

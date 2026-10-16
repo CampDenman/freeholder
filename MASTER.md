@@ -4959,6 +4959,17 @@ deployments are portable, testable and incapable of silently forking the truth.
   business plus a signed-in customer, in light and dark at desktop and mobile
   sizes, publishes them to the repository's `screenshots` branch, and updates
   the gallery on freeholder.ai. Owner standing rule, 2026-10-14.
+- [ ] **C3.30** Launch a new hosted site with one command: `freeholder launch`
+  provisions the provider's resources (DigitalOcean first: scoped Spaces
+  buckets and key, a droplet from the recipe's cloud-init), generates and
+  keeps the site's secrets privately, installs and starts the stack, waits for
+  real readiness over a valid certificate, schedules and confirms backups,
+  and ends at a one-click owner claim link; resumable, idempotent, with
+  `--dry-run`, `--cutover` to the real domain and `--destroy`.
+  (Progress 2026-10-16, not yet checked: `packages/cli/src/launch/`, tested
+  against fakes of DigitalOcean, Spaces' S3, the registry, DNS and SSH in
+  `tests/core/launch-cli.test.ts`. Still open: one real launch on a
+  DigitalOcean account, end to end through the owner's claim.)
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

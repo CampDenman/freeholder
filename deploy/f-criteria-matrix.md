@@ -1649,6 +1649,21 @@ v2.
 - **F10** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
 - **F11** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
 - **F12** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+## C3.30 — Launch a new hosted site with one command
+
+- **F01** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+- **F02** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+- **F03** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+- **F04** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+- **F05** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+- **F06** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+- **F07** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+- **F08** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+- **F09** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+- **F10** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+- **F11** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+- **F12** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/agents-board.test.ts`.
