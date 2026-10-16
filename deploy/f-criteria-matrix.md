@@ -4893,6 +4893,21 @@ v2.
 - **F11** — `deploy/members-platform.md` and `.changeset/member-call-removal.md`.
 - **F12** — `tests/browser/member-group-calls.spec.ts`: a member leaves mid-call through a real LiveKit SFU.
 
+## C12.37 — When someone leaves a conversation during its group call, remove them from the SFU room
+
+- **F01** — `db/migrations/0045_member_call_key_generations.sql`: a key generation on each call and on each control entry.
+- **F02** — `tests/modules/member-group-calls.test.ts`: leaving and device removal mid-call, against a recording SFU adapter.
+- **F03** — N/A — calls are between members, not contacts (`src/modules/members/call-seats.ts`).
+- **F04** — `tests/browser/member-group-calls.spec.ts`: "You are no longer in this call." and the remaining tiles.
+- **F05** — `packages/sdk/src/generated.ts`: `generation` and `fresh` on `members.sendCallKey`; `generation` on sync calls.
+- **F06** — `locales/en.json`: the new string in four locales (`app/(public)/call/group/GroupCallRoom.tsx`).
+- **F07** — `tests/modules/member-group-calls.test.ts`: the leaver is disconnected and never receives the new key (`src/modules/members/call-seats.ts`).
+- **F08** — `tests/browser/member-group-calls.spec.ts`.
+- **F09** — `src/modules/members/manifest.ts`: `member.callSeatLost` handled after commit by `onCallSeatLost`.
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-call-removal.md`.
+- **F12** — `tests/browser/member-group-calls.spec.ts`: a member leaves mid-call through a real LiveKit SFU.
+
 ## C12.30 — Hash-match known abuse imagery on upload
 
 - **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
