@@ -344,6 +344,13 @@
       "when": 1793310000028,
       "tag": "0048_member_remote_follows",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793310000029,
+      "tag": "0049_member_fediverse_moves",
+      "breakpoints": true
     }
   ]
 }

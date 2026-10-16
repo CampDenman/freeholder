@@ -744,6 +744,39 @@ test.describe("members (C12.01)", () => {
     await context.close();
   });
 
+  test("accounts elsewhere and a move are shown, and a move needs confirming (C12.33)", async ({ browser }) => {
+    // The lookup and the Move protocol run against a fake server in tests/modules/member-federation.test.ts;
+    // the production build refuses private addresses, so this checks the screens.
+    await seedC11Owner("Fediverse move proof");
+    await db().insert(users).values({ id: MEMBER_ID, email: "ada@example.test", role: "customer" });
+    await db().insert(memberProfiles).values({ userId: MEMBER_ID, handle: "ada", displayName: "Ada Lane", ageAttestedAt: new Date(), isPrivate: false, federated: true, fediverseAliases: ["https://old.example/users/ada"] });
+    await db().insert(memberSettings).values({ id: 1, federation: true }).onConflictDoUpdate({ target: memberSettings.id, set: { federation: true } });
+    const ada = await db().transaction((tx) => createSession(tx, MEMBER_ID));
+    const context = await browser.newContext({ baseURL: C11_BASE_URL });
+    await context.addCookies([{ name: SESSION_COOKIE, value: ada.token, url: C11_BASE_URL }]);
+    const page = await context.newPage();
+    await page.goto("/portal/member");
+    await page.getByText("Moving between accounts").click();
+    await expect(page.getByText("Also known as: https://old.example/users/ada")).toBeVisible();
+    await axeInBothThemes(page);
+
+    await page.getByText("Moving between accounts").click();
+    await page.getByLabel("Your accounts on other servers").fill("not an address");
+    await page.getByRole("button", { name: "Save accounts" }).click();
+    await expect(page).toHaveURL(/error=validation/);
+    await page.getByText("Moving between accounts").click();
+    await page.getByLabel("Move to another account").fill("@ada@new.example");
+    await page.getByRole("button", { name: "Move my followers" }).click();
+    await expect(page).toHaveURL(/error=validation/);
+    expect((await db().select({ movedTo: memberProfiles.movedTo }).from(memberProfiles).where(eq(memberProfiles.userId, MEMBER_ID)))[0]?.movedTo).toBeNull();
+
+    await db().update(memberProfiles).set({ movedTo: "https://new.example/users/ada" }).where(eq(memberProfiles.userId, MEMBER_ID));
+    await page.goto("/portal/member");
+    await page.getByText("Moving between accounts").click();
+    await expect(page.getByText(/You moved to https:\/\/new\.example\/users\/ada/)).toBeVisible();
+    await context.close();
+  });
+
   test("the prohibited-items policy, published by the site and accepted by sellers (C12.28)", async ({ browser }) => {
     const ownerToken = await seedC11Owner("Policy proof");
     await db().insert(memberSettings).values({ id: 1, marketplaceEnabled: true, listingReview: false });

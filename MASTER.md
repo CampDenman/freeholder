@@ -10947,9 +10947,33 @@ whatever is best for the people using the site.
   as text and followers-only ones not, Update, Delete, Block and Undo; the
   browser test shows a followed account's post in the feed as text and
   unfollows it. Changeset `member-follow-fediverse.md`.)*
-- [ ] **C12.33** Let members take their audience elsewhere and bring it here:
+- [x] **C12.33** Let members take their audience elsewhere and bring it here:
   `alsoKnownAs` and an outgoing `Move` that remote servers follow, and
   accepting an incoming `Move` for an account moving in.
+  *(Evidence 2026-10-15: `setFediverseAliases`, `moveToRemote` and the `Move`
+  case of `applyFollowedActivity` in `src/modules/members/federation/following.ts`,
+  `alsoKnownAs`/`movedTo` on the actor in `src/modules/members/federation/core.ts`,
+  the Move target fetch in `app/ap/users/[handle]/inbox/route.ts`, migration
+  `db/migrations/0049_member_fediverse_moves.sql`,
+  `tests/modules/member-federation.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** "Moving between accounts" under The fediverse on `/portal/member`:
+  your accounts on other servers (shown as "Also known as"), and "Move to
+  another account" behind an explicit confirmation, with "You moved to …"
+  afterwards. **F05** `members.setFediverseAliases`, `members.moveToRemote`,
+  `fediverseAliases` and `movedTo` on the member's profile. **F07** aliases
+  are resolved through WebFinger over the pinned transport and published as
+  `alsoKnownAs`, which is what a remote server checks before following an
+  account moving here; moving out is refused unless the new account already
+  names this one in its `alsoKnownAs`, then a signed `Move` goes to every
+  follower inbox and the actor shows `movedTo`; an incoming `Move` from a
+  followed account is honoured only when the target — fetched by the inbox
+  route outside the transaction — names the old account back, and then the
+  member follows the new account and unfollows the old one. **F09** Move,
+  Follow and Undo go out through `members.deliverFederation`. **F12** the
+  module test runs a fake server: aliases on the actor, a move refused then
+  delivered, a forged incoming Move ignored and a real one switching the
+  follow; the browser test checks the screens and that nothing moves
+  without confirming. Changeset `member-fediverse-moves.md`.)*
 - [x] **C12.34** Bring earlier end-to-end encrypted history to a member's
   newly added device, sent device to device so the server still cannot read
   it.

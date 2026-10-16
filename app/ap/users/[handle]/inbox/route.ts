@@ -49,8 +49,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ han
   // The signer must be the actor the activity claims to come from.
   const verified = sender as Awaited<ReturnType<typeof fetchRemoteActor>>;
   if (!verified || actorUri !== verified.id) return new Response(null, { status: 401 });
+  // C12.33: a Move names the new account; fetch it now, outside the transaction, so the inbox can check it names the old one back.
+  let moveTarget: { id: string; inbox: string; alsoKnownAs: string[] } | undefined;
+  if (parsed.type === "Move" && typeof parsed.target === "string") {
+    const target = await fetchRemoteActor(parsed.target).catch(() => null);
+    if (target) moveTarget = { id: target.id, inbox: target.inbox, alsoKnownAs: [target.alsoKnownAs ?? []].flat() };
+  }
   try {
-    await federationInbox.call({ handle, activity: parsed, actor: { id: verified.id, inbox: verified.inbox, preferredUsername: verified.preferredUsername, endpoints: verified.endpoints } }, { kind: "system" });
+    await federationInbox.call({ handle, activity: parsed, actor: { id: verified.id, inbox: verified.inbox, preferredUsername: verified.preferredUsername, endpoints: verified.endpoints }, moveTarget }, { kind: "system" });
   } catch (error) {
     if (error instanceof ServiceError) return new Response(null, { status: error.code === "not_found" ? 404 : 400 });
     throw error;

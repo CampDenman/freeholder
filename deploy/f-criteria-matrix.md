@@ -4820,18 +4820,18 @@ v2.
 
 ## C12.33 — Let members take their audience elsewhere and bring it here
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F01** — `db/migrations/0049_member_fediverse_moves.sql`: aliases and the account a member moved to.
+- **F02** — `tests/modules/member-federation.test.ts`: aliases, outgoing Move and incoming Move against a fake server.
+- **F03** — N/A — remote accounts are not contacts (`src/modules/members/federation/following.ts`).
+- **F04** — `tests/browser/members.spec.ts`: "Moving between accounts" on `/portal/member`.
+- **F05** — `packages/sdk/src/generated.ts`: `members.setFediverseAliases`, `members.moveToRemote`, and the profile fields.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on `/portal/member`; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-federation.test.ts`: moves only between accounts that name each other.
+- **F08** — `tests/browser/members.spec.ts`.
+- **F09** — `src/modules/members/jobs.ts`: Move, Follow and Undo through `members.deliverFederation`.
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-fediverse-moves.md`.
+- **F12** — `tests/modules/member-federation.test.ts`: a fake fediverse server end to end.
 
 ## C12.34 — Bring earlier end-to-end encrypted history to a member's newly added device
 

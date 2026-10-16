@@ -88,6 +88,9 @@ const profile = row({
   readReceipts: z.boolean(),
   showAdult: z.boolean(),
   federated: z.boolean(),
+  /** C12.33 */
+  fediverseAliases: z.array(z.string()),
+  movedTo: z.string().nullable(),
   createdAt: timestamp,
 });
 const settings = row({
@@ -151,6 +154,8 @@ function shape(found: typeof memberProfiles.$inferSelect) {
     readReceipts: found.readReceipts,
     showAdult: found.showAdult,
     federated: found.federated,
+    fediverseAliases: found.fediverseAliases,
+    movedTo: found.movedTo,
     createdAt: found.createdAt,
   };
 }
