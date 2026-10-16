@@ -11112,6 +11112,22 @@ whatever is best for the people using the site.
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
   preserving evidence and reporting through the legal path for the site's
   jurisdiction.
+  *(Progress 2026-10-15, not yet checked: `src/adapters/abuse-scan/` with a
+  PhotoDNA Cloud Service adapter (request shape from Microsoft's public
+  reference, tested against recorded HTTP) and a Thorn Safer placeholder
+  that reports itself unconfigured until it is written against Safer's own
+  API reference; `createCompositeScanner` in `src/adapters/malware/index.ts`
+  checks images before the malware scan and fails closed, so a match or an
+  unanswered check quarantines the file through the existing rules;
+  `src/modules/members/abuse.ts` records the match id and SHA-256 (never the
+  image), links the upload, suspends the uploader, puts the file under legal
+  hold (`media.trash` and `media.rescan` refuse it), and gives the owner a
+  queue under Admin → Members with where to report — Cybertip.ca in Canada,
+  NCMEC's CyberTipline in the US — and the reference once filed. Tests:
+  `tests/adapters/abuse-scan.test.ts`, `tests/modules/member-abuse.test.ts`.
+  Still open: a provider agreement (Tony, not now), a live run, and
+  submitting reports through a provider API rather than by hand. End-to-end
+  encrypted files (C12.36) cannot be scanned.)*
 
 ---
 

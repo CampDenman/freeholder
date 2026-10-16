@@ -49,4 +49,16 @@ export const sendProviderPayouts = defineJob({
   },
 });
 
-export default [releaseDuePayouts, deliverFederation, purgeSealedBlobs, sendProviderPayouts];
+/** C12.30: tie abuse matches to their uploads and uploaders. */
+export const linkAbuseReports = defineJob({
+  name: "members.linkAbuseReports",
+  summary: "Link uploads that matched known abuse imagery to their uploader and suspend that member.",
+  schedule: "* * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { linkAbuseReports: link } = await import("./abuse");
+    return link.call({}, { kind: "system" });
+  },
+});
+
+export default [releaseDuePayouts, deliverFederation, purgeSealedBlobs, sendProviderPayouts, linkAbuseReports];

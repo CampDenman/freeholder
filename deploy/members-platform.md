@@ -413,3 +413,18 @@ from mocked payment, mail or media runs alone.
 - `members.sendProviderPayouts` runs every five minutes. Request shapes
   follow each provider's public API reference and are tested against
   recorded HTTP only; run each against its sandbox before turning it on.
+
+## C12.30 — known abuse imagery (2026-10-15, built, not yet proven live)
+
+- Off unless `ABUSE_SCAN_PROVIDER` is set. `photodna` needs
+  `PHOTODNA_SUBSCRIPTION_KEY` from Microsoft's PhotoDNA programme (apply as
+  the business; free for qualifying organisations). `safer` is a placeholder
+  until the adapter is written against Thorn's API reference; setting it now
+  stops the site from starting rather than pretending to scan.
+- When on, every image upload is checked before the malware scan. A match,
+  or a check that cannot complete, quarantines the file. Matches are kept as
+  evidence under legal hold and appear for the owner under Admin → Members;
+  the uploader's membership is suspended pending review.
+- Reporting is the owner's legal duty: Cybertip.ca in Canada, NCMEC's
+  CyberTipline in the US. Take legal advice on retention periods; held files
+  are never deleted automatically.

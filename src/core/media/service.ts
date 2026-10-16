@@ -2701,6 +2701,10 @@ export const trashAsset = defineService({
       .where(eq(assets.id, input.id))
       .limit(1);
     if (!asset) throw new ServiceError("not_found", "That file is not here.");
+    // C12.30: a file held as evidence of abuse imagery stays until it has been reported and released by law.
+    if (asset.status === "quarantined" && asset.scanEngine?.startsWith("abuse-hash:")) {
+      throw new ServiceError("conflict", "This file is held as evidence for a legal report and cannot be deleted.");
+    }
 
     if (asset.status === "trashed") return asset;
     const now = new Date();
@@ -2996,6 +3000,8 @@ const rescanSource = z.object({
   bytes: z.number(),
   kind: z.enum(["image", "video", "doc", "audio"]),
   status: z.enum(["processing", "ready", "quarantined", "failed", "trashed"]),
+  /** C12.30: which scan held the file, so evidence is never rescanned. */
+  scanEngine: z.string().nullable(),
   variants: z.unknown(),
   checksumSha256: z.string().nullable(),
   width: z.number().int().nullable(),
@@ -3114,6 +3120,10 @@ export const rescanAsset = defineOrchestratedService({
   output: assetRow,
   handler: async (input, actor) => {
     const asset = await rescanSourceService.call(input, actor);
+    // C12.30: evidence of abuse imagery is never released by a later scan.
+    if (asset.status === "quarantined" && asset.scanEngine?.startsWith("abuse-hash:")) {
+      throw new ServiceError("conflict", "This file is held as evidence for a legal report and cannot be rescanned.");
+    }
     let scan;
     try {
       scan = await scanStored(
