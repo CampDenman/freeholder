@@ -969,6 +969,7 @@ export const SERVICE_NAMES = [
   "media.upload",
   "media.uploadStatus",
   "media.usage",
+  "members.ackHistory",
   "members.activeGroupCall",
   "members.answerCall",
   "members.answerFollow",
@@ -981,6 +982,7 @@ export const SERVICE_NAMES = [
   "members.callConfig",
   "members.callStatus",
   "members.claimKeyPackages",
+  "members.closeHistoryRequest",
   "members.comment",
   "members.confirmDelivery",
   "members.connections",
@@ -1002,6 +1004,7 @@ export const SERVICE_NAMES = [
   "members.groupCall",
   "members.groupCallConfig",
   "members.handleAvailable",
+  "members.historyRequests",
   "members.incomingCalls",
   "members.invite",
   "members.join",
@@ -1040,11 +1043,13 @@ export const SERVICE_NAMES = [
   "members.publishKeyPackages",
   "members.purgeDemoFixture",
   "members.react",
+  "members.receivedHistory",
   "members.registerDevice",
   "members.remoteFollowers",
   "members.replyToReview",
   "members.report",
   "members.reports",
+  "members.requestHistory",
   "members.resolveDispute",
   "members.resolveReport",
   "members.reviewListing",
@@ -1057,6 +1062,7 @@ export const SERVICE_NAMES = [
   "members.saveProfileSection",
   "members.sendCallKey",
   "members.sendEncrypted",
+  "members.sendHistory",
   "members.sendMessage",
   "members.setAvatar",
   "members.setBookingHours",
@@ -5387,6 +5393,10 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { pages: number; sections: number };
   };
+  "members.ackHistory": {
+    input: { deviceId: string; ids: string[] };
+    output: { ok: true };
+  };
   "members.activeGroupCall": {
     input: { conversationId: string };
     output: { call: { id: string; media: "voice" | "video"; [key: string]: unknown } | null; available: boolean };
@@ -5434,6 +5444,10 @@ export interface ServiceCatalog {
   "members.claimKeyPackages": {
     input: { conversationId: string; deviceId: string; devices: string[] };
     output: { packages: { deviceId: string; keyPackageId: string; keyPackage: string; [key: string]: unknown }[] };
+  };
+  "members.closeHistoryRequest": {
+    input: { requestId: string };
+    output: { ok: true };
   };
   "members.comment": {
     input: { postId: string; parentId?: string; body: string; attachments?: { assetId: string; altText?: string }[] };
@@ -5518,6 +5532,10 @@ export interface ServiceCatalog {
   "members.handleAvailable": {
     input: { handle: string };
     output: { available: boolean; reason: string | null };
+  };
+  "members.historyRequests": {
+    input: { deviceId: string };
+    output: { requests: { id: string; deviceId: string; label: string; signatureKey: string; publicKey: string; sig: string; createdAt: string; [key: string]: unknown }[] };
   };
   "members.incomingCalls": {
     input: Record<string, never>;
@@ -5671,6 +5689,10 @@ export interface ServiceCatalog {
     input: { postId: string; kind: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null };
     output: { ok: true };
   };
+  "members.receivedHistory": {
+    input: { deviceId: string };
+    output: { transfers: { id: string; requestId: string; conversationId: string; fromDeviceId: string | null; enc: string; ct: string; [key: string]: unknown }[] };
+  };
   "members.registerDevice": {
     input: { deviceId: string; label: string; signatureKey: string; keyPackages: { id: string; keyPackage: string }[]; lastResort: { id: string; keyPackage: string } };
     output: { deviceId: string };
@@ -5690,6 +5712,10 @@ export interface ServiceCatalog {
   "members.reports": {
     input: { state?: "open" | "actioned" | "dismissed" };
     output: { id: string; targetType: "post" | "comment" | "message" | "listing" | "review" | "member"; targetId: string; reason: "spam" | "harassment" | "hate" | "violence" | "sexual" | "child_safety" | "scam" | "prohibited_item" | "impersonation" | "self_harm" | "other"; details: string; excerpt: string; state: "open" | "actioned" | "dismissed"; action: ("removed" | "suspended" | "dismissed") | null; resolutionNote: string | null; subject: { userId: string; handle: string; displayName: string; status: string; [key: string]: unknown }; reporterCount: number; createdAt: string; resolvedAt: string | null; [key: string]: unknown }[];
+  };
+  "members.requestHistory": {
+    input: { deviceId: string; publicKey: string; sig: string };
+    output: { id: string };
   };
   "members.resolveDispute": {
     input: { id: string; outcome: "release" | "refund"; note: string };
@@ -5738,6 +5764,10 @@ export interface ServiceCatalog {
   "members.sendEncrypted": {
     input: { conversationId: string; deviceId: string; epoch: number; ciphertext: string; frankTag: string; attachments?: { assetId: string; altText?: string }[]; sealedFiles?: string[] };
     output: { id: string };
+  };
+  "members.sendHistory": {
+    input: { requestId: string; deviceId: string; conversationId: string; enc: string; ct: string };
+    output: { ok: true };
   };
   "members.sendMessage": {
     input: { conversationId: string; body: string; attachments?: { assetId: string; altText?: string }[] };
@@ -8674,6 +8704,7 @@ export interface FreeholderApi {
     usage: (input: ServiceCatalog["media.usage"]["input"]) => Promise<ServiceCatalog["media.usage"]["output"]>;
   };
   members: {
+    ackHistory: (input: ServiceCatalog["members.ackHistory"]["input"]) => Promise<ServiceCatalog["members.ackHistory"]["output"]>;
     activeGroupCall: (input: ServiceCatalog["members.activeGroupCall"]["input"]) => Promise<ServiceCatalog["members.activeGroupCall"]["output"]>;
     answerCall: (input: ServiceCatalog["members.answerCall"]["input"]) => Promise<ServiceCatalog["members.answerCall"]["output"]>;
     answerFollow: (input: ServiceCatalog["members.answerFollow"]["input"]) => Promise<ServiceCatalog["members.answerFollow"]["output"]>;
@@ -8686,6 +8717,7 @@ export interface FreeholderApi {
     callConfig: (input?: ServiceCatalog["members.callConfig"]["input"]) => Promise<ServiceCatalog["members.callConfig"]["output"]>;
     callStatus: (input: ServiceCatalog["members.callStatus"]["input"]) => Promise<ServiceCatalog["members.callStatus"]["output"]>;
     claimKeyPackages: (input: ServiceCatalog["members.claimKeyPackages"]["input"]) => Promise<ServiceCatalog["members.claimKeyPackages"]["output"]>;
+    closeHistoryRequest: (input: ServiceCatalog["members.closeHistoryRequest"]["input"]) => Promise<ServiceCatalog["members.closeHistoryRequest"]["output"]>;
     comment: (input: ServiceCatalog["members.comment"]["input"]) => Promise<ServiceCatalog["members.comment"]["output"]>;
     confirmDelivery: (input: ServiceCatalog["members.confirmDelivery"]["input"]) => Promise<ServiceCatalog["members.confirmDelivery"]["output"]>;
     connections: (input?: ServiceCatalog["members.connections"]["input"]) => Promise<ServiceCatalog["members.connections"]["output"]>;
@@ -8707,6 +8739,7 @@ export interface FreeholderApi {
     groupCall: (input: ServiceCatalog["members.groupCall"]["input"]) => Promise<ServiceCatalog["members.groupCall"]["output"]>;
     groupCallConfig: (input?: ServiceCatalog["members.groupCallConfig"]["input"]) => Promise<ServiceCatalog["members.groupCallConfig"]["output"]>;
     handleAvailable: (input: ServiceCatalog["members.handleAvailable"]["input"]) => Promise<ServiceCatalog["members.handleAvailable"]["output"]>;
+    historyRequests: (input: ServiceCatalog["members.historyRequests"]["input"]) => Promise<ServiceCatalog["members.historyRequests"]["output"]>;
     incomingCalls: (input?: ServiceCatalog["members.incomingCalls"]["input"]) => Promise<ServiceCatalog["members.incomingCalls"]["output"]>;
     invite: (input: ServiceCatalog["members.invite"]["input"]) => Promise<ServiceCatalog["members.invite"]["output"]>;
     join: (input: ServiceCatalog["members.join"]["input"]) => Promise<ServiceCatalog["members.join"]["output"]>;
@@ -8745,11 +8778,13 @@ export interface FreeholderApi {
     publishKeyPackages: (input: ServiceCatalog["members.publishKeyPackages"]["input"]) => Promise<ServiceCatalog["members.publishKeyPackages"]["output"]>;
     purgeDemoFixture: (input: ServiceCatalog["members.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["members.purgeDemoFixture"]["output"]>;
     react: (input: ServiceCatalog["members.react"]["input"]) => Promise<ServiceCatalog["members.react"]["output"]>;
+    receivedHistory: (input: ServiceCatalog["members.receivedHistory"]["input"]) => Promise<ServiceCatalog["members.receivedHistory"]["output"]>;
     registerDevice: (input: ServiceCatalog["members.registerDevice"]["input"]) => Promise<ServiceCatalog["members.registerDevice"]["output"]>;
     remoteFollowers: (input?: ServiceCatalog["members.remoteFollowers"]["input"]) => Promise<ServiceCatalog["members.remoteFollowers"]["output"]>;
     replyToReview: (input: ServiceCatalog["members.replyToReview"]["input"]) => Promise<ServiceCatalog["members.replyToReview"]["output"]>;
     report: (input: ServiceCatalog["members.report"]["input"]) => Promise<ServiceCatalog["members.report"]["output"]>;
     reports: (input?: ServiceCatalog["members.reports"]["input"]) => Promise<ServiceCatalog["members.reports"]["output"]>;
+    requestHistory: (input: ServiceCatalog["members.requestHistory"]["input"]) => Promise<ServiceCatalog["members.requestHistory"]["output"]>;
     resolveDispute: (input: ServiceCatalog["members.resolveDispute"]["input"]) => Promise<ServiceCatalog["members.resolveDispute"]["output"]>;
     resolveReport: (input: ServiceCatalog["members.resolveReport"]["input"]) => Promise<ServiceCatalog["members.resolveReport"]["output"]>;
     reviewListing: (input: ServiceCatalog["members.reviewListing"]["input"]) => Promise<ServiceCatalog["members.reviewListing"]["output"]>;
@@ -8762,6 +8797,7 @@ export interface FreeholderApi {
     saveProfileSection: (input: ServiceCatalog["members.saveProfileSection"]["input"]) => Promise<ServiceCatalog["members.saveProfileSection"]["output"]>;
     sendCallKey: (input: ServiceCatalog["members.sendCallKey"]["input"]) => Promise<ServiceCatalog["members.sendCallKey"]["output"]>;
     sendEncrypted: (input: ServiceCatalog["members.sendEncrypted"]["input"]) => Promise<ServiceCatalog["members.sendEncrypted"]["output"]>;
+    sendHistory: (input: ServiceCatalog["members.sendHistory"]["input"]) => Promise<ServiceCatalog["members.sendHistory"]["output"]>;
     sendMessage: (input: ServiceCatalog["members.sendMessage"]["input"]) => Promise<ServiceCatalog["members.sendMessage"]["output"]>;
     setAvatar: (input: ServiceCatalog["members.setAvatar"]["input"]) => Promise<ServiceCatalog["members.setAvatar"]["output"]>;
     setBookingHours: (input: ServiceCatalog["members.setBookingHours"]["input"]) => Promise<ServiceCatalog["members.setBookingHours"]["output"]>;

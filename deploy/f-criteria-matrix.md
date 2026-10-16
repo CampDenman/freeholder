@@ -4835,18 +4835,18 @@ v2.
 
 ## C12.34 — Bring earlier end-to-end encrypted history to a member's newly added device
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F01** — `db/migrations/0047_member_history_transfers.sql`: requests from a device and sealed history for it.
+- **F02** — `tests/modules/member-e2ee.test.ts`: request, approval, sealed transfer and acknowledgement.
+- **F03** — N/A — history moves between one member's devices (`src/modules/members/e2ee/history.ts`).
+- **F04** — `tests/browser/members.spec.ts`: asking on one browser, approving with the code on another, reading the earlier message.
+- **F05** — `packages/sdk/src/generated.ts`: the six history services.
+- **F06** — `locales/en.json`: strings in four locales; a native details disclosure (`app/(public)/messages/SecureConversation.tsx`).
+- **F07** — `tests/modules/member-e2ee.test.ts`: only the member's devices see requests; forged requests are refused; nothing moves before approval.
+- **F08** — `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background work (`src/modules/members/e2ee/history.ts`).
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-history-transfer.md`.
+- **F12** — `tests/browser/members.spec.ts`: two browsers of one member move history after approval.
 
 ## C12.35 — Let members verify the devices in an encrypted conversation
 

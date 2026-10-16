@@ -10924,9 +10924,38 @@ whatever is best for the people using the site.
 - [ ] **C12.33** Let members take their audience elsewhere and bring it here:
   `alsoKnownAs` and an outgoing `Move` that remote servers follow, and
   accepting an incoming `Move` for an account moving in.
-- [ ] **C12.34** Bring earlier end-to-end encrypted history to a member's
+- [x] **C12.34** Bring earlier end-to-end encrypted history to a member's
   newly added device, sent device to device so the server still cannot read
   it.
+  *(Evidence 2026-10-15: `src/modules/members/e2ee/history.ts`,
+  `askForHistory`, `historyAsks`, `giveHistory` and `takeHistory` in
+  `src/modules/members/e2ee/engine.ts`, `HistoryPanel` in
+  `app/(public)/messages/SecureConversation.tsx`, migration
+  `db/migrations/0047_member_history_transfers.sql`,
+  `tests/modules/member-e2ee.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** on `/messages`, "Bring earlier messages to this browser" with
+  "Ask my other devices", which shows this device's code; on the member's
+  other devices, the request with the code to compare and "Send my
+  messages" or "Ignore"; then "Brought N earlier messages to this
+  browser". **F05** `members.requestHistory`, `members.historyRequests`,
+  `members.sendHistory`, `members.closeHistoryRequest`,
+  `members.receivedHistory`, `members.ackHistory`. **F07** the new device
+  makes an HPKE key pair (the conversations' ciphersuite) and signs the
+  public half with its device key, which the server and the approving
+  device both check; requests are visible only to the same member's other
+  devices; nothing moves until the member approves on one of them, after
+  comparing the code — so a device the server registered on its own
+  receives nothing; each conversation's messages (with their franking keys
+  and file keys) are sealed to that key with the request and conversation
+  as associated data; the server relays sealed bytes only and deletes them
+  once read; requests lapse after seven days; services are not
+  agent-callable; erasure removes them. **F09** N/A — no background work;
+  the asking browser checks every few seconds while it waits. **F12** the
+  module test shows the new device reading only later messages, the code
+  matching, another member not seeing the request, a forged signature
+  refused, nothing moving before approval, and the earlier messages arriving
+  sealed; the browser journey approves from one browser and reads the
+  earlier message in another. Changeset `member-history-transfer.md`.)*
 - [x] **C12.35** Let members verify the devices in an encrypted conversation
   (a device list and comparable safety numbers), so a device the server
   added without the person's knowledge is visible.

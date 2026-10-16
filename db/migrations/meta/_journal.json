@@ -330,6 +330,13 @@
       "when": 1793310000026,
       "tag": "0046_member_sealed_blobs",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793310000027,
+      "tag": "0047_member_history_transfers",
+      "breakpoints": true
     }
   ]
 }

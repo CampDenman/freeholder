@@ -339,8 +339,9 @@ from mocked payment, mail or media runs alone.
   name. Device verification (C12.35) makes that visible: devices compute the
   safety number from their own MLS tree, and announce device changes.
 - Device state lives in the browser's IndexedDB (`freeholder-e2ee`). Clearing
-  site data drops that device; history on it is gone, and new devices read
-  only from when they join until C12.34.
+  site data drops that device; history on it is gone. A new device reads
+  from when it joins, and can ask the member's other devices for earlier
+  messages, sent sealed after the member approves (C12.34).
 - The delivery log keeps ciphertext so offline devices can catch up;
   unsending and erasure delete it. There is no pruning yet.
 - Tests: `tests/modules/member-e2ee.test.ts` (3 cases) and the C12.23 journey

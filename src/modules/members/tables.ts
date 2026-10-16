@@ -38,4 +38,6 @@ export {
   memberGroupCalls,
   memberGroupCallParticipants,
   memberSealedBlobs,
+  memberHistoryRequests,
+  memberHistoryTransfers,
 } from "./schema";

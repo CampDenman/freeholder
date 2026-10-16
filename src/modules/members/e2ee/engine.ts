@@ -29,7 +29,7 @@ import {
   type PrivateKeyPackage,
 } from "ts-mls";
 import { defaultClientConfig } from "ts-mls/clientConfig.js";
-import { b64, frankTag, identityOf, openCallKey, openPayload, parseIdentity, sameTag, sealCallKey, sealPayload, suite, unb64, utf8, type SealedFile } from "./wire";
+import { b64, deviceCode, digitGroups, frankTag, historyStatement, identityOf, openCallKey, openPayload, parseIdentity, sameTag, sealCallKey, sealPayload, suite, unb64, utf8, type SealedFile } from "./wire";
 
 export interface DeviceRecord {
   deviceId: string;
@@ -73,6 +73,11 @@ export interface E2eeStore {
   /** C12.24: a group call's media key, base64. */
   callKey(callId: string): Promise<string | null>;
   saveCallKey(callId: string, key: string): Promise<void>;
+  /** C12.34: the private half of this device's history request key, while one is open. */
+  historyKey(): Promise<Uint8Array | null>;
+  saveHistoryKey(key: Uint8Array | null): Promise<void>;
+  /** Conversations this device has read messages in. */
+  conversations(): Promise<string[]>;
   /** C12.35: the devices this member last saw verified in a conversation. */
   seenDevices(conversationId: string): Promise<string[] | null>;
   saveSeenDevices(conversationId: string, devices: string[]): Promise<void>;
@@ -105,6 +110,12 @@ export interface E2eeTransport {
   commit(input: { conversationId: string; deviceId: string; create: boolean; fromEpoch: number; commit: string; welcome?: string; added: { deviceId: string; keyPackageId: string }[]; removed: string[] }): Promise<{ epoch: number }>;
   send(input: { conversationId: string; deviceId: string; epoch: number; ciphertext: string; frankTag: string; attachments: { assetId: string; altText: string }[]; sealedFiles?: string[] }): Promise<{ id: string }>;
   sendCallKey(input: { conversationId: string; deviceId: string; epoch: number; callId: string; generation: number; fresh: boolean; ciphertext: string }): Promise<unknown>;
+  requestHistory(input: { deviceId: string; publicKey: string; sig: string }): Promise<{ id: string }>;
+  historyRequests(input: { deviceId: string }): Promise<{ requests: { id: string; deviceId: string; label: string; signatureKey: string; publicKey: string; sig: string }[] }>;
+  sendHistory(input: { requestId: string; deviceId: string; conversationId: string; enc: string; ct: string }): Promise<unknown>;
+  closeHistory(input: { requestId: string }): Promise<unknown>;
+  receivedHistory(input: { deviceId: string }): Promise<{ transfers: { id: string; requestId: string; conversationId: string; enc: string; ct: string }[] }>;
+  ackHistory(input: { deviceId: string; ids: string[] }): Promise<unknown>;
 }
 
 export interface ConversationState {
@@ -137,15 +148,18 @@ export interface Verification {
   changed: { added: string[]; removed: string[] };
 }
 
-/** Five-digit groups from a digest, as in other messengers' safety numbers. */
-function groups(bytes: Uint8Array, count: number): string {
-  const out: string[] = [];
-  for (let i = 0; i < count; i++) {
-    const n = ((bytes[(i * 2) % bytes.length]! << 16) | (bytes[(i * 2 + 1) % bytes.length]! << 8) | bytes[(i * 2 + 2) % bytes.length]!) % 100000;
-    out.push(String(n).padStart(5, "0"));
-  }
-  return out.join(" ");
+/** C12.34: one of the member's other devices asking for their history. */
+export interface HistoryAsk {
+  id: string;
+  label: string;
+  /** The code the asking device shows; the member compares it before approving. */
+  code: string;
+  publicKey: string;
 }
+
+const HISTORY_INFO = utf8("freeholder:history:v1");
+/** Kept well under a server action's body limit once sealed and base64-encoded. */
+const HISTORY_CHUNK_BYTES = 400_000;
 
 /** Where a call's key for one generation is kept on the device. */
 const keySlot = (callId: string, generation: number) => (generation === 0 ? callId : `${callId}#${generation}`);
@@ -484,8 +498,8 @@ export class E2eeDevice {
     }
     devices.sort((a, b) => (a.userId + a.deviceId).localeCompare(b.userId + b.deviceId));
     const digest = async (text: string) => new Uint8Array(await crypto.subtle.digest("SHA-256", utf8(text) as BufferSource));
-    for (const d of devices) d.fingerprint = groups(await digest(`freeholder:device:v1\n${d.userId}\n${d.deviceId}\n${d.signatureKey}`), 4);
-    const number = groups(await digest(`freeholder:safety:v1\n${conversationId}\n${devices.map((d) => `${d.userId}:${d.deviceId}:${d.signatureKey}`).join("\n")}`), 12);
+    for (const d of devices) d.fingerprint = await deviceCode(d.userId, d.deviceId, d.signatureKey);
+    const number = digitGroups(await digest(`freeholder:safety:v1\n${conversationId}\n${devices.map((d) => `${d.userId}:${d.deviceId}:${d.signatureKey}`).join("\n")}`), 12);
     const current = devices.map((d) => `${d.userId}:${d.deviceId}`);
     const seen = await this.store.seenDevices(conversationId);
     if (!seen) await this.store.saveSeenDevices(conversationId, current);
@@ -502,6 +516,106 @@ export class E2eeDevice {
   async confirmDevices(conversationId: string): Promise<void> {
     const v = await this.verification(conversationId);
     if (v) await this.store.saveSeenDevices(conversationId, v.devices.map((d) => `${d.userId}:${d.deviceId}`));
+  }
+
+  /** C12.34/35: this device's own code, shown so the member can match it on another device. */
+  async code(): Promise<string> {
+    const device = await this.device();
+    return deviceCode(this.userId, device.deviceId, b64(device.publicKey));
+  }
+
+  /** C12.34: ask the member's other devices for earlier history. Returns this device's code. */
+  async askForHistory(): Promise<string> {
+    const device = await this.device();
+    const cs = await suite();
+    const pair = await cs.hpke.generateKeyPair();
+    const publicKey = b64(await cs.hpke.exportPublicKey(pair.publicKey));
+    await this.store.saveHistoryKey(await cs.hpke.exportPrivateKey(pair.privateKey));
+    const sig = b64(await cs.signature.sign(device.signKey, historyStatement(this.userId, device.deviceId, publicKey)));
+    await this.transport.requestHistory({ deviceId: device.deviceId, publicKey, sig });
+    return this.code();
+  }
+
+  /** C12.34: requests from the member's other devices, each checked against that device's own key. */
+  async historyAsks(): Promise<HistoryAsk[]> {
+    const device = await this.device();
+    const cs = await suite();
+    const { requests } = await this.transport.historyRequests({ deviceId: device.deviceId });
+    const asks: HistoryAsk[] = [];
+    for (const r of requests) {
+      const ok = await cs.signature.verify(unb64(r.signatureKey), historyStatement(this.userId, r.deviceId, r.publicKey), unb64(r.sig)).catch(() => false);
+      if (ok) asks.push({ id: r.id, label: r.label, code: await deviceCode(this.userId, r.deviceId, r.signatureKey), publicKey: r.publicKey });
+    }
+    return asks;
+  }
+
+  /** C12.34: the member approved: seal every conversation this device has read to the asking device. */
+  async giveHistory(ask: HistoryAsk): Promise<number> {
+    const device = await this.device();
+    const cs = await suite();
+    const to = await cs.hpke.importPublicKey(unb64(ask.publicKey));
+    let sent = 0;
+    for (const conversationId of await this.store.conversations()) {
+      // Up to date first, so the new device gets everything this one can read.
+      await this.sync(conversationId).catch(() => undefined);
+      const entries = [...(await this.store.messages(conversationId))].filter(([, m]) => m.ok);
+      let chunk: [string, ReadMessage][] = [];
+      let size = 0;
+      const flush = async () => {
+        if (!chunk.length) return;
+        const plaintext = utf8(JSON.stringify({ v: 1, conversationId, messages: chunk }));
+        const sealed = await cs.hpke.seal(to, plaintext, HISTORY_INFO, utf8(`${ask.id}\n${conversationId}`));
+        await this.transport.sendHistory({ requestId: ask.id, deviceId: device.deviceId, conversationId, enc: b64(sealed.enc), ct: b64(sealed.ct) });
+        sent += chunk.length;
+        chunk = [];
+        size = 0;
+      };
+      try {
+        for (const entry of entries) {
+          const bytes = JSON.stringify(entry).length;
+          if (size + bytes > HISTORY_CHUNK_BYTES) await flush();
+          chunk.push(entry);
+          size += bytes;
+        }
+        await flush();
+      } catch (error) {
+        // A conversation the member has since left is skipped, not fatal.
+        if (codeOf(error) !== "not_found") throw error;
+      }
+    }
+    await this.transport.closeHistory({ requestId: ask.id });
+    return sent;
+  }
+
+  /** C12.34: open history sealed to this device and keep what it did not already have. */
+  async takeHistory(): Promise<number> {
+    const key = await this.store.historyKey();
+    if (!key) return 0;
+    const device = await this.device();
+    const cs = await suite();
+    const privateKey = await cs.hpke.importPrivateKey(key);
+    const { transfers } = await this.transport.receivedHistory({ deviceId: device.deviceId });
+    let kept = 0;
+    const done: string[] = [];
+    for (const t of transfers) {
+      try {
+        const plain = await cs.hpke.open(privateKey, unb64(t.enc), unb64(t.ct), HISTORY_INFO, utf8(`${t.requestId}\n${t.conversationId}`));
+        const bundle = JSON.parse(new TextDecoder().decode(plain)) as { v: number; conversationId: string; messages: [string, ReadMessage][] };
+        if (bundle.v === 1 && bundle.conversationId === t.conversationId) {
+          const have = await this.store.messages(t.conversationId);
+          for (const [id, message] of bundle.messages) {
+            if (have.get(id)?.ok) continue;
+            await this.store.saveMessage(t.conversationId, id, message);
+            kept++;
+          }
+        }
+      } catch {
+        // Something that does not open with this device's key is dropped.
+      }
+      done.push(t.id);
+    }
+    if (done.length) await this.transport.ackHistory({ deviceId: device.deviceId, ids: done });
+    return kept;
   }
 
   /** Encrypt and send. Returns the message id, or null if the conversation cannot be encrypted. */

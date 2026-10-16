@@ -835,3 +835,37 @@ export const memberSealedBlobs = pgTable(
     check("member_sealed_blobs_state_valid", sql`${t.state} in ('pending','ready')`),
   ],
 );
+
+/**
+ * C12.34: a new device asks for the member's earlier messages. It publishes
+ * an HPKE public key signed by its device key; one of the member's other
+ * devices, after the member approves it there, seals history to that key.
+ */
+export const memberHistoryRequests = pgTable(
+  "member_history_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    deviceId: uuid("device_id").notNull().references(() => memberDevices.id, { onDelete: "cascade" }),
+    publicKey: text("public_key").notNull(),
+    sig: text("sig").notNull(),
+    state: text("state", { enum: ["open", "closed"] }).notNull().default("open"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [index("member_history_requests_user_idx").on(t.userId, t.state), check("member_history_requests_state_valid", sql`${t.state} in ('open','closed')`)],
+);
+
+/** C12.34: one conversation's history, sealed to a requesting device; deleted once it is read. */
+export const memberHistoryTransfers = pgTable(
+  "member_history_transfers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requestId: uuid("request_id").notNull().references(() => memberHistoryRequests.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id").notNull().references(() => memberConversations.id, { onDelete: "cascade" }),
+    fromDeviceId: uuid("from_device_id").references(() => memberDevices.id, { onDelete: "set null" }),
+    enc: text("enc").notNull(),
+    ct: text("ct").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [index("member_history_transfers_request_idx").on(t.requestId)],
+);

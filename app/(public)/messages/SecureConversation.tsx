@@ -6,7 +6,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { E2eeDevice, type E2eeTransport, type ReadMessage, type Verification } from "@/modules/members/e2ee/engine";
+import { E2eeDevice, type E2eeTransport, type HistoryAsk, type ReadMessage, type Verification } from "@/modules/members/e2ee/engine";
 import { browserStore } from "@/modules/members/e2ee/idb-store";
 import { openFile, SEALED_TYPES, sealFile, type SealedFile } from "@/modules/members/e2ee/wire";
 import { Button, Callout, Field } from "@/ui/primitives";
@@ -20,6 +20,12 @@ import {
   registerDeviceAction,
   sendCallKeyAction,
   sendEncryptedAction,
+  requestHistoryAction,
+  historyRequestsAction,
+  sendHistoryAction,
+  closeHistoryAction,
+  receivedHistoryAction,
+  ackHistoryAction,
   sendPlaintextAction,
 } from "./e2ee-actions";
 
@@ -43,6 +49,12 @@ const transport: E2eeTransport = {
   commit: (input) => unwrap(e2eeCommitAction(input)),
   send: (input) => unwrap(sendEncryptedAction(input)),
   sendCallKey: (input) => unwrap(sendCallKeyAction(input)),
+  requestHistory: (input) => unwrap(requestHistoryAction(input)),
+  historyRequests: (input) => unwrap(historyRequestsAction(input)),
+  sendHistory: (input) => unwrap(sendHistoryAction(input)),
+  closeHistory: (input) => unwrap(closeHistoryAction(input)),
+  receivedHistory: (input) => unwrap(receivedHistoryAction(input)),
+  ackHistory: (input) => unwrap(ackHistoryAction(input)),
 };
 
 /** A name the member will recognise in their device list. */
@@ -324,6 +336,58 @@ export function DeviceVerification({ conversationId, userId, people, labels }: {
               </li>
             ))}
           </ul>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+/** C12.34: bring earlier messages to this browser, or approve another of the member's devices asking for them. */
+export function HistoryPanel({ userId, labels }: {
+  userId: string;
+  labels: { title: string; intro: string; ask: string; asked: string; brought: string; request: string; compare: string; send: string; ignore: string; sent: string; failed: string };
+}) {
+  const [asks, setAsks] = useState<HistoryAsk[]>([]);
+  const [code, setCode] = useState<string | null>(null);
+  const [brought, setBrought] = useState(0);
+  const [note, setNote] = useState<string | null>(null);
+  const refresh = useCallback(async () => {
+    const device = deviceFor(userId);
+    const kept = await device.takeHistory();
+    if (kept) setBrought((n) => n + kept);
+    setAsks(await device.historyAsks());
+  }, [userId]);
+  useEffect(() => {
+    void refresh().catch(() => undefined);
+    if (!code) return;
+    const timer = setInterval(() => { void refresh().catch(() => undefined); }, 4000);
+    return () => clearInterval(timer);
+  }, [refresh, code]);
+  return (
+    <div className="grid gap-2">
+      {brought ? <Callout tone="success">{labels.brought.replace("{n}", String(brought))}</Callout> : null}
+      {note ? <Callout>{note}</Callout> : null}
+      {asks.map((ask) => (
+        <Callout key={ask.id}>
+          <span className="grid gap-2">
+            <span>{labels.request.replace("{device}", ask.label)}</span>
+            <span>{labels.compare} <code data-history-code>{ask.code}</code></span>
+            <span className="flex flex-wrap gap-2">
+              <Button onClick={() => { void deviceFor(userId).giveHistory(ask).then(() => { setNote(labels.sent); return refresh(); }).catch(() => setNote(labels.failed)); }}>{labels.send}</Button>
+              <Button variant="quiet" onClick={() => { void unwrap(closeHistoryAction({ requestId: ask.id })).then(refresh); }}>{labels.ignore}</Button>
+            </span>
+          </span>
+        </Callout>
+      ))}
+      <details className="rounded-md border border-rule p-3">
+        <summary className="cursor-pointer font-medium">{labels.title}</summary>
+        <div className="mt-2 grid gap-2">
+          <p className="text-sm text-ink-muted">{labels.intro}</p>
+          {code ? (
+            <p>{labels.asked} <code data-my-code>{code}</code></p>
+          ) : (
+            <div><Button variant="quiet" onClick={() => { void deviceFor(userId).askForHistory().then(setCode).catch(() => setNote(labels.failed)); }}>{labels.ask}</Button></div>
+          )}
         </div>
       </details>
     </div>

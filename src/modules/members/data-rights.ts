@@ -43,6 +43,7 @@ import {
   memberDisputes,
   memberFederationDeliveries,
   memberFollows,
+  memberHistoryRequests,
   memberFriendships,
   memberListings,
   memberMentions,
@@ -148,6 +149,8 @@ async function eraseMember(tx: Tx, userId: string): Promise<number> {
   if (sent.length) count(await tx.delete(memberMlsLog).where(inArray(memberMlsLog.messageId, sent.map((m) => m.id))).returning({ seq: memberMlsLog.seq }));
   // Their encrypted files (C12.36) are purged by the next sweep.
   count(await tx.update(memberSealedBlobs).set({ deletedAt: now }).where(eq(memberSealedBlobs.ownerId, userId)).returning({ id: memberSealedBlobs.id }));
+  // History on its way between their devices (C12.34).
+  count(await tx.delete(memberHistoryRequests).where(eq(memberHistoryRequests.userId, userId)).returning({ id: memberHistoryRequests.id }));
   // Their devices, key packages and group seats (C12.23), and their presence on the fediverse (C12.18).
   count(await tx.delete(memberDevices).where(eq(memberDevices.userId, userId)).returning({ id: memberDevices.id }));
   count(await tx.delete(memberRemoteFollowers).where(eq(memberRemoteFollowers.userId, userId)).returning({ id: memberRemoteFollowers.id }));
@@ -227,6 +230,8 @@ registerContactPrivacySource({
     "member_remote_followers",
     "member_federation_deliveries",
     "member_sealed_blobs",
+    "member_history_requests",
+    "member_history_transfers",
   ],
   eraseOrder: 10,
   exportData: async (tx, contactId) => {
