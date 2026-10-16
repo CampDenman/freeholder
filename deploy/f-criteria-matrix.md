@@ -4850,18 +4850,18 @@ v2.
 
 ## C12.35 — Let members verify the devices in an encrypted conversation
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F01** — N/A — what a member has confirmed is kept on their device (`src/modules/members/e2ee/idb-store.ts`).
+- **F02** — `tests/modules/member-e2ee.test.ts`: matching numbers, a change when a device joins, and confirmation.
+- **F03** — N/A — devices belong to members, not contacts (`src/modules/members/e2ee/engine.ts`).
+- **F04** — `tests/browser/members.spec.ts`: "Verify devices", the change notice and the safety number in two browsers.
+- **F05** — N/A — computed on the device; no service changes (`src/modules/members/e2ee/engine.ts`).
+- **F06** — `locales/en.json`: strings in four locales; a native details disclosure (`app/(public)/messages/SecureConversation.tsx`).
+- **F07** — `tests/modules/member-e2ee.test.ts`: the list comes from the device's own MLS tree, so a device the server adds is visible.
+- **F08** — `tests/browser/members.spec.ts`.
+- **F09** — N/A — no background work (`src/modules/members/e2ee/engine.ts`).
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-device-verification.md`.
+- **F12** — `tests/browser/members.spec.ts`: two browsers show the same number after a device joins.
 
 ## C12.36 — Encrypt attachments end to end in encrypted conversations
 

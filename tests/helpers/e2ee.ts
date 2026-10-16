@@ -14,6 +14,7 @@ export function memoryStore(): E2eeStore {
   const groups = new Map<string, { state: Uint8Array | null; cursor: number }>();
   const messages = new Map<string, Map<string, ReadMessage>>();
   const callKeys = new Map<string, string>();
+  const seen = new Map<string, string[]>();
   return {
     device: async () => device,
     saveDevice: async (d) => { device = d; },
@@ -25,6 +26,8 @@ export function memoryStore(): E2eeStore {
     messages: async (id) => new Map(messages.get(id) ?? []),
     saveMessage: async (id, mid, m) => { messages.set(id, new Map(messages.get(id) ?? []).set(mid, m)); },
     dropMessage: async (id, mid) => { messages.get(id)?.delete(mid); },
+    seenDevices: async (id) => seen.get(id) ?? null,
+    saveSeenDevices: async (id, devices) => { seen.set(id, devices); },
     callKey: async (id) => callKeys.get(id) ?? null,
     saveCallKey: async (id, key) => { callKeys.set(id, key); },
     clear: async () => { device = null; packages.clear(); groups.clear(); messages.clear(); callKeys.clear(); },

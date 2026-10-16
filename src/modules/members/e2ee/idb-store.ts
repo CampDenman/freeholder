@@ -7,7 +7,7 @@
 import type { DeviceRecord, E2eeStore, ReadMessage, StoredKeyPackage } from "./engine";
 
 const NAME = "freeholder-e2ee";
-const STORES = ["device", "keyPackages", "groups", "messages", "callKeys"] as const;
+const STORES = ["device", "keyPackages", "groups", "messages", "callKeys", "seenDevices"] as const;
 
 function request<T>(r: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -19,7 +19,7 @@ function request<T>(r: IDBRequest<T>): Promise<T> {
 let opened: Promise<IDBDatabase> | null = null;
 function database(): Promise<IDBDatabase> {
   opened ??= new Promise((resolve, reject) => {
-    const open = indexedDB.open(NAME, 2);
+    const open = indexedDB.open(NAME, 3);
     open.onupgradeneeded = () => {
       for (const store of STORES) if (!open.result.objectStoreNames.contains(store)) open.result.createObjectStore(store);
     };
@@ -72,6 +72,8 @@ export const browserStore: E2eeStore = {
     delete saved[id];
     await put("messages", conversationId, saved);
   },
+  seenDevices: (conversationId) => get<string[]>("seenDevices", conversationId),
+  saveSeenDevices: (conversationId, devices) => put("seenDevices", conversationId, devices),
   callKey: (callId) => get<string>("callKeys", callId),
   saveCallKey: (callId, key) => put("callKeys", callId, key),
   async clear() {

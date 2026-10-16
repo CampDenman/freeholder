@@ -336,7 +336,8 @@ from mocked payment, mail or media runs alone.
   dependency only because `ts-mls` imports it without declaring it.
 - The server is the delivery service and the device directory. It cannot
   read messages, but whoever runs it could register a device in a member's
-  name; device verification (C12.35) is what makes that visible.
+  name. Device verification (C12.35) makes that visible: devices compute the
+  safety number from their own MLS tree, and announce device changes.
 - Device state lives in the browser's IndexedDB (`freeholder-e2ee`). Clearing
   site data drops that device; history on it is gone, and new devices read
   only from when they join until C12.34.

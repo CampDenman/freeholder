@@ -16,7 +16,7 @@ import { GroupCallButtons } from "../../call/group/GroupCallRoom";
 import { Button, Callout, Pill } from "@/ui/primitives";
 import { getLocale, getT } from "../../../i18n";
 import { conversationAction } from "../actions";
-import { SecureBody, SecureComposer, SecureConversation, SecureStatus } from "../SecureConversation";
+import { DeviceVerification, SecureBody, SecureComposer, SecureConversation, SecureStatus } from "../SecureConversation";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -49,6 +49,7 @@ export default async function ConversationPage({ params, searchParams }: { param
   const name = c.title ?? c.people.map((p) => p.displayName).join(", ");
   if (actor.kind !== "user") notFound();
   const groupCall = c.kind === "group" && c.e2ee && c.state === "active" ? await activeGroupCall.call({ conversationId: c.id }, actor) : null;
+  const people: Record<string, string> = Object.fromEntries<string>([...c.people.map((p): [string, string] => [p.userId, p.displayName]), [actor.userId, t("members.e2ee.you")]]);
   const secureLabels = { loading: t("members.e2ee.decrypting"), unreadable: t("members.e2ee.unreadable"), before: t("members.e2ee.before") };
   return (
     <SecureConversation conversationId={c.id} userId={actor.userId}>
@@ -59,6 +60,22 @@ export default async function ConversationPage({ params, searchParams }: { param
         {c.people.map((p, i) => <span key={p.handle}>{i ? ", " : ""}<a className="underline" href={`/@${p.handle}`}>@{p.handle}</a></span>)}
       </p>
       <SecureStatus labels={{ encrypted: t("members.e2ee.on"), joining: t("members.e2ee.joining"), plaintext: t("members.e2ee.waiting"), failed: t("members.e2ee.failed") }} />
+      <DeviceVerification
+        conversationId={c.id}
+        userId={actor.userId}
+        people={people}
+        labels={{
+          title: t("members.e2ee.verifyTitle"),
+          intro: t("members.e2ee.verifyIntro"),
+          number: t("members.e2ee.safetyNumber"),
+          unknown: t("members.e2ee.unknownAccount"),
+          thisDevice: t("members.e2ee.thisDevice"),
+          changed: t("members.e2ee.devicesChanged"),
+          added: t("members.e2ee.devicesAdded"),
+          removed: t("members.e2ee.devicesRemoved"),
+          confirm: t("members.e2ee.devicesConfirm"),
+        }}
+      />
       {query.error ? <Callout tone="danger">{t("members.messages.failed")}</Callout> : null}
       {groupCall?.available ? (
         <GroupCallButtons

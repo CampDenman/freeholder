@@ -10927,9 +10927,28 @@ whatever is best for the people using the site.
 - [ ] **C12.34** Bring earlier end-to-end encrypted history to a member's
   newly added device, sent device to device so the server still cannot read
   it.
-- [ ] **C12.35** Let members verify the devices in an encrypted conversation
+- [x] **C12.35** Let members verify the devices in an encrypted conversation
   (a device list and comparable safety numbers), so a device the server
   added without the person's knowledge is visible.
+  *(Evidence 2026-10-15: `verification` and `confirmDevices` in
+  `src/modules/members/e2ee/engine.ts`, `DeviceVerification` in
+  `app/(public)/messages/SecureConversation.tsx`,
+  `tests/modules/member-e2ee.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** "Verify devices" on encrypted conversations: the safety number
+  (twelve groups of five digits), each person's devices with a per-device
+  fingerprint and "this device", and a notice naming devices that came or
+  went since the member last checked, with "I have checked them". **F05**
+  N/A — computed on the device from its own MLS group; no service changes.
+  **F07** the device list comes from this device's MLS ratchet tree — the
+  leaves that will actually receive messages — not from the server's
+  directory, and the number is SHA-256 over every leaf's identity and
+  signature key, so a device added without someone's knowledge changes it
+  for everyone and is named in the notice; an account not in the
+  conversation is shown as one. **F09** N/A — no background work. **F12**
+  the module test checks both members see the same number, that a further
+  device changes it and is reported until confirmed; the browser journey
+  compares the numbers across two browsers after a device joins.
+  Changeset `member-device-verification.md`.)*
 - [ ] **C12.36** Encrypt attachments end to end in encrypted conversations:
   files encrypted on the sender's device with keys carried inside the MLS
   message, stored as opaque blobs.

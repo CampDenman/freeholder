@@ -6,7 +6,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { E2eeDevice, type E2eeTransport, type ReadMessage } from "@/modules/members/e2ee/engine";
+import { E2eeDevice, type E2eeTransport, type ReadMessage, type Verification } from "@/modules/members/e2ee/engine";
 import { browserStore } from "@/modules/members/e2ee/idb-store";
 import { Button, Callout, Field } from "@/ui/primitives";
 import { attachmentsFrom } from "../m/attachment-form";
@@ -202,5 +202,65 @@ export function FrankingFields({ conversationId, messageId, userId }: { conversa
       <input type="hidden" name="frankKey" value={read.fk} />
       <blockquote className="whitespace-pre-line break-words border-s-4 border-rule ps-3 text-sm">{read.body}</blockquote>
     </>
+  );
+}
+
+/** C12.35: the devices in this conversation, as this device's own MLS group shows them, and a safety number to compare. */
+export function DeviceVerification({ conversationId, userId, people, labels }: {
+  conversationId: string;
+  userId: string;
+  people: Record<string, string>;
+  labels: { title: string; intro: string; number: string; unknown: string; thisDevice: string; changed: string; added: string; removed: string; confirm: string };
+}) {
+  const secure = useContext(SecureContext);
+  const [view, setView] = useState<Verification | null>(null);
+  const [mine, setMine] = useState<string | null>(null);
+  const ready = secure?.phase === "ready";
+  const load = useCallback(async () => {
+    const device = deviceFor(userId);
+    setMine((await device.device()).deviceId);
+    setView(await device.verification(conversationId));
+  }, [conversationId, userId]);
+  useEffect(() => { if (ready) void load().catch(() => undefined); }, [ready, load, secure?.messages]);
+  if (!ready || !view) return null;
+  const name = (id: string) => people[id.split(":")[0]!] ?? labels.unknown;
+  const byPerson = new Map<string, typeof view.devices>();
+  for (const d of view.devices) byPerson.set(d.userId, [...(byPerson.get(d.userId) ?? []), d]);
+  const changed = view.changed.added.length + view.changed.removed.length > 0;
+  return (
+    <div className="grid gap-2">
+      {changed ? (
+        <Callout>
+          <span className="grid gap-2">
+            <span>{labels.changed}</span>
+            {view.changed.added.length ? <span>{labels.added} {view.changed.added.map(name).join(", ")}</span> : null}
+            {view.changed.removed.length ? <span>{labels.removed} {view.changed.removed.map(name).join(", ")}</span> : null}
+            <span><Button variant="quiet" onClick={() => { void deviceFor(userId).confirmDevices(conversationId).then(load); }}>{labels.confirm}</Button></span>
+          </span>
+        </Callout>
+      ) : null}
+      <details className="rounded-md border border-rule p-3">
+        <summary className="cursor-pointer font-medium">{labels.title}</summary>
+        <div className="mt-2 grid gap-3">
+          <p className="text-sm text-ink-muted">{labels.intro}</p>
+          <p>
+            <span className="text-sm">{labels.number}</span>{" "}
+            <code className="break-words" data-safety-number>{view.number}</code>
+          </p>
+          <ul className="grid gap-2">
+            {[...byPerson].map(([person, devices]) => (
+              <li key={person}>
+                <strong>{people[person] ?? labels.unknown}</strong>
+                <ul className="ms-4 list-disc">
+                  {devices.map((d) => (
+                    <li key={d.deviceId}><code>{d.fingerprint}</code>{d.deviceId === mine ? ` · ${labels.thisDevice}` : ""}</li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </details>
+    </div>
   );
 }
