@@ -16,7 +16,7 @@ import { PROFILE_SECTION_KINDS } from "@/modules/members/profile-kinds";
 import { ImageUpload } from "./ImageUpload";
 import { MemberPasskeys } from "./MemberPasskeys";
 import { twoFactorStatus } from "@/core/auth/two-factor";
-import { avatarAction, deleteSectionAction, federationAction, followRemoteAction, revokeDeviceAction, sectionAction, unfollowRemoteAction } from "./profile-actions";
+import { aliasesAction, avatarAction, deleteSectionAction, federationAction, followRemoteAction, moveAction, revokeDeviceAction, sectionAction, unfollowRemoteAction } from "./profile-actions";
 import { remoteFollows } from "@/modules/members/federation/following";
 import { myDevices } from "@/modules/members/e2ee/service";
 import { formatDateTime } from "@/core/i18n";
@@ -145,6 +145,29 @@ export default async function MemberProfilePage({ searchParams }: { searchParams
                 </Field>
                 <Button type="submit">{t("members.fediverse.followButton")}</Button>
               </form>
+              <details className="rounded-md border border-rule p-3">
+                <summary className="cursor-pointer font-medium">{t("members.fediverse.moveTitle")}</summary>
+                <div className="mt-2 grid gap-3">
+                  {me.movedTo ? <Callout>{t("members.fediverse.moved", { target: me.movedTo })}</Callout> : null}
+                  <form action={aliasesAction} className="grid gap-2">
+                    <Field label={t("members.fediverse.aliases")} htmlFor="fediverse-aliases" hint={t("members.fediverse.aliasesHint")}>
+                      <Input id="fediverse-aliases" name="aliases" maxLength={1600} defaultValue="" />
+                    </Field>
+                    {me.fediverseAliases.length ? <p className="text-sm text-ink-muted">{t("members.fediverse.aliasesNow")} {me.fediverseAliases.join(", ")}</p> : null}
+                    <div><Button type="submit" variant="quiet">{t("members.fediverse.aliasesSave")}</Button></div>
+                  </form>
+                  <form action={moveAction} className="grid gap-2">
+                    <Field label={t("members.fediverse.moveTo")} htmlFor="fediverse-move" hint={t("members.fediverse.moveHint")}>
+                      <Input id="fediverse-move" name="target" required maxLength={320} />
+                    </Field>
+                    <label className="flex items-start gap-2">
+                      <input type="checkbox" name="confirm" value="yes" />
+                      <span>{t("members.fediverse.moveConfirm")}</span>
+                    </label>
+                    <div><Button type="submit" variant="danger">{t("members.fediverse.moveButton")}</Button></div>
+                  </form>
+                </div>
+              </details>
               {following.follows.length ? (
                 <ul className="grid gap-2" aria-label={t("members.fediverse.following")}>
                   {following.follows.map((f) => (

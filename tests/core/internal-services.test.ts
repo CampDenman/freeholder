@@ -217,6 +217,10 @@ const CALLER_AUTHORIZED_PHASES = [
   // /member-blobs/[id]; the bytes route is the only way in.
   // C12.32: the apply half of members.followRemote, after the lookup.
   "members.addRemoteFollow",
+  // C12.33: the halves of members.setFediverseAliases and members.moveToRemote.
+  "members.applyFediverseAliases",
+  "members.applyMove",
+  "members.moveSource",
   "members.claimSealedBlob",
   "members.confirmSealedBlob",
   "members.sealedBlobAccess",

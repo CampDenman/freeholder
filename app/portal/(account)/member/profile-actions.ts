@@ -9,7 +9,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { deleteProfileSection, saveProfileSection, setAvatar } from "@/modules/members/profile";
 import { setMyFederation } from "@/modules/members/federation/core";
-import { followRemote, unfollowRemote } from "@/modules/members/federation/following";
+import { followRemote, moveToRemote, setFediverseAliases, unfollowRemote } from "@/modules/members/federation/following";
 import { revokeDevice } from "@/modules/members/e2ee/service";
 import { PROFILE_SECTION_KINDS } from "@/modules/members/profile-kinds";
 import { VISIBILITIES, type Visibility } from "@/modules/members/visibility";
@@ -76,4 +76,15 @@ export async function followRemoteAction(form: FormData): Promise<void> {
 
 export async function unfollowRemoteAction(form: FormData): Promise<void> {
   await run((actor) => unfollowRemote.call({ actorUri: text(form, "actorUri") }, actor));
+}
+
+// C12.33: name your accounts elsewhere, or move to one of them.
+export async function aliasesAction(form: FormData): Promise<void> {
+  const addresses = text(form, "aliases").split(/[\s,]+/).filter(Boolean);
+  await run((actor) => setFediverseAliases.call({ addresses }, actor));
+}
+
+export async function moveAction(form: FormData): Promise<void> {
+  if (form.get("confirm") !== "yes") redirect(`${BACK}?error=validation`);
+  await run((actor) => moveToRemote.call({ address: text(form, "target") }, actor));
 }

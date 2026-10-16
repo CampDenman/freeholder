@@ -13,7 +13,7 @@ import { ready } from "@/core/runtime";
 import { joinSite, updateMembershipRules } from "@/modules/members/service";
 import { createPost, deletePost } from "@/modules/members/posts";
 import { deliverFederation, federationDocument, setMyFederation } from "@/modules/members/federation/core";
-import { followRemote, remoteFeed, remoteFollows, unfollowRemote } from "@/modules/members/federation/following";
+import { followRemote, moveToRemote, remoteFeed, remoteFollows, setFediverseAliases, unfollowRemote } from "@/modules/members/federation/following";
 import { newActorKeys, signRequest, verifyRequest } from "@/modules/members/federation/signatures";
 import { memberFederationDeliveries, memberRemoteFollowers } from "@/modules/members/schema";
 import { POST as inbox } from "../../app/ap/users/[handle]/inbox/route";
@@ -26,15 +26,19 @@ let remote: Server;
 let base = "";
 const received: { path: string; headers: Record<string, string>; body: string }[] = [];
 
-function remoteActor() {
+/** Who the remote accounts say are also them (C12.33). */
+const aliases: Record<string, string[]> = { sam: [], sam2: [] };
+
+function remoteActor(name = "sam") {
   return {
     "@context": ["https://www.w3.org/ns/activitystreams"],
-    id: `${base}/users/sam`,
+    id: `${base}/users/${name}`,
     type: "Person",
-    preferredUsername: "sam",
-    inbox: `${base}/users/sam/inbox`,
+    preferredUsername: name,
+    inbox: `${base}/users/${name}/inbox`,
     endpoints: { sharedInbox: `${base}/inbox` },
-    publicKey: { id: `${base}/users/sam#main-key`, owner: `${base}/users/sam`, publicKeyPem: remoteKeys.publicKeyPem },
+    alsoKnownAs: aliases[name] ?? [],
+    publicKey: { id: `${base}/users/${name}#main-key`, owner: `${base}/users/${name}`, publicKeyPem: remoteKeys.publicKeyPem },
   };
 }
 
@@ -61,6 +65,15 @@ describe("http signatures (C12.18)", () => {
   });
 });
 
+describe("remote HTML to text (C12.32)", () => {
+  it("leaves no markup even when tags are split around each other", async () => {
+    const { plainText } = await import("@/modules/members/federation/following");
+    expect(plainText("<scr<script>x</script>ipt>alert(1)</script>")).not.toMatch(/<|>?script/i);
+    expect(plainText("<<b>i</b>mg src=x onerror=alert(1)>")).not.toContain("<");
+    expect(plainText("<p>1 &lt; 2 &amp;&amp; 3 &gt; 2</p>")).toBe("1 < 2 && 3 > 2");
+  });
+});
+
 describe.runIf(hasDatabase)("ActivityPub federation (C12.18)", () => {
   beforeAll(async () => {
     await ready();
@@ -69,13 +82,15 @@ describe.runIf(hasDatabase)("ActivityPub federation (C12.18)", () => {
       req.on("data", (c: Buffer) => { body += c.toString(); });
       req.on("end", () => {
         if (req.method === "GET" && req.url?.startsWith("/.well-known/webfinger")) {
+          const name = /acct%3A([a-z0-9]+)%40/.exec(req.url)?.[1] ?? "sam";
           res.writeHead(200, { "content-type": "application/jrd+json" });
-          res.end(JSON.stringify({ subject: "acct:sam@remote", links: [{ rel: "self", type: "application/activity+json", href: `${base}/users/sam` }] }));
+          res.end(JSON.stringify({ subject: `acct:${name}@remote`, links: [{ rel: "self", type: "application/activity+json", href: `${base}/users/${name}` }] }));
           return;
         }
-        if (req.method === "GET" && req.url === "/users/sam") {
+        const actorMatch = req.method === "GET" ? /^\/users\/(sam2?)$/.exec(req.url ?? "") : null;
+        if (actorMatch) {
           res.writeHead(200, { "content-type": "application/activity+json" });
-          res.end(JSON.stringify(remoteActor()));
+          res.end(JSON.stringify(remoteActor(actorMatch[1])));
           return;
         }
         received.push({ path: req.url ?? "", headers: req.headers as Record<string, string>, body });
@@ -89,6 +104,8 @@ describe.runIf(hasDatabase)("ActivityPub federation (C12.18)", () => {
   }, 60_000);
   beforeEach(async () => {
     received.length = 0;
+    aliases.sam = [];
+    aliases.sam2 = [];
     await truncateSpine();
     await db().insert(users).values([
       { id: OWNER.userId, email: "owner@example.test", role: "owner" },
@@ -190,5 +207,43 @@ describe.runIf(hasDatabase)("ActivityPub federation (C12.18)", () => {
     await unfollowRemote.call({ actorUri: `${base}/users/sam` }, RAE);
     await deliverFederation();
     expect(received.map((r) => (JSON.parse(r.body) as { type: string }).type)).toContain("Undo");
+  });
+
+  it("names accounts elsewhere, moves followers out only to an account that names it back, and follows a move in (C12.33)", async () => {
+    await updateMembershipRules.call({ federation: true }, OWNER);
+    await setMyFederation.call({ federated: true }, RAE);
+    const host = new URL(base).host;
+    const raeActor = "http://localhost:3000/ap/users/rae";
+
+    // Aliases resolve to actors and appear on Rae's actor document.
+    expect((await setFediverseAliases.call({ addresses: [`@sam@${host}`] }, RAE)).aliases).toEqual([`${base}/users/sam`]);
+    expect(await federationDocument.call({ kind: "actor", handle: "rae" }, ANONYMOUS)).toMatchObject({ alsoKnownAs: [`${base}/users/sam`] });
+
+    // Moving out: refused until the new account names Rae, then announced to followers.
+    const follow = { "@context": "https://www.w3.org/ns/activitystreams", id: `${base}/follows/1`, type: "Follow", actor: `${base}/users/sam`, object: raeActor };
+    await sendToInbox(follow);
+    expect((await failure(moveToRemote.call({ address: `@sam2@${host}` }, RAE))).code).toBe("validation");
+    aliases.sam2 = [raeActor];
+    expect(await moveToRemote.call({ address: `@sam2@${host}` }, RAE)).toEqual({ notified: 1, target: `${base}/users/sam2` });
+    await deliverFederation();
+    const move = received.map((r) => JSON.parse(r.body) as { type: string; target?: string }).find((a) => a.type === "Move");
+    expect(move).toMatchObject({ type: "Move", target: `${base}/users/sam2` });
+    expect(await federationDocument.call({ kind: "actor", handle: "rae" }, ANONYMOUS)).toMatchObject({ movedTo: `${base}/users/sam2` });
+
+    // Moving in: Rae follows sam, sam moves to sam2 (which names sam back), and Rae now follows sam2.
+    await followRemote.call({ address: `@sam@${host}` }, RAE);
+    await deliverFederation();
+    const sent = received.map((r) => JSON.parse(r.body) as { type: string; id: string }).filter((a) => a.type === "Follow").at(-1)!;
+    await sendToInbox({ id: `${base}/accepts/9`, type: "Accept", actor: `${base}/users/sam`, object: sent.id });
+    const bogus = { id: `${base}/moves/0`, type: "Move", actor: `${base}/users/sam`, object: `${base}/users/sam`, target: `${base}/users/sam2` };
+    aliases.sam2 = [];
+    await sendToInbox(bogus);
+    expect((await remoteFollows.call({}, RAE)).follows.map((f) => f.actorUri)).toEqual([`${base}/users/sam`]);
+    aliases.sam2 = [`${base}/users/sam`];
+    received.length = 0;
+    await sendToInbox({ ...bogus, id: `${base}/moves/1` });
+    expect((await remoteFollows.call({}, RAE)).follows.map((f) => [f.actorUri, f.state])).toEqual([[`${base}/users/sam2`, "pending"]]);
+    await deliverFederation();
+    expect(received.map((r) => `${(JSON.parse(r.body) as { type: string }).type} ${r.path}`).sort()).toEqual(["Follow /users/sam2/inbox", "Undo /users/sam/inbox"]);
   });
 });

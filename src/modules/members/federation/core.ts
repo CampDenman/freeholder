@@ -89,6 +89,9 @@ export function actorDocument(profile: typeof memberProfiles.$inferSelect, publi
     followers: `${id}/followers`,
     manuallyApprovesFollowers: false,
     discoverable: profile.indexable,
+    // C12.33: the member's other accounts, and where they moved, if they did.
+    ...(profile.fediverseAliases.length ? { alsoKnownAs: profile.fediverseAliases } : {}),
+    ...(profile.movedTo ? { movedTo: profile.movedTo } : {}),
     publicKey: { id: `${id}#main-key`, owner: id, publicKeyPem },
   };
 }
@@ -170,7 +173,12 @@ const remoteActor = z.object({
   inbox: z.string().url(),
   preferredUsername: z.string().max(200).optional(),
   endpoints: z.object({ sharedInbox: z.string().url().optional() }).partial().optional(),
+  /** C12.33: the accounts it says are also it. */
+  alsoKnownAs: z.union([z.string(), z.array(z.string()).max(50)]).optional(),
 });
+
+/** C12.33: a Move target, fetched by the inbox route before the transaction. */
+const moveTarget = z.object({ id: z.string().url(), inbox: z.string().url(), alsoKnownAs: z.array(z.string()).max(50) });
 
 /** Handle one verified inbox activity for a member. `actor` is the verified sender's document. */
 export const federationInbox = defineService({
@@ -178,7 +186,7 @@ export const federationInbox = defineService({
   summary: "Apply a verified ActivityPub activity sent to a member: Follow, Undo Follow, or a remote account's Delete.",
   kind: "mutation",
   permission: "system",
-  input: z.object({ handle: z.string().max(60), activity: z.record(z.string(), z.unknown()), actor: remoteActor }),
+  input: z.object({ handle: z.string().max(60), activity: z.record(z.string(), z.unknown()), actor: remoteActor, moveTarget: moveTarget.optional() }),
   output: okResult,
   handler: async (input, ctx) => {
     const member = await federatedMember(ctx, input.handle);
@@ -188,7 +196,7 @@ export const federationInbox = defineService({
     const objectId = typeof activity.object === "string" ? activity.object : (activity.object as { id?: string } | undefined)?.id;
     const host = new URL(actor.id).host;
     // C12.32: accounts this member follows — acceptances and their posts.
-    if (await applyFollowedActivity(ctx, member.userId, me, activity, actor)) return { ok: true as const };
+    if (await applyFollowedActivity(ctx, member.userId, me, activity, actor, input.moveTarget)) return { ok: true as const };
     if (activity.type === "Follow" && objectId === me) {
       await ctx.tx
         .insert(memberRemoteFollowers)

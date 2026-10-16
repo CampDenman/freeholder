@@ -34,13 +34,39 @@ function parseAddress(address: string): { user: string; host: string } | null {
   return match ? { user: match[1]!, host: match[2]!.toLowerCase() } : null;
 }
 
-/** HTML from another server, reduced to plain text. Nothing of it is ever rendered as markup. */
+/**
+ * HTML from another server, reduced to plain text. Nothing of it is ever
+ * rendered as markup. One left-to-right scan: everything from a "<" to its
+ * ">" is dropped (script and style contents with it), so no "<" survives,
+ * however tags are nested or split; entities are decoded only afterwards,
+ * so decoded text is never parsed again.
+ */
 export function plainText(html: string): string {
-  const text = html
-    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
-    .replace(/<\s*br\s*\/?>/gi, "\n")
-    .replace(/<\/\s*p\s*>/gi, "\n\n")
-    .replace(/<[^>]*>/g, "")
+  const lower = html.toLowerCase();
+  let out = "";
+  let i = 0;
+  while (i < html.length) {
+    if (html[i] !== "<") {
+      out += html[i];
+      i++;
+      continue;
+    }
+    const end = html.indexOf(">", i + 1);
+    if (end === -1) break;
+    const tag = lower.slice(i + 1, end).trim();
+    const closing = tag.startsWith("/");
+    const name = /^\/?\s*([a-z][a-z0-9]*)/.exec(tag)?.[1] ?? "";
+    if (!closing && (name === "script" || name === "style")) {
+      const close = lower.indexOf(`</${name}`, end);
+      const after = close === -1 ? -1 : html.indexOf(">", close);
+      i = after === -1 ? html.length : after + 1;
+      continue;
+    }
+    if (name === "br") out += "\n";
+    else if (closing && name === "p") out += "\n\n";
+    i = end + 1;
+  }
+  const text = out
     .replace(/&nbsp;/g, " ")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
@@ -54,9 +80,10 @@ export function plainText(html: string): string {
 }
 
 const found = z.object({ actorUri: z.string().url(), inboxUri: z.string().url(), handle: z.string(), displayName: z.string().nullable() });
+type Resolved = z.infer<typeof found> & { alsoKnownAs: string[] };
 
 /** Resolve `@user@host` to its actor. Provider I/O: never inside a transaction. */
-async function resolve(address: string): Promise<z.infer<typeof found>> {
+async function resolve(address: string): Promise<Resolved> {
   const parsed = parseAddress(address);
   if (!parsed) throw new ServiceError("validation", "Enter an address like @name@example.social.");
   const base = `${schemeFor(parsed.host)}://${parsed.host}`;
@@ -72,7 +99,7 @@ async function resolve(address: string): Promise<z.infer<typeof found>> {
   if (!self) throw new ServiceError("not_found", "That account does not federate.");
   const actor = await fetchRemoteActor(self).catch(() => null);
   if (!actor) throw new ServiceError("not_found", "That account could not be read.");
-  return { actorUri: actor.id, inboxUri: actor.inbox, handle: `${actor.preferredUsername ?? parsed.user}@${new URL(actor.id).host}`, displayName: null };
+  return { actorUri: actor.id, inboxUri: actor.inbox, handle: `${actor.preferredUsername ?? parsed.user}@${new URL(actor.id).host}`, displayName: null, alsoKnownAs: [actor.alsoKnownAs ?? []].flat() };
 }
 
 async function federatingSelf(ctx: ServiceContext) {
@@ -118,7 +145,7 @@ export const followRemote = defineOrchestratedService({
   input: z.object({ address: z.string().trim().min(3).max(320) }),
   output: z.object({ handle: z.string() }),
   handler: async (input, actor) => {
-    const target = await resolve(input.address);
+    const { alsoKnownAs: _aliases, ...target } = await resolve(input.address);
     await addRemoteFollow.call(target, actor);
     return { handle: target.handle };
   },
@@ -193,7 +220,7 @@ const addressed = (note: Activity, activity: Activity) =>
  * C12.32: what the inbox does with activities about accounts a member follows.
  * Returns true when it handled the activity. `actor` is the verified sender.
  */
-export async function applyFollowedActivity(ctx: ServiceContext, memberId: string, memberActor: string, activity: Activity, actor: { id: string }): Promise<boolean> {
+export async function applyFollowedActivity(ctx: ServiceContext, memberId: string, memberActor: string, activity: Activity, actor: { id: string }, moveTarget?: { id: string; inbox: string; alsoKnownAs: string[] }): Promise<boolean> {
   const [follow] = await ctx.tx.select().from(memberRemoteFollows).where(and(eq(memberRemoteFollows.userId, memberId), eq(memberRemoteFollows.actorUri, actor.id)));
   const object = activity.object as Activity | string | undefined;
   switch (activity.type) {
@@ -235,6 +262,21 @@ export async function applyFollowedActivity(ctx: ServiceContext, memberId: strin
       await ctx.tx.update(memberRemotePosts).set({ deletedAt: new Date() }).where(and(eq(memberRemotePosts.objectId, id), eq(memberRemotePosts.actorUri, actor.id)));
       return true;
     }
+    case "Move": {
+      // C12.33: a followed account moved. Follow the new one only if it names the old one back.
+      if (!follow || idOf(object) !== actor.id || !moveTarget || idOf(activity.target) !== moveTarget.id || !moveTarget.alsoKnownAs.includes(actor.id)) return false;
+      const followId = `${memberActor}#follows/${randomUUID()}`;
+      await ctx.tx.delete(memberRemoteFollows).where(eq(memberRemoteFollows.id, follow.id));
+      await ctx.tx
+        .insert(memberRemoteFollows)
+        .values({ userId: memberId, actorUri: moveTarget.id, inboxUri: moveTarget.inbox, handle: `${follow.handle.split("@")[0]}@${new URL(moveTarget.id).host}`, followId })
+        .onConflictDoNothing();
+      await ctx.tx.insert(memberFederationDeliveries).values([
+        { userId: memberId, inboxUri: moveTarget.inbox, activity: { "@context": CONTEXT, id: followId, type: "Follow", actor: memberActor, object: moveTarget.id } },
+        { userId: memberId, inboxUri: follow.inboxUri, activity: { "@context": CONTEXT, id: `${follow.followId}#undo`, type: "Undo", actor: memberActor, object: { id: follow.followId, type: "Follow", actor: memberActor, object: actor.id } } },
+      ]);
+      return true;
+    }
     case "Block": {
       if (idOf(object) !== memberActor) return false;
       await ctx.tx.delete(memberRemoteFollows).where(and(eq(memberRemoteFollows.userId, memberId), eq(memberRemoteFollows.actorUri, actor.id)));
@@ -254,4 +296,99 @@ export async function forgetUnfollowedPosts(ctx: ServiceContext, actorUris: stri
   if (gone.length) await ctx.tx.delete(memberRemotePosts).where(inArray(memberRemotePosts.actorUri, gone));
 }
 
-export default [addRemoteFollow, followRemote, unfollowRemote, remoteFollows, remoteFeed];
+const MAX_ALIASES = 5;
+
+export const applyFediverseAliases = defineService({
+  name: "members.applyFediverseAliases",
+  summary: "Store the resolved accounts that are also you.",
+  kind: "mutation",
+  permission: "authenticated",
+  external: false,
+  agentCallable: false,
+  writeClass: "write",
+  input: z.object({ actorUris: z.array(z.string().url().max(2000)).max(MAX_ALIASES) }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    const me = await federatingSelf(ctx);
+    await ctx.tx.update(memberProfiles).set({ fediverseAliases: [...new Set(input.actorUris)], updatedAt: new Date() }).where(eq(memberProfiles.userId, me.userId));
+    return { ok: true as const };
+  },
+});
+
+/** C12.33: name your accounts elsewhere, so a Move from one of them to here can be trusted. */
+export const setFediverseAliases = defineOrchestratedService({
+  name: "members.setFediverseAliases",
+  summary: "Say which accounts on other servers are also you, so you can move from one of them to here.",
+  kind: "mutation",
+  permission: "authenticated",
+  agentCallable: false,
+  writeClass: "write",
+  input: z.object({ addresses: z.array(z.string().trim().min(3).max(320)).max(MAX_ALIASES) }),
+  output: z.object({ aliases: listed(z.string()) }),
+  handler: async (input, actor) => {
+    const actorUris = [];
+    for (const address of input.addresses) actorUris.push((await resolve(address)).actorUri);
+    await applyFediverseAliases.call({ actorUris }, actor);
+    return { aliases: actorUris };
+  },
+});
+
+export const applyMove = defineService({
+  name: "members.applyMove",
+  summary: "Record that you moved to another account and tell your followers.",
+  kind: "mutation",
+  permission: "authenticated",
+  external: false,
+  agentCallable: false,
+  writeClass: "write",
+  input: z.object({ target: z.string().url().max(2000) }),
+  output: z.object({ notified: z.number().int() }),
+  handler: async (input, ctx) => {
+    const me = await federatingSelf(ctx);
+    const actor = actorId(me.handle);
+    await ctx.tx.update(memberProfiles).set({ movedTo: input.target, updatedAt: new Date() }).where(eq(memberProfiles.userId, me.userId));
+    const followers = await ctx.tx.select().from(memberRemoteFollowers).where(eq(memberRemoteFollowers.userId, me.userId));
+    const inboxes = [...new Set(followers.map((f) => f.sharedInboxUri ?? f.inboxUri))];
+    if (inboxes.length) {
+      await ctx.tx.insert(memberFederationDeliveries).values(inboxes.map((inboxUri) => ({ userId: me.userId, inboxUri, activity: { "@context": CONTEXT, id: `${actor}#moves/${randomUUID()}`, type: "Move", actor, object: actor, target: input.target } })));
+    }
+    ctx.setSubject("member", me.userId);
+    return { notified: inboxes.length };
+  },
+});
+
+/**
+ * C12.33: move this account's audience to an account elsewhere. The new
+ * account must already name this one in its alsoKnownAs — the same check
+ * every remote server makes before following the move.
+ */
+export const moveToRemote = defineOrchestratedService({
+  name: "members.moveToRemote",
+  summary: "Move to an account on another server: your fediverse followers are asked to follow it instead.",
+  kind: "mutation",
+  permission: "authenticated",
+  agentCallable: false,
+  writeClass: "write",
+  input: z.object({ address: z.string().trim().min(3).max(320) }),
+  output: z.object({ notified: z.number().int(), target: z.string() }),
+  handler: async (input, actor) => {
+    const target = await resolve(input.address);
+    const me = await moveSource.call({}, actor);
+    if (!target.alsoKnownAs.includes(me.actor)) throw new ServiceError("validation", "On the new account, first add this one as an alias (also known as), then move.");
+    const { notified } = await applyMove.call({ target: target.actorUri }, actor);
+    return { notified, target: target.actorUri };
+  },
+});
+
+export const moveSource = defineService({
+  name: "members.moveSource",
+  summary: "Your fediverse actor, for checking a move.",
+  kind: "query",
+  permission: "authenticated",
+  external: false,
+  input: z.object({}),
+  output: z.object({ actor: z.string() }),
+  handler: async (_input, ctx) => ({ actor: actorId((await federatingSelf(ctx)).handle) }),
+});
+
+export default [addRemoteFollow, followRemote, unfollowRemote, remoteFollows, remoteFeed, applyFediverseAliases, setFediverseAliases, applyMove, moveToRemote, moveSource];

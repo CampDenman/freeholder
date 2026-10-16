@@ -60,6 +60,10 @@ export const memberProfiles = pgTable(
     avatarAssetId: uuid("avatar_asset_id").references(() => assets.id, { onDelete: "set null" }),
     /** C12.18: this member chose to be findable and followable on the fediverse. */
     federated: boolean("federated").notNull().default(false),
+    /** C12.33: other fediverse accounts that are also this member (alsoKnownAs). */
+    fediverseAliases: jsonb("fediverse_aliases").$type<string[]>().notNull().default([]),
+    /** C12.33: the account this member moved to, announced to their followers. */
+    movedTo: text("moved_to"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },

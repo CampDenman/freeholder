@@ -1019,6 +1019,7 @@ export const SERVICE_NAMES = [
   "members.markShipped",
   "members.marketPolicy",
   "members.me",
+  "members.moveToRemote",
   "members.muteConversation",
   "members.myBookingHours",
   "members.myListings",
@@ -1070,6 +1071,7 @@ export const SERVICE_NAMES = [
   "members.setAvatar",
   "members.setBookingHours",
   "members.setFederation",
+  "members.setFediverseAliases",
   "members.setPayoutAccountStatus",
   "members.setRelation",
   "members.setStatus",
@@ -5555,7 +5557,7 @@ export interface ServiceCatalog {
   };
   "members.join": {
     input: { handle: string; displayName: string; meetsMinimumAge: true; isAdult: boolean };
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; createdAt: string; [key: string]: unknown };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; fediverseAliases: string[]; movedTo: string | null; createdAt: string; [key: string]: unknown };
   };
   "members.joinGroupCall": {
     input: { id: string; deviceId: string };
@@ -5579,7 +5581,7 @@ export interface ServiceCatalog {
   };
   "members.list": {
     input: { status?: "active" | "pending" | "suspended"; search?: string; limit?: number; offset?: number };
-    output: { members: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; createdAt: string; email: string; statusReason: string | null; [key: string]: unknown }[]; total: number };
+    output: { members: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; fediverseAliases: string[]; movedTo: string | null; createdAt: string; email: string; statusReason: string | null; [key: string]: unknown }[]; total: number };
   };
   "members.loadDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
@@ -5595,7 +5597,11 @@ export interface ServiceCatalog {
   };
   "members.me": {
     input: Record<string, never>;
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; createdAt: string; [key: string]: unknown } | null;
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; fediverseAliases: string[]; movedTo: string | null; createdAt: string; [key: string]: unknown } | null;
+  };
+  "members.moveToRemote": {
+    input: { address: string };
+    output: { notified: number; target: string };
   };
   "members.muteConversation": {
     input: { conversationId: string; muted: boolean };
@@ -5801,6 +5807,10 @@ export interface ServiceCatalog {
     input: { federated: boolean };
     output: { federated: boolean; address: string | null };
   };
+  "members.setFediverseAliases": {
+    input: { addresses: string[] };
+    output: { aliases: string[] };
+  };
   "members.setPayoutAccountStatus": {
     input: { userId: string; status: "ready" | "disabled" | "pending" };
     output: { ok: true };
@@ -5811,7 +5821,7 @@ export interface ServiceCatalog {
   };
   "members.setStatus": {
     input: { userId: string; status: "active" | "pending" | "suspended"; reason?: string };
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; createdAt: string; [key: string]: unknown };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; fediverseAliases: string[]; movedTo: string | null; createdAt: string; [key: string]: unknown };
   };
   "members.setSubscriptionPlanStatus": {
     input: { planId: string; offered: boolean };
@@ -5879,7 +5889,7 @@ export interface ServiceCatalog {
   };
   "members.updateMe": {
     input: { displayName?: string; bio?: string; handle?: string; isAdult?: boolean; showAdult?: boolean; bioVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; linksVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility?: "public" | "followers" | "friends" | "subscribers" | "only_me"; links?: { label: string; url: string }[]; isPrivate?: boolean; indexable?: boolean; readReceipts?: boolean };
-    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; createdAt: string; [key: string]: unknown };
+    output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; fediverseAliases: string[]; movedTo: string | null; createdAt: string; [key: string]: unknown };
   };
   "members.updateSettings": {
     input: { joinPolicy?: "open" | "approval" | "invite"; minimumAge?: number; marketplaceEnabled?: boolean; listingReview?: boolean; payoutModel?: "hold" | "seller_merchant" | "instant"; holdDays?: number; siteFeeBps?: number; payoutAdapter?: string; adultContent?: boolean; federation?: boolean };
@@ -8774,6 +8784,7 @@ export interface FreeholderApi {
     markShipped: (input: ServiceCatalog["members.markShipped"]["input"]) => Promise<ServiceCatalog["members.markShipped"]["output"]>;
     marketPolicy: (input?: ServiceCatalog["members.marketPolicy"]["input"]) => Promise<ServiceCatalog["members.marketPolicy"]["output"]>;
     me: (input?: ServiceCatalog["members.me"]["input"]) => Promise<ServiceCatalog["members.me"]["output"]>;
+    moveToRemote: (input: ServiceCatalog["members.moveToRemote"]["input"]) => Promise<ServiceCatalog["members.moveToRemote"]["output"]>;
     muteConversation: (input: ServiceCatalog["members.muteConversation"]["input"]) => Promise<ServiceCatalog["members.muteConversation"]["output"]>;
     myBookingHours: (input?: ServiceCatalog["members.myBookingHours"]["input"]) => Promise<ServiceCatalog["members.myBookingHours"]["output"]>;
     myListings: (input?: ServiceCatalog["members.myListings"]["input"]) => Promise<ServiceCatalog["members.myListings"]["output"]>;
@@ -8825,6 +8836,7 @@ export interface FreeholderApi {
     setAvatar: (input: ServiceCatalog["members.setAvatar"]["input"]) => Promise<ServiceCatalog["members.setAvatar"]["output"]>;
     setBookingHours: (input: ServiceCatalog["members.setBookingHours"]["input"]) => Promise<ServiceCatalog["members.setBookingHours"]["output"]>;
     setFederation: (input: ServiceCatalog["members.setFederation"]["input"]) => Promise<ServiceCatalog["members.setFederation"]["output"]>;
+    setFediverseAliases: (input: ServiceCatalog["members.setFediverseAliases"]["input"]) => Promise<ServiceCatalog["members.setFediverseAliases"]["output"]>;
     setPayoutAccountStatus: (input: ServiceCatalog["members.setPayoutAccountStatus"]["input"]) => Promise<ServiceCatalog["members.setPayoutAccountStatus"]["output"]>;
     setRelation: (input: ServiceCatalog["members.setRelation"]["input"]) => Promise<ServiceCatalog["members.setRelation"]["output"]>;
     setStatus: (input: ServiceCatalog["members.setStatus"]["input"]) => Promise<ServiceCatalog["members.setStatus"]["output"]>;

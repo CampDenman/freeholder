@@ -389,3 +389,9 @@ from mocked payment, mail or media runs alone.
 - Remote posts are stored as plain text (`member_remote_posts`), once per
   post however many members follow its author, and deleted when nobody here
   follows that account any more.
+
+## C12.33 — moving between fediverse accounts (2026-10-15)
+
+- Aliases are published as `alsoKnownAs`; a member who moved away shows
+  `movedTo` and keeps working here. A move cannot be undone from the
+  settings yet: remote servers have already moved those followers.
