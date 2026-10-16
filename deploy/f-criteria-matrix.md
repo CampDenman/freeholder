@@ -4893,6 +4893,36 @@ v2.
 - **F11** — `deploy/members-platform.md` and `.changeset/member-call-removal.md`.
 - **F12** — `tests/browser/member-group-calls.spec.ts`: a member leaves mid-call through a real LiveKit SFU.
 
+## C12.38 — Let sellers be the merchant of record
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+
+## C12.39 — Move end-to-end encryption from ts-mls to OpenMLS
+
+- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+
 ## C12.30 — Hash-match known abuse imagery on upload
 
 - **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.

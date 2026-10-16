@@ -9,9 +9,10 @@ import { formatDateTime, formatMoney } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { myPayoutAccount, myPayouts } from "@/modules/members/payouts";
 import { membershipRules } from "@/modules/members/service";
-import { Button, Callout, Card, CardBody, CardHeader, Field, Pill } from "@/ui/primitives";
+import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill } from "@/ui/primitives";
 import { getLocale, getT } from "../../../i18n";
-import { savePayoutInstructionsAction } from "./actions";
+import { refreshPayoutAccountAction, savePayoutInstructionsAction, startPayoutSetupAction } from "./actions";
+import { payoutSetup } from "@/modules/members/provider-payouts";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -30,7 +31,7 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Prom
       </div>
     );
   }
-  const [account, earnings] = await Promise.all([myPayoutAccount.call({}, actor), myPayouts.call({}, actor)]);
+  const [account, earnings, setup] = await Promise.all([myPayoutAccount.call({}, actor), myPayouts.call({}, actor), payoutSetup.call({}, actor)]);
   const timezone = business?.timezone ?? "UTC";
   return (
     <div className="grid gap-6">
@@ -50,8 +51,29 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Prom
               </Field>
               <div><Button type="submit">{t("members.payouts.saveInstructions")}</Button></div>
             </form>
-          ) : (
+          ) : !setup.provider ? (
             <p>{t("members.payouts.providerManaged")}</p>
+          ) : !setup.configured ? (
+            <Callout>{t("members.payouts.notConfigured")}</Callout>
+          ) : (
+            <div className="grid gap-3">
+              <p className="text-sm text-ink-muted">{t(`members.payouts.setupIntro.${setup.provider}`)}</p>
+              {setup.kind === "hosted" ? (
+                <form action={startPayoutSetupAction}><Button type="submit">{t(account.status === "none" ? "members.payouts.setupStart" : "members.payouts.setupContinue")}</Button></form>
+              ) : (
+                <form action={startPayoutSetupAction} className="grid gap-3 sm:grid-cols-2">
+                  {setup.fields.map((field) => (
+                    <Field key={field} label={t(`members.payouts.field.${field}`)} htmlFor={`payout-${field}`}>
+                      <Input id={`payout-${field}`} name={field} required maxLength={200} autoComplete="off" />
+                    </Field>
+                  ))}
+                  <div className="sm:col-span-2"><Button type="submit">{t("members.payouts.setupSave")}</Button></div>
+                </form>
+              )}
+              {account.status !== "none" ? (
+                <form action={refreshPayoutAccountAction}><Button type="submit" variant="quiet">{t("members.payouts.checkStatus")}</Button></form>
+              ) : null}
+            </div>
           )}
         </CardBody>
       </Card>

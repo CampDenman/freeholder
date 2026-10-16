@@ -42,4 +42,5 @@ export {
   memberHistoryTransfers,
   memberRemoteFollows,
   memberRemotePosts,
+  memberPayoutTransfers,
 } from "./schema";

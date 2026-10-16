@@ -911,3 +911,34 @@ export const memberRemotePosts = pgTable(
   },
   (t) => [uniqueIndex("member_remote_posts_object_idx").on(t.objectId), index("member_remote_posts_actor_idx").on(t.actorUri, t.publishedAt)],
 );
+
+/**
+ * C12.26–C12.27: a payout carried out (or a refunded one reversed) by the
+ * site's payout provider. One of each kind per payout, so a retry never pays
+ * twice; the provider's reference settles it when its webhook confirms.
+ */
+export const memberPayoutTransfers = pgTable(
+  "member_payout_transfers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    payoutId: uuid("payout_id").notNull().references(() => memberPayouts.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["transfer", "reversal"] }).notNull(),
+    provider: text("provider").notNull(),
+    state: text("state", { enum: ["pending", "sent", "settled", "failed"] }).notNull().default("pending"),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    reference: text("reference"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    lastError: text("last_error"),
+    createdAt: createdAtColumn(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("member_payout_transfers_once_idx").on(t.payoutId, t.kind),
+    index("member_payout_transfers_due_idx").on(t.state, t.nextAttemptAt),
+    index("member_payout_transfers_reference_idx").on(t.provider, t.reference),
+    check("member_payout_transfers_kind_valid", sql`${t.kind} in ('transfer','reversal')`),
+    check("member_payout_transfers_state_valid", sql`${t.state} in ('pending','sent','settled','failed')`),
+  ],
+);

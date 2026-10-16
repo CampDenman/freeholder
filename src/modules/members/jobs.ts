@@ -37,4 +37,16 @@ export const purgeSealedBlobs = defineJob({
   },
 });
 
-export default [releaseDuePayouts, deliverFederation, purgeSealedBlobs];
+/** C12.26–C12.27: due payouts and reversals through the site's payout provider. */
+export const sendProviderPayouts = defineJob({
+  name: "members.sendProviderPayouts",
+  summary: "Pay due seller payouts, and reverse refunded ones, through the payout provider.",
+  schedule: "*/5 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { sendProviderPayouts: send } = await import("./provider-payouts");
+    return send();
+  },
+});
+
+export default [releaseDuePayouts, deliverFederation, purgeSealedBlobs, sendProviderPayouts];

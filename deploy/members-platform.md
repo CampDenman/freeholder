@@ -395,3 +395,21 @@ from mocked payment, mail or media runs alone.
 - Aliases are published as `alsoKnownAs`; a member who moved away shows
   `movedTo` and keeps working here. A move cannot be undone from the
   settings yet: remote servers have already moved those followers.
+
+## C12.26–C12.27 — payout providers (2026-10-15, built, not yet proven live)
+
+- Stripe Connect uses `STRIPE_SECRET_KEY` plus a Connect webhook endpoint at
+  `/api/payouts/stripe_connect/webhook` signed with
+  `STRIPE_CONNECT_WEBHOOK_SECRET` (subscribe to `account.updated`).
+- PayPal Payouts uses `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and
+  `PAYPAL_WEBHOOK_ID`; point a webhook at `/api/payouts/paypal_payouts/webhook`
+  with the `PAYMENT.PAYOUTS-ITEM.*` events. Payouts must be enabled on the
+  PayPal account.
+- Razorpay Route uses `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and
+  `RAZORPAY_WEBHOOK_SECRET`; Route must be enabled; webhook at
+  `/api/payouts/razorpay_route/webhook` with `transfer.*` and
+  `product.route.*`. Bank details pass through to Razorpay and are not
+  stored.
+- `members.sendProviderPayouts` runs every five minutes. Request shapes
+  follow each provider's public API reference and are tested against
+  recorded HTTP only; run each against its sandbox before turning it on.

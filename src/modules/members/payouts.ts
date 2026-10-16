@@ -7,12 +7,14 @@
 // for the site's window (or until the buyer confirms delivery), and moves it
 // through due to paid. Which provider pays sellers is a marketplace payout
 // adapter; the manual adapter here lets a site pay by hand while the ledger
-// keeps every amount. Stripe Connect is C12.26; other providers C12.27.
+// keeps every amount. Provider-backed adapters (Stripe Connect, PayPal
+// Payouts, Razorpay Route: C12.26–C12.27) are in provider-payouts.ts.
 import { z } from "zod";
 import { and, desc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { orderForInvoice, orderSellers, registerSellerGate } from "@/modules/catalog/market";
+import { PAYOUT_PROVIDER_IDS } from "@/adapters/payouts";
 import { notifyMember } from "./notify";
 import { openMessage, sealMessage } from "./message-crypto";
 import {
@@ -47,6 +49,9 @@ export function payoutAdapters(): MarketplacePayoutAdapter[] {
 
 /** The site pays sellers itself (bank transfer, e-transfer, cash) and records it here. */
 registerPayoutAdapter({ id: "manual", models: ["hold", "instant"], manual: true });
+// The site's balance pays sellers through a provider. Direct charges to the
+// seller (seller_merchant) need checkout changes and are not offered yet.
+for (const id of PAYOUT_PROVIDER_IDS) registerPayoutAdapter({ id, models: ["hold", "instant"], manual: false });
 
 export async function marketRules(ctx: ServiceContext) {
   const [found] = await ctx.tx.select().from(memberSettings).where(eq(memberSettings.id, 1));
@@ -207,6 +212,11 @@ export const reversePayouts = defineService({
       .set({ state: "review", note: "Buyer refunded after the seller was paid; recover or absorb it." })
       .where(and(source, eq(memberPayouts.state, "paid")))
       .returning({ id: memberPayouts.id });
+    // C12.26: where a provider paid the seller, a full refund asks it to reverse the transfer.
+    if (full && paid.length) {
+      const { queueReversals } = await import("./provider-payouts");
+      await queueReversals(ctx, paid.map((p) => p.id));
+    }
     return { changed: open.length + paid.length };
   },
 });

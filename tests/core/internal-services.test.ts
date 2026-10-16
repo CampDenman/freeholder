@@ -69,6 +69,11 @@ const INTERNAL = [
   "members.recordInvoicePayout",
   "members.releaseDuePayouts",
   "members.reversePayouts",
+  // C12.26–C12.27: the provider payout job's claim and apply steps, and
+  // verified provider webhooks; money moves on nobody's behalf.
+  "members.applyPayoutWebhook",
+  "members.applyProviderTransfer",
+  "members.claimProviderTransfers",
   // C12.18: federation runs on nobody's behalf. Posting and deleting queue
   // activities; the inbox route applies only signature-verified activities.
   "members.federateDelete",
@@ -215,6 +220,9 @@ const CALLER_AUTHORIZED_PHASES = [
   "members.federationDocument",
   // C12.36: halves of members.uploadSealedBlob, and the check behind
   // /member-blobs/[id]; the bytes route is the only way in.
+  // C12.26–C12.27: the halves of seller payout setup around the provider call.
+  "members.applyPayoutAccount",
+  "members.payoutSetupSource",
   // C12.32: the apply half of members.followRemote, after the lookup.
   "members.addRemoteFollow",
   // C12.33: the halves of members.setFediverseAliases and members.moveToRemote.
