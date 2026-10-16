@@ -5563,6 +5563,10 @@ export interface ServiceCatalog {
     input: { id: string; deviceId: string };
     output: { url: string; token: string; room: string; media: "voice" | "video"; conversationId: string };
   };
+  "members.joinGroupCall": {
+    input: { id: string; deviceId: string };
+    output: { url: string; token: string; room: string; media: "voice" | "video"; conversationId: string };
+  };
   "members.latest": {
     input: { before?: string; tag?: string };
     output: { posts: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; visibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; adult: boolean; createdAt: string; editedAt: string | null; repost: { id: string; author: { userId: string; handle: string; displayName: string; [key: string]: unknown }; body: string; createdAt: string; [key: string]: unknown } | null; reactions: { [key: string]: number }; myReaction: ("like" | "love" | "laugh" | "wow" | "sad" | "thanks") | null; comments: number; tagged: { userId: string; handle: string; displayName: string; [key: string]: unknown }[]; attachments: { id: string; kind: "image" | "video"; altText: string; width: number | null; height: number | null; [key: string]: unknown }[]; [key: string]: unknown }[]; next: string | null };
