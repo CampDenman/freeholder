@@ -24,9 +24,11 @@ The plan gate on main reads **350 unique IDs, 323 checked, 27 open**. Of the 27,
 twelve are §43.2's permanent F01–F12 template rows, which are re-run at the
 final gate and are not work in themselves. The rest are real items.
 
-**Main is `92504696` and is deployed.** There are no in-flight merges, no
-running agents and no background watchers. The scratch Postgres used for local
-tests has been stopped.
+**Main is `e809a71e`; the deploy is still `92504696`.** Since this snapshot
+was written, #541 (the Dependabot rollup) and this handoff PR (#540) merged to
+main; neither is deployed. There are no in-flight merges, no running agents
+and no background watchers. The scratch Postgres used for local tests has been
+stopped.
 
 ## Production
 
@@ -70,8 +72,16 @@ digest by hand.
   - It **proposes the same C3 IDs as #539**, so whichever of #529 and #539 merges
     second must renumber its items.
   - IDs must stay contiguous, or `plan:check` fails.
-- **Dependabot #478–#500.** These have not been reviewed. Batch them into a
-  single lockfile PR, as #456 did.
+- **Dependabot #478–#500: done in #541** (merged 2026-10-16). Eleven bumps
+  rolled into one lockfile PR, as #456 did. pg-boss is floored at `~12.37.1`
+  on purpose — `^` resolves to the breaking 12.38.0. When this deploys,
+  restart all instances together: pg-boss schemas 42–45 migrate on start.
+  - The two high-severity alerts on `apps/mobile/package-lock.json` (braces
+    ≤3.0.3, node-forge ≤1.4.0) have no published fix upstream and are
+    build-time tooling only. The owner chose to leave the alerts open until
+    upstream patches.
+  - nodemailer 10.1.2 (one more security fix) was skipped for release age;
+    take it once Dependabot re-proposes it.
 
 ## Open plan items
 
