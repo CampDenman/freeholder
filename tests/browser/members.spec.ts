@@ -333,6 +333,19 @@ test.describe("members (C12.01)", () => {
     await expect(samTablet.page.getByText("Dinner at 8?")).toBeVisible();
     await expect(samTablet.page.getByText("Sent before this device joined the conversation.").first()).toBeVisible();
 
+    // C12.34: the tablet asks for Sam's earlier messages; the phone shows the same code and sends them.
+    await samTablet.page.goto("/messages");
+    await samTablet.page.getByText("Bring earlier messages to this browser").click();
+    await samTablet.page.getByRole("button", { name: "Ask my other devices" }).click();
+    const tabletCode = await samTablet.page.locator("[data-my-code]").textContent();
+    await samSide.page.goto("/messages");
+    await expect(samSide.page.locator("[data-history-code]")).toHaveText(tabletCode!);
+    await samSide.page.getByRole("button", { name: "Send my messages" }).click();
+    await expect(samSide.page.getByText(/^Sent\. They are encrypted/)).toBeVisible();
+    await expect(samTablet.page.getByText(/^Brought \d+ earlier messages to this browser\.$/)).toBeVisible({ timeout: 20_000 });
+    await samTablet.page.goto(raeSide.page.url());
+    await expect(samTablet.page.getByText("The spare key is under the blue pot")).toBeVisible();
+
     // C12.35: Rae is told a device joined, and both see the same safety number.
     await raeSide.page.reload();
     await expect(raeSide.page.getByText("The devices in this conversation changed since you last checked.")).toBeVisible();

@@ -12,7 +12,7 @@ import { myMembership } from "@/modules/members/service";
 import { Callout, Field, Input } from "@/ui/primitives";
 import { getLocale, getT } from "../../i18n";
 import { startConversationAction } from "./actions";
-import { NewConversation } from "./SecureConversation";
+import { HistoryPanel, NewConversation } from "./SecureConversation";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -44,6 +44,22 @@ export default async function MessagesPage({ searchParams }: { searchParams: Pro
         <a className="underline" href="/messages?box=requests" aria-current={box === "requests" ? "page" : undefined}>{t("members.messages.requests", { count: counts.requests })}</a>
       </nav>
       {query.error ? <Callout tone="danger">{t("members.messages.failed")}</Callout> : null}
+      <HistoryPanel
+        userId={me.userId}
+        labels={{
+          title: t("members.history.title"),
+          intro: t("members.history.intro"),
+          ask: t("members.history.ask"),
+          asked: t("members.history.asked"),
+          brought: t("members.history.brought", { n: "{n}" }),
+          request: t("members.history.request", { device: "{device}" }),
+          compare: t("members.history.compare"),
+          send: t("members.history.send"),
+          ignore: t("members.history.ignore"),
+          sent: t("members.history.sent"),
+          failed: t("members.history.failed"),
+        }}
+      />
       <NewConversation userId={me.userId} fallback={startConversationAction} labels={{ send: t("members.messages.send"), sending: t("members.e2ee.sending"), failed: t("members.messages.failed") }}>
         <Field label={t("members.messages.to")} htmlFor="message-to" hint={t("members.messages.toHint")}>
           <Input id="message-to" name="to" required defaultValue={query.to ?? ""} maxLength={2000} />

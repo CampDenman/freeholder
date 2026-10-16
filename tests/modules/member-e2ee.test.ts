@@ -19,6 +19,8 @@ import { memberReports, memberSealedBlobs } from "@/modules/members/schema";
 import { purgeSealedBlobs, sealedBlobAccess, uploadSealedBlob } from "@/modules/members/sealed-blobs";
 import { openFile, sealFile } from "@/modules/members/e2ee/wire";
 import { storage } from "@/adapters/storage";
+import { requestHistory } from "@/modules/members/e2ee/history";
+import { memberHistoryTransfers } from "@/modules/members/schema";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 type Member = typeof CUSTOMER;
@@ -180,6 +182,37 @@ describe.runIf(hasDatabase)("end-to-end encrypted messages (C12.23)", () => {
     expect((await purgeSealedBlobs()).purged).toBe(1);
     expect(await storage().get(access!.storageKey)).toBeUndefined();
     expect(await db().select().from(memberSealedBlobs)).toEqual([]);
+  });
+
+  it("brings earlier messages to a new device only when the member approves it on another (C12.34)", { timeout: 60_000 }, async () => {
+    const rae = deviceFor(RAE, "Rae");
+    const sam = deviceFor(SAM, "Sam phone");
+    await Promise.all([rae.device(), sam.device()]);
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await rae.send(id, "The code for the gate is 4417");
+    await sam.send(id, "Thanks");
+    const tablet = deviceFor(SAM, "Sam tablet");
+    const tabletDevice = await tablet.device();
+    await rae.send(id, "And bring snacks");
+    expect((await bodies(tablet, id)).filter((b) => b !== "(unreadable)")).toEqual(["And bring snacks"]);
+
+    // The tablet asks; Sam's phone sees the request with the tablet's own code; Rae never sees it.
+    const shown = await tablet.askForHistory();
+    expect(shown).toBe(await tablet.code());
+    const [ask] = await sam.historyAsks();
+    expect(ask?.code).toBe(shown);
+    expect(await rae.historyAsks()).toEqual([]);
+    expect((await failure(requestHistory.call({ deviceId: tabletDevice.deviceId, publicKey: "AAAA", sig: "A".repeat(86) + "==" }, SAM))).code).toBe("validation");
+
+    // Nothing moves until the phone approves; then the tablet reads the earlier messages.
+    expect(await tablet.takeHistory()).toBe(0);
+    expect(await sam.giveHistory(ask!)).toBeGreaterThanOrEqual(3);
+    const sealed = JSON.stringify(await db().select().from(memberHistoryTransfers));
+    expect(sealed).not.toContain("4417");
+    expect(await tablet.takeHistory()).toBe(2);
+    expect(await bodies(tablet, id)).toEqual(expect.arrayContaining(["The code for the gate is 4417", "Thanks", "And bring snacks"]));
+    expect(await db().select().from(memberHistoryTransfers)).toEqual([]);
+    expect(await sam.historyAsks()).toEqual([]);
   });
 
   it("stays plaintext, and says so, until everyone has a device", async () => {

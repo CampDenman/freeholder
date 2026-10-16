@@ -189,3 +189,22 @@ export async function openCallKey(conversationId: string, callId: string, genera
   const ok = await (await suite()).signature.verify(sender.signatureKey, callKeyPart(conversationId, parsed), unb64(parsed.sig));
   return ok && unb64(parsed.key).length === 32 ? parsed.key : null;
 }
+
+/** Five-digit groups from a digest, as in other messengers' safety numbers. */
+export function digitGroups(bytes: Uint8Array, count: number): string {
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const n = ((bytes[(i * 2) % bytes.length]! << 16) | (bytes[(i * 2 + 1) % bytes.length]! << 8) | bytes[(i * 2 + 2) % bytes.length]!) % 100000;
+    out.push(String(n).padStart(5, "0"));
+  }
+  return out.join(" ");
+}
+
+/** C12.35/34: the code identifying one device's key, shown on it and wherever it is checked. */
+export async function deviceCode(userId: string, deviceId: string, signatureKey: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", utf8(`freeholder:device:v1\n${userId}\n${deviceId}\n${signatureKey}`) as BufferSource));
+  return digitGroups(digest, 4);
+}
+
+/** C12.34: what a device signs when it asks for history, binding the key it will open it with. */
+export const historyStatement = (userId: string, deviceId: string, publicKey: string): Uint8Array => utf8(`freeholder:history:v1\n${userId}\n${deviceId}\n${publicKey}`);

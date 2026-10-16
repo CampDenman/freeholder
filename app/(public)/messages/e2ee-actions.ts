@@ -9,6 +9,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { sendMessage, startConversation } from "@/modules/members/messages";
 import { claimKeyPackages, e2eeCommit, e2eeSync, publishKeyPackages, registerDevice, sendCallKey, sendEncrypted } from "@/modules/members/e2ee/service";
+import { ackHistory, closeHistoryRequest, historyRequests, receivedHistory, requestHistory, sendHistory } from "@/modules/members/e2ee/history";
 
 type Result<T> = { ok: T } | { error: { code: string; message: string } };
 
@@ -49,4 +50,22 @@ export async function sendPlaintextAction(input: Parameters<typeof sendMessage.c
 }
 export async function sendCallKeyAction(input: Parameters<typeof sendCallKey.call>[0]) {
   return run((actor) => sendCallKey.call(input, actor));
+}
+export async function requestHistoryAction(input: Parameters<typeof requestHistory.call>[0]) {
+  return run((actor) => requestHistory.call(input, actor));
+}
+export async function historyRequestsAction(input: Parameters<typeof historyRequests.call>[0]) {
+  return run((actor) => historyRequests.call(input, actor));
+}
+export async function sendHistoryAction(input: Parameters<typeof sendHistory.call>[0]) {
+  return run((actor) => sendHistory.call(input, actor));
+}
+export async function closeHistoryAction(input: Parameters<typeof closeHistoryRequest.call>[0]) {
+  return run((actor) => closeHistoryRequest.call(input, actor));
+}
+export async function receivedHistoryAction(input: Parameters<typeof receivedHistory.call>[0]) {
+  return run((actor) => receivedHistory.call(input, actor));
+}
+export async function ackHistoryAction(input: Parameters<typeof ackHistory.call>[0]) {
+  return run((actor) => ackHistory.call(input, actor));
 }

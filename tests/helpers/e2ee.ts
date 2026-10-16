@@ -5,6 +5,7 @@
 import { ServiceError, type Actor } from "@/core/service";
 import { E2eeDevice, type DeviceRecord, type E2eeStore, type E2eeTransport, type ReadMessage, type StoredKeyPackage } from "@/modules/members/e2ee/engine";
 import { claimKeyPackages, e2eeCommit, e2eeSync, publishKeyPackages, registerDevice, sendCallKey, sendEncrypted } from "@/modules/members/e2ee/service";
+import { ackHistory, closeHistoryRequest, historyRequests, receivedHistory, requestHistory, sendHistory } from "@/modules/members/e2ee/history";
 
 type Member = Extract<Actor, { kind: "user" }>;
 
@@ -15,6 +16,7 @@ export function memoryStore(): E2eeStore {
   const messages = new Map<string, Map<string, ReadMessage>>();
   const callKeys = new Map<string, string>();
   const seen = new Map<string, string[]>();
+  let historyKey: Uint8Array | null = null;
   return {
     device: async () => device,
     saveDevice: async (d) => { device = d; },
@@ -26,6 +28,9 @@ export function memoryStore(): E2eeStore {
     messages: async (id) => new Map(messages.get(id) ?? []),
     saveMessage: async (id, mid, m) => { messages.set(id, new Map(messages.get(id) ?? []).set(mid, m)); },
     dropMessage: async (id, mid) => { messages.get(id)?.delete(mid); },
+    historyKey: async () => historyKey,
+    saveHistoryKey: async (key) => { historyKey = key; },
+    conversations: async () => [...messages.keys()],
     seenDevices: async (id) => seen.get(id) ?? null,
     saveSeenDevices: async (id, devices) => { seen.set(id, devices); },
     callKey: async (id) => callKeys.get(id) ?? null,
@@ -52,6 +57,12 @@ export function directTransport(actor: Member): E2eeTransport {
     commit: wrap(e2eeCommit),
     send: wrap(sendEncrypted),
     sendCallKey: wrap(sendCallKey),
+    requestHistory: wrap(requestHistory),
+    historyRequests: wrap(historyRequests),
+    sendHistory: wrap(sendHistory),
+    closeHistory: wrap(closeHistoryRequest),
+    receivedHistory: wrap(receivedHistory),
+    ackHistory: wrap(ackHistory),
   };
 }
 

@@ -7,7 +7,7 @@
 import type { DeviceRecord, E2eeStore, ReadMessage, StoredKeyPackage } from "./engine";
 
 const NAME = "freeholder-e2ee";
-const STORES = ["device", "keyPackages", "groups", "messages", "callKeys", "seenDevices"] as const;
+const STORES = ["device", "keyPackages", "groups", "messages", "callKeys", "seenDevices", "history"] as const;
 
 function request<T>(r: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -19,7 +19,7 @@ function request<T>(r: IDBRequest<T>): Promise<T> {
 let opened: Promise<IDBDatabase> | null = null;
 function database(): Promise<IDBDatabase> {
   opened ??= new Promise((resolve, reject) => {
-    const open = indexedDB.open(NAME, 3);
+    const open = indexedDB.open(NAME, 4);
     open.onupgradeneeded = () => {
       for (const store of STORES) if (!open.result.objectStoreNames.contains(store)) open.result.createObjectStore(store);
     };
@@ -71,6 +71,12 @@ export const browserStore: E2eeStore = {
     const saved = (await get<Record<string, ReadMessage>>("messages", conversationId)) ?? {};
     delete saved[id];
     await put("messages", conversationId, saved);
+  },
+  historyKey: () => get<Uint8Array>("history", "key"),
+  saveHistoryKey: (key) => (key ? put("history", "key", key) : remove("history", "key")),
+  async conversations() {
+    const db = await database();
+    return (await request(db.transaction("messages").objectStore("messages").getAllKeys())).map(String);
   },
   seenDevices: (conversationId) => get<string[]>("seenDevices", conversationId),
   saveSeenDevices: (conversationId, devices) => put("seenDevices", conversationId, devices),
