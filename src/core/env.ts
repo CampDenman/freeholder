@@ -194,6 +194,8 @@ const envSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   /** Kept only during Stripe endpoint-secret rotation. */
   STRIPE_WEBHOOK_SECRET_PREVIOUS: z.string().optional(),
+  /** C12.26: the signing secret of the Connect webhook endpoint (account events). */
+  STRIPE_CONNECT_WEBHOOK_SECRET: z.string().optional(),
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_WEBHOOK_ID: z.string().optional(),

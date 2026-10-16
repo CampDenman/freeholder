@@ -10858,9 +10858,27 @@ whatever is best for the people using the site.
   verification, held funds with transfers on release, direct and
   destination charges, application fees, refunds and transfer reversals, and
   signed webhooks.
+  *(Progress 2026-10-15, not yet checked: `src/adapters/payouts/stripe-connect.ts`
+  and `src/modules/members/provider-payouts.ts` carry the hold and instant
+  models — Express accounts with Stripe-hosted onboarding, `account.updated`
+  webhooks verified with `STRIPE_CONNECT_WEBHOOK_SECRET`, one idempotent
+  Transfer per due payout from the site's balance, and a reversal on a full
+  refund — proven against recorded HTTP in
+  `tests/adapters/payout-providers.test.ts` and
+  `tests/modules/member-provider-payouts.test.ts`. Still open: a run against
+  a Stripe test account (waits for test keys, Tony 2026-10-15) and direct
+  and destination charges with application fees, now C12.38.)*
 - [ ] **C12.27** Add marketplace payout adapters for providers other than
   Stripe (for example PayPal, Adyen for Platforms, Mollie), selectable by the
   site owner without code changes.
+  *(Progress 2026-10-15, not yet checked: PayPal Payouts
+  (`src/adapters/payouts/paypal-payouts.ts`: the seller's PayPal email,
+  one-item batches keyed by the payout id, settled and failed by verified
+  webhook; PayPal cannot reverse a claimed payout, so a refund after payment
+  goes to review) and Razorpay Route (`src/adapters/payouts/razorpay-route.ts`:
+  a linked account with Route and bank settlement, direct transfers and
+  reversals, signed webhooks), selectable under Admin → Members, proven
+  against recorded HTTP. Still open: sandbox runs with test credentials.)*
 - [x] **C12.28** Publish a prohibited-items policy: the site owner edits it
   under Admin → Members, it is public at `/market/policy`, sellers accept it
   before listing, and the report queue offers it as a reason.
@@ -11081,6 +11099,15 @@ whatever is best for the people using the site.
   and revokes mid-call against a recording SFU adapter; the browser test has
   a member leave mid-call through the real LiveKit and checks the others keep
   decoding on the new key. Changeset `member-call-removal.md`.)*
+- [ ] **C12.38** Let sellers be the merchant of record: direct or
+  destination charges at checkout through the payout provider (Stripe
+  Connect first), with the site fee taken as an application fee, refunds
+  and disputes on the seller's account. Split from C12.26 on 2026-10-15.
+- [ ] **C12.39** Move end-to-end encryption from `ts-mls` (not independently
+  audited) to OpenMLS (audited by SRLabs), compiled to WebAssembly in CI and
+  committed so deploys stay Node-only. Deferred by Tony on 2026-10-15; until
+  then members are not told their messages are safe against a compromised
+  server.
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
   preserving evidence and reporting through the legal path for the site's

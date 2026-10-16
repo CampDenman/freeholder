@@ -1033,6 +1033,7 @@ export const SERVICE_NAMES = [
   "members.offerBookableService",
   "members.openDispute",
   "members.payoutAccount",
+  "members.payoutSetup",
   "members.payouts",
   "members.pendingListings",
   "members.pendingTags",
@@ -1046,6 +1047,7 @@ export const SERVICE_NAMES = [
   "members.purgeDemoFixture",
   "members.react",
   "members.receivedHistory",
+  "members.refreshPayoutAccount",
   "members.registerDevice",
   "members.remoteFeed",
   "members.remoteFollowers",
@@ -1082,6 +1084,7 @@ export const SERVICE_NAMES = [
   "members.startCall",
   "members.startConversation",
   "members.startGroupCall",
+  "members.startPayoutSetup",
   "members.storefront",
   "members.subscriptionPlans",
   "members.takeSignals",
@@ -5655,6 +5658,10 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { adapter: string; manual: boolean; status: "none" | "pending" | "ready" | "disabled"; instructions: string | null };
   };
+  "members.payoutSetup": {
+    input: Record<string, never>;
+    output: { provider: string | null; kind: ("hosted" | "form") | null; fields: ("paypalEmail" | "legalName" | "phone" | "street" | "city" | "state" | "postalCode" | "beneficiaryName" | "accountNumber" | "ifsc")[]; configured: boolean };
+  };
   "members.payouts": {
     input: { state?: "held" | "due" | "paid" | "cancelled" | "review" };
     output: { payouts: { id: string; orderId: string | null; invoiceId: string | null; sellerId: string; sellerHandle: string; currency: string; grossMinor: number; feeMinor: number; netMinor: number; state: "held" | "due" | "paid" | "cancelled" | "review"; model: "hold" | "seller_merchant" | "instant"; releaseAt: string | null; paidAt: string | null; reference: string | null; note: string | null; createdAt: string; [key: string]: unknown }[]; accounts: { userId: string; handle: string; status: "pending" | "ready" | "disabled"; instructions: string | null; [key: string]: unknown }[] };
@@ -5706,6 +5713,10 @@ export interface ServiceCatalog {
   "members.receivedHistory": {
     input: { deviceId: string };
     output: { transfers: { id: string; requestId: string; conversationId: string; fromDeviceId: string | null; enc: string; ct: string; [key: string]: unknown }[] };
+  };
+  "members.refreshPayoutAccount": {
+    input: Record<string, never>;
+    output: { status: "pending" | "ready" | "disabled" };
   };
   "members.registerDevice": {
     input: { deviceId: string; label: string; signatureKey: string; keyPackages: { id: string; keyPackage: string }[]; lastResort: { id: string; keyPackage: string } };
@@ -5850,6 +5861,10 @@ export interface ServiceCatalog {
   "members.startGroupCall": {
     input: { conversationId: string; media: "voice" | "video" };
     output: { id: string; started: boolean };
+  };
+  "members.startPayoutSetup": {
+    input: { fields?: { [key: string]: string } };
+    output: { url: string | null; status: "pending" | "ready" | "disabled" };
   };
   "members.storefront": {
     input: { handle: string };
@@ -8798,6 +8813,7 @@ export interface FreeholderApi {
     offerBookableService: (input: ServiceCatalog["members.offerBookableService"]["input"]) => Promise<ServiceCatalog["members.offerBookableService"]["output"]>;
     openDispute: (input: ServiceCatalog["members.openDispute"]["input"]) => Promise<ServiceCatalog["members.openDispute"]["output"]>;
     payoutAccount: (input?: ServiceCatalog["members.payoutAccount"]["input"]) => Promise<ServiceCatalog["members.payoutAccount"]["output"]>;
+    payoutSetup: (input?: ServiceCatalog["members.payoutSetup"]["input"]) => Promise<ServiceCatalog["members.payoutSetup"]["output"]>;
     payouts: (input?: ServiceCatalog["members.payouts"]["input"]) => Promise<ServiceCatalog["members.payouts"]["output"]>;
     pendingListings: (input?: ServiceCatalog["members.pendingListings"]["input"]) => Promise<ServiceCatalog["members.pendingListings"]["output"]>;
     pendingTags: (input?: ServiceCatalog["members.pendingTags"]["input"]) => Promise<ServiceCatalog["members.pendingTags"]["output"]>;
@@ -8811,6 +8827,7 @@ export interface FreeholderApi {
     purgeDemoFixture: (input: ServiceCatalog["members.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["members.purgeDemoFixture"]["output"]>;
     react: (input: ServiceCatalog["members.react"]["input"]) => Promise<ServiceCatalog["members.react"]["output"]>;
     receivedHistory: (input: ServiceCatalog["members.receivedHistory"]["input"]) => Promise<ServiceCatalog["members.receivedHistory"]["output"]>;
+    refreshPayoutAccount: (input?: ServiceCatalog["members.refreshPayoutAccount"]["input"]) => Promise<ServiceCatalog["members.refreshPayoutAccount"]["output"]>;
     registerDevice: (input: ServiceCatalog["members.registerDevice"]["input"]) => Promise<ServiceCatalog["members.registerDevice"]["output"]>;
     remoteFeed: (input?: ServiceCatalog["members.remoteFeed"]["input"]) => Promise<ServiceCatalog["members.remoteFeed"]["output"]>;
     remoteFollowers: (input?: ServiceCatalog["members.remoteFollowers"]["input"]) => Promise<ServiceCatalog["members.remoteFollowers"]["output"]>;
@@ -8847,6 +8864,7 @@ export interface FreeholderApi {
     startCall: (input: ServiceCatalog["members.startCall"]["input"]) => Promise<ServiceCatalog["members.startCall"]["output"]>;
     startConversation: (input: ServiceCatalog["members.startConversation"]["input"]) => Promise<ServiceCatalog["members.startConversation"]["output"]>;
     startGroupCall: (input: ServiceCatalog["members.startGroupCall"]["input"]) => Promise<ServiceCatalog["members.startGroupCall"]["output"]>;
+    startPayoutSetup: (input?: ServiceCatalog["members.startPayoutSetup"]["input"]) => Promise<ServiceCatalog["members.startPayoutSetup"]["output"]>;
     storefront: (input: ServiceCatalog["members.storefront"]["input"]) => Promise<ServiceCatalog["members.storefront"]["output"]>;
     subscriptionPlans: (input: ServiceCatalog["members.subscriptionPlans"]["input"]) => Promise<ServiceCatalog["members.subscriptionPlans"]["output"]>;
     takeSignals: (input: ServiceCatalog["members.takeSignals"]["input"]) => Promise<ServiceCatalog["members.takeSignals"]["output"]>;
