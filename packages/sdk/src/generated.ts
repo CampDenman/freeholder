@@ -5488,7 +5488,7 @@ export interface ServiceCatalog {
   };
   "members.e2eeSync": {
     input: { conversationId: string; deviceId: string; after?: number };
-    output: { available: boolean; missing: string[]; epoch: number | null; inGroup: boolean; roster: string[]; entitled: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; directory: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; log: { seq: number; epoch: number; kind: "commit" | "welcome" | "application" | "control"; senderDeviceId: string | null; keyPackageId: string | null; messageId: string | null; callId: string | null; frankTag: string | null; payload: string; [key: string]: unknown }[]; more: boolean; unclaimed: number; calls: { callId: string; needsKey: boolean; [key: string]: unknown }[] };
+    output: { available: boolean; missing: string[]; epoch: number | null; inGroup: boolean; roster: string[]; entitled: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; directory: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; log: { seq: number; epoch: number; kind: "commit" | "welcome" | "application" | "control"; senderDeviceId: string | null; keyPackageId: string | null; messageId: string | null; callId: string | null; callGeneration: number | null; frankTag: string | null; payload: string; [key: string]: unknown }[]; more: boolean; unclaimed: number; calls: { callId: string; generation: number; needsKey: boolean; [key: string]: unknown }[] };
   };
   "members.editPost": {
     input: { id: string; body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me" };
@@ -5731,7 +5731,7 @@ export interface ServiceCatalog {
     output: { id: string };
   };
   "members.sendCallKey": {
-    input: { conversationId: string; deviceId: string; epoch: number; callId: string; ciphertext: string };
+    input: { conversationId: string; deviceId: string; epoch: number; callId: string; generation?: number; fresh?: boolean; ciphertext: string };
     output: { ok: true };
   };
   "members.sendEncrypted": {

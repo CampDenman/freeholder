@@ -20,6 +20,7 @@ import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Actor, type ServiceContext } from "@/core/service";
 import { relationBetween } from "./graph";
 import { notifyMember } from "./notify";
+import { dropFromCalls } from "./call-seats";
 import { openMessage, sealMessage } from "./message-crypto";
 import { memberConversationParticipants, memberConversations, memberDevices, memberMessages, memberMlsGroups, memberMlsLog, memberProfiles } from "./schema";
 
@@ -397,6 +398,8 @@ export const leaveConversation = defineService({
       .update(memberConversationParticipants)
       .set({ state: "left" })
       .where(and(eq(memberConversationParticipants.conversationId, input.conversationId), eq(memberConversationParticipants.userId, me)));
+    // C12.37: out of any call here too, and the call moves to a key they never get.
+    await dropFromCalls(ctx, [input.conversationId], me);
     return { ok: true as const };
   },
 });

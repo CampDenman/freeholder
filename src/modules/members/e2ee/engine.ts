@@ -76,7 +76,7 @@ export interface E2eeStore {
 }
 
 type DeviceEntry = { deviceId: string; userId: string; signatureKey: string };
-type LogEntry = { seq: number; epoch: number; kind: "commit" | "welcome" | "application" | "control"; senderDeviceId: string | null; keyPackageId: string | null; messageId: string | null; callId: string | null; frankTag: string | null; payload: string };
+type LogEntry = { seq: number; epoch: number; kind: "commit" | "welcome" | "application" | "control"; senderDeviceId: string | null; keyPackageId: string | null; messageId: string | null; callId: string | null; callGeneration: number | null; frankTag: string | null; payload: string };
 export interface SyncResult {
   available: boolean;
   missing: string[];
@@ -88,7 +88,7 @@ export interface SyncResult {
   log: LogEntry[];
   more: boolean;
   unclaimed: number;
-  calls: { callId: string; needsKey: boolean }[];
+  calls: { callId: string; generation: number; needsKey: boolean }[];
 }
 
 /** The services, however they are reached. Failures throw an error with a `code`. */
@@ -99,7 +99,7 @@ export interface E2eeTransport {
   claim(input: { conversationId: string; deviceId: string; devices: string[] }): Promise<{ packages: { deviceId: string; keyPackageId: string; keyPackage: string }[] }>;
   commit(input: { conversationId: string; deviceId: string; create: boolean; fromEpoch: number; commit: string; welcome?: string; added: { deviceId: string; keyPackageId: string }[]; removed: string[] }): Promise<{ epoch: number }>;
   send(input: { conversationId: string; deviceId: string; epoch: number; ciphertext: string; frankTag: string; attachments: { assetId: string; altText: string }[] }): Promise<{ id: string }>;
-  sendCallKey(input: { conversationId: string; deviceId: string; epoch: number; callId: string; ciphertext: string }): Promise<unknown>;
+  sendCallKey(input: { conversationId: string; deviceId: string; epoch: number; callId: string; generation: number; fresh: boolean; ciphertext: string }): Promise<unknown>;
 }
 
 export interface ConversationState {
@@ -109,11 +109,16 @@ export interface ConversationState {
   ready: boolean;
   missing: string[];
   messages: Map<string, ReadMessage>;
+  /** C12.24/37: calls going on here, and which key generation each is on. */
+  calls: { callId: string; generation: number }[];
 }
 
 const BATCH = 50;
 const LOW_WATER = 10;
 const RETRIES = 4;
+
+/** Where a call's key for one generation is kept on the device. */
+const keySlot = (callId: string, generation: number) => (generation === 0 ? callId : `${callId}#${generation}`);
 
 const codeOf = (error: unknown): string | undefined => (error && typeof error === "object" && "code" in error ? String(error.code) : undefined);
 
@@ -225,13 +230,7 @@ export class E2eeDevice {
         }
       }
       if (result && result.unclaimed < LOW_WATER) await this.topUp(device);
-      // A device that joined after a call's key went out cannot read it: send it again.
-      if (result?.available) {
-        for (const call of result.calls) {
-          const key = call.needsKey ? await this.store.callKey(call.callId) : null;
-          if (key) await this.sendControl(conversationId, device, call.callId, key).catch((error: unknown) => { if (codeOf(error) !== "conflict") throw error; });
-        }
-      }
+      if (result?.available) await this.tendCallKeys(conversationId, device, result.calls);
       const { state } = await this.load(conversationId, result?.directory ?? []);
       const fresh = result ? await this.transport.sync({ conversationId, deviceId: device.deviceId, after: Number.MAX_SAFE_INTEGER }) : null;
       return {
@@ -239,6 +238,7 @@ export class E2eeDevice {
         ready: Boolean(state && fresh?.inGroup),
         missing: fresh?.missing ?? [],
         messages: await this.store.messages(conversationId),
+        calls: (fresh?.calls ?? []).map(({ callId, generation }) => ({ callId, generation })),
       };
     });
   }
@@ -280,8 +280,9 @@ export class E2eeDevice {
             if (state.groupActiveState.kind === "removedFromGroup") state = null;
             if (processed.kind === "applicationMessage" && entry.kind === "control" && entry.callId) {
               const sender = entry.senderDeviceId ? keys.get(entry.senderDeviceId) : undefined;
-              const key = sender ? await openCallKey(conversationId, entry.callId, processed.message, { deviceId: sender.deviceId, signatureKey: unb64(sender.signatureKey) }) : null;
-              if (key) await this.store.saveCallKey(entry.callId, key);
+              const generation = entry.callGeneration ?? 0;
+              const key = sender ? await openCallKey(conversationId, entry.callId, generation, processed.message, { deviceId: sender.deviceId, signatureKey: unb64(sender.signatureKey) }) : null;
+              if (key) await this.store.saveCallKey(keySlot(entry.callId, generation), key);
             } else if (processed.kind === "applicationMessage" && entry.messageId) {
               const sender = entry.senderDeviceId ? keys.get(entry.senderDeviceId) : undefined;
               const payload = sender ? await openPayload(conversationId, processed.message, { deviceId: sender.deviceId, signatureKey: unb64(sender.signatureKey) }) : null;
@@ -351,19 +352,50 @@ export class E2eeDevice {
     return true;
   }
 
-  private async sendControl(conversationId: string, device: DeviceRecord, callId: string, key: string) {
+  private async sendControl(conversationId: string, device: DeviceRecord, callId: string, generation: number, key: string, fresh: boolean) {
     const cs = await suite();
     const { state, cursor } = await this.load(conversationId, []);
     if (!state) throw Object.assign(new Error("not ready"), { code: "conflict" });
-    const message = await createApplicationMessage(state, await sealCallKey(conversationId, callId, key, device), cs);
+    const message = await createApplicationMessage(state, await sealCallKey(conversationId, callId, generation, key, device), cs);
     await this.save(conversationId, message.newState, cursor);
     await this.transport.sendCallKey({
       conversationId,
       deviceId: device.deviceId,
       epoch: Number(state.groupContext.epoch),
       callId,
+      generation,
+      fresh,
       ciphertext: b64(encodeMlsMessage({ privateMessage: message.privateMessage, wireformat: "mls_private_message", version: "mls10" })),
     });
+  }
+
+  /**
+   * Keep every running call's current key with every device that should
+   * have it: send it again to devices that joined since, and when the call
+   * moved to a new generation (someone left, C12.37), a device that held the
+   * previous key makes the new one. The server takes the first and refuses
+   * the rest, so all devices end up on one key.
+   */
+  private async tendCallKeys(conversationId: string, device: DeviceRecord, calls: SyncResult["calls"]) {
+    for (const call of calls) {
+      if (!call.needsKey) continue;
+      const tolerate = (error: unknown) => { if (codeOf(error) !== "conflict") throw error; };
+      const current = await this.store.callKey(keySlot(call.callId, call.generation));
+      if (current) {
+        await this.sendControl(conversationId, device, call.callId, call.generation, current, false).catch(tolerate);
+        continue;
+      }
+      let heldBefore = false;
+      for (let g = call.generation - 1; g >= 0 && !heldBefore; g--) heldBefore = Boolean(await this.store.callKey(keySlot(call.callId, g)));
+      if (!heldBefore) continue;
+      const key = b64(crypto.getRandomValues(new Uint8Array(32)));
+      try {
+        await this.sendControl(conversationId, device, call.callId, call.generation, key, true);
+        await this.store.saveCallKey(keySlot(call.callId, call.generation), key);
+      } catch (error) {
+        tolerate(error);
+      }
+    }
   }
 
   /**
@@ -379,7 +411,7 @@ export class E2eeDevice {
       const status = await this.sync(conversationId);
       if (!status.ready) throw Object.assign(new Error("This device has not been added to the conversation yet."), { code: "not_ready" });
       try {
-        await this.serial(conversationId, () => this.sendControl(conversationId, device, callId, key));
+        await this.serial(conversationId, () => this.sendControl(conversationId, device, callId, 0, key, true));
         await this.store.saveCallKey(callId, key);
         return key;
       } catch (error) {
@@ -389,12 +421,15 @@ export class E2eeDevice {
     throw Object.assign(new Error("The conversation kept changing; try again."), { code: "conflict" });
   }
 
-  /** C12.24: a call's media key, once a device in the call has sent it here. */
+  /** C12.24/37: the call's current key generation, and its key once a device in the call has sent it here. */
+  async currentCallKey(conversationId: string, callId: string): Promise<{ generation: number; key: string | null }> {
+    const status = await this.sync(conversationId);
+    const generation = status.calls.find((c) => c.callId === callId)?.generation ?? 0;
+    return { generation, key: await this.store.callKey(keySlot(callId, generation)) };
+  }
+
   async callKey(conversationId: string, callId: string): Promise<string | null> {
-    const known = await this.store.callKey(callId);
-    if (known) return known;
-    await this.sync(conversationId);
-    return this.store.callKey(callId);
+    return (await this.currentCallKey(conversationId, callId)).key;
   }
 
   /** Encrypt and send. Returns the message id, or null if the conversation cannot be encrypted. */

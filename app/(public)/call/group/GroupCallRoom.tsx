@@ -32,6 +32,7 @@ export interface GroupCallLabels {
   leave: string;
   you: string;
   alone: string;
+  removed: string;
 }
 
 type Tile = { identity: string; name: string; encrypted: boolean; local: boolean; video: Track | null };
@@ -65,7 +66,7 @@ function tilesOf(room: Room): Tile[] {
 
 export function GroupCallRoom({ callId, conversationId, userId, media, labels }: { callId: string; conversationId: string; userId: string; media: "voice" | "video"; labels: GroupCallLabels }) {
   const router = useRouter();
-  const [phase, setPhase] = useState<"connecting" | "key" | "live" | "failed">("connecting");
+  const [phase, setPhase] = useState<"connecting" | "key" | "live" | "failed" | "removed">("connecting");
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [mic, setMic] = useState(true);
   const [camera, setCamera] = useState(media === "video");
@@ -82,8 +83,9 @@ export function GroupCallRoom({ callId, conversationId, userId, media, labels }:
       const credentials = await unwrap(joinGroupCallAction({ id: callId, deviceId: me.deviceId }));
       setPhase("key");
       let key: string | null = null;
+      let generation = 0;
       for (let i = 0; i < 60 && !key && !stopped; i++) {
-        key = await device.callKey(conversationId, callId);
+        ({ key, generation } = await device.currentCallKey(conversationId, callId));
         if (!key) await new Promise((resolve) => setTimeout(resolve, 1000));
       }
       if (!key || stopped) throw new Error("No media key arrived.");
@@ -101,7 +103,8 @@ export function GroupCallRoom({ callId, conversationId, userId, media, labels }:
         })
         .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => { track.detach().forEach((el) => el.remove()); refresh(); })
         .on(RoomEvent.LocalTrackPublished, refresh)
-        .on(RoomEvent.ParticipantEncryptionStatusChanged, refresh);
+        .on(RoomEvent.ParticipantEncryptionStatusChanged, refresh)
+        .on(RoomEvent.Disconnected, () => { if (!stopped) setPhase("removed"); });
       await keyProvider.setKey(unb64(key).buffer as ArrayBuffer);
       await room.setE2EEEnabled(true);
       await room.connect(credentials.url, credentials.token);
@@ -109,8 +112,19 @@ export function GroupCallRoom({ callId, conversationId, userId, media, labels }:
       if (media === "video") await room.localParticipant.setCameraEnabled(true);
       refresh();
       setPhase("live");
-      // Keep the group current, so a device that joins the call gets the key.
-      resync = setInterval(() => { void device.sync(conversationId).catch(() => undefined); }, 5000);
+      // Keep the group current, so a device that joins gets the key, and move
+      // to the new key when someone has left (C12.37).
+      resync = setInterval(() => {
+        void device
+          .currentCallKey(conversationId, callId)
+          .then(async (next) => {
+            if (next.key && next.generation > generation) {
+              generation = next.generation;
+              await keyProvider.setKey(unb64(next.key).buffer as ArrayBuffer);
+            }
+          })
+          .catch(() => undefined);
+      }, 3000);
     }
     connect().catch(() => { if (!stopped) setPhase("failed"); });
     return () => {
@@ -131,6 +145,7 @@ export function GroupCallRoom({ callId, conversationId, userId, media, labels }:
       {phase === "connecting" ? <p className="text-ink-muted">{labels.connecting}</p> : null}
       {phase === "key" ? <p className="text-ink-muted">{labels.waitingKey}</p> : null}
       {phase === "failed" ? <Callout tone="danger">{labels.failed}</Callout> : null}
+      {phase === "removed" ? <Callout>{labels.removed}</Callout> : null}
       {phase === "live" && tiles.length === 1 ? <p className="text-ink-muted">{labels.alone}</p> : null}
       <ul className="grid gap-3 sm:grid-cols-2" aria-live="polite">
         {tiles.map((tile) => <VideoTile key={tile.identity} tile={tile} labels={labels} />)}

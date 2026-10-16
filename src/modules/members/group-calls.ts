@@ -19,6 +19,7 @@ import { activeSelf, participant } from "./messages";
 import { notifyMember } from "./notify";
 import { memberConversationParticipants, memberConversations, memberDevices, memberGroupCallParticipants, memberGroupCalls, memberMlsGroups, memberMlsRoster, memberProfiles } from "./schema";
 import { sfu } from "./sfu";
+import { roomOf } from "./call-seats";
 
 const TOKEN_SECONDS = 2 * 3600;
 const STALE_MS = 12 * 3600 * 1000;
@@ -42,8 +43,6 @@ async function liveCall(ctx: ServiceContext, callId: string) {
   if (!call || call.state !== "active") throw new ServiceError("not_found", "That call has ended.");
   return call;
 }
-
-const roomOf = (callId: string) => `freeholder-${callId}`;
 
 export const groupCallConfig = defineService({
   name: "members.groupCallConfig",

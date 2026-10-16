@@ -55,6 +55,7 @@ export default async function GroupCallPage({ params }: { params: Promise<{ id: 
             leave: t("members.groupCall.leave"),
             you: t("members.groupCall.you"),
             alone: t("members.groupCall.alone"),
+            removed: t("members.groupCall.removed"),
           }}
         />
       )}

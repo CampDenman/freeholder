@@ -15,6 +15,9 @@ import { joinSite, updateMyMembership } from "@/modules/members/service";
 import { followMember } from "@/modules/members/graph";
 import { startConversation } from "@/modules/members/messages";
 import { activeGroupCall, joinGroupCall, leaveGroupCall, startGroupCall, viewGroupCall } from "@/modules/members/group-calls";
+import { leaveConversation } from "@/modules/members/messages";
+import { revokeDevice } from "@/modules/members/e2ee/service";
+import { setSfuForTests, type SfuAdapter } from "@/modules/members/sfu";
 import { memberMlsLog } from "@/modules/members/schema";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 import { deviceFor } from "../helpers/e2ee";
@@ -52,6 +55,7 @@ describe.runIf(hasDatabase)("group calls (C12.24)", () => {
     await followMember.call({ handle: "rae" }, SAM);
   });
   afterEach(() => {
+    setSfuForTests(undefined);
     delete process.env.LIVEKIT_URL;
     delete process.env.LIVEKIT_API_KEY;
     delete process.env.LIVEKIT_API_SECRET;
@@ -106,6 +110,58 @@ describe.runIf(hasDatabase)("group calls (C12.24)", () => {
     expect((await viewGroupCall.call({ id }, RAE)).inCall.map((p) => p.handle)).toEqual(["sam"]);
     await leaveGroupCall.call({ id }, SAM);
     expect((await viewGroupCall.call({ id }, RAE)).state).toBe("ended");
+  });
+
+  it("drops someone who leaves mid-call from the room, and moves everyone else to a new key (C12.37)", { timeout: 90_000 }, async () => {
+    const room = new Set<string>();
+    const removed: string[] = [];
+    const fake: SfuAdapter = {
+      id: "fake",
+      url: "ws://sfu.test",
+      issue: ({ identity }) => { room.add(identity); return `token-for-${identity}`; },
+      participants: async () => [...room],
+      remove: async (_room, identity) => { removed.push(identity); room.delete(identity); },
+    };
+    setSfuForTests(fake);
+    await followMember.call({ handle: "rae" }, KIM);
+    const rae = deviceFor(RAE, "Rae");
+    const sam = deviceFor(SAM, "Sam");
+    const kim = deviceFor(KIM, "Kim");
+    const [raeDevice, samDevice, kimDevice] = await Promise.all([rae.device(), sam.device(), kim.device()]);
+    const { id: conversationId } = await startConversation.call({ handles: ["sam", "kim"], title: "Climbing" }, RAE);
+    await rae.send(conversationId, "Call?");
+    const { id } = await startGroupCall.call({ conversationId, media: "voice" }, RAE);
+    const first = await rae.startCallKey(conversationId, id);
+    for (const [who, device, actor] of [[rae, raeDevice, RAE], [sam, samDevice, SAM], [kim, kimDevice, KIM]] as const) {
+      expect(await who.callKey(conversationId, id)).toBe(first);
+      await joinGroupCall.call({ id, deviceId: device.deviceId }, actor);
+    }
+
+    // Kim leaves the conversation: the SFU drops Kim's device, and the call moves to generation 1.
+    await leaveConversation.call({ conversationId }, KIM);
+    await expect.poll(() => removed).toEqual([`${KIM.userId}:${kimDevice.deviceId}`]);
+    const next = await sam.currentCallKey(conversationId, id);
+    expect(next.generation).toBe(1);
+    expect(next.key).toBeTruthy();
+    expect(next.key).not.toBe(first);
+    expect(await rae.currentCallKey(conversationId, id)).toEqual(next);
+    await expect(kim.callKey(conversationId, id)).rejects.toThrow();
+    expect((await failure(joinGroupCall.call({ id, deviceId: kimDevice.deviceId }, KIM))).code).toBe("not_found");
+
+    // Rae's second device joins, then is removed: it is dropped from the room and the key moves again.
+    const raePhone = deviceFor(RAE, "Rae phone");
+    const phone = await raePhone.device();
+    await rae.send(conversationId, "phone in");
+    expect(await raePhone.callKey(conversationId, id)).toBe(next.key);
+    await joinGroupCall.call({ id, deviceId: phone.deviceId }, RAE);
+    await revokeDevice.call({ deviceId: phone.deviceId }, RAE);
+    await expect.poll(() => removed.at(-1)).toBe(`${RAE.userId}:${phone.deviceId}`);
+    const third = await sam.currentCallKey(conversationId, id);
+    expect(third.generation).toBe(2);
+    expect(third.key).not.toBe(next.key);
+    expect((await rae.currentCallKey(conversationId, id)).key).toBe(third.key);
+    const controls = await db().select().from(memberMlsLog).where(and(eq(memberMlsLog.callId, id), eq(memberMlsLog.kind, "control"), eq(memberMlsLog.callGeneration, 2)));
+    expect(controls.length).toBeGreaterThanOrEqual(1);
   });
 
   it("is not offered without an SFU", async () => {

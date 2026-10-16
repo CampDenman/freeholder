@@ -7342,6 +7342,7 @@
   "members.groupCall.leave": "Salir de la llamada",
   "members.groupCall.you": "Tú",
   "members.groupCall.alone": "Esperando a que se unan los demás.",
+  "members.groupCall.removed": "Ya no estás en esta llamada.",
   "members.groupCall.startVoice": "Iniciar llamada de voz",
   "members.groupCall.startVideo": "Iniciar videollamada",
   "members.groupCall.join": "Unirse a la llamada en curso",
