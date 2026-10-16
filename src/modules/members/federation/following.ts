@@ -36,11 +36,21 @@ function parseAddress(address: string): { user: string; host: string } | null {
 
 /** HTML from another server, reduced to plain text. Nothing of it is ever rendered as markup. */
 export function plainText(html: string): string {
-  const text = html
-    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
-    .replace(/<\s*br\s*\/?>/gi, "\n")
-    .replace(/<\/\s*p\s*>/gi, "\n\n")
-    .replace(/<[^>]*>/g, "")
+  // Strip until nothing changes, so a tag split around another
+  // (`<scr<script>ipt>`) cannot reassemble after one pass.
+  let stripped = html;
+  for (let previous = ""; previous !== stripped; ) {
+    previous = stripped;
+    stripped = stripped
+      .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
+      .replace(/<\s*br\s*\/?>/gi, "\n")
+      .replace(/<\/\s*p\s*>/gi, "\n\n")
+      .replace(/<[^>]*>/g, "");
+  }
+  // Any "<" left can no longer open a tag; entities are decoded only now,
+  // so decoded text is never parsed again.
+  const text = stripped
+    .replace(/</g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")

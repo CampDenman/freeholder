@@ -65,6 +65,15 @@ describe("http signatures (C12.18)", () => {
   });
 });
 
+describe("remote HTML to text (C12.32)", () => {
+  it("leaves no markup even when tags are split around each other", async () => {
+    const { plainText } = await import("@/modules/members/federation/following");
+    expect(plainText("<scr<script>x</script>ipt>alert(1)</script>")).not.toMatch(/<|>?script/i);
+    expect(plainText("<<b>i</b>mg src=x onerror=alert(1)>")).not.toContain("<");
+    expect(plainText("<p>1 &lt; 2 &amp;&amp; 3 &gt; 2</p>")).toBe("1 < 2 && 3 > 2");
+  });
+});
+
 describe.runIf(hasDatabase)("ActivityPub federation (C12.18)", () => {
   beforeAll(async () => {
     await ready();
