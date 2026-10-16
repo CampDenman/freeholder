@@ -969,6 +969,7 @@ export const SERVICE_NAMES = [
   "media.upload",
   "media.uploadStatus",
   "media.usage",
+  "members.abuseReports",
   "members.ackHistory",
   "members.activeGroupCall",
   "members.answerCall",
@@ -1016,6 +1017,7 @@ export const SERVICE_NAMES = [
   "members.leaveReview",
   "members.list",
   "members.loadDemoFixture",
+  "members.markAbuseReported",
   "members.markShipped",
   "members.marketPolicy",
   "members.me",
@@ -5402,6 +5404,10 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { pages: number; sections: number };
   };
+  "members.abuseReports": {
+    input: { state?: "to_report" | "reported" };
+    output: { id: string; provider: string; matchId: string | null; sha256: string; contentType: string; bytes: number; detectedAt: string; assetId: string | null; uploader: string | null; reportedTo: string | null; reportReference: string | null; [key: string]: unknown }[];
+  };
   "members.ackHistory": {
     input: { deviceId: string; ids: string[] };
     output: { ok: true };
@@ -5589,6 +5595,10 @@ export interface ServiceCatalog {
   "members.loadDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { records: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+  };
+  "members.markAbuseReported": {
+    input: { id: string; reportedTo: "cybertip" | "ncmec" | "other"; reference: string };
+    output: { ok: true };
   };
   "members.markShipped": {
     input: { orderId: string; sellerId: string; carrier?: string; tracking?: string };
@@ -8749,6 +8759,7 @@ export interface FreeholderApi {
     usage: (input: ServiceCatalog["media.usage"]["input"]) => Promise<ServiceCatalog["media.usage"]["output"]>;
   };
   members: {
+    abuseReports: (input?: ServiceCatalog["members.abuseReports"]["input"]) => Promise<ServiceCatalog["members.abuseReports"]["output"]>;
     ackHistory: (input: ServiceCatalog["members.ackHistory"]["input"]) => Promise<ServiceCatalog["members.ackHistory"]["output"]>;
     activeGroupCall: (input: ServiceCatalog["members.activeGroupCall"]["input"]) => Promise<ServiceCatalog["members.activeGroupCall"]["output"]>;
     answerCall: (input: ServiceCatalog["members.answerCall"]["input"]) => Promise<ServiceCatalog["members.answerCall"]["output"]>;
@@ -8796,6 +8807,7 @@ export interface FreeholderApi {
     leaveReview: (input: ServiceCatalog["members.leaveReview"]["input"]) => Promise<ServiceCatalog["members.leaveReview"]["output"]>;
     list: (input?: ServiceCatalog["members.list"]["input"]) => Promise<ServiceCatalog["members.list"]["output"]>;
     loadDemoFixture: (input: ServiceCatalog["members.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["members.loadDemoFixture"]["output"]>;
+    markAbuseReported: (input: ServiceCatalog["members.markAbuseReported"]["input"]) => Promise<ServiceCatalog["members.markAbuseReported"]["output"]>;
     markShipped: (input: ServiceCatalog["members.markShipped"]["input"]) => Promise<ServiceCatalog["members.markShipped"]["output"]>;
     marketPolicy: (input?: ServiceCatalog["members.marketPolicy"]["input"]) => Promise<ServiceCatalog["members.marketPolicy"]["output"]>;
     me: (input?: ServiceCatalog["members.me"]["input"]) => Promise<ServiceCatalog["members.me"]["output"]>;

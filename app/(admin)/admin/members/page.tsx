@@ -2,16 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.01 (MASTER.md §44.1): members of this site.
 import type { Metadata } from "next";
-import { formatDateTime } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { listMembers, membershipRules } from "@/modules/members/service";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { getLocale, getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
-import { disputeAction, inviteMemberAction, marketPolicyAction, reportAction, payoutAccountAction, reviewListingAction, saveMarketRulesAction, saveMembershipRulesAction, setMemberStatusAction, settlePayoutsAction } from "./actions";
+import { markAbuseReportedAction, disputeAction, inviteMemberAction, marketPolicyAction, reportAction, payoutAccountAction, reviewListingAction, saveMarketRulesAction, saveMembershipRulesAction, setMemberStatusAction, settlePayoutsAction } from "./actions";
 import { payoutAdapters, sitePayouts } from "@/modules/members/payouts";
 import { listDisputes, saleThread } from "@/modules/members/protection";
 import { listReports } from "@/modules/members/reports";
+import { abuseReportQueue, REPORT_CHANNELS } from "@/modules/members/abuse";
+import { formatDateTime } from "@/core/i18n";
 import { marketPolicy } from "@/modules/members/policy";
 import { formatMoney } from "@/core/i18n";
 import { pendingListings } from "@/modules/members/listings";
@@ -42,6 +43,9 @@ export default async function MembersPage({
   const open = ledger.payouts.filter((p) => p.state === "held" || p.state === "due" || p.state === "review");
   const [disputes, reports, policy] = await Promise.all([listDisputes.call({ state: "open" }, actor), listReports.call({ state: "open" }, actor), marketPolicy.call({}, actor)]);
   const threads = await Promise.all(disputes.map((d) => saleThread.call({ orderId: d.orderId, sellerId: d.sellerId }, actor)));
+  // C12.30: only the owner sees matches of known abuse imagery.
+  const legal = actor.kind === "user" && actor.role === "owner" ? await abuseReportQueue.call({}, actor) : [];
+  const channel = REPORT_CHANNELS[(business?.country ?? "") as keyof typeof REPORT_CHANNELS];
   const back = `/admin/members?status=${status ?? "all"}${query.q ? `&q=${encodeURIComponent(query.q)}` : ""}`;
   return (
     <div className="grid gap-6">
@@ -145,6 +149,40 @@ export default async function MembersPage({
           </form>
         </CardBody>
       </Card>
+
+      {legal.length ? (
+        <Card>
+          <CardHeader title={t("members.legal.title", { count: legal.length })} />
+          <CardBody>
+            <div className="grid gap-3">
+              <Callout tone="danger">{t("members.legal.intro")}</Callout>
+              <p className="text-sm">{channel ? t(`members.legal.where.${channel.id}`, { url: channel.url }) : t("members.legal.where.other")}</p>
+              <ul className="grid gap-3">
+                {legal.map((r) => (
+                  <li key={r.id} className="grid gap-2 rounded-md border border-rule p-3">
+                    <p className="text-sm">
+                      {formatDateTime(r.detectedAt, business?.timezone ?? "UTC", locale)} · {r.provider} · {t("members.legal.match")} {r.matchId ?? "—"} · {t("members.legal.uploader")} {r.uploader ?? "—"}
+                    </p>
+                    <p className="break-all text-xs text-ink-muted">{t("members.legal.fingerprint", { sha256: r.sha256, type: r.contentType, bytes: r.bytes })}{r.assetId ? ` · ${t("members.legal.asset")} ${r.assetId}` : ""}</p>
+                    <form action={markAbuseReportedAction} className="flex flex-wrap items-end gap-2">
+                      <input type="hidden" name="id" value={r.id} />
+                      <Field label={t("members.legal.reportedTo")} htmlFor={`legal-to-${r.id}`}>
+                        <Select id={`legal-to-${r.id}`} name="reportedTo" defaultValue={channel?.id ?? "other"}>
+                          {(["cybertip", "ncmec", "other"] as const).map((c) => <option key={c} value={c}>{t(`members.legal.channel.${c}`)}</option>)}
+                        </Select>
+                      </Field>
+                      <Field label={t("members.legal.reference")} htmlFor={`legal-ref-${r.id}`}>
+                        <Input id={`legal-ref-${r.id}`} name="reference" required maxLength={200} />
+                      </Field>
+                      <Button type="submit">{t("members.legal.record")}</Button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </CardBody>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader title={t("members.admin.reports", { count: reports.length })} />

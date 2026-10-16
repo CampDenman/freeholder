@@ -14,6 +14,7 @@ import { setPayoutAccountStatus, settlePayouts } from "@/modules/members/payouts
 import { postSaleMessage, resolveDispute } from "@/modules/members/protection";
 import { resolveReport } from "@/modules/members/reports";
 import { updateMarketPolicy } from "@/modules/members/policy";
+import { markAbuseReported } from "@/modules/members/abuse";
 
 const PATH = "/admin/members";
 
@@ -151,4 +152,12 @@ export async function reportAction(form: FormData): Promise<void> {
 
 export async function marketPolicyAction(form: FormData): Promise<void> {
   await run(async () => updateMarketPolicy.call({ text: text(form, "policy") }, await actor()));
+}
+
+// C12.30: the owner records the report made to the authorities.
+export async function markAbuseReportedAction(form: FormData): Promise<void> {
+  const to = text(form, "reportedTo");
+  await run(async () =>
+    markAbuseReported.call({ id: text(form, "id"), reportedTo: to === "cybertip" || to === "ncmec" ? to : "other", reference: text(form, "reference") }, await actor()),
+  );
 }

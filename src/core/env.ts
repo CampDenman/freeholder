@@ -91,6 +91,15 @@ const envSchema = z.object({
    * its config. Media is end-to-end encrypted, so the SFU forwards frames it
    * cannot read. Without these, group calls are not offered.
    */
+  /**
+   * Known-abuse-imagery hash matching on upload (C12.30). Each provider needs
+   * the site owner's own agreement with it: PhotoDNA through Microsoft's
+   * review, Safer through Thorn. Off by default.
+   */
+  ABUSE_SCAN_PROVIDER: z.enum(["none", "photodna", "safer"]).default("none"),
+  PHOTODNA_SUBSCRIPTION_KEY: z.string().optional(),
+  PHOTODNA_ENDPOINT: z.string().url().default("https://api.microsoftmoderator.com/photodna/v1.0"),
+
   LIVEKIT_URL: z.string().url().optional(),
   LIVEKIT_API_KEY: z.string().min(1).optional(),
   LIVEKIT_API_SECRET: z.string().min(1).optional(),

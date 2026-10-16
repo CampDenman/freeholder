@@ -69,6 +69,8 @@ const INTERNAL = [
   "members.recordInvoicePayout",
   "members.releaseDuePayouts",
   "members.reversePayouts",
+  // C12.30: ties abuse matches to their uploads and suspends the uploader.
+  "members.linkAbuseReports",
   // C12.26–C12.27: the provider payout job's claim and apply steps, and
   // verified provider webhooks; money moves on nobody's behalf.
   "members.applyPayoutWebhook",
