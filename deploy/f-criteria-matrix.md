@@ -4805,18 +4805,18 @@ v2.
 
 ## C12.32 — Let members follow fediverse accounts from here
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F01** — `db/migrations/0048_member_remote_follows.sql`: accounts followed elsewhere and their public posts as text.
+- **F02** — `tests/modules/member-federation.test.ts`: follow, accept, posts, Update, Delete, Block and Undo against a fake remote server.
+- **F03** — N/A — remote accounts are not contacts (`src/modules/members/federation/following.ts`).
+- **F04** — `tests/browser/members.spec.ts`: the follow form and list on `/portal/member`, and remote posts in `/feed`.
+- **F05** — `packages/sdk/src/generated.ts`: `members.followRemote`, `unfollowRemote`, `remoteFollows`, `remoteFeed`.
+- **F06** — `tests/browser/members.spec.ts`: axe in light and dark on the feed; strings in four locales (`locales/en.json`).
+- **F07** — `tests/modules/member-federation.test.ts`: nothing before Accept, only public posts, text only (`src/modules/members/federation/following.ts`).
+- **F08** — `tests/browser/members.spec.ts`.
+- **F09** — `src/modules/members/jobs.ts`: Follow and Undo through `members.deliverFederation`.
+- **F10** — N/A — no seed changes (`deploy/members-platform.md`).
+- **F11** — `deploy/members-platform.md` and `.changeset/member-follow-fediverse.md`.
+- **F12** — `tests/modules/member-federation.test.ts`: a local fake fediverse server end to end.
 
 ## C12.33 — Let members take their audience elsewhere and bring it here
 

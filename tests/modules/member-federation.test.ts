@@ -13,6 +13,7 @@ import { ready } from "@/core/runtime";
 import { joinSite, updateMembershipRules } from "@/modules/members/service";
 import { createPost, deletePost } from "@/modules/members/posts";
 import { deliverFederation, federationDocument, setMyFederation } from "@/modules/members/federation/core";
+import { followRemote, remoteFeed, remoteFollows, unfollowRemote } from "@/modules/members/federation/following";
 import { newActorKeys, signRequest, verifyRequest } from "@/modules/members/federation/signatures";
 import { memberFederationDeliveries, memberRemoteFollowers } from "@/modules/members/schema";
 import { POST as inbox } from "../../app/ap/users/[handle]/inbox/route";
@@ -67,6 +68,11 @@ describe.runIf(hasDatabase)("ActivityPub federation (C12.18)", () => {
       let body = "";
       req.on("data", (c: Buffer) => { body += c.toString(); });
       req.on("end", () => {
+        if (req.method === "GET" && req.url?.startsWith("/.well-known/webfinger")) {
+          res.writeHead(200, { "content-type": "application/jrd+json" });
+          res.end(JSON.stringify({ subject: "acct:sam@remote", links: [{ rel: "self", type: "application/activity+json", href: `${base}/users/sam` }] }));
+          return;
+        }
         if (req.method === "GET" && req.url === "/users/sam") {
           res.writeHead(200, { "content-type": "application/activity+json" });
           res.end(JSON.stringify(remoteActor()));
@@ -142,5 +148,47 @@ describe.runIf(hasDatabase)("ActivityPub federation (C12.18)", () => {
     expect(await db().select().from(memberRemoteFollowers)).toEqual([]);
     const pending = await db().select().from(memberFederationDeliveries).where(eq(memberFederationDeliveries.userId, RAE.userId));
     expect(pending.some((d) => (d.activity as { type: string }).type === "Delete" && (d.activity as { object: unknown }).object === "http://localhost:3000/ap/users/rae")).toBe(true);
+  });
+
+  it("follows an account elsewhere, takes its public posts as plain text, and honours Update, Delete and Block (C12.32)", async () => {
+    await updateMembershipRules.call({ federation: true }, OWNER);
+    await setMyFederation.call({ federated: true }, RAE);
+    const address = `@sam@${new URL(base).host}`;
+    expect((await followRemote.call({ address }, RAE)).handle).toBe(`sam@${new URL(base).host}`);
+    await deliverFederation();
+    const follow = JSON.parse(received.find((r) => (JSON.parse(r.body) as { type: string }).type === "Follow")!.body) as { id: string; actor: string; object: string };
+    expect(follow).toMatchObject({ actor: "http://localhost:3000/ap/users/rae", object: `${base}/users/sam` });
+    expect((await remoteFollows.call({}, RAE)).follows.map((f) => f.state)).toEqual(["pending"]);
+
+    const note = (id: string, content: string, to = ["https://www.w3.org/ns/activitystreams#Public"]) => ({ id: `${base}/notes/${id}`, type: "Note", attributedTo: `${base}/users/sam`, to, content, published: "2026-10-15T10:00:00Z", url: `${base}/@sam/${id}` });
+    const create = (id: string, content: string, to?: string[]) => ({ id: `${base}/notes/${id}/activity`, type: "Create", actor: `${base}/users/sam`, object: note(id, content, to) });
+    // Before Sam's server accepts, nothing is taken.
+    expect((await sendToInbox(create("0", "<p>too early</p>"))).status).toBe(202);
+    expect((await sendToInbox({ id: `${base}/accepts/1`, type: "Accept", actor: `${base}/users/sam`, object: follow.id })).status).toBe(202);
+    expect((await remoteFollows.call({}, RAE)).follows.map((f) => f.state)).toEqual(["accepted"]);
+
+    await sendToInbox(create("1", "<p>Hello <b>from</b> elsewhere<br>second line</p><script>alert(1)</script>"));
+    await sendToInbox(create("2", "<p>Only for my followers</p>", [`${base}/users/sam/followers`]));
+    let feed = (await remoteFeed.call({}, RAE)).posts;
+    expect(feed.map((p) => p.text)).toEqual(["Hello from elsewhere\nsecond line"]);
+    await sendToInbox({ id: `${base}/notes/1/update`, type: "Update", actor: `${base}/users/sam`, object: note("1", "<p>Edited</p>") });
+    expect((await remoteFeed.call({}, RAE)).posts.map((p) => p.text)).toEqual(["Edited"]);
+    await sendToInbox({ id: `${base}/notes/1/delete`, type: "Delete", actor: `${base}/users/sam`, object: { id: `${base}/notes/1`, type: "Tombstone" } });
+    expect((await remoteFeed.call({}, RAE)).posts).toEqual([]);
+
+    // A Block from the account ends the follow, and its posts leave the feed.
+    await sendToInbox(create("3", "<p>Again</p>"));
+    feed = (await remoteFeed.call({}, RAE)).posts;
+    expect(feed).toHaveLength(1);
+    await sendToInbox({ id: `${base}/blocks/1`, type: "Block", actor: `${base}/users/sam`, object: "http://localhost:3000/ap/users/rae" });
+    expect((await remoteFollows.call({}, RAE)).follows).toEqual([]);
+    expect((await remoteFeed.call({}, RAE)).posts).toEqual([]);
+
+    // Unfollowing sends Undo.
+    await followRemote.call({ address }, RAE);
+    received.length = 0;
+    await unfollowRemote.call({ actorUri: `${base}/users/sam` }, RAE);
+    await deliverFederation();
+    expect(received.map((r) => (JSON.parse(r.body) as { type: string }).type)).toContain("Undo");
   });
 });

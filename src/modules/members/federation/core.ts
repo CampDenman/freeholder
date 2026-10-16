@@ -28,6 +28,7 @@ import {
   memberSettings,
 } from "../schema";
 import { newActorKeys, signRequest } from "./signatures";
+import { applyFollowedActivity } from "./following";
 
 export const ACTIVITY_JSON = "application/activity+json";
 export const PUBLIC = "https://www.w3.org/ns/activitystreams#Public";
@@ -186,6 +187,8 @@ export const federationInbox = defineService({
     const { activity, actor } = input;
     const objectId = typeof activity.object === "string" ? activity.object : (activity.object as { id?: string } | undefined)?.id;
     const host = new URL(actor.id).host;
+    // C12.32: accounts this member follows — acceptances and their posts.
+    if (await applyFollowedActivity(ctx, member.userId, me, activity, actor)) return { ok: true as const };
     if (activity.type === "Follow" && objectId === me) {
       await ctx.tx
         .insert(memberRemoteFollowers)
@@ -201,8 +204,7 @@ export const federationInbox = defineService({
     } else if (activity.type === "Delete" && objectId === actor.id) {
       await ctx.tx.delete(memberRemoteFollowers).where(eq(memberRemoteFollowers.actorUri, actor.id));
     }
-    // Anything else is accepted and ignored: following remote accounts and
-    // reading their posts is C12.32.
+    // Anything else is accepted and ignored.
     return { ok: true as const };
   },
 });

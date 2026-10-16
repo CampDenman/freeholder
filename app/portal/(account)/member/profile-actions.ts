@@ -9,6 +9,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { deleteProfileSection, saveProfileSection, setAvatar } from "@/modules/members/profile";
 import { setMyFederation } from "@/modules/members/federation/core";
+import { followRemote, unfollowRemote } from "@/modules/members/federation/following";
 import { revokeDevice } from "@/modules/members/e2ee/service";
 import { PROFILE_SECTION_KINDS } from "@/modules/members/profile-kinds";
 import { VISIBILITIES, type Visibility } from "@/modules/members/visibility";
@@ -66,4 +67,13 @@ export async function federationAction(form: FormData): Promise<void> {
 // C12.23: take a device out of every encrypted conversation.
 export async function revokeDeviceAction(form: FormData): Promise<void> {
   await run((actor) => revokeDevice.call({ deviceId: text(form, "deviceId") }, actor));
+}
+
+// C12.32: follow, or stop following, an account on another fediverse server.
+export async function followRemoteAction(form: FormData): Promise<void> {
+  await run((actor) => followRemote.call({ address: text(form, "address") }, actor));
+}
+
+export async function unfollowRemoteAction(form: FormData): Promise<void> {
+  await run((actor) => unfollowRemote.call({ actorUri: text(form, "actorUri") }, actor));
 }

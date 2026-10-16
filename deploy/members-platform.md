@@ -380,3 +380,12 @@ from mocked payment, mail or media runs alone.
 - `members.purgeSealedBlobs` (every ten minutes) deletes unsent uploads
   after a day, and files whose message was removed or whose sender erased
   their data.
+
+## C12.32 — following fediverse accounts (2026-10-15)
+
+- Needs site federation and the member's own opt-in (C12.18). Lookups use
+  WebFinger and the actor document over the DNS-pinned transport; in
+  production only HTTPS, never private addresses.
+- Remote posts are stored as plain text (`member_remote_posts`), once per
+  post however many members follow its author, and deleted when nobody here
+  follows that account any more.

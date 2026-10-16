@@ -40,4 +40,6 @@ export {
   memberSealedBlobs,
   memberHistoryRequests,
   memberHistoryTransfers,
+  memberRemoteFollows,
+  memberRemotePosts,
 } from "./schema";

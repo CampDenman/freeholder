@@ -10918,9 +10918,35 @@ whatever is best for the people using the site.
   the owner's choices in Admin → Members). **F09** N/A — no background work.
   **F12** the preset test installs it and checks the pages, product and
   home links. Changeset `community-preset.md`.)*
-- [ ] **C12.32** Let members follow fediverse accounts from here: look up
+- [x] **C12.32** Let members follow fediverse accounts from here: look up
   `@user@host`, send a signed Follow, accept their public posts into the
   member's home feed, and respect remote Delete, Update and Block.
+  *(Evidence 2026-10-15: `src/modules/members/federation/following.ts`,
+  `applyFollowedActivity` in `members.federationInbox`, `app/(public)/feed/page.tsx`,
+  migration `db/migrations/0048_member_remote_follows.sql`,
+  `tests/modules/member-federation.test.ts`, `tests/browser/members.spec.ts`.
+  **F04** "Follow someone on another server" with the accounts followed
+  elsewhere (following, or waiting for them to accept) and Unfollow under
+  The fediverse on `/portal/member`; their posts interleaved by time in the
+  home feed, marked "from the fediverse" with a link to the original.
+  **F05** `members.followRemote`, `members.unfollowRemote`,
+  `members.remoteFollows`, `members.remoteFeed`. **F07** only a member who
+  has joined the fediverse can follow out; WebFinger and the actor are
+  fetched through the DNS-pinned transport outside any transaction (plain
+  HTTP only for loopback outside production); the Follow and Undo are
+  signed by the member's actor through the existing delivery queue; posts
+  are taken only after the remote server accepts, only from the accounts
+  the member follows, only when addressed publicly, authored by the
+  verified sender and on its own host; remote HTML is reduced to plain text
+  (scripts and styles dropped) and always rendered as text; Update edits,
+  Delete removes, an account's own Delete forgets it, and Block ends the
+  follow both ways; unfollowing drops posts nobody here still follows.
+  **F09** Follow and Undo go out through `members.deliverFederation`.
+  **F12** the module test runs a fake remote server: WebFinger lookup,
+  signed Follow delivered, a post refused before Accept, public posts kept
+  as text and followers-only ones not, Update, Delete, Block and Undo; the
+  browser test shows a followed account's post in the feed as text and
+  unfollows it. Changeset `member-follow-fediverse.md`.)*
 - [ ] **C12.33** Let members take their audience elsewhere and bring it here:
   `alsoKnownAs` and an outgoing `Move` that remote servers follow, and
   accepting an incoming `Move` for an account moving in.

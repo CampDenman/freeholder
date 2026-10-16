@@ -869,3 +869,41 @@ export const memberHistoryTransfers = pgTable(
   },
   (t) => [index("member_history_transfers_request_idx").on(t.requestId)],
 );
+
+/** C12.32: a fediverse account a member follows from here. */
+export const memberRemoteFollows = pgTable(
+  "member_remote_follows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    actorUri: text("actor_uri").notNull(),
+    inboxUri: text("inbox_uri").notNull(),
+    handle: text("handle").notNull(),
+    displayName: text("display_name"),
+    /** The id of the Follow activity sent, which the remote Accept names. */
+    followId: text("follow_id").notNull(),
+    state: text("state", { enum: ["pending", "accepted"] }).notNull().default("pending"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("member_remote_follows_pair_idx").on(t.userId, t.actorUri),
+    index("member_remote_follows_actor_idx").on(t.actorUri),
+    check("member_remote_follows_state_valid", sql`${t.state} in ('pending','accepted')`),
+  ],
+);
+
+/** C12.32: a public post from a followed fediverse account, kept as plain text. */
+export const memberRemotePosts = pgTable(
+  "member_remote_posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorUri: text("actor_uri").notNull(),
+    objectId: text("object_id").notNull(),
+    url: text("url"),
+    text: text("text").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("member_remote_posts_object_idx").on(t.objectId), index("member_remote_posts_actor_idx").on(t.actorUri, t.publishedAt)],
+);
