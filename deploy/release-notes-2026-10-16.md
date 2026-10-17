@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 Product version stays **0.2.0-beta.3**, in active development. This is a
 session digest. `CHANGELOG.md`, which is generated from `.changeset/`, is still
 the canonical list of changes for owners, and it was regenerated with no drift.
-freeholder.ai **was redeployed**: see the last section.
+freeholder.ai **was redeployed** in that session: see the last section. That pin was superseded on 2026-10-17; the live revision is in `deploy/release-notes-2026-10-17.md`.
 
 It covers PRs #501–#538, which merged between 2026-10-14 and 2026-10-16. That
 is the members platform (MASTER §44, section C12), built on the 2026-10-14
@@ -130,9 +130,13 @@ multi-user decision: one site, many members.
 
 ## Deployment
 
+Superseded on 2026-10-17. The live revision is
+`deploy/release-notes-2026-10-17.md`. The record below is the pin at the end
+of the 2026-10-16 session.
+
 The first deploy of 5b1c7bcb failed readiness (the #538 bug above). Fixing
-forward was the owner's choice. **freeholder.ai now runs main `92504696`**,
-pinned to the linux/amd64 digest
+forward was the owner's choice. At the end of this session freeholder.ai ran
+main `92504696`, pinned to the linux/amd64 digest
 `ghcr.io/campdenman/freeholder@sha256:68f16cda645c4665205f904b725f14a55a1d35febc3bd7892d71079b8a8d61e8`.
-After the deploy, readiness passed with 93 jobs and 1 worker. The deploy used
+After that deploy, readiness passed with 93 jobs and 1 worker. The deploy used
 `scripts/deploy-droplet.mjs`, after a `--dry-run`.
