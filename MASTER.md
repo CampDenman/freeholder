@@ -4959,6 +4959,13 @@ deployments are portable, testable and incapable of silently forking the truth.
   business plus a signed-in customer, in light and dark at desktop and mobile
   sizes, publishes them to the repository's `screenshots` branch, and updates
   the gallery on freeholder.ai. Owner standing rule, 2026-10-14.
+  (Progress 2026-10-16, not yet checked: capture and `screenshots`-branch
+  publication run in CI on every push to main. The gallery publisher,
+  `scripts/screenshots-gallery.mjs` with the workflow's `gallery` job, is
+  proven end to end against a local instance: upload, dedup, publish,
+  media-pipeline render and retire. Still open: the owner adds the scoped
+  credential per `deploy/screenshots-gallery.md`, then one live gallery
+  update on freeholder.ai.)
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
