@@ -216,6 +216,19 @@ export default async function AdminSettingsPage({
             reactivate: t("mail.reactivate"),
             test: t("mail.test"),
             verified: t("mail.verified"),
+            verifyTitle: t("mail.verify.title"),
+            verifyProves: t("mail.verify.proves"),
+            verifyResend: t("mail.verify.resend"),
+            verifyPostmark: t("mail.verify.postmark"),
+            verifySes: t("mail.verify.ses"),
+            verifyFailed: t("mail.verify.failed"),
+            verifyDkim: t("mail.verify.dkim"),
+            verifyReturnPath: t("mail.verify.returnPath"),
+            verifyProviderStatus: t("mail.verify.providerStatus"),
+            verifyDomain: t("mail.verify.domain"),
+            verifyIdentity: t("mail.verify.identity"),
+            verifyYes: t("mail.verify.yes"),
+            verifyNo: t("mail.verify.no"),
             pending: t("mail.pending"),
             failed: t("mail.failed"),
             active: t("mail.active"),
@@ -382,6 +395,10 @@ async function loadMailAccess(actor: Actor, locale: string) {
         : null,
       lastVerifiedAt: undefined,
       createdAt: undefined,
+      verificationDetail:
+        sender.verificationDetail && typeof sender.verificationDetail === "object"
+          ? (sender.verificationDetail as Record<string, unknown>)
+          : {},
     })),
     deliveries: status.deliveries.map((delivery) => ({
       id: delivery.id,

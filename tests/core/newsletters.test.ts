@@ -175,4 +175,56 @@ describe.runIf(hasDatabase)("newsletters module", { timeout: 30_000 }, () => {
     expect((await db().select().from(newsletterSubscriptions).where(eq(newsletterSubscriptions.id, row!.id)))[0]?.status).toBe("unsubscribed");
     expect(await canContact.call({ contactId: row!.contactId, purpose: "marketing", channel: "email" }, OWNER)).toMatchObject({ allowed: false, reason: "withdrawn" });
   });
+
+  it("lets someone who unsubscribed join again, and keeps the words they agreed to", async () => {
+    const newsletter = await createNewsletter.call({ name: "Return", slug: "return" }, OWNER);
+    const statement = "Send me the studio letter. I can unsubscribe from any issue.";
+    const first = await subscribeToNewsletter.call(
+      {
+        newsletterId: newsletter.id,
+        email: "reader@example.test",
+        consent: {
+          termsVersion: statement,
+          sourceUrl: "/newsletters",
+          evidence: { popup: "newsletter-subscribe", statement },
+        },
+      },
+      ANONYMOUS,
+    );
+    const [row] = await db()
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.id, first.subscriptionId));
+    await confirmSubscription.call({ token: row!.confirmToken }, ANONYMOUS);
+    await unsubscribeFromNewsletter.call({ token: row!.unsubscribeToken }, ANONYMOUS);
+
+    const again = await subscribeToNewsletter.call(
+      {
+        newsletterId: newsletter.id,
+        email: "reader@example.test",
+        consent: {
+          termsVersion: statement,
+          sourceUrl: "/newsletters",
+          evidence: { popup: "newsletter-subscribe", statement },
+        },
+      },
+      ANONYMOUS,
+    );
+    expect(again.status).toBe("pending");
+    expect(again.subscriptionId).toBe(first.subscriptionId);
+    const [pending] = await db()
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.id, again.subscriptionId));
+    expect(pending?.status).toBe("pending");
+    expect(pending?.consentEvidence).toMatchObject({ statement });
+    const confirmed = await confirmSubscription.call({ token: pending!.confirmToken }, ANONYMOUS);
+    expect(confirmed.status).toBe("confirmed");
+    expect(
+      await canContact.call(
+        { contactId: pending!.contactId, purpose: "marketing", channel: "email" },
+        OWNER,
+      ),
+    ).toMatchObject({ allowed: true, reason: "granted" });
+  });
 });

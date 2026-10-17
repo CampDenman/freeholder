@@ -70,6 +70,12 @@ export const newsletterSubscribe = defineBlock({
   contexts: ["page"],
   schema: z.object({
     newsletterId: z.string().uuid().optional(),
+    /**
+     * The owner's own consent sentence, shown beside a checkbox.
+     * Absent means the form behaves as it always has: the address and the
+     * double opt-in are the evidence, and no extra claim is invented.
+     */
+    consentStatement: z.string().trim().max(500).optional(),
   }),
   starter: () => ({}),
   resolve: async (props) => {
@@ -81,7 +87,7 @@ export const newsletterSubscribe = defineBlock({
     if (props.newsletterId) return active.filter((row) => row.id === props.newsletterId);
     return active;
   },
-  render: ({ resolved, ctx }) => {
+  render: ({ props, resolved, ctx }) => {
     if (!resolved || resolved.length === 0) return null;
     if (ctx.query?.subscribed === "1") {
       return (
@@ -90,8 +96,14 @@ export const newsletterSubscribe = defineBlock({
         </p>
       );
     }
+    const statement = props.consentStatement?.trim() ?? "";
     return (
       <form action={subscribePublicNewsletter} className="grid max-w-md gap-3">
+        {ctx.query?.subscribeError === "1" ? (
+          <p role="alert" className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
+            {ctx.t("newsletters.subscribeError")}
+          </p>
+        ) : null}
         {resolved.length === 1 ? (
           <input type="hidden" name="newsletterId" value={resolved[0]!.id} />
         ) : (
@@ -115,6 +127,13 @@ export const newsletterSubscribe = defineBlock({
             className="rounded-md border border-rule-strong bg-surface px-3 py-2"
           />
         </label>
+        {statement ? (
+          <label className="flex items-start gap-2 text-sm text-ink">
+            <input type="checkbox" name="consent" required className="mt-1" />
+            <span>{statement}</span>
+          </label>
+        ) : null}
+        {statement ? <input type="hidden" name="consentStatement" value={statement} /> : null}
         <button type="submit" className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent">
           {ctx.t("newsletters.subscribe")}
         </button>

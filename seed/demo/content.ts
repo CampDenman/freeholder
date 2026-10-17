@@ -483,6 +483,31 @@ export const TRANSLATIONS: Array<{
   },
 ];
 
+/**
+ * The letter a demo visitor can actually read, and the campaign wording an
+ * owner can send. The archive page is empty without an issue, and the sending
+ * journey has nothing to send without a template.
+ */
+export const NEWSLETTER = {
+  name: "The Aurora Coast Letter",
+  slug: "aurora-coast-letter",
+  description:
+    "Occasional notes from the studio: the light, what is on the wall, and when the next sitting is.",
+  consentStatement:
+    "Send me the Aurora Coast Letter. I can unsubscribe from any issue.",
+  issue: {
+    slug: "first-light",
+    title: "First light on the coast",
+    excerpt: "What the morning looked like from the strait, and when the next sitting is.",
+    body: "The strait was silver before the ferry. This letter is how the studio says what is coming up, and nothing else.\n\nThe next open sitting is on the booking page.",
+  },
+  template: {
+    name: "Aurora Coast Letter",
+    subject: "The Aurora Coast Letter",
+    body: "Hello {{contact.first_name}}.\n\nA short note from the studio.",
+  },
+};
+
 export const PAGES: SeedPage[] = [
   {
     slug: "blog",
@@ -500,7 +525,11 @@ export const PAGES: SeedPage[] = [
     blocks: () => [
       { id: "newsletters-title", type: "heading", props: { text: "Studio newsletters", level: 1 } },
       { id: "newsletters-archive", type: "newsletterArchive", props: {} },
-      { id: "newsletters-subscribe", type: "newsletterSubscribe", props: {} },
+      {
+        id: "newsletters-subscribe",
+        type: "newsletterSubscribe",
+        props: { consentStatement: NEWSLETTER.consentStatement },
+      },
     ],
   },
   {

@@ -29,7 +29,7 @@ import { getTemplate, listTemplates, templateSlots } from "@/modules/newsletters
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { domainOrNull } from "../../../read-helpers";
-import { resetTemplateAction, saveTemplateAction } from "../../../template-actions";
+import { resetTemplateAction, saveTemplateAction, testTemplateAction } from "../../../template-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -50,7 +50,7 @@ function bodyText(blocks: unknown): string {
 export default async function MessageTemplatesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ template?: string; saved?: string; error?: string }>;
+  searchParams: Promise<{ template?: string; saved?: string; tested?: string; error?: string }>;
 }) {
   const actor = await requireStaffActor("newsletters", "manage");
   const query = await searchParams;
@@ -89,6 +89,11 @@ export default async function MessageTemplatesPage({
       {query.saved ? (
         <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
           {t("templates.saved")}
+        </p>
+      ) : null}
+      {query.tested ? (
+        <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          {t("broadcasts.notice.tested")}
         </p>
       ) : null}
       {query.error ? (
@@ -245,6 +250,22 @@ export default async function MessageTemplatesPage({
               <Button type="submit" variant="quiet">
                 {t("templates.action.reset")}
               </Button>
+            </form>
+          ) : null}
+
+          {/* §30: test-send-to-self on every editor screen, not only the campaign. */}
+          {chosen ? (
+            <form action={testTemplateAction} className="mt-4 flex flex-wrap items-end gap-3">
+              <input type="hidden" name="id" value={chosen.template.id} />
+              <input type="hidden" name="templateId" value={chosen.template.id} />
+              <input type="hidden" name="subject" value={chosen.template.subject} />
+              <Field label={t("broadcasts.field.testTo")} htmlFor="template-test-to">
+                <Input id="template-test-to" name="to" type="email" required />
+              </Field>
+              <Button type="submit" variant="quiet">
+                {t("broadcasts.action.test")}
+              </Button>
+              <p className="basis-full max-w-prose text-sm text-ink-muted">{t("templates.testHint")}</p>
             </form>
           ) : null}
         </CardBody>

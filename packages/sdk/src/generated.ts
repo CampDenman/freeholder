@@ -217,6 +217,7 @@ export const SERVICE_NAMES = [
   "briefing.recent",
   "briefing.setSection",
   "briefing.today",
+  "broadcasts.audiencePreview",
   "broadcasts.list",
   "broadcasts.pause",
   "broadcasts.recipients",
@@ -2396,6 +2397,10 @@ export interface ServiceCatalog {
     input: { onDate?: string };
     output: { id: string; onDate: string; status: "assembling" | "ready" | "failed"; assembledAt: string | null; readAt: string | null; sections: { key: string; source: "core" | "module" | "playbook"; title: string; body: string | null; items: { label: string; href?: string; detail?: string }[]; severity: "attention" | "today" | "changed"; playbookRunId: string | null }[]; hidden: { key: string; title: string }[] } | null;
   };
+  "broadcasts.audiencePreview": {
+    input: { segmentId: string };
+    output: { segmentId: string; members: number; mailable: number; suppressed: number; [key: string]: unknown };
+  };
   "broadcasts.list": {
     input: { status?: "draft" | "scheduled" | "sending" | "sent" | "paused" | "cancelled"; limit?: number };
     output: { id: string; name: string; templateId: string; segmentId: string; subject: string | null; status: "draft" | "scheduled" | "sending" | "sent" | "paused" | "cancelled"; scheduledAt: string | null; startedAt: string | null; finishedAt: string | null; audienceCount: number; updatedAt: string; [key: string]: unknown }[];
@@ -2418,7 +2423,7 @@ export interface ServiceCatalog {
   };
   "broadcasts.start": {
     input: { id: string };
-    output: { broadcastId: string; audience: number; [key: string]: unknown };
+    output: { broadcastId: string; audience: number; mailable: number; suppressed: number; [key: string]: unknown };
   };
   "broadcasts.stats": {
     input: { id: string };
@@ -5206,7 +5211,7 @@ export interface ServiceCatalog {
   };
   "mail.status": {
     input: { limit?: number };
-    output: { configuration: { transactional: { provider: "smtp" | "console" | "gmail" | "outlook"; delivers: boolean; missing: string[]; fromAddress: string | null }; oauth: { provider: "google" | "microsoft"; configured: boolean; missing: string[] }[]; bulk: { provider: "resend" | "postmark" | "ses" | "none"; sendConfigured: boolean; feedbackConfigured: boolean; missing: string[]; webhookPath: string | null; fromAddress: string | null } }; senders: { id: string; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses"; email: string; displayName: string | null; verificationStatus: "pending" | "verified" | "failed"; status: "active" | "paused" | "needs_attention"; isDefault: boolean; lastVerifiedAt: string | null; lastError: string | null; createdAt: string; accountStatus: ("active" | "needs_reconnect" | "revoked") | null; capabilityEnabled: boolean | null; [key: string]: unknown }[]; deliveries: { id: string; senderId: string | null; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "none"; recipient: string; subject: string; status: "queued" | "submitted" | "delivered" | "bounced" | "complained" | "failed" | "suppressed"; providerRef: string | null; idempotencyKey: string | null; requestedBy: string; attempts: number; lastError: string | null; submittedAt: string | null; deliveredAt: string | null; providerStatusAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; suppressions: { email: string; reason: "hard_bounce" | "complaint" | "provider" | "manual"; provider: "resend" | "postmark" | "ses" | "manual"; sourceEventId: string | null; detail: string | null; active: boolean; releasedAt: string | null; releasedBy: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[] };
+    output: { configuration: { transactional: { provider: "smtp" | "console" | "gmail" | "outlook"; delivers: boolean; missing: string[]; fromAddress: string | null }; oauth: { provider: "google" | "microsoft"; configured: boolean; missing: string[] }[]; bulk: { provider: "resend" | "postmark" | "ses" | "none"; sendConfigured: boolean; feedbackConfigured: boolean; missing: string[]; webhookPath: string | null; fromAddress: string | null } }; senders: { id: string; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses"; email: string; displayName: string | null; verificationStatus: "pending" | "verified" | "failed"; status: "active" | "paused" | "needs_attention"; isDefault: boolean; lastVerifiedAt: string | null; lastError: string | null; verificationDetail: unknown; createdAt: string; accountStatus: ("active" | "needs_reconnect" | "revoked") | null; capabilityEnabled: boolean | null; [key: string]: unknown }[]; deliveries: { id: string; senderId: string | null; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "none"; recipient: string; subject: string; status: "queued" | "submitted" | "delivered" | "bounced" | "complained" | "failed" | "suppressed"; providerRef: string | null; idempotencyKey: string | null; requestedBy: string; attempts: number; lastError: string | null; submittedAt: string | null; deliveredAt: string | null; providerStatusAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; suppressions: { email: string; reason: "hard_bounce" | "complaint" | "provider" | "manual"; provider: "resend" | "postmark" | "ses" | "manual"; sourceEventId: string | null; detail: string | null; active: boolean; releasedAt: string | null; releasedBy: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[] };
   };
   "mail.testSend": {
     input: { id: string };
@@ -7939,6 +7944,7 @@ export interface FreeholderApi {
     today: (input?: ServiceCatalog["briefing.today"]["input"]) => Promise<ServiceCatalog["briefing.today"]["output"]>;
   };
   broadcasts: {
+    audiencePreview: (input: ServiceCatalog["broadcasts.audiencePreview"]["input"]) => Promise<ServiceCatalog["broadcasts.audiencePreview"]["output"]>;
     list: (input?: ServiceCatalog["broadcasts.list"]["input"]) => Promise<ServiceCatalog["broadcasts.list"]["output"]>;
     pause: (input: ServiceCatalog["broadcasts.pause"]["input"]) => Promise<ServiceCatalog["broadcasts.pause"]["output"]>;
     recipients: (input: ServiceCatalog["broadcasts.recipients"]["input"]) => Promise<ServiceCatalog["broadcasts.recipients"]["output"]>;

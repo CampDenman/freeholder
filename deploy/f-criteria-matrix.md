@@ -3691,18 +3691,18 @@ v2.
 
 ## C9.37 — Newsletter readiness and sending journey
 
-- **F01** — Additive customer identifiers and asset privacy backfill: `db/migrations/0022_customer_surfaces.sql`.
-- **F02** — Typed shared services: `src/modules/newsletters/broadcast-service.ts`; customer identity and refusal tests: `tests/modules/customer-surfaces.test.ts`.
-- **F03** — Canonical contact, invoice, grant and share-policy composition: `tests/modules/customer-surfaces.test.ts`.
-- **F04** — Human surface: `app/(admin)/admin/newsletters/broadcasts/page.tsx`; browser evidence: `tests/browser/customer-surfaces.spec.ts`.
-- **F05** — The service registry projects the same schemas and permissions to HTTP/MCP: `src/modules/newsletters/broadcast-service.ts`, `packages/sdk/src/generated.ts`.
-- **F06** — Four locale catalogs: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; runtime catalog gate: `tests/core/locale-quality.test.ts`.
-- **F07** — Customer ownership, stale terms, duplicate reservations, payment-bound grants and private downloads: `tests/modules/customer-surfaces.test.ts`.
-- **F08** — Database regressions: `tests/modules/customer-surfaces.test.ts`; browser forms: `tests/browser/customer-surfaces.spec.ts`.
-- **F09** — Provider and deployment limitations remain explicit: `deploy/customer-surfaces-2026-10-07.md`; no mocked live-provider acceptance is claimed.
-- **F10** — Configuration and customer entry points: `deploy/customer-surfaces-2026-10-07.md`.
-- **F11** — Beta release notes: `.changeset/customer-self-service.md`; scope and remaining acceptance: `deploy/customer-surfaces-2026-10-07.md`.
-- **F12** — Composed software journeys: `tests/browser/customer-surfaces.spec.ts`, `tests/modules/customer-surfaces.test.ts`; actual provider acceptance remains open in `MASTER.md`.
+- **F01** — No new migration. Newsletter, broadcast, consent and suppression tables already ship in `db/migrations/0000_reviewed-baseline.sql`; this change adds queries and screens on `src/modules/newsletters/schema.ts` and `src/core/mail/schema.ts`.
+- **F02** — `tests/modules/broadcasts.test.ts` covers `broadcasts.audiencePreview` and the freeze-moment counts on `broadcasts.start`; `tests/core/newsletters.test.ts` covers resubscribe and the stored consent statement.
+- **F03** — Marketing-email consent stays on the contact spine: the preview join and the send both use the latest granted unexpired record plus active suppression. `tests/modules/broadcasts.test.ts`, `tests/core/newsletters.test.ts`.
+- **F04** — Compose `app/(admin)/admin/newsletters/broadcasts/page.tsx`, detail `app/(admin)/admin/newsletters/broadcasts/[id]/page.tsx`, template test-send `app/(admin)/admin/newsletters/templates/page.tsx`, guidance `app/(admin)/admin/settings/MailSettingsCard.tsx`, public subscribe `src/modules/newsletters/blocks.tsx`. Browser: `tests/browser/newsletters.spec.ts`.
+- **F05** — `broadcasts.audiencePreview` and additive `broadcasts.start` / `mail.status` fields project through the registry to HTTP/MCP/SDK: `src/modules/newsletters/broadcast-service.ts`, `src/core/mail/service.ts`, `packages/sdk/src/generated.ts`. Surface equivalence: `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts`, `tests/core/mcp.test.ts`.
+- **F06** — New copy in `locales/en.json`, `locales/es.json`, `locales/fr.json`, `locales/ar.json`. Catalog gate: `tests/core/i18n-gate.test.ts` and `tests/core/locale-quality.test.ts`. Axe on the changed screens: `tests/browser/newsletters.spec.ts`.
+- **F07** — Unverified sender, empty audience, suppressed address, missing consent, archived wording and a statement posted without its box are refusals. `tests/modules/broadcasts.test.ts`, `tests/core/newsletters.test.ts`. Scoped permission enforcement for every service: `tests/core/api.test.ts`.
+- **F08** — `tests/modules/broadcasts.test.ts`, `tests/core/newsletters.test.ts`, `tests/core/mail-ui.test.ts`, `tests/core/seed-demo.test.ts`, `tests/browser/newsletters.spec.ts`.
+- **F09** — `assertMailReady` in `src/core/mail/service.ts` refuses a campaign with no delivering verified bulk sender. SMTP/HTTP doubles prove behavior; live inbox placement stays owner acceptance in `deploy/customer-surfaces-2026-10-07.md`. Product-wide export/restore/retention remains C11.14; shared audit/outbox participation: `tests/core/record-participation.test.ts`.
+- **F10** — Demo letter, published issue and campaign template via ordinary services: `seed/demo/content.ts`, `src/modules/seed/service.ts`, `tests/core/seed-demo.test.ts`. Sender guidance is on the settings card: `app/(admin)/admin/settings/MailSettingsCard.tsx`.
+- **F11** — Changeset `.changeset/c9-37-newsletter-journey.md`. Annotation in `MASTER.md`. Reconciliation row in `deploy/spec-reconciliation.md`. Acceptance boundary: `deploy/customer-surfaces-2026-10-07.md`.
+- **F12** — `tests/modules/broadcasts.test.ts` composes preview, freeze, consent and suppression. Owner path: `tests/browser/newsletters.spec.ts` (jobs off, so the batch itself stays in the vitest proof). Demo site: `tests/core/seed-demo.test.ts`.
 
 ## C9.38 — Public membership signup
 

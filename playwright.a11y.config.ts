@@ -67,6 +67,13 @@ Object.assign(process.env, {
   LOCAL_STORAGE_ROOT: "test-results/browser-media",
   SESSION_SECRET: sessionSecret,
   BOOTSTRAP_SECRET: "browser-test-only-bootstrap-secret-32-characters",
+  // Campaign journeys need a delivering bulk route. Readiness stays false
+  // until a test inserts a verified default sender, so other specs still see
+  // the "configure mail" gate.
+  MAIL_BULK_ADAPTER: "resend",
+  MAIL_BULK_FROM: "news@example.test",
+  RESEND_API_KEY: "browser-test-key",
+  RESEND_WEBHOOK_SECRET: "whsec_browser_test",
 });
 
 export default defineConfig({

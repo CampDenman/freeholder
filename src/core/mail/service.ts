@@ -715,6 +715,8 @@ export const mailStatus = defineService({
         isDefault: z.boolean(),
         lastVerifiedAt: timestamp.nullable(),
         lastError: z.string().nullable(),
+        /** Last provider check: DKIM, return path, domain. Not a secret. */
+        verificationDetail: z.unknown(),
         createdAt: timestamp,
         accountStatus: z
           .enum(["active", "needs_reconnect", "revoked"])
@@ -739,6 +741,7 @@ export const mailStatus = defineService({
           isDefault: mailSenders.isDefault,
           lastVerifiedAt: mailSenders.lastVerifiedAt,
           lastError: mailSenders.lastError,
+          verificationDetail: mailSenders.verificationDetail,
           createdAt: mailSenders.createdAt,
           accountStatus: connectedAccounts.status,
           capabilityEnabled: connectionCapabilities.enabled,

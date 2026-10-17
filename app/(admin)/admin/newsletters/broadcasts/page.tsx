@@ -13,7 +13,7 @@ import { Button, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "
 import { mailReadiness } from "@/core/mail/service";
 import { currentBusiness } from "@/core/settings/read";
 import { listSegments } from "@/core/segments/service";
-import { listBroadcasts, listTemplates } from "@/modules/newsletters/service";
+import { audiencePreview, listBroadcasts, listTemplates } from "@/modules/newsletters/service";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { domainOrNull } from "../../../read-helpers";
@@ -53,6 +53,20 @@ export default async function BroadcastsPage({
   const sendable = (templates ?? []).filter(
     (each) => each.kind === "campaign" || each.kind === "newsletter",
   );
+  // One query per segment, not per person: the preview is the send's own gate
+  // counted in SQL. An owner choosing an audience sees who would actually be
+  // mailed, instead of the size of the list.
+  const previews = (
+    await Promise.all(
+      (segments ?? []).map(async (segment) => {
+        const preview = await domainOrNull(
+          audiencePreview.call({ segmentId: segment.id }, actor),
+        );
+        return preview ? { name: segment.name, ...preview } : null;
+      }),
+    )
+  ).filter((preview) => preview !== null);
+
   const locale = business?.defaultLocale ?? "en";
   // Shown in the business's own timezone, not the server's: a send time an
   // owner set for nine o'clock must read as nine o'clock.
@@ -135,6 +149,25 @@ export default async function BroadcastsPage({
                     ))}
                   </Select>
                 </Field>
+                {previews.length > 0 ? (
+                  <div className="md:col-span-2">
+                    <p className="text-sm font-semibold text-ink">
+                      {t("broadcasts.audiencePreviewTitle")}
+                    </p>
+                    <ul className="mt-2 grid list-none gap-2 p-0">
+                      {previews.map((preview) => (
+                        <li key={preview.segmentId} className="text-sm text-ink-muted">
+                          <span className="font-semibold text-ink">{preview.name}. </span>
+                          {t("broadcasts.audiencePreview", {
+                            mailable: preview.mailable,
+                            members: preview.members,
+                            suppressed: preview.suppressed,
+                          })}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 <Field
                   label={t("broadcasts.field.scheduledAt")}
                   htmlFor="scheduledAt"

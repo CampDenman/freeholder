@@ -674,6 +674,7 @@ import templateServices from "./template-service";
 export {
   saveBroadcast,
   testSend,
+  audiencePreview,
   startBroadcast,
   sendNext,
   tick,

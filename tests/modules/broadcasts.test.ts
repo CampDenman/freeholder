@@ -20,6 +20,7 @@ import {
   broadcasts,
 } from "@/modules/newsletters/broadcast-schema";
 import {
+  audiencePreview,
   broadcastRecipientList,
   broadcastStats,
   listBroadcasts,
@@ -34,6 +35,8 @@ import {
   unsubscribeFromBroadcast,
 } from "@/modules/newsletters/service";
 import { saveSegment } from "@/core/segments/service";
+import { contacts } from "@/core/contacts/schema";
+import { segmentMembers, segments } from "@/core/segments/schema";
 import { canContact, recordConsent } from "@/core/privacy/service";
 import { users } from "@/core/auth/schema";
 import { mergeContacts, resolveContact } from "@/core/contacts/service";
@@ -200,6 +203,8 @@ describe.runIf(hasDatabase)("broadcasts", () => {
 
     const started = await startBroadcast.call({ id: saved.id }, OWNER);
     expect(started.audience).toBe(3);
+    expect(started.mailable).toBe(3);
+    expect(started.suppressed).toBe(0);
 
     // Somebody joining now is not on this send.
     await resolveContact.call({ email: "latecomer@example.com", name: "Late" }, OWNER);
@@ -208,6 +213,93 @@ describe.runIf(hasDatabase)("broadcasts", () => {
     expect(recipients.map((each) => each.email).sort()).toEqual(
       people.map((each) => each.email).sort(),
     );
+  });
+
+  it("counts who can be mailed before the send, and again when it starts", async () => {
+    const granted = await resolveContact.call(
+      { email: "granted@example.test", name: "Granted" },
+      OWNER,
+    );
+    await recordConsent.call(
+      {
+        contactId: granted.contact.id,
+        purpose: "marketing",
+        channel: "email",
+        state: "granted",
+        method: "double_opt_in",
+      },
+      OWNER,
+    );
+    await resolveContact.call({ email: "silent@example.test", name: "Silent" }, OWNER);
+    const blocked = await resolveContact.call(
+      { email: "blocked@example.test", name: "Blocked" },
+      OWNER,
+    );
+    await recordConsent.call(
+      {
+        contactId: blocked.contact.id,
+        purpose: "marketing",
+        channel: "email",
+        state: "granted",
+        method: "double_opt_in",
+      },
+      OWNER,
+    );
+    // Reason and provider have to agree: an owner suppression names itself.
+    await db().insert(mailSuppressions).values({
+      email: "blocked@example.test",
+      reason: "manual",
+      provider: "manual",
+      active: true,
+    });
+    const [noAddress] = await db().insert(contacts).values({ name: "No Address" }).returning();
+
+    const segment = await saveSegment.call(
+      {
+        name: "Reachable preview",
+        definition: { match: "all", rules: [{ field: "contact.email", op: "isSet" }] },
+      },
+      OWNER,
+    );
+    expect(await audiencePreview.call({ segmentId: segment.id }, OWNER)).toMatchObject({
+      members: 3,
+      mailable: 1,
+      suppressed: 2,
+    });
+
+    // A frozen list can hold someone with no address. They are in the audience
+    // and they will be skipped: a campaign cannot mail a blank.
+    const [held] = await db()
+      .insert(segments)
+      .values({
+        name: "Held",
+        slug: "held-preview",
+        kind: "static",
+        definition: { match: "all", rules: [{ field: "contact.email", op: "isSet" }] },
+        capturedAt: new Date(),
+        createdBy: OWNER.userId,
+      })
+      .returning();
+    await db().insert(segmentMembers).values([
+      { segmentId: held!.id, contactId: granted.contact.id },
+      { segmentId: held!.id, contactId: noAddress!.id },
+    ]);
+    expect(await audiencePreview.call({ segmentId: held!.id }, OWNER)).toMatchObject({
+      members: 2,
+      mailable: 1,
+      suppressed: 1,
+    });
+
+    const template = await ready_();
+    const saved = await saveBroadcast.call(
+      { name: "Preview", templateId: template.id, segmentId: segment.id },
+      OWNER,
+    );
+    expect(await startBroadcast.call({ id: saved.id }, OWNER)).toMatchObject({
+      audience: 3,
+      mailable: 1,
+      suppressed: 2,
+    });
   });
 
   it("refuses a stale edit once a concurrent start has frozen the campaign", async () => {
