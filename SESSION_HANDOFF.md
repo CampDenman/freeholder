@@ -24,7 +24,7 @@ the final gate and are not work in themselves. The twelve real open items are
 C3.28, C3.29, C11.05, C11.08, C11.10, C11.16, C11.17, C12.26, C12.27, C12.30,
 C12.38 and C12.39.
 
-**Main is `5af2cf0c`, and that is the deploy.** Since the 2026-10-16 snapshot,
+**The deploy is `5af2cf0c`.** This snapshot merges on top of that revision and does not change the running image. Refresh `git log` before treating the tip of main as what freeholder.ai runs. Since the 2026-10-16 snapshot,
 #541 (the Dependabot rollup), #540 and #542 (the handoff), #543 (C3.29's
 gallery publisher, item still open), #544 (C6.11), #545 (C9.37) and #546
 (C9.38) merged. There are no in-flight merges.

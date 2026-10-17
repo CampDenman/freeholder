@@ -82,10 +82,14 @@ owner left them open.
 
 ## Deployment
 
-**freeholder.ai now runs main `5af2cf0c`** (PR #546), pinned to the
+**freeholder.ai runs product revision `5af2cf0c`** (PR #546), pinned to the
 linux/amd64 digest
 
 `ghcr.io/campdenman/freeholder@sha256:87eebf56dfe33d50ee14d523f32df715d00175de5984d19198aeceb7df561ea6`.
+
+These notes merge after that revision. They do not change the droplet. The
+tip of `main` moves when this digest lands; the running image stays that pin
+until the next `scripts/deploy-droplet.mjs`.
 
 Main CI for that commit succeeded, Publish image
 ([run 39066301842](https://github.com/CampDenman/freeholder/actions/runs/39066301842))
