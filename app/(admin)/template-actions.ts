@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
-import { resetTemplate, saveTemplate } from "@/modules/newsletters/service";
+import { resetTemplate, saveTemplate, testSend } from "@/modules/newsletters/service";
 
 async function actor() {
   return actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
@@ -24,14 +24,14 @@ function optional(form: FormData, name: string): string | null {
   return value.length > 0 ? value : null;
 }
 
-function done(id: string | null, error?: unknown): never {
+function done(id: string | null, error?: unknown, flag = "saved"): never {
   const base = id ? `/admin/newsletters/templates?template=${id}` : "/admin/newsletters/templates";
   if (error instanceof ServiceError) {
     redirect(`${base}${id ? "&" : "?"}error=${encodeURIComponent(error.message)}`);
   }
   if (error instanceof Error) throw error;
   if (error !== undefined) throw new Error("template action failed");
-  redirect(`${base}${id ? "&" : "?"}saved=1`);
+  redirect(`${base}${id ? "&" : "?"}${flag}=1`);
 }
 
 /**
@@ -45,6 +45,25 @@ function done(id: string | null, error?: unknown): never {
  */
 function bodyBlocks(value: string): Array<Record<string, unknown>> {
   return value.length > 0 ? [{ type: "text", props: { body: value } }] : [];
+}
+
+/** One copy of this wording, to one address. The same send the campaign screen uses. */
+export async function testTemplateAction(form: FormData): Promise<void> {
+  const caller = await actor();
+  const id = optional(form, "id");
+  try {
+    await testSend.call(
+      {
+        templateId: text(form, "templateId"),
+        to: text(form, "to"),
+        subject: optional(form, "subject"),
+      },
+      caller,
+    );
+  } catch (error) {
+    done(id, error);
+  }
+  done(id, undefined, "tested");
 }
 
 export async function saveTemplateAction(form: FormData): Promise<void> {

@@ -106,11 +106,15 @@ export async function startBroadcastAction(form: FormData): Promise<void> {
   const caller = await actor();
   const id = text(form, "id");
   try {
-    await startBroadcast.call({ id }, caller);
+    const started = await startBroadcast.call({ id }, caller);
+    // The freeze-moment counts, on the page the owner is already looking at.
+    // Consent is still re-asked per copy; this is what the gate would do now.
+    redirect(
+      `/admin/newsletters/broadcasts/${id}?started=1&audience=${started.audience}&mailable=${started.mailable}&suppressed=${started.suppressed}`,
+    );
   } catch (error) {
     done(id, error);
   }
-  done(id, undefined, "started");
 }
 
 export async function pauseBroadcastAction(form: FormData): Promise<void> {

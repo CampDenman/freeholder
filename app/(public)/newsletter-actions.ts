@@ -17,13 +17,36 @@ export async function subscribePublicNewsletter(form: FormData): Promise<void> {
   const emailRaw = form.get("email");
   const newsletterId = typeof newsletterRaw === "string" ? newsletterRaw : "";
   const email = typeof emailRaw === "string" ? emailRaw : "";
+  const statementRaw = form.get("consentStatement");
+  const statement = typeof statementRaw === "string" ? statementRaw.trim().slice(0, 500) : "";
+  const accepted = form.get("consent") === "on";
   const requestHeaders = await headers();
   const barePath = requestHeaders.get(PATH_HEADER) ?? "/";
   const [business, locale] = await Promise.all([currentBusiness(), getLocale()]);
   const path = business ? localizeCustomerHref(barePath, locale, business) : barePath;
   const join = path.includes("?") ? "&" : "?";
+  if (statement && !accepted) {
+    redirect(`${path}${join}subscribeError=1`);
+  }
   try {
-    await subscribeToNewsletter.call({ newsletterId, email }, ANONYMOUS);
+    await subscribeToNewsletter.call(
+      {
+        newsletterId,
+        email,
+        // The sentence on the form is the terms. No statement, no extra record:
+        // existing pages keep the double opt-in they already had.
+        ...(statement
+          ? {
+              consent: {
+                termsVersion: statement.slice(0, 100),
+                sourceUrl: path,
+                evidence: { popup: "newsletter-subscribe", statement },
+              },
+            }
+          : {}),
+      },
+      ANONYMOUS,
+    );
     redirect(`${path}${join}subscribed=1`);
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;

@@ -202,6 +202,35 @@ const installDemoApply = defineService({
       await ctx.callAsSystem(publishCalculator, { id: made.id });
     }
 
+    // After the pages, so the demo's own /newsletters page is the archive
+    // (ensureIndex will not replace it) and publishing the issue only adds
+    // the leaf. The template is campaign wording, not a page.
+    const { createNewsletter, createIssue, publishIssue, saveTemplate } = await import(
+      "@/modules/newsletters/service"
+    );
+    const letter = pack.NEWSLETTER;
+    const newsletter = await ctx.callAsSystem(createNewsletter, {
+      name: letter.name,
+      slug: letter.slug,
+      description: letter.description,
+    });
+    const issue = await ctx.callAsSystem(createIssue, {
+      newsletterId: newsletter.id,
+      slug: letter.issue.slug,
+      title: letter.issue.title,
+      excerpt: letter.issue.excerpt,
+      body: letter.issue.body,
+    });
+    await ctx.callAsSystem(publishIssue, { id: issue.id, expectedVersion: issue.version });
+    await ctx.callAsSystem(saveTemplate, {
+      kind: "campaign",
+      name: letter.template.name,
+      subject: letter.template.subject,
+      blocks: [{ type: "text", props: { body: letter.template.body } }],
+      variables: ["contact.first_name"],
+      status: "active",
+    });
+
     await ctx.callAsSystem(completeSetup, {});
 
     ctx.queueEvent("demo.installed", { pages: created.length });
