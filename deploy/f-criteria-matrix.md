@@ -2536,16 +2536,16 @@ v2.
 
 ## C6.11 — Build events/classes with venue, sessions, seat inventory
 
-- **F01** — `db/migrations/0000_reviewed-baseline.sql` — reviewed baseline (C10.19) folding the item's migration tag `0059_concerned_sumo.sql`; table invariants asserted in `tests/core/events.test.ts`.
-- **F02** — `tests/core/events.test.ts` — event scheduling mutations through the typed service boundary.
+- **F01** — `db/migrations/0000_reviewed-baseline.sql` — reviewed baseline (C10.19) folding the item's original migration tag; paid admission's `event_registrations.invoice_id`/`hold_expires_at` and hold-sweep index land in `db/migrations/0052_event_paid_admission.sql`; invariants asserted in `tests/core/events.test.ts`.
+- **F02** — `tests/core/events.test.ts` — event scheduling, paid registration, settlement, expiry and refund mutations through the typed service boundary.
 - **F03** — `tests/core/merge-completeness.test.ts` — merge repointing is enforced by reflection over every module's tables, so any contact reference this item stores is covered; its contact-facing behaviour is exercised in `tests/core/events.test.ts`.
-- **F04** — /admin/events list/create. — screen file `app/(admin)/admin/events/page.tsx`.
-- **F05** — `events.create`/`update`/`addSession`/`addTicket`/`register`/`list`/`publish` at /api/v1/events.*, MCP `events_*`. — surface equivalence: `tests/core/api.test.ts` (every service has an endpoint, spec schema is the validator), `tests/core/sdk-schema.test.ts` (generated client contract) and `tests/core/mcp.test.ts` (registry-derived MCP tools)..
-- **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG over the surfaces the browser suite visits in `tests/browser/accessibility.spec.ts`.
-- **F07** — `tests/core/events.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing).
-- **F08** — `tests/core/events.test.ts` — the item's unit/service/database coverage.
-- **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared audit/outbox participation it rides on: `tests/core/record-participation.test.ts`.
-- **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; per-item contextual help is not separately evidenced.
+- **F04** — /admin/events list/create plus the public registration form in the eventDetail block (`app/(public)/event-actions.ts`, `src/modules/events/blocks.tsx`). — screen file `app/(admin)/admin/events/page.tsx`.
+- **F05** — `events.create`/`update`/`addSession`/`addTicket`/`register`/`list`/`publish` at /api/v1/events.*, MCP `events_*`; the settlement, hold-sweep and refund-cancellation phases (`events.confirmPaidRegistration`/`expireHeldRegistrations`/`cancelRegistrationForInvoice`) are system services, deliberately off every projection (`tests/core/internal-services.test.ts`). — surface equivalence: `tests/core/api.test.ts` (every service has an endpoint, spec schema is the validator), `tests/core/sdk-schema.test.ts` (generated client contract) and `tests/core/mcp.test.ts` (registry-derived MCP tools).
+- **F06** — axe WCAG A/AA over the public index, the public event page with its registration form and result states, and both admin surfaces, in light and dark, in `tests/browser/events.spec.ts`; the form's strings ship in all four locales, held to ICU parity by `tests/core/i18n-gate.test.ts` + `tests/core/locale-quality.test.ts`.
+- **F07** — `tests/core/events.test.ts` covers paid-hold refusal at check-in, lapsed/cancelled-hold checkout refusal, duplicate refusal and partial-payment containment; `tests/core/client-readiness-security.test.ts` keeps the legacy guards (foreign/inactive tickets, unverifiable paid rows refused at check-in); scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing).
+- **F08** — `tests/core/events.test.ts` plus `tests/browser/events.spec.ts` — service, database and browser coverage.
+- **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. The hold sweeper is the pg-boss job `events.expireHeldRegistrations` (`src/modules/events/jobs.ts`). Shared audit/outbox participation it rides on: `tests/core/record-participation.test.ts`.
+- **F10** — `src/modules/events/onboarding.ts` ships a demo class in en/fr/es, loaded, verified and purged by the tracked demo run; the class is paid, so its public page's form genuinely sells a seat.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping).
 - **F12** — `tests/core/events.test.ts` is the composition proof.
 

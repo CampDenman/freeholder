@@ -3475,7 +3475,7 @@ what is true now and what remains.
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | Customer-facing acceptance gaps identified 2026-10-07: C9.37 (actual external newsletter delivery) and C9.38 (card-required trial setup; live settlement is C11.05). C2.26, C6.19 and C8.17 closed 2026-10-14. Actual new Replit and Lovable launch acceptance with the owner (C3.28). Owner passkey/MCP browser acceptance (C1.39) and private launch tooling/package acceptance (C3.27) closed 2026-10-06; see the evidence under each item. §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). Paid event admission (C6.11). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 was recorded closed 2026-09-28, then reopened 2026-10-05 because the drill had no source object bytes (`deploy/stable-acceptance-2026-10-05.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | Customer-facing acceptance gaps identified 2026-10-07: C9.37 (actual external newsletter delivery) and C9.38 (card-required trial setup; live settlement is C11.05). C2.26, C6.19 and C8.17 closed 2026-10-14. Actual new Replit and Lovable launch acceptance with the owner (C3.28). Owner passkey/MCP browser acceptance (C1.39) and private launch tooling/package acceptance (C3.27) closed 2026-10-06; see the evidence under each item. §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). C6.11 closed 2026-10-17 — paid event admission on the invoice spine: held seats, settlement, expiry sweep, refund/void cascade, paid check-in and the public registration form (annotation under the item). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 was recorded closed 2026-09-28, then reopened 2026-10-05 because the drill had no source object bytes (`deploy/stable-acceptance-2026-10-05.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -6180,24 +6180,71 @@ payment, tax, inventory and reporting path, with no floating-point money.
   the policy says, because there is nothing left to inspect. `/admin/hire`,
   ordered overdue-first. `0094_rentals.sql`. Coverage in
   `tests/core/rentals.test.ts`. **F04** `/admin/hire` rentals. **F05** `rentals.quote`/`reserve`/`handOver`/`takeBack`/`setTerms`/`list` at `/api/v1/rentals.*`, MCP `rentals_*`. **F07** `tests/core/rentals.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/rentals.test.ts` is the composition proof.)
-- [ ] **C6.11** Build events/classes with venue, sessions, seat inventory,
+- [x] **C6.11** Build events/classes with venue, sessions, seat inventory,
   tickets/passes, waitlists, schema.org Event, ICS and check-in.
-  *(Evidence: `events` module — venue fields, sessions with capacity,
-  ticket types, contact-spine registrations that waitlist when a session is
-  full and promote on cancel, check-in, Event JSON-LD, `/ics/events/{slug}`,
-  public `/events` pages and `/admin/events`. Merge and privacy cover
-  `event_registrations`. The tables are in the squashed baseline
-  `db/migrations/0000_reviewed-baseline.sql` — this line previously cited
-  `0059_concerned_sumo.sql`, which the squash removed, so the citation could
-  not resolve and the item could not honestly be checked;
-  `tests/core/events.test.ts`. **F04** `/admin/events` list/create. **F05** `events.create`/`update`/`addSession`/`addTicket`/`register`/`list`/`publish` at `/api/v1/events.*`, MCP `events_*`. **F07** `tests/core/events.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F06** axe WCAG A/AA over the public index, the public event page and both admin surfaces, in light and dark, in `tests/browser/events.spec.ts`; ICU parity across shipped locales by `tests/core/i18n-gate.test.ts`. **F08** `tests/core/events.test.ts` plus `tests/browser/events.spec.ts` — service, database and browser coverage. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F10** `src/modules/events/onboarding.ts` ships a demo class in en/fr/es, loaded, verified and purged by the tracked demo run. **F12** `tests/core/events.test.ts` is the composition proof.)*
-
-  *(Stable acceptance audit 2026-10-05, C6.11 reopened: free admission is
-  implemented and capacity changes are serialized. Paid tickets are refused
-  by `events.register`; there is no canonical invoice/settlement/reservation
-  flow. Legacy paid confirmations are refused at check-in. The ticket UI and
-  seeded paid class do not prove purchasable admission. Paid checkout, bounded
-  seat holds, settlement, expiry/cancellation and check-in evidence remain.)*
+  (**A paid ticket is an invoice, and a seat is a hold.** §4.3 settles the
+  money shape — the invoice is the single money object — so `events.register`
+  never confirms a paid seat: under the session row lock it writes a
+  `reserved` registration with a 30-minute `hold_expires_at` and creates *and
+  issues* the invoice (`source_type "event"`, one per registration under
+  `invoices_source_idx`, idempotency-keyed on the registration) in the same
+  transaction, returning `{ registration, paymentUrl }` — the portal invoice
+  page under its HMAC capability. Settlement stays on the invoicing module:
+  `invoicing.settlePayment` branches on `sourceType "event"` exactly as it
+  does for orders, a fully paid invoice flips the hold to `confirmed`
+  atomically (`events.confirmPaidRegistration`, a system service), and a
+  partial payment leaves the seat reserved and outside the sweeper's reach.
+  **A hold that never settles stops being a seat.** The pg-boss job
+  `events.expireHeldRegistrations` (every five minutes, thin wrapper over the
+  system service) cancels lapsed unpaid holds, voids the orphaned invoice so
+  its link can never be paid, and runs the promotion cascade — a paid
+  waitlisted row becomes a fresh hold with its own issued invoice, and the
+  emailed invoice *is* the waitlist notification, pay link included. Refund
+  or void of an event invoice cancels the seat and promotes the next in line
+  through the manifest's `listens` (`invoice.refunded`, `invoice.voided` →
+  `events.cancelRegistrationForInvoice`); cancelling a *settled* registration
+  reports its invoice id on the outcome and leaves the refund a deliberate
+  invoicing act — a seat is not a payment, the same line C6.08 drew.
+  **Admission is evidence, not a row.** Check-in refuses a paid registration
+  without a settled invoice — legacy confirmations from before settlement
+  existed stay refused — and the settled invoice id rides the outcome row.
+  A cancelled or lapsed hold's invoice refuses payment at checkout through
+  the checkout-eligibility hook (`registerCheckoutEligibility("event", …)`:
+  still reserved, hold live, session ahead on a published event), and one
+  live registration per person per session makes a double submit a conflict
+  rather than a second seat. A hold with an in-flight payment attempt cannot
+  be released — cancellation refuses and the sweeper skips until the attempt
+  resolves, the same race guard `catalog.cancelOrder` draws, so a settlement
+  never lands on a seat somebody else now holds. Free registration, capacity serialization, the
+  waitlist and check-in are unchanged for unpaid tickets. The public proof:
+  the `eventDetail` block carries a server-rendered registration form
+  (session/ticket pickers, name/email/quantity, posting to
+  `app/(public)/event-actions.ts`); a free seat confirms inline, a paid seat
+  redirects to the payment page, a full session takes the waitlist, and a
+  draft, cancelled or finished event renders no form. Merge and privacy cover
+  `event_registrations`; the demo class (`src/modules/events/onboarding.ts`)
+  is paid, so it genuinely sells. `db/migrations/0052_event_paid_admission.sql`;
+  `tests/core/events.test.ts` (hold + invoice + payment URL, concurrency
+  serialized onto the waitlist, partial-payment containment, expiry sweep
+  with paid and free promotion, checkout refusal, refund cascade, duplicate
+  refusal), `tests/core/client-readiness-security.test.ts` (legacy guards:
+  foreign/inactive tickets refused, unverifiable paid rows refused at
+  check-in), `tests/browser/events.spec.ts` (a visitor buys the paid class
+  through the form, lands on the invoice surface, the owner records the
+  offline payment at /admin/payments, the registration confirms and checks
+  in; axe on the form and its result states, light and dark). **F04**
+  `/admin/events` plus the public registration form on the event page.
+  **F05** `events.create`/`update`/`addSession`/`addTicket`/`register`/`list`/`publish`
+  at `/api/v1/events.*`, MCP `events_*`; the settlement, sweep and
+  refund-cancellation phases are system services, kept off every projection
+  by `tests/core/internal-services.test.ts`. **F07**
+  `tests/core/events.test.ts` covers refusal and failure modes (unpaid
+  check-in, lapsed-hold checkout, duplicates, partials); scoped permission
+  enforcement on the service boundary is proven for every service by
+  `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 —
+  this item uses the shared audit/outbox; product-wide
+  export/restore/retention/erasure proof is still open. **F12**
+  `tests/core/events.test.ts` is the composition proof.)
 
 #### Quotes, contracts, projects, and time
 - [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/
@@ -10272,7 +10319,7 @@ the plan's references to print-on-demand as a v1 requirement resolve here.
 
 C1.03/C1.05/C6.08/C9.09/C9.12/C11.10: production first ownership requires an independent BOOTSTRAP_SECRET; public waitlist enrollment returns only an acknowledgement; referral contact attribution requires ownership or scope; redemption locks account and reward rows; magic-link limits use token hashes and forms use validated submitter identities or explicitly trusted proxy addresses.
 
-C6.11 is reopened: free event enrollment validates ticket ownership and availability and serializes capacity changes. Paid enrollment refuses until a canonical invoice/payment settlement flow exists. Existing paid confirmations from before this repair need operator reconciliation. At that date C10.06/C10.10 were reopened because automatic apply/rollback was unavailable. Their later Docker host-executor delivery and evidence under §43.16 supersede that historical status; both are checked. The other target recipes retain their documented manual procedures. Previous updater history alone does not prove deployment or recoverability.
+C6.11 is reopened: free event enrollment validates ticket ownership and availability and serializes capacity changes. Paid enrollment refuses until a canonical invoice/payment settlement flow exists. Existing paid confirmations from before this repair need operator reconciliation. At that date C10.06/C10.10 were reopened because automatic apply/rollback was unavailable. Their later Docker host-executor delivery and evidence under §43.16 supersede that historical status; both are checked. The other target recipes retain their documented manual procedures. Previous updater history alone does not prove deployment or recoverability. (C6.11's paid-admission remainder closed 2026-10-17 — held seats on the invoice spine, settlement, expiry, refund cascade and paid check-in; annotation under the item.)
 
 ### 43.19 C12 — Members, social graph, messaging, calls, and marketplace
 

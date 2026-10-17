@@ -1,0 +1,5 @@
+---
+"freeholder": patch
+---
+
+Paid event admission (C6.11): a paid ticket now sells. Registering for a paid session reserves the seat for 30 minutes and issues a real invoice in the same transaction — the public event page's new registration form hands paid attendees straight to their private payment page, and settlement (offline-recorded or provider) confirms the seat atomically. A hold that lapses unpaid is swept: the seat is released, its invoice voided, and the waitlist promoted — a paid waitlisted row gets its own invoice by email as the notification. Refunding or voiding an event invoice cancels the seat and promotes the next in line; cancelling a settled registration reports its invoice and leaves the refund a deliberate act. Check-in admits a paid registration only against a settled invoice (legacy unverifiable rows stay refused), a cancelled or lapsed hold's invoice refuses payment at checkout, and duplicate registrations for the same person and session are rejected. `events.register` now returns `{ registration, paymentUrl }`, and `event_registrations` gains `invoice_id`/`hold_expires_at` (migration `0052_event_paid_admission`).

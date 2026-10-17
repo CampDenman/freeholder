@@ -156,6 +156,7 @@ export const invoiceRow = row({
     "late_fee",
     "unlock",
     "ad_campaign",
+    "event",
   ]),
   sourceId: z.string().nullable(),
   idempotencyKey: z.string(),

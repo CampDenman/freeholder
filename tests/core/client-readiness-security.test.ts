@@ -77,19 +77,27 @@ it('registration rejects foreign tickets, missing tickets and unpaid admission',
   const inactive = await addEventTicket.call({ eventId: a.id, name: 'Inactive admission', priceMinor: 0 }, OWNER);
   await db().update(eventTickets).set({ active: false }).where(eq(eventTickets.id, inactive.id));
   await publishEvent.call({ id: a.id, expectedVersion: a.version }, OWNER);
-  for (const ticketId of [undefined, foreign.id, inactive.id, paid.id]) {
-    await expect(registerForEvent.call({ eventId: a.id, sessionId: session.id, ticketId, email: 'visitor@example.test' }, ANONYMOUS)).rejects.toMatchObject({ code: ticketId === paid.id ? 'conflict' : 'validation' });
+  for (const ticketId of [undefined, foreign.id, inactive.id]) {
+    await expect(registerForEvent.call({ eventId: a.id, sessionId: session.id, ticketId, email: 'visitor@example.test' }, ANONYMOUS)).rejects.toMatchObject({ code: 'validation' });
   }
+  // C6.11: paid registration is a held seat plus an issued invoice, never a
+  // bare confirmation.
+  const held = await registerForEvent.call({ eventId: a.id, sessionId: session.id, ticketId: paid.id, email: 'paid@example.test' }, ANONYMOUS);
+  expect(held.registration.status).toBe('reserved');
+  expect(held.registration.invoiceId).toBeTruthy();
+  expect(held.paymentUrl).toContain(`/portal/invoices/${held.registration.invoiceId}`);
+  // The held seat cannot check in before its invoice settles.
+  await expect(checkInRegistration.call({ id: held.registration.id }, OWNER)).rejects.toMatchObject({ code: 'conflict' });
   const free = await addEventTicket.call({ eventId: a.id, name: 'Free admission', priceMinor: 0 }, OWNER);
-  const occupied = await registerForEvent.call({ eventId: a.id, sessionId: session.id, ticketId: free.id, email: 'group@example.test', quantity: 10 }, ANONYMOUS);
+  const occupied = await registerForEvent.call({ eventId: a.id, sessionId: session.id, ticketId: free.id, email: 'group@example.test', quantity: 9 }, ANONYMOUS);
   const waiting = await registerForEvent.call({ eventId: a.id, sessionId: session.id, ticketId: free.id, email: 'waiting@example.test' }, ANONYMOUS);
   // Simulate invalid legacy rows created by the vulnerable build.
-  await db().update(eventRegistrations).set({ ticketId: null }).where(eq(eventRegistrations.id, waiting.id));
-  await cancelRegistration.call({ id: occupied.id }, OWNER);
-  const [held] = await db().select().from(eventRegistrations).where(eq(eventRegistrations.id, waiting.id));
-  expect(held?.status).toBe('waitlisted');
-  await db().update(eventRegistrations).set({ status: 'confirmed', ticketId: paid.id }).where(eq(eventRegistrations.id, waiting.id));
-  await expect(checkInRegistration.call({ id: waiting.id }, OWNER)).rejects.toMatchObject({ code: 'conflict' });
+  await db().update(eventRegistrations).set({ ticketId: null }).where(eq(eventRegistrations.id, waiting.registration.id));
+  await cancelRegistration.call({ id: occupied.registration.id }, OWNER);
+  const [held2] = await db().select().from(eventRegistrations).where(eq(eventRegistrations.id, waiting.registration.id));
+  expect(held2?.status).toBe('waitlisted');
+  await db().update(eventRegistrations).set({ status: 'confirmed', ticketId: paid.id }).where(eq(eventRegistrations.id, waiting.registration.id));
+  await expect(checkInRegistration.call({ id: waiting.registration.id }, OWNER)).rejects.toMatchObject({ code: 'conflict' });
 });
 
 it('concurrent loyalty redemptions cannot spend the same points twice', async () => {
