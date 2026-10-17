@@ -3706,18 +3706,18 @@ v2.
 
 ## C9.38 — Public membership signup
 
-- **F01** — Additive customer identifiers and asset privacy backfill: `db/migrations/0022_customer_surfaces.sql`.
-- **F02** — Typed shared services: `src/modules/subscriptions/public-signup.ts`; customer identity and refusal tests: `tests/modules/customer-surfaces.test.ts`.
-- **F03** — Canonical contact, invoice, grant and share-policy composition: `tests/modules/customer-surfaces.test.ts`.
-- **F04** — Human surface: `app/(public)/memberships/page.tsx`; browser evidence: `tests/browser/customer-surfaces.spec.ts`.
-- **F05** — The service registry projects the same schemas and permissions to HTTP/MCP: `src/modules/subscriptions/public-signup.ts`, `packages/sdk/src/generated.ts`.
-- **F06** — Four locale catalogs: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; runtime catalog gate: `tests/core/locale-quality.test.ts`.
-- **F07** — Customer ownership, stale terms, duplicate reservations, payment-bound grants and private downloads: `tests/modules/customer-surfaces.test.ts`.
-- **F08** — Database regressions: `tests/modules/customer-surfaces.test.ts`; browser forms: `tests/browser/customer-surfaces.spec.ts`.
-- **F09** — Provider and deployment limitations remain explicit: `deploy/customer-surfaces-2026-10-07.md`; no mocked live-provider acceptance is claimed.
-- **F10** — Configuration and customer entry points: `deploy/customer-surfaces-2026-10-07.md`.
-- **F11** — Beta release notes: `.changeset/customer-self-service.md`; scope and remaining acceptance: `deploy/customer-surfaces-2026-10-07.md`.
-- **F12** — Composed software journeys: `tests/browser/customer-surfaces.spec.ts`, `tests/modules/customer-surfaces.test.ts`; actual provider acceptance remains open in `MASTER.md`.
+- **F01** — No new migration. Plans, subscriptions, invoices and saved methods already ship in `db/migrations/0000_reviewed-baseline.sql`. `card_setup` is an unconstrained event kind on `src/modules/subscriptions/schema.ts`; its detail is the provider customer reference.
+- **F02** — `tests/modules/subscription-billing.test.ts` covers the paused signup, the setup-fee invoice, card binding and the immediate trial. `tests/core/payment-adapters.test.ts` covers Stripe `createMethodSetup` and a setup-mode webhook.
+- **F03** — The paused row, the setup-fee invoice, the saved method and the site grant stay on the contact spine. `src/modules/subscriptions/public-signup.ts`, `tests/modules/subscription-billing.test.ts`.
+- **F04** — Public plans `app/(public)/memberships/page.tsx`, return `app/(public)/memberships/trial-return/page.tsx`, member profile `app/(public)/m/[handle]/page.tsx`, portal resume `app/portal/(account)/subscriptions/[id]/page.tsx`. Browser: `tests/browser/customer-surfaces.spec.ts`.
+- **F05** — `subscriptions.beginTrialCardSetup` and `subscriptions.startCardTrial`, plus `cardSetup` on `subscriptions.join` and `subscriptions.mine`, project through the registry: `src/modules/subscriptions/public-signup.ts`, `packages/sdk/src/generated.ts`. Surface equivalence: `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts`, `tests/core/mcp.test.ts`.
+- **F06** — New copy in `locales/en.json`, `locales/es.json`, `locales/fr.json`, `locales/ar.json`. Catalog gate: `tests/core/i18n-gate.test.ts` and `tests/core/locale-quality.test.ts`. Axe on the membership screen: `tests/browser/customer-surfaces.spec.ts`.
+- **F07** — A cancelled signup, an older card, an unrelated card, a staff-saved card, and an adapter that cannot save one are refusals. `tests/modules/subscription-billing.test.ts`. A setup session is not a payment: `tests/core/payment-adapters.test.ts`. Scoped permission enforcement for every service: `tests/core/api.test.ts`.
+- **F08** — `tests/modules/subscription-billing.test.ts`, `tests/core/payment-adapters.test.ts`, `tests/browser/customer-surfaces.spec.ts`.
+- **F09** — The adapter double proves the handoff. Live recurring settlement stays owner acceptance in `deploy/customer-surfaces-2026-10-07.md`. Product-wide export/restore/retention remains C11.14; shared audit/outbox participation: `tests/core/record-participation.test.ts`.
+- **F10** — What the customer is promised, and what a manual adapter cannot do: `deploy/customer-surfaces-2026-10-07.md`, `app/(public)/memberships/page.tsx`.
+- **F11** — Changeset `.changeset/c9-38-card-trial.md`. Annotation in `MASTER.md`. Reconciliation row in `deploy/spec-reconciliation.md`. Acceptance boundary: `deploy/customer-surfaces-2026-10-07.md`.
+- **F12** — `tests/modules/subscription-billing.test.ts` composes signup, consent, the saved card and the grant. The browser path in `tests/browser/customer-surfaces.spec.ts` proves an incapable adapter keeps the plan unavailable; the server default is manual, so that run does not render the save-card form.
 
 ## C9.32 — Build scheduled exports and the accounting export shapes
 

@@ -70,6 +70,8 @@ export const SUBSCRIPTION_EVENT_KINDS = [
   "plan_changed",
   "cancelled",
   "expired",
+  /** A card-setup session was opened. Detail is the provider customer reference, not a card number. */
+  "card_setup",
 ] as const;
 
 export const plans = pgTable(
