@@ -90,6 +90,12 @@ const INTERNAL = [
   "entitlements.issueUnlock",
   "entitlements.syncSubscription",
   "entitlements.syncTier",
+  // Paid event admission (C6.11): settlement confirming a held seat, the
+  // five-minute hold sweep, and refund/void cancellation all happen on
+  // nobody's behalf — a webhook, a job, or a bus event is not a person.
+  "events.confirmPaidRegistration",
+  "events.expireHeldRegistrations",
+  "events.cancelRegistrationForInvoice",
   "forms.briefingEnquiries",
   "galleries.buildArchive",
   "galleries.expireSessions",

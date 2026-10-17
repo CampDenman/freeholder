@@ -203,7 +203,7 @@ export const invoices = pgTable(
     // earns its place because `sourceType` rides along on every settlement
     // event — a listener that cannot tell an ad sale from an order misfiles
     // somebody's commission (C9.10).
-    sourceType: text("source_type", { enum: ["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock", "ad_campaign"] })
+    sourceType: text("source_type", { enum: ["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock", "ad_campaign", "event"] })
       .notNull()
       .default("manual"),
     sourceId: text("source_id"),

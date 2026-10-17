@@ -19,6 +19,7 @@ import {
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import { contacts } from "@/core/contacts/schema";
 import { businessLocations } from "@/core/locations/schema";
+import { invoices } from "@/modules/invoicing/schema";
 
 export const EVENT_STATUSES = ["draft", "published", "cancelled"] as const;
 export const REGISTRATION_STATUSES = [
@@ -133,6 +134,10 @@ export const eventRegistrations = pgTable(
     status: text("status", { enum: REGISTRATION_STATUSES }).notNull().default("confirmed"),
     quantity: integer("quantity").notNull().default(1),
     checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
+    // C6.11: a paid seat is held until the invoice that pays for it settles,
+    // and the hold lapses at hold_expires_at if it never does.
+    invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+    holdExpiresAt: timestamp("hold_expires_at", { withTimezone: true }),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -140,6 +145,7 @@ export const eventRegistrations = pgTable(
     index("event_registrations_session_idx").on(t.sessionId, t.status),
     index("event_registrations_contact_idx").on(t.contactId),
     index("event_registrations_event_idx").on(t.eventId),
+    index("event_registrations_hold_idx").on(t.status, t.holdExpiresAt),
     check("event_registrations_quantity_positive", sql`${t.quantity} > 0`),
     check(
       "event_registrations_status_valid",

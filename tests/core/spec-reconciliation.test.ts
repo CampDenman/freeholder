@@ -32,9 +32,8 @@ describe("C11.16 spec reconciliation", () => {
     }
     expect(items.get("C11.17")).toBe(false);
     for (const id of [
-      // Remaining acceptance requires actual paid admission, provider settlement
-      // and Tier-1 object bytes; database rows and adapter doubles do not suffice.
-      "C6.11",
+      // Remaining acceptance requires actual provider settlement and Tier-1
+      // object bytes; database rows and adapter doubles do not suffice.
       "C11.05",
       "C11.08",
       "C11.10",
@@ -43,6 +42,11 @@ describe("C11.16 spec reconciliation", () => {
       expect(items.get(id)).toBe(false);
       expect(recon).toContain(id);
     }
+    // C6.11 closed 2026-10-17 with paid admission on the invoice spine; the
+    // reconciliation table must record where that evidence lives.
+    expect(items.get("C6.11")).toBe(true);
+    expect(recon).toContain("C6.11");
+    expect(recon).toContain("0052_event_paid_admission");
     // C11.11 is checked with its archived reference-target evidence; the
     // reconciliation table must record where that evidence lives.
     expect(items.get("C11.11")).toBe(true);

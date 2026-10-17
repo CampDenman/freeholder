@@ -174,7 +174,7 @@ export default async function EventDetailPage({
                     <Button type="submit">{t("events.checkIn")}</Button>
                   </form>
                 ) : null}
-                {registration.status === "confirmed" || registration.status === "waitlisted" ? (
+                {registration.status === "confirmed" || registration.status === "waitlisted" || registration.status === "reserved" ? (
                   <form action={eventAction}>
                     <input type="hidden" name="intent" value="cancelRegistration" />
                     <input type="hidden" name="id" value={bundle.event.id} />
