@@ -1456,6 +1456,7 @@ export const SERVICE_NAMES = [
   "social.syncGbpReviews",
   "social.variantList",
   "subscriptions.attachProviderSchedule",
+  "subscriptions.beginTrialCardSetup",
   "subscriptions.cancel",
   "subscriptions.cancelAgreement",
   "subscriptions.cancelMine",
@@ -1475,6 +1476,7 @@ export const SERVICE_NAMES = [
   "subscriptions.publicPlans",
   "subscriptions.resume",
   "subscriptions.savePlan",
+  "subscriptions.startCardTrial",
   "subscriptions.subscribe",
   "tasks.create",
   "tasks.list",
@@ -7353,6 +7355,10 @@ export interface ServiceCatalog {
     input: { subscriptionId: string };
     output: { id: string; providerRef: string; [key: string]: unknown };
   };
+  "subscriptions.beginTrialCardSetup": {
+    input: { subscriptionId: string; saveMethodConsent: true };
+    output: { url: string };
+  };
   "subscriptions.cancel": {
     input: { id: string; immediately?: boolean; reason?: string };
     output: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown };
@@ -7387,11 +7393,11 @@ export interface ServiceCatalog {
   };
   "subscriptions.get": {
     input: { id: string };
-    output: { subscription: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }; plan: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; [key: string]: unknown } | null; history: { kind: "created" | "trialing" | "activated" | "renewed" | "payment_failed" | "dunning" | "paused" | "resumed" | "plan_changed" | "cancelled" | "expired"; invoiceId: string | null; detail: string | null; at: string; [key: string]: unknown }[]; [key: string]: unknown };
+    output: { subscription: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }; plan: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; [key: string]: unknown } | null; history: { kind: "created" | "trialing" | "activated" | "renewed" | "payment_failed" | "dunning" | "paused" | "resumed" | "plan_changed" | "cancelled" | "expired" | "card_setup"; invoiceId: string | null; detail: string | null; at: string; [key: string]: unknown }[]; [key: string]: unknown };
   };
   "subscriptions.join": {
     input: { planId: string; termsHash: string; requestKey: string; acceptedTerms: true; paymentMethodId?: string };
-    output: { id: string; invoiceId: string | null; pending: boolean };
+    output: { id: string; invoiceId: string | null; pending: boolean; cardSetup: boolean };
   };
   "subscriptions.list": {
     input: { contactId?: string; status?: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; limit?: number };
@@ -7407,7 +7413,7 @@ export interface ServiceCatalog {
   };
   "subscriptions.mine": {
     input: { id: string };
-    output: { name: string; pending: boolean; invoiceId: string | null; cancelAtPeriodEnd: boolean };
+    output: { name: string; pending: boolean; invoiceId: string | null; cancelAtPeriodEnd: boolean; cardSetup: boolean };
   };
   "subscriptions.myPaymentMethods": {
     input: Record<string, never>;
@@ -7428,6 +7434,10 @@ export interface ServiceCatalog {
   "subscriptions.savePlan": {
     input: { id?: string; productId: string; name: string; interval?: "day" | "week" | "month" | "year"; intervalCount?: number; trialDays?: number; trialRequiresCard?: boolean; setupFeeMinor?: number; billingMode?: "provider" | "platform" | "manual"; cancelBehaviour?: "period_end" | "immediate"; proration?: "create_prorations" | "none"; status?: "draft" | "active" | "archived"; dunning?: { retries?: number[]; graceDays?: number; notifyChannels?: ("email" | "sms" | "in_app")[]; finalAction?: "pause" | "cancel" | "downgrade"; downgradeToPlanId?: string | null } };
     output: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; dunning: { retries: number[]; graceDays: number; notifyChannels: ("email" | "sms" | "in_app")[]; finalAction: "pause" | "cancel" | "downgrade"; downgradeToPlanId: string | null; [key: string]: unknown } | null; [key: string]: unknown };
+  };
+  "subscriptions.startCardTrial": {
+    input: { subscriptionId: string; paymentMethodId: string };
+    output: { id: string; started: boolean };
   };
   "subscriptions.subscribe": {
     input: { contactId: string; planId: string; productVariantId?: string; currency?: string; paymentMethodId?: string; deferFirstPayment?: boolean };
@@ -9315,6 +9325,7 @@ export interface FreeholderApi {
   };
   subscriptions: {
     attachProviderSchedule: (input: ServiceCatalog["subscriptions.attachProviderSchedule"]["input"]) => Promise<ServiceCatalog["subscriptions.attachProviderSchedule"]["output"]>;
+    beginTrialCardSetup: (input: ServiceCatalog["subscriptions.beginTrialCardSetup"]["input"]) => Promise<ServiceCatalog["subscriptions.beginTrialCardSetup"]["output"]>;
     cancel: (input: ServiceCatalog["subscriptions.cancel"]["input"]) => Promise<ServiceCatalog["subscriptions.cancel"]["output"]>;
     cancelAgreement: (input: ServiceCatalog["subscriptions.cancelAgreement"]["input"]) => Promise<ServiceCatalog["subscriptions.cancelAgreement"]["output"]>;
     cancelMine: (input: ServiceCatalog["subscriptions.cancelMine"]["input"]) => Promise<ServiceCatalog["subscriptions.cancelMine"]["output"]>;
@@ -9334,6 +9345,7 @@ export interface FreeholderApi {
     publicPlans: (input?: ServiceCatalog["subscriptions.publicPlans"]["input"]) => Promise<ServiceCatalog["subscriptions.publicPlans"]["output"]>;
     resume: (input: ServiceCatalog["subscriptions.resume"]["input"]) => Promise<ServiceCatalog["subscriptions.resume"]["output"]>;
     savePlan: (input: ServiceCatalog["subscriptions.savePlan"]["input"]) => Promise<ServiceCatalog["subscriptions.savePlan"]["output"]>;
+    startCardTrial: (input: ServiceCatalog["subscriptions.startCardTrial"]["input"]) => Promise<ServiceCatalog["subscriptions.startCardTrial"]["output"]>;
     subscribe: (input: ServiceCatalog["subscriptions.subscribe"]["input"]) => Promise<ServiceCatalog["subscriptions.subscribe"]["output"]>;
   };
   tasks: {

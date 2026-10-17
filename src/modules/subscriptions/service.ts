@@ -693,18 +693,28 @@ export const subscribe = defineService({
     }
 
     const now = new Date();
-    const trialing = plan.trialDays > 0;
-    if (input.deferFirstPayment && trialing && plan.trialRequiresCard && !paymentMethod) {
+    // A card-required trial without a method is not a trial yet. It waits,
+    // paused, until the card exists. The trial window is counted from that
+    // moment, not from the click. Manual billing cannot store a card, so it
+    // still refuses rather than opening a trial nobody can renew.
+    const awaitingCard =
+      input.deferFirstPayment && plan.trialDays > 0 && plan.trialRequiresCard && !paymentMethod;
+    if (awaitingCard && plan.billingMode === "manual") {
       throw new ServiceError("conflict", "This trial needs a saved payment method before it can start.");
     }
-    const pending = input.deferFirstPayment && !trialing;
+    const trialing = plan.trialDays > 0 && !awaitingCard;
+    const pending = Boolean(input.deferFirstPayment && !trialing);
     // A trial *is* the first period. Treating it as a prelude would leave a
     // subscription with no period at all for its first fortnight, and every
-    // question about "what are they inside" would have no answer.
+    // question about "what are they inside" would have no answer. A card that
+    // has not been saved yet is not that period: one day keeps the row ordered
+    // until the trial actually starts.
     const start = now;
-    const end = trialing
-      ? periodEnd(now, "day", plan.trialDays)
-      : periodEnd(now, plan.interval, plan.intervalCount);
+    const end = awaitingCard
+      ? periodEnd(now, "day", 1)
+      : trialing
+        ? periodEnd(now, "day", plan.trialDays)
+        : periodEnd(now, plan.interval, plan.intervalCount);
 
     const [created] = await ctx.tx
       .insert(subscriptions)
@@ -729,9 +739,19 @@ export const subscribe = defineService({
     if (!pending) await record(ctx, created!.id, trialing ? "trialing" : "activated");
 
     // A trial bills nothing, which is what makes it a trial. The first invoice
-    // is raised by the renewal sweep when the trial period ends.
+    // is raised by the renewal sweep when the trial period ends. A card that
+    // is still missing is not a trial: the setup fee, when there is one, is
+    // the only line. A zero-total invoice would mark itself paid, so a fee of
+    // zero raises nothing and the card is saved through method setup instead.
     let invoiceId: string | null = null;
-    if (!trialing) {
+    if (awaitingCard && plan.setupFeeMinor > 0) {
+      invoiceId = await raiseInvoice(ctx, created!, {
+        amountMinor: 0,
+        setupFeeMinor: plan.setupFeeMinor,
+        periodStart: start,
+        periodEnd: end,
+      });
+    } else if (!trialing && !awaitingCard) {
       const price = await priceFor(ctx, created!);
       if ("refused" in price) {
         throw new ServiceError("conflict", `This plan cannot be billed. ${price.refused}`);
@@ -1448,17 +1468,25 @@ export const getSubscription = defineService({
       .select()
       .from(plans)
       .where(eq(plans.id, subscription.planId));
-    const history = await ctx.tx
-      .select({
-        kind: subscriptionEvents.kind,
-        invoiceId: subscriptionEvents.invoiceId,
-        detail: subscriptionEvents.detail,
-        at: subscriptionEvents.at,
-      })
-      .from(subscriptionEvents)
-      .where(eq(subscriptionEvents.subscriptionId, input.id))
-      .orderBy(desc(subscriptionEvents.at))
-      .limit(200);
+    const staff = permits(ctx.actor, "scoped", "subscriptions.get", "query");
+    const history = (
+      await ctx.tx
+        .select({
+          kind: subscriptionEvents.kind,
+          invoiceId: subscriptionEvents.invoiceId,
+          detail: subscriptionEvents.detail,
+          at: subscriptionEvents.at,
+        })
+        .from(subscriptionEvents)
+        .where(eq(subscriptionEvents.subscriptionId, input.id))
+        .orderBy(desc(subscriptionEvents.at))
+        .limit(200)
+    ).map((event) => ({
+      ...event,
+      // The provider customer reference binds the saved card to this trial.
+      // Staff can see it. A self-service read cannot.
+      detail: !staff && event.kind === "card_setup" ? null : event.detail,
+    }));
     return { subscription, plan: plan ?? null, history };
   },
 });

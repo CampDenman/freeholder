@@ -17,6 +17,7 @@ import {
   cancelMySubscriptionAction,
   changeMyPlanAction,
 } from "../../../subscription-actions";
+import { continueTrialCardSetupAction } from "../../../../(public)/memberships/actions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -103,7 +104,19 @@ export default async function PortalSubscriptionPage({
           }
         />
         <CardBody>
-          {membership.pending ? <p role="status">{t("memberships.pending")} {membership.invoiceId ? <a className="underline" href={href(`/portal/invoices/${membership.invoiceId}`)}>{t("portal.record.invoice")}</a> : null}</p> : null}
+          {membership.cardSetup ? (
+            <form action={continueTrialCardSetupAction} className="grid gap-3">
+              <p role="status">{t("memberships.cardSetupPending")}</p>
+              <input type="hidden" name="subscriptionId" value={id} />
+              <label className="flex items-start gap-2 text-sm text-ink">
+                <input type="checkbox" name="saveMethodConsent" value="yes" required className="mt-1" />
+                {t("memberships.saveConsent")}
+              </label>
+              <div>
+                <Button type="submit">{t("memberships.saveCard")}</Button>
+              </div>
+            </form>
+          ) : membership.pending ? <p role="status">{t("memberships.pending")} {membership.invoiceId ? <a className="underline" href={href(`/portal/invoices/${membership.invoiceId}`)}>{t("portal.record.invoice")}</a> : null}</p> : null}
           {record.at && !membership.pending ? (
             <p className="text-sm text-ink-muted">
               {t(

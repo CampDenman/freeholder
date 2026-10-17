@@ -60,6 +60,32 @@ export interface CheckoutSession {
   expiresAt?: string;
 }
 
+/**
+ * Save a card without charging it.
+ *
+ * A card-required trial whose setup fee is zero has nothing to invoice. A
+ * zero-total invoice would mark itself paid, so this session is the capture
+ * instead. Providers that cannot do it leave the method off the adapter, and
+ * the plan stays unavailable rather than starting an unverified trial.
+ */
+export interface MethodSetupRequest {
+  contactId: string;
+  subscriptionId: string;
+  customer: { email: string; name?: string };
+  /** Provider customer reference, never a card or bank-account number. */
+  providerCustomerRef?: string;
+  successUrl: string;
+  cancelUrl: string;
+  idempotencyKey: string;
+}
+
+export interface MethodSetupSession {
+  providerRef: string;
+  url: string;
+  expiresAt?: string;
+  providerCustomerRef?: string;
+}
+
 export interface CheckoutCaptureRequest {
   checkoutRef: string;
   idempotencyKey: string;
@@ -233,6 +259,11 @@ export interface PaymentAdapter {
     recurring: boolean;
   }): Promise<readonly PaymentMethodOffer[]>;
   createCheckout(invoice: InvoiceForCharge): Promise<CheckoutSession>;
+  /**
+   * Optional. A missing method means this provider cannot save a card without
+   * a charge. Callers must check before offering a zero-fee card trial.
+   */
+  createMethodSetup?(request: MethodSetupRequest): Promise<MethodSetupSession>;
   captureCheckout(request: CheckoutCaptureRequest): Promise<CheckoutCaptureResult>;
   refund(request: RefundRequest): Promise<RefundResult>;
   revokeSavedMethod(request: SavedMethodRevocationRequest): Promise<void>;

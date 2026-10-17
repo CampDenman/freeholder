@@ -142,6 +142,23 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
     if (!checkoutRef) return [];
     const providerRef = typeof value.payment_intent === "string" ? value.payment_intent : checkoutRef;
     const common = { id, providerRef, checkoutRef, amountMinor: number(value.amount_total), currency, occurredAt: created, invoiceId, contactId, providerCustomerRef: customer };
+    // Setup mode never moves money. A completed session can name the saved
+    // method when the provider expanded it; otherwise the attach event does.
+    if (value.mode === "setup") {
+      if (type !== "checkout.session.completed" || value.payment_status !== "no_payment_required" || !contactId) return [];
+      const setupIntent = object(value.setup_intent);
+      const methodSource = object(setupIntent?.payment_method) ?? object(value.payment_method);
+      const method = methodSource ? stripeMethod(methodSource) : undefined;
+      if (!method) return [];
+      return [{
+        id,
+        kind: "saved_method_added",
+        contactId,
+        providerCustomerRef: customer ?? method.providerCustomerRef,
+        method: { ...method, providerCustomerRef: method.providerCustomerRef ?? customer },
+        occurredAt: created,
+      }];
+    }
     if (type === "checkout.session.async_payment_succeeded" || (type === "checkout.session.completed" && value.payment_status === "paid")) {
       return [{ ...common, kind: "payment_succeeded" }];
     }
@@ -298,6 +315,41 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         paymentRef: typeof value.payment_intent === "string" ? value.payment_intent : undefined,
         url,
         expiresAt: number(value.expires_at) === undefined ? undefined : stripeTime(value.expires_at),
+      };
+    },
+    async createMethodSetup(request) {
+      const form = new URLSearchParams({
+        mode: "setup",
+        client_reference_id: request.subscriptionId,
+        success_url: request.successUrl,
+        cancel_url: request.cancelUrl,
+        "metadata[freeholder_contact_id]": request.contactId,
+        "metadata[freeholder_subscription_id]": request.subscriptionId,
+        "setup_intent_data[metadata][freeholder_contact_id]": request.contactId,
+        "setup_intent_data[metadata][freeholder_subscription_id]": request.subscriptionId,
+      });
+      if (request.providerCustomerRef) form.set("customer", request.providerCustomerRef);
+      else {
+        form.set("customer_email", request.customer.email);
+        form.set("customer_creation", "always");
+      }
+      if (request.customer.name) form.set("metadata[freeholder_customer_name]", request.customer.name.slice(0, 200));
+      const value = await api("/v1/checkout/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": request.idempotencyKey },
+        body: form,
+      });
+      const providerRef = text(value.id);
+      const url = text(value.url);
+      const providerCustomerRef = typeof value.customer === "string" ? value.customer : text(object(value.customer)?.id);
+      if (!providerRef || !url || !providerCustomerRef) {
+        throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return a card-setup address.");
+      }
+      return {
+        providerRef,
+        url,
+        expiresAt: number(value.expires_at) === undefined ? undefined : stripeTime(value.expires_at),
+        providerCustomerRef,
       };
     },
     async captureCheckout(request): Promise<CheckoutCaptureResult> {
