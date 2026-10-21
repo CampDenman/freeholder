@@ -5,6 +5,8 @@ export interface TransferStore {
   put(key: string, bytes: Uint8Array<ArrayBuffer>, contentType: string): Promise<void>;
 }
 
+export function createS3Store(environment: Record<string, string | undefined>, prefix: string): TransferStore;
+
 export interface MediaTransferManifest {
   format: "freeholder-media-manifest/v1";
   objects: Array<{ key: string; bytes: number; contentType?: string; assetId?: string; checksumSha256?: string | null }>;

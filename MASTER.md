@@ -4727,8 +4727,11 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   source-to-target verification. Synthetic regressions are component evidence;
   production transfers, backup freshness and production recovery acceptance
   remain open.
-  URL dot-segment and HTTP/redirect transport
-  hardening remain separate qualification gaps; this patch does not close them.
+  Transport follow-up rejects dot-path/NUL/empty keys across the entire manifest
+  before store access, requires HTTPS (explicit loopback HTTP fixtures only), and
+  refuses GET/PUT redirects. Actual signed request tests preserve literal percent
+  keys in path/virtual addressing. Cloud ACLs, live transfers, production backup
+  freshness and production recovery acceptance remain open.
 - [x] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
   (Platform and packages are `0.2.0-beta.3`; SDK `PLATFORM_VERSION` is stamped from

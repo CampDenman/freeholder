@@ -23,7 +23,14 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+function validateObjectKey(key) {
+  if (typeof key !== "string" || !key || key.includes("\0") || key.split("/").some((part) => part === "." || part === "..")) {
+    throw new Error("S3 object keys must not contain empty keys, NUL or dot path segments.");
+  }
+}
+
 function s3ObjectUrl(endpoint, bucket, key, style) {
+  validateObjectKey(key);
   const target = new URL(endpoint);
   const encodedKey = key.split("/").map(encodeURIComponent).join("/");
   if (style === "virtual") {
@@ -35,8 +42,15 @@ function s3ObjectUrl(endpoint, bucket, key, style) {
   return target.toString();
 }
 
-function createS3Store(environment, prefix) {
+export function createS3Store(environment, prefix) {
   const endpoint = required(environment, `${prefix}_S3_ENDPOINT`);
+  const parsedEndpoint = new URL(endpoint);
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsedEndpoint.hostname);
+  const syntheticHttp = environment[`${prefix}_S3_ALLOW_LOOPBACK_HTTP`] === "true";
+  if (parsedEndpoint.username || parsedEndpoint.password || parsedEndpoint.search || parsedEndpoint.hash ||
+      (parsedEndpoint.protocol !== "https:" && !(syntheticHttp && loopback && parsedEndpoint.protocol === "http:"))) {
+    throw new Error(`${prefix}_S3_ENDPOINT requires HTTPS without userinfo, query or fragment; HTTP is only allowed for an explicit loopback fixture.`);
+  }
   const region = required(environment, `${prefix}_S3_REGION`);
   const bucket = required(environment, `${prefix}_S3_BUCKET`);
   const accessKeyId = required(environment, `${prefix}_S3_ACCESS_KEY_ID`);
@@ -49,7 +63,7 @@ function createS3Store(environment, prefix) {
   const url = (key) => s3ObjectUrl(endpoint, bucket, key, style);
   return {
     async get(key) {
-      const response = await client.fetch(url(key));
+      const response = await client.fetch(url(key), { redirect: "error" });
       if (response.status === 404) return undefined;
       if (!response.ok) throw new Error(`${prefix}: GET ${key} failed (${response.status}).`);
       return new Uint8Array(await response.arrayBuffer());
@@ -57,6 +71,7 @@ function createS3Store(environment, prefix) {
     async put(key, bytes, contentType) {
       const response = await client.fetch(url(key), {
         method: "PUT",
+        redirect: "error",
         body: new Blob([bytes], { type: contentType }),
         headers: { "content-length": String(bytes.byteLength) },
       });
@@ -100,6 +115,7 @@ export async function copyManifestObjects({ manifest, source, target, dryRun = f
   }
   const keys = new Set();
   const objects = manifest.objects.map((object) => {
+    validateObjectKey(object.key);
     if (keys.has(object.key)) throw new Error(`Duplicate media object key: ${object.key}.`);
     keys.add(object.key);
     const known = [object.checksumSha256, ...(manifest.assets ?? [])
