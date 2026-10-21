@@ -3861,6 +3861,15 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   and Replit storage and verifies target byte length plus SHA-256. Both are
   exercised in CI; contracts in `tests/core/portability.test.ts` and transfer
   behavior in `tests/core/media-transfer.test.ts`.)
+  Recovery integrity follow-up (2026-10-21): retain original asset SHA-256 in
+  object inventories and check known digests before copying, including legacy
+  asset-only manifests and dry runs. Reject duplicate object keys and malformed
+  or conflicting digests in preflight. Variants without recorded hashes retain
+  source-to-target verification. Synthetic regressions are component evidence;
+  production transfers, backup freshness and production recovery acceptance
+  remain open.
+  URL dot-segment and HTTP/redirect transport
+  hardening remain separate qualification gaps; this patch does not close them.
 - [x] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
   (`platform.version` / `platform.compatibility`; `/api/health` `version`;

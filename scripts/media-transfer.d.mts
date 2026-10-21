@@ -7,7 +7,8 @@ export interface TransferStore {
 
 export interface MediaTransferManifest {
   format: "freeholder-media-manifest/v1";
-  objects: Array<{ key: string; bytes: number; contentType?: string }>;
+  objects: Array<{ key: string; bytes: number; contentType?: string; assetId?: string; checksumSha256?: string | null }>;
+  assets?: Array<{ id?: string; storageKey: string; checksumSha256?: string | null }>;
   integrity?: { missingInventoryKeys?: string[] };
 }
 

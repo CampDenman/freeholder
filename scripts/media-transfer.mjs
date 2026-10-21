@@ -98,13 +98,30 @@ export async function copyManifestObjects({ manifest, source, target, dryRun = f
   if (manifest.integrity?.missingInventoryKeys?.length) {
     throw new Error("The source media manifest has missing inventory keys; repair it before migration.");
   }
-  const objects = [...new Map(manifest.objects.map((item) => [item.key, item])).values()];
+  const keys = new Set();
+  const objects = manifest.objects.map((object) => {
+    if (keys.has(object.key)) throw new Error(`Duplicate media object key: ${object.key}.`);
+    keys.add(object.key);
+    const known = [object.checksumSha256, ...(manifest.assets ?? [])
+      .filter((asset) => asset.storageKey === object.key && (!object.assetId || asset.id === object.assetId))
+      .map((asset) => asset.checksumSha256)]
+      .filter((value) => value != null);
+    if (known.some((value) => typeof value !== 'string' || !/^[0-9a-f]{64}$/i.test(value))) {
+      throw new Error(`Invalid source checksum for ${object.key}.`);
+    }
+    const checksums = new Set(known.map((value) => value.toLowerCase()));
+    if (checksums.size > 1) throw new Error(`Conflicting source checksums for ${object.key}.`);
+    return { ...object, checksumSha256: [...checksums][0] };
+  });
   let bytes = 0;
   for (const object of objects) {
     const body = await source.get(object.key);
     if (!body) throw new Error(`Source media object is missing: ${object.key}.`);
     if (Number(object.bytes) !== body.byteLength) {
       throw new Error(`Source media size differs for ${object.key}: manifest ${object.bytes}, object ${body.byteLength}.`);
+    }
+    if (object.checksumSha256 && sha256(body) !== object.checksumSha256) {
+      throw new Error(`Source media checksum differs for ${object.key}.`);
     }
     if (!dryRun) {
       await target.put(object.key, body, object.contentType ?? "application/octet-stream");
