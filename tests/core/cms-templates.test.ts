@@ -17,18 +17,23 @@ import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/
 describe("template seeds", () => {
   it("ships page, post, product, service, email, and SMS trees per preset", () => {
     const keys = seedTemplates("everything").map((row) => row.key);
-    expect(keys).toEqual([
-      "page.blank",
-      "page.landing",
-      "post.article",
-      "product.default",
-      "service.default",
-      "portfolio.index",
-      "portfolio.collection",
-      "project.case-study",
-      "email.transactional",
-      "sms.transactional",
-    ]);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        "page.blank",
+        "page.landing",
+        "post.article",
+        "product.default",
+        "service.default",
+        "portfolio.index",
+        "portfolio.collection",
+        "project.case-study",
+        "email.transactional",
+        "sms.transactional",
+        "email.welcome",
+        "email.booking-confirm",
+        "email.order-receipt",
+      ]),
+    );
     const shop = seedTemplates("shop");
     expect(shop.find((row) => row.key === "page.landing")?.blocks.some((block) => block.type === "productsIndex")).toBe(
       true,

@@ -108,7 +108,10 @@ describe("robots and sitemaps", () => {
     ]) {
       expect(robots).toContain(`Disallow: ${path}`);
     }
-    expect(robots).toContain("Disallow: /*?*filter=");
+    // The bare pattern also covers the bracket grammar the storefront facets
+    // use (`?filter[price:min]=…`), where no literal "filter=" substring
+    // appears.
+    expect(robots).toContain("Disallow: /*?*filter");
     expect(robots).toContain("Sitemap: https://example.test/sitemap.xml");
   });
 

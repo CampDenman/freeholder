@@ -35,7 +35,14 @@ Thumbs.db
 # local agent/session state (never product source or planning truth)
 .claude/
 .codex/
+.work/
 
 # typescript / next
 *.tsbuildinfo
 next-env.d.ts
+
+# Python host-tool bytecode
+__pycache__/
+
+# Private launch credentials and owner claim link
+.freeholder-launch/

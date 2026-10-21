@@ -41,7 +41,9 @@ export default async function CaptureLinkPage({
               submit: t("media.capture.upload"),
               pending: t("media.uploading"),
               failed: t("media.uploadFailed"),
-              progress: t("media.uploadProgress"),
+              // ICU interpolates at t(); UploadForm still substitutes the live
+              // percent with String.replace, so the value must stay `{percent}`.
+              progress: t("media.uploadProgress", { percent: "{percent}" }),
               resumable: t("media.uploadResuming"),
               cancel: t("common.cancel"),
             }}

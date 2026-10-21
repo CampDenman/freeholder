@@ -19,8 +19,15 @@ export default defineModule({
   requires: ["core", "cms"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  jobs: () => import("./jobs"),
   blocks: () => import("./blocks"),
   events: {
-    emits: ["project.created", "project.completed", "project.published", "project.unpublished"],
+    emits: [
+      "project.created",
+      "project.completed",
+      "project.published",
+      "project.unpublished",
+      "projects.consentLapsed",
+    ],
   },
 });

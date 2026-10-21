@@ -119,6 +119,7 @@ export const CART_KINDS = ["cart", "saved"] as const;
 export const CART_STATUSES = ["open", "converted", "abandoned"] as const;
 export const ORDER_STATUSES = [
   "pending_payment",
+  "partially_paid",
   "paid",
   "fulfilling",
   "fulfilled",
@@ -147,3 +148,33 @@ export const RETURN_STATUSES = [
 export const COUPON_KINDS = ["percent", "fixed", "free_shipping"] as const;
 export const GIFT_CARD_STATUSES = ["active", "redeemed", "void"] as const;
 export const OFFER_RULE_KINDS = ["bump", "post_add"] as const;
+
+/**
+ * How a collection's membership is decided (C3.25 slice 1).
+ *
+ * `manual` rows are pinned one product at a time by the owner.
+ * `segment` membership is derived: the collection names one saved segment
+ * (§4.14's one definition of "who") and the recompute job fills the
+ * collection with what those contacts bought, so the collection follows the
+ * audience instead of being re-curated by hand.
+ */
+export const COLLECTION_RULE_TYPES = ["manual", "segment"] as const;
+export type CollectionRuleType = (typeof COLLECTION_RULE_TYPES)[number];
+
+export const COLLECTION_SORT_ORDERS = ["manual", "title", "newest"] as const;
+export type CollectionSortOrder = (typeof COLLECTION_SORT_ORDERS)[number];
+
+/**
+ * Storefront browse ordering (C3.25 slice 2). `featured` is the honest
+ * default: a collection's own curated positions when one is being browsed,
+ * and best name match when a search term is in play. The other four are the
+ * shopper-facing sorts the merchandising brief names.
+ */
+export const BROWSE_SORT_ORDERS = [
+  "featured",
+  "price-asc",
+  "price-desc",
+  "newest",
+  "title",
+] as const;
+export type BrowseSortOrder = (typeof BROWSE_SORT_ORDERS)[number];

@@ -12,6 +12,7 @@ import {
   createIssue,
   createNewsletter,
   publishIssue,
+  updateNewsletter,
 } from "@/modules/newsletters/service";
 
 function field(form: FormData, key: string): string {
@@ -73,6 +74,22 @@ export async function newsletterAction(form: FormData): Promise<void> {
       );
       revalidatePath(`/admin/newsletters/${newsletterId}`);
       revalidatePath("/admin/newsletters");
+    }
+    if (intent === "update") {
+      const newsletterId = field(form, "newsletterId");
+      const status = field(form, "status");
+      await updateNewsletter.call(
+        {
+          id: newsletterId,
+          name: field(form, "name") || undefined,
+          description: field(form, "description") || null,
+          status: status === "paused" || status === "active" ? status : undefined,
+        },
+        signed,
+      );
+      revalidatePath(`/admin/newsletters/${newsletterId}`);
+      revalidatePath("/admin/newsletters");
+      redirect(`/admin/newsletters/${newsletterId}?saved=updated`);
     }
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;

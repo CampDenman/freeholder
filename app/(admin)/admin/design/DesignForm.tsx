@@ -64,10 +64,14 @@ export function DesignForm({
     measureDefault: string;
     measureWide: string;
     fontSystem: string;
-    px: (n: number) => string;
-    ms: (n: number) => string;
+    // Unit formatters cross the server/client boundary as ICU-rendered
+    // templates ("{n}px"): functions cannot be passed to a Client Component.
+    pxTemplate: string;
+    msTemplate: string;
   };
 }) {
+  const px = (n: number) => labels.pxTemplate.replaceAll("{n}", String(n));
+  const ms = (n: number) => labels.msTemplate.replaceAll("{n}", String(n));
   const [state, action, pending] = useActionState<DesignActionState, FormData>(
     saveDesignAction,
     {},
@@ -139,17 +143,17 @@ export function DesignForm({
             <Field label={labels.radius} htmlFor="radius">
               <Select id="radius" name="radius" defaultValue={values.radius}>
                 <option value="">{labels.radiusDefault}</option>
-                <option value="0.25rem">{labels.px(4)}</option>
-                <option value="0.375rem">{labels.px(6)}</option>
-                <option value="0.5rem">{labels.px(8)}</option>
-                <option value="0.75rem">{labels.px(12)}</option>
+                <option value="0.25rem">{px(4)}</option>
+                <option value="0.375rem">{px(6)}</option>
+                <option value="0.5rem">{px(8)}</option>
+                <option value="0.75rem">{px(12)}</option>
               </Select>
             </Field>
             <Field label={labels.motion} htmlFor="motion">
               <Select id="motion" name="motion" defaultValue={values.motion}>
                 <option value="">{labels.motionDefault}</option>
-                <option value="120ms">{labels.ms(120)}</option>
-                <option value="180ms">{labels.ms(180)}</option>
+                <option value="120ms">{ms(120)}</option>
+                <option value="180ms">{ms(180)}</option>
                 <option value="0.01ms">{labels.motionReduced}</option>
               </Select>
             </Field>
@@ -164,9 +168,9 @@ export function DesignForm({
             <Field label={labels.gutter} htmlFor="gutter">
               <Select id="gutter" name="gutter" defaultValue={values.gutter}>
                 <option value="">{labels.measureDefault}</option>
-                <option value="1rem">{labels.px(16)}</option>
-                <option value="1.5rem">{labels.px(24)}</option>
-                <option value="2rem">{labels.px(32)}</option>
+                <option value="1rem">{px(16)}</option>
+                <option value="1.5rem">{px(24)}</option>
+                <option value="2rem">{px(32)}</option>
               </Select>
             </Field>
             <Field label={labels.logo} htmlFor="logoAssetId">

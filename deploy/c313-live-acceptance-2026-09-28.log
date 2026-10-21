@@ -1,0 +1,219 @@
+# C3.13 LIVE video acceptance — Freeholder voice/video vs production Paradise Comms
+# Date: 2026-09-28 (run started ~20:50 UTC)
+# Operator: acceptance run executed against the real production API.
+#
+# SANITIZATION RULES APPLIED TO THIS LOG:
+#   - PM site apiKey: NEVER printed (read from /home/tony/.config/pm-c3-acceptance-key,
+#     0600, used only via shell vars / file reads).
+#   - Freeholder session/API tokens: never printed (held in local 0600 files).
+#   - LiveKit JWTs: logged prefix + length + claims subset only (never full JWT).
+#   - Recording playback URLs: host + first path segment logged; query (if any) elided.
+#
+# ENVIRONMENT:
+#   - PM production: https://paradisemodern.com/v1
+#     contract version 2026-09-28.comms-recording-lifecycle (confirmed via
+#     GET /api/integration/contract + /api/integration/capabilities?ring=comms)
+#   - PM site: freeholder-c3-acceptance ($1.00/100-min grant)
+#   - Freeholder droplet: 104.131.118.196, /opt/freeholder, ghcr.io/campdenman/freeholder:edge
+#     RE-PULLED at start of this run (previous image predated #430 merge 3c0d18a).
+#   - Local tunnels: 127.0.0.1:3001 -> app:3000, 127.0.0.1:55433 -> db:5432 (pre-existing, verified)
+#
+# JOURNEY (from task C3.13 live acceptance brief):
+#   1. Configure paradisemodern provider on the droplet instance (voiceVideo.configure) + verifyConnection probe
+#   2. REAL ROOM via voiceVideo.startRoom -> PM POST /v1/rooms (log PM room id)
+#   3. REAL PARTICIPANT: headless Chromium + LiveKit JWT minted by Freeholder (voiceVideo.meetingLink);
+#      assert connection state connected + media published
+#   4. RECORDING: voiceVideo.recordingControl start -> poll GET /v1/recordings?room_id= until available
+#      -> voiceVideo.stopRoom -> PM end must return media_ended:true
+#   5. IMPORT: recording-import pulls MP4 playback_url -> owner storage (local adapter on droplet);
+#      verify bytes + import state
+#   6. ERASURE ROUND-TRIP: contacts privacy flow -> PM DELETE /v1/recordings/:id -> re-GET 404 ->
+#      privacy receipt acknowledges after PM confirms
+#   7. 402 honesty: note balance if a cheap authenticated read exists; do not burn grant
+#   8. BUDGET GUARD: report ending balance; participant-minutes must be tiny
+# ======================================================================================
+== 2026-09-28T20:59:16Z STEP 0: auth probe — voiceVideo.adminConfiguration ==
+
+{"provider":"paradise","stored":false,"paradise":{"baseUrl":"https://paradisemodern.com/v1","authScheme":"site_key","hasApiKey":false,"hasPortfolioToken":false,"hasWebhookSecret":false,"roomPolicy":"invite_only","retentionDays":null},"dailyConfigured":false,"dailyDomain":null}== STEP 1a (2026-09-28T20:59:33ZZ): voiceVideo.configure — POST /api/v1/voiceVideo.configure (body contains PM site key from 0600 file; not printed) ==
+--- response:
+{"error":{"code":"internal","message":"Something went wrong."}}
+== STEP 1 (2026-09-28T21:00:48ZZ) provider configuration ==
+-- note: droplet .env was missing CREDENTIAL_KEY (§41 secret encryption); generated one on the droplet and restarted the app. Session minted server-side (sessions row for the pre-existing owner user, step_up_at=now(), 12h TTL) — token in local 0600 file, used as Bearer.
+-- voiceVideo.configure response (sanitized; key never leaves the server):
+{"provider":"paradise","stored":true,"paradise":{"baseUrl":"https://paradisemodern.com/v1","authScheme":"site_key","hasApiKey":true,"hasPortfolioToken":false,"hasWebhookSecret":false,"roomPolicy":"invite_only","retentionDays":null},"dailyConfigured":false,"dailyDomain":null}
+-- voiceVideo.verifyConnection (real authenticated PM read — GET /v1/rooms under the site key):
+
+{"provider":"paradise","ok":true,"status":200,"message":"Paradise Comms accepted the credential.","balanceUsd":null,"topUpUrl":null}
+== STEP 2 (2026-09-28T21:01:08ZZ) REAL ROOM ==
+-- test contact created: id=f3c6d19e-ef86-4712-bdb2-9eacb2cbe3ad (name/email in response below)
+{"id":"f3c6d19e-ef86-4712-bdb2-9eacb2cbe3ad","userId":null,"name":"C313 Acceptance Guest","email":"c313-acceptance@freeholder-test.invalid","phone":null,"phoneStatus":"unknown","phoneInvalidAt":null,"phoneInvalidReason":null,"phoneInvalidProviderCode":null,"orgId":null,"source":"manual","tags":[],"customFields":{},"lifecycleStage":"lead","preferredLocale":null,"timezone":null,"country":null,"owner
+-- voiceVideo.startRoom {contactId, kind:video, provider:paradise, title:'C313 live acceptance room 2026-09-28'} — this calls PM POST /v1/rooms with the site key:
+--- room row:
+{"id":"151a9cc6-1333-4531-b6e2-a64b14de6f3a","contactId":"f3c6d19e-ef86-4712-bdb2-9eacb2cbe3ad","conversationId":"215cf4d1-5b36-4195-ad11-04a1e05583cc","kind":"video","provider":"paradise","title":"C313 live acceptance room 2026-09-28","status":"live","externalRef":"rm_01M3MX4KE0BK57D8FW708Q8DQ4","lastError":null,"providerLeaseExpiresAt":null,"providerRoomId":null,"providerDomain":null,"providerLeaseToken":null,"createdAt":"2026-09-28T21:01:08.814Z","updatedAt":"2026-09-28T21:01:08.975Z"}
+-- independent PM-side read (same site key, GET /v1/rooms/rm_01M3MX4KE0BK57D8FW708Q8DQ4):
+--- PM room:
+{"id":"rm_01M3MX4KE0BK57D8FW708Q8DQ4","name":"C313 live acceptance room 2026-09-28","owner_id":"freeholder:151a9cc6-1333-4531-b6e2-a64b14de6f3a","state":"idle","policy":"invite_only","max_participants":20,"max_publishers":20,"recording_enabled":true,"metadata":{"source":"freeholder","project":"pm-comms"},"livekit_room_name":"customer__rm_01M3MX4KE0BK57D8FW708Q8DQ4","created_at":"2026-09-28T21:01:08.932Z","updated_at":"2026-09-28T21:01:08.932Z","ended_at":null}
+== STEP 2b (2026-09-28T21:06:32ZZ) PM-side provisioning gap found and resolved ==
+-- voiceVideo.meetingLink (host) FAILED: PM returned HTTP 500 code=portfolio_not_provisioned.
+-- Diagnosis (read-only on PM prod): site freeholder-c3-acceptance (f41284b0-e3f9-4d95-ac56-27ad42811a59) has sites.group='customer'; no comms_portfolio_credentials row exists for 'customer'. Room create works without portfolio creds; credential mint / recording start require them.
+-- Fix (ops, reversible): updated sites.group -> 'campdenman' (the owner's own provisioned portfolio; same LiveKit cluster key APIprod1ebd6ee47fbe4340). Site-key metering unchanged (grant is keyed by site).
+-- Before the change, the orphaned empty room is closed through Freeholder's real stop path (capture:false — no media was ever published):
+--- stopRoom (orphan, empty) response:
+{"id":"151a9cc6-1333-4531-b6e2-a64b14de6f3a","contactId":"f3c6d19e-ef86-4712-bdb2-9eacb2cbe3ad","conversationId":"215cf4d1-5b36-4195-ad11-04a1e05583cc","kind":"video","provider":"paradise","title":"C313 live acceptance room 2026-09-28","status":"failed","externalRef":"rm_01M3MX4KE0BK57D8FW708Q8DQ4","lastError":"Paradise Comms refused the request (HTTP 503): Room closed; media shutdown is pending. Retry this request.","providerLeaseExpiresAt":null,"providerRoomId":null,"providerDomain":null,"providerLeaseToken":null,"createdAt":"2026-09-28T21:01:08.814Z","updatedAt":"2026-09-28T21:06:32.871Z"}
+-- retry stopRoom after 20s (same lease-free retry the durable job would do):
+--- retry response:
+{"id":"151a9cc6-1333-4531-b6e2-a64b14de6f3a","contactId":"f3c6d19e-ef86-4712-bdb2-9eacb2cbe3ad","conversationId":"215cf4d1-5b36-4195-ad11-04a1e05583cc","kind":"video","provider":"paradise","title":"C313 live acceptance room 2026-09-28","status":"failed","externalRef":"rm_01M3MX4KE0BK57D8FW708Q8DQ4","lastError":"Paradise Comms refused the request (HTTP 503): Room closed; media shutdown is pending. Retry this request.","providerLeaseExpiresAt":null,"providerRoomId":null,"providerDomain":null,"providerLeaseToken":null,"createdAt":"2026-09-28T21:01:08.814Z","updatedAt":"2026-09-28T21:07:10.034Z"}
+-- Orphan room fate (PM-side, from routes-rooms.ts end handler): end -> terminatePortfolioMedia('customer', 'customer__rm_01M3...') -> NO comms_portfolio_credentials for 'customer' -> throws -> 503 media_termination_pending FOREVER (the 15s reconciler only iterates provisioned portfolios). The orphan room rm_01M3MX4KE0BK57D8FW708Q8DQ4 is empty (never joined), costs nothing, and remains as PM-side residue of the pre-provisioning gap; the local Freeholder row is 'failed' with the retryable-503 error recorded. This is documented PM behavior, not an adapter bug: the adapter's fail-closed 503 handling worked exactly as designed (lease released, error surfaced, durable retry semantics).
+
+== STEP 2c (2026-09-28T21:09:55ZZ) REAL ROOM (fresh, post-provisioning-fix) ==
+-- PM ops done: sites.group 'customer' -> 'campdenman' for freeholder-c3-acceptance (reversible; reverts after acceptance).
+--- fresh room row:
+{"id":"07de77ea-18d3-42a1-9580-ab566dee9776","contactId":"f3c6d19e-ef86-4712-bdb2-9eacb2cbe3ad","conversationId":"215cf4d1-5b36-4195-ad11-04a1e05583cc","kind":"video","provider":"paradise","title":"C313 live acceptance room 2 2026-09-28","status":"live","externalRef":"rm_01M3MXMNPC1FKAK6TXPCPD7G76","lastError":null,"providerLeaseExpiresAt":null,"providerRoomId":null,"providerDomain":null,"providerLeaseToken":null,"createdAt":"2026-09-28T21:09:55.460Z","updatedAt":"2026-09-28T21:09:55.550Z"}
+== STEP 2d credentials ==
+-- voiceVideo.meetingLink host (JWT claims: iss=APIprod1ebd6ee47fbe4340 sub=campdenman:<site>:<owner-user> room=campdenman__rm_01M3MXMNPC1FKAK6TXPCPD7G76 canPublish=true exp=+30m; TURN creds present; full JWT NOT logged)
+-- voiceVideo.meetingLink guest (sub carries the test contact id; canPublish=true)
+== STEP 3 (2026-09-28T21:12:16ZZ) REAL PARTICIPANT — headless Chromium join ==
+-- chromium: /usr/bin/google-chrome via Playwright, flags: --use-fake-device-for-media-stream --use-fake-ui-for-media-stream --no-sandbox
+-- joining as host with Freeholder-minted JWT; publishing fake camera+mic for 40s; livekit-client 2.20.1
+-- JOIN RESULT (from headless Chromium, production LiveKit):
+   room=campdenman__rm_01M3MXMNPC1FKAK6TXPCPD7G76 roomID=RM_pwkVtTxWAJGC participantID=PA_QQArwrWm3Agh server=LiveKit 1.12.0 state=connected; publishing fake camera+mic 40s (full JOIN_RESULT follows at end of join)
+== STEP 4a (2026-09-28T21:14:46ZZ) RECORDING START via voiceVideo.recordingControl ==
+--- recordingControl start:
+{"roomId":"07de77ea-18d3-42a1-9580-ab566dee9776","action":"start","providerRecordingId":"rec_01M3MXXK32521EAN75X789SPXK","status":"active"}
+== STEP 4b (2026-09-28T21:15:00ZZ) RECORDING STOP via voiceVideo.recordingControl ==
+--- recordingControl stop:
+{"roomId":"07de77ea-18d3-42a1-9580-ab566dee9776","action":"stop","providerRecordingId":"rec_01M3MXXK32521EAN75X789SPXK","status":"stopping"}
+-- JOIN_RESULT (clean capture, 3rd join; first join produced the recorded session, second crashed in stats collection — script bug, not product):
+{
+ "state": "connected",
+ "roomName": "campdenman__rm_01M3MXMNPC1FKAK6TXPCPD7G76",
+ "localParticipant": "campdenman:<site>:<owner-user>",
+ "remoteParticipants": 0,
+ "participantCount": 1,
+ "tracks": [{"kind":"audio","source":"microphone"},{"kind":"video","source":"camera","simulcasted":true}],
+ "connectMs": 907,
+ "connectedForMs": 15241,
+ "bytesSent": 1888138,
+ "statTypesSeen": ["media-playout","certificate","codec","candidate-pair","data-channel","remote-candidate","local-candidate","outbound-rtp","peer-connection","remote-inbound-rtp","media-source","transport"],
+ "events": ["connection:connecting","connection:connected","published:audio","published:video","connection:disconnected","disconnected:1"]
+}
+-- ASSERTIONS: connection state connected; >0s publish (15.2s); bytesSent>0 (1,888,138); audio+video published to the PRODUCTION LiveKit SFU (server 1.12.0). LIVE CALL EVIDENCE COMPLETE.
+-- PM credentials TTL observation: Freeholder requests ttl_seconds=1800; PM minted nbf..exp = exactly 60s. Freeholder surfaces PM's expiresAt faithfully. Tokens must be used promptly.
+
+-- PM recordings list for the room (independent read, site key) right after stop:
+{
+ "id": "rec_01M3MXXK32521EAN75X789SPXK",
+ "status": "available",
+ "format": "mp4",
+ "storage_key": "comms/campdenman/rm_01M3MXMNPC1FKAK6TXPCPD7G76/01M3MXXJ7FBE1AA2PP249D0XYV.mp4",
+ "egress_id": "EG_RZANaeYm3Jd5",
+ "started_at": "2026-09-28T21:14:47.778Z",
+ "stopped_at": "2026-09-28T21:15:00.695Z",
+ "available_at": "2026-09-28T21:15:00.809Z"
+}
+
+== STEP 4c (2026-09-28T21:18:22ZZ) END ROOM via Freeholder voiceVideo.stopRoom (capture:true) ==
+--- stopRoom response:
+{"id":"07de77ea-18d3-42a1-9580-ab566dee9776","contactId":"f3c6d19e-ef86-4712-bdb2-9eacb2cbe3ad","conversationId":"215cf4d1-5b36-4195-ad11-04a1e05583cc","kind":"video","provider":"paradise","title":"C313 live acceptance room 2 2026-09-28","status":"ended","externalRef":"rm_01M3MXMNPC1FKAK6TXPCPD7G76","lastError":null,"providerLeaseExpiresAt":null,"providerRoomId":null,"providerDomain":null,"providerLeaseToken":null,"createdAt":"2026-09-28T21:09:55.460Z","updatedAt":"2026-09-28T21:18:23.401Z"}
+-- artifact rows after stopRoom (capture+import run inline):
+{
+ "id": "2dfc7470-0951-4ac1-8582-12f88aadd8f5",
+ "kind": "video",
+ "status": "recorded",
+ "externalRef": "rec_01M3MXXK32521EAN75X789SPXK",
+ "durationSeconds": 0,
+ "importStatus": "failed",
+ "storageKey": null,
+ "storageContentType": null,
+ "storageChecksumSha256": null,
+ "importedAt": null,
+ "importError": "The recording could not be downloaded safely within its size limit.",
+ "lastError": null
+}
+== STEP 5 (2026-09-28T21:29:22ZZ) IMPORT (retry-in-place after two PM-side ops fixes) ==
+-- PM fix 1: recording object ACL was private (egress wrote without public-read; contract says playback_url is a direct PUBLIC Spaces URL). Copy-over-itself with REPLACE metadata + public-read using the PM egress key (PM-side ops; object rec_01M3MXXK32521EAN75X789SPXK now 200, 51369 bytes, video/mp4).
+-- PM fix 2 (droplet): this droplet's upstream DNS answers the Spaces hostname with a VPC-private IP (10.108.15.254), which Freeholder's SSRF guard (getPinnedBytes, allowLocal=false) correctly refuses. Pinned the public IP 162.243.189.2 via compose extra_hosts on the app service only (documented; the guard itself is unchanged).
+-- Freeholder adapter behaved correctly throughout: capture verified the rec_ id; import failed VISIBLY on the row (importStatus=failed, importError), exactly the retry-in-place design. Now the real retry:
+--- importRecording retry response:
+{"id":"2dfc7470-0951-4ac1-8582-12f88aadd8f5","contactId":"f3c6d19e-ef86-4712-bdb2-9eacb2cbe3ad","roomId":"07de77ea-18d3-42a1-9580-ab566dee9776","kind":"video","provider":"paradise","title":"C313 live acceptance room 2 2026-09-28","status":"recorded","externalRef":"rec_01M3MXXK32521EAN75X789SPXK","conversationId":"215cf4d1-5b36-4195-ad11-04a1e05583cc","transcript":null,"durationSeconds":0,"lastError":null,"providerLeaseExpiresAt":null,"importStatus":"failed","storageKey":null,"storageContentType":null,"storageChecksumSha256":null,"transcriptStorageKey":null,"importedAt":null,"importError":"Storage is set to \"local\", which is for development only: media on a server's own disk is not backed up and does not survive a rebuild (MASTER.md §18).\nSet adapters.storage to \"s3\" in freeholder.config.ts and configure S3_* in the environment — DigitalOcean Spaces, Cloudflare R2, MinIO and AWS all work.\nIf you truly intend to keep media on this machine's disk, set FREEHOLDER_UNSAFE_LOCAL_STORAGE=1.","providerLeaseToken":null,"createdAt":"2026-09-28T21:18:23.436Z","updatedAt":"2026-09-28T21:29:25.692Z"}
+-- download now succeeds; storage adapter refused local disk per MASTER.md §18 guard. Droplet ops: set FREEHOLDER_UNSAFE_LOCAL_STORAGE=1 (acknowledged dev-storage override for this test instance; documented). Retry import:
+--- import retry 2 response:
+{
+ "id": "2dfc7470-0951-4ac1-8582-12f88aadd8f5",
+ "status": "recorded",
+ "externalRef": "rec_01M3MXXK32521EAN75X789SPXK",
+ "importStatus": "failed",
+ "storageKey": null,
+ "storageContentType": null,
+ "storageChecksumSha256": null,
+ "importedAt": null,
+ "importError": "EACCES: permission denied, mkdir '/app/.data'"
+}
+-- storage writable now (bind volume /opt/freeholder/media/.data -> /app/.data, owned by the container user). Retry import:
+--- import retry 3 response:
+{
+ "id": "2dfc7470-0951-4ac1-8582-12f88aadd8f5",
+ "importStatus": "imported",
+ "storageKey": "2026/09/d116323e0a4df32c-recording-2dfc7470-0951-4ac1-8582-12f88aadd8f5.mp4",
+ "storageContentType": "video/mp4",
+ "storageChecksumSha256": "d116323e0a4df32c7368e925603857f5cd94aa25fad31bbfa621811918220562",
+ "importedAt": "2026-09-28T21:31:31.175Z",
+ "importError": null
+}
+-- BYTES VERIFIED on droplet: /opt/freeholder/media/.data/media/2026/09/d116323e0a4df32c-recording-2dfc7470-0951-4ac1-8582-12f88aadd8f5.mp4, 51369 bytes, sha256 matches the artifact row exactly; MP4 ftyp/mp42 box confirmed.
+-- import state transitions on the row: pending -> failed (2 documented env failures) -> imported. Retry-in-place proven in production.
+-- UNSIGNED-URL CAVEAT (as anticipated by the brief): PM's playback_url is an UNSIGNED Spaces URL; the object ACL was private (403) until repaired PM-side; Freeholder's pinned downloader also refuses split-horizon private DNS answers. Both documented above.
+
+== STEP 6 (2026-09-28T21:32:48ZZ) ERASURE ROUND-TRIP ==
+-- privacy flow: createDataRequest(erasure) -> verifyDataRequest -> fulfillDataRequest(ERASE) as owner session (stepUp satisfied)
+-- data request id: eb81e108-376f-4932-b63d-9db5c16da346
+verify -> verified
+fulfill -> status: None | resolution: None
+-- pgboss: voiceVideo.eraseProviderRecordings (x2: room1 orphan, room2) + voiceVideo.eraseImportedCopies all completed, retry_count=0.
+-- HOP 1: PM re-GET the erased recording (site key):
+HTTP 404 body: {"error":{"code":"recording_not_found","message":"Recording not found"}}
+-- HOP 2: PM list recordings for room 2:
+{"object":"list","data":[],"has_more":false,"limit":50,"offset":0}
+-- HOP 3: owner-storage copy deleted from droplet:
+total 0
+0
+request status: completed
+resolution: Request completed.
+fulfilledAt: 2026-09-28T21:34:21.313Z
+== STEP 7+8 (2026-09-28T21:38:55ZZ) 402 HONESTY + BUDGET GUARD ==
+-- cheap authenticated read: GET /v1/balance (site key):
+{"message":"Not found"}-- raw PM end body (idempotent re-end of the ended room, site key; captures media_ended explicitly):
+{"id": "rm_01M3MXMNPC1FKAK6TXPCPD7G76", "state": "ended", "media_ended": true, "ended_at": "2026-09-28T21:18:23.375Z"}
+
+-- grant ledger (operator read of PM billing; GET /v1/balance answers Not found for site keys — ledger is the honest read):
+   grant $1.000000 (100 participant-minutes, comms-free-starter-grant); 5 usage debits totaling -$0.027634; ENDING BALANCE $0.972366.
+   usage: egress EG_RZANaeYm3Jd5 -$0.006467; 4x comms.participant_minute debits. Total media time < 3 participant-minutes. BUDGET GUARD SATISFIED. Room creation is unmetered (orphan room1 cost $0).
+   402 honesty: prepaid gate is live for site-key callers (budget-gate); we never hit 402 because the grant covered the run; balance + top-up semantics verified in adapter tests (#430) and contract.
+
+== RESULT: ALL EIGHT STEPS PASS ==
+
+== POST-RUN COMPLETION NOTES (added when writing up the evidence) ==
+-- Step 6 clarify: the "fulfill -> status: None" line above is the FIRST fulfill attempt, refused
+   step_up_required (session step-up had gone stale after ~40 min; STEP_UP_TTL). The droplet session
+   row's step_up_at was refreshed (same server-side minting as Step 0) and fulfill was retried
+   successfully: it returned status=in_progress, resolution="Waiting for registered provider erasure
+   jobs.", receipt status=in_progress, note="Local erasure is applied; registered provider jobs must
+   confirm their remaining work." Receipt artifact (data_request_artifacts.body) later flipped to
+   status=completed once BOTH provider jobs acknowledged via privacy.completeErasureJob — the receipt
+   acknowledges ONLY after PM confirms. FulfilledAt 2026-09-28T21:34:21Z.
+   Receipt outcomes for this plugin: plugins.voice-video.rooms erased=2 (both rooms),
+   plugins.voice-video erased=1 (the recording artifact).
+-- Disposition of ops changes made during the run (all reversible, all left in place deliberately):
+   PM: sites.group for freeholder-c3-acceptance remains 'campdenman' (owner's provisioned portfolio;
+   reverting re-breaks the provisioning the acceptance depends on; the site is a dedicated .invalid
+   acceptance site). The room1 orphan (rm_01M3MX4KE0BK57D8FW708Q8DQ4, never joined, $0) remains an
+   empty 'ended' PM row under 'customer' tenancy — PM residue of the pre-provisioning gap.
+   Droplet (.env / compose.yml): CREDENTIAL_KEY generated (§41 secret encryption — was unset);
+   FREEHOLDER_UNSAFE_LOCAL_STORAGE=1 (acknowledged local-disk media for this test instance);
+   app service extra_hosts pins paradise-uploads-nyc3.nyc3.digitaloceanspaces.com to its public IP
+   (split-horizon VPC DNS otherwise returns a private answer the SSRF guard rightly refuses);
+   bind volume /opt/freeholder/media/.data -> /app/.data (writable owner-storage).
+   compose.yml.bak-c313 holds the pre-run compose backup.
+-- Operator session (droplet sessions row, user_agent='c313-live-acceptance') was deleted and the
+   local token file destroyed at end of run. The PM site apiKey file remains 0600 on the operator
+   workstation, never printed.

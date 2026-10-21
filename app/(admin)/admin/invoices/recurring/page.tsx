@@ -155,7 +155,7 @@ export default async function RecurringPage({
               <input
                 name="name"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -163,7 +163,7 @@ export default async function RecurringPage({
               <select
                 name="contactId"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {(people?.rows ?? []).map((contact) => (
                   <option key={contact.id} value={contact.id}>
@@ -177,7 +177,7 @@ export default async function RecurringPage({
               <input
                 name="description"
                 required
-                className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -186,7 +186,7 @@ export default async function RecurringPage({
                 name="amount"
                 required
                 inputMode="decimal"
-                className="w-28 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="w-28 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -194,7 +194,7 @@ export default async function RecurringPage({
               <select
                 name="cadence"
                 defaultValue="monthly"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {["weekly", "monthly", "quarterly", "yearly"].map((cadence) => (
                   <option key={cadence} value={cadence}>
@@ -210,7 +210,7 @@ export default async function RecurringPage({
                 name="dueInDays"
                 min={0}
                 defaultValue={14}
-                className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="w-20 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <label className="flex items-center gap-2 text-sm">

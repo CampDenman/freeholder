@@ -14,6 +14,7 @@ const colorTokens = z.object({
   ink: z.string(),
   inkMuted: z.string(),
   rule: z.string(),
+  ruleStrong: z.string(),
   accent: z.string(),
   onAccent: z.string(),
   accentSoft: z.string(),
@@ -23,6 +24,7 @@ const colorTokens = z.object({
   warningSoft: z.string(),
   danger: z.string(),
   dangerSoft: z.string(),
+  onDanger: z.string(),
   focus: z.string(),
 });
 
@@ -68,6 +70,7 @@ const colorPatch = z
     ink: HEX_COLOR.optional(),
     inkMuted: HEX_COLOR.optional(),
     rule: HEX_COLOR.optional(),
+    ruleStrong: HEX_COLOR.optional(),
     accent: HEX_COLOR.optional(),
     onAccent: HEX_COLOR.optional(),
     accentSoft: HEX_COLOR.optional(),
@@ -77,12 +80,21 @@ const colorPatch = z
     warningSoft: HEX_COLOR.optional(),
     danger: HEX_COLOR.optional(),
     dangerSoft: HEX_COLOR.optional(),
+    // Checked by refuseIfUnsafe as `onDanger on danger`, so it has to be
+    // settable. It was not: a site sending a light palette for the dark slot
+    // was refused over a role it had never been allowed to send, and the
+    // message named that role. Reported by a third party who hit exactly
+    // that and could not act on the error.
+    onDanger: HEX_COLOR.optional(),
     focus: HEX_COLOR.optional(),
   })
   .strict();
 
-const FONT = z.string().trim().min(1).max(160).refine((value) => !/[<>{}]/.test(value), {
-  message: "a font stack cannot contain markup",
+// This value is interpolated into a custom-property declaration. Keep the
+// useful font-family grammar (names, quotes, commas and generic families) but
+// reject declaration delimiters, escapes and url()/function syntax.
+const FONT = z.string().trim().min(1).max(160).regex(/^[\p{L}\p{N} _'",.-]+$/u, {
+  message: "a font stack can contain only font names, quotes and commas",
 });
 
 const RADIUS = z.enum(["0.25rem", "0.375rem", "0.5rem", "0.75rem"]);

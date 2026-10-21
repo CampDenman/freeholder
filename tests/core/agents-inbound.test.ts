@@ -11,7 +11,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
-import { agentRuns, agentSpend, agentTasks } from "@/core/agents/schema";
+import { agentTasks } from "@/core/agents/schema";
+import { runSpend, runs } from "@/core/runs/schema";
 import {
   connectAgentRuntime,
   createTask,
@@ -288,7 +289,7 @@ describe.runIf(hasDatabase)("reporting and finishing", () => {
     expect(row?.status).toBe("done");
     expect(row?.result).toEqual({ reply: "Sent." });
 
-    const [run] = await db().select().from(agentRuns);
+    const [run] = await db().select().from(runs);
     expect(run?.status).toBe("done");
     expect(run?.leaseExpiresAt).toBeNull();
   });
@@ -352,7 +353,7 @@ describe.runIf(hasDatabase)("reporting and finishing", () => {
       asAgent("Worker"),
     );
 
-    const [spend] = await db().select().from(agentSpend);
+    const [spend] = await db().select().from(runSpend);
     expect(spend?.costCents).toBe(25);
     expect(spend?.tokensOut).toBe(300);
   });
@@ -434,15 +435,15 @@ describe.runIf(hasDatabase)("when an agent goes away", () => {
     const claim = await claimTask.call({}, asAgent("Worker"));
 
     await db()
-      .update(agentRuns)
+      .update(runs)
       .set({ leaseExpiresAt: sql`now() - interval '1 minute'` })
-      .where(eq(agentRuns.id, claim!.runId));
+      .where(eq(runs.id, claim!.runId));
 
     expect(await reapExpiredLeases()).toEqual({ reclaimed: 1 });
 
     const [row] = await db().select().from(agentTasks).where(eq(agentTasks.id, task.id));
     expect(row?.status).toBe("queued");
-    const [run] = await db().select().from(agentRuns);
+    const [run] = await db().select().from(runs);
     expect(run?.stopReason).toBe("timeout");
   });
 
@@ -463,9 +464,9 @@ describe.runIf(hasDatabase)("when an agent goes away", () => {
 
     const claim = await claimTask.call({}, asAgent("Worker"));
     await db()
-      .update(agentRuns)
+      .update(runs)
       .set({ leaseExpiresAt: sql`now() - interval '1 minute'` })
-      .where(eq(agentRuns.id, claim!.runId));
+      .where(eq(runs.id, claim!.runId));
     await reapExpiredLeases();
 
     const [row] = await db().select().from(agentTasks).where(eq(agentTasks.id, task.id));
@@ -481,9 +482,9 @@ describe.runIf(hasDatabase)("when an agent goes away", () => {
     expect(await claimTask.call({}, asAgent("Worker"))).toBeNull();
 
     await db()
-      .update(agentRuns)
+      .update(runs)
       .set({ leaseExpiresAt: sql`now() - interval '1 minute'` })
-      .where(eq(agentRuns.id, claim!.runId));
+      .where(eq(runs.id, claim!.runId));
     await reapExpiredLeases();
 
     expect(await claimTask.call({}, asAgent("Worker"))).not.toBeNull();

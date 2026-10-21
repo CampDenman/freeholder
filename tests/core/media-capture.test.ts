@@ -40,6 +40,20 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
   beforeEach(truncateSpine);
   afterAll(closeDb);
 
+  it("requires media authority for a session id while preserving the phone token lane", async () => {
+    const link = await createUploadLink.call({ source: "upload_link" }, OWNER);
+    const customer = { kind: "user" as const, userId: OWNER.userId, role: "customer" as const, grants: [] };
+    for (const actor of [ANONYMOUS, customer, { kind: "agent" as const, keyName: "capture-test", scopes: ["contacts.list"] }]) {
+      expect((await failure(getCaptureSession.call({ id: link.id }, actor))).code).toBe("permission");
+      expect((await failure(attachCaptureUpload.call({ id: link.id, filename: "test.png", contentType: "image/png", bytes: await png() }, actor))).code).toBe("permission");
+      expect((await failure(confirmCapture.call({ id: link.id }, actor))).code).toBe("permission");
+    }
+    expect((await getCaptureSession.call({ token: link.token }, ANONYMOUS))?.id).toBe(link.id);
+    expect((await getCaptureSession.call({ id: link.id }, OWNER))?.id).toBe(link.id);
+    const reader = { kind: "agent" as const, keyName: "capture-reader", scopes: ["media.getCaptureSession"] };
+    expect(await getCaptureSession.call({ id: link.id }, reader)).toMatchObject({ id: link.id, captureUrl: null, uploadId: null });
+  });
+
   it("refuses to record without an explicit permission grant", async () => {
     const session = await createCaptureSession.call({ source: "screen" }, OWNER);
     const blocked = await failure(startCapture.call({ id: session.id }, OWNER));
@@ -214,6 +228,10 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
       ANONYMOUS,
     );
     const { bindCaptureAsset } = await import("@/core/media/capture");
+    const otherLink = await createUploadLink.call({ source: "upload_link" }, OWNER);
+    expect((await failure(bindCaptureAsset.call(
+      { token: otherLink.token, assetId: uploaded.id }, ANONYMOUS,
+    ))).code).toBe("permission");
     const bound = await bindCaptureAsset.call(
       { token: link.token, assetId: uploaded.id },
       ANONYMOUS,

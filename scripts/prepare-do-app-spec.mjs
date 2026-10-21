@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { parse, stringify } from "yaml";
 
 const SECRET_KEYS = [
+  "BOOTSTRAP_SECRET",
   "SESSION_SECRET",
   "CREDENTIAL_KEY",
   "S3_BUCKET",
@@ -33,6 +34,9 @@ export function renderAppSpec(template, environment) {
   }
   if (environment.SESSION_SECRET.length < 32) {
     throw new Error("SESSION_SECRET must contain at least 32 characters.");
+  }
+  if (environment.BOOTSTRAP_SECRET.length < 32) {
+    throw new Error("BOOTSTRAP_SECRET must contain at least 32 characters.");
   }
   const credential = environment.CREDENTIAL_KEY.trim();
   const credentialBytes = /^[0-9a-fA-F]{64}$/.test(credential)

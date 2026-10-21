@@ -10,7 +10,7 @@ import {
 } from "@simplewebauthn/server";
 import type {
   AuthenticationResponseJSON,
-  AuthenticatorTransportFuture,
+  AuthenticatorTransport,
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { and, count, eq, gt, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
@@ -27,6 +27,7 @@ import {
   createSession,
   describeDevice,
   markSessionStepUp,
+  protectSessionMetadata,
   type ProtectedSessionMetadata,
 } from "@/core/auth/sessions";
 import {
@@ -41,7 +42,7 @@ import {
 } from "@/core/auth/two-factor-crypto";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { env } from "@/core/env";
-import { defineService, ServiceError, type Actor, type Tx } from "@/core/service";
+import { defineService, ServiceError, type Actor, type Tx, type ServiceContext } from "@/core/service";
 import { recordSuccessfulLogin } from "@/core/auth/session-management/service";
 
 export const LOGIN_CHALLENGE_COOKIE = "freeholder_login_challenge";
@@ -123,7 +124,7 @@ async function recoveryCodesIfMissing(tx: Tx, userId: string): Promise<string[]>
 async function challenge(
   tx: Tx,
   userId: string,
-  purpose: "login" | "totp-enrollment" | "webauthn-registration" | "webauthn-step-up",
+  purpose: "login" | "passkey-login" | "totp-enrollment" | "webauthn-registration" | "webauthn-step-up",
   values: {
     challenge?: string;
     pendingSecret?: string;
@@ -149,7 +150,7 @@ async function challenge(
 async function activeChallenge(
   tx: Tx,
   token: string,
-  purpose: "login" | "totp-enrollment" | "webauthn-registration" | "webauthn-step-up",
+  purpose: "login" | "passkey-login" | "totp-enrollment" | "webauthn-registration" | "webauthn-step-up",
   userId?: string,
 ) {
   const conditions = [
@@ -246,7 +247,7 @@ async function verifyWebAuthn(
         id: credential.credentialId,
         publicKey: Buffer.from(credential.publicKey, "base64url"),
         counter: credential.counter,
-        transports: credential.transports as AuthenticatorTransportFuture[],
+        transports: credential.transports,
       },
     });
   } catch {
@@ -285,7 +286,7 @@ export async function createLoginChallenge(
       userVerification: "required",
       allowCredentials: credentials.map((credential) => ({
         id: credential.credentialId,
-        transports: credential.transports as AuthenticatorTransportFuture[],
+        transports: credential.transports as AuthenticatorTransport[],
       })),
     });
     webauthnChallenge = webauthnOptions.challenge;
@@ -327,7 +328,7 @@ export const loginChallengeDetails = defineService({
         userVerification: "required",
         allowCredentials: credentials.map((credential) => ({
           id: credential.credentialId,
-          transports: credential.transports as AuthenticatorTransportFuture[],
+          transports: credential.transports as AuthenticatorTransport[],
         })),
       });
     }
@@ -386,33 +387,14 @@ export const completeTwoFactorLogin = defineService({
   },
 });
 
-export const completeWebAuthnLogin = defineService({
-  name: "auth.completeWebAuthnLogin",
-  summary: "Finish a password login with a passkey or security key.",
-  kind: "mutation",
-  permission: "public",
-  input: z.object({
-    challengeToken: z.string().min(20),
-    credentialResponse: responseValue,
-  }),
-  rateLimit: {
-    limit: 10,
-    windowSeconds: 15 * 60,
-    subject: (input) => hashTwoFactorToken(input.challengeToken),
-    message: "Too many verification attempts. Start sign-in again.",
-  },
-  output: row({
-    userId: uuid,
-    method: z.literal("webauthn"),
-  }).and(sessionIssued),
-  handler: async (input, ctx) => {
-    const row = await activeChallenge(ctx.tx, input.challengeToken, "login");
+async function finishWebAuthnLogin(ctx: ServiceContext, token: string, credentialResponse: Record<string, unknown>, purpose: "login" | "passkey-login") {
+    const row = await activeChallenge(ctx.tx, token, purpose);
     if (!row.challenge) throw new ServiceError("permission", "This sign-in did not request a security key.");
     await verifyWebAuthn(
       ctx.tx,
       row.userId,
       row.challenge,
-      input.credentialResponse as unknown as AuthenticationResponseJSON,
+      credentialResponse as unknown as AuthenticationResponseJSON,
     );
     await spendChallenge(ctx.tx, row.id);
     await ctx.tx.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, row.userId));
@@ -435,6 +417,80 @@ export const completeWebAuthnLogin = defineService({
     );
     ctx.setSubject("user", row.userId);
     return { userId: row.userId, method: "webauthn" as const, ...session };
+}
+
+export const completeWebAuthnLogin = defineService({
+  name: "auth.completeWebAuthnLogin",
+  summary: "Finish a password login with a passkey or security key.",
+  kind: "mutation",
+  permission: "public",
+  input: z.object({
+    challengeToken: z.string().min(20),
+    credentialResponse: responseValue,
+  }),
+  rateLimit: {
+    limit: 10,
+    windowSeconds: 15 * 60,
+    subject: (input) => hashTwoFactorToken(input.challengeToken),
+    message: "Too many verification attempts. Start sign-in again.",
+  },
+  output: row({
+    userId: uuid,
+    method: z.literal("webauthn"),
+  }).and(sessionIssued),
+  handler: (input, ctx) => finishWebAuthnLogin(ctx, input.challengeToken, input.credentialResponse, "login"),
+});
+
+export const beginPasskeyLogin = defineService({
+  name: "auth.beginPasskeyLogin",
+  summary: "Begin passwordless passkey sign-in without revealing account existence.",
+  kind: "mutation",
+  permission: "public",
+  input: z.object({ email: z.string().trim().email().toLowerCase() }),
+  rateLimit: {
+    limit: 10, windowSeconds: 15 * 60,
+    subject: (input) => hashTwoFactorToken(input.email),
+    message: "Too many sign-in attempts. Wait before trying again.",
+  },
+  output: row({ challengeToken: z.string(), options: z.unknown() }),
+  handler: async (input, ctx) => {
+    const { rpID } = relyingParty();
+    // Discoverable credentials give existing and unknown emails the same options.
+    const options = await generateAuthenticationOptions({ rpID, userVerification: "required" });
+    const [account] = await ctx.tx.select({ id: users.id }).from(users).where(eq(users.email, input.email)).limit(1);
+    const challengeToken = account ? await challenge(ctx.tx, account.id, "passkey-login", {
+      challenge: options.challenge, loginMetadata: protectSessionMetadata(ctx.actor.request),
+    }) : generateChallengeToken();
+    return { challengeToken, options };
+  },
+});
+
+export const completePasskeyLogin = defineService({
+  name: "auth.completePasskeyLogin",
+  summary: "Sign in with a verified passkey without a password.",
+  kind: "mutation",
+  permission: "public",
+  input: z.object({
+    challengeToken: z.string().min(20),
+    credentialResponse: responseValue,
+  }),
+  rateLimit: {
+    limit: 10,
+    windowSeconds: 15 * 60,
+    subject: (input) => hashTwoFactorToken(input.challengeToken),
+    message: "Too many verification attempts. Start sign-in again.",
+  },
+  output: row({
+    userId: uuid,
+    method: z.literal("webauthn"),
+  }).and(sessionIssued),
+  handler: async (input, ctx) => {
+    try {
+      return await finishWebAuthnLogin(ctx, input.challengeToken, input.credentialResponse, "passkey-login");
+    } catch (error) {
+      if (!(error instanceof ServiceError)) throw error;
+      throw new ServiceError("permission", "Passkey sign-in could not be verified. Try again or use password sign-in.");
+    }
   },
 });
 
@@ -558,10 +614,10 @@ export const beginWebAuthnRegistration = defineService({
       userName: account[0]?.email ?? actor.userId,
       userID: new TextEncoder().encode(actor.userId),
       attestationType: "none",
-      authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
+      authenticatorSelection: { residentKey: "required", userVerification: "required" },
       excludeCredentials: existing.map((credential) => ({
         id: credential.credentialId,
-        transports: credential.transports as AuthenticatorTransportFuture[],
+        transports: credential.transports as AuthenticatorTransport[],
       })),
     });
     const registrationToken = await challenge(ctx.tx, actor.userId, "webauthn-registration", {
@@ -659,7 +715,7 @@ export const beginWebAuthnStepUp = defineService({
       userVerification: "required",
       allowCredentials: credentials.map((credential) => ({
         id: credential.credentialId,
-        transports: credential.transports as AuthenticatorTransportFuture[],
+        transports: credential.transports as AuthenticatorTransport[],
       })),
     });
     const verificationToken = await challenge(ctx.tx, actor.userId, "webauthn-step-up", {
@@ -789,6 +845,8 @@ export const pruneTwoFactorChallenges = async (tx: Tx) =>
 
 export default [
   loginChallengeDetails,
+  beginPasskeyLogin,
+  completePasskeyLogin,
   completeTwoFactorLogin,
   completeWebAuthnLogin,
   twoFactorStatus,

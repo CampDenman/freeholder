@@ -135,18 +135,18 @@ describe.runIf(hasDatabase)("private client galleries", { timeout: 90_000 }, () 
   it("stores a PIN as a hash and never writes the raw secret", async () => {
     const client = await person();
     const gallery = await createGallery.call(
-      { contactId: client.id, title: "PIN proofs", access: "pin", secret: "1357" },
+      { contactId: client.id, title: "PIN proofs", access: "pin", secret: "13572468" },
       OWNER,
     );
     const [row] = await db().select().from(galleries).where(eq(galleries.id, gallery.id));
     expect(row!.secretHash).toBeTruthy();
-    expect(row!.secretHash).not.toContain("1357");
-    expect(JSON.stringify(gallery)).not.toContain("1357");
+    expect(row!.secretHash).not.toContain("13572468");
+    expect(JSON.stringify(gallery)).not.toContain("13572468");
     expect(gallery.secretSet).toBe(true);
     expect(await unlockGallery.call({ slug: gallery.slug, secret: "0000" }, ANONYMOUS)).toEqual({
       ok: false,
     });
-    const opened = await unlockGallery.call({ slug: gallery.slug, secret: "1357" }, ANONYMOUS);
+    const opened = await unlockGallery.call({ slug: gallery.slug, secret: "13572468" }, ANONYMOUS);
     expect(opened.ok).toBe(true);
     if (opened.ok) expect(opened.items).toEqual([]);
   });

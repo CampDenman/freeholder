@@ -12,8 +12,10 @@ import { ownerFacing } from "./action-helpers";
 import {
   assignTask,
   cancelTask,
+  connectAgentRuntime,
   createTask,
   flagTask,
+  hireAgent,
   inspectRun,
   pauseAgent,
   pauseAllAgents,
@@ -21,11 +23,13 @@ import {
   retryTask,
   stopRun,
   tailRun,
+  updateAgent,
   updateTask,
 } from "@/core/agents/service";
 
 export interface WorkActionState {
   error?: string;
+  token?: string;
 }
 
 function text(form: FormData, key: string): string {
@@ -58,6 +62,91 @@ export async function pauseAgentAction(form: FormData): Promise<void> {
   }
   revalidatePath("/admin/work");
   redirect(`/admin/work?saved=${paused ? "paused" : "resumed"}`);
+}
+
+function stepUpOrError(error: unknown, fallback: string): WorkActionState {
+  if (error instanceof ServiceError && error.code === "step_up_required") {
+    redirect(`/security/verify?returnTo=${encodeURIComponent("/admin/work")}`);
+  }
+  return {
+    error: error instanceof ServiceError ? ownerFacing(error.message) : fallback,
+  };
+}
+
+export async function connectRuntimeAction(
+  _prev: WorkActionState,
+  form: FormData,
+): Promise<WorkActionState> {
+  const kind = text(form, "kind") === "managed" ? "managed" : "inbound";
+  try {
+    await connectAgentRuntime.call(
+      {
+        name: text(form, "name"),
+        kind,
+        adapter: text(form, "adapter") || undefined,
+        model: text(form, "model") || undefined,
+        credentialRef: text(form, "credentialRef") || undefined,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    return stepUpOrError(error, "That runtime could not be connected.");
+  }
+  revalidatePath("/admin/work");
+  redirect("/admin/work?saved=connected");
+}
+
+export async function hireAgentAction(
+  _prev: WorkActionState,
+  form: FormData,
+): Promise<WorkActionState> {
+  const scopes = text(form, "toolScopes")
+    .split(/[\s,]+/)
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+  const autonomy = text(form, "autonomy");
+  try {
+    const hired = await hireAgent.call(
+      {
+        connectionId: text(form, "connectionId"),
+        name: text(form, "name"),
+        role: text(form, "role"),
+        instructions: text(form, "instructions") || undefined,
+        toolScopes: scopes,
+        autonomy: autonomy === "approve" || autonomy === "autonomous" ? autonomy : "suggest",
+      },
+      await actor(),
+    );
+    revalidatePath("/admin/work");
+    return { token: hired.token };
+  } catch (error) {
+    return stepUpOrError(error, "That worker could not be hired.");
+  }
+}
+
+export async function updateAgentAction(form: FormData): Promise<void> {
+  const autonomy = text(form, "autonomy");
+  try {
+    await updateAgent.call(
+      {
+        id: text(form, "id"),
+        role: text(form, "role") || undefined,
+        autonomy:
+          autonomy === "approve" || autonomy === "autonomous" || autonomy === "suggest"
+            ? autonomy
+            : undefined,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === "step_up_required") {
+      redirect(`/security/verify?returnTo=${encodeURIComponent("/admin/work")}`);
+    }
+    const message = error instanceof ServiceError ? ownerFacing(error.message) : "update";
+    redirect(`/admin/work?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/admin/work");
+  redirect("/admin/work?saved=updated");
 }
 
 export async function createTaskAction(

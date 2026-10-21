@@ -25,6 +25,7 @@ import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
 import {
   captureSegmentAction,
+  previewSegmentAction,
   removeSegmentAction,
   saveSegmentAction,
 } from "../../segment-actions";
@@ -35,7 +36,14 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 export default async function SegmentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string; why?: string; who?: string }>;
+  searchParams: Promise<{
+    saved?: string;
+    error?: string;
+    why?: string;
+    who?: string;
+    previewCount?: string;
+    previewSample?: string;
+  }>;
 }) {
   const actor = await requireStaffActor("crm");
   const query = await searchParams;
@@ -132,7 +140,7 @@ export default async function SegmentsPage({
                       <span className="text-ink-muted">{t("segments.why")}</span>
                       <select
                         name="who"
-                        className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                        className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                       >
                         {(people?.rows ?? []).map((contact) => (
                           <option key={contact.id} value={contact.id}>
@@ -182,7 +190,7 @@ export default async function SegmentsPage({
                 <input
                   name="name"
                   required
-                  className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <label className="grid gap-1 text-sm">
@@ -190,7 +198,7 @@ export default async function SegmentsPage({
                 <select
                   name="match"
                   defaultValue="all"
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 >
                   <option value="all">{t("segments.match.all")}</option>
                   <option value="any">{t("segments.match.any")}</option>
@@ -204,7 +212,7 @@ export default async function SegmentsPage({
                   <select
                     name="field"
                     defaultValue=""
-                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   >
                     <option value="">{t("segments.field.none")}</option>
                     {(fields ?? []).map((field) => (
@@ -219,7 +227,7 @@ export default async function SegmentsPage({
                   <select
                     name="op"
                     defaultValue="is"
-                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   >
                     {["is", "isNot", "isOneOf", "contains", "atLeast", "atMost", "inLastDays", "before", "after", "isSet", "isNotSet"].map(
                       (op) => (
@@ -234,13 +242,26 @@ export default async function SegmentsPage({
                   <span className="sr-only">{t("segments.field.value")}</span>
                   <input
                     name="value"
-                    className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                 </label>
               </div>
             ))}
-            <Button type="submit">{t("segments.action.save")}</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit">{t("segments.action.save")}</Button>
+              <Button type="submit" formAction={previewSegmentAction} variant="quiet">
+                {t("segments.preview")}
+              </Button>
+            </div>
           </form>
+          {query.previewCount ? (
+            <p className="mt-3 text-sm">
+              {t("segments.previewCount", { count: query.previewCount })}
+              {query.previewSample
+                ? ` · ${query.previewSample}`
+                : ` · ${t("segments.previewEmpty")}`}
+            </p>
+          ) : null}
           {/* Commas mean a list, because "one of" is the operator people reach
               for and asking them to write JSON is not an option. */}
           <p className="max-w-prose text-sm text-ink-muted">{t("segments.hint")}</p>

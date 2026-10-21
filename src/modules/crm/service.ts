@@ -15,12 +15,17 @@
 // timeline and queues the event, and the board drags through the same door the
 // API does.
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerLifecycleAdvancer } from "@/core/contacts/lifecycle";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import {
   defineService,
   getService,
@@ -867,6 +872,34 @@ registerContactPrivacySource({
       .returning({ id: deals.id });
     await tx.delete(contactStages).where(eq(contactStages.contactId, contactId));
     return { affected: rows.length };
+  },
+});
+
+registerSearchSource({
+  kind: "deal",
+  readService: "crm.listDeals",
+  module: "crm",
+  tables: ["deals"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: deals.id,
+        title: deals.title,
+        contactId: deals.contactId,
+      })
+      .from(deals)
+      .where(or(matchesIlike(deals.title, pattern), matchesIlike(deals.source, pattern)))
+      .orderBy(desc(deals.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "deal",
+      id: row.id,
+      title: row.title,
+      href: "/admin/pipeline",
+      snippet: clipSnippet(row.title),
+      contactId: row.contactId,
+      module: "crm",
+    }));
   },
 });
 

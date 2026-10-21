@@ -16,28 +16,12 @@ import type { SmsInboundMedia, SmsProviderEvent } from "@/adapters/sms";
 import { AdapterError } from "@/adapters/types";
 import { getService, ServiceError } from "@/core/service";
 import { ready } from "@/core/runtime";
+import { readBoundedBytes, RequestBodyError } from "@/core/http/body";
 
 const MAX_WEBHOOK_BYTES = 1_048_576;
 
-class WebhookError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
 async function rawRequest(request: Request): Promise<Uint8Array<ArrayBuffer>> {
-  const announced = Number(request.headers.get("content-length"));
-  if (Number.isFinite(announced) && announced > MAX_WEBHOOK_BYTES) {
-    throw new WebhookError(413, "That callback is too large.");
-  }
-  const buffer = await request.arrayBuffer();
-  if (buffer.byteLength > MAX_WEBHOOK_BYTES) {
-    throw new WebhookError(413, "That callback is too large.");
-  }
-  return new Uint8Array(buffer);
+  return readBoundedBytes(request, MAX_WEBHOOK_BYTES);
 }
 
 export function smsWebhookRoute(provider: string) {
@@ -99,7 +83,7 @@ export function smsWebhookRoute(provider: string) {
         headers: { "content-type": "text/xml; charset=utf-8" },
       });
     } catch (error) {
-      if (error instanceof WebhookError) {
+      if (error instanceof RequestBodyError) {
         return Response.json({ error: error.message }, { status: error.status });
       }
       if (error instanceof AdapterError) {

@@ -3,6 +3,10 @@
 // C5.17 reorder, purchase orders, receiving and backorders.
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { db } from "@/core/db";
+import { users } from "@/core/auth/schema";
+import { contacts } from "@/core/contacts/schema";
+import { eq } from "drizzle-orm";
 import { createContact } from "@/core/contacts/service";
 import { createLocationService } from "@/core/locations/service";
 import {
@@ -26,6 +30,7 @@ import {
 } from "@/modules/catalog/service";
 import {
   ANONYMOUS,
+  CUSTOMER,
   closeDb,
   failure,
   hasDatabase,
@@ -78,6 +83,25 @@ describe.runIf(hasDatabase)("catalog procurement", { timeout: 30_000 }, () => {
     ).toMatch(/restock date/);
   });
 
+  it("refuses anonymous notification enrollment for a supplied contact ID", async () => {
+    const { variant, location } = await setup();
+    const contact = await createContact.call({ name: "Private", email: "private-stock@example.test" }, OWNER);
+    await expect(subscribeBackInStock.call({ variantId: variant.id, contactId: contact.id, locationId: location.id }, ANONYMOUS)).rejects.toMatchObject({ code: "permission" });
+  });
+
+  it("lets the signed-in customer enroll only their own profile", async () => {
+    const { variant, location } = await setup();
+    await db().insert(users).values({ id: CUSTOMER.userId, email: "own-stock@example.test", role: "customer" });
+    const own = await createContact.call({ name: "Own profile", email: "own-stock@example.test" }, OWNER);
+    const other = await createContact.call({ name: "Other profile", email: "other-stock@example.test" }, OWNER);
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, own.id));
+    const input = { variantId: variant.id, contactId: own.id, locationId: location.id };
+    const subscription = await subscribeBackInStock.call(input, CUSTOMER);
+    expect((await subscribeBackInStock.call(input, CUSTOMER)).id).toBe(subscription.id);
+    await expect(subscribeBackInStock.call({ ...input, contactId: other.id }, CUSTOMER)).rejects.toMatchObject({ code: "permission" });
+    await expect(subscribeBackInStock.call(input, { kind: "agent", keyName: "read-only", scopes: ["catalog.listProducts"] })).rejects.toMatchObject({ code: "permission" });
+  });
+
   it("places a PO to raise incoming, receives onto the shelf, and notifies subscribers", async () => {
     const { variant, location } = await setup();
     const contact = await createContact.call(
@@ -86,7 +110,7 @@ describe.runIf(hasDatabase)("catalog procurement", { timeout: 30_000 }, () => {
     );
     await subscribeBackInStock.call(
       { variantId: variant.id, contactId: contact.id, locationId: location.id },
-      ANONYMOUS,
+      OWNER,
     );
     const supplier = await createSupplier.call({ name: "Paper mill", currency: "CAD" }, OWNER);
     const order = await createPurchaseOrder.call(

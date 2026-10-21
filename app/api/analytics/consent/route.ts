@@ -17,6 +17,7 @@ import {
   parseAnalyticsConsentState,
   type AnalyticsConsentState,
 } from "@/modules/analytics/visitor";
+import { readBoundedText, RequestBodyError } from "@/core/http/body";
 
 type Decision = "sync" | "grant" | "deny";
 
@@ -107,17 +108,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Cross-site analytics choice refused." }, { status: 403 });
   }
 
-  if (Number(request.headers.get("content-length") ?? 0) > 16_384) {
-    return NextResponse.json({ error: "Analytics choice payload is too large." }, { status: 413 });
+  let raw: string;
+  try {
+    raw = await readBoundedText(request, 16_384);
+  } catch (error) {
+    const status = error instanceof RequestBodyError ? error.status : 400;
+    return NextResponse.json({ error: "Analytics choice payload could not be read." }, { status });
   }
-
-  const [raw, settings] = await Promise.all([
-    request.text().catch(() => ""),
-    currentAnalyticsSettings(),
-  ]);
-  if (new TextEncoder().encode(raw).byteLength > 16_384) {
-    return NextResponse.json({ error: "Analytics choice payload is too large." }, { status: 413 });
-  }
+  const settings = await currentAnalyticsSettings();
   const { decision, returnTo, redirect } = inputOf(
     raw,
     request.headers.get("content-type") ?? "",

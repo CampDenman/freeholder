@@ -51,6 +51,8 @@ export interface ContentSecurityPolicyOptions {
   uploadOrigins?: string[];
   creativeOrigins?: string[];
   thirdPartyCreativeConsent?: boolean;
+  /** C12.24: the site's own SFU, reachable only from group call pages. */
+  callOrigins?: string[];
 }
 
 /**
@@ -68,7 +70,9 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
   const creative = options.thirdPartyCreativeConsent
     ? [...new Set(options.creativeOrigins ?? [])].sort()
     : [];
+  const call = options.path.startsWith("/call/group/") ? [...new Set(options.callOrigins ?? [])].sort() : [];
   const preview = options.path === "/preview" || options.path.startsWith("/preview/");
+  const embed = options.path === "/embed" || options.path.startsWith("/embed/");
   const development = options.production
     ? ""
     : " 'unsafe-eval'";
@@ -81,14 +85,17 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
     `img-src 'self' data: blob:${sources([...media, ...creative])}`,
     `font-src 'self' data:${sources(creative)}`,
     `media-src 'self' blob:${sources([...media, ...creative])}`,
-    `connect-src 'self'${sources([...upload, ...creative])}`,
+    `connect-src 'self'${sources([...upload, ...creative, ...call])}`,
     `frame-src 'self'${sources(creative)}`,
     "worker-src 'self' blob:",
     "manifest-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    `frame-ancestors ${preview ? "'self'" : "'none'"}`,
+    // Embeds (C9.36) are meant to be framed on other sites. Everything else
+    // stays unframeable, including admin. `*` here is the point of an embed;
+    // clickjacking a review wall is not a credential theft.
+    `frame-ancestors ${embed ? "*" : preview ? "'self'" : "'none'"}`,
     `report-uri ${CSP_REPORT_PATH}`,
     `report-to ${CSP_REPORT_GROUP}`,
     ...(options.production ? ["upgrade-insecure-requests"] : []),
@@ -104,4 +111,11 @@ export function thirdPartyCreativeConsentGranted(
   value: string | null | undefined,
 ): boolean {
   return value === "granted";
+}
+
+export function parseThirdPartyCreativeConsent(
+  value: string | null | undefined,
+): "granted" | "denied" | undefined {
+  if (value === "granted" || value === "denied") return value;
+  return undefined;
 }

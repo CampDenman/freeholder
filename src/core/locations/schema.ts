@@ -195,12 +195,31 @@ export const serviceAreas = pgTable(
     locationId: uuid("location_id")
       .notNull()
       .references(() => businessLocations.id, { onDelete: "cascade" }),
-    kind: text("kind", { enum: ["radius", "regions"] }).notNull(),
+    kind: text("kind", { enum: ["radius", "regions", "postal_codes"] }).notNull(),
     centerLatitude: numeric("center_latitude", { precision: 9, scale: 6 }),
     centerLongitude: numeric("center_longitude", { precision: 9, scale: 6 }),
     radiusKm: numeric("radius_km", { precision: 8, scale: 2 }),
     /** Named places: "Comox Valley", "Vancouver Island", "Greater London". */
     regions: text("regions").array().notNull().default(sql`'{}'`),
+    /**
+     * The postal codes the owner named, normalised to upper case with the
+     * spacing removed.
+     *
+     * The only shape of this table a machine can check. A radius describes
+     * coverage to a reader and a region names it, but neither answers "do you
+     * come to L4C 2K1?" without a geocoder or a gazetteer \u2014 and answering it
+     * by guessing is the invented coverage 4.18 forbids.
+     */
+    postalCodes: text("postal_codes").array().notNull().default(sql`'{}'`),
+    /**
+     * The weekly window when this area receives deliveries, all three
+     * together or none (C6.18). Null means the owner named no window, and no
+     * window is a real answer — the coverage check must not invent one.
+     * Weekdays follow opening_hours.weekday: 0 = Sunday.
+     */
+    deliveryWeekdays: smallint("delivery_weekdays").array(),
+    deliveryOpens: time("delivery_opens"),
+    deliveryCloses: time("delivery_closes"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -213,8 +232,26 @@ export const serviceAreas = pgTable(
       sql`case ${t.kind}
             when 'radius' then ${t.centerLatitude} is not null and ${t.centerLongitude} is not null and ${t.radiusKm} is not null
             when 'regions' then array_length(${t.regions}, 1) is not null
+            when 'postal_codes' then array_length(${t.postalCodes}, 1) is not null
             else false
           end`,
+    ),
+    // A delivery window is a whole or it is nothing: days without times name
+    // no hour, times without days name no day, and a window that closes
+    // before it opens is a negative afternoon. The database enforces it
+    // because a rule only the service checks is one a second writer can miss.
+    check(
+      "service_areas_delivery_window",
+      sql`(${t.deliveryWeekdays} is null and ${t.deliveryOpens} is null and ${t.deliveryCloses} is null)
+           or (
+             ${t.deliveryWeekdays} is not null
+             and array_length(${t.deliveryWeekdays}, 1) is not null
+             and ${t.deliveryOpens} is not null
+             and ${t.deliveryCloses} is not null
+             and ${t.deliveryOpens} < ${t.deliveryCloses}
+             and 0 <= all(${t.deliveryWeekdays})
+             and 6 >= all(${t.deliveryWeekdays})
+           )`,
     ),
   ],
 );

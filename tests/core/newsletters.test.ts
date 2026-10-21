@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Newsletters: double-opt-in, RFC 8058, public archive, prefs (C9.04).
 
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, vi, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
+import { resetMailForTests } from "@/adapters/mail";
+import { resetEnvForTests } from "@/core/env";
 import { db } from "@/core/db";
 import { pages } from "@/modules/cms/schema";
 import { publishedPaths } from "@/modules/cms/service";
@@ -19,10 +21,19 @@ import {
   unsubscribeFromNewsletter,
 } from "@/modules/newsletters/service";
 import { newsletterSubscriptions } from "@/modules/newsletters/schema";
+import { canContact } from "@/core/privacy/service";
 import { ANONYMOUS, closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { waitForBlockedQuery } from "../helpers/database-lock";
+import { GET as readConfirmation, POST as applyConfirmation } from "../../app/newsletters/confirm/route";
+import { GET as readUnsubscribe, POST as applyUnsubscribe } from "../../app/unsubscribe/route";
 
 describe.runIf(hasDatabase)("newsletters module", { timeout: 30_000 }, () => {
   beforeEach(async () => {
+    vi.stubEnv("MAIL_ADAPTER", "smtp");
+    vi.stubEnv("SMTP_HOST", "127.0.0.1");
+    vi.stubEnv("SMTP_PORT", "2525");
+    vi.stubEnv("MAIL_FROM", "sender@example.test");
+    resetEnvForTests(); resetMailForTests();
     await truncateSpine();
     await updateBusiness.call(
       {
@@ -34,6 +45,7 @@ describe.runIf(hasDatabase)("newsletters module", { timeout: 30_000 }, () => {
       OWNER,
     );
   });
+  afterEach(() => { vi.unstubAllEnvs(); resetEnvForTests(); resetMailForTests(); });
   afterAll(closeDb);
 
   it("publishes an archive leaf, requires double opt-in, and honours RFC 8058 unsubscribe", async () => {
@@ -79,8 +91,27 @@ describe.runIf(hasDatabase)("newsletters module", { timeout: 30_000 }, () => {
     expect(headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
     expect(headers["List-Unsubscribe"]).toContain("/unsubscribe?token=");
 
+    // The confirmation is the consent evidence (§2096), not merely a status.
+    // Nothing else on the platform records marketing-email consent, and
+    // `contacts.canContact` treats absence of evidence as refusal — so without
+    // this a campaign (C9.06) would lawfully refuse to mail every confirmed
+    // subscriber the business has.
+    expect(
+      await canContact.call(
+        { contactId: row!.contactId, purpose: "marketing", channel: "email" },
+        OWNER,
+      ),
+    ).toMatchObject({ allowed: true, reason: "granted" });
+
     const left = await unsubscribeFromNewsletter.call({ token: row!.unsubscribeToken }, ANONYMOUS);
     expect(left.status).toBe("unsubscribed");
+    // And leaving withdraws it, so a segment cannot mail them anyway.
+    expect(
+      await canContact.call(
+        { contactId: row!.contactId, purpose: "marketing", channel: "email" },
+        OWNER,
+      ),
+    ).toMatchObject({ allowed: false, reason: "withdrawn" });
   });
 
   it("merges two subscription rows for the same newsletter into the survivor", async () => {
@@ -102,5 +133,98 @@ describe.runIf(hasDatabase)("newsletters module", { timeout: 30_000 }, () => {
       .where(eq(newsletterSubscriptions.newsletterId, newsletter.id));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.contactId).toBe(ada.id);
+  });
+
+  it("requires a POST for mail links and keeps repeated one-click withdrawals safe", async () => {
+    const newsletter = await createNewsletter.call({ name: "Scanner proof", slug: "scanner-proof" }, OWNER);
+    const pending = await subscribeToNewsletter.call({ newsletterId: newsletter.id, email: "reader@example.test" }, ANONYMOUS);
+    const [row] = await db().select().from(newsletterSubscriptions).where(eq(newsletterSubscriptions.id, pending.subscriptionId));
+    const confirm = `https://example.test/newsletters/confirm?token=${row!.confirmToken}`;
+    const unsubscribe = `https://example.test/unsubscribe?token=${row!.unsubscribeToken}`;
+    const page = await readConfirmation(new Request(confirm, { headers: { cookie: "freeholder_theme=dark", "x-freeholder-locale": "fr" } }));
+    const html = await page.text();
+    expect(html).toContain('method="post"'); expect(html).toContain('data-theme="dark"'); expect(html).toContain('lang="fr"');
+    expect(page.headers.get("referrer-policy")).toBe("no-referrer");
+    expect((await db().select().from(newsletterSubscriptions).where(eq(newsletterSubscriptions.id, row!.id)))[0]?.status).toBe("pending");
+    expect((await applyConfirmation(new Request(confirm, { method: "POST" }))).status).toBe(200);
+    expect((await readUnsubscribe(new Request(unsubscribe))).status).toBe(200);
+    expect((await db().select().from(newsletterSubscriptions).where(eq(newsletterSubscriptions.id, row!.id)))[0]?.status).toBe("confirmed");
+    for (let repeat = 0; repeat < 2; repeat++) expect((await applyUnsubscribe(new Request(unsubscribe, {
+      method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "List-Unsubscribe=One-Click",
+    }))).status).toBe(200);
+    expect((await db().select().from(newsletterSubscriptions).where(eq(newsletterSubscriptions.id, row!.id)))[0]?.status).toBe("unsubscribed");
+  });
+
+  it("does not restore consent when a stale confirmation races an unsubscribe", async () => {
+    const newsletter = await createNewsletter.call({ name: "Withdrawal wins", slug: "withdrawal-wins" }, OWNER);
+    const pending = await subscribeToNewsletter.call({ newsletterId: newsletter.id, email: "reader@example.test" }, ANONYMOUS);
+    const [row] = await db().select().from(newsletterSubscriptions).where(eq(newsletterSubscriptions.id, pending.subscriptionId));
+    let release!: () => void;
+    let withdrawn!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const entered = new Promise<void>(resolve => { withdrawn = resolve; });
+    const withdrawing = db().transaction(async tx => {
+      await unsubscribeFromNewsletter.call({ token: row!.unsubscribeToken }, ANONYMOUS, { tx });
+      withdrawn(); await held;
+    });
+    await entered;
+    const confirming = confirmSubscription.call({ token: row!.confirmToken }, ANONYMOUS).then(() => "unexpected success", (error: unknown) => (error as { code?: string }).code);
+    try { await waitForBlockedQuery("newsletter_subscriptions"); } finally { release(); }
+    await withdrawing;
+    expect(await confirming).toBe("conflict");
+    expect((await db().select().from(newsletterSubscriptions).where(eq(newsletterSubscriptions.id, row!.id)))[0]?.status).toBe("unsubscribed");
+    expect(await canContact.call({ contactId: row!.contactId, purpose: "marketing", channel: "email" }, OWNER)).toMatchObject({ allowed: false, reason: "withdrawn" });
+  });
+
+  it("lets someone who unsubscribed join again, and keeps the words they agreed to", async () => {
+    const newsletter = await createNewsletter.call({ name: "Return", slug: "return" }, OWNER);
+    const statement = "Send me the studio letter. I can unsubscribe from any issue.";
+    const first = await subscribeToNewsletter.call(
+      {
+        newsletterId: newsletter.id,
+        email: "reader@example.test",
+        consent: {
+          termsVersion: statement,
+          sourceUrl: "/newsletters",
+          evidence: { popup: "newsletter-subscribe", statement },
+        },
+      },
+      ANONYMOUS,
+    );
+    const [row] = await db()
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.id, first.subscriptionId));
+    await confirmSubscription.call({ token: row!.confirmToken }, ANONYMOUS);
+    await unsubscribeFromNewsletter.call({ token: row!.unsubscribeToken }, ANONYMOUS);
+
+    const again = await subscribeToNewsletter.call(
+      {
+        newsletterId: newsletter.id,
+        email: "reader@example.test",
+        consent: {
+          termsVersion: statement,
+          sourceUrl: "/newsletters",
+          evidence: { popup: "newsletter-subscribe", statement },
+        },
+      },
+      ANONYMOUS,
+    );
+    expect(again.status).toBe("pending");
+    expect(again.subscriptionId).toBe(first.subscriptionId);
+    const [pending] = await db()
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.id, again.subscriptionId));
+    expect(pending?.status).toBe("pending");
+    expect(pending?.consentEvidence).toMatchObject({ statement });
+    const confirmed = await confirmSubscription.call({ token: pending!.confirmToken }, ANONYMOUS);
+    expect(confirmed.status).toBe("confirmed");
+    expect(
+      await canContact.call(
+        { contactId: pending!.contactId, purpose: "marketing", channel: "email" },
+        OWNER,
+      ),
+    ).toMatchObject({ allowed: true, reason: "granted" });
   });
 });

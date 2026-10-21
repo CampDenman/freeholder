@@ -11,7 +11,10 @@ import {
   connectedAccounts,
   connectionCapabilities,
 } from "@/core/connections/schema";
-import { accessTokenForAccount, type OAuthProvider } from "@/core/connections/oauth-core";
+import {
+  accessTokenForAccountOutsideTransaction,
+  type OAuthProvider,
+} from "@/core/connections/oauth-core";
 import { ServiceError, type Tx } from "@/core/service";
 import type { SIGNUP_CONTACT_IMPORT_FIELDS } from "./contacts-schema";
 
@@ -157,15 +160,13 @@ export async function readMicrosoftContacts(
   return contacts;
 }
 
-export async function providerContactsForUser(
+export async function providerContactSourceForUser(
   tx: Tx,
   input: {
     userId: string;
     accountId: string;
-    fields: readonly SignupContactField[];
-    limit: number;
   },
-): Promise<{ provider: OAuthProvider; contacts: ProviderContact[] }> {
+): Promise<{ accountId: string; provider: OAuthProvider }> {
   const [account] = await tx
     .select({
       id: connectedAccounts.id,
@@ -196,11 +197,23 @@ export async function providerContactsForUser(
   ) {
     throw new ServiceError("not_found", "That contacts connection is unavailable.");
   }
-  const provider = account.provider;
-  const accessToken = await accessTokenForAccount(tx, { id: account.id, provider });
+  return { accountId: account.id, provider: account.provider };
+}
+
+/** Resolve credentials and page through the provider with no service tx open. */
+export async function providerContactsForSource(input: {
+  accountId: string;
+  provider: OAuthProvider;
+  fields: readonly SignupContactField[];
+  limit: number;
+}): Promise<{ provider: OAuthProvider; contacts: ProviderContact[] }> {
+  const accessToken = await accessTokenForAccountOutsideTransaction({
+    id: input.accountId,
+    provider: input.provider,
+  });
   const contacts =
-    provider === "google"
+    input.provider === "google"
       ? await readGoogleContacts(accessToken, input.fields, input.limit)
       : await readMicrosoftContacts(accessToken, input.fields, input.limit);
-  return { provider, contacts };
+  return { provider: input.provider, contacts };
 }

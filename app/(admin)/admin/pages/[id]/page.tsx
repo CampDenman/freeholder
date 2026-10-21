@@ -12,6 +12,8 @@ import { ServiceError } from "@/core/service";
 import {
   getLayout,
   getPage,
+  helpArticleFeedback,
+  helpCategoryList,
   listRevisions,
   listSections,
   pageAuthorSummary,
@@ -24,9 +26,10 @@ import {
 import { listComments } from "@/modules/cms/collaboration";
 import { listAssets } from "@/core/media/service";
 import { listRoleUsers } from "@/core/roles/service";
+import { listCollections, listProducts } from "@/modules/catalog/service";
 import { actorString } from "@/core/service";
 import type { BlockNode } from "@/modules/cms/blocks/types";
-import { Card, CardBody, CardHeader } from "@/ui/primitives";
+import { Button, Card, CardBody, CardHeader, Field, Select } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { editorBlockTypes, editorLabels, sectionPaletteEntries } from "../../editorLabels";
@@ -37,7 +40,7 @@ import { PageLifecycle } from "./PageLifecycle";
 import { PagePresence } from "./PagePresence";
 import { PageComments } from "./PageComments";
 import { currentBusiness } from "@/core/settings/read";
-import { detachLayoutAction, rejoinLayoutAction } from "../../../cms-actions";
+import { detachLayoutAction, fileHelpArticleAction, rejoinLayoutAction } from "../../../cms-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +50,7 @@ export default async function EditPagePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ compare?: string }>;
+  searchParams: Promise<{ compare?: string; saved?: string }>;
 }) {
   const actor = await requireStaffActor("cms", "manage");
   const { id } = await params;
@@ -58,7 +61,7 @@ export default async function EditPagePage({
     throw error;
   });
 
-  const [business, revisions, authors, library, t, links, lease, diff, comments, staff, sectionRows, layout] =
+  const [business, revisions, authors, library, t, links, lease, diff, comments, staff, sectionRows, layout, categories, filed, collectionRows, productRows] =
     await Promise.all([
       currentBusiness(),
       listRevisions.call({ subjectType: "page", subjectId: page.id }, actor),
@@ -77,7 +80,14 @@ export default async function EditPagePage({
       listRoleUsers.call({}, actor).catch(() => [] as { id: string; email: string }[]),
       listSections.call({}, actor),
       getLayout.call({ pageId: page.id }, actor),
+      helpCategoryList.call({ locale: page.locale }, actor).catch(() => []),
+      helpArticleFeedback.call({ locale: page.locale }, actor).catch(() => []),
+      // The commerce blocks' pickers: published collections and active
+      // products, exactly what the storefront itself may render.
+      listCollections.call({}, actor).catch(() => []),
+      listProducts.call({ status: "active", limit: 500 }, actor).catch(() => []),
     ]);
+  const currentCategory = filed.find((article) => article.id === page.id)?.categoryId ?? "";
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
@@ -145,6 +155,7 @@ export default async function EditPagePage({
         id={page.id}
         initialVersion={page.version}
         initialBlocks={(page.workingBlocks ?? page.blocks) as BlockNode[]}
+        initialPublished={published}
         blockTypes={[
           ...editorBlockTypes(
             t,
@@ -154,6 +165,12 @@ export default async function EditPagePage({
               filename: a.filename,
               kind: a.kind,
             })),
+            {
+              collections: collectionRows
+                .filter((collection) => collection.published)
+                .map((collection) => ({ slug: collection.slug, title: collection.title })),
+              products: productRows.map((product) => ({ slug: product.slug, name: product.name })),
+            },
           ),
           ...sectionPaletteEntries(
             t,
@@ -164,6 +181,33 @@ export default async function EditPagePage({
         ]}
         labels={editorLabels(t)}
       />
+
+      {query.saved === "help" ? (
+        <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          {t("help.admin.saved")}
+        </p>
+      ) : null}
+
+      <Card>
+        <CardHeader title={t("help.admin.file")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("help.admin.fileHint")}</p>
+          <form action={fileHelpArticleAction} className="mt-3 flex flex-wrap items-end gap-3">
+            <input type="hidden" name="pageId" value={page.id} />
+            <Field label={t("help.admin.categories")} htmlFor="help-category">
+              <Select id="help-category" name="categoryId" defaultValue={currentCategory}>
+                <option value="">{t("help.admin.uncategorise")}</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Button type="submit" variant="quiet">{t("help.admin.file")}</Button>
+          </form>
+        </CardBody>
+      </Card>
 
       <PageLifecycle
         page={{

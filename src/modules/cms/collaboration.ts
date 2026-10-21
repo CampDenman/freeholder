@@ -71,7 +71,7 @@ export const heartbeatPresence = defineService({
     const [page] = await ctx.tx
       .select({ id: pages.id })
       .from(pages)
-      .where(eq(pages.id, input.pageId))
+      .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
       .limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
     const actor = actorString(ctx.actor);
@@ -170,7 +170,7 @@ export const addComment = defineService({
     const [page] = await ctx.tx
       .select({ id: pages.id })
       .from(pages)
-      .where(eq(pages.id, input.pageId))
+      .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
       .limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
 
@@ -338,7 +338,7 @@ export const requestReview = defineService({
     const [page] = await ctx.tx
       .select({ id: pages.id })
       .from(pages)
-      .where(eq(pages.id, input.pageId))
+      .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
       .limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
     if (input.revisionId) {

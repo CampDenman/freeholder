@@ -15,23 +15,30 @@ the app are sharing that RAM.
 - `doctl` authenticated: `doctl auth init`.
 - An SSH key on your DigitalOcean account: `doctl compute ssh-key list`.
 
-## 1. Create the Spaces bucket
+## 1. Create the Spaces buckets
 
-Media must live in object storage. In the DigitalOcean console:
-**Spaces Object Storage → Create** — pick the region you'll put the droplet in,
-name the bucket, and leave file listing **restricted**.
+Media must live in object storage, and the nightly database backup (step 6)
+needs a bucket of its own. In the DigitalOcean console:
+**Spaces Object Storage → Create**, twice — pick the region you'll put the
+droplet in, and leave file listing **restricted** on both:
 
-Then create a key scoped to just that bucket:
+- a media bucket, e.g. `yourname-media`
+- a backup bucket, e.g. `yourname-backups`, with **versioning enabled** so an
+  overwritten or deleted archive can still be recovered
+
+Then create one key scoped to just those two buckets. `backup.sh` uploads with
+the same `S3_ACCESS_KEY_ID` the app uses, so a media-only key makes every
+nightly backup fail:
 
 ```bash
-doctl spaces keys create freeholder-media-rw \
-  --grants 'bucket=YOUR-BUCKET;permission=readwrite'
+doctl spaces keys create freeholder-rw \
+  --grants 'bucket=YOUR-MEDIA-BUCKET;permission=readwrite,bucket=YOUR-BACKUP-BUCKET;permission=readwrite'
 ```
 
-Scoped, not full-access: if this key ever leaks, it reaches one bucket rather
+Scoped, not full-access: if this key ever leaks, it reaches two buckets rather
 than every Space on the account. Note the secret — DigitalOcean shows it once.
 
-> The bucket must exist first. Scoping a key to a bucket that isn't there is
+> The buckets must exist first. Scoping a key to a bucket that isn't there is
 > rejected with `invalid grant`.
 
 ## 2. Create the droplet
@@ -52,10 +59,13 @@ returns; cloud-init keeps working after the API reports the droplet active.
 
 ## 3. Point the domain
 
-Create an `A` record for your domain at the droplet's IPv4 address, at whatever
-registrar or DNS host you use. **Do this before step 5** — Caddy asks Let's
-Encrypt for a certificate on first boot, and that only works once the name
-resolves to this machine.
+Create `A` records for your domain and `www` at the droplet's IPv4 address,
+at whatever registrar or DNS host you use. **Do this before step 5** — Caddy
+asks Let's Encrypt for certificates on first boot, and that only works once
+both names resolve to this machine. Requests to `www` redirect to the apex
+domain, preserving the path and query string. If `FREEHOLDER_DOMAIN` lists
+multiple hostnames, set `FREEHOLDER_PRIMARY_DOMAIN` to the single apex name
+that should receive the redirect.
 
 ## 4. Configure
 
@@ -92,9 +102,14 @@ Media is already in Spaces; this covers the database.
 ```bash
 ssh root@DROPLET_IP
 chmod +x /opt/freeholder/backup.sh
-echo '15 3 * * * root . /opt/freeholder/.env && /opt/freeholder/backup.sh' \
+echo '15 3 * * * root set -a; . /opt/freeholder/.env; set +a; /opt/freeholder/backup.sh >> /var/log/freeholder-backup.log 2>&1' \
   > /etc/cron.d/freeholder-backup
 ```
+
+`set -a` matters: a plain `. .env` sets shell variables but does not export
+them, so `backup.sh` — a child process — would see none of them and fail every
+night on its first `BACKUP_BUCKET` check, silently, because cron's output went
+nowhere. The log line is so you can see that it ran.
 
 Then work through [`verify.md`](verify.md) — including the restore rehearsal.
 A backup you have never restored is a hope, not a backup.
@@ -106,10 +121,19 @@ to prove all three recovery parts agree.
 
 ## Updating
 
+Merging to `main` publishes an image. It does not change this droplet. The
+operator pipeline — a confirmed Forgejo job, not a GitHub one, and not the
+unattended updater — is [`deploy.md`](deploy.md).
+
+Until that job is wired up, pin `FREEHOLDER_IMAGE` to
+`ghcr.io/campdenman/freeholder@sha256:<64 hex>` (the linux/amd64 digest, not
+the tag's index digest) and then:
+
 ```bash
 ssh root@DROPLET_IP 'cd /opt/freeholder && docker compose pull && docker compose up -d'
 ```
 
+`DROPLET_IP` stands in for the address you kept outside this repository.
 Migrations ship inside the image, so a release can never be newer than the
 schema it expects.
 

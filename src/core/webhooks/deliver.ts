@@ -15,6 +15,8 @@
 // with in-process listeners.
 import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/core/db";
+import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy";
+import { env } from "@/core/env";
 import { WEBHOOK_SCHEMA_VERSION } from "@/core/platform";
 import { webhookDeliveries, webhookSubscriptions } from "@/core/webhooks/schema";
 import {
@@ -23,6 +25,7 @@ import {
   SIGNATURE_HEADER,
   signPayload,
 } from "@/core/webhooks/sign";
+import { postWebhook } from "@/core/webhooks/transport";
 
 /** How long to wait for somebody else's server before giving up on a try. */
 const TIMEOUT_MS = 10_000;
@@ -162,6 +165,22 @@ async function fail(
 }
 
 async function attempt(delivery: Claimed): Promise<void> {
+  if (playgroundBlocksExternalDelivery(env())) {
+    // C1.38: no route out exists from the playground's container network, and
+    // this is the in-app twin of that — events visitors generate still
+    // enqueue deliveries, and the sweep must not turn them into POSTs.
+    // Failed outright, not backed off: retrying a disallowed delivery only
+    // delays the abandonment.
+    await db()
+      .update(webhookDeliveries)
+      .set({
+        status: "failed",
+        error: "External webhook delivery is disabled in the public playground.",
+        completedAt: sql`now()`,
+      })
+      .where(eq(webhookDeliveries.id, delivery.id));
+    return;
+  }
   const body = JSON.stringify({
     id: delivery.id,
     event: delivery.eventName,
@@ -177,30 +196,20 @@ async function attempt(delivery: Claimed): Promise<void> {
     Math.floor(Date.now() / 1000),
   );
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => {
-    controller.abort();
-  }, TIMEOUT_MS);
-
   try {
-    const response = await fetch(delivery.url, {
-      method: "POST",
-      headers: {
+    const response = await postWebhook(
+      delivery.url,
+      body,
+      {
         "content-type": "application/json",
         "user-agent": "Freeholder-Webhooks/1",
         [EVENT_HEADER]: delivery.eventName,
         [DELIVERY_HEADER]: delivery.id,
         [SIGNATURE_HEADER]: signature,
       },
-      body,
-      signal: controller.signal,
-      // A redirect is not followed on purpose: it is the ordinary way an
-      // allowed address turns into a disallowed one after the check, and a
-      // receiver that wants to move can be told to update the address.
-      redirect: "manual",
-    });
-
-    const text = await response.text().catch(() => "");
+      { timeoutMs: TIMEOUT_MS, maxResponseBytes: MAX_BODY },
+    );
+    const text = response.body;
     if (response.status >= 200 && response.status < 300) {
       await succeed(delivery, response.status, text);
     } else {
@@ -211,15 +220,8 @@ async function attempt(delivery: Claimed): Promise<void> {
       });
     }
   } catch (error) {
-    const message =
-      error instanceof Error && error.name === "AbortError"
-        ? `No answer within ${TIMEOUT_MS / 1000} seconds.`
-        : error instanceof Error
-          ? error.message
-          : String(error);
+    const message = error instanceof Error ? error.message : String(error);
     await fail(delivery, { error: message });
-  } finally {
-    clearTimeout(timer);
   }
 }
 

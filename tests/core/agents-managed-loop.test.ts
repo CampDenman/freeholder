@@ -7,7 +7,8 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
-import { agentRuns, agentSteps, agentTasks } from "@/core/agents/schema";
+import { agentTasks } from "@/core/agents/schema";
+import { runSteps, runs } from "@/core/runs/schema";
 import { createContact, getContact } from "@/core/contacts/service";
 import {
   connectAgentRuntime,
@@ -142,12 +143,12 @@ describe.runIf(hasDatabase)("the managed agent loop", { timeout: 60_000 }, () =>
       "Renamed Rae to Rae Lane.",
     );
 
-    const [run] = await db().select().from(agentRuns).where(eq(agentRuns.taskId, task.id));
+    const [run] = await db().select().from(runs).where(eq(runs.subjectId, task.id));
     expect(run?.status).toBe("done");
     expect(run?.stopReason).toBe("done");
     expect(run?.tokensIn).toBe(100);
     expect(run?.tokensOut).toBe(20);
-    const steps = await db().select().from(agentSteps).where(eq(agentSteps.runId, run!.id));
+    const steps = await db().select().from(runSteps).where(eq(runSteps.runId, run!.id));
     const kinds = steps.map((step) => step.kind).sort();
     expect(kinds).toContain("message");
     expect(kinds).toContain("tool_call");
@@ -180,7 +181,7 @@ describe.runIf(hasDatabase)("the managed agent loop", { timeout: 60_000 }, () =>
     expect((await getTask.call({ id: task.id }, OWNER))?.status).toBe("waiting_approval");
     const [approval] = await listApprovals.call({ status: "pending" }, OWNER);
     expect(approval?.serviceName).toBe("contacts.update");
-    const [run] = await db().select().from(agentRuns).where(eq(agentRuns.taskId, task.id));
+    const [run] = await db().select().from(runs).where(eq(runs.subjectId, task.id));
     expect(run?.status).toBe("done");
   });
 
@@ -219,9 +220,9 @@ describe.runIf(hasDatabase)("the managed agent loop", { timeout: 60_000 }, () =>
     // Failure is a state, not an exception (§40): the bounded run stops with
     // its reason, the task goes back to the queue, the tick retries it, and
     // after the attempt ceiling it parks as needs_attention — all visible.
-    const runs = await db().select().from(agentRuns).where(eq(agentRuns.taskId, task.id));
-    expect(runs.length).toBe(tick.runs);
-    expect(runs.every((run) => run.status === "failed" && run.stopReason === "timeout")).toBe(
+    const runRows = await db().select().from(runs).where(eq(runs.subjectId, task.id));
+    expect(runRows.length).toBe(tick.runs);
+    expect(runRows.every((run) => run.status === "failed" && run.stopReason === "timeout")).toBe(
       true,
     );
     const [row] = await db().select().from(agentTasks).where(eq(agentTasks.id, task.id));
@@ -240,8 +241,8 @@ describe.runIf(hasDatabase)("the managed agent loop", { timeout: 60_000 }, () =>
 
     await runManagedAgentWork();
     expect((await getTask.call({ id: task.id }, OWNER))?.status).toBe("done");
-    const [run] = await db().select().from(agentRuns).where(eq(agentRuns.taskId, task.id));
-    const steps = await db().select().from(agentSteps).where(eq(agentSteps.runId, run!.id));
+    const [run] = await db().select().from(runs).where(eq(runs.subjectId, task.id));
+    const steps = await db().select().from(runSteps).where(eq(runSteps.runId, run!.id));
     const toolResult = steps.find((step) => step.kind === "tool_result");
     expect(JSON.stringify(toolResult?.output)).toContain("No tool called cms_updatePage");
   });

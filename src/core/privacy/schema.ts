@@ -13,6 +13,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { contacts } from "@/core/contacts/schema";
+import { assets } from "@/core/media/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 /** Immutable proof of one consent decision; current state is derived history. */
@@ -175,6 +176,105 @@ export const dataRequestArtifacts = pgTable(
       "data_request_artifacts_expiry_after_creation",
       sql`${t.expiresAt} > ${t.createdAt}`,
     ),
+  ],
+);
+
+
+export const MEDIA_CONSENT_STATES = ["granted", "withdrawn"] as const;
+export const MEDIA_CONSENT_METHODS = [
+  "contract",
+  "form",
+  "email",
+  "written",
+  "verbal",
+  "other",
+] as const;
+export const MEDIA_CONSENT_SURFACES = [
+  "project",
+  "portfolio",
+  "service",
+  "social",
+  "advertising",
+] as const;
+
+/**
+ * Permission to publish media of an identifiable person or their property
+ * (MASTER.md §4.18, C8.16).
+ *
+ * The same shape `consent_records` uses above, and for the same reason:
+ * immutable proof of one decision, with the current state derived from the
+ * history. A withdrawal is a *new row*, never an edit — which matters more
+ * here than almost anywhere, because "we published lawfully from March until
+ * they asked us to stop in September" is precisely the record a clinic or a
+ * surgeon needs to keep, and an implementation that clears the old columns
+ * destroys the evidence at the exact moment it starts mattering.
+ *
+ * Scoped to the work it covers rather than to the person as a whole. Somebody
+ * who agreed to one before-and-after has not agreed to every photograph of
+ * them the business will ever hold, and a model that cannot express that
+ * difference will eventually be used as though they had.
+ */
+export const mediaConsents = pgTable(
+  "media_consents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    /** What it covers: `project` and the project id. */
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: uuid("subject_id").notNull(),
+    state: text("state", { enum: MEDIA_CONSENT_STATES }).notNull(),
+    method: text("method", { enum: MEDIA_CONSENT_METHODS }).notNull(),
+    /** Where it may appear. A grant for a portfolio is not a grant for ads. */
+    surfaces: text("surfaces").array().notNull().default(sql`ARRAY['project']::text[]`),
+    note: text("note"),
+    /** The signed form, where there is one. Provenance for the permission. */
+    evidenceAssetId: uuid("evidence_asset_id").references(() => assets.id, {
+      onDelete: "set null",
+    }),
+    /** When the decision took effect. Not when somebody typed it in. */
+    effectiveAt: timestamp("effective_at", { withTimezone: true }).notNull(),
+    /**
+     * When a grant lapses, if it was given for a period.
+     *
+     * Consent with an end date is normal in this domain and unrepresentable
+     * without a column for it — and consent that has quietly lapsed reads
+     * exactly like consent that still holds, which is the failure worth
+     * designing against.
+     */
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    /**
+     * Who recorded it: `user:<id>`, `agent:<key-name>`, or `system`.
+     *
+     * Text rather than a users foreign key, following `audit_log`: an actor is
+     * not always a person, and typing the column uuid would assert something
+     * untrue of every fact an agent or a scheduled job records.
+     */
+    recordedBy: text("recorded_by"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    index("media_consents_subject_idx").on(
+      t.subjectKind,
+      t.subjectId,
+      t.effectiveAt,
+    ),
+    index("media_consents_contact_idx").on(t.contactId, t.effectiveAt),
+    check(
+      "media_consents_expiry_after_effective",
+      sql`${t.expiresAt} is null or ${t.expiresAt} > ${t.effectiveAt}`,
+    ),
+    // A withdrawal does not expire; only a grant has a period.
+    check(
+      "media_consents_withdrawal_has_no_expiry",
+      sql`${t.state} <> 'withdrawn' or ${t.expiresAt} is null`,
+    ),
+    check(
+      "media_consents_surfaces",
+      sql`${t.surfaces} <@ ARRAY['project','portfolio','service','social','advertising']::text[]`,
+    ),
+    check("media_consents_surfaces_present", sql`array_length(${t.surfaces}, 1) >= 1`),
   ],
 );
 

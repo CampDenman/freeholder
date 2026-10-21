@@ -53,5 +53,6 @@ describe("Tier-1 pair round-trip contract (C3.19)", () => {
 describe("platform version (C3.20)", () => {
   it("is semver", () => {
     expect(PLATFORM_VERSION).toMatch(/^\d+\.\d+\.\d+/);
+    expect(PLATFORM_VERSION).not.toBe("0.0.0");
   });
 });

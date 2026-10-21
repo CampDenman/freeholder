@@ -30,7 +30,7 @@ import {
   assertSchedule,
   assertTimezone,
   nextOccurrence,
-  scheduleZone,
+  scheduleZoneIn,
 } from "@/core/agents/cron";
 import {
   defineService,
@@ -92,7 +92,7 @@ export const setPlaybookSchedule = defineService({
     if (!playbook) throw new ServiceError("not_found", "No such playbook.");
 
     if (input.timezone) assertTimezone(input.timezone);
-    const timezone = input.timezone ?? (await scheduleZone(playbook));
+    const timezone = input.timezone ?? (await scheduleZoneIn(ctx, playbook));
     assertSchedule(input.cron, timezone);
 
     const [updated] = await ctx.tx
@@ -150,7 +150,7 @@ async function tick(
   playbook: typeof agentPlaybooks.$inferSelect,
   now: Date,
 ): Promise<PlaybookTick> {
-  const timezone = await scheduleZone(playbook);
+  const timezone = await scheduleZoneIn(ctx, playbook);
   const due = playbook.nextRunAt ?? now;
   let outcome: PlaybookTick["outcome"] = "started";
   let detail: string | undefined;

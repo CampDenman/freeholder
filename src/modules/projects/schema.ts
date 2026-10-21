@@ -120,14 +120,13 @@ export const projects = pgTable(
     publishedAt: timestamp("published_at", { withTimezone: true }),
     /** Untyped CMS page id: the operational module still installs without CMS. */
     publicPageId: uuid("public_page_id"),
-    /** Permission to publish contact-linked client work (MASTER.md §4.5). */
-    clientConsentGivenAt: timestamp("client_consent_given_at", {
-      withTimezone: true,
-    }),
-    clientConsentMethod: text("client_consent_method", {
-      enum: PROJECT_CONSENT_METHODS,
-    }),
-    clientConsentNote: text("client_consent_note"),
+    /*
+     * Permission to publish contact-linked client work used to live here as
+     * three nullable columns (MASTER.md §4.5). It is a ledger now, in
+     * `core/privacy`'s `media_consents` (§4.18, C8.16): revoking used to set
+     * these back to NULL, which destroyed the proof that the business had ever
+     * published lawfully — at the exact moment that proof starts mattering.
+     */
     /** Compare-and-swap token for block-editor autosave. */
     version: integer("version").notNull().default(1),
     createdAt: createdAtColumn(),
@@ -154,14 +153,6 @@ export const projects = pgTable(
     check(
       "projects_publication_status",
       sql`${t.publicationStatus} in ('draft','published')`,
-    ),
-    check(
-      "projects_consent_complete",
-      sql`(${t.clientConsentGivenAt} is null and ${t.clientConsentMethod} is null) or (${t.clientConsentGivenAt} is not null and ${t.clientConsentMethod} is not null)`,
-    ),
-    check(
-      "projects_consent_method",
-      sql`${t.clientConsentMethod} is null or ${t.clientConsentMethod} in ('contract','email','written','verbal','other')`,
     ),
     check("projects_version_positive", sql`${t.version} > 0`),
   ],
@@ -252,6 +243,7 @@ export const PROJECT_FILE_ROLES = [
   "gallery",
   "before",
   "after",
+  "series",
   "process",
   "detail",
   "document",
@@ -278,6 +270,14 @@ export const projectFiles = pgTable(
     role: text("role", { enum: PROJECT_FILE_ROLES }).notNull().default("gallery"),
     /** Ties a `before` to its `after`. Null for everything else. */
     pairKey: text("pair_key"),
+    /**
+     * Ties one step to the rest of its progress series. Null for everything
+     * else. Orthodontic tracking and a recovery timeline are ordered over
+     * time, which a pair cannot express.
+     */
+    seriesKey: text("series_key"),
+    /** When the picture was taken, not when it was uploaded (§4.18). */
+    capturedAt: timestamp("captured_at", { withTimezone: true }),
     caption: text("caption"),
     position: integer("position").notNull().default(0),
     createdAt: createdAtColumn(),
@@ -294,6 +294,13 @@ export const projectFiles = pgTable(
       "project_files_pairing",
       sql`(${t.role} in ('before','after')) = (${t.pairKey} is not null)`,
     ),
+    check(
+      "project_files_series",
+      sql`(${t.role} = 'series') = (${t.seriesKey} is not null)`,
+    ),
+    index("project_files_series_idx")
+      .on(t.projectId, t.seriesKey, t.capturedAt)
+      .where(sql`${t.seriesKey} is not null`),
   ],
 );
 

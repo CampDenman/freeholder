@@ -83,6 +83,7 @@ export const tasks = pgTable(
   "tasks",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    trashedAt: timestamp("trashed_at", { withTimezone: true }),
     /** What it is about, or neither half for a task about nothing. */
     subjectType: text("subject_type", { enum: TASK_SUBJECTS }),
     subjectId: uuid("subject_id"),
@@ -141,6 +142,7 @@ export const tasks = pgTable(
     updatedAt: updatedAtColumn(),
   },
   (t) => [
+    index("tasks_trash_idx").on(t.trashedAt).where(sql`${t.trashedAt} is not null`),
     // The work list itself: what is open, soonest first.
     index("tasks_open_idx").on(t.status, t.dueAt),
     index("tasks_assignee_idx").on(t.assigneeUserId, t.status, t.dueAt),

@@ -18,13 +18,16 @@ import {
   createFromTemplate,
   createPage,
   createSectionLocale,
+  deleteHelpCategory,
   deleteSection,
   detachLayout,
   detachSection,
   ensureDefaults,
+  fileHelpArticle,
   rejoinLayout,
   resetTemplate,
   saveAsSection,
+  saveHelpCategory,
   mergePage,
   publishPage,
   restoreRevision,
@@ -44,6 +47,7 @@ import {
   schedulePage,
   snapshotRevision,
 } from "@/modules/cms/lifecycle";
+import { listCollections, listVisibleProducts } from "@/modules/catalog/service";
 import {
   addComment,
   decideReview,
@@ -433,6 +437,70 @@ export async function setPagePublishedAction(form: FormData): Promise<void> {
   applyInvalidation(invalidationPlan({ kind: "published", pageId: id, slug: page.slug }));
 }
 
+/**
+ * Publish the page's current draft without touching its live status first
+ * (audit gap 8). The editor saves the draft before calling this, so the
+ * publish validates exactly what the owner sees; `cms.publishPage` copies the
+ * draft over the published tree in one transaction and the public page never
+ * comes down.
+ */
+export async function publishPageNowAction(
+  id: string,
+  expectedVersion: number,
+): Promise<SaveResult> {
+  try {
+    const page = await publishPage.call({ id, published: true, expectedVersion }, await currentActor());
+    applyInvalidation(invalidationPlan({ kind: "published", pageId: id, slug: page.slug }));
+    return { version: page.version };
+  } catch (error) {
+    const shown = present(error);
+    if (!shown.conflict) return shown;
+    try {
+      const current = await reloadWorkingDraft.call({ id }, await currentActor());
+      return { ...shown, serverVersion: current.version };
+    } catch {
+      return shown;
+    }
+  }
+}
+
+/**
+ * The collections a store-section picker can offer, for the editor's
+ * on-canvas collection swap. Refusals answer empty rather than alarming the
+ * autosave-adjacent flow that raised the picker.
+ */
+export async function listCollectionsForEditorAction(): Promise<
+  { slug: string; title: string }[]
+> {
+  try {
+    const rows = await listCollections.call({}, await currentActor());
+    return rows.map((row) => ({ slug: row.slug, title: row.title }));
+  } catch (error) {
+    console.error("catalog listing for the editor failed", error);
+    return [];
+  }
+}
+
+/**
+ * The products a product-row picker can offer: the live storefront
+ * projection, so the picker shows exactly what the row could render.
+ */
+export async function listProductsForEditorAction(): Promise<
+  { slug: string; title: string; detail: string | null }[]
+> {
+  try {
+    const rows = await listVisibleProducts.call({ limit: 200 }, await currentActor());
+    return rows.map((row) => ({
+      slug: row.slug,
+      title: row.name,
+      detail: row.subtitle,
+    }));
+  } catch (error) {
+    console.error("catalog listing for the editor failed", error);
+    return [];
+  }
+}
+
 export async function restoreRevisionAction(form: FormData): Promise<void> {
   const revisionId = text(form, "revisionId");
   await restoreRevision.call({ revisionId }, await currentActor());
@@ -512,4 +580,58 @@ export async function nameRevisionAction(form: FormData): Promise<void> {
 export async function ensureDefaultsAction(): Promise<void> {
   await ensureDefaults.call({}, await currentActor());
   revalidatePath("/", "layout");
+}
+
+function helpRefused(error: unknown, fallback: string, path: string): never {
+  const message = error instanceof ServiceError ? error.message : fallback;
+  redirect(`${path}?error=${encodeURIComponent(message)}`);
+}
+
+export async function saveHelpCategoryAction(form: FormData): Promise<void> {
+  try {
+    await saveHelpCategory.call(
+      {
+        ...(text(form, "id") ? { id: text(form, "id") } : {}),
+        slug: text(form, "slug"),
+        name: text(form, "name"),
+        description: text(form, "description") || null,
+        locale: text(form, "locale") || "en",
+        position: Number(text(form, "position") || "0"),
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    helpRefused(error, "That help category could not be saved.", "/admin/pages");
+  }
+  revalidatePath("/admin/pages");
+  redirect("/admin/pages?saved=help");
+}
+
+export async function deleteHelpCategoryAction(form: FormData): Promise<void> {
+  if (text(form, "confirm") !== "yes") {
+    redirect("/admin/pages?error=" + encodeURIComponent("Confirm that this category should be removed."));
+  }
+  try {
+    await deleteHelpCategory.call({ id: text(form, "id") }, await currentActor());
+  } catch (error) {
+    helpRefused(error, "That help category could not be removed.", "/admin/pages");
+  }
+  revalidatePath("/admin/pages");
+  redirect("/admin/pages?saved=help");
+}
+
+export async function fileHelpArticleAction(form: FormData): Promise<void> {
+  const pageId = text(form, "pageId");
+  const category = text(form, "categoryId");
+  try {
+    await fileHelpArticle.call(
+      { pageId, categoryId: category === "" ? null : category },
+      await currentActor(),
+    );
+  } catch (error) {
+    helpRefused(error, "That page could not be filed in the help centre.", `/admin/pages/${pageId}`);
+  }
+  revalidatePath(`/admin/pages/${pageId}`);
+  revalidatePath("/admin/pages");
+  redirect(`/admin/pages/${pageId}?saved=help`);
 }

@@ -53,7 +53,7 @@ export function RevisionList({
             name="name"
             required
             placeholder={labels.namePlaceholder}
-            className="rounded-md border border-rule bg-surface px-3 py-2 text-ink"
+            className="rounded-md border border-rule-strong bg-surface px-3 py-2 text-ink"
           />
         </label>
         <button
@@ -87,7 +87,7 @@ export function RevisionList({
                     required
                     aria-label={labels.name}
                     placeholder={labels.namePlaceholder}
-                    className="w-36 rounded-md border border-rule bg-surface px-2 py-1 text-xs text-ink"
+                    className="w-36 rounded-md border border-rule-strong bg-surface px-2 py-1 text-xs text-ink"
                   />
                 </form>
               )}

@@ -40,11 +40,64 @@ export interface AssetChoice {
   kind?: "image" | "video" | "doc" | "audio";
 }
 
+/** One entry the collection picker can offer — a published collection. */
+export interface CollectionChoice {
+  slug: string;
+  title: string;
+}
+
+/** One entry the product picker can offer — an active product. */
+export interface ProductChoice {
+  slug: string;
+  name: string;
+}
+
+/**
+ * The choice lists entity-pick fields draw from. Every editor screen passes
+ * what it can resolve; a missing list simply renders that field's "None"
+ * entry alone, the same as an empty asset library.
+ */
+export interface EntityChoices {
+  collections?: CollectionChoice[];
+  products?: ProductChoice[];
+}
+
 function translateField(
   t: Translate,
   field: FieldDescriptor,
   assets: AssetChoice[],
+  entities: EntityChoices = {},
 ): EditorField {
+  if (field.kind === "collection") {
+    return {
+      name: field.name,
+      kind: field.kind,
+      required: field.required,
+      label: label(t, `cms.field.${field.name}`, field.name),
+      choices: [
+        { value: "", label: t("cms.field.noCollection") },
+        ...(entities.collections ?? []).map((collection) => ({
+          value: collection.slug,
+          label: collection.title,
+        })),
+      ],
+    };
+  }
+  if (field.kind === "product") {
+    return {
+      name: field.name,
+      kind: field.kind,
+      required: field.required,
+      label: label(t, `cms.field.${field.name}`, field.name),
+      choices: [
+        { value: "", label: t("cms.field.noProduct") },
+        ...(entities.products ?? []).map((product) => ({
+          value: product.slug,
+          label: product.name,
+        })),
+      ],
+    };
+  }
   return {
     name: field.name,
     kind: field.kind,
@@ -67,7 +120,8 @@ function translateField(
             value: choice.value,
             label: label(t, choice.labelKey, choice.value),
           })),
-    itemFields: field.itemFields?.map((sub) => translateField(t, sub, assets)),
+    itemFields: field.itemFields?.map((sub) => translateField(t, sub, assets, entities)),
+    ...(field.kind === "asset" && field.assetKind ? { assetKind: field.assetKind } : {}),
   };
 }
 
@@ -75,13 +129,14 @@ export function editorBlockTypes(
   t: Translate,
   context: "page" | "chrome" | "email",
   assets: AssetChoice[] = [],
+  entities: EntityChoices = {},
 ): EditorBlockType[] {
   return paletteFor(context).map((entry) => ({
     type: entry.type,
     label: label(t, entry.labelKey, entry.type),
     container: entry.container,
     starter: entry.starter,
-    fields: entry.fields.map((field) => translateField(t, field, assets)),
+    fields: entry.fields.map((field) => translateField(t, field, assets, entities)),
   }));
 }
 
@@ -91,6 +146,15 @@ export function editorLabels(t: Translate): EditorLabels {
       region: t("cms.editor.preview"),
       desktop: t("cms.editor.desktop"),
       mobile: t("cms.editor.mobile"),
+      replaceImage: t("cms.editor.replaceImage"),
+      noImage: t("cms.editor.noImage"),
+      noAssets: t("cms.editor.noAssets"),
+      replaceCollection: t("cms.editor.replaceCollection"),
+      noCollection: t("cms.editor.noCollection"),
+      noCollections: t("cms.editor.noCollections"),
+      replaceProduct: t("cms.editor.replaceProduct"),
+      noProduct: t("cms.editor.noProduct"),
+      noProducts: t("cms.editor.noProducts"),
     },
     addBlock: t("cms.editor.addBlock"),
     cancel: t("common.cancel"),
@@ -112,6 +176,56 @@ export function editorLabels(t: Translate): EditorLabels {
     slash: t("cms.editor.slash"),
     undo: t("cms.editor.undo"),
     redo: t("cms.editor.redo"),
+    history: t("cms.editor.history"),
+    historyCurrent: t("cms.editor.historyCurrent"),
+    historyAdd: t("cms.editor.historyAdd", { label: "{label}" }),
+    historyRemove: t("cms.editor.historyRemove", { label: "{label}" }),
+    historyDuplicate: t("cms.editor.historyDuplicate", { label: "{label}" }),
+    historyMove: t("cms.editor.historyMove", { label: "{label}" }),
+    historyEdit: t("cms.editor.historyEdit", { label: "{label}" }),
+    focusMode: t("cms.editor.focusMode"),
+    exitFocus: t("cms.editor.exitFocus"),
+    showOutlines: t("cms.editor.showOutlines"),
+    hideOutlines: t("cms.editor.hideOutlines"),
+    zoom: t("cms.editor.zoom"),
+    chooseCollection: t("cms.editor.chooseCollection"),
+    chooseProducts: t("cms.editor.chooseProducts"),
+    noCollections: t("cms.editor.noCollections"),
+    noProducts: t("cms.editor.noProducts"),
+    pickedProducts: t("cms.editor.pickedProducts", { count: "{count}" }),
+    done: t("common.done"),
+    altText: t("cms.editor.altText"),
+    altApply: t("cms.editor.altApply"),
+    media: {
+      upload: t("cms.editor.upload"),
+      // {percent} survives as a literal; the picker fills it in as parts land.
+      uploading: t("cms.editor.uploading", { percent: "{percent}" }),
+      uploadFailed: t("cms.editor.uploadFailed"),
+      cropTitle: t("cms.editor.crop.title"),
+      focalPoint: t("cms.editor.crop.focalPoint", { x: "{x}", y: "{y}" }),
+      focalHint: t("cms.editor.crop.focalHint"),
+      cropToggle: t("cms.editor.crop.toggle"),
+      cropArea: t("cms.editor.crop.area"),
+      corners: {
+        nw: t("cms.editor.crop.cornerNw"),
+        ne: t("cms.editor.crop.cornerNe"),
+        sw: t("cms.editor.crop.cornerSw"),
+        se: t("cms.editor.crop.cornerSe"),
+      },
+      shape: t("cms.field.aspect"),
+      aspects: {
+        original: t("cms.choice.aspect.original"),
+        wide: t("cms.choice.aspect.wide"),
+        landscape: t("cms.choice.aspect.landscape"),
+        square: t("cms.choice.aspect.square"),
+        portrait: t("cms.choice.aspect.portrait"),
+      },
+      preview: t("cms.editor.crop.preview"),
+      reset: t("cms.editor.crop.reset"),
+      apply: t("cms.editor.crop.apply"),
+      loading: t("cms.editor.crop.loading"),
+      unavailable: t("cms.editor.crop.unavailable"),
+    },
     duplicate: t("cms.editor.duplicate"),
     copy: t("cms.editor.copy"),
     paste: t("cms.editor.paste"),
@@ -125,6 +239,19 @@ export function editorLabels(t: Translate): EditorLabels {
     saveAsSection: t("cms.editor.saveAsSection"),
     detachSection: t("cms.editor.detachSection"),
     sectionName: t("cms.editor.sectionName"),
+    live: t("cms.editor.live"),
+    draft: t("cms.editor.draft"),
+    publishChanges: t("cms.editor.publishChanges"),
+    publishing: t("cms.editor.publishing"),
+    publishFailed: t("cms.editor.publishFailed"),
+    // The placeholders survive formatting as literals — the client fills them
+    // in once the moved block's new position is known (same pattern as
+    // media.uploadProgress).
+    movedTo: t("cms.editor.movedTo", {
+      label: "{label}",
+      position: "{position}",
+      total: "{total}",
+    }),
     a11y: {
       title: t("cms.a11y.title"),
       ok: t("cms.a11y.ok"),
@@ -138,6 +265,8 @@ export function editorLabels(t: Translate): EditorLabels {
       htmlImage: t("cms.a11y.htmlImage"),
       htmlLandmarks: t("cms.a11y.htmlLandmarks"),
       videoMissing: t("cms.a11y.videoMissing"),
+      popupH1: t("cms.a11y.popupH1"),
+      popupRawHtml: t("cms.a11y.popupRawHtml"),
     },
   };
 }

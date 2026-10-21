@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Locale workflow on top of i18n (C2.16): machine drafts and SEO completeness.
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError } from "@/core/service";
 import { getTranslation, setTranslation } from "@/core/i18n/service";
@@ -137,7 +137,11 @@ export const draftPageTranslation = defineService({
   }),
   output: translationRow,
   handler: async (input, ctx) => {
-    const [page] = await ctx.tx.select().from(pages).where(eq(pages.id, input.pageId)).limit(1);
+    const [page] = await ctx.tx
+      .select()
+      .from(pages)
+      .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
+      .limit(1);
     if (!page) throw new ServiceError("not_found", "That page is not on this site.");
     const existing = await ctx.call(getTranslation, {
       entityType: "page",
@@ -194,7 +198,8 @@ export const pageTranslationReport = defineService({
         slug: pages.slug,
         seo: pages.seo,
       })
-      .from(pages);
+      .from(pages)
+      .where(isNull(pages.trashedAt));
     const rows = await ctx.tx
       .select({
         entityId: entityTranslations.entityId,

@@ -10,8 +10,12 @@ import { notFound } from "next/navigation";
 import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primitives";
 import { listAssets } from "@/core/media/service";
 import { listContacts } from "@/core/contacts/service";
-import { listProducts } from "@/modules/catalog/service";
+import { listProducts, listCollections } from "@/modules/catalog/service";
 import { getProject } from "@/modules/projects/service";
+import {
+  mediaConsentHistory,
+  mediaConsentState,
+} from "@/core/privacy/media-consent";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { domainOrNull } from "../../../read-helpers";
@@ -56,7 +60,7 @@ const TASK_TONES: Record<string, Tone> = {
 
 const STATUSES = ["enquiry", "quoted", "active", "on_hold", "complete", "cancelled"];
 const LINK_KINDS = ["quote", "contract", "booking", "invoice", "rental", "form_submission"];
-const FILE_ROLES = ["hero", "gallery", "before", "after", "process", "detail", "document"];
+const FILE_ROLES = ["hero", "gallery", "before", "after", "series", "process", "detail", "document"];
 const CONSENT_METHODS = ["contract", "email", "written", "verbal", "other"];
 const TESTIMONIAL_STATUSES = ["draft", "published", "withdrawn"];
 
@@ -78,14 +82,27 @@ export default async function ProjectPage({
 }) {
   const actor = await requireStaffActor("projects");
   const { id } = await params;
-  const [t, project, query, library, services, people] = await Promise.all([
-    getT(),
-    domainOrNull(getProject.call({ id }, actor)),
-    searchParams,
-    domainOrNull(listAssets.call({ kind: "image", limit: 500 }, actor)),
-    domainOrNull(listProducts.call({ kind: "service", limit: 500 }, actor)),
-    domainOrNull(listContacts.call({ limit: 500 }, actor)),
-  ]);
+  // Consent is a ledger now (C8.16), so the page asks what currently stands
+  // rather than reading a column that a revoke would have blanked.
+  const consent = await mediaConsentState
+    .call({ subjectKind: "project", subjectId: id }, actor)
+    .catch(() => ({ live: false, reason: "none" as const, decision: null }));
+  // Every decision anybody made, because a permission that was given and later
+  // taken back is two facts about this work, not one state.
+  const consentHistory = await mediaConsentHistory
+    .call({ subjectKind: "project", subjectId: id }, actor)
+    .catch(() => []);
+  const [t, project, query, library, services, people, allProducts, publishedCollections] =
+    await Promise.all([
+      getT(),
+      domainOrNull(getProject.call({ id }, actor)),
+      searchParams,
+      domainOrNull(listAssets.call({ kind: "image", limit: 500 }, actor)),
+      domainOrNull(listProducts.call({ kind: "service", limit: 500 }, actor)),
+      domainOrNull(listContacts.call({ limit: 500 }, actor)),
+      domainOrNull(listProducts.call({ status: "active", limit: 500 }, actor)),
+      domainOrNull(listCollections.call({}, actor)),
+    ]);
   if (!project) notFound();
   const seo = project.seo;
   const imageAssets = library?.rows ?? [];
@@ -154,11 +171,11 @@ export default async function ProjectPage({
           {project.contactId ? (
             <div className="grid max-w-prose gap-3 rounded-md border border-rule p-3">
               <p className="text-sm font-semibold">{t("projects.caseStudy.clientConsent")}</p>
-              {project.clientConsentGivenAt ? (
+              {consent.live ? (
                 <div className="flex flex-wrap items-center gap-3 text-sm">
                   <Pill tone="success">{t("projects.caseStudy.consentRecorded")}</Pill>
                   <span className="text-ink-muted">
-                    {t(`projects.consent.${project.clientConsentMethod}`)}
+                    {t(`projects.consent.${consent.decision!.method}`)}
                   </span>
                   <form action={projectConsentAction} className="ms-auto">
                     <input type="hidden" name="id" value={project.id} />
@@ -172,9 +189,16 @@ export default async function ProjectPage({
                 <form action={projectConsentAction} className="grid gap-3 sm:grid-cols-2">
                   <input type="hidden" name="id" value={project.id} />
                   <input type="hidden" name="intent" value="record" />
+                  {consent.reason === "withdrawn" || consent.reason === "lapsed" ? (
+                    // Never-given, withdrawn and lapsed all block publishing,
+                    // but an owner needs to know which of the three this is.
+                    <p className="text-sm text-ink-muted sm:col-span-2">
+                      {t(`projects.caseStudy.consent${consent.reason === "withdrawn" ? "Withdrawn" : "Lapsed"}`)}
+                    </p>
+                  ) : null}
                   <label className="grid gap-1 text-sm">
                     <span className="text-ink-muted">{t("projects.caseStudy.consentMethod")}</span>
-                    <select name="method" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                    <select name="method" required className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                       {CONSENT_METHODS.map((method) => (
                         <option key={method} value={method}>{t(`projects.consent.${method}`)}</option>
                       ))}
@@ -182,11 +206,52 @@ export default async function ProjectPage({
                   </label>
                   <label className="grid gap-1 text-sm">
                     <span className="text-ink-muted">{t("projects.caseStudy.consentNote")}</span>
-                    <input name="note" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+                    <input name="note" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span className="text-ink-muted">{t("projects.caseStudy.consentExpiry")}</span>
+                    <input
+                      type="date"
+                      name="expiresAt"
+                      className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
+                    />
                   </label>
                   <div><Button type="submit" variant="quiet">{t("projects.caseStudy.recordConsent")}</Button></div>
                 </form>
               )}
+              {consentHistory.length ? (
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-ink-muted">
+                    {t("projects.caseStudy.consentHistory", { count: consentHistory.length })}
+                  </summary>
+                  <ul className="mt-2 grid list-none gap-1 p-0">
+                    {consentHistory.map((decision) => (
+                      <li key={decision.id} className="flex flex-wrap items-baseline gap-2 text-xs">
+                        <Pill tone={decision.state === "granted" ? "success" : "neutral"}>
+                          {t(`projects.caseStudy.consent.${decision.state}`)}
+                        </Pill>
+                        <span className="text-ink-muted">
+                          {t(`projects.consent.${decision.method}`)}
+                        </span>
+                        <time
+                          dateTime={decision.effectiveAt.toISOString()}
+                          className="font-mono text-ink-muted tabular-nums"
+                        >
+                          {decision.effectiveAt.toISOString().slice(0, 10)}
+                        </time>
+                        {decision.expiresAt ? (
+                          <span className="text-ink-muted">
+                            {t("projects.caseStudy.consentUntil", {
+                              date: decision.expiresAt.toISOString().slice(0, 10),
+                            })}
+                          </span>
+                        ) : null}
+                        {decision.note ? <span className="text-ink-muted">{decision.note}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
             </div>
           ) : null}
         </CardBody>
@@ -199,7 +264,7 @@ export default async function ProjectPage({
             <input type="hidden" name="id" value={project.id} />
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.cover")}</span>
-              <select name="coverAssetId" defaultValue={project.coverAssetId ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="coverAssetId" defaultValue={project.coverAssetId ?? ""} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 <option value="">{t("projects.caseStudy.noCover")}</option>
                 {imageAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.filename}</option>)}
               </select>
@@ -210,11 +275,11 @@ export default async function ProjectPage({
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.seoTitle")}</span>
-              <input name="seoTitle" maxLength={60} defaultValue={seo.title ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="seoTitle" maxLength={60} defaultValue={seo.title ?? ""} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.seoDescription")}</span>
-              <input name="seoDescription" maxLength={155} defaultValue={seo.description ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="seoDescription" maxLength={155} defaultValue={seo.description ?? ""} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <div><Button type="submit" variant="quiet">{t("projects.action.save")}</Button></div>
           </form>
@@ -233,6 +298,12 @@ export default async function ProjectPage({
               t,
               "page",
               imageAssets.map((asset) => ({ id: asset.id, filename: asset.filename, kind: asset.kind })),
+              {
+                collections: (publishedCollections ?? [])
+                  .filter((collection) => collection.published)
+                  .map((collection) => ({ slug: collection.slug, title: collection.title })),
+                products: (allProducts ?? []).map((row) => ({ slug: row.slug, name: row.name })),
+              },
             ).filter((entry) => entry.type !== "projectCaseStudy")}
             labels={editorLabels(t)}
           />
@@ -279,7 +350,7 @@ export default async function ProjectPage({
               <span className="text-ink-muted">{t("projects.field.kind")}</span>
               <select
                 name="kind"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {LINK_KINDS.map((kind) => (
                   <option key={kind} value={kind}>
@@ -293,14 +364,14 @@ export default async function ProjectPage({
               <input
                 name="targetId"
                 required
-                className="w-80 rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs"
+                className="w-80 rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-xs"
               />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.field.label")}</span>
               <input
                 name="label"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <Button type="submit" variant="quiet">
@@ -338,7 +409,7 @@ export default async function ProjectPage({
                     <select
                       name="status"
                       defaultValue={task.status}
-                      className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                      className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                     >
                       {["todo", "doing", "blocked", "done"].map((status) => (
                         <option key={status} value={status}>
@@ -368,7 +439,7 @@ export default async function ProjectPage({
               <input
                 name="title"
                 required
-                className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -376,7 +447,7 @@ export default async function ProjectPage({
               <input
                 type="date"
                 name="dueOn"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <Button type="submit" variant="quiet">
@@ -400,6 +471,19 @@ export default async function ProjectPage({
                     <Pill tone="neutral">{t(`projects.file.${file.role}`)}</Pill>
                     <span>{asset?.filename ?? file.assetId}</span>
                     {file.pairKey ? <span className="text-ink-muted">{file.pairKey}</span> : null}
+                    {file.seriesKey ? (
+                      <span className="text-ink-muted">{file.seriesKey}</span>
+                    ) : null}
+                    {file.capturedAt ? (
+                      // The date it was taken, which is what the series is
+                      // ordered by — not the date somebody got round to filing.
+                      <time
+                        dateTime={file.capturedAt.toISOString()}
+                        className="font-mono text-xs text-ink-muted tabular-nums"
+                      >
+                        {file.capturedAt.toISOString().slice(0, 10)}
+                      </time>
+                    ) : null}
                     {file.caption ? <span className="text-ink-muted">{file.caption}</span> : null}
                     <form action={detachProjectFileAction} className="ms-auto">
                       <input type="hidden" name="projectId" value={project.id} />
@@ -415,14 +499,14 @@ export default async function ProjectPage({
             <input type="hidden" name="projectId" value={project.id} />
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.asset")}</span>
-              <select name="assetId" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="assetId" required className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 <option value="">{t("projects.caseStudy.chooseAsset")}</option>
                 {imageAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.filename}</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.role")}</span>
-              <select name="role" className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="role" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 {FILE_ROLES.filter((role) => role !== "document").map((role) => (
                   <option key={role} value={role}>{t(`projects.file.${role}`)}</option>
                 ))}
@@ -430,15 +514,24 @@ export default async function ProjectPage({
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.pairKey")}</span>
-              <input name="pairKey" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="pairKey" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.seriesKey")}</span>
+              <input name="seriesKey" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.capturedAt")}</span>
+              <input type="date" name="capturedAt" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.caption")}</span>
-              <input name="caption" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="caption" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <div><Button type="submit" variant="quiet">{t("projects.caseStudy.attachMedia")}</Button></div>
           </form>
           <p className="max-w-prose text-sm text-ink-muted">{t("projects.caseStudy.pairHint")}</p>
+          <p className="max-w-prose text-sm text-ink-muted">{t("projects.caseStudy.seriesHint")}</p>
         </CardBody>
       </Card>
 
@@ -480,7 +573,7 @@ export default async function ProjectPage({
               <input
                 name="label"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -488,21 +581,21 @@ export default async function ProjectPage({
               <input
                 name="value"
                 required
-                className="w-24 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="w-24 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.field.unit")}</span>
               <input
                 name="unit"
-                className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-20 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid grow gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.field.method")}</span>
               <input
                 name="method"
-                className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <Button type="submit" variant="quiet">
@@ -530,7 +623,7 @@ export default async function ProjectPage({
                     <input type="hidden" name="id" value={testimonial.id} />
                     <label className="grid gap-1">
                       <span className="text-ink-muted">{t("projects.caseStudy.testimonialStatus")}</span>
-                      <select name="status" defaultValue={testimonial.status} className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                      <select name="status" defaultValue={testimonial.status} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                         {TESTIMONIAL_STATUSES.map((status) => (
                           <option key={status} value={status}>{t(`projects.testimonial.${status}`)}</option>
                         ))}
@@ -546,39 +639,39 @@ export default async function ProjectPage({
             <input type="hidden" name="projectId" value={project.id} />
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.field.client")}</span>
-              <select name="contactId" required defaultValue={project.contactId ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="contactId" required defaultValue={project.contactId ?? ""} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 <option value="">{t("projects.caseStudy.chooseContact")}</option>
                 {(people?.rows ?? []).map((contact) => <option key={contact.id} value={contact.id}>{contact.name}</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.displayName")}</span>
-              <input name="displayName" required defaultValue={project.clientDisplayName ?? project.contactName ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="displayName" required defaultValue={project.clientDisplayName ?? project.contactName ?? ""} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm sm:col-span-2">
               <span className="text-ink-muted">{t("projects.caseStudy.quote")}</span>
-              <textarea name="body" required rows={3} className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <textarea name="body" required rows={3} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.clientRole")}</span>
-              <input name="role" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="role" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.rating")}</span>
-              <select name="rating" className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="rating" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 <option value="">{t("projects.caseStudy.noRating")}</option>
                 {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating}/5</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.consentMethod")}</span>
-              <select name="consentMethod" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="consentMethod" required className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 {CONSENT_METHODS.map((method) => <option key={method} value={method}>{t(`projects.consent.${method}`)}</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.consentNote")}</span>
-              <input name="consentNote" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="consentNote" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <fieldset className="flex flex-wrap gap-3 text-sm sm:col-span-2">
               <legend className="mb-1 text-ink-muted">{t("projects.caseStudy.displayLocations")}</legend>
@@ -605,7 +698,7 @@ export default async function ProjectPage({
                 <input
                   name="title"
                   defaultValue={project.title}
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <label className="grid gap-1 text-sm">
@@ -613,7 +706,7 @@ export default async function ProjectPage({
                 <select
                   name="status"
                   defaultValue={project.status}
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 >
                   {STATUSES.map((status) => (
                     <option key={status} value={status}>
@@ -628,7 +721,7 @@ export default async function ProjectPage({
                   name="clientDisplayName"
                   defaultValue={project.clientDisplayName ?? ""}
                   placeholder={t("projects.publicNamePlaceholder")}
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <label className="grid gap-1 text-sm">
@@ -637,7 +730,7 @@ export default async function ProjectPage({
                   type="date"
                   name="occurredOn"
                   defaultValue={project.occurredOn ?? ""}
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
             </div>
@@ -666,7 +759,7 @@ export default async function ProjectPage({
               <input
                 name="summary"
                 defaultValue={project.summary ?? ""}
-                className="max-w-prose rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="max-w-prose rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -675,7 +768,7 @@ export default async function ProjectPage({
                 name="notes"
                 rows={4}
                 defaultValue={project.notes ?? ""}
-                className="max-w-prose rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="max-w-prose rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <div>

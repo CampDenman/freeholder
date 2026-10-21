@@ -8,12 +8,13 @@
 
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
+import { matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { decimalToMinor } from "@/adapters/payments/currency";
-import { defineService, ServiceError, type Tx } from "@/core/service";
+import { defineService, permits, ServiceError, type Tx } from "@/core/service";
 import { BACKORDER_POLICIES, PURCHASE_ORDER_STATUSES } from "./contract";
 import { bumpIncoming, enableInventory, listInventory, recordStockMovement } from "./inventory";
 import {
@@ -618,6 +619,13 @@ export const subscribeBackInStock = defineService({
   input: z.object({ variantId: id, contactId: id, locationId: id.optional() }),
   output: backInStockRow,
   handler: async (input, ctx) => {
+    if (!permits(ctx.actor, "scoped", "catalog.subscribeBackInStock", "mutation")) {
+      const own = ctx.actor.kind === "user"
+        ? (await ctx.tx.select({ id: contacts.id }).from(contacts)
+          .where(and(eq(contacts.id, input.contactId), eq(contacts.userId, ctx.actor.userId))).limit(1))[0]
+        : undefined;
+      if (!own) throw new ServiceError("permission", "Sign in to request stock notifications for your own contact profile.");
+    }
     await requireContact(ctx.tx, input.contactId);
     const [existing] = await ctx.tx
       .select()
@@ -668,3 +676,14 @@ export default [
   cancelPurchaseOrder,
   subscribeBackInStock,
 ];
+
+registerSearchSource({
+  kind: "supplier", module: "catalog", readService: "catalog.listSuppliers", tables: ["suppliers"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx.select({ id: suppliers.id, name: suppliers.name, contactId: suppliers.contactId })
+      .from(suppliers).where(matchesIlike(suppliers.name, pattern))
+      .orderBy(asc(suppliers.name), asc(suppliers.id)).limit(limit);
+    return rows.map(item => ({ kind: "supplier", id: item.id, title: item.name,
+      href: `/admin/procurement#supplier-${item.id}`, snippet: null, contactId: item.contactId, module: "catalog" }));
+  },
+});

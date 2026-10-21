@@ -14,7 +14,8 @@
 //   run     what is left of both, once this run's own spend is counted
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
-import { agentRuns, agentSpend, agentTasks } from "@/core/agents/schema";
+import { agentTasks } from "@/core/agents/schema";
+import { runSpend, runs } from "@/core/runs/schema";
 import { modelPrice, type ModelPrice } from "@/core/agents/pricing";
 
 export interface BudgetScope {
@@ -39,12 +40,12 @@ export async function periodSpend(
   period: "day" | "week" | "month",
 ): Promise<number> {
   const [row] = await db()
-    .select({ total: sql<number>`coalesce(sum(${agentSpend.costCents}), 0)::int` })
-    .from(agentSpend)
+    .select({ total: sql<number>`coalesce(sum(${runSpend.costCents}), 0)::int` })
+    .from(runSpend)
     .where(
       and(
-        eq(agentSpend.agentId, agentId),
-        sql`${agentSpend.periodStart} >= date_trunc(${period}, now())`,
+        eq(runSpend.agentId, agentId),
+        sql`${runSpend.periodStart} >= date_trunc(${period}, now())`,
       ),
     );
   return row?.total ?? 0;
@@ -53,9 +54,9 @@ export async function periodSpend(
 /** What every run of one task has cost so far, across attempts. */
 export async function taskSpend(taskId: string): Promise<number> {
   const [row] = await db()
-    .select({ total: sql<number>`coalesce(sum(${agentRuns.costCents}), 0)::int` })
-    .from(agentRuns)
-    .where(eq(agentRuns.taskId, taskId));
+    .select({ total: sql<number>`coalesce(sum(${runs.costCents}), 0)::int` })
+    .from(runs)
+    .where(eq(runs.subjectId, taskId));
   return row?.total ?? 0;
 }
 

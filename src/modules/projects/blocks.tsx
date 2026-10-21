@@ -8,7 +8,7 @@
 import { z } from "zod";
 import { defineBlock } from "@/modules/cms/blocks/types";
 
-const imageRole = z.enum(["hero", "gallery", "before", "after", "process", "detail"]);
+const imageRole = z.enum(["hero", "gallery", "before", "after", "series", "process", "detail"]);
 const portfolioProject = z.object({
   id: z.string().uuid(),
   title: z.string().max(200),
@@ -50,6 +50,12 @@ export const projectCaseStudy = defineBlock({
         assetId: z.string().uuid(),
         role: imageRole,
         pairKey: z.string().max(80).nullable(),
+        // A progress series is ordered by when each frame was taken, not
+        // when it was filed — `capturedAt` is what makes the timeline read
+        // as the work went. Both default for snapshots published before
+        // series existed.
+        seriesKey: z.string().max(80).nullable().default(null),
+        capturedAt: z.iso.datetime().nullable().default(null),
         caption: z.string().max(500).nullable(),
         position: z.number().int(),
       }))
@@ -110,13 +116,22 @@ export const projectCaseStudy = defineBlock({
   },
   render: ({ props, resolved, ctx }) => {
     const pairs = new Map<string, typeof resolved.media>();
+    const series = new Map<string, typeof resolved.media>();
     for (const item of resolved.media) {
-      if (!item.item.pairKey) continue;
-      const group = pairs.get(item.item.pairKey) ?? [];
-      group.push(item);
-      pairs.set(item.item.pairKey, group);
+      if (item.item.pairKey) {
+        const group = pairs.get(item.item.pairKey) ?? [];
+        group.push(item);
+        pairs.set(item.item.pairKey, group);
+      }
+      if (item.item.seriesKey) {
+        const group = series.get(item.item.seriesKey) ?? [];
+        group.push(item);
+        series.set(item.item.seriesKey, group);
+      }
     }
-    const loose = resolved.media.filter((item) => item.item.pairKey === null);
+    const loose = resolved.media.filter(
+      (item) => item.item.pairKey === null && item.item.seriesKey === null,
+    );
     return (
       <div className="grid gap-8">
         {resolved.cover ? (
@@ -198,6 +213,32 @@ export const projectCaseStudy = defineBlock({
           </section>
         ))}
 
+        {[...series.entries()].map(([key, items]) => (
+          <section key={key} aria-label={ctx.t("projects.public.progress")} className="grid gap-3">
+            <h2 className="text-lg font-bold tracking-tight">{ctx.t("projects.public.progress")}</h2>
+            <ol className="grid list-none gap-4 p-0 sm:grid-cols-3">
+              {items
+                .sort((a, b) => (a.item.capturedAt ?? "").localeCompare(b.item.capturedAt ?? ""))
+                .map(({ item, image }) => (
+                  <li key={item.assetId}>
+                    <figure className="grid gap-2">
+                      <picture>
+                        {image!.sources.map((source) => (
+                          <source key={source.format} srcSet={source.srcset} type={source.type} />
+                        ))}
+                        <img src={image!.src} alt={item.caption ?? image!.altText ?? ""} width={image!.width ?? undefined} height={image!.height ?? undefined} loading="lazy" decoding="async" className="h-auto w-full rounded-lg" />
+                      </picture>
+                      <figcaption className="text-sm text-ink-muted">
+                        {item.capturedAt ? <time dateTime={item.capturedAt}>{item.capturedAt.slice(0, 10)}</time> : null}
+                        {item.caption ? `${item.capturedAt ? " · " : ""}${item.caption}` : ""}
+                      </figcaption>
+                    </figure>
+                  </li>
+                ))}
+            </ol>
+          </section>
+        ))}
+
         {loose.length ? (
           <ul className="grid list-none gap-4 p-0 sm:grid-cols-2">
             {loose.map(({ item, image }) => (
@@ -270,21 +311,21 @@ export const portfolioIndex = defineBlock({
       <form method="get" className="grid gap-3 rounded-lg border border-rule p-4 sm:grid-cols-3">
         <label className="grid gap-1 text-sm">
           <span className="font-semibold text-ink">{ctx.t("projects.portfolio.filterService")}</span>
-          <select name="filter[service]" defaultValue={resolved.active.service ?? ""} className="rounded-md border border-rule bg-field px-3 py-2">
+          <select name="filter[service]" defaultValue={resolved.active.service ?? ""} className="rounded-md border border-rule-strong bg-field px-3 py-2">
             <option value="">{ctx.t("projects.portfolio.allServices")}</option>
             {resolved.services.map((service) => <option key={service.id} value={service.slug}>{service.name}</option>)}
           </select>
         </label>
         <label className="grid gap-1 text-sm">
           <span className="font-semibold text-ink">{ctx.t("projects.portfolio.filterCollection")}</span>
-          <select name="filter[collection]" defaultValue={resolved.active.collection ?? ""} className="rounded-md border border-rule bg-field px-3 py-2">
+          <select name="filter[collection]" defaultValue={resolved.active.collection ?? ""} className="rounded-md border border-rule-strong bg-field px-3 py-2">
             <option value="">{ctx.t("projects.portfolio.allCollections")}</option>
             {resolved.collections.map(({ collection }) => <option key={collection.id} value={collection.slug}>{collection.name}</option>)}
           </select>
         </label>
         <label className="grid gap-1 text-sm">
           <span className="font-semibold text-ink">{ctx.t("projects.portfolio.search")}</span>
-          <input type="search" name="q" defaultValue={resolved.active.q ?? ""} className="rounded-md border border-rule bg-field px-3 py-2" />
+          <input type="search" name="q" defaultValue={resolved.active.q ?? ""} className="rounded-md border border-rule-strong bg-field px-3 py-2" />
         </label>
         <div className="flex flex-wrap gap-3 sm:col-span-3">
           <button type="submit" className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent">

@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
-import { agentRuns } from "@/core/agents/schema";
+import { runs } from "@/core/runs/schema";
 import {
   connectAgentRuntime,
   createTask,
@@ -85,7 +85,7 @@ describe.runIf(hasDatabase)("pausing a workforce", { timeout: 60_000 }, () => {
 
     // The lease is revoked rather than left to lapse: an owner who hits pause
     // should not wait ten minutes for the agent to actually stop.
-    const [run] = await db().select().from(agentRuns).where(eq(agentRuns.id, claim!.runId));
+    const [run] = await db().select().from(runs).where(eq(runs.id, claim!.runId));
     expect(run?.status).toBe("cancelled");
     expect(run?.stopReason).toBe("cancelled");
     expect(run?.leaseExpiresAt).toBeNull();
@@ -117,7 +117,7 @@ describe.runIf(hasDatabase)("pausing a workforce", { timeout: 60_000 }, () => {
     const killed = await pauseAllAgents.call({}, OWNER);
     expect(killed).toEqual({ changed: 2, stoppedRuns: 2 });
     for (const claim of [first, second]) {
-      const [run] = await db().select().from(agentRuns).where(eq(agentRuns.id, claim!.runId));
+      const [run] = await db().select().from(runs).where(eq(runs.id, claim!.runId));
       expect(run?.status).toBe("cancelled");
     }
     const agents = await listAgents.call({}, OWNER);
@@ -160,13 +160,13 @@ describe.runIf(hasDatabase)("pausing a workforce", { timeout: 60_000 }, () => {
     // One turn happened; the second was never sent, because the loop checks
     // whether the run is still its own before spending anything.
     expect(turns).toBe(1);
-    const runs = await db().select().from(agentRuns).where(eq(agentRuns.agentId, agent.id));
-    expect(runs).toHaveLength(1);
-    expect(runs[0]?.status).toBe("cancelled");
+    const runRows = await db().select().from(runs).where(eq(runs.agentId, agent.id));
+    expect(runRows).toHaveLength(1);
+    expect(runRows[0]?.status).toBe("cancelled");
     // The loop did not overwrite the task the pause re-queued.
-    const [task] = await db().select().from(agentRuns);
+    const [task] = await db().select().from(runs);
     expect(task).toBeTruthy();
-    const tasks = await getTask.call({ id: runs[0]!.taskId }, OWNER);
+    const tasks = await getTask.call({ id: runRows[0]!.subjectId }, OWNER);
     expect(tasks?.status).toBe("queued");
   });
 

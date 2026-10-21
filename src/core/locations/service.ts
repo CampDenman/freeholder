@@ -21,9 +21,11 @@ import {
   serviceAreas,
 } from "@/core/locations/schema";
 import { violates } from "@/core/db/errors";
+import { normalisePostalCode } from "./coverage";
 import { requireSetupOwner } from "@/core/settings/setup";
 import {
   defineService,
+  permits,
   ServiceError,
   type ServiceContext,
 } from "@/core/service";
@@ -78,11 +80,15 @@ const hoursRow = row({
 const serviceAreaRow = row({
   id: uuid,
   locationId: uuid,
-  kind: z.enum(["radius", "regions"]),
+  kind: z.enum(["radius", "regions", "postal_codes"]),
   centerLatitude: z.string().nullable(),
   centerLongitude: z.string().nullable(),
   radiusKm: z.string().nullable(),
   regions: z.array(z.string()),
+  postalCodes: z.array(z.string()),
+  deliveryWeekdays: z.array(z.number().int().min(0).max(6)).nullable(),
+  deliveryOpens: z.string().nullable(),
+  deliveryCloses: z.string().nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -180,6 +186,9 @@ export const listLocations = defineService({
   }),
   output: listed(locationRow),
   handler: async (input, ctx) => {
+    if (input.includeHidden && !permits(ctx.actor, "scoped", "locations.list", "query")) {
+      throw new ServiceError("permission", "Location read access is required to include hidden locations.");
+    }
     const rows = await ctx.tx
       .select()
       .from(businessLocations)
@@ -248,9 +257,14 @@ export const getLocation = defineService({
       .select()
       .from(businessLocations)
       .where(
-        input.id
-          ? eq(businessLocations.id, input.id)
-          : eq(businessLocations.slug, input.slug!),
+        and(
+          input.id
+            ? eq(businessLocations.id, input.id)
+            : eq(businessLocations.slug, input.slug!),
+          permits(ctx.actor, "scoped", "locations.get", "query")
+            ? undefined
+            : eq(businessLocations.status, "visible"),
+        ),
       )
       .limit(1);
     if (!location) return null;
@@ -499,8 +513,36 @@ export const setServiceArea = defineService({
           kind: z.literal("regions"),
           regions: z.array(z.string().min(1).max(120)).min(1).max(50),
         }),
+        z.object({
+          /**
+           * The one shape a machine can check against an address (C6.18).
+           * Stored normalised, so an owner who typed "L4C 2K1" also covers
+           * somebody who types "l4c2k1".
+           */
+          kind: z.literal("postal_codes"),
+          postalCodes: z
+            .array(z.string().min(1).max(20))
+            .min(1)
+            .max(500)
+            .transform((codes) => codes.map(normalisePostalCode)),
+        }),
       ])
       .nullable(),
+    /**
+     * The weekly window when this area receives deliveries (C6.18) — the
+     * "when" that accompanies the "where". Absent or null names no window,
+     * which is itself the answer until the owner says otherwise.
+     */
+    delivery: z
+      .object({
+        weekdays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+        opens: timeOfDay,
+        closes: timeOfDay,
+      })
+      .refine((v) => v.opens < v.closes, {
+        message: "a delivery window closes after it opens",
+      })
+      .nullish(),
   }),
   output: serviceAreaRow.nullable(),
   handler: async (input, ctx) => {
@@ -517,6 +559,17 @@ export const setServiceArea = defineService({
 
     let row = null;
     if (input.area) {
+      const delivery = input.delivery
+        ? {
+            deliveryWeekdays: input.delivery.weekdays,
+            deliveryOpens: input.delivery.opens,
+            deliveryCloses: input.delivery.closes,
+          }
+        : {
+            deliveryWeekdays: null,
+            deliveryOpens: null,
+            deliveryCloses: null,
+          };
       const values =
         input.area.kind === "radius"
           ? {
@@ -525,10 +578,12 @@ export const setServiceArea = defineService({
               centerLongitude: input.area.centerLongitude,
               radiusKm: input.area.radiusKm,
             }
-          : { kind: "regions" as const, regions: input.area.regions };
+          : input.area.kind === "regions"
+            ? { kind: "regions" as const, regions: input.area.regions }
+            : { kind: "postal_codes" as const, postalCodes: input.area.postalCodes };
       [row] = await ctx.tx
         .insert(serviceAreas)
-        .values({ locationId: input.locationId, ...values })
+        .values({ locationId: input.locationId, ...values, ...delivery })
         .returning();
     }
 

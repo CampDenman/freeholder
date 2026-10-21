@@ -34,6 +34,8 @@ import {
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError, type Tx } from "@/core/service";
+// "Lead" means one thing, and core says what (§4.7, C9.07).
+import "./funnel";
 
 const STAGES = ["lead", "prospect", "customer", "repeat"] as const;
 const lifecycleStage = z.enum(STAGES);
@@ -1288,7 +1290,9 @@ export const listContacts = defineService({
       .where(where)
       // Newest first: the contact somebody is looking for is far more often
       // the one that just arrived than the one from three years ago.
-      .orderBy(desc(contacts.createdAt))
+      // Imports create many contacts at the same timestamp. A unique tie-breaker
+      // keeps adjacent OFFSET pages from repeating or omitting those people.
+      .orderBy(desc(contacts.createdAt), desc(contacts.id))
       .limit(input.limit)
       .offset(input.offset);
 

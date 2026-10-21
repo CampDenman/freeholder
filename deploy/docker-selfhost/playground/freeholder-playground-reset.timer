@@ -1,0 +1,10 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=Hourly Freeholder playground reset
+[Timer]
+OnBootSec=2min
+OnCalendar=hourly
+Persistent=true
+[Install]
+WantedBy=timers.target

@@ -4,6 +4,7 @@
 // here, is what stops each route inventing its own status codes and its own
 // idea of how much to tell the caller.
 import { ServiceError, type Actor } from "@/core/service";
+import { RequestBodyError } from "@/core/http/body";
 
 const STATUS: Record<ServiceError["code"], number> = {
   validation: 400,
@@ -50,6 +51,12 @@ export function json(
  * someone else would not help", and conflating them makes both confusing.
  */
 export function errorResponse(error: unknown, actor: Actor): Response {
+  if (error instanceof RequestBodyError) {
+    return json(
+      { error: { code: "validation", message: error.message } },
+      error.status,
+    );
+  }
   if (error instanceof ServiceError) {
     const status =
       error.code === "permission" && actor.kind === "anonymous"

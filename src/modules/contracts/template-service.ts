@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
+import { getBusiness } from "@/core/settings/service";
 import {
   defineService,
   getService,
@@ -211,8 +212,7 @@ async function standardValues(
   contactId: string | undefined,
   extra: Record<string, string> | undefined,
 ): Promise<Record<string, string>> {
-  const { currentBusiness } = await import("@/core/settings/read");
-  const business = await currentBusiness();
+  const business = await ctx.call(getBusiness, {});
   const values: Record<string, string> = {
     business_name: business?.name ?? "",
     today: new Date().toISOString().slice(0, 10),

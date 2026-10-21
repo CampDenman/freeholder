@@ -17,49 +17,16 @@
 //     hand has the same review the PR would have given them.
 //
 // Both paths hand over the same bytes. Neither writes to this filesystem.
-import { requestWithTimeout, providerJson } from "@/adapters/mail/http";
-import { env } from "@/core/env";
+import { githubJson, repositoryTarget } from "@/adapters/git/github";
 import { ServiceError } from "@/core/service";
 import type { ProposedFile } from "./code-gates";
 
-export interface DeliveryTarget {
-  /** `owner/repo`, the owner's own fork. */
-  repository: string;
-  baseBranch: string;
-}
+export type { RepositoryTarget as DeliveryTarget } from "@/adapters/git/github";
 
 /** Where a proposal would go, or why it cannot go anywhere yet. */
-export function deliveryTarget(): DeliveryTarget | null {
-  const repository = env().BUILDER_CODE_REPOSITORY;
-  const token = env().BUILDER_CODE_TOKEN;
-  if (!repository || !token) return null;
-  return { repository, baseBranch: env().BUILDER_CODE_BASE_BRANCH ?? "main" };
-}
+export const deliveryTarget = repositoryTarget;
 
-async function github<T>(
-  path: string,
-  init: { method: string; body?: unknown },
-): Promise<T> {
-  const token = env().BUILDER_CODE_TOKEN;
-  if (!token) {
-    throw new ServiceError("conflict", "No repository is connected for code proposals.");
-  }
-  const response = await requestWithTimeout(
-    globalThis.fetch,
-    `https://api.github.com${path}`,
-    {
-      method: init.method,
-      headers: {
-        authorization: `Bearer ${token}`,
-        accept: "application/vnd.github+json",
-        "x-github-api-version": "2022-11-28",
-        "content-type": "application/json",
-      },
-      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
-    },
-  );
-  return providerJson<T>(response, "GitHub");
-}
+const github = githubJson;
 
 /**
  * A patch an owner can read, and apply with `git apply`.

@@ -55,6 +55,7 @@ export async function createOwnerAction(
       {
         email: text(form, "email", ""),
         password: text(form, "password", ""),
+        bootstrapSecret: text(form, "bootstrapSecret") || undefined,
       },
       {
         kind: "anonymous",
@@ -85,7 +86,7 @@ export async function createOwnerAction(
     expires: expiresAt,
   });
 
-  redirect("/setup/business");
+  redirect("/setup/security");
 }
 
 export async function saveBusinessAction(

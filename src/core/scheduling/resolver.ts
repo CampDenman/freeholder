@@ -24,7 +24,7 @@
 // needing a therapist *and* a room offers a slot only where both are free. A
 // resolver that picked the person first and then looked for a room would offer
 // slots it cannot honour, which is worse than offering fewer.
-import { and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { or, and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { openWindows, type OpenWindow } from "@/core/scheduling/availability";
 import {
   bookings,
@@ -55,6 +55,7 @@ export interface Slot {
 
 export interface SlotRequest {
   serviceOfferingId: string;
+  excludeBookingId?: string;
   /** Inclusive local dates in the business's zone, `YYYY-MM-DD`. */
   from: string;
   to: string;
@@ -97,6 +98,8 @@ export interface SlotRequest {
 interface Busy {
   startsAt: Date;
   endsAt: Date;
+  /** External commitments block the calendar even when it has spare seats. */
+  external?: boolean;
 }
 
 const DEFAULT_GRANULARITY = 15;
@@ -107,13 +110,15 @@ async function busyFor(
   tx: Tx,
   calendarId: string,
   window: { from: Date; to: Date },
+  excludeBookingId?: string,
 ): Promise<Busy[]> {
   const booked = await tx
     .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt })
     .from(bookings)
     .where(
       and(
-        eq(bookings.calendarId, calendarId),
+        or(eq(bookings.calendarId, calendarId), sql`${calendarId}::uuid = any(${bookings.secondaryCalendarIds})`),
+        excludeBookingId ? sql`${bookings.id} <> ${excludeBookingId}::uuid` : undefined,
         sql`${bookings.status} = any(${sql.param([...HOLDING_STATUSES])})`,
         gte(bookings.endsAt, window.from),
         lte(bookings.startsAt, window.to),
@@ -169,7 +174,11 @@ async function busyFor(
       ),
     );
 
-  return [...booked, ...external, ...imported].sort(
+  return [
+    ...booked,
+    ...external.map((busy) => ({ ...busy, external: true })),
+    ...imported.map((busy) => ({ ...busy, external: true })),
+  ].sort(
     (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
   );
 }
@@ -382,7 +391,7 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
     { startsAt: Date; endsAt: Date; capacityUsed: number }[]
   >();
   for (const member of [...candidates, ...resources]) {
-    busyByCalendar.set(member.calendarId, await busyFor(tx, member.calendarId, busyWindow));
+    busyByCalendar.set(member.calendarId, await busyFor(tx, member.calendarId, busyWindow, request.excludeBookingId));
     if (member.capacityDefault > 1) {
       heldByCalendar.set(
         member.calendarId,
@@ -395,7 +404,8 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
           .from(bookings)
           .where(
             and(
-              eq(bookings.calendarId, member.calendarId),
+              or(eq(bookings.calendarId, member.calendarId), sql`${member.calendarId}::uuid = any(${bookings.secondaryCalendarIds})`),
+              request.excludeBookingId ? sql`${bookings.id} <> ${request.excludeBookingId}::uuid` : undefined,
               sql`${bookings.status} = any(${sql.param([...HOLDING_STATUSES])})`,
               gte(bookings.endsAt, busyWindow.from),
               lte(bookings.startsAt, busyWindow.to),
@@ -406,9 +416,31 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
   }
 
   const perDay = new Map<string, number>();
+  for (const member of candidates.filter((candidate) => candidate.maxPerDay !== null)) {
+    const held = await tx
+      .select({ startsAt: bookings.startsAt })
+      .from(bookings)
+      .where(and(
+        or(eq(bookings.calendarId, member.calendarId), sql`${member.calendarId}::uuid = any(${bookings.secondaryCalendarIds})`),
+        request.excludeBookingId ? sql`${bookings.id} <> ${request.excludeBookingId}::uuid` : undefined,
+        sql`${bookings.status} <> 'cancelled'`,
+        gte(bookings.startsAt, busyWindow.from),
+        lte(bookings.startsAt, busyWindow.to),
+      ));
+    for (const booking of held) {
+      const day = zonedDate(booking.startsAt, member.timezone);
+      const key = `${member.calendarId}:${day.year}-${day.month}-${day.day}`;
+      perDay.set(key, (perDay.get(key) ?? 0) + 1);
+    }
+  }
   const found: Slot[] = [];
 
   for (const member of candidates) {
+    // The offering and the calendar both bound a party. An exclusive calendar
+    // cannot acquire two seats merely because its exclusion constraint only
+    // compares separate booking rows.
+    const capacity = Math.min(member.capacityDefault, request.capacity ?? member.capacityDefault);
+    if (seats > capacity) continue;
     // The audience's terms where it has stated them, the calendar's otherwise.
     // A friend booking at short notice is the audience overriding the
     // calendar, which is exactly what §41 means by bookability being per
@@ -442,11 +474,9 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
 
         const shared = member.capacityDefault > 1;
         if (shared) {
-          const taken = seatsHeld(heldByCalendar.get(member.calendarId) ?? [], {
-            startsAt,
-            endsAt,
-          });
-          if (taken + seats > member.capacityDefault) continue;
+          if ((busyByCalendar.get(member.calendarId) ?? []).some((busy) => busy.external && overlaps(busy, guarded))) continue;
+          const taken = seatsHeld(heldByCalendar.get(member.calendarId) ?? [], guarded);
+          if (taken + seats > capacity) continue;
         } else if (
           (busyByCalendar.get(member.calendarId) ?? []).some((busy) =>
             overlaps(busy, guarded),
@@ -455,7 +485,8 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
           continue;
         }
 
-        // Daily and weekly caps, because burnout is a scheduling bug.
+        // Daily caps count actual appointments, including completed work;
+        // showing several alternatives does not consume several places.
         const day = zonedDate(startsAt, member.timezone);
         const dayKey = `${member.calendarId}:${day.year}-${day.month}-${day.day}`;
         if (member.maxPerDay !== null && (perDay.get(dayKey) ?? 0) >= member.maxPerDay) {
@@ -479,11 +510,9 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
           calendarName: member.name,
           resourceCalendarIds: resource ? [resource.calendarId] : [],
           seatsAvailable: shared
-            ? member.capacityDefault -
-              seatsHeld(heldByCalendar.get(member.calendarId) ?? [], { startsAt, endsAt })
+            ? capacity - seatsHeld(heldByCalendar.get(member.calendarId) ?? [], guarded)
             : 1,
         });
-        perDay.set(dayKey, (perDay.get(dayKey) ?? 0) + 1);
       }
     }
   }

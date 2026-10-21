@@ -43,8 +43,9 @@ export default async function PrivacyRequestPage({
   const canManage = hasModuleAccess(actor, "contacts", "manage");
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
-  const open = OPEN.has(request.status);
-  const canFulfill = request.status === "verified" || request.status === "in_progress";
+  const pendingErasure = request.kind === "erasure" && request.status === "in_progress" && Boolean(artifact);
+  const open = OPEN.has(request.status) && !pendingErasure;
+  const canFulfill = !pendingErasure && (request.status === "verified" || request.status === "in_progress");
   const stepUpValid = actor.kind === "user" && Boolean(actor.security?.stepUpValid);
   const details = request.details && typeof request.details === "object"
     ? request.details as Record<string, unknown>
@@ -60,6 +61,13 @@ export default async function PrivacyRequestPage({
         </div>
         <p className="mt-1 font-mono text-xs text-ink-muted">{request.id}</p>
       </div>
+
+      {pendingErasure ? (
+        <Card><CardHeader title={t("privacy.erasure.pending.title")} /><CardBody>
+          <p className="text-sm text-ink-muted">{t("privacy.erasure.pending.hint")}</p>
+          {hasModuleAccess(actor, "platform") ? <a className="mt-2 inline-block text-sm text-accent underline" href="/admin/jobs">{t("privacy.erasure.pending.jobs")}</a> : null}
+        </CardBody></Card>
+      ) : null}
 
       <Card>
         <CardHeader title={t("privacy.request.details")} />
@@ -135,7 +143,7 @@ export default async function PrivacyRequestPage({
           <Card><CardHeader title={t("privacy.deny.title")} /><CardBody>
             <PrivacyActionForm intent="deny" hidden={{ requestId: request.id }} submitLabel={t("privacy.deny.submit")} pendingLabel={t("privacy.working")} variant="quiet">
               <Field label={t("privacy.resolution")} htmlFor="privacy-denial-resolution">
-                <textarea id="privacy-denial-resolution" name="resolution" required rows={3} className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm" />
+                <textarea id="privacy-denial-resolution" name="resolution" required rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
               </Field>
             </PrivacyActionForm>
           </CardBody></Card>
@@ -165,7 +173,7 @@ export default async function PrivacyRequestPage({
                   </Field>
                 </div>
                 <Field label={t("privacy.retention.legalBasis")} htmlFor="privacy-retention-basis">
-                  <textarea id="privacy-retention-basis" name="legalBasis" required rows={3} className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm" />
+                  <textarea id="privacy-retention-basis" name="legalBasis" required rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
                 </Field>
                 <Field label={t("privacy.retention.expiry")} htmlFor="privacy-retention-expiry">
                   <Input id="privacy-retention-expiry" name="expiresAt" type="datetime-local" />

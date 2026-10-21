@@ -81,8 +81,6 @@ loader. **Admin -> Demo scenarios** assembles those contributions through the
 transactional `demo.load`, `demo.reload`, `demo.reset` and `demo.purge`
 services, with exact record provenance and verified cleanup.
 
-The current-module scenario intentionally proves that extension seam with CMS
-and Forms only. The complete creator, service-business, shop and everything
-journeys remain dependency-blocked until their C5-C9 domain modules exist;
-`MASTER.md` C1.27 is the authoritative obligation. See
-`deploy/demo-scenarios.md` for the contribution and operations contract.
+The current-module scenario still proves the extension seam with CMS and Forms.
+Complete creator, service-business, shop and everything journeys assemble the
+same seam from C5–C9 contributions — see `deploy/demo-scenarios.md`.

@@ -6,8 +6,8 @@
 // playbooks compute the first occurrence when a schedule is written, and the
 // scheduler computes the next one when a window is spent.
 import { CronExpressionParser } from "cron-parser";
-import { currentBusiness } from "@/core/settings/read";
-import { ServiceError } from "@/core/service";
+import { getBusiness } from "@/core/settings/service";
+import { ServiceError, type ServiceContext } from "@/core/service";
 
 /**
  * The next time a cron expression comes round, in a named zone.
@@ -62,6 +62,16 @@ export async function scheduleZone(playbook: {
   timezone: string | null;
 }): Promise<string> {
   if (playbook.timezone) return playbook.timezone;
-  const business = await currentBusiness().catch(() => null);
+  const business = await getBusiness.call({}, { kind: "anonymous" }).catch(() => null);
+  return business?.timezone ?? "UTC";
+}
+
+/** Resolve the same default without opening a second service transaction. */
+export async function scheduleZoneIn(
+  ctx: ServiceContext,
+  playbook: { timezone: string | null },
+): Promise<string> {
+  if (playbook.timezone) return playbook.timezone;
+  const business = await ctx.call(getBusiness, {}).catch(() => null);
   return business?.timezone ?? "UTC";
 }

@@ -69,6 +69,66 @@ describe("page accessibility hints", () => {
   });
 });
 
+/**
+ * The popup context (C9.30).
+ *
+ * A popup is the one surface a visitor did not ask for, and it renders over a
+ * page that already has its own H1 and its own structure. So it gets two rules
+ * of its own, both errors, and `popups.setStatus` refuses to make one live
+ * while either stands — the same shape as publish refusing a page with no H1.
+ */
+describe("a popup's own rules", () => {
+  const heading = (id: string, level: 1 | 2 | 3 | 4): BlockNode => ({
+    id,
+    type: "heading",
+    props: { text: "Join the list", level, align: "start" },
+  });
+
+  it("refuses an H1, because the page underneath already has one", () => {
+    const hints = analyzeAccessibility([heading("h", 1)], { context: "popup" });
+    expect(hints.map((hint) => hint.code)).toContain("popupH1");
+    expect(hints.find((hint) => hint.code === "popupH1")?.severity).toBe("error");
+    expect(publishA11yMessage(hints)).toContain("already has its H1");
+  });
+
+  it("accepts an H2 and warns when the outline skips down from it", () => {
+    // The dialog renders the popup's title as its own H2, so the body's
+    // outline continues from there rather than starting from nothing.
+    expect(analyzeAccessibility([heading("h", 2)], { context: "popup" })).toEqual([]);
+    expect(
+      analyzeAccessibility([heading("h", 4)], { context: "popup" }).map((h) => h.code),
+    ).toContain("headingOrder");
+  });
+
+  it("refuses raw HTML in a popup while leaving it alone on a page", () => {
+    const raw: BlockNode[] = [
+      { id: "raw", type: "html", props: { markup: "<section><p>Hi</p></section>" } },
+    ];
+    const inPopup = analyzeAccessibility(raw, { context: "popup" });
+    expect(inPopup.map((hint) => hint.code)).toContain("popupRawHtml");
+    expect(publishA11yMessage(inPopup)).toContain("close button");
+    // On a page, custom HTML is the owner's own risk on their own surface.
+    expect(
+      analyzeAccessibility([heading("h", 1), ...raw], { context: "page" }).map(
+        (hint) => hint.code,
+      ),
+    ).not.toContain("popupRawHtml");
+  });
+
+  it("still applies the ordinary content rules", () => {
+    const codes = analyzeAccessibility(
+      [
+        { id: "img", type: "image", props: { decorative: false } },
+        { id: "btn", type: "button", props: { label: "Click here", href: "#", variant: "solid" } },
+      ],
+      { context: "popup" },
+    ).map((hint) => hint.code);
+    expect(codes).toEqual(
+      expect.arrayContaining(["imageMissing", "vagueLink", "emptyHref"]),
+    );
+  });
+});
+
 describe.runIf(hasDatabase)("publish refuses a page that fails the H1 rule", { timeout: 30_000 }, () => {
   beforeEach(truncateSpine, 30_000);
   afterAll(closeDb);

@@ -16,6 +16,7 @@ import {
   sendQuote,
   setQuoteItems,
 } from "@/modules/quotes/service";
+import { convertQuote } from "@/modules/quotes/conversion";
 import { ownerFacing } from "./action-helpers";
 
 const QUOTES = "/admin/quotes";
@@ -132,4 +133,16 @@ export async function replyToQuoteAction(form: FormData): Promise<void> {
   }
   revalidatePath(`${QUOTES}/${id}`);
   redirect(`${QUOTES}/${id}?saved=replied`);
+}
+
+export async function convertQuoteAction(form: FormData): Promise<void> {
+  const id = text(form, "id");
+  try {
+    await convertQuote.call({ id }, await actor());
+  } catch (error) {
+    refused(error, `${QUOTES}/${id}`, "That quote could not be turned into work.");
+  }
+  revalidatePath(`${QUOTES}/${id}`);
+  revalidatePath(QUOTES);
+  redirect(`${QUOTES}/${id}?saved=converted`);
 }

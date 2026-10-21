@@ -621,9 +621,9 @@ describe.runIf(hasDatabase)("contact consent and privacy rights", () => {
 });
 
 describe("contact privacy migration", () => {
-  it("is additive and carries the required constraints and indexes", () => {
+  it("carries the required constraints and indexes in the reviewed baseline", () => {
     const migration = readFileSync(
-      "db/migrations/0024_contact-privacy-rights.sql",
+      "db/migrations/0000_reviewed-baseline.sql",
       "utf8",
     );
     expect(migration).toContain('CREATE TABLE "consent_records"');
@@ -632,7 +632,5 @@ describe("contact privacy migration", () => {
     expect(migration).toContain('CREATE TABLE "privacy_retention_exceptions"');
     expect(migration).toContain('CONSTRAINT "consent_records_purpose_channel"');
     expect(migration).toContain('CREATE INDEX "data_requests_status_due_idx"');
-    expect(migration).not.toMatch(/\bDROP\s+(?:TABLE|COLUMN|CONSTRAINT)\b/i);
-    expect(migration).not.toContain('ALTER TABLE "contacts"');
   });
 });

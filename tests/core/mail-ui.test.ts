@@ -46,6 +46,19 @@ const labels: MailLabels = {
   reactivate: "Reactivate",
   test: "Send test",
   verified: "Verified",
+  verifyTitle: "What to do when a sender is not verified",
+  verifyProves: "Verification is the provider confirming this address may send.",
+  verifyResend: "Resend: publish the DNS records Resend shows.",
+  verifyPostmark: "Postmark: confirm the signature, DKIM and return path.",
+  verifySes: "Amazon SES: verify the identity and publish DKIM.",
+  verifyFailed: "Fix the DNS at the provider, then recheck.",
+  verifyDkim: "DKIM",
+  verifyReturnPath: "Return path",
+  verifyProviderStatus: "Provider status",
+  verifyDomain: "Domain",
+  verifyIdentity: "Identity",
+  verifyYes: "Verified",
+  verifyNo: "Not verified",
   pending: "Verification pending",
   failed: "Failed verification",
   active: "Active",
@@ -126,6 +139,7 @@ const props = {
       isDefault: true,
       lastVerified: "Aug 12, 2026, 12:00 PM",
       lastError: null,
+      verificationDetail: {},
       accountStatus: null,
       capabilityEnabled: null,
     },
@@ -140,6 +154,7 @@ const props = {
       isDefault: true,
       lastVerified: "Aug 12, 2026, 12:00 PM",
       lastError: null,
+      verificationDetail: { domain: "example.test", dkim: true, returnPath: false },
       accountStatus: null,
       capabilityEnabled: null,
     },
@@ -202,5 +217,7 @@ describe("mail settings markup", () => {
     expect(document.querySelectorAll("button")).toHaveLength(0);
     expect(document.body.textContent).toContain("customer@example.test");
     expect(document.body.textContent).toContain("blocked@example.test");
+    expect(document.body.textContent).toContain("DKIM: Verified");
+    expect(document.getElementById("mail-verification")).toBeTruthy();
   });
 });

@@ -15,6 +15,7 @@ import {
   ensureDefaults,
   getSection,
   publishedPaths,
+  resolvePage,
 } from "@/modules/cms/service";
 import { NAV_KEY } from "@/modules/cms/defaults";
 import {
@@ -166,6 +167,21 @@ describe.runIf(hasDatabase)("a location's page", () => {
     await expect(
       resolveRedirect.call({ path: "locations/courtenay", locale: "en" }, ANONYMOUS),
     ).resolves.toMatchObject({ toPath: "locations/comox-valley" });
+  });
+
+  it("withholds hidden location pages and SEO before event delivery, then unpublishes", async () => {
+    const location = await createLocationService.call(CANADIAN, OWNER);
+    await onLocationCreated({ id: location.id, slug: location.slug });
+    const visible = await resolvePage.call({ slug: "locations/courtenay" }, ANONYMOUS);
+    expect(JSON.stringify(visible?.seo)).toContain(CANADIAN.street);
+    await updateLocation.call({ id: location.id, status: "hidden" }, OWNER);
+    for (const locale of ["en", "fr", "es"]) {
+      await expect(resolvePage.call({ slug: "locations/courtenay", locale }, ANONYMOUS)).resolves.toBeNull();
+      const paths = await publishedPaths.call({ locale }, ANONYMOUS);
+      expect(paths.some(path => path.slug.includes("locations/courtenay"))).toBe(false);
+    }
+    await onLocationUpdated({ id: location.id, slug: location.slug });
+    expect((await pageAt("locations/courtenay"))?.status).toBe("draft");
   });
 
   it("survives the location being deleted, unpublished", async () => {

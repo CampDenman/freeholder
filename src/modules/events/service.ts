@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Events, sessions, tickets, waitlists, check-in (MASTER.md C6.11).
 
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isUniqueViolation } from "@/core/db";
 import { listed, row, timestamp, uuid } from "@/core/contract";
@@ -12,6 +12,19 @@ import { resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { recordRedirect } from "@/core/seo/service";
 import { siteOrigin } from "@/core/seo/origin";
+import { QUANTITY_SCALE } from "@/modules/invoicing/money";
+import { invoices, payments } from "@/modules/invoicing/schema";
+import {
+  createDraftInvoice,
+  issueInvoice,
+  voidInvoice,
+} from "@/modules/invoicing/invoice-service";
+import { sendInvoice } from "@/modules/invoicing/customer-service";
+import {
+  customerInvoicePath,
+  invoiceAccessToken,
+} from "@/modules/invoicing/customer-tokens";
+import { registerCheckoutEligibility } from "@/modules/invoicing/checkout-requirements";
 import {
   EVENT_STATUSES,
   REGISTRATION_STATUSES,
@@ -20,6 +33,13 @@ import {
   eventTickets,
   events,
 } from "./schema";
+import {
+  demoHandlerInputSchema,
+  demoLoadResultSchema,
+  demoPurgeResultSchema,
+  demoVerifyResultSchema,
+} from "@/core/onboarding/contract";
+import { requireDemoHandlerRun } from "@/core/demo/handler";
 import { renderEventIcs } from "./ics";
 import { syncEventPublicPage } from "./public-pages";
 import "./blocks";
@@ -35,6 +55,12 @@ const name = z.string().trim().min(1).max(240);
 const expectedVersion = z.number().int().positive();
 
 const OCCUPYING = ["reserved", "confirmed", "checked_in"] as const;
+
+/** C6.11: a held seat is released if its invoice is not settled within this. */
+export const REGISTRATION_HOLD_MS = 30 * 60 * 1000;
+
+/** Statuses that make a second registration for the same person a duplicate. */
+const LIVE_REGISTRATION = ["reserved", "confirmed", "waitlisted", "checked_in"] as const;
 
 const eventRow = row({
   id: uuid,
@@ -94,6 +120,8 @@ const eventRegistrationRow = row({
   status: z.enum(REGISTRATION_STATUSES),
   quantity: z.number().int(),
   checkedInAt: timestamp.nullable(),
+  invoiceId: uuid.nullable(),
+  holdExpiresAt: timestamp.nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -198,6 +226,151 @@ async function loadEvent(ctx: ServiceContext, eventId: string) {
   return event;
 }
 
+type AdmissionTicket = typeof eventTickets.$inferSelect;
+
+/**
+ * Create and issue the invoice that holds a paid seat, in the caller's
+ * transaction. One registration ever has one invoice: `invoices_source_idx`
+ * makes (sourceType, sourceId) unique, and the idempotency key is the
+ * registration, so a retried sweep or a double promotion raises nothing twice.
+ */
+async function issueAdmissionInvoice(
+  ctx: ServiceContext,
+  args: {
+    registrationId: string;
+    contactId: string;
+    eventName: string;
+    ticket: AdmissionTicket;
+    quantity: number;
+    holdExpiresAt: Date;
+  },
+) {
+  const draft = await ctx.callAsSystem(createDraftInvoice, {
+    contactId: args.contactId,
+    currency: args.ticket.currency,
+    sourceType: "event",
+    sourceId: args.registrationId,
+    idempotencyKey: `event-registration:${args.registrationId}`,
+    lines: [
+      {
+        sourceType: "event_ticket",
+        sourceId: args.ticket.id,
+        description: `${args.eventName} — ${args.ticket.name}`,
+        quantityMicros: args.quantity * QUANTITY_SCALE,
+        unitAmountMinor: args.ticket.priceMinor,
+      },
+    ],
+    // No address is collected at registration; guessing a tax treatment on the
+    // attendee's behalf is the one thing an accounting system must not do.
+    tax: {
+      mode: "not_applicable" as const,
+      reason: "Event admission; tax applied when the invoice is issued.",
+    },
+    dueAt: args.holdExpiresAt,
+  });
+  return ctx.callAsSystem(issueInvoice, { id: draft.invoice.id });
+}
+
+/**
+ * Promote the oldest waitlisted row that fits the freed seats. The caller
+ * holds the session row lock. A promoted paid row becomes a fresh 30-minute
+ * held reservation with its own issued invoice, and the emailed invoice — pay
+ * link included — is the waitlist notification. Legacy rows that cannot prove
+ * admission (no ticket on a ticketed event, or a retired ticket) stay waiting.
+ */
+async function promoteNext(
+  ctx: ServiceContext,
+  eventId: string,
+  session: typeof eventSessions.$inferSelect,
+): Promise<void> {
+  const remaining = session.capacity - (await occupied(ctx, session.id));
+  const [next] = await ctx.tx
+    .select()
+    .from(eventRegistrations)
+    .where(
+      and(
+        eq(eventRegistrations.sessionId, session.id),
+        eq(eventRegistrations.status, "waitlisted"),
+      ),
+    )
+    .orderBy(asc(eventRegistrations.createdAt))
+    .limit(1);
+  if (!next || next.quantity > remaining) return;
+  const tickets = await ctx.tx.select().from(eventTickets)
+    .where(eq(eventTickets.eventId, eventId));
+  const ticket = tickets.find((candidate) => candidate.id === next.ticketId);
+  if ((next.ticketId && (!ticket || !ticket.active)) || (!next.ticketId && tickets.length > 0)) {
+    return;
+  }
+  if (ticket && ticket.priceMinor > 0) {
+    const holdExpiresAt = new Date(Date.now() + REGISTRATION_HOLD_MS);
+    const [event] = await ctx.tx
+      .select({ name: events.name })
+      .from(events)
+      .where(eq(events.id, eventId))
+      .limit(1);
+    const issued = await issueAdmissionInvoice(ctx, {
+      registrationId: next.id,
+      contactId: next.contactId,
+      eventName: event?.name ?? "Event",
+      ticket,
+      quantity: next.quantity,
+      holdExpiresAt,
+    });
+    await ctx.tx
+      .update(eventRegistrations)
+      .set({ status: "reserved", holdExpiresAt, invoiceId: issued.invoice.id })
+      .where(eq(eventRegistrations.id, next.id));
+    await ctx.callAsSystem(sendInvoice, {
+      id: issued.invoice.id,
+      idempotencyKey: `event-waitlist-promotion:${next.id}`,
+    });
+    ctx.queueEvent("events.promoted", {
+      eventId,
+      registrationId: next.id,
+      contactId: next.contactId,
+      invoiceId: issued.invoice.id,
+    });
+    return;
+  }
+  await ctx.tx
+    .update(eventRegistrations)
+    .set({ status: "confirmed" })
+    .where(eq(eventRegistrations.id, next.id));
+  ctx.queueEvent("events.registered", {
+    eventId,
+    registrationId: next.id,
+    contactId: next.contactId,
+    promoted: true,
+  });
+}
+
+/**
+ * Void the unpaid invoice behind a cancelled hold, so its link can never be
+ * paid. A settled invoice is left paid — refunding is a deliberate invoicing
+ * act, never a side effect of cancelling a seat.
+ */
+async function voidUnpaidAdmissionInvoice(ctx: ServiceContext, invoiceId: string): Promise<void> {
+  const [invoice] = await ctx.tx
+    .select()
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId))
+    .limit(1);
+  if (!invoice || invoice.paidMinor > 0) return;
+  if (!["sent", "viewed", "overdue"].includes(invoice.status)) return;
+  try {
+    await ctx.callAsSystem(voidInvoice, {
+      id: invoice.id,
+      reason: "The event registration this invoice holds was cancelled.",
+    });
+  } catch (error) {
+    // A payment attempt in flight blocks voiding; the checkout eligibility
+    // hook refuses the payment either way, because the registration is no
+    // longer reserved.
+    if (!(error instanceof ServiceError && error.code === "conflict")) throw error;
+  }
+}
+
 export const listEvents = defineService({
   name: "events.list",
   summary: "List events for the owner workspace.",
@@ -271,22 +444,32 @@ export const resolvePublicEvent = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ slug }),
-  output: eventRow.extend({ sessions: listed(eventSessionWithRemaining) }).nullable(),
+  output: eventRow.extend({
+    sessions: listed(eventSessionWithRemaining),
+    tickets: listed(eventTicketRow),
+  }).nullable(),
   handler: async (input, ctx) => {
     const [event] = await ctx.tx.select().from(events).where(eq(events.slug, input.slug)).limit(1);
     if (!event || event.status === "draft") return null;
-    const sessions = await ctx.tx
-      .select()
-      .from(eventSessions)
-      .where(eq(eventSessions.eventId, event.id))
-      .orderBy(asc(eventSessions.startsAt));
+    const [sessions, tickets] = await Promise.all([
+      ctx.tx
+        .select()
+        .from(eventSessions)
+        .where(eq(eventSessions.eventId, event.id))
+        .orderBy(asc(eventSessions.startsAt)),
+      ctx.tx
+        .select()
+        .from(eventTickets)
+        .where(eq(eventTickets.eventId, event.id))
+        .orderBy(asc(eventTickets.createdAt)),
+    ]);
     const remaining = await Promise.all(
       sessions.map(async (session) => ({
         ...session,
         remaining: Math.max(0, session.capacity - (await occupied(ctx, session.id))),
       })),
     );
-    return { ...event, sessions: remaining };
+    return { ...event, sessions: remaining, tickets };
   },
 });
 
@@ -532,7 +715,7 @@ export const addEventTicket = defineService({
 
 export const registerForEvent = defineService({
   name: "events.register",
-  summary: "Register a contact for a session, waitlisting when the session is full.",
+  summary: "Register a contact for a session, holding paid seats behind an issued invoice and waitlisting when the session is full.",
   kind: "mutation",
   permission: "public",
   input: z.object({
@@ -543,7 +726,13 @@ export const registerForEvent = defineService({
     name: z.string().trim().min(1).max(200).optional(),
     quantity: z.number().int().min(1).max(50).default(1),
   }),
-  output: eventRegistrationRow,
+  output: z.object({
+    registration: eventRegistrationRow,
+    // Where the attendee pays, when admission is paid: the portal invoice page
+    // under its HMAC capability. Null for free seats and waitlist rows — a
+    // waitlist claim is free and carries no invoice.
+    paymentUrl: z.string().url().nullable(),
+  }),
   handler: async (input, ctx) => {
     const event = await loadEvent(ctx, input.eventId);
     if (event.status !== "published") {
@@ -555,17 +744,47 @@ export const registerForEvent = defineService({
       .where(and(eq(eventSessions.id, input.sessionId), eq(eventSessions.eventId, event.id)))
       .for("update");
     if (!session) throw new ServiceError("not_found", "That session is not here.");
-    const taken = await occupied(ctx, session.id);
-    const remaining = session.capacity - taken;
+    // C6.11: a ticket is an admission rule, not an optional caller assertion.
+    const tickets = await ctx.tx.select().from(eventTickets)
+      .where(eq(eventTickets.eventId, event.id));
+    const ticket = tickets.find((candidate) => candidate.id === input.ticketId);
+    if (input.ticketId && (!ticket || !ticket.active)) {
+      throw new ServiceError("validation", "Choose an active ticket for this event.");
+    }
+    if (!input.ticketId && tickets.length > 0) {
+      throw new ServiceError("validation", "Choose a ticket for this event.");
+    }
     const resolved = await ctx.callAsSystem(resolveContact, {
       email: input.email,
       name: input.name,
       source: "event-registration",
     });
+    // One live registration per person per session: a second row would hold
+    // two seats for one attendee, or waitlist them behind themselves.
+    const [duplicate] = await ctx.tx
+      .select({ id: eventRegistrations.id })
+      .from(eventRegistrations)
+      .where(
+        and(
+          eq(eventRegistrations.sessionId, session.id),
+          eq(eventRegistrations.contactId, resolved.contact.id),
+          inArray(eventRegistrations.status, [...LIVE_REGISTRATION]),
+        ),
+      )
+      .limit(1);
+    if (duplicate) {
+      throw new ServiceError("conflict", "This email is already registered for that session.");
+    }
+    const taken = await occupied(ctx, session.id);
+    const remaining = session.capacity - taken;
     const waitlisted = remaining < input.quantity;
     if (waitlisted && !session.waitlistEnabled) {
       throw new ServiceError("conflict", "That session is full.");
     }
+    const paid = ticket !== undefined && ticket.priceMinor > 0;
+    const holdExpiresAt = paid && !waitlisted
+      ? new Date(Date.now() + REGISTRATION_HOLD_MS)
+      : null;
     const [created] = await ctx.tx
       .insert(eventRegistrations)
       .values({
@@ -573,17 +792,51 @@ export const registerForEvent = defineService({
         sessionId: session.id,
         ticketId: input.ticketId ?? null,
         contactId: resolved.contact.id,
-        status: waitlisted ? "waitlisted" : "confirmed",
+        status: waitlisted ? "waitlisted" : paid ? "reserved" : "confirmed",
         quantity: input.quantity,
+        holdExpiresAt,
       })
       .returning();
     ctx.setSubject("eventRegistration", created!.id);
-    ctx.queueEvent(waitlisted ? "events.waitlisted" : "events.registered", {
-      eventId: event.id,
+    if (waitlisted) {
+      ctx.queueEvent("events.waitlisted", {
+        eventId: event.id,
+        registrationId: created!.id,
+        contactId: resolved.contact.id,
+      });
+      return { registration: created!, paymentUrl: null };
+    }
+    if (!paid || !ticket) {
+      ctx.queueEvent("events.registered", {
+        eventId: event.id,
+        registrationId: created!.id,
+        contactId: resolved.contact.id,
+      });
+      return { registration: created!, paymentUrl: null };
+    }
+    // Paid admission converges on the commerce spine (§4.3): the seat is
+    // reserved and its invoice created and issued in this same transaction, so
+    // there is never a held seat without a money object or a charge without a
+    // seat. Settlement confirms the seat (invoicing.settlePayment); the hold
+    // lapses under events.expireHeldRegistrations if it never settles.
+    const issued = await issueAdmissionInvoice(ctx, {
       registrationId: created!.id,
       contactId: resolved.contact.id,
+      eventName: event.name,
+      ticket,
+      quantity: input.quantity,
+      holdExpiresAt: holdExpiresAt!,
     });
-    return created!;
+    const [held] = await ctx.tx
+      .update(eventRegistrations)
+      .set({ invoiceId: issued.invoice.id })
+      .where(eq(eventRegistrations.id, created!.id))
+      .returning();
+    const paymentUrl = `${siteOrigin()}${customerInvoicePath(
+      issued.invoice.id,
+      invoiceAccessToken(issued.invoice),
+    )}`;
+    return { registration: held!, paymentUrl };
   },
 });
 
@@ -595,6 +848,12 @@ export const cancelRegistration = defineService({
   input: z.object({ id }),
   output: eventRegistrationRow,
   handler: async (input, ctx) => {
+    const [reference] = await ctx.tx.select({ sessionId: eventRegistrations.sessionId })
+      .from(eventRegistrations).where(eq(eventRegistrations.id, input.id));
+    if (!reference) throw new ServiceError("not_found", "That registration is not here.");
+    // Serialize capacity changes with enrollment; always lock session first.
+    await ctx.tx.select({ id: eventSessions.id }).from(eventSessions)
+      .where(eq(eventSessions.id, reference.sessionId)).for("update");
     const [existing] = await ctx.tx
       .select()
       .from(eventRegistrations)
@@ -602,41 +861,45 @@ export const cancelRegistration = defineService({
       .for("update");
     if (!existing) throw new ServiceError("not_found", "That registration is not here.");
     if (existing.status === "cancelled") return existing;
+    if (existing.invoiceId && existing.status === "reserved") {
+      // The mirror of catalog.cancelOrder's race guard: a held seat whose
+      // invoice has an in-flight payment attempt cannot be released —
+      // settlement may still legitimately arrive, and it must never land on a
+      // seat somebody else now holds. The attempt's own lifecycle (fail,
+      // cancel, reconcile) is what unblocks a later cancellation.
+      const [activeAttempt] = await ctx.tx
+        .select({ id: payments.id })
+        .from(payments)
+        .where(
+          and(
+            eq(payments.invoiceId, existing.invoiceId),
+            inArray(payments.status, ["created", "processing"]),
+          ),
+        )
+        .limit(1);
+      if (activeAttempt) {
+        throw new ServiceError("conflict", "A payment attempt is still active for this registration. Reconcile or cancel it before releasing the seat.");
+      }
+    }
     const [updated] = await ctx.tx
       .update(eventRegistrations)
       .set({ status: "cancelled" })
       .where(eq(eventRegistrations.id, existing.id))
       .returning();
+    // The cancelled row's invoice id stays on the outcome (the returned row):
+    // a settled paid registration reports it and leaves the refund as a
+    // deliberate invoicing act; an unpaid hold's invoice is voided here so its
+    // payment link dies with the seat.
+    if (existing.invoiceId) {
+      await voidUnpaidAdmissionInvoice(ctx, existing.invoiceId);
+    }
     const [session] = await ctx.tx
       .select()
       .from(eventSessions)
       .where(eq(eventSessions.id, existing.sessionId))
       .limit(1);
-    if (session?.waitlistEnabled) {
-      const remaining = session.capacity - (await occupied(ctx, session.id));
-      const [next] = await ctx.tx
-        .select()
-        .from(eventRegistrations)
-        .where(
-          and(
-            eq(eventRegistrations.sessionId, session.id),
-            eq(eventRegistrations.status, "waitlisted"),
-          ),
-        )
-        .orderBy(asc(eventRegistrations.createdAt))
-        .limit(1);
-      if (next && next.quantity <= remaining) {
-        await ctx.tx
-          .update(eventRegistrations)
-          .set({ status: "confirmed" })
-          .where(eq(eventRegistrations.id, next.id));
-        ctx.queueEvent("events.registered", {
-          eventId: existing.eventId,
-          registrationId: next.id,
-          contactId: next.contactId,
-          promoted: true,
-        });
-      }
+    if (session?.waitlistEnabled && OCCUPYING.includes(existing.status as (typeof OCCUPYING)[number])) {
+      await promoteNext(ctx, existing.eventId, session);
     }
     ctx.setSubject("eventRegistration", existing.id);
     return updated!;
@@ -660,6 +923,25 @@ export const checkInRegistration = defineService({
     if (existing.status !== "confirmed" && existing.status !== "checked_in") {
       throw new ServiceError("conflict", "Only a confirmed registration can be checked in.");
     }
+    const tickets = await ctx.tx.select().from(eventTickets)
+      .where(eq(eventTickets.eventId, existing.eventId));
+    const ticket = tickets.find((candidate) => candidate.id === existing.ticketId);
+    if ((existing.ticketId && (!ticket || !ticket.active)) ||
+        (!existing.ticketId && tickets.length > 0)) {
+      throw new ServiceError("conflict", "This registration has no verifiable free admission. Reconcile its ticket and payment before check-in.");
+    }
+    if (ticket && ticket.priceMinor > 0) {
+      // Paid admission checks in on a settled invoice, never on the row alone:
+      // a legacy confirmation with no invoice stays refused, exactly as before
+      // settlement existed. The settled invoice id rides the outcome row as
+      // the evidence link.
+      const [invoice] = existing.invoiceId
+        ? await ctx.tx.select().from(invoices).where(eq(invoices.id, existing.invoiceId)).limit(1)
+        : [];
+      if (!invoice || invoice.status !== "paid") {
+        throw new ServiceError("conflict", "This paid registration has no settled payment. Reconcile its invoice before check-in.");
+      }
+    }
     const [updated] = await ctx.tx
       .update(eventRegistrations)
       .set({ status: "checked_in", checkedInAt: existing.checkedInAt ?? sql`now()` })
@@ -669,6 +951,173 @@ export const checkInRegistration = defineService({
     ctx.queueEvent("events.checkedIn", { registrationId: existing.id, eventId: existing.eventId });
     return updated!;
   },
+});
+
+export const confirmPaidRegistration = defineService({
+  name: "events.confirmPaidRegistration",
+  summary: "Confirm a held registration once its invoice is fully settled.",
+  kind: "mutation",
+  permission: "system",
+  input: z.object({ registrationId: id, invoiceId: id }),
+  output: eventRegistrationRow,
+  handler: async (input, ctx) => {
+    const [existing] = await ctx.tx
+      .select()
+      .from(eventRegistrations)
+      .where(eq(eventRegistrations.id, input.registrationId))
+      .for("update");
+    if (!existing) throw new ServiceError("not_found", "That registration is not here.");
+    if (existing.invoiceId !== input.invoiceId) {
+      throw new ServiceError("conflict", "That invoice does not hold this registration.");
+    }
+    // Idempotent: a duplicated settlement signal confirms nothing twice.
+    if (existing.status === "confirmed" || existing.status === "checked_in") return existing;
+    if (existing.status !== "reserved") {
+      throw new ServiceError("conflict", "Only a held registration can be confirmed by payment.");
+    }
+    const [updated] = await ctx.tx
+      .update(eventRegistrations)
+      .set({ status: "confirmed" })
+      .where(eq(eventRegistrations.id, existing.id))
+      .returning();
+    ctx.setSubject("eventRegistration", existing.id);
+    ctx.queueEvent("events.registered", {
+      eventId: existing.eventId,
+      registrationId: existing.id,
+      contactId: existing.contactId,
+      invoiceId: input.invoiceId,
+    });
+    return updated!;
+  },
+});
+
+export const expireHeldRegistrations = defineService({
+  name: "events.expireHeldRegistrations",
+  summary: "Cancel held registrations whose payment deadline passed without settlement.",
+  kind: "mutation",
+  permission: "system",
+  input: z.object({ limit: z.number().int().min(1).max(500).default(100) }),
+  output: row({ expired: z.number().int() }),
+  handler: async (input, ctx) => {
+    const candidates = await ctx.tx
+      .select({ id: eventRegistrations.id })
+      .from(eventRegistrations)
+      .where(
+        and(
+          eq(eventRegistrations.status, "reserved"),
+          isNotNull(eventRegistrations.holdExpiresAt),
+          lt(eventRegistrations.holdExpiresAt, sql`now()`),
+        ),
+      )
+      .orderBy(asc(eventRegistrations.holdExpiresAt))
+      .limit(input.limit);
+    let expired = 0;
+    for (const candidate of candidates) {
+      const [registration] = await ctx.tx
+        .select({ invoiceId: eventRegistrations.invoiceId })
+        .from(eventRegistrations)
+        .where(eq(eventRegistrations.id, candidate.id))
+        .limit(1);
+      const [invoice] = registration?.invoiceId
+        ? await ctx.tx
+            .select({ status: invoices.status, paidMinor: invoices.paidMinor })
+            .from(invoices)
+            .where(eq(invoices.id, registration.invoiceId))
+            .limit(1)
+        : [];
+      // Money arrived (fully or in part): the seat is no longer the sweeper's
+      // to release — the owner reconciles a partial payment by hand.
+      if (invoice && (invoice.paidMinor > 0 || invoice.status === "paid" || invoice.status === "refunded")) {
+        continue;
+      }
+      // Cancelling releases the seat, voids the unpaid invoice and runs the
+      // waitlist promotion cascade, all inside the cancellation's own locks.
+      try {
+        await ctx.callAsSystem(cancelRegistration, { id: candidate.id });
+      } catch (error) {
+        // A payment attempt that began before the hold lapsed blocks the
+        // release; the attempt's own lifecycle unblocks a later sweep.
+        if (error instanceof ServiceError && error.code === "conflict") continue;
+        throw error;
+      }
+      expired += 1;
+    }
+    return { expired };
+  },
+});
+
+export const cancelRegistrationForInvoice = defineService({
+  name: "events.cancelRegistrationForInvoice",
+  summary: "Cancel the registration an event invoice holds, when that invoice is voided or refunded.",
+  kind: "mutation",
+  permission: "system",
+  input: z.object({ invoiceId: id }),
+  output: row({ cancelled: z.boolean() }),
+  handler: async (input, ctx) => {
+    const [invoice] = await ctx.tx
+      .select({ sourceType: invoices.sourceType, sourceId: invoices.sourceId })
+      .from(invoices)
+      .where(eq(invoices.id, input.invoiceId))
+      .limit(1);
+    if (!invoice || invoice.sourceType !== "event" || !invoice.sourceId) {
+      return { cancelled: false };
+    }
+    const [registration] = await ctx.tx
+      .select({ id: eventRegistrations.id, status: eventRegistrations.status })
+      .from(eventRegistrations)
+      .where(eq(eventRegistrations.id, invoice.sourceId))
+      .limit(1);
+    if (!registration || registration.status === "cancelled") return { cancelled: false };
+    await ctx.callAsSystem(cancelRegistration, { id: registration.id });
+    return { cancelled: true };
+  },
+});
+
+/** Refund or void of an event invoice cancels the seat and promotes the waitlist. */
+async function onInvoiceClosed(payload: unknown): Promise<void> {
+  const invoiceId = (payload as { invoiceId?: string } | null)?.invoiceId;
+  if (!invoiceId) return;
+  await cancelRegistrationForInvoice.call({ invoiceId }, { kind: "system" });
+}
+
+export async function onInvoiceRefunded(payload: unknown): Promise<void> {
+  await onInvoiceClosed(payload);
+}
+
+export async function onInvoiceVoided(payload: unknown): Promise<void> {
+  await onInvoiceClosed(payload);
+}
+
+// C6.11: a lapsed hold must never become payable. Paying an event invoice is
+// refused at checkout unless the registration is still reserved, its hold is
+// still live, and the session is still ahead on a published event.
+registerCheckoutEligibility("event", async (ctx, sourceId) => {
+  const [registration] = await ctx.tx
+    .select({
+      status: eventRegistrations.status,
+      holdExpiresAt: eventRegistrations.holdExpiresAt,
+      sessionId: eventRegistrations.sessionId,
+      eventId: eventRegistrations.eventId,
+    })
+    .from(eventRegistrations)
+    .where(eq(eventRegistrations.id, sourceId))
+    .limit(1);
+  if (!registration || registration.status !== "reserved") return false;
+  if (!registration.holdExpiresAt || registration.holdExpiresAt.getTime() <= Date.now()) {
+    return false;
+  }
+  const [session] = await ctx.tx
+    .select({ startsAt: eventSessions.startsAt })
+    .from(eventSessions)
+    .where(eq(eventSessions.id, registration.sessionId))
+    .limit(1);
+  if (!session || session.startsAt.getTime() <= Date.now()) return false;
+  const [event] = await ctx.tx
+    .select({ status: events.status })
+    .from(events)
+    .where(eq(events.id, registration.eventId))
+    .limit(1);
+  return event?.status === "published";
 });
 
 export const eventCalendar = defineService({
@@ -693,6 +1142,161 @@ export const eventCalendar = defineService({
   },
 });
 
+/**
+ * The demo contribution for events (C6.11, C1.28).
+ *
+ * A class rather than a conference, because the thing an owner needs to see
+ * working is the one that is hard to believe from a screenshot: a session
+ * with a real capacity, one seat already gone, and a public page that says so.
+ * The class is paid on purpose — its public page carries the registration
+ * form, and buying a seat walks the real invoice path, so the demo proves
+ * purchasable admission rather than asserting it.
+ */
+const DEMO_CONTRIBUTION = { key: "events.demo-class", version: 1 };
+const DEMO_OUTCOME = "events.demo-class.visible";
+const DEMO_SLUG = "freeholder-demo-sourdough-class";
+
+const DEMO_CLASS = {
+  en: {
+    name: "[Demo] Intro to sourdough",
+    summary: "Four hours, one loaf each, everything provided.",
+    venueName: "The back kitchen",
+    ticket: "General admission",
+  },
+  es: {
+    name: "[Demo] Introducción a la masa madre",
+    summary: "Cuatro horas, un pan por persona, todo incluido.",
+    venueName: "La cocina trasera",
+    ticket: "Entrada general",
+  },
+  fr: {
+    name: "[Demo] Initiation au levain",
+    summary: "Quatre heures, un pain chacun, tout est fourni.",
+    venueName: "La cuisine du fond",
+    ticket: "Entrée générale",
+  },
+} as const;
+
+export const loadDemoEvent = defineService({
+  name: "events.loadDemoFixture",
+  summary: "Load the events contribution for a tracked demo run.",
+  kind: "mutation",
+  permission: "scoped",
+  input: demoHandlerInputSchema,
+  output: demoLoadResultSchema,
+  handler: async (input, ctx) => {
+    await requireDemoHandlerRun(ctx.tx, input, DEMO_CONTRIBUTION, "load");
+    const copy = DEMO_CLASS[input.locale as keyof typeof DEMO_CLASS];
+    if (!copy) throw new ServiceError("validation", "Unsupported demo locale.");
+
+    const made = await ctx.callAsSystem(createEvent, {
+      name: copy.name,
+      slug: DEMO_SLUG,
+      summary: copy.summary,
+      venueName: copy.venueName,
+    });
+    // Far enough ahead that the demo does not age into a past event the
+    // first week nobody looks at it.
+    const startsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const endsAt = new Date(startsAt.getTime() + 4 * 60 * 60 * 1000);
+    await ctx.callAsSystem(addEventSession, {
+      eventId: made.id,
+      startsAt,
+      endsAt,
+      capacity: 8,
+      waitlistEnabled: true,
+    });
+    await ctx.callAsSystem(addEventTicket, {
+      eventId: made.id,
+      name: copy.ticket,
+      priceMinor: 6500,
+    });
+    // Published, because an unpublished demo proves the admin screen exists
+    // and nothing about what a visitor would see.
+    await ctx.callAsSystem(publishEvent, { id: made.id, expectedVersion: made.version });
+
+    return demoLoadResultSchema.parse({
+      records: [
+        {
+          fixtureKey: "demo-class",
+          subjectType: "event",
+          subjectId: made.id,
+          label: made.name,
+        },
+      ],
+    });
+  },
+});
+
+export const purgeDemoEvent = defineService({
+  name: "events.purgeDemoFixture",
+  summary: "Purge only events proven to belong to a tracked demo run.",
+  kind: "mutation",
+  permission: "scoped",
+  input: demoHandlerInputSchema,
+  output: demoPurgeResultSchema,
+  handler: async (input, ctx) => {
+    await requireDemoHandlerRun(ctx.tx, input, DEMO_CONTRIBUTION, "purge");
+    const purged: Array<{ subjectType: string; subjectId: string }> = [];
+    for (const record of input.records) {
+      if (record.fixtureKey !== "demo-class" || record.subjectType !== "event") {
+        throw new ServiceError("validation", "Unexpected events demo provenance.");
+      }
+      // Registrations point at a contact with onDelete: restrict, so they go
+      // first. They are answers given to a demo, and the run that created
+      // them is the run removing them; sessions and tickets cascade.
+      await ctx.tx
+        .delete(eventRegistrations)
+        .where(eq(eventRegistrations.eventId, record.subjectId));
+      await ctx.tx.delete(events).where(eq(events.id, record.subjectId));
+      purged.push({ subjectType: record.subjectType, subjectId: record.subjectId });
+    }
+    return demoPurgeResultSchema.parse({ purged });
+  },
+});
+
+export const verifyDemoEvent = defineService({
+  name: "events.verifyDemoFixture",
+  summary: "Verify the visible events outcome for a tracked demo run.",
+  kind: "query",
+  permission: "scoped",
+  input: demoHandlerInputSchema,
+  output: demoVerifyResultSchema,
+  handler: async (input, ctx) => {
+    await requireDemoHandlerRun(ctx.tx, input, DEMO_CONTRIBUTION, "verify");
+    const ids = input.records
+      .filter((record) => record.subjectType === "event")
+      .map((record) => record.subjectId);
+    const [found] = ids.length
+      ? await ctx.tx
+          .select({ slug: events.slug, name: events.name, status: events.status })
+          .from(events)
+          .where(eq(events.id, ids[0]!))
+          .limit(1)
+      : [];
+    const sessions = found
+      ? await ctx.tx
+          .select({ id: eventSessions.id })
+          .from(eventSessions)
+          .where(eq(eventSessions.eventId, ids[0]!))
+      : [];
+    return demoVerifyResultSchema.parse({
+      outcomes: [
+        {
+          key: DEMO_OUTCOME,
+          // Published *and* has a session: a class with no date is not a
+          // class anybody could attend, so it would prove nothing.
+          achieved:
+            found?.slug === DEMO_SLUG &&
+            found.name.startsWith("[Demo]") &&
+            found.status === "published" &&
+            sessions.length > 0,
+          detail: found?.name,
+        },
+      ],
+    });
+  },
+});
 export default [
   listEvents,
   getEvent,
@@ -707,5 +1311,11 @@ export default [
   registerForEvent,
   cancelRegistration,
   checkInRegistration,
+  confirmPaidRegistration,
+  expireHeldRegistrations,
+  cancelRegistrationForInvoice,
   eventCalendar,
+  loadDemoEvent,
+  purgeDemoEvent,
+  verifyDemoEvent,
 ];

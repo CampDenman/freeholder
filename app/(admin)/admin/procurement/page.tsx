@@ -77,7 +77,7 @@ export default async function ProcurementPage({
           {suppliers.length === 0 ? <p className="mb-4 text-sm text-ink-muted">{t("catalog.procure.suppliersEmpty")}</p> : (
             <ul className="mb-4 grid list-none gap-2 p-0 text-sm">
               {suppliers.map((row) => (
-                <li key={row.id}>{row.name} · {row.currency} · {t("catalog.procure.leadTime", { days: row.leadTimeDays })}</li>
+                <li key={row.id} id={`supplier-${row.id}`}>{row.name} · {row.currency} · {t("catalog.procure.leadTime", { days: row.leadTimeDays })}</li>
               ))}
             </ul>
           )}

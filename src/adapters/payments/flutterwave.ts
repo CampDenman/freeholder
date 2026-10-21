@@ -12,6 +12,8 @@ import {
   parseProviderJson,
   providerIdentifier,
   providerTime,
+  refuseOffSessionCharge,
+  refuseRecurringSchedule,
   unsupportedSavedMethod,
   verifyProviderHmac,
 } from "./provider-helpers";
@@ -22,6 +24,7 @@ const capabilities: PaymentAdapterCapabilities = {
   partialRefunds: true,
   savedMethods: false,
   subscriptions: false,
+  offSessionCharges: false,
   disputes: false,
   payouts: false,
   inPerson: false,
@@ -172,6 +175,10 @@ export function createFlutterwavePayments(options: FlutterwavePaymentOptions = {
       };
     },
     async revokeSavedMethod() { unsupportedSavedMethod("Flutterwave"); },
+    chargeSavedMethod: refuseOffSessionCharge("flutterwave"),
+    createRecurringSchedule: refuseRecurringSchedule("flutterwave"),
+    updateRecurringSchedule: refuseRecurringSchedule("flutterwave"),
+    cancelRecurringSchedule: refuseRecurringSchedule("flutterwave"),
     async verifyWebhook(request) {
       if (webhookSecrets.length === 0) throw new AdapterError("payments", "flutterwave", "unavailable", "Flutterwave webhook verification is not configured.");
       verifyProviderHmac({

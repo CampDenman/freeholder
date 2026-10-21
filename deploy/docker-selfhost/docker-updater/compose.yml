@@ -1,0 +1,64 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# The standard app/db/caddy recipe supported by the opt-in host updater
+# (deploy/docker-selfhost/docker-updater/README.md, C10.31). The app is
+# reachable only through Caddy and mounts nothing but the updater's private
+# control socket; Docker's socket never enters the application.
+services:
+  app:
+    image: ${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:edge}
+    restart: unless-stopped
+    expose:
+      - "3000"
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgres://freeholder:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/freeholder
+      FREEHOLDER_STORAGE: s3
+      FREEHOLDER_UPDATE_SOCKET: /run/freeholder-updater/updater.sock
+    volumes:
+      - /run/freeholder-updater:/run/freeholder-updater:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: freeholder
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: freeholder
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U freeholder -d freeholder"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

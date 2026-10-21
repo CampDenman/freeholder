@@ -142,7 +142,7 @@ export default async function ScoringPage({
               <input
                 name="name"
                 required
-                className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -150,7 +150,7 @@ export default async function ScoringPage({
               <select
                 name="kind"
                 defaultValue="event"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {SCORING_RULE_KINDS.map((kind) => (
                   <option key={kind} value={kind}>
@@ -164,7 +164,7 @@ export default async function ScoringPage({
               <input
                 name="eventName"
                 list="scoring-events"
-                className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-sm"
               />
               {/* A suggestion list rather than a closed picker: the platform
                   emits far more than this, and a dropdown of a hundred entries
@@ -181,7 +181,7 @@ export default async function ScoringPage({
                 type="number"
                 name="points"
                 defaultValue={10}
-                className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="w-20 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -191,7 +191,7 @@ export default async function ScoringPage({
                 name="decayDays"
                 min={0}
                 defaultValue={0}
-                className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="w-20 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -200,7 +200,7 @@ export default async function ScoringPage({
                 type="number"
                 name="maxAwards"
                 min={1}
-                className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="w-20 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -208,7 +208,7 @@ export default async function ScoringPage({
               <input
                 type="number"
                 name="thresholdScore"
-                className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="w-20 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -216,7 +216,7 @@ export default async function ScoringPage({
               <select
                 name="advanceTo"
                 defaultValue=""
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="">{t("scoring.stayPut")}</option>
                 {LIFECYCLE_LADDER.map((stage) => (

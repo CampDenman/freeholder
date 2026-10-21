@@ -68,7 +68,7 @@ export default async function CartsPage({
               {rows.map((cart) => (
                 <li key={cart.id}>
                   <a href={`/admin/carts/${cart.id}`} className="font-semibold hover:text-accent">
-                    {cart.name ?? cart.token.slice(0, 8)}
+                    {cart.name ?? cart.id.slice(0, 8)}
                   </a>
                   {" · "}
                   <Pill>{t(`catalog.carts.status.${cart.status}`)}</Pill>

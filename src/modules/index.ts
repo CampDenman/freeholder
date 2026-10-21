@@ -30,12 +30,28 @@ import rentalsManifest from "@/modules/rentals/manifest";
 import quotesManifest from "@/modules/quotes/manifest";
 import projectsManifest from "@/modules/projects/manifest";
 import galleriesManifest from "@/modules/galleries/manifest";
+import reviewsManifest from "@/modules/reviews/manifest";
+import membersManifest from "@/modules/members/manifest";
 import crmManifest from "@/modules/crm/manifest";
+import loyaltyManifest from "@/modules/loyalty/manifest";
+import referralsManifest from "@/modules/referrals/manifest";
+import adsManifest from "@/modules/ads/manifest";
+import shareManifest from "@/modules/share/manifest";
+import popupsManifest from "@/modules/popups/manifest";
+import documentsManifest from "@/modules/documents/manifest";
+import automationsManifest from "@/modules/automations/manifest";
+import reportingManifest from "@/modules/reporting/manifest";
+import subscriptionsManifest from "@/modules/subscriptions/manifest";
+import assistantManifest from "@/modules/assistant/manifest";
+import socialManifest from "@/modules/social/manifest";
 import giftRegistryManifest from "../../plugins/gift-registry/manifest";
+import assessmentsManifest from "./assessments/manifest";
+import calculatorsManifest from "./calculators/manifest";
 import printOnDemandManifest from "../../plugins/print-on-demand/manifest";
 import communityManifest from "../../plugins/community/manifest";
 import voiceVideoManifest from "../../plugins/voice-video/manifest";
 import marketplaceManifest from "../../plugins/marketplace/manifest";
+import { localPluginManifests } from "./local-plugins";
 import type { ModuleManifest } from "@/core/module";
 
 const manifests: ModuleManifest[] = [
@@ -55,12 +71,28 @@ const manifests: ModuleManifest[] = [
   quotesManifest,
   projectsManifest,
   galleriesManifest,
+  reviewsManifest,
+  membersManifest,
   crmManifest,
+  adsManifest,
+  shareManifest,
+  popupsManifest,
+  documentsManifest,
+  automationsManifest,
+  reportingManifest,
+  subscriptionsManifest,
+  assistantManifest,
+  socialManifest,
+  loyaltyManifest,
+  referralsManifest,
   giftRegistryManifest,
   printOnDemandManifest,
+  assessmentsManifest,
+  calculatorsManifest,
   communityManifest,
   voiceVideoManifest,
   marketplaceManifest,
+  ...localPluginManifests,
 ];
 
 export default manifests;

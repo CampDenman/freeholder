@@ -31,8 +31,10 @@ import {
   updateBusiness,
 } from "@/core/settings/service";
 import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
-import { PAGES, IMAGES, BUSINESS, LOCATION } from "../../seed/demo/content";
+import { PAGES, IMAGES, BUSINESS, LOCATION, NEWSLETTER } from "../../seed/demo/content";
 import type { BlockNode } from "@/modules/cms/blocks/types";
+import { compute } from "@/modules/calculators/service";
+import { listNewsletters, listPublicIssues, listTemplates } from "@/modules/newsletters/service";
 import {
   ANONYMOUS,
   closeDb,
@@ -264,8 +266,27 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     // the proof that path is wired up end to end.
     const paths = await publishedPaths.call({ locale: "en" }, STAFF);
     expect(paths.map((p: { slug: string }) => p.slug).sort()).toEqual(
-      [...PAGES.map((p) => p.slug), "locations", `locations/${LOCATION.slug}`].sort(),
+      [
+        ...PAGES.map((p) => p.slug),
+        "locations",
+        `locations/${LOCATION.slug}`,
+        `newsletters/${NEWSLETTER.issue.slug}`,
+      ].sort(),
     );
+
+    const letters = await listNewsletters.call({}, OWNER);
+    expect(letters.map((letter) => letter.slug)).toContain(NEWSLETTER.slug);
+    const issues = await listPublicIssues.call({}, ANONYMOUS);
+    expect(issues.map((issue) => issue.slug)).toContain(NEWSLETTER.issue.slug);
+    const templates = await listTemplates.call({}, OWNER);
+    expect(
+      templates.some(
+        (template) => template.name === NEWSLETTER.template.name && template.kind === "campaign",
+      ),
+    ).toBe(true);
+    const archive = await resolvePage.call({ slug: "newsletters", locale: "en" }, ANONYMOUS);
+    const subscribe = (archive!.blocks as BlockNode[]).find((node) => node.type === "newsletterSubscribe");
+    expect(subscribe?.props.consentStatement).toBe(NEWSLETTER.consentStatement);
   });
 
   it("builds real images with real renditions", async () => {
@@ -298,6 +319,35 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     expect(imageBlocks).toBeGreaterThan(0);
   });
 
+  it("opens the planning calculators on figures that actually compute", async () => {
+    await installDemo.call({ publish: true }, OWNER);
+
+    // The affordability calculator: ten hours is two past the eight-hour
+    // day, at the published hourly rate, on the published base.
+    const cost = await compute.call(
+      { slug: "wedding-day-cost", answers: { hours: 10 } },
+      ANONYMOUS,
+    );
+    expect(cost.ok).toBe(true);
+    expect(cost.value).toBe(3900); // $3,400 + 2 × $250
+    expect(cost.basedOn.map((entry) => entry.key).sort()).toEqual([
+      "price.wedding-day-base",
+      "price.wedding-extra-hour",
+    ]);
+    // The as-of of the oldest input — how old the answer really is.
+    expect(cost.oldestAsOf?.toISOString()).toBe("2026-09-01T00:00:00.000Z");
+    expect(cost.assumptions).toContain("not a quote");
+
+    // The rebate-eligibility calculator holds the visitor to the published
+    // cap: forty ordered prints still credit only twenty.
+    const credit = await compute.call(
+      { slug: "print-credit", answers: { prints: 40 } },
+      ANONYMOUS,
+    );
+    expect(credit.ok).toBe(true);
+    expect(credit.value).toBe(80); // 20 × $4.00
+  });
+
   it("refuses to install over a site that already has pages", async () => {
     await installDemo.call({ publish: true }, OWNER);
     const error = await failure(installDemo.call({ publish: true }, OWNER));
@@ -307,7 +357,7 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     // And it refused *before* writing anything: no duplicate pages, no second
     // set of images.
     const rows = await db().select().from(pages);
-    expect(rows).toHaveLength(PAGES.length + 2); // + the location and its index
+    expect(rows).toHaveLength(PAGES.length + 3); // + the location, its index, and the demo issue
     expect(await db().select().from(assets)).toHaveLength(
       Object.keys(IMAGES).length,
     );

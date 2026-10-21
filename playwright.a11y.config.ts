@@ -59,14 +59,31 @@ Object.assign(process.env, {
   CREDENTIAL_KEY: credentialKey,
   DATABASE_URL: databaseUrl,
   FREEHOLDER_JOBS: "off",
+  // Playwright's global setup owns this disposable database migration. The
+  // server starts before global setup, so allowing both paths to migrate would
+  // manufacture a schema race that no browser behaviour depends on.
+  FREEHOLDER_SKIP_MIGRATE: "1",
   FREEHOLDER_UNSAFE_LOCAL_STORAGE: "1",
   LOCAL_STORAGE_ROOT: "test-results/browser-media",
   SESSION_SECRET: sessionSecret,
+  BOOTSTRAP_SECRET: "browser-test-only-bootstrap-secret-32-characters",
+  // Campaign journeys need a delivering bulk route. Readiness stays false
+  // until a test inserts a verified default sender, so other specs still see
+  // the "configure mail" gate.
+  MAIL_BULK_ADAPTER: "resend",
+  MAIL_BULK_FROM: "news@example.test",
+  RESEND_API_KEY: "browser-test-key",
+  RESEND_WEBHOOK_SECRET: "whsec_browser_test",
 });
 
 export default defineConfig({
   testDir: "./tests/browser",
   testMatch: "*.spec.ts",
+  // The playground proof boots the production build in playground mode on its
+  // own disposable database; it runs only under
+  // playwright.playground.config.ts (pnpm test:playground). Under this
+  // ordinary-instance config /playground is not a demo surface at all.
+  testIgnore: "playground.spec.ts",
   tsconfig: "./tsconfig.json",
   fullyParallel: false,
   workers: 1,
@@ -90,7 +107,9 @@ export default defineConfig({
   },
   webServer: {
     command: "node scripts/start-browser-server.mjs",
-    url: `${baseURL}/api/health`,
+    // This test process deliberately disables workers so fixtures cannot race
+    // scheduled maintenance. Production readiness still requires a worker.
+    url: `${baseURL}/api/health/live`,
     timeout: 120_000,
     reuseExistingServer: false,
   },

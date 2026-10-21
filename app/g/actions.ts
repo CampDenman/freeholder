@@ -6,12 +6,17 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
-import { GALLERY_SESSION_COOKIE } from "@/modules/galleries/cookies";
+import {
+  GALLERY_PARTNER_INVITE_COOKIE,
+  GALLERY_SESSION_COOKIE,
+} from "@/modules/galleries/cookies";
 import {
   clearGallerySelection,
+  inviteGalleryPartner,
   openGalleryWithLogin,
   redeemGalleryGuest,
   requestGalleryArchive,
+  revokeGalleryPartner,
   setGallerySelection,
   submitGalleryRound,
   unlockGallery,
@@ -150,6 +155,49 @@ export async function submitGalleryRoundAction(form: FormData): Promise<void> {
   await proof(slug, async () => {
     const token = (await cookies()).get(GALLERY_SESSION_COOKIE)?.value ?? "";
     return submitGalleryRound.call({ sessionToken: token }, { kind: "anonymous" });
+  });
+}
+
+/** The client shares the gallery with a partner (C9.29). */
+export async function inviteGalleryPartnerAction(form: FormData): Promise<void> {
+  const slug = text(form, "slug");
+  let failure: string | null = null;
+  try {
+    const token = (await cookies()).get(GALLERY_SESSION_COOKIE)?.value;
+    if (!token) failure = "That did not work. Nothing has changed.";
+    else {
+      const guest = await inviteGalleryPartner.call(
+        {
+          sessionToken: token,
+          email: text(form, "email"),
+          name: text(form, "name") || undefined,
+        },
+        { kind: "anonymous" },
+      );
+      (await cookies()).set(GALLERY_PARTNER_INVITE_COOKIE, guest.link, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/g",
+        maxAge: 300,
+      });
+    }
+  } catch (error) {
+    if (isRedirect(error)) throw error;
+    failure = messageFor(error);
+  }
+  if (failure) redirect(`/g/${slug}?error=${encodeURIComponent(failure)}`);
+  redirect(`/g/${slug}?invited=1`);
+}
+
+export async function revokeGalleryPartnerAction(form: FormData): Promise<void> {
+  const slug = text(form, "slug");
+  await proof(slug, async () => {
+    const token = (await cookies()).get(GALLERY_SESSION_COOKIE)?.value ?? "";
+    return revokeGalleryPartner.call(
+      { sessionToken: token, id: text(form, "id") },
+      { kind: "anonymous" },
+    );
   });
 }
 

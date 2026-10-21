@@ -5,12 +5,14 @@ import { useActionState } from "react";
 import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { Button, Callout, Field, Input } from "@/ui/primitives";
 import { signInAction, type ActionState } from "../actions";
+import { PasskeySignIn } from "./PasskeySignIn";
 
 export interface SignInFormLabels {
   email: string;
   password: string;
   submit: string;
   pending: string;
+  passkey: { submit: string; intro: string; failed: string };
 }
 
 export function SignInForm({ labels }: { labels: SignInFormLabels }) {
@@ -33,12 +35,13 @@ export function SignInForm({ labels }: { labels: SignInFormLabels }) {
           id="email"
           name="email"
           type="email"
-          autoComplete="username"
+          autoComplete="username webauthn"
           defaultValue={state.values?.email ?? ""}
           required
           autoFocus
         />
       </Field>
+      <PasskeySignIn labels={labels.passkey} disabled={pending} />
       <Field label={labels.password} htmlFor="password">
         <Input
           id="password"

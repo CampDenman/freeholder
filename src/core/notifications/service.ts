@@ -17,11 +17,13 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
-import { listed, row, timestamp, uuid } from "@/core/contract";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { notificationAdapterStatus, pushNotifications, smsNotifications } from "@/adapters/notifications";
 import { users, roleGrants } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
+import { contactForActor } from "@/core/portal/service";
+import { devicesForContact } from "./devices";
 import { db } from "@/core/db";
 import { env } from "@/core/env";
 import { enqueueJob } from "@/core/jobs";
@@ -33,7 +35,10 @@ import {
   notificationReceipts,
   notificationSettings,
   notifications,
+  deviceTokens,
+  webPushSubscriptions,
 } from "@/core/notifications/schema";
+import { acceptablePushEndpoint, sendWebPush, subscriptionsFor, vapidKeys } from "@/core/notifications/web-push";
 import { businessProfile } from "@/core/settings/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { translator } from "@/core/i18n";
@@ -57,6 +62,36 @@ export const NOTIFICATION_TOPICS = [
   "mail.delivery",
   "contribute.ingested",
   "contribute.status",
+  // A scheduled accounting export that did not arrive (C9.32). It earns a
+  // topic of its own because its failure is *silence*: unlike a wrong figure
+  // on a screen, nobody is looking at the thing that stopped.
+  "reports.exportFailed",
+  // A security release this instance has been running without for longer than
+  // its severity allows (§39.10, C10.22). Its own topic for the same reason:
+  // the failure mode of an updater is not a wrong answer, it is nobody asking
+  // the question for three months, so silence must not be indistinguishable
+  // from safety.
+  "platform.securityUpdate",
+  // The four moments §35 says are worth a customer's attention on their phone.
+  // They are ordinary topics, not a mobile-only system: each is subject to the
+  // same per-topic preferences and reaches email and in-app too, because
+  // "a push that says something the platform would not have emailed is a bug"
+  // (§35.1).
+  "booking.confirmed",
+  "gallery.ready",
+  "invoice.due",
+  "catalog.backInStock",
+  // Member-to-member activity (§44, C12.13). Email defaults to a digest for
+  // these: a person should not get an email every time someone reacts.
+  "members.follow",
+  "members.friend",
+  "members.mention",
+  "members.comment",
+  "members.reaction",
+  "members.message",
+  "members.call",
+  "members.sale",
+  "members.safety",
 ] as const;
 
 const notificationCreateResult = z.object({
@@ -100,6 +135,8 @@ const settingsRow = row({
   digestWeekday: z.number().int(),
   timezone: z.string().nullable(),
   escalationMinutes: z.number().int(),
+  quietStartMinute: z.number().int().nullable(),
+  quietEndMinute: z.number().int().nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -119,6 +156,8 @@ const preferenceStatus = z.object({
     digestWeekday: z.number().int(),
     timezone: z.string().nullable(),
     escalationMinutes: z.number().int(),
+    quietStartMinute: z.number().int().nullable(),
+    quietEndMinute: z.number().int().nullable(),
   }),
   email: z.object({
     provider: z.enum(["smtp", "console", "gmail", "outlook"]),
@@ -192,6 +231,35 @@ registerContactReference({
         .from(notifications).where(inArray(notifications.id, ids)),
       (ids, id) => tx.update(notifications).set({ recipientContactId: id })
         .where(inArray(notifications.id, ids)),
+    ),
+});
+
+registerContactReference({
+  // §35.1's DeviceToken. A plain repoint is safe precisely because the unique
+  // index is on the token alone: the survivor cannot already hold the row
+  // being moved, so there is no conflict to decide. Had it been unique on
+  // (contact, token), this would have needed a decision, not an update.
+  table: "device_tokens",
+  repoint: (tx, duplicateId, survivingId) =>
+    tx.update(deviceTokens).set({ contactId: survivingId })
+      .where(eq(deviceTokens.contactId, duplicateId)),
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx.select({ id: deviceTokens.id, contactId: deviceTokens.contactId })
+      .from(deviceTokens)
+      .where(inArray(deviceTokens.contactId, [duplicateId, survivingId])),
+    undoable: true,
+  }),
+  restoreAfterUndo: (tx, before, after, duplicateId) =>
+    restoreContactPointers(
+      tx,
+      "Device tokens",
+      before,
+      after,
+      duplicateId,
+      (ids) => tx.select({ id: deviceTokens.id, contactId: deviceTokens.contactId })
+        .from(deviceTokens).where(inArray(deviceTokens.id, ids)),
+      (ids, id) => tx.update(deviceTokens).set({ contactId: id })
+        .where(inArray(deviceTokens.id, ids)),
     ),
 });
 
@@ -326,6 +394,7 @@ registerContactPrivacySource({
     "notification_preferences",
     "notification_settings",
     "notification_digests",
+    "device_tokens",
   ],
   exportData: async (tx, contactId) => {
     const noticeRows = await tx.select().from(notifications)
@@ -347,6 +416,11 @@ registerContactPrivacySource({
         .where(eq(notificationSettings.contactId, contactId)),
       digests: await tx.select().from(notificationDigests)
         .where(eq(notificationDigests.recipientContactId, contactId)),
+      // Which devices this person is reachable on is data about them, so an
+      // export that omitted it would be an incomplete answer to "what do you
+      // hold". The token itself is included: it is theirs, not ours.
+      devices: await tx.select().from(deviceTokens)
+        .where(eq(deviceTokens.contactId, contactId)),
     };
   },
   erase: async (tx, contactId) => {
@@ -362,7 +436,19 @@ registerContactPrivacySource({
     const noticeRows = await tx.delete(notifications)
       .where(eq(notifications.recipientContactId, contactId))
       .returning({ id: notifications.id });
-    return { affected: digests.length + preferences.length + settings.length + noticeRows.length };
+    // Deleted rather than revoked: erasure means the platform stops holding a
+    // way to reach this person's phone, and a revoked row still holds one.
+    const devices = await tx.delete(deviceTokens)
+      .where(eq(deviceTokens.contactId, contactId))
+      .returning({ id: deviceTokens.id });
+    return {
+      affected:
+        digests.length +
+        preferences.length +
+        settings.length +
+        noticeRows.length +
+        devices.length,
+    };
   },
 });
 
@@ -491,6 +577,8 @@ interface EffectiveSettings {
   digestWeekday: number;
   timezone: string;
   escalationMinutes: number;
+  quietStartMinute?: number | null;
+  quietEndMinute?: number | null;
 }
 
 async function effectiveSettings(
@@ -504,6 +592,8 @@ async function effectiveSettings(
       digestWeekday: 1,
       timezone: await fallbackTimezone(tx, input),
       escalationMinutes: 60,
+      quietStartMinute: null,
+      quietEndMinute: null,
     };
   }
   const condition = input.kind === "user"
@@ -520,6 +610,8 @@ async function effectiveSettings(
     digestWeekday: stored?.digestWeekday ?? 1,
     timezone: stored?.timezone ?? (await fallbackTimezone(tx, input)),
     escalationMinutes: stored?.escalationMinutes ?? 60,
+    quietStartMinute: stored?.quietStartMinute ?? null,
+    quietEndMinute: stored?.quietEndMinute ?? null,
   };
 }
 
@@ -598,6 +690,29 @@ export function nextDigestAt(now: Date, settings: EffectiveSettings): Date {
   return new Date(now.getTime() + 24 * 60 * 60 * 1000);
 }
 
+/**
+ * Quiet hours (C12.22): when `at` falls inside the person's quiet window, the
+ * moment it ends; otherwise `at`. The window may cross midnight.
+ */
+export function afterQuietHours(at: Date, settings: EffectiveSettings): Date {
+  const { quietStartMinute: start, quietEndMinute: end } = settings;
+  if (start == null || end == null || start === end) return at;
+  let timezone = settings.timezone;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: timezone }).format(at);
+  } catch {
+    timezone = "UTC";
+  }
+  const local = localDateParts(at, timezone);
+  const minute = local.hour * 60 + local.minute;
+  const inside = start < end ? minute >= start && minute < end : minute >= start || minute < end;
+  if (!inside) return at;
+  // The window ends today, unless it crosses midnight and we are before it.
+  const endsTomorrow = start > end && minute >= start;
+  const day = new Date(Date.UTC(local.year, local.month - 1, local.day + (endsTomorrow ? 1 : 0)));
+  return localToUtc(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), end, timezone);
+}
+
 async function effectiveModes(
   tx: Tx,
   input: CreateNotificationInput["recipient"],
@@ -605,7 +720,7 @@ async function effectiveModes(
 ): Promise<Record<NotificationChannel, NotificationMode>> {
   const defaults: Record<NotificationChannel, NotificationMode> = {
     in_app: input.kind === "email" ? "off" : "immediate",
-    email: "immediate",
+    email: notificationTopic.startsWith("members.") ? "digest" : "immediate",
     sms: "off",
     push: "off",
   };
@@ -764,7 +879,12 @@ export async function createNotificationTx(
           : mode === "digest"
             ? ("deferred" as const)
             : ("pending" as const),
-      availableAt: mode === "digest" ? nextDigestAt(occurredAt, settings) : occurredAt,
+      // Quiet hours hold push, email and text until they end; critical items
+      // and the in-app inbox never wait.
+      availableAt:
+        channel === "in_app" || input.priority === "critical"
+          ? (mode === "digest" ? nextDigestAt(occurredAt, settings) : occurredAt)
+          : afterQuietHours(mode === "digest" ? nextDigestAt(occurredAt, settings) : occurredAt, settings),
       provider: channel === "in_app" ? "core" : null,
       deliveredAt: channel === "in_app" ? occurredAt : null,
     }));
@@ -996,6 +1116,8 @@ export const notificationPreferenceStatus = defineService({
         digestWeekday: 1,
         timezone: business[0]?.timezone ?? "UTC",
         escalationMinutes: 60,
+        quietStartMinute: null,
+        quietEndMinute: null,
       },
       email: {
         provider: mail.configuration.transactional.provider,
@@ -1003,6 +1125,79 @@ export const notificationPreferenceStatus = defineService({
       },
       adapters: notificationAdapterStatus(),
     };
+  },
+});
+
+const registeredDevice = z.object({
+  id: uuid,
+  platform: z.enum(["ios", "android"]),
+  appVersion: z.string(),
+  lastSeenAt: timestamp,
+});
+
+export const registerDeviceToken = defineService({
+  name: "notifications.registerDevice",
+  summary: "Register this app install so it can receive push notifications.",
+  kind: "mutation",
+  permission: "authenticated",
+  input: z.object({
+    token: z.string().trim().min(8).max(512),
+    platform: z.enum(["ios", "android"]),
+    appVersion: z.string().trim().min(1).max(32),
+    contractVersion: z.number().int().min(1).max(1000),
+  }),
+  output: z.object({ id: uuid, moved: z.boolean() }),
+  handler: async (input, ctx) => {
+    const contact = await contactForActor(ctx);
+    const { registerDevice } = await import("./devices");
+    return registerDevice(ctx.tx, { contactId: contact.id, ...input });
+  },
+});
+
+export const revokeDeviceToken = defineService({
+  name: "notifications.revokeDevice",
+  summary: "Stop pushing to one app install. Called when a session ends.",
+  kind: "mutation",
+  permission: "authenticated",
+  input: z.object({ token: z.string().trim().min(8).max(512) }),
+  output: z.object({ revoked: z.boolean() }),
+  handler: async (input, ctx) => {
+    const contact = await contactForActor(ctx);
+    const { revokeDevice } = await import("./devices");
+    // Scoped to the caller's own devices: a token is a bearer value, and
+    // letting any signed-in person revoke any token by guessing one would be
+    // a denial-of-service on somebody else's notifications.
+    const [owned] = await ctx.tx
+      .select({ id: deviceTokens.id })
+      .from(deviceTokens)
+      .where(and(eq(deviceTokens.token, input.token), eq(deviceTokens.contactId, contact.id)))
+      .limit(1);
+    if (!owned) return { revoked: false };
+    return { revoked: await revokeDevice(ctx.tx, input.token) };
+  },
+});
+
+export const listMyDevices = defineService({
+  name: "notifications.myDevices",
+  summary: "The app installs currently able to notify this customer.",
+  kind: "query",
+  permission: "authenticated",
+  input: z.object({}),
+  output: z.object({ devices: listed(registeredDevice) }),
+  handler: async (_input, ctx) => {
+    const contact = await contactForActor(ctx);
+    const rows = await ctx.tx
+      .select({
+        id: deviceTokens.id,
+        platform: deviceTokens.platform,
+        appVersion: deviceTokens.appVersion,
+        lastSeenAt: deviceTokens.lastSeenAt,
+      })
+      .from(deviceTokens)
+      .where(and(eq(deviceTokens.contactId, contact.id), isNull(deviceTokens.revokedAt)));
+    // The token itself is never returned. A customer needs to know *which
+    // phones* can reach them, not the bearer value that reaches them.
+    return { devices: rows };
   },
 });
 
@@ -1092,7 +1287,7 @@ export const updateNotificationPreferences = defineService({
 
 export const updateNotificationSettings = defineService({
   name: "notifications.updateSettings",
-  summary: "Set the personal digest clock and unread escalation delay.",
+  summary: "Set the personal digest clock, unread escalation delay, and quiet hours.",
   kind: "mutation",
   permission: "authenticated",
   input: z.object({
@@ -1101,7 +1296,13 @@ export const updateNotificationSettings = defineService({
     digestWeekday: z.number().int().min(1).max(7),
     timezone: z.string().trim().min(1).max(100),
     escalationMinutes: z.number().int().min(5).max(10080),
+    /** Quiet hours, minutes after local midnight; both null turns them off. */
+    quietStartMinute: z.number().int().min(0).max(1439).nullable().optional(),
+    quietEndMinute: z.number().int().min(0).max(1439).nullable().optional(),
   }).superRefine((input, issue) => {
+    if ((input.quietStartMinute == null) !== (input.quietEndMinute == null) || (input.quietStartMinute != null && input.quietStartMinute === input.quietEndMinute)) {
+      issue.addIssue({ code: "custom", message: "Give quiet hours a different start and end, or leave both empty.", path: ["quietEndMinute"] });
+    }
     try {
       new Intl.DateTimeFormat("en", { timeZone: input.timezone });
     } catch {
@@ -1122,6 +1323,79 @@ export const updateNotificationSettings = defineService({
       .returning();
     ctx.setSubject("notification_settings", row!.id);
     return row!;
+  },
+});
+
+export const webPushPublicKey = defineService({
+  name: "notifications.webPushKey",
+  summary: "The site's public Web Push key, for a browser to subscribe with.",
+  kind: "query",
+  permission: "public",
+  input: z.object({}),
+  output: z.object({ publicKey: z.string() }),
+  handler: async (_input, ctx) => ({ publicKey: (await vapidKeys(ctx.tx)).publicKey }),
+});
+
+export const subscribeWebPush = defineService({
+  name: "notifications.subscribeWebPush",
+  summary: "Turn on push notifications in this browser. Push starts for every topic you have not turned off.",
+  kind: "mutation",
+  permission: "authenticated",
+  writeClass: "write",
+  rateLimit: { limit: 20, windowSeconds: 3600, message: "Too many push subscriptions. Try again later.", subject: (_input, actor) => (actor.kind === "user" ? actor.userId : undefined) },
+  input: z.object({
+    endpoint: z.string().url().max(2048),
+    p256dh: z.string().min(80).max(120),
+    auth: z.string().min(16).max(40),
+  }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    if (!acceptablePushEndpoint(input.endpoint)) {
+      throw new ServiceError("validation", "That browser's push service is not supported.");
+    }
+    await ctx.tx
+      .insert(webPushSubscriptions)
+      .values({ userId: ctx.actor.userId, ...input })
+      .onConflictDoUpdate({ target: webPushSubscriptions.endpoint, set: { userId: ctx.actor.userId, p256dh: input.p256dh, auth: input.auth } });
+    // Turning push on means wanting it: default every topic to immediate push,
+    // unless the person already chose otherwise.
+    await ctx.tx
+      .insert(notificationPreferences)
+      .values({ userId: ctx.actor.userId, topic: "*", channel: "push", mode: "immediate" })
+      .onConflictDoNothing();
+    ctx.setSubject("web_push_subscription", ctx.actor.userId);
+    return { ok: true as const };
+  },
+});
+
+export const unsubscribeWebPush = defineService({
+  name: "notifications.unsubscribeWebPush",
+  summary: "Turn off push notifications in this browser.",
+  kind: "mutation",
+  permission: "authenticated",
+  writeClass: "write",
+  input: z.object({ endpoint: z.string().max(2048) }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    await ctx.tx
+      .delete(webPushSubscriptions)
+      .where(and(eq(webPushSubscriptions.endpoint, input.endpoint), eq(webPushSubscriptions.userId, ctx.actor.userId)));
+    return { ok: true as const };
+  },
+});
+
+export const myWebPushSubscriptions = defineService({
+  name: "notifications.webPushSubscriptions",
+  summary: "How many browsers you turned push on in.",
+  kind: "query",
+  permission: "authenticated",
+  input: z.object({}),
+  output: z.object({ count: z.number().int() }),
+  handler: async (_input, ctx) => {
+    requirePerson(ctx.actor);
+    return { count: (await subscriptionsFor(ctx.tx, ctx.actor.userId)).length };
   },
 });
 
@@ -1253,18 +1527,77 @@ export async function deliverDueNotifications(limit = 50) {
         }
       } else {
         const adapter = delivery.channel === "sms" ? smsNotifications : pushNotifications;
-        const to = delivery.channel === "sms" ? address.phone : address.key;
-        if (!to) {
-          outcome = { provider: adapter.id, providerRef: null, delivers: false, reason: "This recipient has no phone number." };
+        // One delivery row, but a person may carry several phones. SMS has a
+        // single address; push fans out across every install the contact has
+        // registered (§35.1) and is delivered if any of them took it — one
+        // dead handset must not mark the whole notification undelivered.
+        const targets =
+          delivery.channel === "sms"
+            ? (address.phone ? [address.phone] : [])
+            : notification.recipientContactId
+              ? (await db().transaction((tx) =>
+                  devicesForContact(tx, notification.recipientContactId!),
+                )).map((device) => device.token)
+              : [];
+        // Browsers a signed-in person turned push on in (C12.22).
+        const browsers =
+          delivery.channel === "push" && notification.recipientUserId
+            ? await db().transaction((tx) => subscriptionsFor(tx, notification.recipientUserId!))
+            : [];
+        let browserDelivered = 0;
+        if (browsers.length) {
+          const keys = await db().transaction((tx) => vapidKeys(tx));
+          for (const browser of browsers) {
+            const sent = await sendWebPush(browser, keys, {
+              title: notification.title,
+              body: notification.body,
+              href: absoluteHref(notification.href),
+              tag: notification.dedupeKey ?? notification.id,
+            }).catch(() => "failed" as const);
+            if (sent === "gone") await db().delete(webPushSubscriptions).where(eq(webPushSubscriptions.id, browser.id));
+            if (sent === "delivered") {
+              browserDelivered += 1;
+              await db().update(webPushSubscriptions).set({ lastSuccessAt: new Date() }).where(eq(webPushSubscriptions.id, browser.id));
+            }
+          }
+        }
+        if (browsers.length && targets.length === 0) {
+          outcome = {
+            provider: "web-push",
+            providerRef: null,
+            delivers: browserDelivered > 0,
+            reason: browserDelivered > 0 ? undefined : "No browser accepted this push.",
+          };
+        } else if (targets.length === 0) {
+          outcome = {
+            provider: adapter.id,
+            providerRef: null,
+            delivers: false,
+            reason:
+              delivery.channel === "sms"
+                ? "This recipient has no phone number."
+                : "This recipient has no app install registered for push.",
+          };
         } else {
-          const result = await adapter.send({
-            to,
-            title: notification.title,
-            body: notification.body,
-            href: absoluteHref(notification.href),
-            deliveryId: delivery.id,
-          });
-          outcome = { provider: adapter.id, ...result };
+          const results = [];
+          for (const to of targets) {
+            results.push(
+              await adapter.send({
+                to,
+                title: notification.title,
+                body: notification.body,
+                href: absoluteHref(notification.href),
+                deliveryId: delivery.id,
+              }),
+            );
+          }
+          const delivered = results.filter((result) => result.delivers);
+          outcome = {
+            provider: adapter.id,
+            providerRef: delivered[0]?.providerRef ?? null,
+            delivers: delivered.length > 0 || browserDelivered > 0,
+            reason: delivered.length > 0 || browserDelivered > 0 ? undefined : results[0]?.reason,
+          };
         }
       }
       await db().update(notificationDeliveries).set({
@@ -1501,6 +1834,23 @@ interface EventTemplate {
 }
 
 function eventTemplate(eventName: string, payload: Record<string, unknown>): EventTemplate | undefined {
+  // A scheduled accounting export that did not arrive (C9.32). Critical, and
+  // that is a judgement rather than an oversight: an owner finds out about a
+  // wrong report by reading it, and about a missing one only when their
+  // accountant asks for a quarter that never came.
+  if (eventName === "report.exportFailed" && typeof payload.id === "string") {
+    return {
+      module: "reporting",
+      topic: "reports.exportFailed",
+      priority: "critical",
+      titleKey: "notifications.event.reportExport.title",
+      ...(typeof payload.detail === "string" && payload.detail
+        ? { body: payload.detail.slice(0, 4000) }
+        : { bodyKey: "notifications.event.reportExport.body" }),
+      href: "/admin/reports/exports",
+      dedupeKey: `report-export:${payload.id}`,
+    };
+  }
   if (eventName === "connection.needsAttention" && typeof payload.id === "string") {
     return {
       module: "connections",
@@ -1665,7 +2015,14 @@ export default [
   archiveNotification,
   markAllNotificationsRead,
   notificationPreferenceStatus,
+  registerDeviceToken,
+  revokeDeviceToken,
+  listMyDevices,
   updateNotificationPreference,
   updateNotificationPreferences,
   updateNotificationSettings,
+  webPushPublicKey,
+  subscribeWebPush,
+  unsubscribeWebPush,
+  myWebPushSubscriptions,
 ];

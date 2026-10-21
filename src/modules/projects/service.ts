@@ -17,15 +17,20 @@
 // `contact_id`, resolved through the spine like everything else, and
 // `clientDisplayName` is what to *call* them publicly rather than who they are.
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import { pages } from "@/modules/cms/schema";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { isUniqueViolation } from "@/core/db";
-import { defineService, getService, ServiceError, type Actor } from "@/core/service";
+import { defineService, getService, permits, ServiceError, type Actor } from "@/core/service";
 // The checklist is the platform's one task list (C7.02), not a second one.
 // C6.15 shipped `project_tasks` before that table existed; these services keep
 // their names and their shape and write through core, so a project's list and
@@ -44,6 +49,10 @@ import {
   projectTestimonials,
   projects,
 } from "./schema";
+// Claims this module's room in the customer portal (C8.11). Imported for
+// its side effect: core owns the registry so it never imports a module,
+// and something has to make the claim at load time.
+import "./portal";
 
 const id = z.string().uuid();
 const slug = z
@@ -104,9 +113,6 @@ const projectRow = row({
   publicationStatus: z.enum(PROJECT_PUBLICATION_STATUSES),
   publishedAt: timestamp.nullable(),
   publicPageId: uuid.nullable(),
-  clientConsentGivenAt: timestamp.nullable(),
-  clientConsentMethod: z.enum(PROJECT_CONSENT_METHODS).nullable(),
-  clientConsentNote: z.string().nullable(),
   version: z.number().int(),
 });
 
@@ -173,6 +179,8 @@ const fileRow = row({
   assetId: uuid,
   role: z.enum(PROJECT_FILE_ROLES),
   pairKey: z.string().nullable(),
+  seriesKey: z.string().nullable(),
+  capturedAt: timestamp.nullable(),
   caption: z.string().nullable(),
   position: z.number().int(),
 });
@@ -539,6 +547,16 @@ export const attachFile = defineService({
     role: z.enum(PROJECT_FILE_ROLES).default("gallery"),
     /** Ties a `before` to its `after` (§4.7: a pairing, not two uploads). */
     pairKey: z.string().trim().max(80).nullish(),
+    /** Ties one step to the rest of its progress series (C8.16). */
+    seriesKey: z.string().trim().max(80).nullish(),
+    /**
+     * When the picture was taken, not when it was uploaded.
+     *
+     * A recovery timeline ordered by upload time is a timeline of when
+     * somebody got round to the filing, which is not the thing anybody is
+     * being shown.
+     */
+    capturedAt: z.coerce.date().nullish(),
     caption: z.string().trim().max(500).nullish(),
   }),
   output: fileRow,
@@ -553,6 +571,22 @@ export const attachFile = defineService({
     }
     if (!pairing && input.pairKey) {
       throw new ServiceError("validation", "Only a before or after is paired.");
+    }
+    const inSeries = input.role === "series";
+    if (inSeries && !input.seriesKey) {
+      throw new ServiceError(
+        "validation",
+        "A progress step needs a series name, so the steps can be shown in order.",
+      );
+    }
+    if (!inSeries && input.seriesKey) {
+      throw new ServiceError("validation", "Only a progress step belongs to a series.");
+    }
+    if (inSeries && !input.capturedAt) {
+      throw new ServiceError(
+        "validation",
+        "A progress step needs the date it was taken. Ordering by upload time would show when the filing was done, not how the work went.",
+      );
     }
 
     const [last] = await ctx.tx
@@ -570,6 +604,8 @@ export const attachFile = defineService({
           assetId: input.assetId,
           role: input.role,
           pairKey: input.pairKey ?? null,
+          seriesKey: input.seriesKey ?? null,
+          capturedAt: input.capturedAt ?? null,
           caption: input.caption ?? null,
           position: (last?.position ?? -1) + 1,
         })
@@ -577,6 +613,8 @@ export const attachFile = defineService({
           target: [projectFiles.projectId, projectFiles.assetId, projectFiles.role],
           set: {
             pairKey: input.pairKey ?? null,
+            seriesKey: input.seriesKey ?? null,
+            capturedAt: input.capturedAt ?? null,
             caption: input.caption ?? null,
             updatedAt: sql`now()`,
           },
@@ -601,6 +639,11 @@ export const listProjects = defineService({
   summary: "Work in hand, and work finished.",
   kind: "query",
   permission: "scoped",
+  // C8.11: the customer this asks about may ask it themselves. The
+  // contract layer verifies the field is present and is their own contact
+  // before the handler runs, so this widens what a customer can *see*
+  // about themselves and nothing else.
+  selfService: { contactField: "contactId" },
   input: z.object({
     status: z.enum(PROJECT_STATUSES).optional(),
     contactId: id.optional(),
@@ -614,6 +657,7 @@ export const listProjects = defineService({
   ),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
+    const staffRead = permits(ctx.actor, "scoped", "projects.list", "query");
     const rows = await ctx.tx
       .select({ project: projects, contactName: contacts.name })
       .from(projects)
@@ -639,6 +683,7 @@ export const listProjects = defineService({
         .from(coreTasks)
         .where(
           and(
+            isNull(coreTasks.trashedAt),
             eq(coreTasks.subjectType, "project"),
             inArray(coreTasks.subjectId, rows.map((r) => r.project.id)),
             // Cancelled counts as off the list: it is not outstanding work.
@@ -650,7 +695,16 @@ export const listProjects = defineService({
     }
 
     return rows.map(({ project, contactName }) => ({
-      ...project,
+      ...(staffRead ? project : {
+        id: project.id, contactId: project.contactId, clientDisplayName: project.clientDisplayName,
+        title: project.title, slug: project.slug, summary: project.summary, status: project.status,
+        ownerUserId: null, locationId: project.locationId, serviceProductIds: project.serviceProductIds,
+        startedOn: project.startedOn, occurredOn: project.occurredOn, completedAt: project.completedAt,
+        notes: null, blocks: [], coverAssetId: null, featured: project.featured, seo: {},
+        publicationStatus: project.publicationStatus, publishedAt: project.publishedAt,
+        publicPageId: project.publicPageId, version: project.version,
+        createdAt: project.createdAt, updatedAt: project.updatedAt,
+      }),
       contactName,
       openTasks: counts.get(project.id) ?? 0,
     }));
@@ -692,7 +746,7 @@ export const getProject = defineService({
       ctx.tx
         .select()
         .from(coreTasks)
-        .where(and(eq(coreTasks.subjectType, "project"), eq(coreTasks.subjectId, input.id)))
+        .where(and(isNull(coreTasks.trashedAt), eq(coreTasks.subjectType, "project"), eq(coreTasks.subjectId, input.id)))
         .orderBy(asc(coreTasks.position)),
       ctx.tx
         .select()
@@ -868,9 +922,10 @@ registerContactPrivacySource({
         // as surely as their contact record is.
         clientDisplayName: null,
         notes: null,
-        clientConsentGivenAt: null,
-        clientConsentMethod: null,
-        clientConsentNote: null,
+        // The consent ledger is not cleared here, for the reason
+        // `consent_records` is on the retention opt-out list: it is immutable
+        // evidence under a legal/audit hold. The work goes offline, which is
+        // what erasure actually requires.
         publicationStatus: "draft",
         publishedAt: null,
         updatedAt: sql`now()`,
@@ -938,6 +993,42 @@ registerContactPrivacySource({
       .delete(projectTestimonials)
       .where(eq(projectTestimonials.contactId, contactId));
     return { affected: rows.length };
+  },
+});
+
+registerSearchSource({
+  kind: "project",
+  readService: "projects.list",
+  module: "projects",
+  tables: ["projects"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: projects.id,
+        title: projects.title,
+        slug: projects.slug,
+        summary: projects.summary,
+        contactId: projects.contactId,
+      })
+      .from(projects)
+      .where(
+        or(
+          matchesIlike(projects.title, pattern),
+          matchesIlike(projects.slug, pattern),
+          matchesIlike(projects.summary, pattern),
+        ),
+      )
+      .orderBy(desc(projects.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "project",
+      id: row.id,
+      title: row.title,
+      href: `/admin/projects/${row.id}`,
+      snippet: clipSnippet(row.summary ?? row.slug),
+      contactId: row.contactId,
+      module: "projects",
+    }));
   },
 });
 

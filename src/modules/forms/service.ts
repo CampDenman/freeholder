@@ -12,7 +12,9 @@
 // never `contacts.create`, reached through `ctx.callAsSystem` so the elevation
 // is one greppable call rather than a service that quietly trusts its caller.
 import { z } from "zod";
-import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { consumeAccepted } from "@/core/security/rate-limit";
+import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, getService, ServiceError } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
@@ -22,6 +24,8 @@ import {
 } from "@/core/contacts/service";
 import { db } from "@/core/db";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { withoutHoldCascade } from "@/core/retention/holds";
+import { makeTrashServices } from "@/core/trash";
 import { forms, formSubmissions } from "./schema";
 import {
   emailFrom,
@@ -146,6 +150,31 @@ const formSubmissionRow = row({
   createdAt: timestamp,
 });
 
+/**
+ * Reversible removal (C11.14). Trashing a form trashes *the definition
+ * only*: submissions stay live, because they are evidence of what somebody
+ * told the business. Purging is the existing hard delete — the form row and,
+ * by its long-standing cascade, its submissions — now gated behind trash,
+ * typed confirmation and the hold below: a form whose submissions include a
+ * person under an active retention exception cannot be purged, because the
+ * cascade would reach their held data.
+ */
+const trash = makeTrashServices({
+  family: "forms",
+  table: forms,
+  rowSchema: formRow,
+  subjectKind: "form",
+  gone: "That form is gone.",
+  holdGuard: withoutHoldCascade(
+    formSubmissions,
+    formSubmissions.formId,
+    sql`${forms.id}`,
+    formSubmissions.contactId,
+    "forms.submissions",
+  ),
+});
+export const { remove: removeForm, restore: restoreForm, purge: purgeForm, purgeExpired: purgeExpiredForms } = trash;
+
 /* ------------------------------------------------------------------ authoring */
 
 export const listForms = defineService({
@@ -153,7 +182,10 @@ export const listForms = defineService({
   summary: "Every form, with how many submissions each has taken.",
   kind: "query",
   permission: "scoped",
-  input: z.object({}),
+  input: z.object({
+    /** The recovery view: trashed definitions only (C11.14). */
+    trashedOnly: z.boolean().default(false),
+  }),
   output: listed(
     row({
       id: uuid,
@@ -166,7 +198,7 @@ export const listForms = defineService({
       submissions: z.coerce.number().int(),
     }),
   ),
-  handler: async (_input, ctx) => {
+  handler: async (input, ctx) => {
     const rows = await ctx.tx
       .select({
         id: forms.id,
@@ -180,25 +212,65 @@ export const listForms = defineService({
       })
       .from(forms)
       .leftJoin(formSubmissions, eq(formSubmissions.formId, forms.id))
+      .where(input.trashedOnly ? isNotNull(forms.trashedAt) : isNull(forms.trashedAt))
       .groupBy(forms.id)
       .orderBy(desc(forms.updatedAt));
     return rows;
   },
 });
 
-/** The definition a public page renders from. Public, and deliberately thin. */
+/**
+ * The definition a public page renders from. Public, and thin by construction.
+ *
+ * It said "deliberately thin" while selecting the whole row, so it answered any
+ * anonymous caller with `notify` — the addresses submissions are e-mailed to.
+ * An owner who keeps their address off their site had it published by the API
+ * anyway, and `contact` is the obvious slug to guess. Reported by a third party
+ * building on Freeholder.
+ *
+ * So the projection is named, in both the schema and the query, rather than
+ * being whatever the table happens to hold. `select()` plus a shared row schema
+ * is what turned one added column into a disclosure, and a named projection is
+ * what stops the next added column from doing it again.
+ */
+const publicFormRow = row({
+  id: uuid,
+  slug: z.string(),
+  name: z.string(),
+  fields: z.unknown(),
+  submitLabel: z.string().nullable(),
+  successMessage: z.string().nullable(),
+  // Kept because a visitor may see it and it tells them nothing they could not
+  // infer from the form itself; `notify` is the column that had to go.
+  destination: z.enum(["contact", "none"]),
+  status: z.enum(["active", "closed"]),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
 export const getForm = defineService({
   name: "forms.get",
   summary: "One form's definition, for rendering it.",
   kind: "query",
   permission: "public",
   input: z.object({ slug }),
-  output: formRow.nullable(),
+  output: publicFormRow.nullable(),
   handler: async (input, ctx) => {
     const [form] = await ctx.tx
-      .select()
+      .select({
+        id: forms.id,
+        slug: forms.slug,
+        name: forms.name,
+        fields: forms.fields,
+        submitLabel: forms.submitLabel,
+        successMessage: forms.successMessage,
+        destination: forms.destination,
+        status: forms.status,
+        createdAt: forms.createdAt,
+        updatedAt: forms.updatedAt,
+      })
       .from(forms)
-      .where(eq(forms.slug, input.slug))
+      .where(and(eq(forms.slug, input.slug), isNull(forms.trashedAt)))
       .limit(1);
     return form ?? null;
   },
@@ -224,7 +296,7 @@ export const getFormById = defineService({
     const [form] = await ctx.tx
       .select()
       .from(forms)
-      .where(eq(forms.id, input.id))
+      .where(and(eq(forms.id, input.id), isNull(forms.trashedAt)))
       .limit(1);
     return form ?? null;
   },
@@ -289,7 +361,7 @@ export const updateForm = defineService({
     const [form] = await ctx.tx
       .update(forms)
       .set(changes)
-      .where(eq(forms.id, id))
+      .where(and(eq(forms.id, id), isNull(forms.trashedAt)))
       .returning();
     if (!form) throw new ServiceError("not_found", "That form is gone.");
     ctx.setSubject("form", form.id);
@@ -341,6 +413,18 @@ const DEMO_FORM = {
   },
 } as const;
 
+function formsDemoContribution(scenarioKey: string) {
+  return scenarioKey === "seed.current-modules"
+    ? { key: "forms.current-modules", version: 1 }
+    : { key: "forms.demo-form", version: 1 };
+}
+
+function formsDemoOutcome(scenarioKey: string) {
+  return scenarioKey === "seed.current-modules"
+    ? "forms.current-modules.visible"
+    : "forms.demo-form.visible";
+}
+
 export const loadDemoForms = defineService({
   name: "forms.loadDemoFixture",
   summary: "Load the forms contribution for a tracked demo run.",
@@ -349,12 +433,7 @@ export const loadDemoForms = defineService({
   input: demoHandlerInputSchema,
   output: demoLoadResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "forms.current-modules", version: 1 },
-      "load",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, formsDemoContribution(input.scenarioKey), "load");
     const copy = DEMO_FORM[input.locale as keyof typeof DEMO_FORM];
     if (!copy) throw new ServiceError("validation", "Unsupported demo locale.");
     const form = await ctx.callAsSystem(createForm, {
@@ -389,12 +468,7 @@ export const purgeDemoForms = defineService({
   input: demoHandlerInputSchema,
   output: demoPurgeResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "forms.current-modules", version: 1 },
-      "purge",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, formsDemoContribution(input.scenarioKey), "purge");
     const purged: Array<{ subjectType: string; subjectId: string }> = [];
     for (const record of input.records) {
       if (record.fixtureKey !== "enquiry-form" || record.subjectType !== "form") {
@@ -420,12 +494,7 @@ export const verifyDemoForms = defineService({
   input: demoHandlerInputSchema,
   output: demoVerifyResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "forms.current-modules", version: 1 },
-      "verify",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, formsDemoContribution(input.scenarioKey), "verify");
     const ids = input.records
       .filter((record) => record.subjectType === "form")
       .map((record) => record.subjectId);
@@ -439,7 +508,7 @@ export const verifyDemoForms = defineService({
     return demoVerifyResultSchema.parse({
       outcomes: [
         {
-          key: "forms.current-modules.visible",
+          key: formsDemoOutcome(input.scenarioKey),
           achieved:
             form?.slug === "freeholder-demo-enquiry" &&
             form.name.startsWith("[Demo]"),
@@ -463,16 +532,6 @@ export const submitForm = defineService({
     values: z.record(z.string(), z.unknown()),
     sourceUrl: z.string().max(2000).optional(),
   }),
-  // A public write needs a ceiling that does not depend on anyone being
-  // logged in. Per form rather than per visitor: an anonymous surface has no
-  // trustworthy identity to key on, and threading a client address through a
-  // Server Action is not something Next offers honestly (see the backlog).
-  rateLimit: {
-    limit: 30,
-    windowSeconds: 10 * 60,
-    subject: (input) => `form:${input.slug}`,
-    message: "This form has taken a lot of submissions just now. Try again shortly.",
-  },
   output: z.object({
     ok: z.literal(true),
     submissionId: uuid,
@@ -482,7 +541,7 @@ export const submitForm = defineService({
     const [form] = await ctx.tx
       .select()
       .from(forms)
-      .where(eq(forms.slug, input.slug))
+      .where(and(eq(forms.slug, input.slug), isNull(forms.trashedAt)))
       .limit(1);
     if (!form) throw new ServiceError("not_found", "That form no longer exists.");
     if (form.status === "closed") {
@@ -510,6 +569,18 @@ export const submitForm = defineService({
       );
     }
     const data = parsed.data as Record<string, unknown>;
+    // C11.10: malformed posts and other visitors cannot exhaust the whole form.
+    // Without a trusted proxy, throttle the validated address (or identical
+    // anonymous answers); perimeter flood control remains the host's concern.
+    const identity = ctx.actor.kind === "user" ? `user:${ctx.actor.userId}`
+      : ctx.actor.request?.trustedIp ?? emailFrom(fields, data)?.trim().toLowerCase()
+        ?? JSON.stringify(Object.entries(data).sort(([a], [b]) => a.localeCompare(b)));
+    if (ctx.actor.kind !== "system") {
+      const verdict = await consumeAccepted(ctx.tx, `forms.submit:${form.id}:${createHash("sha256").update(identity).digest("hex")}`, {
+        limit: 30, windowSeconds: 10 * 60,
+      });
+      if (!verdict.allowed) throw new ServiceError("rate_limited", "Too many submissions. Try again shortly.", verdict.retryAfterSeconds);
+    }
 
     // §4.1's identity rule, on an anonymous path. `resolve` rather than
     // `create` because a returning visitor is the same person, and
@@ -820,6 +891,10 @@ export default [
   createForm,
   updateForm,
   deleteForm,
+  removeForm,
+  restoreForm,
+  purgeForm,
+  purgeExpiredForms,
   loadDemoForms,
   purgeDemoForms,
   verifyDemoForms,

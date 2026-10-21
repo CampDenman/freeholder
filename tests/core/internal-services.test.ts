@@ -16,8 +16,30 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "notes.purgeExpired",
+  "tasks.purgeExpired",
+  // The record-trash sweeps (C11.14): a trash window expiring is not something
+  // anybody did; the job purges eligible rows on nobody's behalf.
+  "assessments.purgeExpired",
+  "calculators.purgeExpired",
+  "cms.purgeExpiredPages",
+  "cms.resolvePageForRender",
+  "collections.purgeExpired",
+  "forms.purgeExpired",
+  "popups.purgeExpired",
+  "segments.purgeExpired",
+  "views.purgeExpired",
+  // C8.16: a permission with an end date does not announce its own expiry,
+  // so work already public is taken down on nobody's behalf.
+  "projects.sweepLapsedConsent",
+  "ads.rollUpStats",
   "agents.runDuePlaybooks",
   "agents.startEventPlaybooks",
+  // The wake sweep (C9.02). System rather than scoped because a sleeping run
+  // is woken by a job on nobody's behalf, and it needs a real ServiceContext:
+  // advancing a run dispatches verbs through `ctx.callAsSystem` and queues
+  // events, neither of which a plain function can do.
+  "automations.wake",
   "briefing.agentAttention",
   "briefing.appointments",
   "briefing.assemble",
@@ -26,17 +48,232 @@ const INTERNAL = [
   "briefing.tasks",
   "briefing.update",
   "briefing.webhookFailures",
+  // Sending a campaign (C9.06). Starting one is scoped — an owner presses
+  // send — but carrying it forward is not: `sendNext` and `tick` run from
+  // `newsletters.tickBroadcasts` a batch at a time, on nobody's behalf, long
+  // after the request that started it has ended.
+  "broadcasts.sendNext",
+  "broadcasts.tick",
+  // Provider work is split around short system-only snapshot/apply services.
+  // These names are implementation seams for workers, never public verbs.
+  "catalog.recomputeCollectionMembership",
+  // The member payout ledger (§44.8, C12.09). The catalog answers which
+  // member sold each order line; the ledger is written from catalog.orderPaid
+  // and refund.succeeded and released by a job, on nobody's behalf.
+  "catalog.memberOrdersForContact",
+  "catalog.orderForInvoice",
+  "catalog.orderSellers",
+  "members.recordPayouts",
+  // C12.05 / C12.25: a paid invoice for a member's subscription or booked
+  // service becomes the member's payout.
+  "members.recordInvoicePayout",
+  "members.releaseDuePayouts",
+  "members.reversePayouts",
+  // C12.30: ties abuse matches to their uploads and suspends the uploader.
+  "members.linkAbuseReports",
+  // C12.26–C12.27: the provider payout job's claim and apply steps, and
+  // verified provider webhooks; money moves on nobody's behalf.
+  "members.applyPayoutWebhook",
+  "members.applyProviderTransfer",
+  "members.claimProviderTransfers",
+  // C12.18: federation runs on nobody's behalf. Posting and deleting queue
+  // activities; the inbox route applies only signature-verified activities.
+  "members.federateDelete",
+  "members.federatePost",
+  "members.federationInbox",
+  // C12.36: the sweep that deletes removed and abandoned encrypted files.
+  "members.dueSealedBlobs",
+  "members.forgetSealedBlobs",
+  "catalogue.applyRefresh",
+  "catalogue.refreshSource",
+  "entitlements.issuePass",
+  "entitlements.issueUnlock",
+  "entitlements.syncSubscription",
+  "entitlements.syncTier",
+  // Paid event admission (C6.11): settlement confirming a held seat, the
+  // five-minute hold sweep, and refund/void cancellation all happen on
+  // nobody's behalf — a webhook, a job, or a bus event is not a person.
+  "events.confirmPaidRegistration",
+  "events.expireHeldRegistrations",
+  "events.cancelRegistrationForInvoice",
   "forms.briefingEnquiries",
   "galleries.buildArchive",
   "galleries.expireSessions",
   "invoicing.briefingOverdue",
+  "mail.applySenderVerification",
   "mail.recordProviderEvent",
+  "media.applyWatermarkBackfill",
   "media.backfillWatermarks",
+  "media.listWatermarkBackfill",
   "media.purgeExpired",
+  "media.purgeExpiredClaim",
   "media.registerStoredOriginal",
+  "media.stageCompletedUpload",
+  "marketplace.importProviderOrder",
+  "marketplace.reconcileRefund",
+  "printOnDemand.workBatch",
+  "voiceVideo.applyParadiseWebhook",
+  "voiceVideo.recordingRoom",
+  "voiceVideo.roomAccessSource",
+  "privacy.completeErasureJob",
   "messaging.applySmsEvents",
+  "messaging.applySmsEventsApply",
   "notifications.create",
+  "referrals.claimTouches",
+  "social.applyGbpReviews",
+  "social.applyIngestedProfilePost",
+  "social.applyProfileHealth",
+  "social.gbpHoursSource",
+  "social.gbpProfileIds",
+  "social.gbpProfileSource",
+  "social.healthProfileSource",
+  "social.healthProfiles",
+  "social.ingestProfileIds",
+  "social.ingestProfileSource",
+  "social.ingestedPost",
+  "social.publicationSource",
+  "social.recordGbpHours",
+  "social.recordProfileIngest",
+  "social.recordPublicationResult",
+  // The renewal sweep (C9.13). System because a period ending is not
+  // something anybody did: a job finds what is due and raises the invoice on
+  // nobody's behalf, long after the person who subscribed has gone.
+  // C9.38: verified first-payment activation and durable signup recovery.
+  "subscriptions.activatePaidSignup",
+  "subscriptions.finishSignups",
+  "subscriptions.pendingCustomerSchedules",
+  "subscriptions.renewDue",
+  // The dunning sweep (C9.16). System because a retry offset expiring is not
+  // something anybody did: a job finds who is past due and sends the notice
+  // or takes the final action on nobody's behalf.
+  "subscriptions.advanceDunning",
+  // Platform charges against a stored method (C9.33). The period ending is
+  // not something anybody did; a job raises the invoice and charges on
+  // nobody's behalf.
+  "subscriptions.chargePlatformDue",
+  // Provider schedules are the truth (C9.33). A verified webhook applies the
+  // period on nobody's behalf.
+  "subscriptions.reconcileProviderPeriod",
+  "subscriptions.recoverDunning",
+  // Provider submission happens outside service transactions; this applies
+  // the durable mail ledger's outcome afterwards on nobody's behalf.
+  "reports.settleExportRun",
 ] as const;
+
+const CALLER_AUTHORIZED_PHASES = [
+  // C1.38/C10.31: browser-only entry and owner host controls. These do not
+  // belong in API-key, SDK, OpenAPI or MCP projections.
+  "playground.enter",
+  "platform.getHostUpdateStatus",
+  "platform.requestHostUpdate",
+  "privacy.completeErasureJob",
+  "notes.purgeExpired",
+  "tasks.purgeExpired",
+  "assessments.purgeExpired",
+  "calculators.purgeExpired",
+  "cms.purgeExpiredPages",
+  "cms.resolvePageForRender",
+  "collections.purgeExpired",
+  "forms.purgeExpired",
+  "popups.purgeExpired",
+  "segments.purgeExpired",
+  "views.purgeExpired",
+  // The membership recompute is a job phase: it runs from
+  // catalog.recomputeSegmentCollections on nobody's behalf and claims nothing
+  // on an external protocol.
+  "catalog.recomputeCollectionMembership",
+  "documents.myDownload",
+  // Storage keys stay behind the gallery's controlled byte routes.
+  "galleries.viewItem",
+  "galleries.downloadItem",
+  "galleries.downloadArchive",
+  "media.privateAssetDownloadAccess",
+  "invoicing.claimCustomerCheckout",
+  "invoicing.applyCustomerCheckout",
+  "invoicing.customerPaymentSource",
+  "invoicing.applyCustomerPayment",
+  "demo.installApply",
+  "demo.installGuard",
+  "connections.applyCalendarOAuthCompletion",
+  "connections.applyMailReadOAuthCompletion",
+  "connections.claimCalendarOAuthCompletion",
+  "connections.claimMailReadOAuthCompletion",
+  "connections.peekCalendarOAuthReturn",
+  "connections.peekMailReadOAuthReturn",
+  "mail.applyOAuthCompletion",
+  "mail.claimOAuthCompletion",
+  "media.abortUploadApply",
+  "media.abortUploadClaim",
+  "media.altTextSuggestionSource",
+  "media.applyAltTextSuggestion",
+  "media.applyCaptureComplete",
+  "media.applyRescan",
+  "media.applyStoredOriginal",
+  "media.beginUploadApply",
+  "media.claimProxyUpload",
+  "media.completeUploadSource",
+  "media.confirmCaptureApply",
+  "media.confirmCaptureSource",
+  "media.failDirectUpload",
+  "media.purgeApply",
+  "media.purgeClaim",
+  "media.rescanSource",
+  "media.signUploadClaim",
+  "media.uploadStatusSource",
+  // C12.21: the member file route asks this on every request; it returns a
+  // storage key, so it never leaves the process.
+  "members.fileAccess",
+  // C12.18: the ActivityPub routes render these documents; the fediverse
+  // reaches them over HTTP, not through the service API.
+  "members.federationDocument",
+  // C12.36: halves of members.uploadSealedBlob, and the check behind
+  // /member-blobs/[id]; the bytes route is the only way in.
+  // C12.26–C12.27: the halves of seller payout setup around the provider call.
+  "members.applyPayoutAccount",
+  "members.payoutSetupSource",
+  // C12.32: the apply half of members.followRemote, after the lookup.
+  "members.addRemoteFollow",
+  // C12.33: the halves of members.setFediverseAliases and members.moveToRemote.
+  "members.applyFediverseAliases",
+  "members.applyMove",
+  "members.moveSource",
+  "members.claimSealedBlob",
+  "members.confirmSealedBlob",
+  "members.sealedBlobAccess",
+  "signupContactImports.applyOAuthCompletion",
+  "signupContactImports.applyProviderContacts",
+  "signupContactImports.claimOAuthCompletion",
+  "signupContactImports.providerSource",
+  "social.applyOAuthCompletion",
+  "social.claimOAuthCompletion",
+  "social.createVariantsApply",
+  "social.createVariantsSource",
+  "giftRegistry.applyItemInvoice",
+  "giftRegistry.claimItemInvoice",
+  "marketplace.applyConnect",
+  "marketplace.applySync",
+  "marketplace.claimConnect",
+  "marketplace.claimSync",
+  "marketplace.findImported",
+  "marketplace.recordImported",
+  "printOnDemand.applySubmit",
+  "printOnDemand.applyRefresh",
+  "printOnDemand.claimRefresh",
+  "printOnDemand.claimSubmit",
+  "voiceVideo.applyCapture",
+  "voiceVideo.applyImport",
+  "voiceVideo.applyMiss",
+  "voiceVideo.applyStart",
+  "voiceVideo.applyStop",
+  "voiceVideo.claimCapture",
+  "voiceVideo.claimImport",
+  "voiceVideo.claimStart",
+  "voiceVideo.claimStop",
+  "voiceVideo.applyParadiseWebhook",
+  "voiceVideo.recordingRoom",
+] as const;
+
+const PRIVATE = [...INTERNAL, ...CALLER_AUTHORIZED_PHASES] as const;
 
 const wildcard: Actor = {
   kind: "agent",
@@ -57,7 +294,7 @@ const wildcard: Actor = {
 describe("the system-service boundary", () => {
   beforeAll(async () => {
     await ready();
-  });
+  }, 120_000);
 
   it("keeps an explicit reviewed inventory", () => {
     const actual = [...listServices().values()]
@@ -65,6 +302,14 @@ describe("the system-service boundary", () => {
       .map((service) => service.def.name)
       .sort();
     expect(actual).toEqual([...INTERNAL].sort());
+  });
+
+  it("keeps an explicit reviewed inventory of caller-authorized phases", () => {
+    const actual = [...listServices().values()]
+      .filter((service) => service.def.external === false)
+      .map((service) => service.def.name)
+      .sort();
+    expect(actual).toEqual([...CALLER_AUTHORIZED_PHASES].sort());
   });
 
   it("keeps every internal service out of every generated projection", () => {
@@ -77,9 +322,11 @@ describe("the system-service boundary", () => {
     const projections = contractProjections();
     const tools = new Set(toolsFor(wildcard).map((tool) => tool.name));
 
-    for (const name of INTERNAL) {
+    for (const name of PRIVATE) {
       const service = getService(name);
-      expect(service.def.permission).toBe("system");
+      expect(
+        service.def.permission === "system" || service.def.external === false,
+      ).toBe(true);
       expect(hiddenFromMcp(service)).toBe(true);
       expect(listExternalServices().has(name)).toBe(false);
       expect(paths).not.toHaveProperty(`/api/v1/${name}`);
@@ -91,7 +338,7 @@ describe("the system-service boundary", () => {
   });
 
   it("answers an external name probe exactly like an unknown service", () => {
-    for (const name of INTERNAL) {
+    for (const name of PRIVATE) {
       let refusal: unknown;
       try {
         getExternalService(name);

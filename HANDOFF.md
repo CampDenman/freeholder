@@ -5,10 +5,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # Handoff — 2026-08-28
 
-Written for whoever picks this up next, human or agent. `MASTER.md` remains the
-only source of truth for product, architecture and status; this document is a
-snapshot of *where the work is* and *what is worth knowing that the code does
-not say out loud*. If the two ever disagree, MASTER wins and this file is stale.
+> Historical snapshot only. Not a planning authority. `MASTER.md` §43 is the
+> only product, architecture, status, and delivery source of truth. Do not pick
+> the next work item from this file or from `RESTART_HANDOFF.md`. The latest
+> session snapshot is `SESSION_HANDOFF.md` (2026-10-17).
 
 ---
 
@@ -19,16 +19,32 @@ the live number — it is the only count that is not a guess.
 
 ### Landed on `main`
 
-Five PRs merged on 2026-08-27/28, each green across all eighteen CI steps:
+Seven PRs merged on 2026-08-27/28, each green across all eighteen CI steps:
 
 - **#207** C7.12–C8.02, plus the CI repair described below
 - **#208** C8.03 private client galleries, and an audit of them
 - **#209** C8.04 watermarked variants and a `download_policy` that is read
 - **#210** C8.05 client proofing (`GallerySelection`)
-- **#211** C8.06 approval rounds *(in flight at the time of writing)*
+- **#211** C8.06 approval rounds
+- **#212** C8.07 archive delivery and its notifications
 
-`feat/c8.07-archive-delivery` holds C8.07 — archive delivery and its
-notifications — committed and locally verified, awaiting #211.
+**192 of the 274 §43 items are checked; 82 remain.**
+
+### In flight: a three-deep stack
+
+Three branches are committed, locally verified, and stacked — each on the
+one before it, so they merge in order and each needs `main` merged in after
+the one below it lands:
+
+- `feat/c8.08-gallery-sales` — **#213**, C8.08 print and digital sales
+- `feat/c8.09-reviews` — C8.09 collected customer feedback, no PR yet
+- `feat/c8.10-portal-shell` — C8.10 the customer portal shell, no PR yet
+
+The two without PRs are deliberate: opening them now would show cumulative
+diffs against `main` and re-run three full pipelines for one change. Open
+each once the one below it has merged. All three carry the SIGPIPE fix in
+item 7 below, cherry-picked, so their first pipeline is not exposed to it —
+expect that commit to be a no-op by the time the upper two merge.
 
 ### The CI pipeline was not running
 
@@ -60,6 +76,30 @@ time. Fixing one failure only ever revealed the next:
 6. The same gate then exited on Doctor's status code rather than its verdict.
    `env.appUrl` fails in a throwaway container and should: it is a production
    build on localhost. It now reasons about *which* checks failed.
+7. Both the recipe gate and the public gates waited for the demo with
+   `docker logs <container> | grep -q "demo installed"`, which is a SIGPIPE
+   trap under `set -o pipefail`: `grep -q` exits on the first match, docker —
+   still writing — dies on the closed pipe, and the pipeline reports 141. It
+   presents as `Process completed with exit code 141` with **no failing**
+   **assertion anywhere in the log**, and it is a race, so it passes on
+   re-run. It cost two red builds (#211, #213) before the pattern was clear.
+   **Never pipe a long-running writer into an early-exiting reader in a**
+   **`pipefail` script.** Capture into a variable and match with `[[ ==
+   *glob* ]]`. Piping from `echo` is fine; the writer is already finished.
+
+A red build with nothing failing in it is the signature of the environment,
+not of the code — check for 141 before you go looking for a regression.
+
+**Run `pnpm gates` before every push.** It runs everything CI checks that is
+cheap: typecheck, lint, license headers, the changelog gate, the plan gate,
+and the static-contract suites (locale/RTL, token contrast, block fields,
+CMS a11y, the a11y smoke test, the internal-service inventory). About four
+minutes, and lint is most of it. Three separate red pipelines in this
+session were things on that list, each reported locally in seconds by a gate
+that was already in the repository — the gates were not missing, running
+them was. A green `pnpm gates` means "nothing cheap is broken", never "CI
+will pass": the browser, recipe, SEO and upgrade gates are not in it,
+because they cannot run here at all.
 
 **Do not calibrate any of these limits from a local run.** Docker is not
 installed on the development machine, so the recipe, SEO and upgrade gates
@@ -67,14 +107,23 @@ cannot be exercised locally at all; CI is the only place they run.
 
 ### Next item
 
-**C8.08** — print/digital gallery sales through catalog/cart/orders,
-preserving asset/product/selection provenance. C8.05's selections and C8.06's
-approved rounds are the natural input: what the client chose is what they buy.
+**C8.11** — fill the portal rooms C8.10 deliberately left out: quotes,
+contracts, invoices and payments; bookings, events and rentals; galleries
+and files; orders and returns; subscriptions and passes; loyalty and
+referrals; messages. Each reads through the same services admin uses —
+the portal is a second audience for them, never a second implementation.
+Do not start it on top of the stack above; land the stack first, or it
+becomes four deep.
 
-`RESTART_HANDOFF.md` is pre-existing untracked scratch. Do not modify or stage
-it.
+`RESTART_HANDOFF.md` is a later historical snapshot of the same kind. Neither
+file is a planning authority.
 
 ### Deploying freeholder.ai
+
+> **Superseded 2026-10-01.** freeholder.ai now runs on a new droplet built
+> from `deploy/digitalocean-droplet/` in the owner's main DigitalOcean
+> account; the droplet described below was retired from the apex record. See
+> `SESSION_HANDOFF.md` → "Production". Kept as written for history.
 
 Not wired up, and worth stating plainly so nobody assumes otherwise. Merging
 to `main` publishes a signed container image (`publish-image.yml`) — that is a
@@ -131,8 +180,7 @@ rules that bite most often in practice:
 - **Tick a box only with the evidence §43.2 requires**, and write the evidence
   note in the same PR. The notes on checked items are the only record of *why*
   something is the way it is.
-- **Never `git add -A`.** Stage explicit paths. `RESTART_HANDOFF.md` in the repo
-  root is scratch and must never be committed.
+- **Never `git add -A`.** Stage explicit paths.
 - **`git commit -s`** — DCO, no CLA.
 - **`main` is protected.** PR + green checks, squash-merge, do not delete
   branches.
@@ -387,8 +435,7 @@ Two notes worth carrying:
 
 ## 8. Things I would check early
 
-- **`RESTART_HANDOFF.md`** is untracked scratch in the repo root. It is not this
-  file. Leave it alone or delete it; never stage it.
+- **`RESTART_HANDOFF.md`** is another historical snapshot, not a live plan.
 - **The `none` SMS adapter is not a placeholder.** It is what an unconfigured
   instance resolves to, and it refuses clearly. Do not remove it when adding a
   second provider.

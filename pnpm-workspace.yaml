@@ -25,12 +25,18 @@ overrides:
   #
   # The specifier must match package.json's exactly. An override rewrites the
   # specifier of a direct dependency as well as a transitive one, so a broader
-  # range here (">=0.35.0" against a manifest saying "^0.35.3") makes the
+  # range here (">=0.35.0" against a manifest saying "^0.35.5") makes the
   # lockfile disagree with package.json and fails --frozen-lockfile in CI.
-  sharp: "^0.35.3"
+  # GHSA-wq5f-xc86-pv6w: patched bundled librsvg in sharp 0.35.5.
+  sharp: "^0.35.5"
+  # GHSA-pqg4-j6r4-53mv: quote() command injection through launch-editor.
+  shell-quote: ">=1.11.0 <2"
   # GHSA-r28c-9q8g-f849 and GHSA-fxqj-rqcc-2cmp: sourceMappingURL path
   # traversal/arbitrary map-file reads. 8.5.23 completes the earlier fix.
   postcss: ">=8.5.23 <9"
+  # GHSA-68fv-2mgg-jv7q: indexed source-map section offsets could block the
+  # event loop. Shared by PostCSS, Tailwind and test tooling; 1.2.2 patches it.
+  source-map-js: ">=1.2.2 <2"
   # GHSA-67mh-4wv8-2f99: the old esbuild development server allowed any site
   # to read its responses. drizzle-kit still reaches 0.18 through its retired
   # @esbuild-kit loader even though its other esbuild slots are patched. Scope
@@ -68,3 +74,8 @@ overrides:
   # Keep this exact patched version because every release below 11.1.1 is in
   # the advisory's affected range.
   uuid: "11.1.1"
+  # GHSA-3wwx-pv8p-q78v: WebSocket permessage-deflate unhandled error -> DoS.
+  # Only reachable through jsdom (dev/test fetch), overridden anyway because
+  # the fix is a patch version. 8.10.2 is the first release in the patched
+  # range for the 8.x line the tree uses.
+  undici: ">=8.10.2 <9"

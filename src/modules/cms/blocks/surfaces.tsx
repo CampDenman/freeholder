@@ -5,11 +5,463 @@ import { z } from "zod";
 import { formatMoney } from "@/core/i18n";
 import { ShareCopyButton } from "@/ui/ShareCopyButton";
 import { submitInboundAction } from "../../../../app/(public)/inbound-actions";
+import { addToCartLabels, AddToCart } from "../../../../app/(public)/buy/AddToCart";
 import { SiteChatClient } from "./SiteChatClient";
-import { defineBlock } from "./types";
+import { defineBlock, firstQueryValue } from "./types";
 import { socialEmbed } from "./social";
+import { buyableOf } from "./merchandising";
+import {
+  previewChildCount,
+  selectPreviewChildren,
+} from "@/core/paywalls/evaluate";
 
 const href = z.string().trim().min(1).max(2048);
+
+
+
+/* ---------------------------------------------------------------- C5.26 */
+
+/**
+ * A calculator, worked out on the server.
+ *
+ * A plain GET form, and that is a deliberate choice rather than a shortcut.
+ * Only the visitor's own numbers travel in the URL; the figure itself is
+ * recomputed here on every render, so a crafted link cannot display a result
+ * this calculator never produced. The assumptions and the label come from
+ * the owner's row, as they must.
+ *
+ * It renders no answer at all until somebody has asked for one, and renders a
+ * refusal rather than a number whenever the service declines — which it does
+ * when a published figure it depends on is missing or past its date. The
+ * refusal is rendered from the service's stable refusal code through the
+ * catalog, never from its English sentence: a visitor reading Arabic has to
+ * meet the same refusal an English reader does.
+ *
+ * A result never stands alone. The owner's assumptions render with it, and so
+ * does every published figure the arithmetic rested on — key, value, source
+ * and as-of — plus the as-of of the oldest of them, which is how old the
+ * answer really is. The figure is the least honest part of the sum; the
+ * provenance is what makes it publishable.
+ */
+export const calculator = defineBlock({
+  type: "calculator",
+  labelKey: "cms.block.calculator",
+  contexts: ["page"],
+  schema: z.object({ calculatorSlug: z.string().trim().min(1).max(60) }),
+  starter: () => ({ calculatorSlug: "calculator" }),
+  resolve: async (props, ctx) => {
+    const { getPublicCalculator, compute } = await import("@/modules/calculators/service");
+    const { currentBusiness } = await import("@/core/settings/read");
+    const [found, business] = await Promise.all([
+      getPublicCalculator.call({ slug: props.calculatorSlug }, { kind: "anonymous" }),
+      currentBusiness(),
+    ]);
+    if (!found || found.status !== "active") return null;
+
+    const inputs = found.inputs as Array<{
+      key: string;
+      label: string;
+      help?: string;
+      unit?: string;
+      min?: number;
+      max?: number;
+    }>;
+
+    // Nothing asked, nothing answered.
+    const asked = ctx.query?.calc === props.calculatorSlug;
+    const answers: Record<string, number> = {};
+    const given: Record<string, string> = {};
+    if (asked) {
+      for (const input of inputs) {
+        const raw = firstQueryValue(ctx.query?.[`c_${input.key}`]);
+        if (raw === undefined || raw === "") continue;
+        given[input.key] = raw;
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed)) answers[input.key] = parsed;
+      }
+    }
+
+    const result =
+      asked && Object.keys(answers).length === inputs.length
+        ? await compute.call(
+            { slug: props.calculatorSlug, answers },
+            { kind: "anonymous" },
+          )
+        : null;
+
+    // Store renders the fact's date in the business's timezone (the C8.15
+    // block does the same); which language formats it is the request's call.
+    return { found, inputs, given, result, timezone: business?.timezone ?? "UTC" };
+  },
+  render: ({ resolved, ctx }) => {
+    if (!resolved) return null;
+    const { found, inputs, given, result, timezone } = resolved;
+    const dateLabel = (date: Date) =>
+      new Intl.DateTimeFormat(ctx.locale, {
+        dateStyle: "medium",
+        timeZone: timezone,
+      }).format(date);
+
+    // The service answers a refusal as a stable code plus the key at fault;
+    // the sentence a visitor reads is assembled here, in their own catalog.
+    const refusalText = (() => {
+      if (!result || result.ok || !result.refusalCode) return null;
+      const named = result.refusalKey
+        ? inputs.find((input) => input.key === result.refusalKey)
+        : undefined;
+      // The codes that name an input always carry its key; the fact codes
+      // always carry the fact key. The fallbacks keep the types honest for a
+      // case the service cannot currently produce.
+      switch (result.refusalCode) {
+        case "input_required":
+          return ctx.t("cms.calculator.refusal.inputRequired", {
+            label: named?.label ?? result.refusalKey ?? "",
+          });
+        case "input_below_min":
+          return ctx.t("cms.calculator.refusal.inputBelowMin", {
+            label: named?.label ?? result.refusalKey ?? "",
+            min: named?.min ?? "",
+          });
+        case "input_above_max":
+          return ctx.t("cms.calculator.refusal.inputAboveMax", {
+            label: named?.label ?? result.refusalKey ?? "",
+            max: named?.max ?? "",
+          });
+        case "fact_missing":
+          return ctx.t("cms.calculator.refusal.factMissing", {
+            key: result.refusalKey ?? "",
+          });
+        case "fact_stale":
+          return ctx.t("cms.calculator.refusal.factStale", {
+            key: result.refusalKey ?? "",
+          });
+        case "fact_not_numeric":
+          return ctx.t("cms.calculator.refusal.factNotNumeric", {
+            key: result.refusalKey ?? "",
+          });
+        case "step_unusable":
+          return ctx.t("cms.calculator.refusal.stepUnusable");
+      }
+    })();
+
+    return (
+      <section className="grid max-w-prose gap-4">
+        <h3 className="text-lg font-medium text-ink">{found.name}</h3>
+        {found.intro ? (
+          <p className="whitespace-pre-line text-sm text-ink-muted">{found.intro}</p>
+        ) : null}
+
+        <form method="get" className="grid gap-3">
+          <input type="hidden" name="calc" value={found.slug} />
+          {inputs.map((input) => (
+            <label key={input.key} className="grid gap-1 text-sm">
+              <span className="font-medium text-ink">
+                {input.label}
+                {input.unit ? <span className="text-ink-muted">{` (${input.unit})`}</span> : null}
+              </span>
+              {input.help ? (
+                <span className="text-xs text-ink-muted">{input.help}</span>
+              ) : null}
+              <input
+                type="number"
+                inputMode="decimal"
+                step="any"
+                name={`c_${input.key}`}
+                defaultValue={given[input.key] ?? ""}
+                min={input.min}
+                max={input.max}
+                required
+                // 16px, not 14px: iOS Safari zooms the page when a control
+                // under 16px takes focus, which moves the page under the
+                // visitor on their first tap.
+                className="rounded-md border border-rule-strong bg-field px-3 py-2 text-base text-ink"
+              />
+            </label>
+          ))}
+          <button
+            type="submit"
+            className="justify-self-start rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent"
+          >
+            {ctx.t("cms.calculator.submit")}
+          </button>
+        </form>
+
+        {refusalText ? (
+          <p
+            role="status"
+            className="rounded-md border border-rule bg-warning-soft px-4 py-3 text-sm text-warning"
+          >
+            {refusalText}
+          </p>
+        ) : null}
+
+        {result?.ok ? (
+          <div className="grid gap-2 rounded-md border border-rule bg-surface-muted px-4 py-3">
+            <p className="text-sm text-ink-muted">{result.resultLabel}</p>
+            <p className="text-2xl font-semibold tabular-nums text-ink">
+              {result.resultUnit ? `${result.resultUnit}` : ""}
+              {result.value!.toLocaleString(ctx.locale, { maximumFractionDigits: 2 })}
+            </p>
+            {/* The caveats travel with the figure, always. */}
+            <p className="whitespace-pre-line text-xs text-ink-muted">{found.assumptions}</p>
+            {result.basedOn.length ? (
+              <div className="grid gap-1">
+                <p className="text-xs font-medium text-ink">
+                  {ctx.t("cms.calculator.restsOn")}
+                </p>
+                <ul className="grid list-none gap-1 p-0 text-xs text-ink-muted">
+                  {result.basedOn.map((entry) => (
+                    <li key={entry.key}>
+                      {ctx.t("cms.calculator.assumption", {
+                        key: entry.key,
+                        value: entry.value,
+                        source: entry.source,
+                        date: dateLabel(entry.asOf),
+                      })}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-ink-muted">
+                  {ctx.t("cms.calculator.basedOn", {
+                    count: result.basedOn.length,
+                    date: result.oldestAsOf ? dateLabel(result.oldestAsOf) : "",
+                  })}
+                  {result.oldestAsOf ? (
+                    // The machine-readable instant beside the human date:
+                    // crawlers and tests read the ISO string, people read
+                    // the localized one above it.
+                    <time
+                      dateTime={result.oldestAsOf.toISOString()}
+                      className="sr-only"
+                    >
+                      {result.oldestAsOf.toISOString()}
+                    </time>
+                  ) : null}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    );
+  },
+});
+
+/* ---------------------------------------------------------------- C6.18 */
+
+/**
+ * "Do you come to my postcode?"
+ *
+ * Three answers, and the third is the one worth having. If the business
+ * described its area as a radius or a named region, this says so rather than
+ * guessing — because guessing is how a van ends up two towns over, and the
+ * visitor reads the guess as the business's own word.
+ */
+export const coverageCheck = defineBlock({
+  type: "coverageCheck",
+  labelKey: "cms.block.coverageCheck",
+  contexts: ["page"],
+  schema: z.object({
+    heading: z.string().trim().max(160).optional(),
+    locationId: z.string().uuid().optional(),
+  }),
+  starter: () => ({}),
+  resolve: async (props, ctx) => {
+    const asked = (firstQueryValue(ctx.query?.postcode) ?? "").trim();
+    if (!asked) return { asked: "", answer: null };
+    const { checkCoverage } = await import("@/core/locations/coverage");
+    const answer = await checkCoverage.call(
+      { postalCode: asked, locationId: props.locationId },
+      { kind: "anonymous" },
+    );
+    return { asked, answer };
+  },
+  render: ({ props, resolved, ctx }) => {
+    const tone =
+      resolved.answer?.answer === "covered"
+        ? "bg-success-soft text-success"
+        : resolved.answer?.answer === "outside"
+          ? "bg-danger-soft text-danger"
+          : "bg-surface-muted text-ink-muted";
+    return (
+      <section className="grid max-w-prose gap-3">
+        <h3 className="text-lg font-medium text-ink">
+          {props.heading ?? ctx.t("cms.coverage.heading")}
+        </h3>
+        <form method="get" className="flex flex-wrap items-end gap-2">
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-ink">{ctx.t("cms.coverage.postcode")}</span>
+            <input
+              name="postcode"
+              defaultValue={resolved.asked}
+              required
+              autoComplete="postal-code"
+              className="rounded-md border border-rule-strong bg-field px-3 py-2 text-base text-ink"
+            />
+          </label>
+          <button
+            type="submit"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent"
+          >
+            {ctx.t("cms.coverage.submit")}
+          </button>
+        </form>
+        {resolved.answer ? (
+          <p role="status" className={`rounded-md px-4 py-3 text-sm ${tone}`}>
+            {ctx.t(`cms.coverage.${resolved.answer.answer}`, {
+              postcode: resolved.answer.postalCode,
+              place: resolved.answer.locationName ?? "",
+            })}
+          </p>
+        ) : null}
+        {resolved.answer?.answer === "covered" && resolved.answer.delivery ? (
+          <p className="rounded-md bg-surface-muted px-4 py-3 text-sm text-ink-muted">
+            {ctx.t("cms.coverage.delivery", {
+              window: deliveryWindowText(ctx.locale, resolved.answer.delivery),
+            })}
+          </p>
+        ) : null}
+      </section>
+    );
+  },
+});
+
+/**
+ * "Tuesdays and Thursdays, 09:00–17:00" in the reader's language and clock.
+ *
+ * Day names come from `Intl` rather than seven catalog keys for the same
+ * reason labels.ts gives: the runtime already knows every language's day
+ * names. The times keep the 24-hour HH:MM the owner authored.
+ */
+function deliveryWindowText(
+  locale: string,
+  window: { weekdays: number[]; opens: string; closes: string },
+): string {
+  const names = window.weekdays
+    .slice()
+    .sort((a, b) => a - b)
+    .map((day) =>
+      new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" }).format(
+        new Date(Date.UTC(2024, 0, 7 + day)),
+      ),
+    );
+  const days = new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(names);
+  return `${days}, ${window.opens}–${window.closes}`;
+}
+
+/* ---------------------------------------------------------------- C8.15 */
+
+/**
+ * A fact the business stands behind, shown with its provenance.
+ *
+ * The date and the source are not decoration and they are not optional: §4.18
+ * says a published figure carries the moment it was true and where it came
+ * from, and a block that could render the number alone would be a way around
+ * the rule the rest of the feature is built on. So they render together or
+ * not at all.
+ *
+ * A key with no current fact renders *nothing*. Not a placeholder, not a last
+ * known value, not an em dash — a page that has nothing to say about a number
+ * says nothing about it.
+ */
+export const fact = defineBlock({
+  type: "fact",
+  labelKey: "cms.block.fact",
+  contexts: ["page"],
+  schema: z.object({
+    factKey: z.string().trim().min(1).max(120),
+    label: z.string().max(160).optional(),
+    subjectKind: z.string().max(60).optional(),
+    subjectId: z.string().max(120).optional(),
+    /** The correction ledger, for the newsroom and the lender who want it public. */
+    showHistory: z.boolean().default(false),
+  }),
+  starter: () => ({ factKey: "rate.30-year-fixed", showHistory: false }),
+  resolve: async (props) => {
+    // Lazily, and through the service rather than the table: a block is a
+    // function from validated props to markup, and does not hold a database
+    // handle (see BlockRenderContext).
+    const [{ currentFact, factHistory }, { currentBusiness }, { formatDateTime }] =
+      await Promise.all([
+        import("@/core/attestations/service"),
+        import("@/core/settings/read"),
+        import("@/core/i18n"),
+      ]);
+    const subject =
+      props.subjectKind || props.subjectId
+        ? { kind: props.subjectKind, id: props.subjectId }
+        : undefined;
+    const found = await currentFact.call(
+      { key: props.factKey, subject },
+      { kind: "anonymous" },
+    );
+    if (!found) return null;
+
+    const business = await currentBusiness();
+    const timezone = business?.timezone ?? "UTC";
+    const locale = business?.defaultLocale ?? "en";
+    const shown = (value: unknown) =>
+      typeof value === "string" ? value : JSON.stringify(value);
+
+    const ledger = props.showHistory
+      ? await factHistory.call({ key: props.factKey, subject }, { kind: "anonymous" })
+      : [];
+
+    return {
+      value: shown(found.value),
+      source: found.source,
+      asOf: found.asOf.toISOString(),
+      asOfLabel: formatDateTime(found.asOf, timezone, locale),
+      stale: found.stale,
+      corrections: ledger
+        .filter((entry) => entry.supersededAt !== null)
+        .map((entry) => ({
+          value: shown(entry.value),
+          asOfLabel: formatDateTime(entry.asOf, timezone, locale),
+          note: entry.correctionNote,
+        })),
+    };
+  },
+  render: ({ props, resolved, ctx }) => {
+    // Nothing stated, nothing shown.
+    if (!resolved) return null;
+    return (
+      <section className="grid max-w-prose gap-1">
+        {props.label ? (
+          <h3 className="text-sm font-semibold text-ink">{props.label}</h3>
+        ) : null}
+        <p className="text-2xl font-semibold tabular-nums text-ink">{resolved.value}</p>
+        <p className="text-xs text-ink-muted">
+          <time dateTime={resolved.asOf}>
+            {ctx.t("cms.fact.asOf", { date: resolved.asOfLabel })}
+          </time>
+          {" · "}
+          {ctx.t("cms.fact.source", { source: resolved.source })}
+        </p>
+        {resolved.stale ? (
+          <p className="text-xs font-medium text-warning">{ctx.t("cms.fact.stale")}</p>
+        ) : null}
+        {resolved.corrections.length ? (
+          <details className="mt-2 text-xs text-ink-muted">
+            <summary className="cursor-pointer font-medium text-ink">
+              {ctx.t("cms.fact.corrections", { count: resolved.corrections.length })}
+            </summary>
+            <ul className="mt-2 grid list-none gap-1 p-0">
+              {resolved.corrections.map((entry, index) => (
+                <li key={index}>
+                  <span className="tabular-nums">{entry.value}</span>
+                  {" · "}
+                  <span>{entry.asOfLabel}</span>
+                  {entry.note ? <span>{" · "}{entry.note}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </section>
+    );
+  },
+});
 
 /* ---------------------------------------------------------------- C2.08 */
 
@@ -196,42 +648,8 @@ export const share = defineBlock({
   },
 });
 
-export const knowledge = defineBlock({
-  type: "knowledge",
-  labelKey: "cms.block.knowledge",
-  contexts: ["page"],
-  schema: z.object({
-    prefix: z.string().trim().min(1).max(40).default("help"),
-  }),
-  starter: () => ({ prefix: "help" }),
-  resolve: async (props) => {
-    const { publishedPaths } = await import("../service");
-    const rows = await publishedPaths.call({}, { kind: "anonymous" });
-    const prefix = props.prefix.replace(/^\/+|\/+$/g, "");
-    return rows.filter(
-      (row) => row.slug === prefix || row.slug.startsWith(`${prefix}/`),
-    );
-  },
-  render: ({ resolved, ctx }) => {
-    if (!resolved || resolved.length === 0) return null;
-    return (
-      <nav aria-label={ctx.t("cms.block.knowledge")}>
-        <ul className="grid list-none gap-2 p-0">
-          {resolved.map((page) => (
-            <li key={page.slug}>
-              <a
-                href={ctx.localizeHref?.(page.slug === "" ? "/" : `/${page.slug}`) ?? `/${page.slug}`}
-                className="font-semibold text-ink"
-              >
-                {page.title}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-    );
-  },
-});
+// The knowledge block moved to ./help.tsx when C8.12 turned it from a slug
+// listing into the help centre proper.
 
 /* ---------------------------------------------------------------- C2.09 */
 
@@ -243,23 +661,48 @@ export const productCard = defineBlock({
     slug: z.string().min(1),
   }),
   starter: () => ({ slug: "product" }),
-  resolve: async (props) => {
-    const { resolveVisibleProduct } = await import("@/modules/catalog/service");
-    return resolveVisibleProduct.call({ slug: props.slug }, { kind: "anonymous" });
-  },
+  fieldHints: { slug: { control: "product" } },
+  resolve: async (props, ctx) => buyableOf(props.slug, ctx.actor),
   render: ({ resolved, ctx }) => {
     if (!resolved) return null;
-    const href = ctx.localizeHref?.(`/products/${resolved.slug}`) ?? `/products/${resolved.slug}`;
-    return (
+    const { product, purchase } = resolved;
+    const href = ctx.localizeHref?.(`/products/${product.slug}`) ?? `/products/${product.slug}`;
+    const formatMinor = (minor: number) =>
+      formatMoney(minor, purchase?.currency ?? "USD", ctx.locale);
+    const card = (
       <article className="grid gap-2 rounded-lg border border-rule p-4">
         <h2 className="text-lg font-bold tracking-tight text-ink">
-          <a href={href}>{resolved.name}</a>
+          <a href={href}>{product.name}</a>
         </h2>
-        {resolved.subtitle ? <p className="text-sm text-ink-muted">{resolved.subtitle}</p> : null}
+        {product.subtitle ? <p className="text-sm text-ink-muted">{product.subtitle}</p> : null}
+        {purchase && purchase.priceFromMinor !== null ? (
+          <p className="text-sm font-semibold text-ink">
+            {purchase.variants.length > 1
+              ? ctx.t("store.buy.from", { price: formatMinor(purchase.priceFromMinor) })
+              : formatMinor(purchase.priceFromMinor)}
+          </p>
+        ) : null}
+        {purchase && purchase.variants.length > 0 ? (
+          <AddToCart product={purchase} formatMinor={formatMinor} labels={addToCartLabels(ctx.t)} />
+        ) : null}
         <a href={href} className="text-sm font-semibold text-accent">
           {ctx.t("cms.productCard.view")}
         </a>
       </article>
+    );
+    if (!ctx.identifyBlocks) return card;
+    // The canvas shows the card as it will render, with the buy chrome inert
+    // so the design surface cannot submit into the frame; the product picker
+    // affordance sits outside the inert region.
+    return (
+      <div className="fh-asset" data-pick-prop="slug" data-pick-current={product.slug}>
+        <div className="fh-asset-body">
+          <div inert>{card}</div>
+        </div>
+        <button type="button" className="fh-replace" data-replace-pick="slug">
+          {ctx.t("cms.editor.replaceProduct")}
+        </button>
+      </div>
     );
   },
 });
@@ -270,9 +713,9 @@ export const booking = defineBlock({
   contexts: ["page"],
   schema: z.object({
     slug: z.string().min(1),
-    ctaHref: href.default("/contact"),
+    ctaHref: href.default("/book"),
   }),
-  starter: () => ({ slug: "session", ctaHref: "/contact" }),
+  starter: () => ({ slug: "session", ctaHref: "/book" }),
   resolve: async (props) => {
     const { resolveVisibleProduct } = await import("@/modules/catalog/service");
     const product = await resolveVisibleProduct.call({ slug: props.slug }, { kind: "anonymous" });
@@ -294,12 +737,12 @@ export const booking = defineBlock({
             {ctx.t("cms.booking.duration", { minutes: resolved.offering.durationMin })}
           </p>
         ) : null}
-        <p className="text-sm text-ink-muted">{ctx.t("cms.booking.noCalendar")}</p>
+        <p className="text-sm text-ink-muted">{ctx.t("publicBooking.intro")}</p>
         <a
-          href={ctx.localizeHref?.(props.ctaHref) ?? props.ctaHref}
+          href={ctx.localizeHref?.(props.ctaHref === "/book" ? `/book?service=${resolved.product.id}` : props.ctaHref) ?? props.ctaHref}
           className="inline-flex w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent"
         >
-          {ctx.t("cms.booking.request")}
+          {ctx.t("publicBooking.find")}
         </a>
       </article>
     );
@@ -358,7 +801,7 @@ export const tip = defineBlock({
         <input type="hidden" name="currency" value={props.currency} />
         <label className="grid gap-1 text-sm">
           <span className="font-semibold text-ink">{ctx.t("cms.inbound.email")}</span>
-          <input type="email" name="email" required className="rounded-md border border-rule bg-field px-3 py-2 text-ink" />
+          <input type="email" name="email" required className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
         </label>
         <fieldset className="grid gap-2">
           <legend className="text-sm font-semibold text-ink">{ctx.t("cms.tip.amount")}</legend>
@@ -481,21 +924,28 @@ function InboundFields({ t }: { t: (key: string) => string }) {
     <>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.name")}</span>
-        <input type="text" name="name" autoComplete="name" required className="rounded-md border border-rule bg-field px-3 py-2 text-ink" />
+        <input type="text" name="name" autoComplete="name" required className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
       </label>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.email")}</span>
-        <input type="email" name="email" autoComplete="email" required className="rounded-md border border-rule bg-field px-3 py-2 text-ink" />
+        <input type="email" name="email" autoComplete="email" required className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
       </label>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.message")}</span>
-        <textarea name="message" required rows={4} className="rounded-md border border-rule bg-field px-3 py-2 text-ink" />
+        <textarea name="message" required rows={4} className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
       </label>
     </>
   );
 }
 
 /* ---------------------------------------------------------------- C2.10 */
+
+type PaywallResolved = {
+  allowed: boolean;
+  reveal: "all" | "preview" | "none";
+  previewStrategy: "blocks" | "paragraphs" | "percent";
+  previewValue: number;
+};
 
 export const paywall = defineBlock({
   type: "paywall",
@@ -506,85 +956,76 @@ export const paywall = defineBlock({
     teaser: z.string().min(1).max(400),
     ctaLabel: z.string().min(1).max(80),
     ctaHref: href,
+    paywallId: z.string().uuid().optional(),
   }),
   starter: () => ({
     teaser: "The rest of this page is for supporters.",
     ctaLabel: "Continue",
     ctaHref: "/contact",
   }),
-  includeChildren: ({ ctx }) => ctx.identifyBlocks === true,
-  render: ({ props, ctx, children }) => {
+  resolve: async (props, ctx): Promise<PaywallResolved> => {
+    if (ctx.identifyBlocks) {
+      return { allowed: true, reveal: "all", previewStrategy: "blocks", previewValue: 0 };
+    }
+    const { evaluatePaywall } = await import("@/core/paywalls/service");
+    const decision = await evaluatePaywall.call(
+      {
+        paywallId: props.paywallId,
+        kind: "page",
+        selector: ctx.path,
+        anonId: ctx.visitorId,
+      },
+      ctx.actor ?? { kind: "anonymous" },
+    );
+    // A paywall *block* is a gate even when no Paywall row matches this path.
+    // Showing children in that case would leak every C2.10 tree the moment
+    // this item shipped. A Paywall row is what makes a grant able to open it.
+    if (!decision.gated) {
+      return { allowed: false, reveal: "none", previewStrategy: "blocks", previewValue: 0 };
+    }
+    return {
+      allowed: decision.allowed,
+      reveal: decision.reveal,
+      previewStrategy: decision.previewStrategy,
+      previewValue: decision.previewValue,
+    };
+  },
+  includeChildren: ({ ctx, resolved }) =>
+    ctx.identifyBlocks === true || resolved.reveal !== "none",
+  selectChildren: ({ children, ctx, resolved }) => {
+    if (ctx.identifyBlocks || resolved.reveal === "all") return children;
+    return selectPreviewChildren(
+      children,
+      resolved.previewStrategy,
+      previewChildCount(children.length, resolved.previewStrategy, resolved.previewValue),
+    );
+  },
+  render: ({ props, ctx, resolved, children }) => {
     if (ctx.identifyBlocks) {
       return <div className="grid gap-4">{children}</div>;
     }
+    const showGated = resolved.reveal !== "none";
     return (
-      <aside data-paywall-teaser className="grid max-w-prose gap-3 rounded-lg border border-rule p-4">
-        <p className="text-ink">{props.teaser}</p>
-        <a
-          href={ctx.localizeHref?.(props.ctaHref) ?? props.ctaHref}
-          className="inline-flex w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent"
-        >
-          {props.ctaLabel}
-        </a>
-      </aside>
+      <div className="grid max-w-prose gap-4">
+        {showGated ? <div data-paywall-gated className="grid gap-4">{children}</div> : null}
+        {resolved.allowed ? null : (
+          <aside data-paywall-teaser className="grid gap-3 rounded-lg border border-rule p-4">
+            <p className="text-ink">{props.teaser}</p>
+            <a
+              href={ctx.localizeHref?.(props.ctaHref) ?? props.ctaHref}
+              className="inline-flex w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent"
+            >
+              {props.ctaLabel}
+            </a>
+          </aside>
+        )}
+      </div>
     );
   },
   jsonLd: () => ({
     "@context": "https://schema.org",
     "@type": "WebPageElement",
     isAccessibleForFree: false,
-    cssSelector: "[data-paywall-teaser]",
+    cssSelector: "[data-paywall-gated]",
   }),
-});
-
-export const adSlot = defineBlock({
-  type: "adSlot",
-  labelKey: "cms.block.adSlot",
-  contexts: ["page", "chrome"],
-  schema: z.object({
-    code: z.string().trim().min(1).max(40),
-    desktopWidth: z.number().int().min(50).max(1600).default(728),
-    desktopHeight: z.number().int().min(50).max(1200).default(90),
-    mobileWidth: z.number().int().min(50).max(800).default(320),
-    mobileHeight: z.number().int().min(50).max(800).default(50),
-    houseHref: href.optional(),
-    houseAssetId: z.string().uuid().optional(),
-    houseAlt: z.string().max(200).optional(),
-  }),
-  starter: () => ({ code: "header" }),
-  fieldHints: { houseAssetId: { control: "asset", assetKind: "image" } },
-  resolve: async (props) => {
-    if (!props.houseAssetId) return null;
-    const { resolveImage } = await import("@/core/media/service");
-    return resolveImage.call({ id: props.houseAssetId }, { kind: "anonymous" });
-  },
-  render: ({ props, resolved }) => {
-    const house = resolved && props.houseHref ? (
-      <a href={props.houseHref} className="block h-full w-full">
-        <img
-          src={resolved.src}
-          alt={props.houseAlt || resolved.altText || ""}
-          width={props.desktopWidth}
-          height={props.desktopHeight}
-          className="h-full w-full object-cover"
-        />
-      </a>
-    ) : null;
-    return (
-      <div data-ad-slot={props.code} className="grid justify-items-center">
-        <div
-          className="hidden sm:grid place-items-center overflow-hidden bg-surface-muted"
-          style={{ width: props.desktopWidth, height: props.desktopHeight }}
-        >
-          {house}
-        </div>
-        <div
-          className="grid place-items-center overflow-hidden bg-surface-muted sm:hidden"
-          style={{ width: props.mobileWidth, height: props.mobileHeight }}
-        >
-          {house}
-        </div>
-      </div>
-    );
-  },
 });

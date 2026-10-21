@@ -15,6 +15,7 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
@@ -30,18 +31,23 @@
       ],
       "@freeholder/plugin-kit": [
         "./packages/plugin-kit/src/index.ts"
+      ],
+      "@freeholder/templates": [
+        "./packages/templates/src/presets.ts"
       ]
     }
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
+    "app/.well-known/**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
+    "apps",
     "packages/create-freeholder",
     "packages/templates"
   ]

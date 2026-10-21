@@ -18,6 +18,7 @@ import { Bell } from "@phosphor-icons/react/dist/ssr";
 import { SkipLink } from "@/ui/SkipLink";
 import { listGuidanceContexts } from "@/core/guidance/service";
 import { AdminGuidanceHelp } from "./AdminGuidanceHelp";
+import { PLATFORM_VERSION } from "@/core/platform";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,9 @@ export default async function AdminLayout({
           <span className="rounded-full bg-surface-muted px-2 py-0.5 font-mono text-xs text-ink-muted">
             {actor.kind === "user" ? actor.role : ""}
           </span>
+          <span className="font-mono text-xs text-ink-muted">
+            {t("admin.platformVersion", { version: PLATFORM_VERSION })}
+          </span>
           <div className="ms-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-3">
             <AdminGuidanceHelp
               contexts={guidanceContexts}
@@ -96,21 +100,34 @@ export default async function AdminLayout({
             labels={{
               region: t("admin.nav.label"),
               overview: t("admin.nav.overview"),
+              search: t("admin.nav.search"),
               briefing: t("briefing.title"),
+              guidance: t("guidance.allTitle"),
+              notifications: t("notifications.title"),
               pages: t("admin.nav.pages"),
               sections: t("admin.nav.sections"),
               templates: t("admin.nav.templates"),
               design: t("admin.nav.design"),
               media: t("admin.nav.media"),
               forms: t("forms.title"),
+              assessments: t("assessments.title"),
+              facts: t("facts.title"),
+              calculators: t("calculators.title"),
               traffic: t("analytics.title"),
+              reports: t("reports.title"),
+              subscriptions: t("subscriptions.title"),
+              access: t("entitlements.title"),
+              paywalls: t("paywalls.title"),
               experiments: t("experiments.title"),
               health: t("doctor.title"),
+              updates: t("updates.title"),
               jobs: t("jobs.title"),
               contacts: t("admin.nav.contacts"),
               locations: t("admin.nav.locations"),
               translations: t("admin.nav.translations"),
               settings: t("admin.nav.settings"),
+              retention: t("admin.nav.retention"),
+              redirects: t("seo.redirects.title"),
               roles: t("admin.nav.roles"),
               invitations: t("admin.nav.invitations"),
               builder: t("admin.nav.builder"),
@@ -119,6 +136,7 @@ export default async function AdminLayout({
               payments: t("payments.title"),
               pos: t("pos.title"),
               products: t("catalog.title"),
+              collections: t("admin.nav.collections"),
               prices: t("catalog.prices.listsTitle"),
               inventory: t("catalog.inventory.title"),
               procurement: t("catalog.procure.title"),
@@ -135,10 +153,26 @@ export default async function AdminLayout({
               tasks: t("tasks.title"),
               segments: t("segments.title"),
               scoring: t("scoring.title"),
+              referrals: t("referrals.title"),
+              ads: t("ads.title"),
+              assistant: t("assistant.title"),
+              social: t("social.title"),
+              sharing: t("share.title"),
+              popups: t("popups.title"),
+              automations: t("automations.title"),
+              documents: t("documents.title"),
+              loyalty: t("loyalty.title"),
+              gifts: t("gifts.title"),
+              printOnDemand: t("pod.title"),
+              community: t("community.title"),
+              members: t("members.admin.title"),
+              voiceVideo: t("voiceVideo.title"),
+              marketplace: t("marketplace.title"),
               inbox: t("inbox.title"),
               messaging: t("messaging.title"),
               projects: t("projects.title"),
               galleries: t("galleries.title"),
+              reviews: t("reviews.title"),
               time: t("time.title"),
               quotes: t("quotes.title"),
               agreements: t("agreements.title"),

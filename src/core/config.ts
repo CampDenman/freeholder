@@ -46,7 +46,7 @@ export const configSchema = z.object({
     })
     .prefault({}),
   preset: z
-    .enum(["creator", "service-business", "shop", "everything", "custom"])
+    .enum(["creator", "service-business", "shop", "community", "everything", "custom"])
     .default("everything"),
   locales: z.array(z.string()).min(1).default(["en"]),
   baseCurrency: z.string().length(3).default("USD"),

@@ -29,6 +29,13 @@ surface it:
   that it had a real transition before reduction, so this cannot pass by
   checking an interface that never moved.
 
+A bounded extra set of owner F04 list screens is walked for a unique heading,
+axe in light, and skip-to-content: search, retention, payments, messaging,
+pipeline, products, redirects, pages, community, voice-video, plus the earlier
+roles, invitations, contacts, health, settings, plugins and work. Remaining
+owner lists and record-id detail pages stay out of that loop. RTL is an
+injected `dir` on admin, not a shipped Arabic catalog.
+
 Failures retain a screenshot, video and trace under `test-results/browser`.
 Playwright's HTML report is retained under `playwright-report/browser` in CI.
 Neither directory is committed.

@@ -1,0 +1,11 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=Check and install a compatible Freeholder Docker update
+After=docker.service
+Requires=docker.service
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/freeholder/docker-updater.py scheduled
+TimeoutStartSec=1800
+UMask=0077

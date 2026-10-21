@@ -18,8 +18,8 @@
 //
 // **What is not a tool at all.** Credential services are excluded whatever the
 // caller's scopes say — see EXCLUDED_FAMILIES.
-import { z } from "zod";
-import { listServices, permits, type Actor, type Service } from "@/core/service";
+import { actsByKey, listServices, permits, type Actor, type Service } from "@/core/service";
+import { toContractJsonSchema } from "@/core/contract/json-schema";
 
 /**
  * Families that never become tools.
@@ -44,7 +44,7 @@ const EXCLUDED_FAMILIES = new Set(["auth", "apikeys", "invitations"]);
 export function hiddenFromMcp(service: Service): boolean {
   // Internal orchestration never becomes an agent capability. This check is
   // first so `mcpExclude: false` cannot accidentally override the boundary.
-  if (service.def.permission === "system") return true;
+  if (service.def.permission === "system" || service.def.external === false) return true;
   if (service.def.mcpExclude === true) return true;
   if (service.def.mcpExclude === false) return false;
   return EXCLUDED_FAMILIES.has(service.def.name.split(".")[0]!);
@@ -104,13 +104,9 @@ function describe(service: Service): string {
  * advertise a shape the service would reject.
  */
 function inputSchema(service: Service): Record<string, unknown> {
-  let schema: Record<string, unknown>;
-  try {
-    schema = z.toJSONSchema(service.def.input, { io: "input" });
-  } catch {
-    schema = { type: "object" };
-  }
-  delete schema.$schema;
+  // C3.04: dates and coercions must retain the HTTP/SDK wire shape. A local
+  // Zod conversion used to throw on dates and erase every field in the tool.
+  const schema = toContractJsonSchema(service.def.input, "input") as Record<string, unknown>;
   // MCP requires an object schema at the top level. A service whose input is
   // not an object (none are today) would otherwise produce a tool no client
   // can call.
@@ -130,7 +126,7 @@ export function toolsFor(actor: Actor): McpTool[] {
     const { name, kind, permission, summary } = service.def;
     if (hiddenFromMcp(service)) continue;
     if (service.def.stepUp && actor.kind !== "user") continue;
-    if (service.def.agentCallable === false && actor.kind === "agent") continue;
+    if (service.def.agentCallable === false && actsByKey(actor)) continue;
     if (!permits(actor, permission, name, kind)) continue;
 
     const verb = name.split(".")[1] ?? "";
@@ -166,7 +162,7 @@ export function serviceForTool(
     if (toolName(service.def.name) !== tool) continue;
     if (hiddenFromMcp(service)) return undefined;
     if (service.def.stepUp && actor.kind !== "user") return undefined;
-    if (service.def.agentCallable === false && actor.kind === "agent") {
+    if (service.def.agentCallable === false && actsByKey(actor)) {
       return undefined;
     }
     // Resolved through the same permission check as the listing, so a tool

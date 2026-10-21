@@ -15,7 +15,7 @@ export const newsletterArchive = defineBlock({
     return listPublicIssues.call({}, { kind: "anonymous" });
   },
   render: ({ resolved, ctx }) => {
-    if (!resolved || resolved.length === 0) return null;
+    if (!resolved || resolved.length === 0) return <p className="text-ink-muted">{ctx.t("newsletters.archiveEmpty")}</p>;
     return (
       <ul className="grid list-none gap-4 p-0">
         {resolved.map((issue) => (
@@ -70,16 +70,24 @@ export const newsletterSubscribe = defineBlock({
   contexts: ["page"],
   schema: z.object({
     newsletterId: z.string().uuid().optional(),
+    /**
+     * The owner's own consent sentence, shown beside a checkbox.
+     * Absent means the form behaves as it always has: the address and the
+     * double opt-in are the evidence, and no extra claim is invented.
+     */
+    consentStatement: z.string().trim().max(500).optional(),
   }),
   starter: () => ({}),
   resolve: async (props) => {
+    const { customerSignInStatus } = await import("@/core/portal/sign-in");
+    if (!(await customerSignInStatus.call({}, {kind:"anonymous"})).available) return [];
     const { listPublicNewsletters } = await import("./service");
     const rows = await listPublicNewsletters.call({}, { kind: "anonymous" });
     const active = rows.filter((row) => row.status === "active");
     if (props.newsletterId) return active.filter((row) => row.id === props.newsletterId);
     return active;
   },
-  render: ({ resolved, ctx }) => {
+  render: ({ props, resolved, ctx }) => {
     if (!resolved || resolved.length === 0) return null;
     if (ctx.query?.subscribed === "1") {
       return (
@@ -88,14 +96,20 @@ export const newsletterSubscribe = defineBlock({
         </p>
       );
     }
+    const statement = props.consentStatement?.trim() ?? "";
     return (
       <form action={subscribePublicNewsletter} className="grid max-w-md gap-3">
+        {ctx.query?.subscribeError === "1" ? (
+          <p role="alert" className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
+            {ctx.t("newsletters.subscribeError")}
+          </p>
+        ) : null}
         {resolved.length === 1 ? (
           <input type="hidden" name="newsletterId" value={resolved[0]!.id} />
         ) : (
           <label className="grid gap-1 text-sm">
             <span className="font-semibold text-ink">{ctx.t("newsletters.name")}</span>
-            <select name="newsletterId" required className="rounded-md border border-rule bg-surface px-3 py-2">
+            <select name="newsletterId" required className="rounded-md border border-rule-strong bg-surface px-3 py-2">
               {resolved.map((newsletter) => (
                 <option key={newsletter.id} value={newsletter.id}>
                   {newsletter.name}
@@ -110,9 +124,16 @@ export const newsletterSubscribe = defineBlock({
             type="email"
             name="email"
             required
-            className="rounded-md border border-rule bg-surface px-3 py-2"
+            className="rounded-md border border-rule-strong bg-surface px-3 py-2"
           />
         </label>
+        {statement ? (
+          <label className="flex items-start gap-2 text-sm text-ink">
+            <input type="checkbox" name="consent" required className="mt-1" />
+            <span>{statement}</span>
+          </label>
+        ) : null}
+        {statement ? <input type="hidden" name="consentStatement" value={statement} /> : null}
         <button type="submit" className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent">
           {ctx.t("newsletters.subscribe")}
         </button>

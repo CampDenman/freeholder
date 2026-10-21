@@ -167,7 +167,8 @@ export const consumeCustomerMagicLink = defineService({
   rateLimit: {
     limit: 20,
     windowSeconds: 15 * 60,
-    subject: () => "customer-magic",
+    // C1.05: invalid links must not spend another customer's login allowance.
+    subject: (input) => hashCustomerMagicLinkToken(input.token),
     message: "Too many sign-in attempts. Wait a few minutes and try again.",
   },
   output: row({

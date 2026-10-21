@@ -14,14 +14,19 @@ import { viewGalleryItem } from "@/modules/galleries/service";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string; itemId: string }> },
 ): Promise<Response> {
-  const { itemId } = await params;
-  const token = (await cookies()).get(GALLERY_SESSION_COOKIE)?.value;
+  const { slug, itemId } = await params;
+  // C10.29: native clients hold the same gallery capability in secure storage.
+  // Explicit credentials never fall back to an ambient browser cookie.
+  const authorization = request.headers.get("authorization");
+  const token = authorization !== null
+    ? /^Bearer ([^\s]+)$/i.exec(authorization)?.[1]
+    : (await cookies()).get(GALLERY_SESSION_COOKIE)?.value;
   if (!token) return new Response(null, { status: 404 });
   const allowed = await viewGalleryItem
-    .call({ sessionToken: token, itemId }, { kind: "anonymous" })
+    .call({ sessionToken: token, itemId, slug }, { kind: "anonymous" })
     .catch(() => null);
   if (!allowed) return new Response(null, { status: 404 });
   const body = await storage().get(allowed.storageKey);
@@ -36,7 +41,8 @@ export async function GET(
       ...(inline ? {} : { "content-disposition": `attachment; filename="${safe}"` }),
       // Short enough that a revoke or an expiry bites within the minute,
       // long enough that scrolling a gallery does not refetch every photo.
-      "cache-control": "private, max-age=60",
+      "cache-control": authorization !== null ? "private, no-store" : "private, max-age=60",
+      "vary": "Cookie, Authorization",
       "content-security-policy": "default-src 'none'; sandbox",
       "x-content-type-options": "nosniff",
       "x-robots-tag": "noindex, nofollow",

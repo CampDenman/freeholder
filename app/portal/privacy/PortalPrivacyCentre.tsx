@@ -157,7 +157,7 @@ export function PortalPrivacyCentre({
               </Field>
             </div>
             <Field label={labels.note} htmlFor="portal-privacy-note">
-              <textarea id="portal-privacy-note" name="note" rows={3} className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm" />
+              <textarea id="portal-privacy-note" name="note" rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
             </Field>
             {kind === "correction" ? (
               <fieldset className="grid gap-4 rounded-md border border-rule p-4">

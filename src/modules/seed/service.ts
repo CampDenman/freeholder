@@ -15,7 +15,7 @@
 import { z } from "zod";
 import sharp from "sharp";
 import { count } from "drizzle-orm";
-import { defineService, ServiceError } from "@/core/service";
+import { defineOrchestratedService, defineService, ServiceError } from "@/core/service";
 import { pages } from "@/modules/cms/schema";
 import { updateBusiness, completeSetup } from "@/core/settings/service";
 import { uploadAsset } from "@/core/media/service";
@@ -35,25 +35,19 @@ import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
 import { createForm } from "@/modules/forms/service";
 import { setTranslation } from "@/core/i18n/service";
 import * as demo from "../../../seed/demo/content";
+import { installPreset } from "./preset-install";
 
-export const installDemo = defineService({
-  name: "demo.install",
-  summary: "Fill an empty instance with the Aurora Coast Photography demo.",
-  kind: "mutation",
-  // Owner rather than staff: this rewrites the business profile, which is the
-  // instance's identity. `system` reaches it through ctx.callAsSystem at boot
-  // when FREEHOLDER_SEED_DEMO is set.
+export { installPreset };
+
+const installDemoGuard = defineService({
+  name: "demo.installGuard",
+  summary: "Refuse to seed a site that already has pages.",
+  kind: "query",
   permission: "scoped",
-  input: z.object({
-    /** Publish the pages, rather than leaving them as drafts to look at. */
-    publish: z.boolean().default(true),
-  }),
-  output: z.object({
-    business: z.string(),
-    pages: z.array(z.string()),
-    assets: z.number().int(),
-  }),
-  handler: async (input, ctx) => {
+  external: false,
+  input: z.object({}),
+  output: z.object({ ok: z.literal(true) }),
+  handler: async (_input, ctx) => {
     // Refusing on a populated instance is the whole safety story. There is no
     // force flag: an owner who wants the demo over their real site can delete
     // their pages first and mean it, and a missing flag cannot be passed by
@@ -65,31 +59,33 @@ export const installDemo = defineService({
         "This instance already has pages. The demo only installs into an empty site.",
       );
     }
+    return { ok: true as const };
+  },
+});
 
+const installDemoApply = defineService({
+  name: "demo.installApply",
+  summary: "Write the demo business, pages and translations after images are stored.",
+  kind: "mutation",
+  permission: "scoped",
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    publish: z.boolean(),
+    assets: z.record(z.string(), z.string().uuid()),
+  }),
+  output: z.object({
+    business: z.string(),
+    pages: z.array(z.string()),
+    assets: z.number().int(),
+  }),
+  handler: async (input, ctx) => {
     const pack = demo;
-    const { BUSINESS, LOCATION, HOURS, IMAGES, FORMS, PAGES, TRANSLATIONS, header, footer } =
+    const { BUSINESS, LOCATION, HOURS, FORMS, PAGES, TRANSLATIONS, header, footer } =
       pack;
+    const assets = input.assets;
 
     await ctx.callAsSystem(updateBusiness, BUSINESS);
-
-    // Images first: the pages reference them by id, and a page written with a
-    // dangling assetId would render a hole rather than fail loudly.
-    const assets = {} as Record<string, string>;
-    for (const [slot, image] of Object.entries(IMAGES)) {
-      // Encoded here rather than committed as binaries: a repository people
-      // fork should not carry megabytes of stock photography, and sharp turns
-      // the vector into a real JPEG the media pipeline treats like any upload.
-      const jpeg = await sharp(Buffer.from(image.svg))
-        .jpeg({ quality: 82, mozjpeg: true })
-        .toBuffer();
-      const asset = await ctx.callAsSystem(uploadAsset, {
-        filename: image.filename,
-        contentType: "image/jpeg",
-        bytes: new Uint8Array(jpeg),
-        altText: image.alt,
-      });
-      assets[slot] = asset.id;
-    }
 
     // Forms before pages, for the same reason images are: a form block names
     // a form by slug, and a page referring to one that does not exist yet
@@ -182,6 +178,59 @@ export const installDemo = defineService({
       });
     }
 
+    // The planning page's calculators (C5.26). Facts first: publishing a
+    // calculator is refused while any figure it names is unpublished, so the
+    // seed walks the same path an owner does — record the figures, then open
+    // the calculators.
+    const { recordFact } = await import("@/core/attestations/service");
+    const { createCalculator, publishCalculator } = await import(
+      "@/modules/calculators/service"
+    );
+    for (const fact of pack.FACTS) {
+      await ctx.callAsSystem(recordFact, {
+        key: fact.key,
+        value: fact.value,
+        source: fact.source,
+        asOf: new Date(`${fact.asOf}T00:00:00.000Z`),
+        validUntil: fact.validUntil
+          ? new Date(`${fact.validUntil}T00:00:00.000Z`)
+          : undefined,
+      });
+    }
+    for (const configured of pack.CALCULATORS) {
+      const made = await ctx.callAsSystem(createCalculator, configured);
+      await ctx.callAsSystem(publishCalculator, { id: made.id });
+    }
+
+    // After the pages, so the demo's own /newsletters page is the archive
+    // (ensureIndex will not replace it) and publishing the issue only adds
+    // the leaf. The template is campaign wording, not a page.
+    const { createNewsletter, createIssue, publishIssue, saveTemplate } = await import(
+      "@/modules/newsletters/service"
+    );
+    const letter = pack.NEWSLETTER;
+    const newsletter = await ctx.callAsSystem(createNewsletter, {
+      name: letter.name,
+      slug: letter.slug,
+      description: letter.description,
+    });
+    const issue = await ctx.callAsSystem(createIssue, {
+      newsletterId: newsletter.id,
+      slug: letter.issue.slug,
+      title: letter.issue.title,
+      excerpt: letter.issue.excerpt,
+      body: letter.issue.body,
+    });
+    await ctx.callAsSystem(publishIssue, { id: issue.id, expectedVersion: issue.version });
+    await ctx.callAsSystem(saveTemplate, {
+      kind: "campaign",
+      name: letter.template.name,
+      subject: letter.template.subject,
+      blocks: [{ type: "text", props: { body: letter.template.body } }],
+      variables: ["contact.first_name"],
+      status: "active",
+    });
+
     await ctx.callAsSystem(completeSetup, {});
 
     ctx.queueEvent("demo.installed", { pages: created.length });
@@ -193,4 +242,48 @@ export const installDemo = defineService({
   },
 });
 
-export default [installDemo];
+export const installDemo = defineOrchestratedService({
+  name: "demo.install",
+  summary: "Fill an empty instance with the Aurora Coast Photography demo.",
+  kind: "mutation",
+  // Owner rather than staff: this rewrites the business profile, which is the
+  // instance's identity. `system` reaches it through ctx.callAsSystem at boot
+  // when FREEHOLDER_SEED_DEMO is set.
+  permission: "scoped",
+  writeClass: "write",
+  input: z.object({
+    /** Publish the pages, rather than leaving them as drafts to look at. */
+    publish: z.boolean().default(true),
+  }),
+  output: z.object({
+    business: z.string(),
+    pages: z.array(z.string()),
+    assets: z.number().int(),
+  }),
+  handler: async (input, actor) => {
+    await installDemoGuard.call({}, actor);
+    const { IMAGES } = demo;
+    const assets = {} as Record<string, string>;
+    for (const [slot, image] of Object.entries(IMAGES)) {
+      // Encoded here rather than committed as binaries: a repository people
+      // fork should not carry megabytes of stock photography, and sharp turns
+      // the vector into a real JPEG the media pipeline treats like any upload.
+      const jpeg = await sharp(Buffer.from(image.svg))
+        .jpeg({ quality: 82, mozjpeg: true })
+        .toBuffer();
+      const asset = await uploadAsset.call(
+        {
+          filename: image.filename,
+          contentType: "image/jpeg",
+          bytes: new Uint8Array(jpeg),
+          altText: image.alt,
+        },
+        { kind: "system" },
+      );
+      assets[slot] = asset.id;
+    }
+    return installDemoApply.call({ publish: input.publish, assets }, actor);
+  },
+});
+
+export default [installDemo, installDemoGuard, installDemoApply, installPreset];

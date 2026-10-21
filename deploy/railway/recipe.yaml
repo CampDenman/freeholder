@@ -17,6 +17,7 @@ artifacts:
   - .railway/railway.ts
 required_environment:
   - APP_URL
+  - BOOTSTRAP_SECRET
   - SESSION_SECRET
   - CREDENTIAL_KEY
 operations:
@@ -29,6 +30,6 @@ operations:
   update: "FREEHOLDER_IMAGE=ghcr.io/campdenman/freeholder:$FREEHOLDER_IMAGE_TAG railway config plan && FREEHOLDER_IMAGE=ghcr.io/campdenman/freeholder:$FREEHOLDER_IMAGE_TAG railway config apply"
   rollback: "FREEHOLDER_IMAGE=ghcr.io/campdenman/freeholder:$PREVIOUS_FREEHOLDER_IMAGE_TAG railway config plan && FREEHOLDER_IMAGE=ghcr.io/campdenman/freeholder:$PREVIOUS_FREEHOLDER_IMAGE_TAG railway config apply"
 update:
-  strategy: image-swap
-  rollback: redeploy the previous image
+  strategy: deploy-hook
+  rollback: redeploy the previous image through railway config apply
 tested_on: "2026-08-25"

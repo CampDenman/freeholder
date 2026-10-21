@@ -13,9 +13,22 @@ import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
 import { createCalendar, setServiceCalendars, updateCalendar } from "@/core/scheduling/service";
 import { setAvailability, addAvailabilityException } from "@/core/scheduling/availability-service";
-import { createBooking } from "@/core/scheduling/bookings";
+import { createBooking, setBookingStatus } from "@/core/scheduling/bookings";
+import { externalBusyBlocks } from "@/core/scheduling/schema";
 import { resolveSlots } from "@/core/scheduling/resolver";
-import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { availableSlots } from "@/core/scheduling/resolver-service";
+import { createAudience, setAudienceServices } from "@/core/scheduling/audiences";
+import {
+  createProduct,
+  upsertServiceOffering,
+} from "@/modules/catalog/service";
+import {
+  ANONYMOUS,
+  closeDb,
+  hasDatabase,
+  OWNER,
+  truncateSpine,
+} from "../helpers/spine";
 
 const SERVICE = "00000000-0000-4000-8000-0000000000e0";
 // 2026-09-14 is a Monday.
@@ -91,6 +104,67 @@ describe.runIf(hasDatabase)("the availability resolver", { timeout: 60_000 }, ()
     expect(times(await slots())).toEqual([
       "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00",
     ]);
+  });
+
+  it("composes the public slot service through the catalog and business spine", async () => {
+    // Use a future UTC day so this remains a real public-service test instead
+    // of depending on the fixed historical clock used by the resolver units.
+    const day = new Date();
+    day.setUTCDate(day.getUTCDate() + 14);
+    const date = day.toISOString().slice(0, 10);
+    const calendar = await createCalendar.call(
+      { kind: "resource", name: "Public chair", timezone: "UTC" },
+      OWNER,
+    );
+    await setAvailability.call(
+      {
+        calendarId: calendar.id,
+        rules: [
+          {
+            weekday: day.getUTCDay(),
+            starts: "09:00",
+            ends: "11:00",
+            kind: "bookable",
+          },
+        ],
+      },
+      OWNER,
+    );
+    const product = await createProduct.call(
+      { name: "Public consultation", slug: "public-consultation", kind: "service" },
+      OWNER,
+    );
+    const offering = await upsertServiceOffering.call(
+      { productId: product.id, durationMin: 60, locationType: "in_person" },
+      OWNER,
+    );
+    await setServiceCalendars.call(
+      {
+        serviceOfferingId: offering.id,
+        members: [{ calendarId: calendar.id, role: "primary", priority: 0 }],
+      },
+      OWNER,
+    );
+    const audience = await createAudience.call(
+      { name: "Public", who: "public", hours: "calendar" },
+      OWNER,
+    );
+    await setAudienceServices.call(
+      { id: audience.id, serviceOfferingIds: [offering.id] },
+      OWNER,
+    );
+
+    const found = await availableSlots.call(
+      {
+        serviceOfferingId: offering.id,
+        productId: product.id,
+        from: date,
+        to: date,
+        granularityMin: 60,
+      },
+      ANONYMOUS,
+    );
+    expect(times(found)).toEqual(["09:00", "10:00"]);
   });
 
   it("offers nothing on a day the calendar is closed", async () => {
@@ -210,12 +284,30 @@ describe.runIf(hasDatabase)("the availability resolver", { timeout: 60_000 }, ()
     expect(await slots()).toEqual([]);
   });
 
-  it("stops at the calendar's cap for the day", async () => {
+  it("counts existing appointments against the daily cap, not the offered choices", async () => {
     const sam = await therapist();
     await serves([{ calendarId: sam.id, role: "primary" }]);
     await updateCalendar.call({ id: sam.id, maxPerDay: 3 }, OWNER);
-    // Burnout is a scheduling bug, so the ceiling is real rather than advice.
-    expect(await slots()).toHaveLength(3);
+    // Three appointments may be booked at any of the eight offered hours.
+    expect(await slots()).toHaveLength(8);
+    let firstBookingId: string | undefined;
+    for (const hour of [9, 10, 11]) {
+      const booking = await createBooking.call({
+        calendarId: sam.id,
+        contact: { email: `cap-${hour}@example.test` },
+        startsAt: `${MONDAY}T${hour.toString().padStart(2, "0")}:00:00.000Z`,
+        endsAt: `${MONDAY}T${(hour + 1).toString().padStart(2, "0")}:00:00.000Z`,
+      }, OWNER);
+      firstBookingId ??= booking.id;
+      if (hour === 11) {
+        // Work already completed today still counts against the daily limit.
+        await setBookingStatus.call({ id: booking.id, status: "confirmed" }, OWNER);
+        await setBookingStatus.call({ id: booking.id, status: "completed" }, OWNER);
+      }
+    }
+    expect(await slots()).toEqual([]);
+    // Moving an existing appointment does not consume a fourth daily place.
+    expect(times(await slots({ excludeBookingId: firstBookingId }))).toContain("16:00");
   });
 
   it("only offers a slot where the person and the room are both free", async () => {
@@ -332,6 +424,40 @@ describe.runIf(hasDatabase)("the availability resolver", { timeout: 60_000 }, ()
     const forTwo = await slots({ seats: 2 });
     expect(times(forTwo)).not.toContain("10:00");
     expect(times(forTwo)).toContain("11:00");
+  });
+
+  it("limits a party to both the service capacity and the calendar capacity", async () => {
+    const room = await therapist("Shared room", 10);
+    await serves([{ calendarId: room.id, role: "primary" }]);
+    expect(await slots({ capacity: 2, seats: 3 })).toEqual([]);
+    expect((await slots({ capacity: 2, seats: 2 }))[0]?.seatsAvailable).toBe(2);
+    await createBooking.call({
+      calendarId: room.id, contact: { email: "already@example.test" },
+      startsAt: `${MONDAY}T10:00:00.000Z`, endsAt: `${MONDAY}T11:00:00.000Z`, capacityUsed: 2,
+    }, OWNER);
+    expect(times(await slots({ capacity: 2 }))).not.toContain("10:00");
+    const chair = await therapist("Single chair", 1);
+    await serves([{ calendarId: chair.id, role: "primary" }]);
+    expect(await slots({ capacity: 10, seats: 2 })).toEqual([]);
+  });
+
+  it("respects imported busy time and occupied buffer capacity on shared calendars", async () => {
+    const room = await therapist("Shared room", 3);
+    await serves([{ calendarId: room.id, role: "primary" }]);
+    await db().insert(externalBusyBlocks).values({
+      calendarId: room.id, sourceRef: "external-meeting",
+      startsAt: new Date(`${MONDAY}T14:00:00.000Z`), endsAt: new Date(`${MONDAY}T15:00:00.000Z`),
+    });
+    await createBooking.call({
+      calendarId: room.id, contact: { email: "full-class@example.test" }, capacityUsed: 3,
+      startsAt: `${MONDAY}T12:00:00.000Z`, endsAt: `${MONDAY}T13:00:00.000Z`,
+    }, OWNER);
+    const found = times(await slots({ bufferBeforeMin: 30, bufferAfterMin: 30 }));
+    expect(found).not.toContain("14:00");
+    expect(found).not.toContain("11:00");
+    expect(found).not.toContain("13:00");
+    expect(found).toContain("10:00");
+    expect(found).toContain("16:00");
   });
 
   it("offers nothing for a service nobody is set up to do", async () => {

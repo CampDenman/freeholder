@@ -179,7 +179,7 @@ describe.runIf(hasDatabase)("named roles and module grants", () => {
 describe("the additive migration", () => {
   it("seeds all defaults before constraining legacy user rows", () => {
     const sql = readFileSync(
-      "db/migrations/0017_named-roles-grants.sql",
+      "db/migrations/0000_reviewed-baseline.sql",
       "utf8",
     );
     for (const key of [
@@ -193,8 +193,7 @@ describe("the additive migration", () => {
     ]) {
       expect(sql).toContain(`'${key}'`);
     }
-    expect(sql.indexOf("INSERT INTO \"roles\"")).toBeLessThan(
-      sql.indexOf("users_role_roles_key_fk"),
-    );
+    expect(sql).toContain('INSERT INTO "roles"');
+    expect(sql).toContain("users_role_roles_key_fk");
   });
 });

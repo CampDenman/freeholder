@@ -16,13 +16,23 @@
 import { Fragment } from "react";
 import { z } from "zod";
 import { renderNAP } from "@/core/locations/nap";
+import { formatMoney } from "@/core/i18n";
+import type { Actor } from "@/core/service";
 import { languageName, localePath } from "@/core/i18n/customer";
 import { cx } from "@/ui/primitives";
+import {
+  effectiveFocal,
+  focalCoordinate,
+  imageAspectSchema,
+  imageCropSchema,
+  imageFraming,
+} from "@/core/media/framing";
 import { defineBlock } from "./types";
 import { fromPlainString, richBodySchema } from "./rich";
 import { renderRichDoc } from "./rich-render";
 import { sanitizeOwnerHtml } from "./html";
 import { selectAssignedVariants } from "../experiments";
+import { AddToCart } from "../../../../app/(public)/buy/AddToCart";
 
 /* ------------------------------------------------------------------ text */
 
@@ -72,8 +82,11 @@ export const text = defineBlock({
   }),
   starter: () => ({ body: fromPlainString("Write something here.") }),
   fieldHints: { body: { control: "rich" } },
-  render: ({ props }) => (
+  render: ({ props, ctx }) => (
+    // The whole body is one rich region on the canvas: the caret flows across
+    // paragraphs and lists exactly where the owner reads them.
     <div
+      {...ctx.editableRich?.("body")}
       className={cx(
         "grid gap-4 text-ink-muted",
         props.measure && "max-w-prose",
@@ -299,12 +312,18 @@ export const faq = defineBlock({
   starter: () => ({
     items: [{ question: "A question people ask", answer: "The answer." }],
   }),
-  render: ({ props }) => (
+  render: ({ props, ctx }) => (
     <dl className="grid gap-0 border-t border-rule">
       {props.items.map((item, i) => (
         <div key={i} className="border-b border-rule py-4">
-          <dt className="font-semibold text-ink">{item.question}</dt>
-          <dd className="mt-1.5 max-w-prose text-ink-muted">{item.answer}</dd>
+          {/* Each question and answer is its own typeable surface; the dotted
+              path is how the canvas edit is written back into the items array. */}
+          <dt {...ctx.editable?.(`items.${i}.question`)} className="font-semibold text-ink">
+            {item.question}
+          </dt>
+          <dd {...ctx.editable?.(`items.${i}.answer`)} className="mt-1.5 max-w-prose text-ink-muted">
+            {item.answer}
+          </dd>
         </div>
       ))}
     </dl>
@@ -438,6 +457,15 @@ export const nav = defineBlock({
       .array(z.object({ label: z.string().min(1), href: z.string().min(1) }))
       .default([]),
     ariaLabelKey: z.string().default("cms.nav.primary"),
+    /**
+     * Collapse behind a "Menu" disclosure on small screens.
+     *
+     * Right for the header, wrong for a footer: a footer nav collapsed to
+     * a disclosure hides its links from every phone visitor, which is most
+     * of them. Reported by a third party whose footer links were invisible
+     * on mobile. Defaults true so the header is unchanged.
+     */
+    collapseOnMobile: z.boolean().default(true),
   }),
   starter: () => ({ links: [{ label: "About", href: "/about" }] }),
   // The screen-reader name for the menu is platform machinery, not copy the
@@ -468,12 +496,16 @@ export const nav = defineBlock({
       });
     return (
       <nav aria-label={ctx.t(props.ariaLabelKey)}>
-        <details className="sm:hidden">
-          <summary className="cursor-pointer text-sm font-semibold text-ink">
-            {ctx.t("cms.nav.menu")}
-          </summary>
-          <ul className="mt-2 grid list-none gap-2 p-0">{linkItems("mobile")}</ul>
-        </details>
+        {props.collapseOnMobile ? (
+          <details className="sm:hidden">
+            <summary className="cursor-pointer text-sm font-semibold text-ink">
+              {ctx.t("cms.nav.menu")}
+            </summary>
+            <ul className="mt-2 grid list-none gap-2 p-0">{linkItems("mobile")}</ul>
+          </details>
+        ) : (
+          <ul className="grid list-none gap-2 p-0 sm:hidden">{linkItems("mobile")}</ul>
+        )}
         <ul className="hidden list-none flex-wrap items-center gap-x-5 gap-y-1 p-0 sm:flex">
           {linkItems("desktop")}
         </ul>
@@ -502,6 +534,13 @@ export const nav = defineBlock({
  * copying it onto every block that uses the picture is how it drifts. §5
  * requires it on public images, so a missing one is a visible gap in the media
  * library rather than something a page can quietly omit.
+ *
+ * Crop and focal point (C2.25, `core/media/framing`): the asset carries the
+ * subject's focal point; this placement may override it, choose a frame shape
+ * (`aspect`) that crops by `object-fit: cover` around that point, or set an
+ * explicit `crop` rectangle. All three are placement props on the block — the
+ * file and its renditions are never re-encoded — and the same pure framing
+ * function draws the public page, the canvas and the crop tool's preview.
  */
 export const image = defineBlock({
   type: "image",
@@ -515,9 +554,23 @@ export const image = defineBlock({
     decorative: z.boolean().default(false),
     width: z.enum(["column", "wide", "full"]).default("column"),
     rounded: z.boolean().default(true),
+    /** Frame shape; anything but `original` crops around the focal point. */
+    aspect: imageAspectSchema.default("original"),
+    /** This placement's focal point, basis points; else the asset's own. */
+    focalX: focalCoordinate.optional(),
+    focalY: focalCoordinate.optional(),
+    /** An explicit crop window in basis points of the original. */
+    crop: imageCropSchema.optional(),
   }),
   starter: () => ({}),
-  fieldHints: { assetId: { control: "asset" } },
+  // Crop and focal point are set on the canvas, where the picture is — the
+  // form has no honest control for a rectangle on an image.
+  fieldHints: {
+    assetId: { control: "asset" },
+    focalX: { hidden: true },
+    focalY: { hidden: true },
+    crop: { hidden: true },
+  },
   // Imported lazily so the block library does not drag core/media into every
   // bundle that only needs a heading.
   resolve: async (props) => {
@@ -525,10 +578,20 @@ export const image = defineBlock({
     const { resolveImage } = await import("@/core/media/service");
     return resolveImage.call({ id: props.assetId }, { kind: "anonymous" });
   },
-  render: ({ props, resolved }) => {
-    if (!resolved) return null;
-    const alt = props.decorative ? "" : (props.alt ?? resolved.altText ?? "");
-    return (
+  render: ({ props, resolved, ctx }) => {
+    const alt = props.decorative ? "" : (props.alt ?? resolved?.altText ?? "");
+    const framing = resolved
+      ? imageFraming({
+          width: resolved.width,
+          height: resolved.height,
+          crop: props.crop,
+          aspect: props.aspect,
+          focal: effectiveFocal(props, resolved),
+        })
+      : undefined;
+    const framed = framing !== undefined && framing.mode !== "natural";
+    const stretch = props.width === "wide" || props.width === "full";
+    const pictureEl = resolved ? (
       <picture>
         {resolved.sources.map((source) => (
           <source key={source.format} srcSet={source.srcset} type={source.type} />
@@ -540,14 +603,51 @@ export const image = defineBlock({
           height={resolved.height ?? undefined}
           loading="lazy"
           decoding="async"
+          data-framing={framed ? framing.mode : undefined}
+          style={framed ? framing.image : undefined}
           className={cx(
-            "h-auto max-w-full",
-            props.rounded && "rounded-lg",
-            props.width === "wide" && "w-full",
-            props.width === "full" && "w-full",
+            framed ? undefined : "h-auto max-w-full",
+            !framed && props.rounded && "rounded-lg",
+            !framed && stretch && "w-full",
           )}
         />
       </picture>
+    ) : null;
+    // A framed placement is a window onto the ordinary picture: the frame
+    // takes the shape, clips, and carries the rounding.
+    const picture =
+      pictureEl && framed ? (
+        <div
+          className={cx("fh-frame", props.rounded && "rounded-lg")}
+          style={{ ...framing.frame, ...(stretch ? { width: "100%" } : {}) }}
+        >
+          {pictureEl}
+        </div>
+      ) : (
+        pictureEl
+      );
+    // The public surface renders exactly the picture (nothing at all when no
+    // asset is chosen). The canvas instead wraps it so the picture can be
+    // replaced where it renders: an empty block shows a placeholder rather
+    // than being invisible, and a button raises the picker.
+    if (!ctx.identifyBlocks) return picture;
+    return (
+      <div className="fh-asset" data-asset-prop="assetId" data-asset-current={props.assetId ?? ""}>
+        <div className="fh-asset-body">
+          {picture ?? <span className="fh-asset-empty">{ctx.t("cms.editor.noImage")}</span>}
+        </div>
+        <button type="button" className="fh-replace" data-replace-asset="assetId">
+          {ctx.t("cms.editor.replaceImage")}
+        </button>
+        <button type="button" className="fh-alt" data-edit-alt="alt">
+          {ctx.t("cms.editor.editAlt")}
+        </button>
+        {props.assetId ? (
+          <button type="button" className="fh-crop" data-edit-crop="crop">
+            {ctx.t("cms.editor.editCrop")}
+          </button>
+        ) : null}
+      </div>
     );
   },
 });
@@ -577,7 +677,7 @@ export const video = defineBlock({
     if (!asset || asset.kind !== "video") return null;
     return asset;
   },
-  render: ({ props, resolved }) => {
+  render: ({ props, resolved, ctx }) => {
     if (!resolved) return null;
     return (
       <figure className={cx(props.width !== "column" && "w-full")}>
@@ -592,7 +692,9 @@ export const video = defineBlock({
           {resolved.filename}
         </video>
         {props.caption ? (
-          <figcaption className="mt-2 text-sm text-ink-muted">{props.caption}</figcaption>
+          <figcaption {...ctx.editable?.("caption")} className="mt-2 text-sm text-ink-muted">
+            {props.caption}
+          </figcaption>
         ) : null}
       </figure>
     );
@@ -785,6 +887,16 @@ export const productsIndex = defineBlock({
   },
 });
 
+/**
+ * The buy panel's data source, kept at module level so the block's resolve
+ * stays a thin composition over the catalog service.
+ */
+async function purchaseOptionsOf(slug: string, actor: Actor | undefined) {
+  const { purchaseOptions } = await import("@/modules/catalog/service");
+  const [entry] = await purchaseOptions.call({ slugs: [slug] }, actor ?? { kind: "anonymous" });
+  return entry ?? null;
+}
+
 export const productDetail = defineBlock({
   type: "productDetail",
   labelKey: "cms.block.productDetail",
@@ -794,11 +906,11 @@ export const productDetail = defineBlock({
     slug: z.string().min(1),
   }),
   starter: () => ({ productId: "00000000-0000-4000-8000-000000000000", slug: "product" }),
-  resolve: async (props) => {
+  resolve: async (props, ctx) => {
     const { resolveVisibleProduct } = await import("@/modules/catalog/service");
     const product = await resolveVisibleProduct.call(
       { slug: props.slug },
-      { kind: "anonymous" },
+      ctx.actor ?? { kind: "anonymous" },
     );
     if (!product) return null;
     // Projects owns the relation. Catalog remains unaware of portfolio data;
@@ -822,7 +934,18 @@ export const productDetail = defineBlock({
         projects = [];
       }
     }
-    return { product, projects };
+    // The buy affordance (C3.25 slice 3): the same purchase projection the
+    // shelf pages quote from, so the detail page, the card and the cart can
+    // never disagree about price or availability. A signed-in customer is
+    // quoted their own audience prices through the caller's actor.
+    let purchase: Awaited<ReturnType<typeof purchaseOptionsOf>> = null;
+    try {
+      purchase = await purchaseOptionsOf(props.slug, ctx.actor);
+    } catch {
+      // A buy panel is never the reason a product page fails.
+      purchase = null;
+    }
+    return { product, projects, purchase };
   },
   render: ({ resolved, ctx }) => {
     if (!resolved) return null;
@@ -832,6 +955,25 @@ export const productDetail = defineBlock({
           {resolved.product.subtitle ? <p className="text-lg text-ink-muted">{resolved.product.subtitle}</p> : null}
           {resolved.product.brand ? <p className="text-sm text-ink-muted">{resolved.product.brand}</p> : null}
         </div>
+        {resolved.purchase && resolved.purchase.variants.length > 0 ? (
+          // On the canvas (identifyBlocks) the buy chrome renders inert: the
+          // preview must show exactly what ships, but a form that submitted
+          // inside the iframe would rip the frame to /cart.
+          <div inert={ctx.identifyBlocks === true}>
+            <AddToCart
+              product={resolved.purchase}
+              formatMinor={(minor) =>
+                formatMoney(minor, resolved.purchase?.currency ?? "USD", ctx.locale)
+              }
+              labels={{
+                add: ctx.t("store.buy.add"),
+                choose: ctx.t("store.buy.choose"),
+                unavailable: ctx.t("store.buy.unavailable"),
+                priceUnavailable: ctx.t("store.buy.priceUnavailable"),
+              }}
+            />
+          </div>
+        ) : null}
         {resolved.projects.length ? (
           <section className="grid gap-3" aria-labelledby={`service-${resolved.product.id}-projects`}>
             <h2 id={`service-${resolved.product.id}-projects`} className="text-lg font-bold tracking-tight text-ink">
@@ -852,6 +994,82 @@ export const productDetail = defineBlock({
             </ul>
           </section>
         ) : null}
+      </div>
+    );
+  },
+});
+
+/**
+ * The cart line in the chrome (C3.25 slice 3).
+ *
+ * §32's shell contains no hardcoded structure, so the widget is vocabulary
+ * like any other block: the owner places it in the header Section (fresh
+ * instances get it in the default header), and the routing layer hands the
+ * request's cart snapshot through the render context. Without that snapshot —
+ * an email render, the editor preview — the block renders nothing rather than
+ * a dead link.
+ */
+export const cartWidget = defineBlock({
+  type: "cartWidget",
+  labelKey: "cms.block.cartWidget",
+  contexts: ["chrome", "page"],
+  schema: z.object({}),
+  starter: () => ({}),
+  resolve: async (_props, ctx) => (ctx.shopperCart ? ctx.shopperCart() : null),
+  render: ({ resolved, ctx }) => {
+    if (!resolved) return null;
+    const cartPath = ctx.localizeHref?.("/cart") ?? "/cart";
+    const checkoutPath = ctx.localizeHref?.("/checkout") ?? "/checkout";
+    return (
+      <div className="relative inline-flex items-center gap-2 text-sm">
+        <details className="group relative">
+          <summary
+            className="inline-flex cursor-pointer list-none items-center gap-2 rounded-md border border-rule bg-paper px-3 py-1.5 font-semibold text-ink"
+            aria-label={ctx.t("cms.block.cartWidget.summary", { count: resolved.lineCount })}
+          >
+            {ctx.t("cms.block.cartWidget.count", { count: resolved.lineCount })}
+            <span className="text-ink-muted">
+              {formatMoney(resolved.subtotalMinor, resolved.currency, ctx.locale)}
+            </span>
+          </summary>
+          <div className="absolute end-0 z-30 mt-2 w-72 rounded-lg border border-rule bg-surface p-3 shadow-float">
+            {resolved.lines.length === 0 ? (
+              <p className="text-sm text-ink-muted">{ctx.t("cms.block.cartWidget.empty")}</p>
+            ) : (
+              <ul className="grid list-none gap-2 p-0">
+                {resolved.lines.map((line) => (
+                  <li key={line.variantId} className="flex items-baseline justify-between gap-2 text-sm">
+                    <span className="text-ink">
+                      {line.productName}
+                      <span className="ms-1 text-ink-muted">× {line.quantity}</span>
+                    </span>
+                    <span className="text-ink-muted">
+                      {line.lineTotalMinor === null
+                        ? "—"
+                        : formatMoney(line.lineTotalMinor, resolved.currency, ctx.locale)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-3 flex items-center gap-2">
+              <a
+                href={cartPath}
+                className="rounded-md border border-rule px-3 py-1.5 font-semibold text-ink"
+              >
+                {ctx.t("cms.block.cartWidget.view")}
+              </a>
+              {resolved.lines.length > 0 ? (
+                <a
+                  href={checkoutPath}
+                  className="rounded-md bg-accent px-3 py-1.5 font-semibold text-on-accent"
+                >
+                  {ctx.t("cms.block.cartWidget.checkout")}
+                </a>
+              ) : null}
+            </div>
+          </div>
+        </details>
       </div>
     );
   },

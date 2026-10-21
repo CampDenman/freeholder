@@ -1,0 +1,41 @@
+# C11.08 live Tier-1 restore drill — 2026-09-28
+# operator: Tony Aly (executed by Kimi Code agent on the owner's machine)
+# source: droplet freeholder-ref id=604232042 ip=104.131.118.196 image=ghcr.io/campdenman/freeholder:edge@sha256:0827de964a434adf8b065c4f518d4bbadc73f659108f58ab3a3e052af0a0a46a
+# target: droplet freeholder-restore (provisioned in this drill)
+# repo: worktree /home/tony/code/freeholder-c1108 branch docs/c11-08-restore-drill @ f9f3a05 (origin/main)
+
+[2026-09-29T00:14:50Z] DRILL START
+[2026-09-29T00:14:50Z] source pre-check: app+db containers up; db 361 tables / 79430 rows; assets=10000 ready; media_objects=10000 attached; users=1 (owner); pages=1 (perf-home published); connected_accounts=0
+[2026-09-29T00:14:50Z] source media byte check: /opt/freeholder/media/.data holds 0 files; app 404s its own media objects -> dataset is DB-seeded (tests/helpers/performance.ts writes asset rows, no object bytes). Recorded as a source-data finding for the media leg.
+[2026-09-29T00:19:38Z] STEP 1 EXPORT complete
+  pg_dump archive: /root/c11-08-freeholder.dump on source, copied to /home/tony/c11-08-drill/freeholder.dump
+  archive sha256: e78527321bb2fb93675a57d83f7e7782499c4936e5a8dc19b8eb119a46279123
+  archive size: 6918459 bytes
+  ownership export: /home/tony/c11-08-drill/ownership-export (374 tables, 150812 rows, 10000 media assets, 377 checksumed files)
+  media integrity (DB level): missingInventoryKeys=0 unreferencedInventoryKeys=0
+  recovery.json: secretValuesIncluded=false; CREDENTIAL_KEY fingerprint 5138ef637205fa71e479874daa992bbfc6eb1f2e8893a9a9c0404ed3574074e1 (independently recomputed on source, key never displayed)
+[2026-09-29T00:19:38Z] STEP 1b media byte finding: source media_objects=10000 attached rows but 0 object bytes in the source store; the app 404s its own objects. Byte-level transfer has nothing to copy; recorded for the media leg.
+[2026-09-29T01:13:24Z] STEP 2 PROVISION complete
+  droplet freeholder-restore id=604504844 ip=209.97.155.248 region=nyc3 size=s-1vcpu-1gb image=ubuntu-24-04-x64 ssh-key=59638965 cloud-init=deploy/digitalocean-droplet/infra/cloud-init.yml
+  recipe files scp'd to /opt/freeholder (compose.yml, Caddyfile, backup.sh from deploy/digitalocean-droplet/infra @ f9f3a05)
+  .env written on-box: fresh POSTGRES_PASSWORD/SESSION_SECRET/BOOTSTRAP_SECRET/CREDENTIAL_KEY (openssl rand -hex 32), APP_URL + FREEHOLDER_DOMAIN=http://209.97.155.248 (http-only site label for the drill box), FREEHOLDER_UNSAFE_LOCAL_STORAGE=1
+  deviation (recorded): target mirrors the source's local-disk storage mode because the source dataset is local-disk and no freeholder Spaces bucket exists on the account (freeholder-demo-media 404s in all regions); creating new paid resources was not part of the sanctioned drill footprint. §18 Spaces remains the production mandate; Caddyfile unchanged.
+  compose patched on-box: app service gained ./media/.data:/app/.data volume (mirrors source box; base recipe compose assumes S3)
+  NOTE: 'docker compose pull' fetched current :edge @sha256:34854f00... which is NEWER than the source's running image @sha256:0827de96...; target pinned via FREEHOLDER_IMAGE to the source digest 0827de964a434adf8b065c4f518d4bbadc73f659108f58ab3a3e052af0a0a46a so the restore is same-schema and bootable (recipe rollback mechanism)
+[2026-09-29T01:30:27Z] STEP 3 RESTORE complete (recipe.yaml restore/migrate-in command shape)
+  empty target db (fresh volume) -> docker compose -f compose.yml exec -T db pg_restore --no-owner --no-privileges -U freeholder -d freeholder < freeholder.dump
+  archive re-verified on target: sha256 e78527321bb2fb93675a57d83f7e7782499c4936e5a8dc19b8eb119a46279123, 6918459 bytes; pg_restore exit 0, zero errors
+  target app booted against restored db: 'schema is up to date' (same image digest as source), jobs worker resumed 86 restored jobs
+  verification export on target: 374 tables, 150905 rows, 10000 media assets
+  per-table diff source-vs-target: 366/374 identical (rows + canonical sha256). 8 differing tables are all runtime-operational: pgboss.job(+26), pgboss.job_common(+52), pgboss.queue, pgboss.schedule, pgboss.version, public.analytics_events(+4), public.audit_log(+10), public.job_runtime_heartbeats(+1) -> target app's own live heartbeat/job activity between restore and re-export, NOT business data.
+  owned data exact match: contacts 5001, messages 20000, orders 2000, products 500, assets 10000, pages 1, media_objects 10000, users 1, invoices 2000
+  media manifests identical: assets, objects, integrity (missingInventoryKeys=0, unreferencedInventoryKeys=0) round-tripped the restore byte-for-byte at DB level
+  MEDIA LEG (byte level): source store holds 0 of 10000 object bytes (pre-existing seed condition: tests/helpers/performance.ts writes asset/media_objects rows only; the source app 404s its own media). 'pnpm media:transfer' refuses local-disk stores by design ('local storage is not a Tier-1 migration target') - guardrail captured. Nothing exists to byte-copy; the restore reproduced the source media state exactly on the target.
+[2026-09-29T01:30:27Z] STEP 4 VERIFY complete
+  doctor (recipe verify op, from worktree vs target app): verdict=warn, 16 ok / 14 warn / 0 fail of 30 checks, exit 1. All warns expected for a scratch drill box (http APP_URL, no mail/SMS/push/AI adapters, media-on-disk per documented deviation, update policy undeclared). File storage check: ok (wrote, read, deleted a test file). TOTP enrolled via --enroll-totp (designed path for a fresh disposable instance); owner password set via the recipe's owner-password.mjs --disable-2fa (verify.md 'get back in'), value never leaves the box.
+  seeded public page: GET http://209.97.155.248/perf-home -> 200 via Caddy direct AND via ssh port-forward; body 26351 bytes, 'Performance home' rendered; only diff vs source-rendered page is the origin in canonical/og URLs (localhost:3000 vs 209.97.155.248). Proof the imported site is live on the second instance.
+[2026-09-29T01:37:30Z] STEP 5 DRILL RECORD written: deploy/c11-08-restore-summary.md (restore-drill date, operator, source archive checksum, restored table/row totals, media discrepancy counts, key fingerprint match, retention/erasure checks, verification results, deviations)
+[2026-09-29T01:37:30Z] MASTER.md C11.08 checked with dated F04/F05/F07/F09/F12 evidence; plan-gate exit 0 (281 checked, +1); plan-gate tests 24/24
+[2026-09-29T01:37:30Z] evidence PR opened: https://github.com/CampDenman/freeholder/pull/443 (branch docs/c11-08-restore-drill off origin/main f9f3a05), queued for merge
+[2026-09-29T01:37:30Z] FINAL STATE: source freeholder-ref id=604232042 104.131.118.196 healthy (app+db up, /perf-home 200, read-only throughout; transient dump removed from its disk). target freeholder-restore id=604504844 209.97.155.248 running restored stack (app+db+caddy, /perf-home 200). BOTH DROPLETS LEAVE-RUNNING per drill instructions - owner decides teardown.
+[2026-09-29T01:37:30Z] DRILL COMPLETE - full journey verified; media byte absence recorded as a source-data finding (no bytes existed to restore; manifests identical)

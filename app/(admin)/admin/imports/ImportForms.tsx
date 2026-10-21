@@ -6,9 +6,11 @@ import { useActionState } from "react";
 import { Button, Field, Input, Select } from "@/ui/primitives";
 import {
   commitImportAction,
+  mapImportAction,
   previewImportAction,
   publishImportAction,
   reconcileImportAction,
+  reviewImportConflictsAction,
   rollbackImportAction,
   startImportAction,
   type ImportActionState,
@@ -64,6 +66,15 @@ export function ImportStepForms({
     url: string;
     slug: string;
     title: string;
+    pageKind: string;
+    page: string;
+    post: string;
+    map: string;
+    review: string;
+    keep: string;
+    replace: string;
+    rename: string;
+    renamedSlug: string;
     commit: string;
     reconcile: string;
     publish: string;
@@ -72,7 +83,28 @@ export function ImportStepForms({
 }) {
   return (
     <div className="grid gap-4">
-      {status === "discover" || status === "mapped" ? (
+      {status === "discover" ? (
+        <form action={mapImportAction} className="grid gap-3">
+          <input type="hidden" name="id" value={id} />
+          <Field htmlFor="map-url" label={labels.url}>
+            <Input id="map-url" name="url" type="url" required />
+          </Field>
+          <Field htmlFor="map-slug" label={labels.slug}>
+            <Input id="map-slug" name="slug" required />
+          </Field>
+          <Field htmlFor="map-title" label={labels.title}>
+            <Input id="map-title" name="title" required />
+          </Field>
+          <Field htmlFor="map-kind" label={labels.pageKind}>
+            <Select id="map-kind" name="kind" defaultValue="page">
+              <option value="page">{labels.page}</option>
+              <option value="post">{labels.post}</option>
+            </Select>
+          </Field>
+          <Button type="submit">{labels.map}</Button>
+        </form>
+      ) : null}
+      {status === "mapped" ? (
         <form action={previewImportAction} className="grid gap-3">
           <input type="hidden" name="id" value={id} />
           <Field htmlFor="url" label={labels.url}>
@@ -85,6 +117,25 @@ export function ImportStepForms({
             <Input id="title" name="title" required />
           </Field>
           <Button type="submit">{labels.preview}</Button>
+        </form>
+      ) : null}
+      {status === "previewed" ? (
+        <form action={reviewImportConflictsAction} className="grid gap-3">
+          <input type="hidden" name="id" value={id} />
+          <Field htmlFor="conflict-slug" label={labels.slug}>
+            <Input id="conflict-slug" name="slug" required />
+          </Field>
+          <Field htmlFor="conflict-resolution" label={labels.review}>
+            <Select id="conflict-resolution" name="resolution" defaultValue="keep-existing">
+              <option value="keep-existing">{labels.keep}</option>
+              <option value="replace">{labels.replace}</option>
+              <option value="rename">{labels.rename}</option>
+            </Select>
+          </Field>
+          <Field htmlFor="conflict-renamed" label={labels.renamedSlug}>
+            <Input id="conflict-renamed" name="renamedSlug" />
+          </Field>
+          <Button type="submit">{labels.review}</Button>
         </form>
       ) : null}
       {status === "previewed" ? (

@@ -33,6 +33,16 @@ export const LOCALE_FIXTURES = [
     portalTitle: "Acceso de clientes",
     contacts: ["Aún no hay contactos", "1 contacto", "7 contactos"],
   },
+  {
+    locale: "ar",
+    regionalLocale: "ar-EG",
+    nativeName: "العربية",
+    direction: "rtl",
+    path: "/ar/services",
+    save: "حفظ",
+    portalTitle: "تسجيل دخول العملاء",
+    contacts: ["لا جهات اتصال بعد", "1 جهة اتصال", "7 جهات اتصال"],
+  },
 ] as const;
 
 export const RTL_LOCALE_FIXTURES = [

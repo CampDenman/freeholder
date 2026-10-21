@@ -11,7 +11,8 @@
 // third thing, trusted like the second and true like neither.
 import { z } from "zod";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
-import { agentPlaybooks, agentRuns, agentTasks } from "@/core/agents/schema";
+import { agentPlaybooks, agentTasks } from "@/core/agents/schema";
+import { runs } from "@/core/runs/schema";
 import { zonedInstant } from "@/core/i18n/zoned";
 import { defineService, ServiceError } from "@/core/service";
 import { briefingContribution } from "@/core/briefing/registry";
@@ -76,10 +77,10 @@ export const playbookSection = defineService({
     if (!task) return null;
 
     const [run] = await ctx.tx
-      .select({ id: agentRuns.id })
-      .from(agentRuns)
-      .where(eq(agentRuns.taskId, task.id))
-      .orderBy(desc(agentRuns.startedAt))
+      .select({ id: runs.id })
+      .from(runs)
+      .where(eq(runs.subjectId, task.id))
+      .orderBy(desc(runs.startedAt))
       .limit(1);
 
     if (task.status !== "done") {

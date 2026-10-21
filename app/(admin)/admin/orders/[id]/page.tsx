@@ -107,18 +107,54 @@ export default async function OrderDetailPage({
         </CardBody>
       </Card>
 
-      {grants.length ? (
+      {bundle.milestones.length ? (
         <Card>
-          <CardHeader title={t("catalog.fulfill.digital")} />
+          <CardHeader title={t("catalog.orders.paymentMilestones")} />
           <CardBody>
-            <ul className="grid list-none gap-2 p-0 text-sm">
+            <ol className="grid list-none gap-3 p-0">
+              {bundle.milestones.map((stage) => (
+                <li key={stage.id} className="flex flex-wrap items-center gap-3 border-b border-rule pb-3 last:border-b-0">
+                  <span className="font-semibold">{stage.label}</span>
+                  <span className="font-mono">{money(stage.amountMinor, order.currency)}</span>
+                  <Pill tone={stage.releasedAt ? "success" : "neutral"}>{t(stage.releasedAt ? "catalog.orders.milestoneReleased" : "catalog.orders.milestoneLocked")}</Pill>
+                  {canManage && order.status === "partially_paid" && !stage.releasedAt &&
+                    bundle.milestones.find((candidate) => !candidate.releasedAt)?.id === stage.id ? (
+                    <form action={productAction} className="ms-auto">
+                      <input type="hidden" name="intent" value="releaseOrderPaymentMilestone" />
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <input type="hidden" name="position" value={stage.position} />
+                      <Button type="submit">{t("catalog.orders.releaseMilestone")}</Button>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          </CardBody>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader title={t("catalog.fulfill.digital")} />
+        <CardBody>
+          {grants.length === 0 ? (
+            <p className="mb-3 text-sm text-ink-muted">{t("catalog.fulfill.digitalEmpty")}</p>
+          ) : (
+            <ul className="mb-3 grid list-none gap-2 p-0 text-sm">
               {grants.map((grant) => (
                 <li key={grant.id} className="font-mono">{grant.token}</li>
               ))}
             </ul>
-          </CardBody>
-        </Card>
-      ) : null}
+          )}
+          {canManage && ["paid", "fulfilling", "fulfilled"].includes(order.status) ? (
+            <form action={productAction}>
+              <input type="hidden" name="intent" value="grantDigital" />
+              <input type="hidden" name="orderId" value={order.id} />
+              <input type="hidden" name="returnTo" value={`/admin/orders/${order.id}`} />
+              <Button type="submit">{t("catalog.fulfill.grantDigital")}</Button>
+            </form>
+          ) : null}
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader title={t("catalog.fulfill.shipments")} />

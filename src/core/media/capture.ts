@@ -7,7 +7,14 @@ import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import encodeQR from "qr";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineService, ServiceError, actorString, type ServiceContext } from "@/core/service";
+import {
+  defineOrchestratedService,
+  defineService,
+  ServiceError,
+  actorString,
+  permits,
+  type ServiceContext,
+} from "@/core/service";
 import { siteOrigin } from "@/core/seo/origin";
 import { storage } from "@/adapters/storage";
 import {
@@ -17,6 +24,8 @@ import {
   mediaCaptureItems,
   mediaCaptureSessions,
   mediaObjects,
+  mediaUploads,
+  assets,
 } from "./schema";
 
 const CAPTURE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -268,7 +277,7 @@ export const stageCompletedUpload = defineService({
   name: "media.stageCompletedUpload",
   summary: "Hold a finished resumable upload on a capture session until confirm.",
   kind: "mutation",
-  permission: "public",
+  permission: "system",
   input: z.object({
     uploadId: id,
     token: token.optional(),
@@ -284,8 +293,8 @@ export const stageCompletedUpload = defineService({
     if (!input.token && !input.sessionId) {
       throw new ServiceError("validation", "Identify the capture session.");
     }
-    if (ctx.actor.kind === "anonymous" && !input.token) {
-      throw new ServiceError("permission", "A phone ingest needs its upload link.");
+    if (!input.token && !permits(ctx.actor, "scoped", "media.stageCompletedUpload", "mutation")) {
+      throw new ServiceError("permission", "Use an upload link or an authorized media account.");
     }
     const [row] = input.token
       ? await ctx.tx
@@ -416,6 +425,9 @@ export const getCaptureSession = defineService({
     .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
   output: captureSessionView.nullable(),
   handler: async (input, ctx) => {
+    if (!input.token && !permits(ctx.actor, "scoped", "media.getCaptureSession", "query")) {
+      throw new ServiceError("permission", "Use an upload link or an authorized media account.");
+    }
     const [row] = input.token
       ? await ctx.tx
           .select()
@@ -428,10 +440,13 @@ export const getCaptureSession = defineService({
           .where(eq(mediaCaptureSessions.id, input.id!))
           .limit(1);
     if (!row) return null;
-    if (row.expiresAt.getTime() <= Date.now() && row.status !== "confirmed") {
-      return { ...(await present(ctx, { ...row, status: "expired" })), status: "expired" as const };
-    }
-    return present(ctx, row);
+    const expired = row.expiresAt.getTime() <= Date.now() && row.status !== "confirmed";
+    const view = await present(ctx, expired ? { ...row, status: "expired" } : row);
+    // A read grant must not disclose the phone's write capability. Agents
+    // can use their scoped id-based operations without receiving bearer URLs.
+    const exposeCapability = Boolean(input.token) || (ctx.actor.kind !== "agent" &&
+      permits(ctx.actor, "scoped", "media.createUploadLink", "mutation"));
+    return exposeCapability ? view : { ...view, captureUrl: null, uploadId: null };
   },
 });
 
@@ -572,8 +587,8 @@ export const attachCaptureUpload = defineService({
     asset: z.null(),
   }),
   handler: async (input, ctx) => {
-    if (ctx.actor.kind === "anonymous" && !input.token) {
-      throw new ServiceError("permission", "A phone ingest needs its upload link.");
+    if (!input.token && !permits(ctx.actor, "scoped", "media.attachCaptureUpload", "mutation")) {
+      throw new ServiceError("permission", "Use an upload link or an authorized media account.");
     }
     const [row] = input.token
       ? await ctx.tx
@@ -602,21 +617,43 @@ export const attachCaptureUpload = defineService({
   },
 });
 
-export const confirmCapture = defineService({
-  name: "media.confirmCapture",
-  summary: "Confirm a previewed capture so it becomes a reusable Asset.",
-  kind: "mutation",
+const confirmCaptureInput = z
+  .object({
+    id: id.optional(),
+    token: token.optional(),
+  })
+  .refine((value) => Boolean(value.id || value.token), "Identify the capture session.");
+
+const confirmCapturePromote = z.object({
+  id: z.string().uuid().nullable(),
+  filename: z.string(),
+  stagedKey: z.string(),
+  stagedBytes: z.number().int().nonnegative(),
+  stagedMime: z.string(),
+  checksumSha256: z.string().length(64).nullable(),
+});
+
+const confirmCaptureSource = defineService({
+  name: "media.confirmCaptureSource",
+  summary: "Authorize a capture session and list staged originals to register.",
+  kind: "query",
   permission: "public",
-  input: z
-    .object({
-      id: id.optional(),
-      token: token.optional(),
-    })
-    .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
-  output: captureSessionView,
+  external: false,
+  input: confirmCaptureInput,
+  output: z.object({
+    sessionId: uuid,
+    source: z.enum(CAPTURE_SOURCES),
+    caption: z.string().nullable(),
+    focalX: z.number().int(),
+    focalY: z.number().int(),
+    trimStartMs: z.number().int(),
+    trimEndMs: z.number().int().nullable(),
+    existingAssetId: uuid.nullable(),
+    toPromote: listed(confirmCapturePromote),
+  }),
   handler: async (input, ctx) => {
-    if (ctx.actor.kind === "anonymous" && !input.token) {
-      throw new ServiceError("permission", "A phone ingest needs its upload link.");
+    if (!input.token && !permits(ctx.actor, "scoped", "media.confirmCapture", "mutation")) {
+      throw new ServiceError("permission", "Use an upload link or an authorized media account.");
     }
     const [row] = input.token
       ? await ctx.tx
@@ -641,53 +678,77 @@ export const confirmCapture = defineService({
     if (existing.status !== "preview" && existing.status !== "pending") {
       throw new ServiceError("conflict", "Confirm the capture from preview.");
     }
-    const { registerStoredOriginal, setAltText, setFocalPoint, updateAssetDetails } =
-      await import("./service");
-    const assetIds: string[] = [];
     const toPromote =
       pending.length > 0
-        ? pending.filter((item) => !item.assetId)
+        ? pending
+            .filter((item) => !item.assetId)
+            .map((item) => ({
+              id: item.id,
+              filename: item.filename,
+              stagedKey: item.stagedKey,
+              stagedBytes: item.stagedBytes,
+              stagedMime: item.stagedMime,
+              checksumSha256: item.checksumSha256,
+            }))
         : existing.stagedKey
           ? [
               {
-                id: null as string | null,
+                id: null,
                 filename: existing.stagedFilename ?? "capture.webm",
                 stagedKey: existing.stagedKey,
                 stagedBytes: existing.stagedBytes ?? 0,
                 stagedMime: existing.stagedMime ?? "application/octet-stream",
-                checksumSha256: null as string | null,
+                checksumSha256: null,
               },
             ]
           : [];
-    for (const item of toPromote) {
-      const asset = await ctx.callAsSystem(registerStoredOriginal, {
-        key: item.stagedKey,
-        filename: item.filename,
-        contentType: item.stagedMime,
-        bytes: item.stagedBytes,
-        altText: existing.caption ?? undefined,
-        source: "capture",
-        provenance: {
-          capturedAt: new Date().toISOString(),
-          captureSessionId: existing.id,
-          note: `capture:${existing.source}:${existing.id}`,
-        },
-        metadata: {
-          trimStartMs: existing.trimStartMs,
-          trimEndMs: existing.trimEndMs ?? undefined,
-        },
-        checksumSha256: item.checksumSha256 ?? undefined,
-      });
-      assetIds.push(asset.id);
-      if (item.id) {
+    return {
+      sessionId: existing.id,
+      source: existing.source,
+      caption: existing.caption,
+      focalX: existing.focalX,
+      focalY: existing.focalY,
+      trimStartMs: existing.trimStartMs,
+      trimEndMs: existing.trimEndMs,
+      existingAssetId: existing.assetId,
+      toPromote,
+    };
+  },
+});
+
+const confirmCaptureApply = defineService({
+  name: "media.confirmCaptureApply",
+  summary: "Attach registered capture originals and close the session.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    sessionId: uuid,
+    promotions: listed(
+      z.object({
+        itemId: z.string().uuid().nullable(),
+        assetId: uuid,
+        kind: z.enum(["image", "video", "doc", "audio"]),
+      }),
+    ),
+  }),
+  output: captureSessionView,
+  handler: async (input, ctx) => {
+    const existing = await load(ctx, input.sessionId);
+    const { setAltText, setFocalPoint, updateAssetDetails } = await import("./service");
+    const assetIds: string[] = [];
+    for (const promotion of input.promotions) {
+      assetIds.push(promotion.assetId);
+      if (promotion.itemId) {
         await ctx.tx
           .update(mediaCaptureItems)
-          .set({ assetId: asset.id })
-          .where(eq(mediaCaptureItems.id, item.id));
+          .set({ assetId: promotion.assetId })
+          .where(eq(mediaCaptureItems.id, promotion.itemId));
       }
-      if (asset.kind === "image") {
+      if (promotion.kind === "image") {
         await ctx.callAsSystem(setFocalPoint, {
-          id: asset.id,
+          id: promotion.assetId,
           x: existing.focalX,
           y: existing.focalY,
         });
@@ -731,6 +792,53 @@ export const confirmCapture = defineService({
       assetIds,
     });
     return present(ctx, updated!);
+  },
+});
+
+export const confirmCapture = defineOrchestratedService({
+  name: "media.confirmCapture",
+  summary: "Confirm a previewed capture so it becomes a reusable Asset.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "write",
+  input: confirmCaptureInput,
+  output: captureSessionView,
+  handler: async (input, actor) => {
+    const claimed = await confirmCaptureSource.call(input, actor);
+    const { registerStoredOriginal } = await import("./service");
+    const promotions: Array<{
+      itemId: string | null;
+      assetId: string;
+      kind: "image" | "video" | "doc" | "audio";
+    }> = [];
+    for (const item of claimed.toPromote) {
+      const asset = await registerStoredOriginal.call(
+        {
+          key: item.stagedKey,
+          filename: item.filename,
+          contentType: item.stagedMime,
+          bytes: item.stagedBytes,
+          altText: claimed.caption ?? undefined,
+          source: "capture",
+          provenance: {
+            capturedAt: new Date().toISOString(),
+            captureSessionId: claimed.sessionId,
+            note: `capture:${claimed.source}:${claimed.sessionId}`,
+          },
+          metadata: {
+            trimStartMs: claimed.trimStartMs,
+            trimEndMs: claimed.trimEndMs ?? undefined,
+          },
+          checksumSha256: item.checksumSha256 ?? undefined,
+        },
+        { kind: "system" },
+      );
+      promotions.push({ itemId: item.id, assetId: asset.id, kind: asset.kind });
+    }
+    return confirmCaptureApply.call(
+      { sessionId: claimed.sessionId, promotions },
+      actor,
+    );
   },
 });
 
@@ -806,8 +914,8 @@ export const bindCaptureAsset = defineService({
     .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
   output: captureSessionView,
   handler: async (input, ctx) => {
-    if (ctx.actor.kind === "anonymous" && !input.token) {
-      throw new ServiceError("permission", "A phone ingest needs its upload link.");
+    if (!input.token && !permits(ctx.actor, "scoped", "media.bindCaptureAsset", "mutation")) {
+      throw new ServiceError("permission", "Use an upload link or an authorized media account.");
     }
     const [row] = input.token
       ? await ctx.tx
@@ -824,6 +932,18 @@ export const bindCaptureAsset = defineService({
     const existing = await load(ctx, row.id);
     if (["confirmed", "discarded", "expired"].includes(existing.status)) {
       throw new ServiceError("conflict", "That capture session is closed.");
+    }
+    // The phone capability admits this session's uploads, not arbitrary
+    // library assets whose ids happen to be known (C1.29/C11.09).
+    if (!permits(ctx.actor, "scoped", "media.bindCaptureAsset", "mutation")) {
+      const [upload] = await ctx.tx.select({ id: mediaUploads.id }).from(mediaUploads)
+        .where(and(eq(mediaUploads.assetId, input.assetId), eq(mediaUploads.state, "complete"),
+          eq(mediaUploads.uploadedBy, `capture:${input.token}`))).limit(1);
+      // Small proxy uploads can have no reservation; their stored provenance
+      // carries the capability supplied when the new bytes were introduced.
+      const [direct] = upload ? [] : await ctx.tx.select({ id: assets.id }).from(assets)
+        .where(and(eq(assets.id, input.assetId), sql`${assets.provenance}->>'captureToken' = ${input.token}`)).limit(1);
+      if (!upload && !direct) throw new ServiceError("permission", "Choose a file uploaded through this capture link.");
     }
     const [updated] = await ctx.tx
       .update(mediaCaptureSessions)
@@ -859,8 +979,8 @@ export const appendCaptureChunk = defineService({
     bytes: z.number().int(),
   }),
   handler: async (input, ctx) => {
-    if (ctx.actor.kind === "anonymous" && !input.token) {
-      throw new ServiceError("permission", "A phone ingest needs its upload link.");
+    if (!input.token && !permits(ctx.actor, "scoped", "media.appendCaptureChunk", "mutation")) {
+      throw new ServiceError("permission", "Use an upload link or an authorized media account.");
     }
     const [row] = input.token
       ? await ctx.tx
@@ -931,8 +1051,8 @@ export const assembleCapture = defineService({
     asset: z.null(),
   }),
   handler: async (input, ctx) => {
-    if (ctx.actor.kind === "anonymous" && !input.token) {
-      throw new ServiceError("permission", "A phone ingest needs its upload link.");
+    if (!input.token && !permits(ctx.actor, "scoped", "media.assembleCapture", "mutation")) {
+      throw new ServiceError("permission", "Use an upload link or an authorized media account.");
     }
     const [row] = input.token
       ? await ctx.tx
@@ -1063,6 +1183,8 @@ export default [
   assembleCapture,
   attachCaptureUpload,
   confirmCapture,
+  confirmCaptureSource,
+  confirmCaptureApply,
   discardCapture,
   listCaptureSessions,
   expireCaptureSessions,

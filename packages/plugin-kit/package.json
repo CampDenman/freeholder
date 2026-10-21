@@ -1,21 +1,34 @@
 {
   "name": "@freeholder/plugin-kit",
-  "version": "0.0.0",
-  "description": "Authoring contract for Freeholder plugins — definePlugin, permissions, compatibility (MASTER.md §24, C3.08)",
+  "version": "0.2.0-beta.3",
+  "description": "Authoring contract for Freeholder plugins \u2014 definePlugin, permissions, compatibility (MASTER.md \u00a724, C3.08)",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {
     "type": "git",
-    "url": "https://github.com/campdenman/freeholder.git",
+    "url": "https://github.com/CampDenman/freeholder.git",
     "directory": "packages/plugin-kit"
   },
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
-  "exports": {
-    ".": "./src/index.ts"
+  "engines": {
+    "node": ">=20.19"
   },
-  "files": ["src", "LICENSE"],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",

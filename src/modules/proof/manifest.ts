@@ -15,7 +15,7 @@ export default definePlugin({
   license: "Apache-2.0",
   permissions: ["cms:view"],
   requires: ["core", "cms"],
-  migrations: ["0073_plain_lilandra.sql"],
+  migrations: ["0000_reviewed-baseline.sql"],
   capabilities: { blocks: true },
   tables: () => import("./tables"),
   services: () => import("./service"),

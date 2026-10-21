@@ -8,11 +8,12 @@ database scripts. An owner reaches them at **Admin -> Demo scenarios** and can
 load, reload, reset or purge a scenario in one action. Every action goes
 through the normal service registry, transaction, permission and audit path.
 
-The first shipped scenario is deliberately small. `seed.current-modules@1`
-assembles one visibly marked CMS page and one visibly marked form from the CMS
-and Forms modules. It is the conformance foundation for later creator,
-service-business, shop and everything scenarios; it does not claim that the
-booking, commerce, conversation or reporting domains exist yet.
+`seed.current-modules` remains the small CMS and Forms conformance foundation.
+Complete journeys ship as `seed.creator`, `seed.service-business`, `seed.shop`
+and `seed.everything`. Each is assembled only from module fixture contributions
+— contacts, location, sitting, inbox, page, form, print, gallery, quote, overdue
+invoice and a saved revenue view — in English, French and Spanish, visibly
+marked `[Demo]`, with a guided day-in-the-life and one-action load/reload/reset/purge.
 
 ## Lifecycle and isolation
 
@@ -81,9 +82,10 @@ available.
 ## Post-deploy verification
 
 1. Sign in as the owner and open **Admin -> Demo scenarios**. Confirm the
-   current-module scenario names its page and form outcomes.
-2. Load it in English. Confirm one `[Demo]` page and one `[Demo]` form appear at
-   the linked admin targets.
+   current-module scenario and the four complete journeys are listed.
+2. Load **Creator day** in English. Confirm marked contacts, a studio, a sitting,
+   an inbox thread, a page, a form, a print, a gallery, a quote, an overdue
+   invoice and a revenue view appear at the linked admin targets.
 3. Load it again and confirm no duplicate appears. Use **Reload** and confirm
    the displayed generation advances.
 4. Select French or Spanish and use **Reset fresh**. Confirm the marked fixture

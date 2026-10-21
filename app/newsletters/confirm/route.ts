@@ -3,10 +3,15 @@
 
 import { NextResponse } from "next/server";
 import { confirmSubscription } from "@/modules/newsletters/service";
+import { mailLinkConfirmation } from "@/core/mail/link-confirmation";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  return mailLinkConfirmation(request, "confirm");
+}
+
+export async function POST(request: Request) {
   const token = new URL(request.url).searchParams.get("token");
   if (!token) return new NextResponse("Missing confirmation token.", { status: 400 });
   try {

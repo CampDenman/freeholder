@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Price lists, audiences and deterministic currency-safe resolution (C5.13).
 
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
+import { registerSearchSource, matchesIlike } from "@/core/search/registry";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { segments } from "@/core/segments/schema";
@@ -264,11 +265,13 @@ export const createPriceList = defineService({
     }
     if (input.segmentId) {
       // Checked here rather than left to the foreign key, so an owner gets a
-      // sentence instead of a constraint name.
+      // sentence instead of a constraint name. Trashed segments do not count:
+      // a list wired to an audience that cannot be answered would sit there
+      // granting nothing, silently.
       const [segment] = await ctx.tx
         .select({ id: segments.id })
         .from(segments)
-        .where(eq(segments.id, input.segmentId));
+        .where(and(eq(segments.id, input.segmentId), isNull(segments.trashedAt)));
       if (!segment) throw new ServiceError("not_found", "That segment is not here.");
     }
     const [created] = await ctx.tx.insert(priceLists).values(input).returning();
@@ -434,11 +437,21 @@ async function inSegment(
   // No contact is no membership: an anonymous basket cannot be in a list that
   // is defined by who somebody is.
   if (!contactId) return false;
-  const result = (await ctx.callAsSystem(getService("segments.contains"), {
-    id: segmentId,
-    contactId,
-  })) as { member: boolean };
-  return result.member;
+  try {
+    const result = (await ctx.callAsSystem(getService("segments.contains"), {
+      id: segmentId,
+      contactId,
+    })) as { member: boolean };
+    return result.member;
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === "not_found") {
+      // The segment is trashed or gone. A contract price is a concession the
+      // list grants, so an unanswerable list grants nothing rather than
+      // guessing — the shopper sees the ordinary price until it is restored.
+      return false;
+    }
+    throw error;
+  }
 }
 
 function rank(kind: (typeof PRICE_LIST_KINDS)[number]): number {
@@ -565,3 +578,13 @@ export default [
   setPriceBreak,
   resolvePrice,
 ];
+
+registerSearchSource({
+  kind: "priceList", module: "catalog", readService: "catalog.listPriceLists", tables: ["price_lists"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx.select({ id: priceLists.id, name: priceLists.name, contactId: priceLists.contactId })
+      .from(priceLists).where(matchesIlike(priceLists.name, pattern)).orderBy(asc(priceLists.name), asc(priceLists.id)).limit(limit);
+    return rows.map(item => ({ kind: "priceList", id: item.id, title: item.name,
+      href: `/admin/price-lists#price-list-${item.id}`, snippet: null, contactId: item.contactId, module: "catalog" }));
+  },
+});

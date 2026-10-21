@@ -13,6 +13,7 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { ServiceError } from "@/core/service";
+import { sendInvoice } from "@/modules/invoicing/customer-service";
 import {
   createCreditNote,
   createDraftInvoice,
@@ -193,6 +194,9 @@ export async function invoiceAction(form: FormData): Promise<void> {
         actor,
       );
       destination = `/admin/invoices/${invoiceId}?saved=issue`;
+    } else if (intent === "send") {
+      const sent = await sendInvoice.call({ id: invoiceId, idempotencyKey: field(form, "idempotencyKey") }, actor);
+      destination = `/admin/invoices/${invoiceId}?saved=${sent.delivers ? "send" : "sendPreview"}`;
     } else if (intent === "void") {
       if (field(form, "confirm") !== "yes") {
         throw new ServiceError("validation", "Confirm that this unpaid invoice should be voided.");

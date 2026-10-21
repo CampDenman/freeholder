@@ -38,7 +38,7 @@ describe("plugin block proof", () => {
     expect(proof?.seo?.sitemapSources).toEqual(["proof.publishedPaths"]);
     expect(proof?.tables).toBeTypeOf("function");
     expect(proof?.blocks).toBeTypeOf("function");
-    const migration = readFileSync("db/migrations/0073_plain_lilandra.sql", "utf8");
+    const migration = readFileSync("db/migrations/0000_reviewed-baseline.sql", "utf8");
     expect(migration).toContain("proof_notices");
     expect(seedNoticeBlock().type).toBe("notice");
   });

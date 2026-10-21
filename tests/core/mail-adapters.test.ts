@@ -35,6 +35,10 @@ const MESSAGE: OutboundEmail = {
   replyTo: "reply@example.test",
   deliveryId: "00000000-0000-4000-8000-000000000123",
 };
+const UNSUBSCRIBE_HEADERS = {
+  "List-Unsubscribe": "<https://example.test/unsubscribe?broadcastToken=opaque>",
+  "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" as const,
+};
 
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
@@ -182,13 +186,14 @@ describe("bulk HTTP providers", () => {
           : Response.json({ id: "resend-message" });
       },
     });
-    await expect(adapter.send(MESSAGE)).resolves.toEqual({
+    await expect(adapter.send({ ...MESSAGE, headers: UNSUBSCRIBE_HEADERS })).resolves.toEqual({
       providerRef: "resend-message",
     });
     expect(calls[0]![1]?.headers).toMatchObject({
       authorization: "Bearer resend-secret",
       "idempotency-key": MESSAGE.deliveryId,
     });
+    expect((JSON.parse(requestBody(calls[0]![1])) as { headers: unknown }).headers).toMatchObject(UNSUBSCRIBE_HEADERS);
     await expect(adapter.verifySender?.({ email: "news@example.test" })).resolves.toMatchObject({
       status: "verified",
       detail: { id: "domain-id", domain: "example.test" },
@@ -239,7 +244,8 @@ describe("bulk HTTP providers", () => {
           : Response.json({ MessageID: "postmark-message" });
       },
     });
-    await adapter.send(MESSAGE);
+    await adapter.send({ ...MESSAGE, headers: UNSUBSCRIBE_HEADERS });
+    expect((JSON.parse(requestBody(calls[0]![1])) as { Headers: unknown }).Headers).toEqual(Object.entries(UNSUBSCRIBE_HEADERS).map(([Name, Value]) => ({ Name, Value })));
     await expect(adapter.verifySender?.({ email: "news@example.test" })).resolves.toMatchObject({
       status: "verified",
       detail: { id: 42, dkim: true, returnPath: true },
@@ -282,7 +288,7 @@ describe("Amazon SES", () => {
         },
       },
     });
-    await expect(adapter.send(MESSAGE)).resolves.toEqual({ providerRef: "ses-message" });
+    await expect(adapter.send({ ...MESSAGE, headers: UNSUBSCRIBE_HEADERS })).resolves.toEqual({ providerRef: "ses-message" });
     expect(calls[0]![0]).toBe(
       "https://email.us-west-2.amazonaws.com/v2/email/outbound-emails",
     );
@@ -293,6 +299,8 @@ describe("Amazon SES", () => {
       EmailTags: [{ Name: "freeholder_delivery", Value: MESSAGE.deliveryId }],
       Destination: { ToAddresses: [MESSAGE.to] },
     });
+    const content = body.Content as { Simple: { Headers: Array<{ Name: string; Value: string }> } };
+    for (const [Name, Value] of Object.entries(UNSUBSCRIBE_HEADERS)) expect(content.Simple.Headers).toContainEqual({ Name, Value });
   });
 
   it("checks the configured SES identity and sanitizes provider labels", async () => {

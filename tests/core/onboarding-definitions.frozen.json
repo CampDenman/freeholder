@@ -1,0 +1,20 @@
+{
+  "demo:seed.creator@1": "72b4f2faf64192e20cc4c826c051edc3cdac106538120864598991b8a3ce5963",
+  "demo:seed.creator@2": "3d64ff1c9e6e9d277b3b941bccd6d994dfdfcf0ac5029dd73dcc7783054c9001",
+  "demo:seed.current-modules@1": "e1a7305fa085e81ed8df638f5d3d79433a208647630994c468bb63b8377f991f",
+  "demo:seed.everything@1": "a8ecaaafac9c855c8be34b331ca90a27ec93a4c50b5c6792a226559895f3f33a",
+  "demo:seed.everything@2": "0834658ed4d3e1ca57e4467ba59f6c6742dd144e2a4e71131fb54ff60b62bd67",
+  "demo:seed.service-business@1": "9b9e2882bf06425871d56f298786b524611b8541553ee4a1ca7e5dbda82c6426",
+  "demo:seed.shop@1": "ade0068a7b4dc8c89af97ea9df713c33cc194d9cc8a04634b85539e11a9433f3",
+  "guidance:core.administrator-first-win@1": "af481c4430df15dcc0be05c63f419d7ca5a3e2f720c76f1ed738b6ab6ffdc106",
+  "guidance:core.bookkeeper-first-win@1": "d1a35676d07c597626cc3a3980d06db52274a7a1a1f2f1f3d8005d4a52df5a87",
+  "guidance:core.customer-first-win@1": "4b15a311260c0b117fb270e71a3a17294c75326d9f364fbe9134bc8eb41c61c2",
+  "guidance:core.editor-first-win@1": "618288c0435e587eb8d53ff464427555bd120f976faaa3e93f8fb78b2fd84441",
+  "guidance:core.owner-first-win@1": "8bca073283b07fbc8d39d1726c287425b246303c053b5b120df5d4f81ed32f58",
+  "guidance:core.service-provider-first-win@1": "8db6f432ab8f1e1b2d48cdc81ccea158d08a0efb791ffdf019575d828e4f7964",
+  "guidance:seed.creator-day@1": "d0a7d101b716517845d80700bb7614d0db48a402e38e003830d666de99d3f194",
+  "guidance:seed.everything-day@1": "6eee5d43e106cd99928bf503a28cd4c8900af7655cdaecfa7b43944483d77eb9",
+  "guidance:seed.service-day@1": "ecfbe2f68043b00770fd7bbec5d2e7ba9b67eced96cee79e44fdc43a53726f28",
+  "guidance:seed.shop-day@1": "d0ebf59d604f00030869cafa6847e020a672d698ac750954886b137c93e01706",
+  "guidance:social.connect-hub@1": "3670517e4aea2d310babeae852f9d135fd6673c234c39d8786d0ec8ff08b4e05"
+}

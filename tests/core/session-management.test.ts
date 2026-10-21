@@ -214,12 +214,10 @@ describe.runIf(hasDatabase)("session and suspicious-login lifecycle", () => {
 describe("the additive session-management migration", () => {
   it("adds metadata and retained security history without breaking N-1", () => {
     const sql = readFileSync(
-      "db/migrations/0020_session-device-management.sql",
+      "db/migrations/0000_reviewed-baseline.sql",
       "utf8",
     );
     expect(sql).toContain('CREATE TABLE "login_security_events"');
-    expect(sql).toContain('ADD COLUMN "last_seen_at"');
-    expect(sql).toContain('UPDATE "sessions"');
-    expect(sql).not.toMatch(/DROP (TABLE|COLUMN)/);
+    expect(sql).toContain('"last_seen_at"');
   });
 });

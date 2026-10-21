@@ -208,6 +208,12 @@ export const notificationSettings = pgTable(
     digestWeekday: integer("digest_weekday").notNull().default(1),
     timezone: text("timezone"),
     escalationMinutes: integer("escalation_minutes").notNull().default(60),
+    /**
+     * Quiet hours (C12.22): minutes after local midnight. While inside the
+     * window, push and email wait until it ends; critical items do not.
+     */
+    quietStartMinute: integer("quiet_start_minute"),
+    quietEndMinute: integer("quiet_end_minute"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -237,6 +243,10 @@ export const notificationSettings = pgTable(
     check(
       "notification_settings_escalation_allowed",
       sql`${t.escalationMinutes} between 5 and 10080`,
+    ),
+    check(
+      "notification_settings_quiet_hours_valid",
+      sql`(${t.quietStartMinute} is null and ${t.quietEndMinute} is null) or (${t.quietStartMinute} between 0 and 1439 and ${t.quietEndMinute} between 0 and 1439 and ${t.quietStartMinute} <> ${t.quietEndMinute})`,
     ),
   ],
 );
@@ -346,3 +356,79 @@ export const notificationDeliveries = pgTable(
     ),
   ],
 );
+
+export const DEVICE_PLATFORMS = ["ios", "android"] as const;
+
+/**
+ * One app install that may be pushed to (MASTER.md §35.1, C10.14).
+ *
+ * §35.1: "The device token is a `NotificationDelivery` channel like email and
+ * SMS (§30), registered against the contact, subject to the same per-topic
+ * preferences, and revoked when the session ends. A push that says something
+ * the platform would not have emailed is a bug."
+ *
+ * Unique on the token rather than on (contact, token): a device token is
+ * globally unique and belongs to an install, not to a person. When a phone is
+ * handed on, or a second customer signs in on the same device, re-registration
+ * moves the row rather than creating a second one that would push somebody
+ * else's bookings to the new owner.
+ */
+export const deviceTokens = pgTable(
+  "device_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    platform: text("platform", { enum: DEVICE_PLATFORMS }).notNull(),
+    token: text("token").notNull(),
+    appVersion: text("app_version").notNull(),
+    /** So a push is never sent to a binary too old to open its own link. */
+    contractVersion: integer("contract_version").notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Set when the session ends or the provider says the token is dead. */
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("device_tokens_token_key").on(t.token),
+    index("device_tokens_contact_idx").on(t.contactId),
+    check("device_tokens_token_not_blank", sql`length(trim(${t.token})) > 0`),
+    check("device_tokens_contract_version", sql`${t.contractVersion} >= 1`),
+  ],
+);
+
+/**
+ * Browser Web Push subscriptions (C12.22). Standard Web Push under the site's
+ * own VAPID keys: the browser's push service carries the encrypted payload,
+ * and no third-party account is involved.
+ */
+export const webPushSubscriptions = pgTable(
+  "web_push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: createdAtColumn(),
+    lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("web_push_subscriptions_endpoint_idx").on(t.endpoint),
+    index("web_push_subscriptions_user_idx").on(t.userId),
+  ],
+);
+
+/** The site's own VAPID key pair; the private key is sealed at rest. */
+export const webPushKeys = pgTable(
+  "web_push_keys",
+  {
+    id: integer("id").primaryKey(),
+    publicKey: text("public_key").notNull(),
+    privateKeySealed: text("private_key_sealed").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [check("web_push_keys_singleton", sql`${t.id} = 1`)],
+);
+

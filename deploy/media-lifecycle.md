@@ -48,6 +48,21 @@ image/audio/video URLs and always streams documents through a controlled,
 abort incomplete multipart uploads after two days as defence in depth;
 Freeholder also aborts its expired sessions hourly.
 
+## Client-gallery asset privacy
+
+Adding an asset to a client gallery marks it private across public media and
+project views, including an asset already reused in a published case study.
+Publication consent remains required; it does not override private delivery.
+Migration `0023_gallery_private_delivery.sql` applies this privacy ceiling to
+assets already attached to client galleries. Removing an asset from a gallery
+does not automatically make it public again. Use a separate public asset for
+public presentation with the required consent.
+
+Controlled gallery routes continue to check the session, item permissions,
+watermark/download policy and consent. Consent withdrawal blocks those routes
+as well. Keep object storage private; application checks cannot revoke
+previously delivered copies or existing signed URLs.
+
 ## Malware scanner
 
 Structural validation always runs. With no antivirus engine, assets record

@@ -17,17 +17,24 @@ export {
   webauthnCredentials,
 } from "@/core/auth/schema";
 export { apiKeys } from "@/core/apikeys/schema";
+export { attestations } from "@/core/attestations/schema";
+export {
+  updateSettings,
+  updateSnapshots,
+  updateRuns,
+  releaseNotes,
+  availableReleases,
+} from "@/core/update/schema";
 export {
   agentConnections,
   agents,
   agentTasks,
-  agentRuns,
-  agentSteps,
-  agentApprovals,
-  agentSpend,
   agentPlaybooks,
   agentPlaybookVersions,
 } from "@/core/agents/schema";
+// The runtime four (§4.17, C9.02). Agents and automations both run work, so
+// runs belong to neither of them.
+export { runs, runSteps, runApprovals, runSpend } from "@/core/runs/schema";
 export {
   calendars,
   calendarMemberships,
@@ -64,18 +71,22 @@ export {
 } from "@/core/connections/schema";
 export {
   mailDeliveries,
+  mailOutbox,
   mailOauthStates,
   mailProviderEvents,
   mailSenders,
   mailSuppressions,
 } from "@/core/mail/schema";
 export {
+  deviceTokens,
   notificationDeliveries,
   notificationDigests,
   notificationPreferences,
   notificationReceipts,
   notificationSettings,
   notifications,
+  webPushKeys,
+  webPushSubscriptions,
 } from "@/core/notifications/schema";
 export {
   webhookSubscriptions,
@@ -95,6 +106,13 @@ export { tasks } from "@/core/tasks/schema";
 export { notes, noteRevisions } from "@/core/notes/schema";
 export { segments, segmentMembers } from "@/core/segments/schema";
 export { scoringRules, contactScoreAwards } from "@/core/scoring/schema";
+export {
+  entitlements,
+  entitlementGrants,
+  passBalances,
+  contentUnlocks,
+} from "@/core/entitlements/schema";
+export { paywalls, meterCounters } from "@/core/paywalls/schema";
 export { savedViews } from "@/core/views/schema";
 export {
   contactImports,
@@ -130,7 +148,7 @@ export { designSettings } from "@/core/design/schema";
 export { entityTranslations } from "@/core/i18n/schema";
 export { passwordResets } from "@/core/auth/schema";
 export { outboxEventDeliveries, outboxEvents } from "@/core/events/schema";
-export { jobIdempotencyKeys } from "@/core/jobs/schema";
+export { jobIdempotencyKeys, jobRuntimeHeartbeats } from "@/core/jobs/schema";
 export { guidanceFlows, guidanceProgress } from "@/core/guidance/schema";
 export {
   demoScenarios,
@@ -142,6 +160,7 @@ export {
   dataRequests,
   dataRequestArtifacts,
   privacyRetentionExceptions,
+  mediaConsents,
 } from "@/core/privacy/schema";
 export {
   businessLocations,
@@ -160,3 +179,4 @@ export {
   pluginRetentions,
   importRuns,
 } from "@/core/plugins/schema";
+export { retentionPolicies } from "@/core/retention/schema";

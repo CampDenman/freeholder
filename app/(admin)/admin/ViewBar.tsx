@@ -91,7 +91,7 @@ export async function ViewBar({
               <input
                 name="name"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             {/* Only where there are columns to pick. A picker over a card

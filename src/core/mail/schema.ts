@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Mail routing and delivery evidence (MASTER.md §12, §43 C1.14).
 //
-// Bodies deliberately do not live here. A delivery ledger needs to answer
-// which sender tried which address, through which provider, and what happened;
-// it does not need to become a second mailbox full of customer correspondence.
+// Bodies deliberately do not live in the durable delivery ledger. It answers
+// which sender tried which address, through which provider, and what happened.
+// The separate outbox below holds only authenticated ciphertext and is deleted
+// after delivery or its bounded retention window; it cannot become a mailbox.
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -233,6 +234,23 @@ export const mailDeliveries = pgTable(
       "mail_deliveries_terminal_consistent",
       sql`${t.status} <> 'delivered' or ${t.deliveredAt} is not null`,
     ),
+  ],
+);
+
+/** Encrypted body staged only while a delivery is queued or retryable. */
+export const mailOutbox = pgTable(
+  "mail_outbox",
+  {
+    deliveryId: uuid("delivery_id")
+      .primaryKey()
+      .references(() => mailDeliveries.id, { onDelete: "cascade" }),
+    encryptedMessage: text("encrypted_message").notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    check("mail_outbox_envelope_present", sql`char_length(${t.encryptedMessage}) > 20`),
+    index("mail_outbox_created_idx").on(t.createdAt),
   ],
 );
 

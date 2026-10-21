@@ -6,10 +6,14 @@ import { currentBusiness } from "@/core/settings/read";
 import { PortalLocaleChooser } from "../../PortalLocaleChooser";
 import { ConfirmMagicLink } from "./ConfirmMagicLink";
 
-export const metadata: Metadata = {
-  robots: { index: false, follow: false },
-  referrer: "no-referrer",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: t("portal.magic.title"),
+    robots: { index: false, follow: false },
+    referrer: "no-referrer",
+  };
+}
 
 export default async function ConfirmMagicLinkPage() {
   const [business, locale, t] = await Promise.all([

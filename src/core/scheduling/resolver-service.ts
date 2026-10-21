@@ -13,14 +13,20 @@
 // calendar's name, and nothing else. Everything private stayed behind the
 // resolver — a synced event's title never travelled this far, because C4.12
 // never stored one it was not permitted to.
+import { contactForActor } from "@/core/portal/service";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { uuid } from "@/core/contract";
-import { calendars } from "@/core/scheduling/schema";
+import { bookings, calendars } from "@/core/scheduling/schema";
 import { resolveSlots } from "@/core/scheduling/resolver";
 import { audienceFor, audienceMayBook } from "@/core/scheduling/audiences";
-import { currentBusiness } from "@/core/settings/read";
-import { defineService, getService, ServiceError } from "@/core/service";
+import { getBusiness } from "@/core/settings/service";
+import {
+  defineService,
+  getService,
+  ServiceError,
+  type ServiceContext,
+} from "@/core/service";
 
 /** A fortnight at a time. A year of fifteen-minute slots is not a page. */
 const MAX_RANGE_DAYS = 62;
@@ -45,12 +51,16 @@ interface OfferingShape {
  * A missing catalog is a refusal rather than a guess: offering slots of an
  * invented length would be worse than saying the service cannot be read.
  */
-async function offeringShape(productId: string): Promise<OfferingShape> {
+async function offeringShape(
+  ctx: ServiceContext,
+  productId: string,
+  serviceOfferingId: string,
+): Promise<OfferingShape> {
   let offering: unknown;
   try {
-    offering = await getService("catalog.getServiceOffering").call(
+    offering = await ctx.callAsSystem(
+      getService("catalog.getServiceOffering"),
       { productId },
-      { kind: "system" },
     );
   } catch {
     throw new ServiceError(
@@ -61,7 +71,8 @@ async function offeringShape(productId: string): Promise<OfferingShape> {
   if (!offering) {
     throw new ServiceError("not_found", "That is not a bookable service.");
   }
-  const shape = offering as Partial<OfferingShape>;
+  const shape = offering as Partial<OfferingShape> & { id?: string };
+  if (shape.id !== serviceOfferingId) throw new ServiceError("validation", "That service offering does not belong to this product.");
   if (!shape.durationMin || shape.durationMin <= 0) {
     throw new ServiceError("conflict", "That service has no length set.");
   }
@@ -88,6 +99,8 @@ export const availableSlots = defineService({
     to: isoDate,
     /** "I want Sam" — offered first, never the only answer for a pool. */
     preferredCalendarId: z.uuid().optional(),
+    onlyPreferred: z.boolean().default(false),
+    excludeBookingId: z.uuid().optional(),
     /** A party of three should not be offered a single place. */
     seats: z.number().int().min(1).max(100).default(1),
     /** 15-minute increments, or on the hour only. */
@@ -133,21 +146,21 @@ export const availableSlots = defineService({
       if (!preferred) throw new ServiceError("not_found", "No such calendar.");
     }
 
-    const shape = await offeringShape(input.productId);
-    const business = await currentBusiness().catch(() => null);
+    if (input.excludeBookingId) {
+      const contact = await contactForActor(ctx);
+      const [own] = await ctx.tx.select({ id: bookings.id }).from(bookings).where(and(eq(bookings.id, input.excludeBookingId), eq(bookings.contactId, contact.id), eq(bookings.serviceOfferingId, input.serviceOfferingId))).limit(1);
+      if (!own) throw new ServiceError("not_found", "That appointment is unavailable.");
+    }
+    const shape = await offeringShape(ctx, input.productId, input.serviceOfferingId);
+    const business = await ctx.call(getBusiness, {}).catch(() => null);
 
     // §41: bookability is a property of the audience, not of the calendar.
     // The same calendar answers differently for a customer and for a friend,
     // and busy time is subtracted from both.
     const audience = await audienceFor(ctx.tx, {
       token: input.audienceToken ?? null,
-      // A tagged audience is proved by a contact identity, and a public
-      // request has none until the customer portal session arrives with C8.
-      // Passing null rather than guessing is the point: the alternative is a
-      // tag audience that resolves for whoever happens to be signed in, which
-      // is the opposite of what a tag means. `audienceFor` resolves tags
-      // correctly wherever a contact *is* known, and is tested that way.
-      contactId: null,
+      // A customer session proves the contact used for tag audiences.
+      contactId: ctx.actor.kind === "user" ? (await contactForActor(ctx).catch(() => null))?.id ?? null : null,
       signedIn: ctx.actor.kind === "user",
     });
     if (!audience) {
@@ -174,7 +187,8 @@ export const availableSlots = defineService({
       bufferAfterMin: audience.bufferAfterMin ?? shape.bufferAfterMin,
       travelTimeMin: shape.travelTimeMin,
       capacity: shape.capacity,
-      assignment: shape.assignment,
+      assignment: input.onlyPreferred ? "specific" : shape.assignment,
+      excludeBookingId: input.excludeBookingId,
       granularityMin: input.granularityMin,
       preferredCalendarId: input.preferredCalendarId,
       seats: input.seats,

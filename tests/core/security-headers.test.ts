@@ -8,7 +8,7 @@ import nextConfig from "../../next.config";
 describe("security headers", () => {
   it("allows only same-origin capture while keeping unused sensors disabled", async () => {
     const groups = await nextConfig.headers!();
-    const application = groups.find((group) => group.source === "/((?!preview).*)");
+    const application = groups.find((group) => group.source === "/((?!preview|embed).*)");
     const policy = application?.headers.find(
       (header) => header.key === "Permissions-Policy",
     )?.value;
@@ -29,5 +29,13 @@ describe("security headers", () => {
     );
     expect(studio).toContain("navigator.mediaDevices.getUserMedia");
     expect(studio).toContain("navigator.mediaDevices.getDisplayMedia");
+  });
+
+  it("does not send X-Frame-Options on embed widgets so they can be framed", async () => {
+    const groups = await nextConfig.headers!();
+    const embed = groups.find((group) => group.source === "/embed/:path*");
+    expect(embed).toBeDefined();
+    expect(embed?.headers.some((header) => header.key === "X-Frame-Options")).toBe(false);
+    expect(embed?.headers.some((header) => header.key === "X-Robots-Tag")).toBe(true);
   });
 });

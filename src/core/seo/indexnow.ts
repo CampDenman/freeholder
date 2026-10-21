@@ -6,6 +6,7 @@
 // participant (Bing is the primary). Unchanged URLs are not resent. Local
 // and private hosts are never submitted — a ping of localhost teaches the
 // engine nothing and burns the instance's reputation with the endpoint.
+import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy";
 import { createHash } from "node:crypto";
 import { env } from "@/core/env";
 import { siteOrigin } from "@/core/seo/origin";
@@ -51,6 +52,9 @@ export async function submitIndexNow(
   urls: string[],
   options: { origin?: string; fetchImpl?: typeof fetch } = {},
 ): Promise<{ submitted: number; skipped: boolean; batches: number }> {
+  if (playgroundBlocksExternalDelivery(env())) {
+    return { submitted: 0, skipped: true, batches: 0 };
+  }
   const origin = options.origin ?? siteOrigin();
   const fetchImpl = options.fetchImpl ?? fetch;
   const unique = [...new Set(urls)].filter((url) => isIndexablePublicHost(url));
@@ -99,7 +103,7 @@ export async function queueIndexNow(
   idempotencyKey: string,
   origin = siteOrigin(),
 ): Promise<void> {
-  if (!isIndexablePublicHost(origin)) return;
+  if (playgroundBlocksExternalDelivery(env()) || !isIndexablePublicHost(origin)) return;
   const urls = [...new Set(slugs.map((slug) => absoluteUrl(origin, slug)))];
   if (urls.length === 0) return;
   await ctx.queueJob("seo.submitIndexNow", { urls }, { idempotencyKey });

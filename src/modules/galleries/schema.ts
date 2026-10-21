@@ -76,6 +76,14 @@ export const galleries = pgTable(
      * a watermarked variant.
      */
     watermark: boolean("watermark").notNull().default(false),
+    /**
+     * Owner-permitted client partner sharing (C9.29 / §34). Off until the
+     * owner opts this gallery in; a client cannot mint guests on a gallery
+     * the owner has not opened to that.
+     */
+    clientCanInvitePartner: boolean("client_can_invite_partner")
+      .notNull()
+      .default(false),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -155,6 +163,16 @@ export const galleryGuests = pgTable(
     invitedByUserId: uuid("invited_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    /**
+     * Who issued this invite when it was the client, not staff. Null on
+     * owner-issued guests so a client cannot rotate an invitation they did
+     * not send. Merge and erasure repoint or null this; they do not delete
+     * the guest the partner still holds.
+     */
+    invitedByContactId: uuid("invited_by_contact_id").references(
+      () => contacts.id,
+      { onDelete: "set null" },
+    ),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -164,6 +182,7 @@ export const galleryGuests = pgTable(
       .on(t.tokenHash)
       .where(sql`${t.tokenHash} is not null`),
     index("gallery_guests_contact_idx").on(t.contactId),
+    index("gallery_guests_invited_by_contact_idx").on(t.invitedByContactId),
     check("gallery_guests_role", sql`${t.role} in ('client', 'partner')`),
   ],
 );
@@ -364,6 +383,8 @@ export const galleryArchives = pgTable(
     storageKey: text("storage_key"),
     bytes: integer("bytes"),
     fileCount: integer("file_count"),
+    /** Exact policy/item snapshot packaged; null legacy bundles need a rebuild. */
+    deliveryHash: text("delivery_hash"),
     /** Why it could not be built, in words the owner can act on. */
     error: text("error"),
     builtAt: timestamp("built_at", { withTimezone: true }),
@@ -381,5 +402,41 @@ export const galleryArchives = pgTable(
       "gallery_archives_ready",
       sql`(${t.state} = 'ready' and ${t.storageKey} is not null and ${t.builtAt} is not null) or (${t.state} <> 'ready' and ${t.storageKey} is null)`,
     ),
+  ],
+);
+
+/**
+ * What a gallery sells, and for how much (§4.5, C8.08).
+ *
+ * §4.5 is explicit: "`GalleryItem` links to `ProductVariant` price sheets →
+ * standard `Order` flow. No parallel commerce path." So this table is a link
+ * and nothing more — no prices, no stock, no tax rules of its own. The variant
+ * already knows all of that, and a second opinion about the price of an 8×10
+ * is how two answers to one question get shipped.
+ *
+ * Scoped to the gallery rather than the item: a photographer sells the same
+ * sizes across a delivery, and per-frame pricing is a menu nobody wants to
+ * maintain forty times.
+ */
+export const galleryPriceSheetItems = pgTable(
+  "gallery_price_sheet_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    galleryId: uuid("gallery_id")
+      .notNull()
+      .references(() => galleries.id, { onDelete: "cascade" }),
+    /**
+     * Untyped on purpose. The galleries module must work with catalog
+     * switched off (§11), so this records the id without importing the table
+     * and taking a hard dependency on commerce.
+     */
+    variantId: uuid("variant_id").notNull(),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("gallery_price_sheet_unique_idx").on(t.galleryId, t.variantId),
+    index("gallery_price_sheet_order_idx").on(t.galleryId, t.position),
   ],
 );

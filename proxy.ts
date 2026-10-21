@@ -70,6 +70,26 @@ const ENTITY_FEED = /^\/feeds\/([a-z]+)\.xml$/;
 const LOCALE_PREFIX = /^\/([a-z]{2}(?:-[A-Za-z]{2,4})?)(\/.*)?$/;
 
 /**
+ * Two-letter route roots that are not languages.
+ *
+ * `/og/services` is shaped exactly like a locale-prefixed path, so the prefix
+ * was stripped and the request became `/services` — every page's link-preview
+ * image 404ed, and every `/go/…` short link was swallowed the same way. Nobody
+ * sees that on the site itself; you see it when a page is shared to Facebook,
+ * iMessage or WhatsApp and comes back blank. Reported by a third party.
+ *
+ * `NEVER_LOCALIZED` cannot do this job: it is tested against the *rest* of the
+ * path, so it answers "is `/admin` localizable", never "is `og` a language".
+ * This is the same question asked about the first segment instead.
+ *
+ * A deny-list rather than an allow-list of languages, because the edge still
+ * cannot ask which locales exist, and `tests/core/proxy.test.ts` fails if a new
+ * two-letter route appears in `app/` without being listed here. `ap` is the
+ * ActivityPub surface (C12.18); stripping it sent every fediverse server a 404.
+ */
+const RESERVED_ROOT = /^(og|go|ap)$/;
+
+/**
  * Surfaces where a visitor identifier would be pointless or unwelcome.
  *
  * The owner's own admin is not traffic to measure, and a crawler fetching
@@ -77,10 +97,25 @@ const LOCALE_PREFIX = /^\/([a-z]{2}(?:-[A-Za-z]{2,4})?)(\/.*)?$/;
  * cookie whose events are filtered out later — the cheapest way to be sure a
  * number is honest is to never record it.
  */
-const UNCOUNTED = /^\/(admin|login|setup|preview|portal|api|media|og|feeds)(\/|$)|\.(xml|txt|ico|png|jpg|svg|webp|avif)$/;
+const UNCOUNTED = /^\/(admin|login|setup|preview|portal|api|media|og|feeds|ap|\.well-known)(\/|$)|\.(xml|txt|ico|png|jpg|svg|webp|avif)$/;
 
 /** Owner/internal routes may look like locale-prefixed public paths, but are not. */
-const NEVER_LOCALIZED = /^\/(admin|login|setup|preview|api|media)(\/|$)/;
+const NEVER_LOCALIZED = /^\/(admin|login|setup|preview|api|media|embed)(\/|$)/;
+
+/** The SFU's signalling origin and its HTTP twin, which the client also calls. */
+function sfuOrigins(url: string | undefined): string[] {
+  if (!url) return [];
+  try {
+    const parsed = new URL(url);
+    const http = new URL(url);
+    http.protocol = parsed.protocol === "wss:" ? "https:" : parsed.protocol === "ws:" ? "http:" : parsed.protocol;
+    const ws = new URL(url);
+    ws.protocol = parsed.protocol === "https:" ? "wss:" : parsed.protocol === "http:" ? "ws:" : parsed.protocol;
+    return [...new Set([ws.origin, http.origin])];
+  } catch {
+    return [];
+  }
+}
 
 export function proxy(request: NextRequest): NextResponse {
   const headers = new Headers(request.headers);
@@ -131,7 +166,11 @@ export function proxy(request: NextRequest): NextResponse {
   // the customer portal accept a prefix. Owner/internal routes never do, even
   // when somebody types `/fr/admin` by hand.
   const prefixed = LOCALE_PREFIX.exec(path);
-  if (prefixed && !NEVER_LOCALIZED.test(prefixed[2] ?? "/")) {
+  if (
+    prefixed &&
+    !RESERVED_ROOT.test(prefixed[1] ?? "") &&
+    !NEVER_LOCALIZED.test(prefixed[2] ?? "/")
+  ) {
     const [, locale = "", rest = "/"] = prefixed;
     headers.set(LOCALE_HEADER, locale);
     headers.set(PATH_HEADER, rest);
@@ -189,6 +228,7 @@ function requestPolicy(
       mediaOrigins: storageOrigins,
       uploadOrigins: storageOrigins,
       creativeOrigins: parseCspOrigins(runtime.CSP_THIRD_PARTY_ORIGINS),
+      callOrigins: sfuOrigins(runtime.LIVEKIT_URL),
       thirdPartyCreativeConsent: thirdPartyCreativeConsentGranted(
         request.cookies.get(THIRD_PARTY_CREATIVE_CONSENT_COOKIE)?.value,
       ),

@@ -223,7 +223,7 @@ export const twoFactorChallenges = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     purpose: text("purpose", {
-      enum: ["login", "totp-enrollment", "webauthn-registration", "webauthn-step-up"],
+      enum: ["login", "passkey-login", "totp-enrollment", "webauthn-registration", "webauthn-step-up"],
     }).notNull(),
     tokenHash: text("token_hash").notNull(),
     challenge: text("challenge"),

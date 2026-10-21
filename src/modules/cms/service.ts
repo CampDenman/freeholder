@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import { listBlogPosts } from "./blog";
 // CMS services (MASTER.md Â§11, Â§32).
 //
 // The module's only entry points. The public route, the admin, the REST API
@@ -7,17 +8,34 @@
 // safe: an agent rearranging a page goes through the same validation,
 // permission check, audit row and revision history a human does.
 import { z } from "zod";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
+import { makeTrashServices } from "@/core/trash";
+import { entityTranslations } from "@/core/i18n/schema";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import { isUniqueViolation } from "@/core/db";
+import { businessLocations } from "@/core/locations/schema";
 import { businessProfile } from "@/core/settings/schema";
 import { getTranslation, translatedIds } from "@/core/i18n/service";
 import { recordRedirect } from "@/core/seo/service";
 import { queueIndexNow } from "@/core/seo/indexnow";
 import { kindFromSlug, priorityFromSlug, PUBLIC_ENTITY_KINDS } from "@/core/seo/classify";
+import { blockingVetoes } from "@/core/privacy/publish-veto";
 import { resolveAuthors, writeRevision } from "./history";
-import { contentRevisions, pages, sections } from "./schema";
+import {
+  contentLayouts,
+  contentRevisions,
+  contentPreviewLinks,
+  contentPresence,
+  contentComments,
+  pages,
+  sections,
+} from "./schema";
 import {
   applyDueSchedules,
   compareRevisions,
@@ -101,7 +119,32 @@ import { draftPageTranslation, pageTranslationReport } from "./translation-workf
 export { previewEmail, testSendEmail } from "./email-service";
 import { previewEmail, testSendEmail } from "./email-service";
 export { previewSms, sendSmsTemplate, testSendSms } from "./sms-template-service";
+// The help centre (C8.12). Sibling file, one module: an article is a page,
+// so these services sit beside the page services rather than in a module of
+// their own (§4.6).
+export {
+  deleteHelpCategory,
+  fileHelpArticle,
+  helpArticleFeedback,
+  helpArticles,
+  helpCategoryList,
+  rateHelpArticle,
+  saveHelpCategory,
+  helpArticleAt,
+  searchHelp,
+} from "./help-service";
 import { previewSms, sendSmsTemplate, testSendSms } from "./sms-template-service";
+import {
+  deleteHelpCategory,
+  fileHelpArticle,
+  helpArticleAt,
+  helpArticleFeedback,
+  helpArticles,
+  helpCategoryList,
+  rateHelpArticle,
+  saveHelpCategory,
+  searchHelp,
+} from "./help-service";
 import { analyzeAccessibility, publishA11yMessage } from "./a11y-hints";
 import { budgetMessage } from "./budgets";
 import { BlockValidationError, blockTreeSchema, parseBlockTree } from "./blocks/registry";
@@ -160,6 +203,7 @@ const seo = z
 
 const pageRow = row({
   id: uuid,
+  trashedAt: timestamp.nullable(),
   slug: z.string(),
   locale: z.string(),
   title: z.string(),
@@ -179,6 +223,19 @@ const pageRow = row({
   approvedAt: timestamp.nullable(),
   editLeaseActor: z.string().nullable(),
   editLeaseUntil: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+// An allowlist, not a database row: new editorial columns must stay private.
+const publishedPageRow = z.object({
+  id: uuid,
+  slug: z.string(),
+  locale: z.string(),
+  title: z.string(),
+  blocks: z.unknown(),
+  status: z.literal("published"),
+  publishedAt: timestamp.nullable(),
+  seo: z.unknown(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -270,13 +327,27 @@ const restoreResult = z.discriminatedUnion("subjectType", [
  * because "unlisted" is not a permission model. The admin preview path reads
  * through `cms.getPage`, which is staff-only and can see drafts.
  */
-export const resolvePage = defineService({
-  name: "cms.resolvePage",
-  summary: "The published page at a path, or null.",
+// Location pages snapshot addresses in SEO. Enforce visibility at read time,
+// before the asynchronous location listener has unpublished the stored page.
+const visibleLocationPage = sql`not exists (
+  select 1 from ${contentLayouts}
+  where ${contentLayouts.pageId} = ${pages.id}
+    and ${contentLayouts.entityType} = 'location'
+    and not exists (
+      select 1 from ${businessLocations}
+      where ${businessLocations.id} = ${contentLayouts.entityId}
+        and ${businessLocations.status} = 'visible'
+    )
+)`;
+
+export const resolvePageForRender = defineService({
+  name: "cms.resolvePageForRender",
+  summary: "A published snapshot for the trusted server renderer, which applies viewer gates.",
   kind: "query",
-  permission: "public",
+  permission: "system",
+  external: false,
   input: z.object({ slug: lookupSlug, locale: z.string().default("en") }),
-  output: pageRow.nullable(),
+  output: publishedPageRow.nullable(),
   handler: async (input, ctx) => {
     // Pages are stored in the site's own language and *translated*, not
     // duplicated (Â§4.9). So the lookup is by slug in the source language, and
@@ -290,14 +361,29 @@ export const resolvePage = defineService({
       })
       .from(pages)
       .leftJoin(businessProfile, sql`true`)
-      .where(and(eq(pages.slug, input.slug), eq(pages.status, "published")))
+      .where(
+        and(
+          eq(pages.slug, input.slug),
+          eq(pages.status, "published"),
+          isNull(pages.trashedAt),
+          visibleLocationPage,
+        ),
+      )
       .limit(1);
 
     const page = source?.page;
     if (!page) return null;
 
+    // A published flag is a cache of "this may render". Registered vetoes
+    // re-derive the answer from the ledger that owns it (C8.16: a withdrawn
+    // consent unpublishes the case-study page even if the flag was put back
+    // by hand), so the public route never serves what the ledger forbids.
+    if ((await blockingVetoes(ctx.tx, { id: page.id, slug: page.slug })).length > 0) {
+      return null;
+    }
+
     const sourceLocale = source?.defaultLocale ?? page.locale;
-    if (input.locale === sourceLocale) return page;
+    if (input.locale === sourceLocale) return publishedPageRow.parse(page);
 
     const translation = await ctx.callAsSystem(getTranslation, {
       entityType: "page",
@@ -309,7 +395,7 @@ export const resolvePage = defineService({
       // language rather than not at all. A visitor who followed a French link
       // to an untranslated page should read the English one, not a 404 â€” and
       // hreflang only ever advertises the locales that do have one.
-      return page;
+      return publishedPageRow.parse(page);
     }
 
     const fields = translation.fields as {
@@ -317,12 +403,37 @@ export const resolvePage = defineService({
       blocks?: unknown;
       seo?: unknown;
     };
-    return {
+    return publishedPageRow.parse({
       ...page,
       title: fields.title ?? page.title,
       blocks: fields.blocks ?? page.blocks,
       seo: fields.seo ?? page.seo,
-    };
+    });
+  },
+});
+
+function publicBlockTree(value: unknown): unknown {
+  if (!Array.isArray(value)) return [];
+  return (value as BlockNode[]).map((node) => ({
+    ...node,
+    ...(node.children !== undefined
+      ? { children: node.type === "paywall" ? [] : publicBlockTree(node.children) }
+      : {}),
+  }));
+}
+
+export const resolvePage = defineService({
+  name: "cms.resolvePage",
+  summary: "Published public content at a path; editorial fields and gated bodies are excluded.",
+  kind: "query",
+  permission: "public",
+  input: z.object({ slug: lookupSlug, locale: z.string().default("en") }),
+  output: publishedPageRow.nullable(),
+  handler: async (input, ctx) => {
+    const page = await ctx.callAsSystem(resolvePageForRender, input);
+    // Gate evaluation, metering and entitlement-aware delivery belong to the
+    // server renderer. A raw public JSON lookup cannot reveal the hidden tree.
+    return page ? { ...page, blocks: publicBlockTree(page.blocks) } : null;
   },
 });
 
@@ -337,7 +448,7 @@ export const getPage = defineService({
     const [page] = await ctx.tx
       .select()
       .from(pages)
-      .where(eq(pages.id, input.id))
+      .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
       .limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.id}`);
     return page;
@@ -349,10 +460,17 @@ export const listPages = defineService({
   summary: "Every page, newest first.",
   kind: "query",
   permission: "scoped",
-  input: z.object({}),
+  input: z.object({
+    /** The recovery view: trashed pages only (C11.14). */
+    trashedOnly: z.boolean().default(false),
+  }),
   output: listed(pageRow),
-  handler: (_input, ctx) =>
-    ctx.tx.select().from(pages).orderBy(desc(pages.updatedAt)),
+  handler: (input, ctx) =>
+    ctx.tx
+      .select()
+      .from(pages)
+      .where(input.trashedOnly ? isNotNull(pages.trashedAt) : isNull(pages.trashedAt))
+      .orderBy(desc(pages.updatedAt)),
 });
 
 /**
@@ -369,7 +487,7 @@ export const publishedPaths = defineService({
   input: z.object({ locale: z.string().default("en") }),
   output: listed(publishedPath),
   handler: async (input, ctx) => {
-    const published = await ctx.tx
+    const candidates = await ctx.tx
       .select({
         id: pages.id,
         slug: pages.slug,
@@ -378,8 +496,20 @@ export const publishedPaths = defineService({
         updatedAt: pages.updatedAt,
       })
       .from(pages)
-      .where(eq(pages.status, "published"))
+      .where(and(eq(pages.status, "published"), isNull(pages.trashedAt), visibleLocationPage))
       .orderBy(pages.slug);
+
+    // A sitemap advertises what may render. Registered vetoes re-derive that
+    // from the owning ledger (C8.16), so a case study whose consent was
+    // withdrawn leaves the sitemap with the page — even if the status flag
+    // was put back by hand.
+    const published: typeof candidates = [];
+    for (const page of candidates) {
+      if ((await blockingVetoes(ctx.tx, { id: page.id, slug: page.slug })).length > 0) {
+        continue;
+      }
+      published.push(page);
+    }
 
     const [business] = await ctx.tx
       .select({ defaultLocale: businessProfile.defaultLocale })
@@ -526,6 +656,84 @@ export const deleteDraftPage = defineService({
   },
 });
 
+/**
+ * Reversible removal for pages, drafts and published alike (C11.14).
+ *
+ * Trashing a page is instant takedown: the public lookup, the sitemap, the
+ * search source and every scheduled job filter `trashed_at`, so a trashed
+ * page is gone from every surface even though its row — slug, revisions,
+ * working copy, schedule and all — stays exactly where it was. Restore puts
+ * the same row back; because trash never released the slug, another page
+ * could not have taken it, and the restore check below refuses the
+ * (normally unreachable) case where one somehow has.
+ *
+ * A page names no contact, so no contact-scoped retention hold can apply to
+ * it and the purge carries no hold guard. Purge is the only hard delete:
+ * the page plus every row that exists only for it — revisions, layouts,
+ * preview links, presence, comments and translations.
+ */
+const trash = makeTrashServices<typeof pages.$inferSelect>({
+  family: "cms",
+  names: {
+    remove: "cms.removePage",
+    restore: "cms.restorePage",
+    purge: "cms.purgePage",
+    purgeExpired: "cms.purgeExpiredPages",
+  },
+  events: {
+    trashed: "cms.pageTrashed",
+    restored: "cms.pageRestored",
+    purged: "cms.pagePurged",
+  },
+  table: pages,
+  rowSchema: pageRow,
+  subjectKind: "page",
+  gone: "That page is not here.",
+  purgeChildren: async (tx, ids) => {
+    await tx
+      .delete(contentRevisions)
+      .where(and(eq(contentRevisions.subjectType, "page"), inArray(contentRevisions.subjectId, ids)));
+    await tx.delete(contentLayouts).where(inArray(contentLayouts.pageId, ids));
+    await tx.delete(contentPreviewLinks).where(inArray(contentPreviewLinks.pageId, ids));
+    await tx.delete(contentPresence).where(inArray(contentPresence.pageId, ids));
+    await tx.delete(contentComments).where(inArray(contentComments.pageId, ids));
+    await tx
+      .delete(entityTranslations)
+      .where(and(eq(entityTranslations.entityType, "page"), inArray(entityTranslations.entityId, ids)));
+  },
+  restoreCheck: async (tx, restored) => {
+    const [clash] = await tx
+      .select({ id: pages.id })
+      .from(pages)
+      .where(
+        and(
+          eq(pages.slug, restored.slug),
+          eq(pages.locale, restored.locale),
+          sql`${pages.id} <> ${restored.id}`,
+        ),
+      )
+      .limit(1);
+    // Trash keeps the original row, so its slug stays reserved and this
+    // cannot fire through the services. It guards the one remaining path —
+    // a hand-repaired database where another row was given the slug — and
+    // refuses rather than silently renaming the page onto a broken address.
+    if (clash) {
+      throw new ServiceError(
+        "conflict",
+        restored.slug === ""
+          ? "Another home page now exists for this language. Remove or rename it before restoring."
+          : `Another page now lives at /${restored.slug}. Remove or rename it before restoring.`,
+      );
+    }
+  },
+});
+export const {
+  remove: removePage,
+  restore: restorePage,
+  purge: purgePage,
+  purgeExpired: purgeExpiredPages,
+} = trash;
+
 const DEMO_PAGE = {
   en: {
     title: "[Demo] A clear first project",
@@ -541,6 +749,18 @@ const DEMO_PAGE = {
   },
 } as const;
 
+function cmsDemoContribution(scenarioKey: string) {
+  return scenarioKey === "seed.current-modules"
+    ? { key: "cms.current-modules", version: 1 }
+    : { key: "cms.demo-page", version: 1 };
+}
+
+function cmsDemoOutcome(scenarioKey: string) {
+  return scenarioKey === "seed.current-modules"
+    ? "cms.current-modules.visible"
+    : "cms.demo-page.visible";
+}
+
 export const loadDemoCms = defineService({
   name: "cms.loadDemoFixture",
   summary: "Load the CMS contribution for a tracked demo run.",
@@ -549,12 +769,7 @@ export const loadDemoCms = defineService({
   input: demoHandlerInputSchema,
   output: demoLoadResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "cms.current-modules", version: 1 },
-      "load",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, cmsDemoContribution(input.scenarioKey), "load");
     const copy = DEMO_PAGE[input.locale as keyof typeof DEMO_PAGE];
     if (!copy) throw new ServiceError("validation", "Unsupported demo locale.");
     const page = await ctx.callAsSystem(createPage, {
@@ -596,12 +811,7 @@ export const purgeDemoCms = defineService({
   input: demoHandlerInputSchema,
   output: demoPurgeResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "cms.current-modules", version: 1 },
-      "purge",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, cmsDemoContribution(input.scenarioKey), "purge");
     const purged: Array<{ subjectType: string; subjectId: string }> = [];
     for (const record of input.records) {
       if (record.fixtureKey !== "project-page" || record.subjectType !== "page") {
@@ -630,12 +840,7 @@ export const verifyDemoCms = defineService({
   input: demoHandlerInputSchema,
   output: demoVerifyResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "cms.current-modules", version: 1 },
-      "verify",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, cmsDemoContribution(input.scenarioKey), "verify");
     const ids = input.records
       .filter((record) => record.subjectType === "page")
       .map((record) => record.subjectId);
@@ -649,7 +854,7 @@ export const verifyDemoCms = defineService({
     return demoVerifyResultSchema.parse({
       outcomes: [
         {
-          key: "cms.current-modules.visible",
+          key: cmsDemoOutcome(input.scenarioKey),
           achieved:
             page?.slug === "freeholder-demo-project" &&
             page.title.startsWith("[Demo]"),
@@ -691,8 +896,9 @@ export const updatePage = defineService({
     const [before] = await ctx.tx
       .select()
       .from(pages)
-      .where(eq(pages.id, id))
-      .limit(1);
+      .where(and(eq(pages.id, id), isNull(pages.trashedAt)))
+      .limit(1)
+      .for("update");
     if (!before) throw new ServiceError("not_found", `no page with id ${id}`);
     if (expectedVersion !== undefined && before.version !== expectedVersion) {
       throw new ServiceError(
@@ -738,7 +944,7 @@ export const updatePage = defineService({
         workingSeo: nextWorkingSeo,
         version: before.version + 1,
       })
-      .where(eq(pages.id, id))
+      .where(and(eq(pages.id, id), isNull(pages.trashedAt)))
       .returning()
       .catch((error: unknown) => {
         if (changes.slug !== undefined && isUniqueViolation(error, "pages_slug_locale_idx")) {
@@ -830,11 +1036,19 @@ export const publishPage = defineService({
   summary: "Make a page live, or take it back to draft.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({ id: z.string().uuid(), published: z.boolean() }),
+  input: z.object({ id: z.string().uuid(), published: z.boolean(), expectedVersion: z.number().int().positive().optional() }),
   output: pageRow,
   handler: async (input, ctx) => {
-    const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
+    const [before] = await ctx.tx
+      .select()
+      .from(pages)
+      .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
+      .limit(1)
+      .for("update");
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
+    if (input.expectedVersion !== undefined && before.version !== input.expectedVersion) {
+      throw new ServiceError("conflict", "This page changed after you reviewed it. Reload before publishing again.");
+    }
     if (input.published && before.approvalState === "pending") {
       throw new ServiceError(
         "conflict",
@@ -1255,8 +1469,9 @@ export const restoreRevision = defineService({
       const [before] = await ctx.tx
         .select()
         .from(pages)
-        .where(eq(pages.id, revision.subjectId))
-        .limit(1);
+        .where(and(eq(pages.id, revision.subjectId), isNull(pages.trashedAt)))
+        .limit(1)
+        .for("update");
       if (!before) throw new ServiceError("not_found", "that page is gone");
 
       await writeRevision(ctx.tx, {
@@ -1334,6 +1549,34 @@ export const restoreRevision = defineService({
  * greppable, which is the whole reason elevation is spelled out rather than
  * implied (Â§11).
  */
+/**
+ * Parse a chrome tree, naming the section when it will not parse.
+ *
+ * `ensureDefaults` re-parses the stored header, nav and footer, so an
+ * upgrade that removes a block type — or a plugin being switched off — made
+ * this throw a BlockValidationError, which is not a ServiceError and so
+ * surfaced as a 500 with no indication of which section was stale. Header
+ * and footer maintenance then failed for reasons the owner could not read.
+ * Reported by a third party after an upgrade.
+ *
+ * The refusal itself is right and stays: silently dropping an unknown block
+ * is how an owner loses a section permanently, because the next save writes
+ * the tree back without it. What changes is that the refusal now says which
+ * section, and arrives as a validation error rather than a crash.
+ */
+function parseChrome(blocks: unknown, sectionKey: string): BlockNode[] {
+  try {
+    return parseBlockTree(blocks, "chrome");
+  } catch (error) {
+    if (error instanceof BlockValidationError) {
+      throw new ServiceError(
+        "validation",
+        `The "${sectionKey}" section cannot be read: ${error.message}`,
+      );
+    }
+    throw error;
+  }
+}
 export const ensureDefaults = defineService({
   name: "cms.ensureDefaults",
   summary: "Create the starting chrome sections and home page if absent.",
@@ -1364,7 +1607,7 @@ export const ensureDefaults = defineService({
           locale: input.locale,
           name: piece.name,
           kind: "chrome",
-          blocks: parseBlockTree(piece.blocks, "chrome"),
+          blocks: parseChrome(piece.blocks, piece.key),
         })
         .onConflictDoNothing({ target: [sections.key, sections.locale] })
         .returning({ key: sections.key });
@@ -1386,12 +1629,12 @@ export const ensureDefaults = defineService({
       if (pulled.nav.length > 0) {
         await ctx.tx
           .update(sections)
-          .set({ blocks: parseBlockTree(pulled.rest, "chrome") })
+          .set({ blocks: parseChrome(pulled.rest, HEADER_KEY) })
           .where(eq(sections.id, headerRow.id));
         if (!navHasLinks(navRow.blocks as BlockNode[])) {
           await ctx.tx
             .update(sections)
-            .set({ blocks: parseBlockTree(pulled.nav, "chrome") })
+            .set({ blocks: parseChrome(pulled.nav, NAV_KEY) })
             .where(eq(sections.id, navRow.id));
         }
         created.push("section:nav-migrated");
@@ -1413,6 +1656,10 @@ export const ensureDefaults = defineService({
       .returning({ id: pages.id });
     if (insertedHome.length > 0) created.push("page:home");
 
+    const blog = await ctx.tx.insert(pages).values({ slug: "blog", locale: input.locale, title: "Blog", blocks: parseBlockTree([{ id: "blog-title", type: "heading", props: { text: "Blog", level: 1 } }, { id: "blog-index", type: "blogIndex", props: {} }], "page"), status: "published", publishedAt: sql`now()` }).onConflictDoNothing({ target: [pages.slug, pages.locale] }).returning({ id: pages.id });
+    if (blog.length) created.push("page:blog");
+    const archive = await ctx.tx.insert(pages).values({ slug: "newsletters", locale: input.locale, title: "Newsletters", blocks: parseBlockTree([{ id: "newsletters-title", type: "heading", props: { text: "Newsletters", level: 1 } }, { id: "newsletters-archive", type: "newsletterArchive", props: {} }, { id: "newsletters-subscribe", type: "newsletterSubscribe", props: {} }], "page"), status: "published", publishedAt: sql`now()` }).onConflictDoNothing({ target: [pages.slug, pages.locale] }).returning({ id: pages.id });
+    if (archive.length) created.push("page:newsletters");
     const templates = await ctx.call(ensureTemplates, { locale: input.locale });
     created.push(...templates.created);
 
@@ -1439,13 +1686,57 @@ export async function onSetupCompleted(): Promise<void> {
   await ensureDefaults.call({}, { kind: "system" });
 }
 
+registerSearchSource({
+  kind: "page",
+  readService: "cms.listPages",
+  module: "cms",
+  tables: ["pages"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: pages.id,
+        title: pages.title,
+        slug: pages.slug,
+        workingTitle: pages.workingTitle,
+      })
+      .from(pages)
+      .where(
+        and(
+          isNull(pages.trashedAt),
+          or(
+            matchesIlike(pages.title, pattern),
+            matchesIlike(pages.slug, pattern),
+            matchesIlike(pages.workingTitle, pattern),
+          ),
+        ),
+      )
+      .orderBy(desc(pages.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "page",
+      id: row.id,
+      title: row.workingTitle?.trim() || row.title,
+      href: `/admin/pages/${row.id}`,
+      snippet: clipSnippet(row.slug || row.title),
+      contactId: null,
+      module: "cms",
+    }));
+  },
+});
+
 export default [
+  listBlogPosts,
   resolvePage,
+  resolvePageForRender,
   getPage,
   listPages,
   publishedPaths,
   createPage,
   deleteDraftPage,
+  removePage,
+  restorePage,
+  purgePage,
+  purgeExpiredPages,
   loadDemoCms,
   purgeDemoCms,
   verifyDemoCms,
@@ -1479,6 +1770,15 @@ export default [
   previewSms,
   sendSmsTemplate,
   testSendSms,
+  deleteHelpCategory,
+  fileHelpArticle,
+  helpArticleAt,
+  helpArticleFeedback,
+  helpArticles,
+  helpCategoryList,
+  rateHelpArticle,
+  saveHelpCategory,
+  searchHelp,
   listRevisions,
   pageAuthorSummary,
   restoreRevision,

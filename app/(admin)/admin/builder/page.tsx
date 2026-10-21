@@ -77,7 +77,7 @@ export default async function BuilderPage({ searchParams }: { searchParams: Prom
                   maxLength={5000}
                   rows={7}
                   placeholder={t("builder.briefPlaceholder")}
-                  className="w-full resize-y rounded-md border border-rule bg-field px-3 py-3 text-sm text-ink placeholder:text-ink-muted focus-visible:border-accent"
+                  className="w-full resize-y rounded-md border border-rule-strong bg-field px-3 py-3 text-sm text-ink placeholder:text-ink-muted focus-visible:border-accent"
                 />
                 <p className="text-xs text-ink-muted">{t("builder.briefHint")}</p>
               </div>

@@ -8,6 +8,7 @@
 // skipping is a real button beside the save one rather than a link in small
 // print — and skipping writes nothing at all, which is what makes the promise
 // about scaffolding true.
+import { setupOwner } from "../access";
 import { redirect } from "next/navigation";
 import { setupState } from "@/core/settings/service";
 import { currentBusiness } from "@/core/settings/read";
@@ -21,13 +22,14 @@ export default async function SetupLocationPage() {
   const state = await setupState.call({}, { kind: "anonymous" });
   if (state.completed) redirect("/");
   if (!state.hasOwner) redirect("/setup");
+  await setupOwner();
   if (!state.hasBusiness) redirect("/setup/business");
 
   const [t, business] = await Promise.all([getT(), currentBusiness()]);
 
   return (
     <>
-      <Steps current={2} />
+      <Steps current={3} />
       <h1 className="text-2xl font-bold tracking-tight">
         {t("setup.location.title")}
       </h1>

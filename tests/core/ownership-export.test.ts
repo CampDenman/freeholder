@@ -63,7 +63,8 @@ describe("ownership export boundaries", () => {
           storage_key: "original.jpg",
           variants: { webp: [{ key: "variant.webp" }] },
           checksum_sha256: "a".repeat(64),
-          source: "upload",
+          source: "capture",
+          provenance: { captureSessionId: "capture-1", source: "camera" },
           deleted_at: null,
           purge_after: null,
         },
@@ -91,6 +92,13 @@ describe("ownership export boundaries", () => {
     );
     expect(manifest.integrity.missingInventoryKeys).toEqual(["variant.webp"]);
     expect(manifest.integrity.unreferencedInventoryKeys).toEqual(["orphan.tmp"]);
+    // C8.16: capture provenance is part of the asset and travels with the
+    // inventory — an export that lists the bytes but loses where they came
+    // from is not evidence of anything.
+    expect(manifest.assets[0]?.provenance).toEqual({
+      captureSessionId: "capture-1",
+      source: "camera",
+    });
   });
 
   it("refuses an ordinary database before a destructive restore rehearsal", () => {
@@ -148,6 +156,7 @@ describe.runIf(hasDatabase)("complete ownership export", () => {
         bytes: 12,
         checksumSha256: "b".repeat(64),
         scanStatus: "clean",
+        provenance: { captureSessionId: "ownership-capture-1", source: "camera" },
       });
   });
 
@@ -161,6 +170,10 @@ describe.runIf(hasDatabase)("complete ownership export", () => {
       const parent = await mkdtemp(path.join(tmpdir(), "freeholder-export-test-"));
       const output = path.join(parent, "export");
       const credentialKey = Buffer.alloc(32, 9).toString("hex");
+      const sensitiveAppUrl = new URL("https://example.test/freeholder");
+      sensitiveAppUrl.username = "operator";
+      sensitiveAppUrl.password = "app-url-secret";
+      sensitiveAppUrl.searchParams.set("token", "query-secret");
       try {
         const configPath = path.resolve("freeholder.config.ts");
         const result = await createOwnershipExport({
@@ -172,8 +185,7 @@ describe.runIf(hasDatabase)("complete ownership export", () => {
           },
           environment: {
             NODE_ENV: "test",
-            APP_URL:
-              "https://operator:app-url-secret@example.test/freeholder?token=query-secret",
+            APP_URL: sensitiveAppUrl.href,
             CREDENTIAL_KEY: credentialKey,
             SESSION_SECRET: "session-secret-must-not-export",
             DATABASE_URL: "database-url-must-not-export",
@@ -239,6 +251,18 @@ describe.runIf(hasDatabase)("complete ownership export", () => {
           missingInventoryKeys: [],
           unreferencedInventoryKeys: [],
         });
+        // C8.16: capture provenance survives export on the media entry, and
+        // the consent ledger exports as a table even though no service names
+        // it in the manifest — the permission history is part of ownership.
+        expect(media.assets[0]?.provenance).toEqual({
+          captureSessionId: "ownership-capture-1",
+          source: "camera",
+        });
+        const consentExport = await readFile(
+          path.join(output, "data", "public", "media_consents.json"),
+          "utf8",
+        );
+        expect(consentExport).toContain('"table": "media_consents"');
         expect(manifest).not.toContain(process.env.DATABASE_URL!);
       } finally {
         await rm(parent, { recursive: true, force: true });

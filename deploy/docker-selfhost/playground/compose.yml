@@ -1,0 +1,59 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# C1.38: independent disposable database; no production keys, mounts or network.
+name: freeholder-playground
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: playground
+      POSTGRES_DB: playground
+      POSTGRES_PASSWORD: ${PLAYGROUND_DB_PASSWORD:?Set a dedicated random password}
+    tmpfs:
+      - /var/lib/postgresql/data:size=536870912
+    mem_limit: 768m
+    cpus: 0.5
+    pids_limit: 128
+    networks: [private]
+    healthcheck:
+      test: [CMD-SHELL, 'test "$$(cat /proc/1/comm)" = postgres && pg_isready -U playground -d playground']
+      interval: 5s
+      retries: 30
+  app:
+    image: ${FREEHOLDER_IMAGE:?Pin a verified image digest}
+    environment:
+      DATABASE_URL: postgres://playground:${PLAYGROUND_DB_PASSWORD}@db:5432/playground
+      SESSION_SECRET: ${PLAYGROUND_SESSION_SECRET:?Set a dedicated random secret}
+      APP_URL: https://${PLAYGROUND_DOMAIN:?Set the demo hostname}
+      NODE_ENV: production
+      FREEHOLDER_PLAYGROUND: '1'
+      FREEHOLDER_SEED_DEMO: '1'
+      FREEHOLDER_UNSAFE_LOCAL_STORAGE: '1'
+      LOCAL_STORAGE_ROOT: /tmp/media
+      FREEHOLDER_JOBS: 'on'
+      FREEHOLDER_UPDATE_CHECK: 'off'
+      MAIL_ADAPTER: console
+    tmpfs: [/tmp:size=134217728, /app/.next/cache:size=33554432]
+    read_only: true
+    mem_limit: 768m
+    cpus: 1
+    pids_limit: 256
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      private: {}
+      proxy:
+        aliases: [playground-app]
+    expose: ['3000']
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: '2'}
+networks:
+  private:
+    internal: true
+  proxy:
+    name: freeholder-playground-proxy
+    external: true

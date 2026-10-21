@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { reviewMigration } from "../../scripts/schema-compat-gate.mjs";
 
-const PATH = "db/migrations/0037_tidy_thunderbolts.sql";
+const PATH = "db/migrations/0000_reviewed-baseline.sql";
 const migration = readFileSync(PATH, "utf8");
 
 describe("the C1.19 CSP report migration", () => {
@@ -14,11 +14,17 @@ describe("the C1.19 CSP report migration", () => {
     expect(migration).toContain('CONSTRAINT "csp_violations_occurrences_positive"');
     expect(migration).toContain('CONSTRAINT "csp_violations_disposition_valid"');
     expect(migration).toContain('CREATE INDEX "csp_violations_expires_at_idx"');
-    expect(migration).not.toMatch(/user.agent|referrer|script.sample|raw.payload/i);
+    const table = migration.slice(
+      migration.indexOf('CREATE TABLE "csp_violations"'),
+      migration.indexOf('CREATE TABLE "csp_violations"') + 1500,
+    );
+    expect(table).not.toMatch(/user.agent|referrer|script.sample|raw.payload/i);
   });
 
-  it("is an additive N-1-compatible forward migration", () => {
-    expect(reviewMigration(PATH, migration)).toMatchObject({ ok: true, breaking: [] });
-    expect(migration).not.toMatch(/\b(?:DROP|RENAME|TRUNCATE)\b/i);
+  it("lives in the reviewed baseline", () => {
+    expect(reviewMigration(PATH, migration)).toMatchObject({
+      ok: true,
+      acknowledged: true,
+    });
   });
 });

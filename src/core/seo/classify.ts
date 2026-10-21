@@ -39,6 +39,7 @@ export function kindFromSlug(slug: string): PublicEntityKind {
   if (segments.length === 1 && root && SECTION_INDEXES.has(root)) return "section";
   if (root === "locations" && leaf) return "location";
   if ((root === "shop" || root === "products") && leaf) return "product";
+  if (root === "c" && leaf) return "collection";
   if (root === "events" && leaf) return "event";
   if (root === "newsletters" && leaf) return "newsletter";
   if ((root === "blog" || root === "journal") && leaf) return "article";

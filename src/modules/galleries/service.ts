@@ -7,13 +7,21 @@
 // through the spine. Per-asset flags are a ceiling: a guest overlay cannot
 // grant more than the item allows.
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { and, asc, desc, eq, exists, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { contactForActor } from "@/core/portal/service";
+import { registerPortalSection } from "@/core/portal/sections";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { hashPassword, verifyPassword } from "@/core/auth/passwords";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import { sendMail } from "@/core/mail/service";
 import { businessProfile } from "@/core/settings/schema";
 import { env } from "@/core/env";
@@ -33,6 +41,7 @@ import {
   type ServiceContext,
   type Tx,
 } from "@/core/service";
+import demoServices from "./demo";
 import {
   GALLERY_ACCESS_ACTIONS,
   GALLERY_ACCESS_MODES,
@@ -46,6 +55,7 @@ import {
   galleryGuests,
   galleryItems,
   galleryArchives,
+  galleryPriceSheetItems,
   galleryRounds,
   gallerySelections,
   gallerySessions,
@@ -54,6 +64,7 @@ import { hashGalleryToken, newGalleryToken } from "./tokens";
 import { buildZip, uniqueNames, zipCeilingExceeded } from "./archive";
 import { storage } from "@/adapters/storage";
 import { getService } from "@/core/service";
+import { consentBlockedAssetIds } from "@/modules/projects/consent-gate";
 
 const id = z.string().uuid();
 const slug = z
@@ -173,6 +184,7 @@ const galleryRow = row({
   downloadPolicy: z.enum(GALLERY_DOWNLOAD_POLICIES),
   downloadLimit: z.number().int().nullable(),
   watermark: z.boolean(),
+  clientCanInvitePartner: z.boolean(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -190,6 +202,11 @@ const itemRow = row({
   status: z.string().optional(),
 });
 
+const liveItemRow = itemRow.extend({
+  viewUrl: z.string(),
+  downloadUrl: z.string().nullable(),
+});
+
 const guestRow = row({
   id: uuid,
   galleryId: uuid,
@@ -201,6 +218,7 @@ const guestRow = row({
   canDownload: z.boolean(),
   expiresAt: timestamp.nullable(),
   revokedAt: timestamp.nullable(),
+  invitedByContactId: uuid.nullable().optional(),
 });
 
 const selectionRow = row({
@@ -246,9 +264,16 @@ const archiveRow = row({
 
 /** The stored object is never named to the client; the route serves it. */
 function publicArchive(archive: typeof galleryArchives.$inferSelect) {
-  const { storageKey: _storageKey, createdAt: _c, updatedAt: _u, ...rest } = archive;
+  const { storageKey: _storageKey, deliveryHash: _deliveryHash, createdAt: _c, updatedAt: _u, ...rest } = archive;
   return rest;
 }
+
+const priceSheetRow = row({
+  id: uuid,
+  galleryId: uuid,
+  variantId: uuid,
+  position: z.number().int(),
+});
 
 const logRow = row({
   id: uuid,
@@ -270,8 +295,9 @@ function publicGallery(
   };
 }
 
-async function loadGallery(ctx: ServiceContext, galleryId: string) {
-  const [gallery] = await ctx.tx.select().from(galleries).where(eq(galleries.id, galleryId)).limit(1);
+async function loadGallery(ctx: ServiceContext, galleryId: string, lock = false) {
+  const lookup = ctx.tx.select().from(galleries).where(eq(galleries.id, galleryId)).limit(1);
+  const [gallery] = lock ? await lookup.for("update") : await lookup;
   if (!gallery) throw new ServiceError("not_found", "That gallery is not here.");
   return gallery;
 }
@@ -429,6 +455,38 @@ function deliverableFor(
   return master;
 }
 
+/** Bind a bundle to the files and policy that are currently deliverable. */
+async function archiveContents(ctx: ServiceContext, gallery: typeof galleries.$inferSelect) {
+  const rows = await ctx.tx.select({ item: galleryItems, asset: assets })
+    .from(galleryItems).innerJoin(assets, eq(assets.id, galleryItems.assetId))
+    .where(eq(galleryItems.galleryId, gallery.id)).orderBy(asc(galleryItems.position), asc(galleryItems.id));
+  const blocked = await consentBlockedAssetIds(ctx.tx, rows.map(({ asset }) => asset.id));
+  const deliverable = rows
+    .filter(({ item, asset }) => gallery.downloadPolicy !== "none" && asset.status === "ready" &&
+      item.canView && item.canDownload && !blocked.has(asset.id))
+    .map((row) => ({ row, delivery: deliverableFor(row.asset, gallery, "download") }))
+    .filter((entry): entry is typeof entry & { delivery: Delivery } => entry.delivery !== null);
+  const deliveryHash = createHash("sha256").update(JSON.stringify({
+    policy: [gallery.downloadPolicy, gallery.downloadLimit, gallery.watermark],
+    // Include excluded/removed items and asset state too: a restriction must
+    // invalidate a ZIP containing bytes that are no longer in the live list.
+    items: rows.map(({ item, asset }) => [item.id, item.assetId, item.position,
+      item.canView, item.canDownload, asset.status, asset.updatedAt, asset.storageKey,
+      asset.filename, asset.mime, asset.bytes, asset.checksumSha256, asset.variants]),
+    blocked: [...blocked].sort(),
+  })).digest("hex");
+  return { deliverable, deliveryHash };
+}
+
+/** Called only with the gallery row locked, across every download session. */
+async function hasDownloadAllowance(ctx: ServiceContext, gallery: typeof galleries.$inferSelect, count: number) {
+  if (gallery.downloadPolicy !== "limit_n") return true;
+  const [taken] = await ctx.tx.select({ count: sql<number>`count(*)::int` })
+    .from(galleryAccessLogs).where(and(eq(galleryAccessLogs.galleryId, gallery.id),
+      eq(galleryAccessLogs.action, "download")));
+  return (taken?.count ?? 0) + count <= (gallery.downloadLimit ?? 0);
+}
+
 function itemAllowed(
   item: { canView: boolean; canDownload: boolean },
   guest: { canView: boolean; canDownload: boolean } | null,
@@ -444,6 +502,7 @@ async function liveItems(
   ctx: ServiceContext,
   gallery: {
     id: string;
+    slug: string;
     downloadPolicy: (typeof GALLERY_DOWNLOAD_POLICIES)[number];
     watermark: boolean;
   },
@@ -460,21 +519,26 @@ async function liveItems(
     .orderBy(asc(galleryItems.position));
   return rows
     .filter((row) => row.asset.status === "ready" && itemAllowed(row.item, guest, "view"))
-    .map((row) => ({
-      id: row.item.id,
-      galleryId: row.item.galleryId,
-      assetId: row.item.assetId,
-      position: row.item.position,
-      canView: true,
-      canDownload:
-        gallery.downloadPolicy !== "none" &&
+    .map((row) => {
+      const canDownload = gallery.downloadPolicy !== "none" &&
         itemAllowed(row.item, guest, "download") &&
-        deliverableFor(row.asset, gallery, "download") !== null,
-      filename: row.asset.filename,
-      altText: row.asset.altText,
-      mime: row.asset.mime,
-      status: row.asset.status,
-    }));
+        deliverableFor(row.asset, gallery, "download") !== null;
+      const path = `/g/${encodeURIComponent(gallery.slug)}`;
+      return {
+        id: row.item.id,
+        galleryId: row.item.galleryId,
+        assetId: row.item.assetId,
+        position: row.item.position,
+        canView: true,
+        canDownload,
+        viewUrl: `${path}/view/${row.item.id}`,
+        downloadUrl: canDownload ? `${path}/download/${row.item.id}` : null,
+        filename: row.asset.filename,
+        altText: row.asset.altText,
+        mime: row.asset.mime,
+        status: row.asset.status,
+      };
+    });
 }
 
 /**
@@ -585,8 +649,8 @@ async function issueSession(
   return token;
 }
 
-async function loadSession(ctx: ServiceContext, token: string) {
-  const [session] = await ctx.tx
+async function loadSession(ctx: ServiceContext, token: string, lockGallery = false) {
+  let [session] = await ctx.tx
     .select()
     .from(gallerySessions)
     .where(eq(gallerySessions.tokenHash, hashGalleryToken("session", token)))
@@ -594,7 +658,16 @@ async function loadSession(ctx: ServiceContext, token: string) {
   if (!session || isExpired(session.expiresAt)) {
     throw new ServiceError("permission", "That did not work. Nothing has changed.");
   }
-  const gallery = await loadGallery(ctx, session.galleryId);
+  const gallery = await loadGallery(ctx, session.galleryId, lockGallery);
+  if (lockGallery) {
+    // Secret rotation may have invalidated the session while this request
+    // waited for the shared gallery allowance/policy lock.
+    [session] = await ctx.tx.select().from(gallerySessions)
+      .where(eq(gallerySessions.id, session.id)).limit(1);
+    if (!session || isExpired(session.expiresAt)) {
+      throw new ServiceError("permission", "That did not work. Nothing has changed.");
+    }
+  }
   assertLive(gallery);
   const guest = session.guestId
     ? (
@@ -609,6 +682,85 @@ async function loadSession(ctx: ServiceContext, token: string) {
     throw new ServiceError("permission", "That did not work. Nothing has changed.");
   }
   return { session, gallery, guest };
+}
+
+/**
+ * The named client, or a client-role guest. A partner is the invitee, never
+ * the inviter — otherwise one share becomes unbounded.
+ */
+function isClientSpeaker(
+  gallery: { contactId: string | null },
+  contactId: string | null,
+  guest: { role: (typeof GALLERY_GUEST_ROLES)[number] } | null | undefined,
+): boolean {
+  if (!contactId) return false;
+  if (guest?.role === "partner") return false;
+  return contactId === gallery.contactId || guest?.role === "client";
+}
+
+async function partnersInvitedBy(
+  ctx: ServiceContext,
+  galleryId: string,
+  contactId: string,
+) {
+  const rows = await ctx.tx
+    .select({
+      guest: galleryGuests,
+      name: contacts.name,
+      email: contacts.email,
+    })
+    .from(galleryGuests)
+    .innerJoin(contacts, eq(contacts.id, galleryGuests.contactId))
+    .where(
+      and(
+        eq(galleryGuests.galleryId, galleryId),
+        eq(galleryGuests.invitedByContactId, contactId),
+        eq(galleryGuests.role, "partner"),
+        isNull(galleryGuests.revokedAt),
+      ),
+    )
+    .orderBy(desc(galleryGuests.createdAt));
+  return rows.map((row) => ({
+    ...row.guest,
+    contactName: row.name,
+    contactEmail: row.email,
+  }));
+}
+
+async function openedSessionPayload(
+  ctx: ServiceContext,
+  gallery: typeof galleries.$inferSelect,
+  sessionToken: string,
+  contactId: string | null,
+  guest: typeof galleryGuests.$inferSelect | null,
+) {
+  const speakerIsClient = isClientSpeaker(gallery, contactId, guest);
+  const items = await liveItems(ctx, gallery, guest);
+  // A gallery is a publish surface like any other (C8.16): media whose
+  // project consent no longer stands does not render here, whoever the
+  // session belongs to. Withdrawal lands on this surface with no separate
+  // step, because the filter reads the consent ledger, not a copied flag.
+  const blocked = await consentBlockedAssetIds(
+    ctx.tx,
+    items.map((item) => item.assetId),
+  );
+  const visibleItems = items.filter((item) => !blocked.has(item.assetId));
+  return {
+    ok: true as const,
+    sessionToken,
+    gallery: publicGallery(gallery),
+    items: visibleItems,
+    archiveUrl: visibleItems.some(item => item.canDownload)
+      ? `/g/${encodeURIComponent(gallery.slug)}/archive` : null,
+    selections: await selectionsFor(ctx, gallery.id, contactId),
+    round: await currentRound(ctx, gallery.id),
+    lastDecided: await lastDecidedRound(ctx, gallery.id),
+    canInvitePartner: Boolean(gallery.clientCanInvitePartner && speakerIsClient),
+    invitedPartners:
+      speakerIsClient && contactId
+        ? await partnersInvitedBy(ctx, gallery.id, contactId)
+        : [],
+  };
 }
 
 async function contactForUser(tx: Tx, userId: string): Promise<string | null> {
@@ -636,6 +788,7 @@ export const createGallery = defineService({
     downloadPolicy: z.enum(GALLERY_DOWNLOAD_POLICIES).default("none"),
     downloadLimit: z.number().int().positive().optional(),
     watermark: z.boolean().default(false),
+    clientCanInvitePartner: z.boolean().default(false),
   }),
   output: galleryRow,
   handler: async (input, ctx) => {
@@ -667,6 +820,7 @@ export const createGallery = defineService({
           downloadPolicy,
           downloadLimit,
           watermark: input.watermark,
+          clientCanInvitePartner: input.clientCanInvitePartner,
           createdByUserId: await actingUserId(ctx),
         })
         .returning();
@@ -703,6 +857,7 @@ export const updateGallery = defineService({
     downloadPolicy: z.enum(GALLERY_DOWNLOAD_POLICIES).optional(),
     downloadLimit: z.number().int().positive().nullish(),
     watermark: z.boolean().optional(),
+    clientCanInvitePartner: z.boolean().optional(),
     coverAssetId: id.nullish(),
   }),
   output: galleryRow,
@@ -741,6 +896,8 @@ export const updateGallery = defineService({
         downloadPolicy,
         downloadLimit,
         watermark: input.watermark ?? gallery.watermark,
+        clientCanInvitePartner:
+          input.clientCanInvitePartner ?? gallery.clientCanInvitePartner,
         coverAssetId:
           input.coverAssetId === undefined ? gallery.coverAssetId : input.coverAssetId,
       })
@@ -771,6 +928,42 @@ export const listGalleries = defineService({
       .orderBy(desc(galleries.updatedAt))
       .limit(input.limit);
     return rows.map(publicGallery);
+  },
+});
+
+/** C10.29: a customer sees only galleries their own login can open. */
+export const myGalleries = defineService({
+  name: "galleries.myGalleries",
+  summary: "Your own unexpired client galleries and active guest invitations.",
+  kind: "query",
+  permission: "authenticated",
+  input: z.object({ limit: z.number().int().min(1).max(200).default(100) }).strict(),
+  output: listed(row({ id: uuid, title: z.string(), slug: z.string(), expiresAt: timestamp.nullable(), updatedAt: timestamp })),
+  handler: async (input, ctx) => {
+    const contact = await contactForActor(ctx);
+    const now = new Date();
+    const invited = ctx.tx.select({ id: galleryGuests.id }).from(galleryGuests).where(and(
+      eq(galleryGuests.galleryId, galleries.id),
+      eq(galleryGuests.contactId, contact.id),
+      isNull(galleryGuests.revokedAt),
+      or(isNull(galleryGuests.expiresAt), gt(galleryGuests.expiresAt, now)),
+    ));
+    return ctx.tx.select({ id: galleries.id, title: galleries.title, slug: galleries.slug,
+      expiresAt: galleries.expiresAt, updatedAt: galleries.updatedAt }).from(galleries).where(and(
+      eq(galleries.kind, "client_delivery"),
+      or(isNull(galleries.expiresAt), gt(galleries.expiresAt, now)),
+      or(eq(galleries.contactId, contact.id), exists(invited)),
+    )).orderBy(desc(galleries.updatedAt), desc(galleries.id)).limit(input.limit);
+  },
+});
+
+registerPortalSection({
+  key: "galleries",
+  order: 65,
+  load: async (ctx, _contactId, limit) => {
+    const rows = await ctx.call(myGalleries, { limit });
+    return rows.map((gallery) => ({ id: gallery.id, title: gallery.title, status: null,
+      at: gallery.updatedAt, href: `/g/${encodeURIComponent(gallery.slug)}` }));
   },
 });
 
@@ -813,6 +1006,9 @@ export const addGalleryItem = defineService({
     if (asset.status !== "ready") {
       throw new ServiceError("validation", "Only a ready file can go in a client gallery.");
     }
+    // Privacy is durable: removing a gallery or disabling this module must
+    // never turn a previously private client file into a public library URL.
+    await ctx.tx.update(assets).set({ isPrivate: true }).where(eq(assets.id, asset.id));
     const [last] = await ctx.tx
       .select({ position: galleryItems.position })
       .from(galleryItems)
@@ -942,6 +1138,7 @@ export const inviteGalleryGuest = defineService({
           expiresAt: input.expiresAt ? new Date(input.expiresAt) : gallery.expiresAt,
           revokedAt: null,
           invitedByUserId: await actingUserId(ctx),
+          invitedByContactId: null,
         })
         .where(eq(galleryGuests.id, existing[0].id))
         .returning();
@@ -958,6 +1155,7 @@ export const inviteGalleryGuest = defineService({
           canDownload: input.canDownload,
           expiresAt: input.expiresAt ? new Date(input.expiresAt) : gallery.expiresAt,
           invitedByUserId: await actingUserId(ctx),
+          invitedByContactId: null,
         })
         .returning();
       guest = created!;
@@ -1029,6 +1227,181 @@ export const revokeGalleryGuest = defineService({
   },
 });
 
+export const inviteGalleryPartner = defineService({
+  name: "galleries.invitePartner",
+  summary: "The client shares this gallery with a partner, when the owner has allowed it.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "write",
+  input: z.object({
+    sessionToken: z.string().min(20).max(200),
+    email: z.string().trim().email().toLowerCase(),
+    name: z.string().trim().min(1).max(200).optional(),
+  }),
+  rateLimit: {
+    limit: 8,
+    windowSeconds: 15 * 60,
+    subject: (input) => `gallery-partner:${hashGalleryToken("session", input.sessionToken)}`,
+    message: "Too many invites. Wait a few minutes and try again.",
+  },
+  output: guestRow.extend({
+    token: z.string(),
+    link: z.string(),
+    delivers: z.boolean(),
+  }),
+  handler: async (input, ctx) => {
+    const { session, gallery, guest: speaker } = await loadSession(ctx, input.sessionToken);
+    if (
+      !gallery.clientCanInvitePartner ||
+      !session.contactId ||
+      !isClientSpeaker(gallery, session.contactId, speaker)
+    ) {
+      throw new ServiceError("permission", "This gallery cannot be shared that way.");
+    }
+    const resolved = await ctx.callAsSystem(resolveContact, {
+      email: input.email,
+      name: input.name,
+      source: "gallery-guest",
+    });
+    if (
+      resolved.contact.id === session.contactId ||
+      resolved.contact.id === gallery.contactId
+    ) {
+      throw new ServiceError("validation", "Invite someone else. This gallery is already yours.");
+    }
+    const token = newGalleryToken();
+    const tokenHash = hashGalleryToken("guest", token);
+    const existing = await ctx.tx
+      .select()
+      .from(galleryGuests)
+      .where(
+        and(
+          eq(galleryGuests.galleryId, gallery.id),
+          eq(galleryGuests.contactId, resolved.contact.id),
+        ),
+      )
+      .limit(1);
+    let guest: typeof galleryGuests.$inferSelect;
+    if (existing[0]) {
+      if (
+        existing[0].role !== "partner" ||
+        existing[0].invitedByContactId !== session.contactId
+      ) {
+        throw new ServiceError("conflict", "That person already has access to this gallery.");
+      }
+      const [updated] = await ctx.tx
+        .update(galleryGuests)
+        .set({
+          tokenHash,
+          canView: true,
+          canDownload: false,
+          expiresAt: gallery.expiresAt,
+          revokedAt: null,
+          invitedByUserId: null,
+          invitedByContactId: session.contactId,
+        })
+        .where(eq(galleryGuests.id, existing[0].id))
+        .returning();
+      guest = updated!;
+    } else {
+      const [created] = await ctx.tx
+        .insert(galleryGuests)
+        .values({
+          galleryId: gallery.id,
+          contactId: resolved.contact.id,
+          role: "partner",
+          tokenHash,
+          canView: true,
+          canDownload: false,
+          expiresAt: gallery.expiresAt,
+          invitedByUserId: null,
+          invitedByContactId: session.contactId,
+        })
+        .returning();
+      guest = created!;
+    }
+    const link = guestLink(gallery.slug, token);
+    const [business] = await ctx.tx
+      .select({ name: businessProfile.name })
+      .from(businessProfile)
+      .limit(1);
+    const site = business?.name ?? "this Freeholder site";
+    const sent = await sendGuestInvite(ctx.tx, {
+      to: resolved.contact.email ?? input.email,
+      site,
+      title: gallery.title,
+      link,
+      expiresAt: guest.expiresAt,
+      idempotencyKey: `gallery-guest:${guest.id}:${tokenHash.slice(0, 32)}`,
+    });
+    ctx.setSubject("gallery", gallery.id);
+    await ctx.emitTimeline({
+      contactId: resolved.contact.id,
+      eventType: "gallery.guestInvited",
+      subjectType: "gallery",
+      subjectId: gallery.id,
+      payload: { role: guest.role, invitedBy: "client" },
+    });
+    ctx.queueEvent("gallery.guestInvited", {
+      id: guest.id,
+      galleryId: gallery.id,
+      contactId: resolved.contact.id,
+    });
+    return {
+      ...guest,
+      contactName: resolved.contact.name,
+      contactEmail: resolved.contact.email,
+      token,
+      link,
+      delivers: sent,
+    };
+  },
+});
+
+export const revokeGalleryPartner = defineService({
+  name: "galleries.revokePartner",
+  summary: "The client takes back a partner invitation they issued.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "write",
+  input: z.object({
+    sessionToken: z.string().min(20).max(200),
+    id,
+  }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    const { session, gallery, guest: speaker } = await loadSession(ctx, input.sessionToken);
+    if (!session.contactId || !isClientSpeaker(gallery, session.contactId, speaker)) {
+      throw new ServiceError("permission", "This gallery cannot be shared that way.");
+    }
+    const [guest] = await ctx.tx
+      .update(galleryGuests)
+      .set({ revokedAt: now(), tokenHash: null })
+      .where(
+        and(
+          eq(galleryGuests.id, input.id),
+          eq(galleryGuests.galleryId, gallery.id),
+          eq(galleryGuests.invitedByContactId, session.contactId),
+          eq(galleryGuests.role, "partner"),
+          isNull(galleryGuests.revokedAt),
+        ),
+      )
+      .returning();
+    if (!guest) throw new ServiceError("not_found", "That guest is not here.");
+    await ctx.tx.delete(gallerySessions).where(eq(gallerySessions.guestId, guest.id));
+    ctx.setSubject("gallery", guest.galleryId);
+    await ctx.emitTimeline({
+      contactId: guest.contactId,
+      eventType: "gallery.guestRevoked",
+      subjectType: "gallery",
+      subjectId: guest.galleryId,
+      payload: { invitedBy: "client" },
+    });
+    ctx.queueEvent("gallery.guestRevoked", { id: guest.id, galleryId: guest.galleryId });
+    return { ok: true as const };
+  },
+});
+
 export const listGalleryGuests = defineService({
   name: "galleries.listGuests",
   summary: "Who has been given access to a gallery.",
@@ -1086,13 +1459,22 @@ const unlocked = z.object({
     watermark: true,
     expiresAt: true,
   }),
-  items: listed(itemRow),
+  items: listed(liveItemRow),
+  /** Controlled byte routes accept the session token as a Bearer credential. */
+  archiveUrl: z.string().nullable(),
   /** This person's own marks, so the surface can render what they chose. */
   selections: listed(selectionRow),
   /** Where the approval conversation stands, which the client must see. */
   round: roundRow.nullable(),
   /** The last decided round, which carries the owner's note. */
   lastDecided: roundRow.nullable(),
+  /**
+   * The named client (or a client-role guest) may invite a partner only
+   * when the owner has opted this gallery in. Partners never can.
+   */
+  canInvitePartner: z.boolean(),
+  /** Partners this session's contact invited and has not revoked. */
+  invitedPartners: listed(guestRow),
 });
 const unlockResult = z.union([unlocked, z.object({ ok: z.literal(false) })]);
 
@@ -1147,15 +1529,7 @@ export const unlockGallery = defineService({
     await logAccess(ctx, { galleryId: gallery.id, contactId: gallery.contactId, action: "view" });
     ctx.setSubject("gallery", gallery.id);
     ctx.queueEvent("gallery.accessed", { id: gallery.id, via: gallery.access });
-    return {
-      ok: true as const,
-      sessionToken: token,
-      gallery: publicGallery(gallery),
-      items: await liveItems(ctx, gallery, null),
-      selections: await selectionsFor(ctx, gallery.id, gallery.contactId),
-      round: await currentRound(ctx, gallery.id),
-      lastDecided: await lastDecidedRound(ctx, gallery.id),
-    };
+    return openedSessionPayload(ctx, gallery, token, gallery.contactId, null);
   },
 });
 
@@ -1191,15 +1565,7 @@ export const redeemGalleryGuest = defineService({
     await logAccess(ctx, { galleryId: gallery.id, contactId: guest.contactId, action: "view" });
     ctx.setSubject("gallery", gallery.id);
     ctx.queueEvent("gallery.accessed", { id: gallery.id, via: "magic-link" });
-    return {
-      ok: true as const,
-      sessionToken: token,
-      gallery: publicGallery(gallery),
-      items: await liveItems(ctx, gallery, guest),
-      selections: await selectionsFor(ctx, gallery.id, guest.contactId),
-      round: await currentRound(ctx, gallery.id),
-      lastDecided: await lastDecidedRound(ctx, gallery.id),
-    };
+    return openedSessionPayload(ctx, gallery, token, guest.contactId, guest);
   },
 });
 
@@ -1238,6 +1604,7 @@ export const openGalleryWithLogin = defineService({
               eq(galleryGuests.galleryId, gallery.id),
               eq(galleryGuests.contactId, contactId),
               isNull(galleryGuests.revokedAt),
+              or(isNull(galleryGuests.expiresAt), gt(galleryGuests.expiresAt, new Date())),
             ),
           )
           .limit(1);
@@ -1248,15 +1615,7 @@ export const openGalleryWithLogin = defineService({
     await logAccess(ctx, { galleryId: gallery.id, contactId, action: "view" });
     ctx.setSubject("gallery", gallery.id);
     ctx.queueEvent("gallery.accessed", { id: gallery.id, via: "login" });
-    return {
-      ok: true as const,
-      sessionToken: token,
-      gallery: publicGallery(gallery),
-      items: await liveItems(ctx, gallery, guest ?? null),
-      selections: await selectionsFor(ctx, gallery.id, contactId),
-      round: await currentRound(ctx, gallery.id),
-      lastDecided: await lastDecidedRound(ctx, gallery.id),
-    };
+    return openedSessionPayload(ctx, gallery, token, contactId, guest ?? null);
   },
 });
 
@@ -1269,15 +1628,13 @@ export const viewGallerySession = defineService({
   output: unlocked,
   handler: async (input, ctx) => {
     const { session, gallery, guest } = await loadSession(ctx, input.sessionToken);
-    return {
-      ok: true as const,
-      sessionToken: input.sessionToken,
-      gallery: publicGallery(gallery),
-      items: await liveItems(ctx, gallery, guest),
-      selections: await selectionsFor(ctx, gallery.id, session.contactId),
-      round: await currentRound(ctx, gallery.id),
-      lastDecided: await lastDecidedRound(ctx, gallery.id),
-    };
+    return openedSessionPayload(
+      ctx,
+      gallery,
+      input.sessionToken,
+      session.contactId,
+      guest ?? null,
+    );
   },
 });
 
@@ -1286,10 +1643,12 @@ export const downloadGalleryItem = defineService({
   summary: "Download one gallery file the session is allowed to take.",
   kind: "mutation",
   permission: "public",
+  external: false,
   writeClass: "write",
   input: z.object({
     sessionToken: z.string().min(20).max(200),
     itemId: id,
+    slug: slug.optional(),
   }),
   output: row({
     assetId: uuid,
@@ -1299,7 +1658,10 @@ export const downloadGalleryItem = defineService({
     bytes: z.number(),
   }),
   handler: async (input, ctx) => {
-    const { session, gallery, guest } = await loadSession(ctx, input.sessionToken);
+    const { session, gallery, guest } = await loadSession(ctx, input.sessionToken, true);
+    if (input.slug !== undefined && gallery.slug !== input.slug) {
+      throw new ServiceError("not_found", "That file is not in this gallery.");
+    }
     const [row] = await ctx.tx
       .select({ item: galleryItems, asset: assets })
       .from(galleryItems)
@@ -1307,6 +1669,18 @@ export const downloadGalleryItem = defineService({
       .where(and(eq(galleryItems.id, input.itemId), eq(galleryItems.galleryId, gallery.id)))
       .limit(1);
     if (!row || row.asset.status !== "ready") {
+      throw new ServiceError("not_found", "That file is not in this gallery.");
+    }
+    // C8.16: never hand out bytes the list would no longer show. Denied goes
+    // in the access log like any other refused download, so the owner can see
+    // the withdrawal being honoured.
+    if ((await consentBlockedAssetIds(ctx.tx, [row.asset.id])).has(row.asset.id)) {
+      await logAccess(ctx, {
+        galleryId: gallery.id,
+        contactId: session.contactId,
+        action: "denied",
+        assetId: row.asset.id,
+      });
       throw new ServiceError("not_found", "That file is not in this gallery.");
     }
     const delivery =
@@ -1323,17 +1697,7 @@ export const downloadGalleryItem = defineService({
       throw new ServiceError("permission", "That file cannot be downloaded.");
     }
     if (gallery.downloadPolicy === "limit_n") {
-      const [taken] = await ctx.tx
-        .select({ count: sql<number>`count(*)::int` })
-        .from(galleryAccessLogs)
-        .where(
-          and(
-            eq(galleryAccessLogs.galleryId, gallery.id),
-            eq(galleryAccessLogs.action, "download"),
-          ),
-        );
-      const next = (taken?.count ?? 0) + 1;
-      if (next > (gallery.downloadLimit ?? 0)) {
+      if (!await hasDownloadAllowance(ctx, gallery, 1)) {
         await logAccess(ctx, {
           galleryId: gallery.id,
           contactId: session.contactId,
@@ -1365,9 +1729,11 @@ export const viewGalleryItem = defineService({
   summary: "Authorize one gallery image for a live session.",
   kind: "query",
   permission: "public",
+  external: false,
   input: z.object({
     sessionToken: z.string().min(20).max(200),
     itemId: id,
+    slug: slug.optional(),
   }),
   output: row({
     assetId: uuid,
@@ -1378,6 +1744,7 @@ export const viewGalleryItem = defineService({
   }).nullable(),
   handler: async (input, ctx) => {
     const { gallery, guest } = await loadSession(ctx, input.sessionToken);
+    if (input.slug !== undefined && gallery.slug !== input.slug) return null;
     const [found] = await ctx.tx
       .select({ item: galleryItems, asset: assets })
       .from(galleryItems)
@@ -1386,6 +1753,14 @@ export const viewGalleryItem = defineService({
       .limit(1);
     if (!found || found.asset.status !== "ready") return null;
     if (!itemAllowed(found.item, guest, "view")) return null;
+    // C8.16: a blocked asset is not in this gallery for rendering purposes,
+    // however the session got here. The list above already hid it; this is
+    // the same rule for a direct item id.
+    if (
+      (await consentBlockedAssetIds(ctx.tx, [found.asset.id])).has(found.asset.id)
+    ) {
+      return null;
+    }
     // Null when a watermarked gallery has nothing marked to show: the page
     // renders a gap rather than the unmarked original.
     const delivery = deliverableFor(found.asset, gallery, "view");
@@ -1784,8 +2159,8 @@ export const requestGalleryArchive = defineService({
   input: z.object({ sessionToken: z.string().min(20).max(200) }),
   output: archiveRow,
   handler: async (input, ctx) => {
-    const { gallery } = await loadSession(ctx, input.sessionToken);
-    if (gallery.downloadPolicy === "none") {
+    const { gallery, guest } = await loadSession(ctx, input.sessionToken);
+    if (gallery.downloadPolicy === "none" || (guest && (!guest.canView || !guest.canDownload))) {
       throw new ServiceError("permission", "This gallery is view-only.");
     }
     const [existing] = await ctx.tx
@@ -1807,6 +2182,7 @@ export const requestGalleryArchive = defineService({
           fileCount: null,
           error: null,
           builtAt: null,
+          deliveryHash: null,
           updatedAt: new Date(),
         },
       })
@@ -1838,23 +2214,7 @@ export const buildGalleryArchive = defineService({
       throw new ServiceError("permission", "Only trusted platform work packages a gallery.");
     }
     const gallery = await loadGallery(ctx, input.galleryId);
-    const rows = await ctx.tx
-      .select({ item: galleryItems, asset: assets })
-      .from(galleryItems)
-      .innerJoin(assets, eq(assets.id, galleryItems.assetId))
-      .where(eq(galleryItems.galleryId, gallery.id))
-      .orderBy(asc(galleryItems.position));
-
-    const deliverable = rows
-      .filter((row) => row.asset.status === "ready")
-      .map((row) => ({
-        row,
-        delivery: deliverableFor(row.asset, gallery, "download"),
-      }))
-      .filter(
-        (entry): entry is typeof entry & { delivery: NonNullable<typeof entry.delivery> } =>
-          entry.delivery !== null && entry.row.item.canDownload,
-      );
+    const { deliverable, deliveryHash } = await archiveContents(ctx, gallery);
 
     const fail = async (message: string) => {
       const [failed] = await ctx.tx
@@ -1900,6 +2260,7 @@ export const buildGalleryArchive = defineService({
         storageKey: key,
         bytes: zip.bytes,
         fileCount: zip.entries,
+        deliveryHash,
         error: null,
         builtAt: new Date(),
         updatedAt: new Date(),
@@ -1932,13 +2293,21 @@ export const galleryArchiveState = defineService({
   input: z.object({ sessionToken: z.string().min(20).max(200) }),
   output: archiveRow.nullable(),
   handler: async (input, ctx) => {
-    const { gallery } = await loadSession(ctx, input.sessionToken);
+    const { gallery, guest } = await loadSession(ctx, input.sessionToken);
+    if (gallery.downloadPolicy === "none" || (guest && (!guest.canView || !guest.canDownload))) return null;
     const [archive] = await ctx.tx
       .select()
       .from(galleryArchives)
       .where(eq(galleryArchives.galleryId, gallery.id))
       .limit(1);
-    return archive ? publicArchive(archive) : null;
+    if (!archive) return null;
+    if (archive.state === "ready" && (!archive.deliveryHash ||
+      archive.deliveryHash !== (await archiveContents(ctx, gallery)).deliveryHash)) {
+      // Keep the old bundle offline and let the existing translated failed /
+      // request-again surface offer recovery, rather than a ready 404 link.
+      return { ...publicArchive(archive), state: "failed" as const, error: "The gallery changed. Request a new archive." };
+    }
+    return publicArchive(archive);
   },
 });
 
@@ -1946,24 +2315,203 @@ export const galleryArchiveState = defineService({
 export const downloadGalleryArchive = defineService({
   name: "galleries.downloadArchive",
   summary: "Download the packaged gallery.",
-  kind: "query",
+  kind: "mutation",
+  writeClass: "write",
   permission: "public",
-  input: z.object({ sessionToken: z.string().min(20).max(200) }),
+  external: false,
+  input: z.object({ sessionToken: z.string().min(20).max(200), slug: slug.optional() }),
   output: row({ storageKey: z.string(), filename: z.string(), bytes: z.number().int() }).nullable(),
   handler: async (input, ctx) => {
-    const { gallery } = await loadSession(ctx, input.sessionToken);
-    if (gallery.downloadPolicy === "none") return null;
+    const { session, gallery, guest } = await loadSession(ctx, input.sessionToken, true);
+    if (input.slug !== undefined && gallery.slug !== input.slug) return null;
+    if (gallery.downloadPolicy === "none" || (guest && (!guest.canView || !guest.canDownload))) return null;
     const [archive] = await ctx.tx
       .select()
       .from(galleryArchives)
       .where(eq(galleryArchives.galleryId, gallery.id))
       .limit(1);
-    if (archive?.state !== "ready" || !archive.storageKey) return null;
+    if (archive?.state !== "ready" || !archive.storageKey || !archive.deliveryHash) return null;
+    const current = await archiveContents(ctx, gallery);
+    if (archive.deliveryHash !== current.deliveryHash || current.deliverable.length === 0) return null;
+    if (!await hasDownloadAllowance(ctx, gallery, current.deliverable.length)) return null;
+    // A ZIP consumes one allowance per contained file, under the same lock
+    // and log as individual downloads. Reopening a session cannot reset it.
+    for (const { row } of current.deliverable) {
+      await logAccess(ctx, { galleryId: gallery.id, contactId: session.contactId,
+        action: "download", assetId: row.asset.id });
+    }
+    if (gallery.downloadPolicy === "limit_n") {
+      await ctx.tx.update(gallerySessions).set({ downloadsUsed: session.downloadsUsed + current.deliverable.length })
+        .where(eq(gallerySessions.id, session.id));
+    }
     return {
       storageKey: archive.storageKey,
       filename: `${gallery.slug}.zip`,
       bytes: archive.bytes ?? 0,
     };
+  },
+});
+
+/**
+ * Offer a product on this gallery (§4.5, C8.08).
+ *
+ * A link and nothing more. The variant owns price, stock and tax; recording
+ * a second opinion here is how two answers to one question get shipped.
+ */
+export const addGalleryPriceSheetItem = defineService({
+  name: "galleries.addPriceSheetItem",
+  summary: "Offer a product variant for sale from this gallery.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  input: z.object({
+    galleryId: id,
+    variantId: id,
+    position: z.number().int().min(0).max(10_000).default(0),
+  }),
+  output: priceSheetRow,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    const gallery = await loadGallery(ctx, input.galleryId);
+    const [saved] = await ctx.tx
+      .insert(galleryPriceSheetItems)
+      .values({
+        galleryId: gallery.id,
+        variantId: input.variantId,
+        position: input.position,
+      })
+      .onConflictDoUpdate({
+        target: [galleryPriceSheetItems.galleryId, galleryPriceSheetItems.variantId],
+        set: { position: input.position, updatedAt: new Date() },
+      })
+      .returning();
+    ctx.setSubject("gallery", gallery.id);
+    return saved!;
+  },
+});
+
+/** Stop offering a product from this gallery. */
+export const removeGalleryPriceSheetItem = defineService({
+  name: "galleries.removePriceSheetItem",
+  summary: "Stop offering a product variant from this gallery.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  input: z.object({ id }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    const [removed] = await ctx.tx
+      .delete(galleryPriceSheetItems)
+      .where(eq(galleryPriceSheetItems.id, input.id))
+      .returning();
+    if (removed) ctx.setSubject("gallery", removed.galleryId);
+    return { ok: true as const };
+  },
+});
+
+/** What this gallery offers, for the owner and for the client's session. */
+export const listGalleryPriceSheet = defineService({
+  name: "galleries.listPriceSheet",
+  summary: "The products this gallery sells.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ galleryId: id }),
+  output: listed(priceSheetRow),
+  handler: async (input, ctx) => {
+    await loadGallery(ctx, input.galleryId);
+    return ctx.tx
+      .select()
+      .from(galleryPriceSheetItems)
+      .where(eq(galleryPriceSheetItems.galleryId, input.galleryId))
+      .orderBy(asc(galleryPriceSheetItems.position));
+  },
+});
+
+/**
+ * Buy a print of one photograph (§4.5, C8.08).
+ *
+ * Goes through `catalog.addCartItem` rather than beside it. §4.5 forbids a
+ * parallel commerce path, and this is what honouring that looks like: the
+ * gallery decides *what may be bought and of which frame*, and commerce
+ * decides price, stock, tax and the order — each answering only the question
+ * it owns.
+ *
+ * `ctx.call` keeps it in one transaction, so a cart line and the audit entry
+ * describing it cannot half-commit.
+ */
+export const addGalleryItemToCart = defineService({
+  name: "galleries.addToCart",
+  summary: "Add a print of one gallery photograph to a cart.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "write",
+  input: z.object({
+    sessionToken: z.string().min(20).max(200),
+    itemId: id,
+    variantId: id,
+    cartId: id,
+    cartToken: z.string().uuid().optional(),
+    quantity: z.number().int().min(1).max(1_000).default(1),
+  }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    const { session, gallery, guest } = await loadSession(ctx, input.sessionToken);
+    const [found] = await ctx.tx
+      .select({ item: galleryItems, asset: assets })
+      .from(galleryItems)
+      .innerJoin(assets, eq(assets.id, galleryItems.assetId))
+      .where(and(eq(galleryItems.id, input.itemId), eq(galleryItems.galleryId, gallery.id)))
+      .limit(1);
+    if (!found || found.asset.status !== "ready") {
+      throw new ServiceError("not_found", "That file is not in this gallery.");
+    }
+    // Buying follows the view ceiling. A frame this person cannot see is not
+    // one they can order a print of.
+    if (!itemAllowed(found.item, guest, "view")) {
+      throw new ServiceError("permission", "That file is not in this gallery.");
+    }
+    // Only what the owner put on the sheet. Without this the variant id is
+    // an open door onto the whole catalogue from a PIN-gated page.
+    const [offered] = await ctx.tx
+      .select({ id: galleryPriceSheetItems.id })
+      .from(galleryPriceSheetItems)
+      .where(
+        and(
+          eq(galleryPriceSheetItems.galleryId, gallery.id),
+          eq(galleryPriceSheetItems.variantId, input.variantId),
+        ),
+      )
+      .limit(1);
+    if (!offered) {
+      throw new ServiceError("permission", "That is not for sale from this gallery.");
+    }
+
+    await ctx.call(getService("catalog.addCartItem"), {
+      cartId: input.cartId,
+      cartToken: input.cartToken,
+      variantId: input.variantId,
+      quantity: input.quantity,
+      galleryId: gallery.id,
+      assetId: found.asset.id,
+    });
+
+    ctx.setSubject("gallery", gallery.id);
+    if (session.contactId) {
+      await ctx.emitTimeline({
+        contactId: session.contactId,
+        eventType: "gallery.ordered",
+        subjectType: "gallery",
+        subjectId: gallery.id,
+        payload: { assetId: found.asset.id, variantId: input.variantId },
+      });
+    }
+    ctx.queueEvent("gallery.ordered", {
+      id: gallery.id,
+      assetId: found.asset.id,
+      variantId: input.variantId,
+    });
+    return { ok: true as const };
   },
 });
 
@@ -2071,24 +2619,50 @@ registerContactReference({
           .where(eq(galleryGuests.id, guest.id));
       }
     }
+    await tx
+      .update(galleryGuests)
+      .set({ invitedByContactId: survivingId })
+      .where(eq(galleryGuests.invitedByContactId, duplicateId));
   },
   captureForUndo: async (tx, duplicateId, survivingId) => ({
     state: await tx
-      .select({ id: galleryGuests.id, contactId: galleryGuests.contactId })
+      .select({
+        id: galleryGuests.id,
+        contactId: galleryGuests.contactId,
+        invitedByContactId: galleryGuests.invitedByContactId,
+      })
       .from(galleryGuests)
-      .where(inArray(galleryGuests.contactId, [duplicateId, survivingId])),
+      .where(
+        or(
+          inArray(galleryGuests.contactId, [duplicateId, survivingId]),
+          inArray(galleryGuests.invitedByContactId, [duplicateId, survivingId]),
+        ),
+      ),
     undoable: true,
   }),
   restoreAfterUndo: async (tx, beforeState, _afterState, duplicateId) => {
-    const moved = z
-      .array(z.object({ id: z.string().uuid(), contactId: z.string().uuid() }))
-      .parse(beforeState)
-      .filter((guest) => guest.contactId === duplicateId);
+    const rows = z
+      .array(
+        z.object({
+          id: z.string().uuid(),
+          contactId: z.string().uuid(),
+          invitedByContactId: z.string().uuid().nullable(),
+        }),
+      )
+      .parse(beforeState);
+    const moved = rows.filter((guest) => guest.contactId === duplicateId);
     if (moved.length) {
       await tx
         .update(galleryGuests)
         .set({ contactId: duplicateId })
         .where(inArray(galleryGuests.id, moved.map((guest) => guest.id)));
+    }
+    const invited = rows.filter((guest) => guest.invitedByContactId === duplicateId);
+    if (invited.length) {
+      await tx
+        .update(galleryGuests)
+        .set({ invitedByContactId: duplicateId })
+        .where(inArray(galleryGuests.id, invited.map((guest) => guest.id)));
     }
   },
 });
@@ -2272,6 +2846,10 @@ registerContactPrivacySource({
   exportData: async (tx, contactId) => {
     const owned = await tx.select().from(galleries).where(eq(galleries.contactId, contactId));
     const guests = await tx.select().from(galleryGuests).where(eq(galleryGuests.contactId, contactId));
+    const invited = await tx
+      .select()
+      .from(galleryGuests)
+      .where(eq(galleryGuests.invitedByContactId, contactId));
     const logs = await tx
       .select()
       .from(galleryAccessLogs)
@@ -2284,7 +2862,7 @@ registerContactPrivacySource({
       .select()
       .from(galleryRounds)
       .where(eq(galleryRounds.submittedByContactId, contactId));
-    return { galleries: owned, guests, logs, selections, rounds };
+    return { galleries: owned, guests, invited, logs, selections, rounds };
   },
   erase: async (tx, contactId) => {
     // The gallery is the business's delivery record. The person goes; the
@@ -2297,6 +2875,10 @@ registerContactPrivacySource({
       .returning({ id: galleries.id });
     await tx.delete(gallerySessions).where(eq(gallerySessions.contactId, contactId));
     await tx.delete(galleryGuests).where(eq(galleryGuests.contactId, contactId));
+    await tx
+      .update(galleryGuests)
+      .set({ invitedByContactId: null })
+      .where(eq(galleryGuests.invitedByContactId, contactId));
     await tx
       .update(galleryAccessLogs)
       .set({ contactId: null })
@@ -2317,7 +2899,37 @@ registerContactPrivacySource({
   },
 });
 
+registerSearchSource({
+  kind: "gallery",
+  readService: "galleries.list",
+  module: "galleries",
+  tables: ["galleries"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: galleries.id,
+        title: galleries.title,
+        slug: galleries.slug,
+        contactId: galleries.contactId,
+      })
+      .from(galleries)
+      .where(or(matchesIlike(galleries.title, pattern), matchesIlike(galleries.slug, pattern)))
+      .orderBy(desc(galleries.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "gallery",
+      id: row.id,
+      title: row.title,
+      href: `/admin/galleries/${row.id}`,
+      snippet: clipSnippet(row.slug),
+      contactId: row.contactId,
+      module: "galleries",
+    }));
+  },
+});
+
 export default [
+  ...demoServices,
   createGallery,
   updateGallery,
   listGalleries,
@@ -2326,12 +2938,15 @@ export default [
   updateGalleryItem,
   removeGalleryItem,
   inviteGalleryGuest,
+  inviteGalleryPartner,
   revokeGalleryGuest,
+  revokeGalleryPartner,
   listGalleryGuests,
   listGalleryAccess,
   unlockGallery,
   redeemGalleryGuest,
   openGalleryWithLogin,
+  myGalleries,
   viewGallerySession,
   viewGalleryItem,
   setGallerySelection,
@@ -2345,6 +2960,10 @@ export default [
   buildGalleryArchive,
   galleryArchiveState,
   downloadGalleryArchive,
+  addGalleryPriceSheetItem,
+  removeGalleryPriceSheetItem,
+  listGalleryPriceSheet,
+  addGalleryItemToCart,
   downloadGalleryItem,
   galleryBySlug,
   expireGallerySessions,

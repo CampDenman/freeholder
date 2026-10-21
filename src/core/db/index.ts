@@ -4,10 +4,20 @@
 // importing this module never connects — only use does.
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { databaseUrl } from "@/core/env";
+import { databasePoolMax, databaseUrl } from "@/core/env";
 
 function connect() {
-  const conn = postgres(databaseUrl(), { onnotice: () => {} });
+  const conn = postgres(databaseUrl(), {
+    // Bounded so two instances fit in a small managed database during a
+    // rolling deploy: this process holds one pool per module graph, and the
+    // platform runs the new instance beside the old one.
+    max: databasePoolMax(),
+    // Readiness must fail promptly while liveness remains available. A dead
+    // database route otherwise occupies the pool and outlives the platform's
+    // five-second health-check budget.
+    connect_timeout: 3,
+    onnotice: () => {},
+  });
   return { conn, orm: drizzle(conn) };
 }
 
@@ -33,6 +43,7 @@ export async function closeDb(): Promise<void> {
 }
 
 const UNIQUE_VIOLATION = "23505";
+const FOREIGN_KEY_VIOLATION = "23503";
 
 /**
  * True when this error — or anything it wraps — is a Postgres unique-constraint
@@ -57,6 +68,22 @@ export function isUniqueViolation(
     if (candidate.code === UNIQUE_VIOLATION) {
       return !constraint || candidate.constraint_name === constraint;
     }
+    current = candidate.cause;
+  }
+  return false;
+}
+
+/**
+ * True when this error — or anything it wraps — is a Postgres
+ * foreign-key violation. A delete refused this way means a row elsewhere
+ * still points at the one being removed; services translate that into the
+ * conflict sentence a person can act on rather than the driver page.
+ */
+export function isForeignKeyViolation(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    const candidate = current as { code?: unknown; cause?: unknown };
+    if (candidate.code === FOREIGN_KEY_VIOLATION) return true;
     current = candidate.cause;
   }
   return false;

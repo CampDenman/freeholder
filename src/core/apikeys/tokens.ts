@@ -65,6 +65,8 @@ export interface VerifiedKey {
   id: string;
   name: string;
   scopes: string[];
+  /** C12.14: a personal key acts as this person. */
+  actsAsUserId: string | null;
 }
 
 /**
@@ -86,6 +88,7 @@ export async function verifyApiKey(
       name: apiKeys.name,
       scopes: apiKeys.scopes,
       tokenHash: apiKeys.tokenHash,
+      actsAsUserId: apiKeys.actsAsUserId,
     })
     .from(apiKeys)
     .where(
@@ -107,7 +110,7 @@ export async function verifyApiKey(
     return undefined;
   }
 
-  return { id: row.id, name: row.name, scopes: row.scopes };
+  return { id: row.id, name: row.name, scopes: row.scopes, actsAsUserId: row.actsAsUserId };
 }
 
 /**

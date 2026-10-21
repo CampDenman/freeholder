@@ -52,6 +52,19 @@ describe("t()", () => {
       expect(t("es", "contacts.count", { count: 7 })).toBe("7 contactos");
     });
 
+    it("pluralizes in Arabic and keeps placeholders verbatim", () => {
+      // Arabic selects `one` for 1 and falls through to `other` for 7;
+      // the =0 branch stays an explicit sentence rather than a count.
+      expect(t("ar", "contacts.count", { count: 0 })).toBe(
+        "لا جهات اتصال بعد",
+      );
+      expect(t("ar", "contacts.count", { count: 1 })).toBe("1 جهة اتصال");
+      expect(t("ar", "contacts.count", { count: 7 })).toBe("7 جهات اتصال");
+      expect(t("ar-EG", "setup.done.title", { name: "Aurora" })).toBe(
+        "Aurora جاهز",
+      );
+    });
+
     it("interpolates placeholders in every shipped locale", () => {
       expect(t("es", "setup.done.title", { name: "Aurora" })).toBe(
         "Aurora está listo",

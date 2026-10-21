@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
-import { agentRuns, agentSpend } from "@/core/agents/schema";
+import { runSpend, runs } from "@/core/runs/schema";
 import {
   agentSpendReport,
   connectAgentRuntime,
@@ -145,9 +145,9 @@ describe.runIf(hasDatabase)("budgets in the managed loop", { timeout: 60_000 }, 
 
     await runManagedAgentWork();
     expect((await getTask.call({ id: task.id }, OWNER))?.status).toBe("done");
-    const [run] = await db().select().from(agentRuns).where(eq(agentRuns.taskId, task.id));
+    const [run] = await db().select().from(runs).where(eq(runs.subjectId, task.id));
     expect(run?.costCents).toBe(100);
-    const [ledger] = await db().select().from(agentSpend).where(eq(agentSpend.agentId, agent.id));
+    const [ledger] = await db().select().from(runSpend).where(eq(runSpend.agentId, agent.id));
     expect(ledger?.costCents).toBe(100);
     expect(await periodSpend(agent.id, "month")).toBe(100);
 
@@ -171,7 +171,7 @@ describe.runIf(hasDatabase)("budgets in the managed loop", { timeout: 60_000 }, 
     scriptModel();
 
     await runManagedAgentWork();
-    const [run] = await db().select().from(agentRuns).where(eq(agentRuns.taskId, task.id));
+    const [run] = await db().select().from(runs).where(eq(runs.subjectId, task.id));
     expect(run?.stopReason).toBe("budget");
     expect(run?.costCents).toBe(0);
     // Refused before the provider was called at all: no tokens, no charge.
@@ -188,7 +188,7 @@ describe.runIf(hasDatabase)("budgets in the managed loop", { timeout: 60_000 }, 
     const tick = await runManagedAgentWork();
     expect(tick).toEqual({ runs: 0, blocked: 1 });
     // No attempts burned on a setting the owner can fix.
-    const [task] = await db().select().from(agentRuns);
+    const [task] = await db().select().from(runs);
     expect(task).toBeUndefined();
     const inbox = await listNotifications.call({}, OWNER);
     expect(inbox.some((item) => item.body.includes("no budget"))).toBe(true);
@@ -259,7 +259,7 @@ describe.runIf(hasDatabase)("budgets in the managed loop", { timeout: 60_000 }, 
     );
 
     await runManagedAgentWork();
-    const [run] = await db().select().from(agentRuns).where(eq(agentRuns.taskId, task.id));
+    const [run] = await db().select().from(runs).where(eq(runs.subjectId, task.id));
     expect(run?.stopReason).toBe("budget");
     // Exactly one turn's worth: the second was refused before it was sent.
     expect(run?.costCents).toBe(100);

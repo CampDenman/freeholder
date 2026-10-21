@@ -21,6 +21,10 @@ import {
   messages,
 } from "./schema";
 
+// Screens and server actions need the closed vocabularies without importing
+// schema: outside core, the service layer is the only door (MASTER.md §15.5).
+export { KEYWORD_ACTIONS, KEYWORD_MATCH_KINDS };
+
 const id = z.string().uuid();
 const matchKind = z.enum(KEYWORD_MATCH_KINDS);
 const actionKind = z.enum(KEYWORD_ACTIONS);

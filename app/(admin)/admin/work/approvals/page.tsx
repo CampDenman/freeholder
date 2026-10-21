@@ -86,7 +86,7 @@ export default async function ApprovalInboxPage({
                         <input
                           name="note"
                           maxLength={2000}
-                          className="rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                          className="rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
                         />
                       </label>
                       <Button type="submit">{t("work.approvals.approve")}</Button>
@@ -99,7 +99,7 @@ export default async function ApprovalInboxPage({
                           name="note"
                           required
                           maxLength={2000}
-                          className="rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                          className="rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
                         />
                       </label>
                       <Button type="submit" variant="danger">

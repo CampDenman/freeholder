@@ -7,8 +7,10 @@ import path from "node:path";
 
 // Next 16/Turbopack splits this route-rich application into thousands of small
 // server chunks. File count is still bounded to catch a traced repository or
-// dependency explosion, but it needs headroom above the clean-build baseline
-// (9,351 at C7.15). Forbidden roots remain the strongest boundary.
+// dependency explosion, but it needs headroom above the clean-build baseline:
+// 9,351 at C7.15, and 12,069 at C9.32 — the growth is one more admin screen
+// and one more module at a time, each adding chunks, with no dependency
+// change behind it. Forbidden roots remain the strongest boundary.
 //
 // These are tripwires for a traced repository or a dependency explosion, not
 // a size budget: the number to catch is a doubling, not a percent of drift.
@@ -21,13 +23,31 @@ import path from "node:path";
 // the same commit measures ~205 MB on a Windows developer machine and
 // ~218 MB on CI's Linux runner, because the native image binaries differ. A
 // cap set from a local build is therefore a cap that passes locally and
-// fails in CI. 320 MiB sits about 1.5x above the Linux baseline, which still
-// catches the failure mode this exists for.
-const MAX_FILES = 12_000;
-const MAX_BYTES = 320 * 1024 * 1024;
+// fails in CI. 320 MiB was 1.5x the ~218 MB Linux baseline at the first
+// enforcement; C10.01 measured 341,431,578 bytes (~326 MiB) on the same
+// runner. 512 MiB is ~1.5x that measurement, which still catches the
+// failure mode this exists for.
+// 1.5x the measured baseline, on the same reasoning as the byte cap below: far
+// enough above organic growth that a release is not blocked by shipping a
+// feature, close enough that a traced repository or a dependency explosion —
+// which arrive as a doubling, not as a drift — still trips it. Raised from
+// 12,000 when an ordinary eleven-file module crossed it, and to 27,000
+// (1.5x the 18,094 files measured on 2026-10-14) when the member platform's
+// routes (§44: members, profiles, feeds, messages, calls, market, payouts)
+// crossed 18,000.
+const MAX_FILES = 27_000;
+const MAX_BYTES = 512 * 1024 * 1024;
 const STANDALONE = path.resolve(".next", "standalone");
 const FORBIDDEN_ROOTS = new Set([
+  ".git",
+  ".github",
+  ".agents",
+  ".codex",
+  ".claude",
+  ".work",
+  ".freeholder-launch",
   "app",
+  "apps",
   "db",
   "deploy",
   "locales",
@@ -37,8 +57,10 @@ const FORBIDDEN_ROOTS = new Set([
   "seed",
   "src",
   "tests",
+  "test-results",
 ]);
 const FORBIDDEN_ROOT_FILES = new Set([
+  "AGENTS.md",
   "CLAUDE.md",
   "HANDOFF.md",
   "MASTER.md",
@@ -55,11 +77,13 @@ async function scrubBuildOnlyFiles() {
   const removed = [];
   for (const entry of entries) {
     const removeDirectory = entry.isDirectory() && FORBIDDEN_ROOTS.has(entry.name);
+    const removeLink = entry.isSymbolicLink() && FORBIDDEN_ROOTS.has(entry.name);
     const removeFile = entry.isFile() && (
-      isEnvironmentFile(entry.name) || FORBIDDEN_ROOT_FILES.has(entry.name)
+      isEnvironmentFile(entry.name) || FORBIDDEN_ROOT_FILES.has(entry.name) || FORBIDDEN_ROOTS.has(entry.name)
     );
-    if (!removeDirectory && !removeFile) continue;
+    if (!removeDirectory && !removeFile && !removeLink) continue;
     const target = path.join(STANDALONE, entry.name);
+    if (!path.resolve(target).startsWith(STANDALONE + path.sep)) throw new Error("Refusing to scrub outside the standalone artifact.");
     await rm(target, { recursive: removeDirectory, force: true });
     removed.push(removeDirectory ? `${entry.name}/` : entry.name);
   }

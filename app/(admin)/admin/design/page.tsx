@@ -70,8 +70,8 @@ export default async function DesignPage() {
           measureDefault: t("design.measureDefault"),
           measureWide: t("design.measureWide"),
           fontSystem: t("design.fontSystem"),
-          px: (n) => t("design.px", { n }),
-          ms: (n) => t("design.ms", { n }),
+          pxTemplate: t("design.px", { n: "{n}" }),
+          msTemplate: t("design.ms", { n: "{n}" }),
         }}
       />
     </div>

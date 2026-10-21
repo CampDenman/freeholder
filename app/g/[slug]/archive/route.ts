@@ -12,11 +12,18 @@ import { downloadGalleryArchive } from "@/modules/galleries/service";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(): Promise<Response> {
-  const token = (await cookies()).get(GALLERY_SESSION_COOKIE)?.value;
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ slug: string }> },
+): Promise<Response> {
+  const { slug } = await params;
+  const authorization = request.headers.get("authorization");
+  const token = authorization !== null
+    ? /^Bearer ([^\s]+)$/i.exec(authorization)?.[1]
+    : (await cookies()).get(GALLERY_SESSION_COOKIE)?.value;
   if (!token) return new Response(null, { status: 404 });
   const allowed = await downloadGalleryArchive
-    .call({ sessionToken: token }, { kind: "anonymous" })
+    .call({ sessionToken: token, slug }, { kind: "anonymous" })
     .catch(() => null);
   if (!allowed) return new Response(null, { status: 404 });
   const body = await storage().get(allowed.storageKey);
@@ -27,6 +34,7 @@ export async function GET(): Promise<Response> {
       "content-type": "application/zip",
       "content-disposition": `attachment; filename="${safe}"`,
       "cache-control": "private, no-store",
+      "vary": "Cookie, Authorization",
       "x-robots-tag": "noindex, nofollow",
     },
   });

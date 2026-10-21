@@ -81,6 +81,26 @@ export function SiteChatClient({ locale, labels }: { locale: string; labels: Lab
     };
   }, [refresh]);
 
+  /**
+   * Give the front-site assistant (C9.21) a chance to answer, if there is one.
+   *
+   * Optional in every direction: the endpoint 404s on an instance without the
+   * module, returns `{ status: "off" }` on one that has not switched it on,
+   * and any failure here is silence rather than an error — the visitor's
+   * message is already recorded and a person can still reply to it.
+   */
+  const askAssistant = useCallback(async () => {
+    try {
+      const response = await fetch("/api/chat/assistant", { method: "POST" });
+      if (!response.ok) return;
+      const body: unknown = await response.json().catch(() => ({}));
+      if ((body as { status?: string }).status === "answered") await refresh();
+    } catch {
+      // Nothing to tell the visitor: they were talking to the business, and
+      // they still are.
+    }
+  }, [refresh]);
+
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -105,6 +125,7 @@ export function SiteChatClient({ locale, labels }: { locale: string; labels: Lab
       }
       setChat(body as Transcript);
       form.reset();
+      await askAssistant();
     } catch {
       setError(labels.failed);
     } finally {
@@ -183,7 +204,7 @@ export function SiteChatClient({ locale, labels }: { locale: string; labels: Lab
                 required
                 maxLength={4_000}
                 rows={3}
-                className="w-full rounded-md border border-rule bg-field px-3 py-2 text-ink"
+                className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-ink"
               />
             </label>
             <div className="flex flex-wrap items-center gap-3">
@@ -199,7 +220,7 @@ export function SiteChatClient({ locale, labels }: { locale: string; labels: Lab
             <form action={(form) => { void postSiteChatAction(form); }} className="grid gap-2">
               <label className="grid gap-1 text-sm">
                 <span className="font-semibold text-ink">{labels.message}</span>
-                <textarea name="message" required maxLength={4_000} rows={3} className="w-full rounded-md border border-rule bg-field px-3 py-2 text-ink" />
+                <textarea name="message" required maxLength={4_000} rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
               </label>
               <button type="submit" className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent">{labels.send}</button>
             </form>

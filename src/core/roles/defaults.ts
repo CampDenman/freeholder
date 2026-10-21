@@ -28,6 +28,8 @@ const ADMIN_MODULES = [
   "agents",
   "analytics",
   "apikeys",
+  "assistant",
+  "social",
   "catalog",
   "cms",
   "connections",
@@ -37,6 +39,13 @@ const ADMIN_MODULES = [
   "contribute",
   "demo",
   "events",
+  "giftRegistry",
+  "printOnDemand",
+  "community",
+  "voiceVideo",
+  "marketplace",
+  "entitlements",
+  "paywalls",
   "forms",
   "galleries",
   "newsletters",
@@ -50,10 +59,13 @@ const ADMIN_MODULES = [
   "projects",
   "quotes",
   "rentals",
+  "reviews",
   "roles",
   "scheduling",
+  "search",
   "seo",
   "settings",
+  "retention",
   "time",
   "webhooks",
 ];
@@ -71,7 +83,12 @@ export const DEFAULT_ROLES: readonly DefaultRole[] = [
     name: "Administrator",
     description: "Runs the instance and manages every currently installed area.",
     assignable: true,
-    grants: manage(ADMIN_MODULES),
+    grants: [
+      ...manage(ADMIN_MODULES),
+      // Facts are owner-authored truth (§4.18): staff read the ledger, only
+      // the owner (or a role the owner explicitly grants) publishes to it.
+      ...view(["attestations"]),
+    ],
   },
   {
     key: "editor",
@@ -79,7 +96,7 @@ export const DEFAULT_ROLES: readonly DefaultRole[] = [
     description: "Publishes the site, forms, media, translations, and SEO.",
     assignable: true,
     grants: [
-      ...view(["admin", "analytics", "settings"]),
+      ...view(["admin", "analytics", "search", "settings"]),
       ...manage(["cms", "forms", "i18n", "media", "seo"]),
     ],
   },
@@ -89,7 +106,7 @@ export const DEFAULT_ROLES: readonly DefaultRole[] = [
     description: "Manages invoicing and reads business, contact, activity, and reporting information.",
     assignable: true,
     grants: [
-      ...view(["admin", "analytics", "contacts", "events", "settings"]),
+      ...view(["admin", "analytics", "contacts", "events", "search", "settings"]),
       ...manage(["invoicing"]),
     ],
   },
@@ -99,7 +116,7 @@ export const DEFAULT_ROLES: readonly DefaultRole[] = [
     description: "Works with customers and day-to-day service information.",
     assignable: true,
     grants: [
-      ...view(["admin", "events", "forms", "locations", "media", "settings"]),
+      ...view(["admin", "events", "forms", "locations", "media", "search", "settings"]),
       // Somebody whose day is appointments needs the diary they appear in.
       ...manage(["contacts", "scheduling"]),
     ],
@@ -119,7 +136,7 @@ export const DEFAULT_ROLES: readonly DefaultRole[] = [
     name: "Legacy staff",
     description: "Compatibility role for accounts created before named roles.",
     assignable: false,
-    grants: view(ADMIN_MODULES),
+    grants: [...view(ADMIN_MODULES), ...view(["attestations"])],
   },
 ] as const;
 

@@ -62,7 +62,10 @@ export function hoursFormLabels(t: Translate): HoursFormLabels {
   };
 }
 
-export function serviceAreaFormLabels(t: Translate): ServiceAreaFormLabels {
+export function serviceAreaFormLabels(
+  t: Translate,
+  locale: string,
+): ServiceAreaFormLabels {
   return {
     cardTitle: t("locations.area.title"),
     intro: t("locations.area.intro"),
@@ -70,6 +73,9 @@ export function serviceAreaFormLabels(t: Translate): ServiceAreaFormLabels {
     none: t("locations.area.none"),
     radius: t("locations.area.radius"),
     regions: t("locations.area.regions"),
+    postalCodes: t("locations.area.postalCodes"),
+    postalCodeList: t("locations.area.postalCodeList"),
+    postalCodeHint: t("locations.area.postalCodeHint"),
     centerLatitude: t("locations.area.centerLatitude"),
     centerLongitude: t("locations.area.centerLongitude"),
     radiusKm: t("locations.area.radiusKm"),
@@ -79,6 +85,11 @@ export function serviceAreaFormLabels(t: Translate): ServiceAreaFormLabels {
     submit: t("common.saveChanges"),
     pending: t("common.saving"),
     saved: t("admin.settings.saved"),
+    deliveryDays: t("locations.area.deliveryDays"),
+    deliveryOpens: t("locations.area.deliveryOpens"),
+    deliveryCloses: t("locations.area.deliveryCloses"),
+    deliveryHint: t("locations.area.deliveryHint"),
+    deliveryDayNames: weekdayNames(locale),
   };
 }
 

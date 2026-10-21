@@ -10,7 +10,8 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { decimalToMinor } from "@/adapters/payments/currency";
-import { defineService, ServiceError } from "@/core/service";
+import { defineService, permits, ServiceError } from "@/core/service";
+import { contactForActor } from "@/core/portal/service";
 import { getFormById } from "@/modules/forms/service";
 import { roundRatio, safeMinor } from "@/modules/invoicing/money";
 import {
@@ -554,6 +555,13 @@ export const quoteServicePayment = defineService({
   }),
   output: servicePaymentQuote,
   handler: async (input, ctx) => {
+    if (input.contactId && !permits(ctx.actor, "scoped", "catalog.resolvePrice", "query")) {
+      const own = await contactForActor(ctx).catch((error: unknown) => {
+        if (error instanceof ServiceError && ["permission", "not_found"].includes(error.code)) return null;
+        throw error;
+      });
+      if (own?.id !== input.contactId) throw new ServiceError("permission", "You can only request your own customer price.");
+    }
     const [offering] = await ctx.tx
       .select()
       .from(serviceOfferings)

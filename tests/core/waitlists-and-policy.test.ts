@@ -13,6 +13,7 @@
 //   3. **A seat is a seat.** Moving into a full class, or adding a guest to
 //      one, must be refused the same way booking into it is.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { bookingTime } from "../helpers/booking-time";
 import { eq, sql } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
@@ -49,10 +50,10 @@ import {
 } from "@/core/scheduling/waitlist";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
-const NINE = "2026-09-14T09:00:00.000Z";
-const TEN = "2026-09-14T10:00:00.000Z";
-const ELEVEN = "2026-09-14T11:00:00.000Z";
-const NOON = "2026-09-14T12:00:00.000Z";
+const NINE = bookingTime(9, 0);
+const TEN = bookingTime(10, 0);
+const ELEVEN = bookingTime(11, 0);
+const NOON = bookingTime(12, 0);
 
 const STRICT: CancellationTerms = {
   name: "48 hours, half back",
@@ -196,7 +197,7 @@ describe.runIf(hasDatabase)("groups, waitlists and policy", { timeout: 90_000 },
       .update(bookings)
       .set({
         cancellationPolicy: terms,
-        ...(startsAt ? { startsAt: new Date(startsAt) } : {}),
+        ...(startsAt ? { startsAt: new Date(startsAt), endsAt: new Date(new Date(startsAt).getTime() + 3_600_000) } : {}),
         updatedAt: sql`now()`,
       })
       .where(eq(bookings.id, id));
@@ -317,7 +318,7 @@ describe.runIf(hasDatabase)("groups, waitlists and policy", { timeout: 90_000 },
   });
 
   async function join(email: string, overrides: Record<string, unknown> = {}) {
-    return joinWaitlist.call(
+    const result = await joinWaitlist.call(
       {
         contact: { email, name: email.split("@")[0] },
         windowStart: NINE,
@@ -326,6 +327,10 @@ describe.runIf(hasDatabase)("groups, waitlists and policy", { timeout: 90_000 },
       },
       { kind: "anonymous" },
     );
+    expect(result).toEqual({ ok: true });
+    const [entry] = await db().select({ entry: bookingWaitlist }).from(bookingWaitlist)
+      .innerJoin(contacts, eq(contacts.id, bookingWaitlist.contactId)).where(eq(contacts.email, email));
+    return entry!.entry;
   }
 
   it("keeps somebody's place rather than adding them twice", async () => {

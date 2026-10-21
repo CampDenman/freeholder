@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
-import { agentApprovals } from "@/core/agents/schema";
+import { runApprovals } from "@/core/runs/schema";
 import { createContact, getContact } from "@/core/contacts/service";
 import {
   connectAgentRuntime,
@@ -300,6 +300,18 @@ describe.runIf(hasDatabase)("managed writes", { timeout: 30_000 }, () => {
     expect(await listApprovals.call({}, OWNER)).toHaveLength(0);
   });
 
+  it("refuses internal payment phases before reading or parking their input", async () => {
+    await hire("PrivateBoundary", "approve");
+    await createTask.call({ title: "Try internal payment phases" }, OWNER);
+    const actor = asAgent("PrivateBoundary");
+    const claim = await claimTask.call({}, actor);
+    for (const serviceName of ["invoicing.applyCustomerPayment", "invoicing.customerPaymentSource"]) {
+      const refused = await failure(proposeWrite.call({ runId: claim!.runId, serviceName, input: {} }, actor));
+      expect(refused.code, serviceName).toBe("not_found");
+    }
+    expect(await listApprovals.call({}, OWNER)).toHaveLength(0);
+  });
+
   it("stores approved input verbatim and redacts every read of it", async () => {
     await hire("Reviewer2", "approve");
     const person = await createContact.call({ name: "Rae", email: "rae7@example.test" }, OWNER);
@@ -316,8 +328,8 @@ describe.runIf(hasDatabase)("managed writes", { timeout: 30_000 }, () => {
     expect((result.approval?.input as Record<string, unknown>).apiToken).toBe("[redacted]");
     const [stored] = await db()
       .select()
-      .from(agentApprovals)
-      .where(eq(agentApprovals.id, result.approval!.id));
+      .from(runApprovals)
+      .where(eq(runApprovals.id, result.approval!.id));
     expect((stored!.input as Record<string, unknown>).apiToken).toBe("s3cret");
     const [listedRow] = await listApprovals.call({}, OWNER);
     expect((listedRow!.input as Record<string, unknown>).apiToken).toBe("[redacted]");

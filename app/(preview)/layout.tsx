@@ -10,202 +10,23 @@
 // A second "editor rendering" is how every page builder eventually shows you
 // something you do not get; here the canvas and the public page are the same
 // function, and only a flag differs.
+//
+// The frame renders the *stored* tree; `canvas-bridge.ts` layers the editor's
+// local draft onto the typeable elements so a keystroke's preview does not
+// wait for the autosave debounce, and a save still reloads the frame from
+// stored state.
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { CSP_NONCE_HEADER } from "@/core/http/csp";
+import { serializeInlineJson } from "@/core/http/inline-json";
 import { getT } from "../i18n";
+import { CANVAS_BRIDGE, CANVAS_DRAG } from "./canvas-bridge";
 
 export const dynamic = "force-dynamic";
 
 /** Authenticated view of unpublished content, so it is never indexable. */
 export const metadata: Metadata = { robots: { index: false, follow: false } };
-
-/**
- * Reports clicks to the editor and highlights whatever the editor selects.
- *
- * Links are neutralised: following one would navigate the frame away from the
- * page being edited, which reads as the editor breaking.
- */
-const BRIDGE = `
-document.addEventListener("click", function (event) {
-  var target = event.target instanceof Element ? event.target : null;
-  if (target && target.closest("a")) event.preventDefault();
-  var el = target ? target.closest("[data-block-id]") : null;
-  parent.postMessage({
-    source: "freeholder-preview",
-    blockId: el ? el.getAttribute("data-block-id") : null
-  }, window.location.origin);
-});
-document.addEventListener("mouseover", function (event) {
-  var target = event.target instanceof Element ? event.target : null;
-  var el = target ? target.closest("[data-block-id]") : null;
-  document.querySelectorAll("[data-hovered]").forEach(function (n) {
-    n.removeAttribute("data-hovered");
-  });
-  if (el) el.setAttribute("data-hovered", "true");
-});
-// Typing on the canvas. The element carries which prop it shows and the block
-// it belongs to; the editor owns the tree and decides what to do with it.
-//
-// Listens on input rather than blur, so the controls stay in step while
-// typing. The canvas never writes to the tree itself; it only reports what was
-// typed, and the editor debounces before saving.
-document.addEventListener("input", function (event) {
-  var el = event.target instanceof Element ? event.target : null;
-  if (!el || !el.hasAttribute("data-editable-prop")) return;
-  var block = el.closest("[data-block-id]");
-  if (!block) return;
-  parent.postMessage({
-    source: "freeholder-preview",
-    edit: {
-      blockId: block.getAttribute("data-block-id"),
-      prop: el.getAttribute("data-editable-prop"),
-      value: el.innerText
-    }
-  }, window.location.origin);
-});
-
-// Enter would insert a line break inside a heading; blur commits instead.
-document.addEventListener("keydown", function (event) {
-  var el = event.target instanceof Element ? event.target : null;
-  if (!el || !el.hasAttribute("data-editable-prop")) return;
-  if (event.key === "Enter" && el.tagName !== "DIV") {
-    event.preventDefault();
-    el.blur();
-  }
-});
-
-window.addEventListener("message", function (event) {
-  if (event.origin !== window.location.origin) return;
-  if (!event.data || event.data.source !== "freeholder-editor") return;
-  document.querySelectorAll("[data-selected]").forEach(function (n) {
-    n.removeAttribute("data-selected");
-  });
-  if (!event.data.blockId) return;
-  var el = document.querySelector('[data-block-id="' + event.data.blockId + '"]');
-  if (el) {
-    el.setAttribute("data-selected", "true");
-    el.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }
-});
-`;
-
-const DRAG = `
-// ── Dragging blocks around the canvas ─────────────────────────────────────
-//
-// A grip rather than making the whole block draggable: a draggable element
-// swallows text selection, and half these blocks are typed into. The grip is
-// injected here rather than emitted by the renderer, so the block components
-// stay free of editor furniture.
-//
-// The DOM is moved on drop for immediate feedback, but that move is a
-// *preview of the reported intent*, not the change itself. The tree is the
-// source of truth; the editor applies the move to it and the next render
-// overwrites whatever this did. If the editor refuses the move — dropping a
-// container into its own child — the canvas simply snaps back on that render.
-function fhAddGrips() {
-  document.querySelectorAll("[data-block-id]").forEach(function (block) {
-    if (block.querySelector(":scope > .fh-grip")) return;
-    var grip = document.createElement("span");
-    grip.className = "fh-grip";
-    grip.setAttribute("draggable", "true");
-    grip.setAttribute("aria-hidden", "true");
-    grip.title = FH_DRAG_LABEL;
-    grip.textContent = "⠿";
-    block.appendChild(grip);
-  });
-}
-fhAddGrips();
-new MutationObserver(fhAddGrips).observe(document.body, {
-  childList: true,
-  subtree: true
-});
-
-var fhDragId = null;
-var fhDrop = null;
-
-function fhClearIndicator() {
-  document.querySelectorAll("[data-drop]").forEach(function (n) {
-    n.removeAttribute("data-drop");
-  });
-}
-
-document.addEventListener("dragstart", function (event) {
-  var target = event.target instanceof Element ? event.target : null;
-  if (!target || !target.classList.contains("fh-grip")) return;
-  var block = target.closest("[data-block-id]");
-  if (!block) return;
-  fhDragId = block.getAttribute("data-block-id");
-  block.setAttribute("data-dragging", "true");
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = "move";
-    // Firefox refuses to start a drag without data on the transfer.
-    event.dataTransfer.setData("text/plain", fhDragId);
-  }
-});
-
-document.addEventListener("dragover", function (event) {
-  if (!fhDragId) return;
-  event.preventDefault();
-  var target = event.target instanceof Element ? event.target : null;
-  var block = target ? target.closest("[data-block-id]") : null;
-  fhClearIndicator();
-  if (!block) { fhDrop = null; return; }
-
-  var id = block.getAttribute("data-block-id");
-  if (id === fhDragId) { fhDrop = null; return; }
-
-  var box = block.getBoundingClientRect();
-  var container = block.querySelector(":scope > * > [data-block-id]") !== null
-    || block.hasAttribute("data-container");
-  var empty = container && block.querySelector("[data-block-id]") === null;
-
-  var position;
-  if (empty) {
-    position = "inside";
-  } else {
-    position = event.clientY < box.top + box.height / 2 ? "before" : "after";
-  }
-  block.setAttribute("data-drop", position);
-  fhDrop = { targetId: id, position: position };
-});
-
-document.addEventListener("drop", function (event) {
-  if (!fhDragId || !fhDrop) return;
-  event.preventDefault();
-  parent.postMessage({
-    source: "freeholder-preview",
-    move: {
-      blockId: fhDragId,
-      targetId: fhDrop.targetId,
-      position: fhDrop.position
-    }
-  }, window.location.origin);
-
-  // Optimistic, and only that: the editor decides what really happened.
-  var moving = document.querySelector('[data-block-id="' + fhDragId + '"]');
-  var target = document.querySelector('[data-block-id="' + fhDrop.targetId + '"]');
-  if (moving && target && !target.contains(moving)) {
-    if (fhDrop.position === "before") {
-      target.parentNode.insertBefore(moving, target);
-    } else if (fhDrop.position === "after") {
-      target.parentNode.insertBefore(moving, target.nextSibling);
-    } else {
-      target.appendChild(moving);
-    }
-  }
-});
-
-document.addEventListener("dragend", function () {
-  fhDragId = null;
-  fhDrop = null;
-  fhClearIndicator();
-  document.querySelectorAll("[data-dragging]").forEach(function (n) {
-    n.removeAttribute("data-dragging");
-  });
-});
-`;
 
 /** Selection affordances exist only here, never on the real page. */
 const CANVAS_CSS = `
@@ -213,27 +34,127 @@ const CANVAS_CSS = `
   [data-block-id] { outline-offset: 3px; cursor: pointer; }
   [data-editable-prop] { cursor: text; }
   [data-editable-prop]:focus { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
+  [data-editable-rich] { cursor: text; white-space: normal; }
+  [data-editable-rich]:focus { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
   [data-hovered] { outline: 1px dashed var(--fh-rule); }
   [data-selected] { outline: 2px solid var(--fh-accent); }
   [data-block-id] { position: relative; }
   .fh-grip {
     position: absolute; inset-inline-start: -2rem; inset-block-start: 0;
-    width: 1.25rem; height: 1.25rem; display: none;
-    align-items: center; justify-content: center;
-    cursor: grab; border-radius: 0.25rem;
-    color: var(--fh-ink-muted); background: var(--fh-surface);
-    border: 1px solid var(--fh-rule); font-size: 0.75rem; line-height: 1;
-    user-select: none;
+    width: 1.25rem; height: 1.25rem;
+    display: flex; align-items: center; justify-content: center;
+    cursor: grab; border-radius: 0.25rem; appearance: none; padding: 0;
+    background: var(--fh-surface); border: 1px solid var(--fh-rule-strong);
+    font-size: 0.75rem; line-height: 1; font-family: inherit; user-select: none;
+    /* Always rendered: a hidden control can never take focus, which would
+       make the keyboard path unreachable, and the persistent handle is also
+       how a first-timer sees where the blocks are. Full-strength ink keeps
+       it inside the WCAG AA contrast budget in both themes; hover and focus
+       sharpen the chrome around it. */
+    color: var(--fh-ink);
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
   }
-  [data-hovered] > .fh-grip, [data-selected] > .fh-grip { display: flex; }
+  [data-hovered] > .fh-grip, [data-selected] > .fh-grip,
+  [data-block-id]:focus-within > .fh-grip {
+    border-color: var(--fh-accent);
+    box-shadow: var(--fh-shadow-sm);
+  }
+  .fh-grip:focus-visible { outline: 2px solid var(--fh-focus); outline-offset: 2px; }
   [data-dragging] { opacity: 0.4; }
   [data-drop="before"]::before, [data-drop="after"]::after {
-    content: ""; position: absolute; inset-inline: 0; height: 2px;
+    content: ""; position: absolute; inset-inline: 0; height: 3px;
     background: var(--fh-accent); border-radius: 2px;
   }
-  [data-drop="before"]::before { inset-block-start: -0.5rem; }
-  [data-drop="after"]::after { inset-block-end: -0.5rem; }
-  [data-drop="inside"] { outline: 2px dashed var(--fh-accent); }
+  [data-drop="before"]::before { inset-block-start: -0.625rem; }
+  [data-drop="after"]::after { inset-block-end: -0.625rem; }
+  [data-drop="inside"] {
+    outline: 2px dashed var(--fh-accent);
+    outline-offset: 4px;
+    background: var(--fh-accent-soft);
+  }
+
+  /* The drag ghost: the dragged block's own render, lifted translucent. The
+     browser paints it as the drag image, offset so it sits under the
+     pointer where the block was grabbed; it lives far off-screen in the
+     document and is removed at dragend. */
+  .fh-ghost {
+    position: fixed; inset-inline-start: -10000px; inset-block-start: -10000px;
+    z-index: -1; pointer-events: none; overflow: hidden;
+    opacity: 0.92; border: 1px solid var(--fh-accent); border-radius: 0.5rem;
+    background: var(--fh-surface); box-shadow: var(--fh-shadow-raised);
+    padding: 0.5rem;
+  }
+
+  /* The move announcer for screen readers: status role, visually hidden,
+     present in the frame because that is where grip focus lives. */
+  .fh-sr-only {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap;
+  }
+
+  /* The image block's on-canvas replace affordance, and the store sections'
+     source-swap affordance — one pattern (a host wrapper, a replace button),
+     two data attributes so the bridge can tell an asset swap from a
+     collection swap. Token colours so both themes render it correctly;
+     keyboard focus reveals it without a hover. */
+  .fh-asset, .fh-store { position: relative; }
+  .fh-asset-empty {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 9rem; border: 1px dashed var(--fh-rule); border-radius: 0.5rem;
+    color: var(--fh-ink-muted); font-size: 0.875rem;
+  }
+  .fh-store-empty {
+    margin: 0; padding: 1.5rem; border: 1px dashed var(--fh-rule); border-radius: 0.5rem;
+    color: var(--fh-ink-muted); font-size: 0.875rem;
+  }
+  .fh-replace {
+    position: absolute; inset-block-start: 0.5rem; inset-inline-end: 0.5rem;
+    padding: 0.3rem 0.65rem; border-radius: 0.375rem;
+    border: 1px solid var(--fh-rule); background: var(--fh-surface);
+    color: var(--fh-ink); font-size: 0.75rem; font-weight: 600;
+    cursor: pointer; opacity: 0; transition: opacity 0.12s ease;
+  }
+  .fh-asset:hover .fh-replace, .fh-asset:focus-within .fh-replace,
+  .fh-store:hover .fh-replace, .fh-store:focus-within .fh-replace,
+  [data-selected] > .fh-replace,
+  .fh-replace:focus { opacity: 1; }
+  .fh-replace:focus-visible { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
+
+  /* The image block's alt-text affordance: the corner opposite the replace
+     button, revealed the same way. */
+  .fh-alt {
+    position: absolute; inset-block-start: 0.5rem; inset-inline-start: 0.5rem;
+    padding: 0.3rem 0.65rem; border-radius: 0.375rem;
+    border: 1px solid var(--fh-rule); background: var(--fh-surface);
+    color: var(--fh-ink); font-size: 0.75rem; font-weight: 600;
+    cursor: pointer; opacity: 0; transition: opacity 0.12s ease;
+  }
+  .fh-asset:hover .fh-alt, .fh-asset:focus-within .fh-alt,
+  [data-selected] > .fh-alt,
+  .fh-alt:focus { opacity: 1; }
+  .fh-alt:focus-visible { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
+
+  /* The image block's crop & focal affordance (C2.25): the bottom corner
+     under the replace button, revealed the same way. */
+  .fh-crop {
+    position: absolute; inset-block-end: 0.5rem; inset-inline-end: 0.5rem;
+    padding: 0.3rem 0.65rem; border-radius: 0.375rem;
+    border: 1px solid var(--fh-rule); background: var(--fh-surface);
+    color: var(--fh-ink); font-size: 0.75rem; font-weight: 600;
+    cursor: pointer; opacity: 0; transition: opacity 0.12s ease;
+  }
+  .fh-asset:hover .fh-crop, .fh-asset:focus-within .fh-crop,
+  [data-selected] > .fh-crop,
+  .fh-crop:focus { opacity: 1; }
+  .fh-crop:focus-visible { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
+
+  /* Persistent block outlines (the zen surface's "show structure"): every
+     block keeps a dashed rule around it, sharpened to the accent when
+     hovered or selected exactly as before. */
+  .fh-outlines [data-block-id] { outline: 1px dashed var(--fh-rule-strong); outline-offset: 3px; }
+  .fh-outlines [data-block-id]:hover { outline-color: var(--fh-rule); }
+  .fh-outlines [data-block-id][data-selected] { outline: 2px solid var(--fh-accent); }
+  .fh-outlines [data-block-id][data-hovered]:not([data-selected]) { outline: 1px dashed var(--fh-accent); }
 
 `;
 
@@ -244,9 +165,13 @@ export default async function PreviewLayout({
 }) {
   const [t, requestHeaders] = await Promise.all([getT(), headers()]);
   const nonce = requestHeaders.get(CSP_NONCE_HEADER) ?? undefined;
-  // The grip's tooltip is copy, so it comes from the catalog like the rest —
-  // injected as a constant the script reads rather than hardcoded in it.
-  const dragLabel = JSON.stringify(t("cms.editor.dragBlock"));
+  // The grip's tooltip and the move announcements are copy, so they come from
+  // the catalog like the rest — injected as constants the scripts read
+  // rather than hardcoded in them.
+  const dragLabel = serializeInlineJson(t("cms.editor.dragBlock"));
+  const announceUp = serializeInlineJson(t("cms.editor.announceMoveUp"));
+  const announceDown = serializeInlineJson(t("cms.editor.announceMoveDown"));
+  const announceMove = serializeInlineJson(t("cms.editor.announceMove"));
   return (
     <>
       <style nonce={nonce} dangerouslySetInnerHTML={{ __html: CANVAS_CSS }} />
@@ -254,7 +179,13 @@ export default async function PreviewLayout({
       <script
         nonce={nonce}
         dangerouslySetInnerHTML={{
-          __html: `var FH_DRAG_LABEL = ${dragLabel};` + BRIDGE + DRAG,
+          __html:
+            `var FH_DRAG_LABEL = ${dragLabel};` +
+            `var FH_ANNOUNCE_UP = ${announceUp};` +
+            `var FH_ANNOUNCE_DOWN = ${announceDown};` +
+            `var FH_ANNOUNCE_MOVE = ${announceMove};` +
+            CANVAS_BRIDGE +
+            CANVAS_DRAG,
         }}
       />
     </>

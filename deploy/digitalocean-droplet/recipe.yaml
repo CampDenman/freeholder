@@ -22,6 +22,7 @@ artifacts:
   - deploy/digitalocean-droplet/infra/backup.sh
 required_environment:
   - POSTGRES_PASSWORD
+  - BOOTSTRAP_SECRET
   - SESSION_SECRET
   - CREDENTIAL_KEY
   - APP_URL
@@ -39,7 +40,7 @@ operations:
   migrate-in: "docker compose -f deploy/digitalocean-droplet/infra/compose.yml exec -T db pg_restore --no-owner --no-privileges -U freeholder -d freeholder < freeholder.dump && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
   migrate-out: "docker compose -f deploy/digitalocean-droplet/infra/compose.yml exec -T db pg_dump --format=custom --no-owner --no-privileges -U freeholder freeholder > freeholder.dump && pnpm ownership:export -- --output ownership-export && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
   update: "docker compose -f deploy/digitalocean-droplet/infra/compose.yml pull && docker compose -f deploy/digitalocean-droplet/infra/compose.yml up -d"
-  rollback: "FREEHOLDER_IMAGE=$PREVIOUS_FREEHOLDER_IMAGE docker compose -f deploy/digitalocean-droplet/infra/compose.yml up -d"
+  rollback: "FREEHOLDER_IMAGE=${PREVIOUS_FREEHOLDER_IMAGE:?set previous immutable image digest} docker compose -f deploy/digitalocean-droplet/infra/compose.yml up -d"
 update:
   strategy: image-swap
   rollback: compose pull the previous sha tag

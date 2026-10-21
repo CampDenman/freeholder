@@ -30,6 +30,7 @@ for target in "${TARGETS[@]}"; do
     -e PORT="$PORT" \
     -e NODE_ENV=production \
     -e APP_URL="$BASE" \
+    -e BOOTSTRAP_SECRET=ci-only-bootstrap-secret-of-at-least-32-characters \
     -e SESSION_SECRET=recipe-gate-session-secret-is-long-enough \
     -e CREDENTIAL_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
     -e DATABASE_URL="postgres://${PGUSER}:${PGPASSWORD}@${PGHOST}:5432/${database}" \
@@ -56,15 +57,35 @@ for target in "${TARGETS[@]}"; do
     exit 1
   fi
 
+  # C11.15: refuse the 0.0.0 placeholder a stale droplet used to publish.
+  health_json=$(curl -s "$BASE/api/health")
+  if [[ "$health_json" != *'"version"'* ]] || [[ "$health_json" == *'"version":"0.0.0"'* ]]; then
+    echo "${target}: health version is missing or 0.0.0: ${health_json}"
+    docker logs freeholder-recipe-gate
+    exit 1
+  fi
+
+  # Capture and match without a pipe: see the note in public-gates.sh.
+  # `docker logs … | grep -q` takes SIGPIPE when grep exits on the first
+  # match while docker is still writing, which `set -o pipefail` turns into
+  # exit 141 and `set -e` turns into a red build with nothing failing in it.
+  installed=""
   for _ in $(seq 1 60); do
-    docker logs freeholder-recipe-gate 2>&1 | grep -q "demo installed" && break
+    if [[ "$(docker logs freeholder-recipe-gate 2>&1)" == *"demo installed"* ]]; then
+      installed="yes"
+      break
+    fi
     sleep 1
   done
-  docker logs freeholder-recipe-gate 2>&1 | grep -q "demo installed"
+  if [ -z "$installed" ]; then
+    echo "${target}: the demo did not install"
+    docker logs freeholder-recipe-gate
+    exit 1
+  fi
 
   created=$(curl -sS -o /tmp/freeholder-recipe-owner.json -w '%{http_code}' \
     -H 'content-type: application/json' \
-    -d "{\"email\":\"${OWNER_EMAIL}\",\"password\":\"${OWNER_PASSWORD}\"}" \
+    -d "{\"email\":\"${OWNER_EMAIL}\",\"bootstrapSecret\":\"ci-only-bootstrap-secret-of-at-least-32-characters\",\"password\":\"${OWNER_PASSWORD}\"}" \
     "$BASE/api/setup/owner")
   [ "$created" = "201" ]
 
@@ -108,5 +129,13 @@ for target in "${TARGETS[@]}"; do
       process.exit(1);
     }
   ' "$doctor_status"
-  echo "${target}: image healthy; seeded setup claim and Doctor passed with no failures"
+  # §39.8, C10.10: "A recipe without a tested update path is not Tier 1."
+  # Run this target's own declared update and rollback commands with a
+  # recorded shell instead of the real one, so the matrix proves the commands
+  # are the ones the recipe declares, are reachable, and pin the artifact that
+  # strategy actually needs. The real doctl/render/railway calls are not made
+  # here — this gate owns the wiring, not somebody else's control plane.
+  node scripts/recipe-update-actions.mjs "$target"
+
+  echo "${target}: image healthy; seeded setup claim, Doctor and update/rollback actions passed"
 done

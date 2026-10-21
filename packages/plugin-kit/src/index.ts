@@ -17,17 +17,17 @@ export {
   type PluginContractInput,
   type PluginManifestFields,
   type PluginPermission,
-} from "./contract";
-export { parseSemver, satisfies } from "./semver";
-export { scaffoldPlugin } from "./scaffold";
-export { inspectPluginFolder, EXAMPLE_KINDS } from "./harness";
-export { defineImporter, type ImporterDefinitionInput, type ImporterSourceKind } from "./importer";
+} from "./contract.ts";
+export { parseSemver, satisfies } from "./semver.ts";
+export { scaffoldPlugin } from "./scaffold.ts";
+export { inspectPluginFolder, EXAMPLE_KINDS } from "./harness.ts";
+export { defineImporter, type ImporterDefinitionInput, type ImporterSourceKind } from "./importer.ts";
 
 import {
   validatePluginContract,
   type PluginContractInput,
   type PluginManifestFields,
-} from "./contract";
+} from "./contract.ts";
 
 export type PluginDefinition<T extends PluginContractInput> = T & PluginManifestFields;
 

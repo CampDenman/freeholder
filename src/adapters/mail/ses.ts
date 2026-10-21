@@ -50,13 +50,10 @@ export function createSesMail(options: {
                   ? { Html: { Data: message.html, Charset: "UTF-8" } }
                   : {}),
               },
-              ...(message.deliveryId
-                ? {
-                    Headers: [
-                      { Name: "X-Freeholder-Delivery", Value: message.deliveryId },
-                    ],
-                  }
-                : {}),
+              Headers: [
+                ...Object.entries(message.headers ?? {}).map(([Name, Value]) => ({ Name, Value })),
+                ...(message.deliveryId ? [{ Name: "X-Freeholder-Delivery", Value: message.deliveryId }] : []),
+              ],
             },
           },
           ReplyToAddresses: message.replyTo ? [message.replyTo] : undefined,

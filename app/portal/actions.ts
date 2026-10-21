@@ -7,8 +7,9 @@ import { revalidatePath } from "next/cache";
 import {
   CUSTOMER_MAGIC_COOKIE,
   consumeCustomerMagicLink,
-  requestCustomerMagicLink,
 } from "@/core/auth/magic-links/service";
+import { requestCustomerSignIn } from "@/core/portal/sign-in";
+import { CUSTOMER_RETURN_COOKIE, safeCustomerReturnPath } from "@/core/portal/return-path";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { logout } from "@/core/auth/service";
 import { actorFromToken } from "@/core/http/actor";
@@ -63,20 +64,22 @@ export async function requestMagicLinkAction(
 ): Promise<MagicLinkState> {
   try {
     const locale = await getLocale();
-    await requestCustomerMagicLink.call(
-      { email: field(form, "email"), locale },
+    await requestCustomerSignIn.call(
+      { email: field(form, "email"), name: field(form,"name") || undefined, locale },
       {
         kind: "anonymous",
         request: requestMetadataFromHeaders(await headers()),
       },
     );
+    (await cookies()).set(CUSTOMER_RETURN_COOKIE, safeCustomerReturnPath(field(form,"returnTo")), { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 900 });
   } catch (error) {
+    if (error instanceof ServiceError && error.code === "conflict") return { error: (await getT())("portal.login.unavailable") };
     if (error instanceof ServiceError && error.code === "rate_limited") {
       return { error: (await getT())("portal.login.rateLimited") };
     }
     // Delivery errors must not reveal that this address was the one that
     // reached the mail adapter while an unknown address did not.
-    console.error("customer magic-link request failed", error);
+    return { error: (await getT())("portal.login.unavailable") };
   }
   return { sent: true };
 }
@@ -155,7 +158,9 @@ export async function confirmMagicLinkAction(
       console.error("post-signup contact import offer could not be read", error);
     }
   }
-  redirect(localizeCustomerHref("/portal/login", result.locale, result));
+  const returnTo = safeCustomerReturnPath(jar.get(CUSTOMER_RETURN_COOKIE)?.value);
+  jar.delete(CUSTOMER_RETURN_COOKIE);
+  redirect(localizeCustomerHref(returnTo, result.locale, result));
 }
 
 export async function setPortalLocaleAction(form: FormData): Promise<void> {
@@ -286,4 +291,33 @@ export async function portalSignOutAction(): Promise<void> {
       ? localizeCustomerHref("/portal/login", locale, business)
       : "/portal/login",
   );
+}
+
+/** Correct your own name or phone from the portal (C8.10). */
+export async function updatePortalProfileAction(form: FormData): Promise<void> {
+  const path = "/portal/profile";
+  try {
+    const { updateMyProfile } = await import("@/core/portal/service");
+    await updateMyProfile.call(
+      { name: field(form, "name"), phone: field(form, "phone") || null },
+      await currentPortalActor(),
+    );
+  } catch {
+    redirect(`${path}?error=1`);
+  }
+  revalidatePath(path);
+  redirect(`${path}?saved=1`);
+}
+
+/** Sign one other device out. The current session is ended by signing out. */
+export async function revokePortalSessionAction(form: FormData): Promise<void> {
+  const path = "/portal/profile";
+  try {
+    const { revokeSession } = await import("@/core/auth/session-management/service");
+    await revokeSession.call({ id: field(form, "id") }, await currentPortalActor());
+  } catch {
+    redirect(`${path}?error=1`);
+  }
+  revalidatePath(path);
+  redirect(`${path}?saved=1`);
 }

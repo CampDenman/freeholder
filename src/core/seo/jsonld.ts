@@ -11,6 +11,7 @@
 // owner has to find: the home page describes the site and the business, every
 // other page carries a breadcrumb trail, and blocks contribute their own
 // (an FAQ block emits FAQPage — see the block registry).
+import { serializeInlineJson } from "@/core/http/inline-json";
 
 export interface BusinessFacts {
   name: string;
@@ -23,6 +24,11 @@ export interface BusinessFacts {
 export type JsonLd = Record<string, unknown>;
 
 const CONTEXT = "https://schema.org";
+
+/** Serialize structured data without letting content close its script tag. */
+export function serializeJsonLd(value: JsonLd): string {
+  return serializeInlineJson(value);
+}
 
 /** The site itself. Home page only — it describes the whole domain. */
 export function websiteJsonLd(origin: string, business: BusinessFacts): JsonLd {
@@ -273,5 +279,29 @@ export function collectionPageJsonLd(input: {
     name: input.name,
     url: input.url,
     ...(input.description ? { description: input.description } : {}),
+  };
+}
+
+/**
+ * A collection's products as a list (§5's structured-data contract for
+ * /c/<slug>). `item` is omitted for a product with no public address of its
+ * own yet; the name and position still tell a crawler what the list holds.
+ */
+export function itemListJsonLd(input: {
+  name: string;
+  url: string;
+  items: Array<{ name: string; url?: string }>;
+}): JsonLd {
+  return {
+    "@context": CONTEXT,
+    "@type": "ItemList",
+    name: input.name,
+    url: input.url,
+    itemListElement: input.items.map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.name,
+      ...(item.url ? { item: item.url } : {}),
+    })),
   };
 }

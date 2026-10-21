@@ -33,6 +33,12 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
   it("reports on every subsystem an instance can misconfigure", async () => {
     const report = await runDoctor();
     const ids = report.checks.map((check) => check.id);
+    const preflight = report.checks.find((check) => check.id === "update.preflight");
+    expect(preflight?.verdict).toBe("warn");
+    expect(preflight?.detail).toContain("No signed candidate");
+    const policy = report.checks.find((check) => check.id === "update.policy");
+    expect(policy?.verdict).toBe("warn");
+    expect(policy?.detail).toContain("Automatic updates and rollback are unavailable");
     for (const id of [
       "env.sessionSecret",
       "env.appUrl",
@@ -47,6 +53,17 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
       "notifications.sms",
       "notifications.push",
       "jobs.worker",
+      "update.seams.configuration",
+      "update.seams.uploads",
+      "update.coreFiles",
+      "update.release",
+      "update.channel",
+      "update.feed.key",
+      "update.check",
+      "update.preflight",
+      "update.n1",
+      "update.policy",
+      "platform.version",
     ]) {
       expect({ id, checked: ids.includes(id) }).toEqual({ id, checked: true });
     }
@@ -67,6 +84,14 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
     const schema = report.checks.find((c) => c.id === "db.migrations");
     expect(schema?.verdict).toBe("ok");
     expect(schema?.detail).toMatch(/migrations have been applied/);
+  });
+
+  it("reports the real platform version rather than 0.0.0", async () => {
+    const report = await runDoctor();
+    const version = report.checks.find((c) => c.id === "platform.version");
+    expect(version?.verdict).toBe("ok");
+    expect(version?.detail).not.toMatch(/0\.0\.0/);
+    expect(version?.detail).toMatch(/\d+\.\d+\.\d+/);
   });
 
   it("says mail cannot deliver, because in this environment it cannot", async () => {

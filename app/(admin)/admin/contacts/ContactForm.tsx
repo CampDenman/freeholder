@@ -263,7 +263,7 @@ export function ContactForm({
               rows={3}
               defaultValue={seed.ownerNotes}
               disabled={readOnly}
-              className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink focus-visible:border-accent"
+              className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink focus-visible:border-accent"
             />
           </Field>
         </CardBody>

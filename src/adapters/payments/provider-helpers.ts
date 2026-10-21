@@ -4,6 +4,35 @@
 
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { AdapterError } from "../types";
+import type {
+  OffSessionChargeRequest,
+  RecurringScheduleRequest,
+  RecurringScheduleUpdateRequest,
+} from "./types";
+
+export function refuseOffSessionCharge(id: string) {
+  return async (_request: OffSessionChargeRequest) => {
+    throw new AdapterError(
+      "payments",
+      id,
+      "unavailable",
+      `${id} cannot charge a stored payment method off-session.`,
+    );
+  };
+}
+
+export function refuseRecurringSchedule(id: string) {
+  return async (
+    _request?: RecurringScheduleRequest | RecurringScheduleUpdateRequest | { providerRef: string; idempotencyKey: string },
+  ) => {
+    throw new AdapterError(
+      "payments",
+      id,
+      "unavailable",
+      `${id} cannot run a provider billing schedule.`,
+    );
+  };
+}
 
 export function parseProviderJson(provider: string, body: Uint8Array): Record<string, unknown> {
   let parsed: unknown;

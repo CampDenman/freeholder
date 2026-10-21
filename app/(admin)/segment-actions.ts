@@ -11,7 +11,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
-import { captureSegment, removeSegment, saveSegment } from "@/core/segments/service";
+import { captureSegment, previewSegment, removeSegment, saveSegment } from "@/core/segments/service";
 import { ownerFacing } from "./action-helpers";
 
 const SEGMENTS = "/admin/segments";
@@ -70,6 +70,32 @@ function parseValue(raw: string): unknown {
       .filter(Boolean);
   }
   return /^-?\d+$/.test(raw) ? Number(raw) : raw;
+}
+
+export async function previewSegmentAction(form: FormData): Promise<void> {
+  let preview;
+  try {
+    const rules = rulesFrom(form);
+    if (rules.length === 0) {
+      throw new ServiceError("validation", "A segment needs at least one rule.");
+    }
+    preview = await previewSegment.call(
+      {
+        definition: {
+          match: text(form, "match") === "any" ? "any" : "all",
+          rules,
+        },
+        sample: 10,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, "That segment could not be previewed.");
+  }
+  const names = preview.sample.map((person) => person.name).join(" · ");
+  redirect(
+    `${SEGMENTS}?previewCount=${preview.count}&previewSample=${encodeURIComponent(names)}`,
+  );
 }
 
 export async function saveSegmentAction(form: FormData): Promise<void> {

@@ -6,6 +6,8 @@
 //
 // Usage: node scripts/changelog-gate.mjs <base-ref>
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { changelogTopVersion } from "./generate-changelog.mjs";
 
 const base = process.argv[2] ?? "origin/main";
 const diff = execSync(`git diff --name-only ${base}...HEAD`, {
@@ -34,8 +36,28 @@ if (functional.length > 0 && !hasChangeset) {
   );
   process.exit(1);
 }
+
+const packageVersion = JSON.parse(readFileSync("package.json", "utf8")).version;
+let changelog;
+try {
+  changelog = readFileSync("CHANGELOG.md", "utf8");
+} catch {
+  console.error(
+    "Changelog gate (C11.15): CHANGELOG.md is missing. Run `node scripts/generate-changelog.mjs`.",
+  );
+  process.exit(1);
+}
+const changelogVersion = changelogTopVersion(changelog);
+if (changelogVersion !== packageVersion) {
+  console.error(
+    `Changelog gate (C11.15): CHANGELOG.md top version is ${changelogVersion ?? "(none)"}, ` +
+      `package.json is ${packageVersion}. Run \`node scripts/generate-changelog.mjs\`.`,
+  );
+  process.exit(1);
+}
+
 console.log(
   functional.length === 0
-    ? "Changelog gate: no functional changes — no changeset required."
-    : "Changelog gate: changeset present.",
+    ? `Changelog gate: no functional changes — CHANGELOG.md is ${packageVersion}.`
+    : `Changelog gate: changeset present; CHANGELOG.md is ${packageVersion}.`,
 );

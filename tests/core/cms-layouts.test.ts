@@ -5,9 +5,12 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { applyLayoutBindings, ensureBoundEntityBlock } from "@/modules/cms/layout-service";
 import {
   attachLayout,
+  createPage,
   detachLayout,
   ensureTemplates,
   getLayout,
+  getPage,
+  publishPage,
   rejoinLayout,
   updatePage,
 } from "@/modules/cms/service";
@@ -88,5 +91,20 @@ describe.runIf(hasDatabase)("cms entity layouts", { timeout: 30_000 }, () => {
     await detachLayout.call({ pageId }, OWNER);
     const again = await getLayout.call({ pageId }, OWNER);
     expect(again?.detached).toBe(true);
+  });
+
+  it("keeps a published override live until the rejoined working draft is explicitly published", async () => {
+    await ensureTemplates.call({}, OWNER);
+    const page = await createPage.call({ slug: "published-layout", title: "Live override", blocks: [{ id: "custom", type: "heading", props: { text: "Live override", level: 1 } }] }, OWNER);
+    await attachLayout.call({ pageId: page.id, entityType: "page", entityId: page.id, templateKey: "page.landing", detached: true }, OWNER);
+    await publishPage.call({ id: page.id, published: true }, OWNER);
+    const before = await getPage.call({ id: page.id }, OWNER);
+    await rejoinLayout.call({ pageId: page.id, bindings: { title: "Unpublished template draft" } }, OWNER);
+    const after = await getPage.call({ id: page.id }, OWNER);
+    expect(after.blocks).toEqual(before.blocks);
+    expect(JSON.stringify(after.workingBlocks)).toContain("Unpublished template draft");
+    expect(after.version).toBe(before.version + 1);
+    await publishPage.call({ id: page.id, published: true, expectedVersion: after.version }, OWNER);
+    expect((await getPage.call({ id: page.id }, OWNER)).blocks).toEqual(after.workingBlocks);
   });
 });

@@ -16,6 +16,7 @@ import {
   submitSiteChat,
   submitTipIntent,
 } from "@/modules/cms/inbound";
+import { rateHelpArticle } from "@/modules/cms/help-service";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
@@ -73,6 +74,17 @@ export async function submitInboundAction(form: FormData): Promise<void> {
         ANONYMOUS,
       );
       redirect(`${path}?tipped=1`);
+    }
+    if (kind === "helpful") {
+      // Two counters and no comment box (§4.6). The flag the block reads
+      // back is the vote itself, so a reader who votes and then reloads is
+      // thanked rather than asked again.
+      const helpful = text(form, "helpful") === "yes";
+      await rateHelpArticle.call(
+        { articleId: text(form, "articleId"), helpful },
+        ANONYMOUS,
+      );
+      redirect(`${path}?helped=${helpful ? "1" : "0"}`);
     }
   } catch (error) {
     if (typeof error === "object" && error && "digest" in error) throw error;

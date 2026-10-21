@@ -14,18 +14,14 @@
 import { uploadAsset } from "@/core/media/service";
 import { PROXY_UPLOAD_LIMIT } from "@/core/media/validation";
 import { serviceRoute } from "@/core/http/route";
-import { ServiceError } from "@/core/service";
+import { readBoundedFormData } from "@/core/http/body";
 
 export const POST = serviceRoute(uploadAsset, {
   readInput: async (request) => {
-    const contentLength = Number(request.headers.get("content-length") ?? 0);
-    if (contentLength > PROXY_UPLOAD_LIMIT + 1024 * 1024) {
-      throw new ServiceError(
-        "validation",
-        "That request is too large for the upload proxy. Use resumable direct upload.",
-      );
-    }
-    const form = await request.formData();
+    const form = await readBoundedFormData(
+      request,
+      PROXY_UPLOAD_LIMIT + 1024 * 1024,
+    );
     const file = form.get("file");
     if (!(file instanceof File)) return {};
     return {

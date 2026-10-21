@@ -16,6 +16,7 @@
 import type { ReactNode } from "react";
 import type { z } from "zod";
 import type { Translate } from "@/core/i18n";
+import type { Actor } from "@/core/service";
 import type { FieldHint } from "./fields";
 
 export type BlockContext = "page" | "chrome" | "email";
@@ -25,10 +26,10 @@ export type BlockContext = "page" | "chrome" | "email";
  *
  * Deliberately narrow. A block gets the request's locale and the business
  * profile because those are properties of *where it is being rendered*; it
- * does not get a database handle, an actor, or the ability to call services at
- * will. A block is a pure function from its own validated props to semantic
- * HTML, and blocks that need live data get it through a resolver on the
- * definition (below) rather than by reaching out mid-render.
+ * does not get a database handle or the ability to call services at will.
+ * Who is looking is passed as `actor` so a paywall can ask a service about
+ * this person; the block still goes through `resolve` rather than querying
+ * itself. A block is a function from its validated props to semantic HTML.
  */
 export interface BlockRenderContext {
   locale: string;
@@ -53,8 +54,13 @@ export interface BlockRenderContext {
    * in state — would put the first hydration boundary on the public surface.
    * §5 and the SEO gate both rest on that surface being plain server-rendered
    * HTML, so a query parameter is the cheaper answer by a wide margin.
+   *
+   * Repeated keys stay arrays: the browse machinery (filter[option:size]=s&
+   * filter[option:size]=l) reads several values for one name, while a block
+   * asking "was this form just sent?" wants an answer, not an array — it
+   * compares, and a comparison with an array is simply false.
    */
-  query?: Record<string, string | undefined>;
+  query?: Record<string, string | string[] | undefined>;
   /**
    * Wrap each block so the editor can trace a click back to a node.
    *
@@ -74,12 +80,60 @@ export interface BlockRenderContext {
    */
   editable?: (prop: string) => Record<string, string> | undefined;
   /**
+   * Mark a *rich-text* region for canvas editing — a container whose children
+   * are the typed document's paragraphs and lists, as opposed to one flat
+   * string. The canvas serializes the region's DOM back to the typed document
+   * on input, so formatting the owner types inside marks survives; a plain
+   * `editable` region is plaintext-only by contrast. Preview-only, like
+   * `editable`.
+   */
+  editableRich?: (prop: string) => Record<string, string> | undefined;
+  /**
    * Sticky experiment assignments for this visitor (C2.17). Server-side only;
    * the public HTML contains the chosen variant, never a client swap.
    */
   experimentAssignments?: Readonly<Record<string, string>>;
   /** First-party visitor id used to assign variants when no assignment exists. */
   visitorId?: string | null;
+  /**
+   * Who is looking, so a paywall can ask entitlements about this person.
+   * Absent means anonymous. Never a database handle: the block still goes
+   * through `resolve` / a service rather than querying itself.
+   */
+  actor?: Actor;
+  /**
+   * Visitor's `fh_tc` choice for third-party creatives (C9.20). Only
+   * `granted` emits somebody else's script. Absent means they have not
+   * chosen yet.
+   */
+  thirdPartyConsent?: "granted" | "denied";
+  /** Request CSP nonce, so a reviewed tag's inline scripts can run. */
+  cspNonce?: string;
+  /**
+   * The request's guest-cart snapshot, for the cart widget block (C3.25).
+   * A loader rather than a value so a chrome tree without the widget costs
+   * nothing; absent means "no request cart to show" (emails, previews) and
+   * the widget renders nothing. The routing layer owns reading the cookie —
+   * blocks never touch the jar themselves (§10).
+   */
+  shopperCart?: () => Promise<ShopperCartSnapshot | null>;
+}
+
+/**
+ * The cart-widget's view of the caller's cart: counts and line totals only.
+ * Deliberately no ids, tokens or contact data — what the chrome needs and
+ * nothing the chrome must not print.
+ */
+export interface ShopperCartSnapshot {
+  currency: string;
+  lineCount: number;
+  subtotalMinor: number;
+  lines: Array<{
+    variantId: string;
+    productName: string;
+    quantity: number;
+    lineTotalMinor: number | null;
+  }>;
 }
 
 /**
@@ -126,6 +180,7 @@ export interface BlockDefinition<
   includeChildren?: (args: {
     props: z.output<Props>;
     ctx: BlockRenderContext;
+    resolved: Resolved;
   }) => boolean | Promise<boolean>;
   /**
    * Pick which child nodes to render (C2.17). The public surface returns one
@@ -135,6 +190,7 @@ export interface BlockDefinition<
     props: z.output<Props>;
     children: BlockNode[];
     ctx: BlockRenderContext;
+    resolved: Resolved;
   }) => BlockNode[];
   resolve?: (
     props: z.output<Props>,
@@ -161,6 +217,20 @@ export interface BlockNode {
   type: string;
   props: Record<string, unknown>;
   children?: BlockNode[];
+}
+
+/**
+ * The first value of a query parameter.
+ *
+ * Blocks that ask a yes/no question ("was this form just sent?") want an
+ * answer, not an array — a comparison with an array is simply false. The
+ * browse machinery reads repeated keys whole; everything else reads the
+ * first value, which is what a repeated key never means on those params.
+ */
+export function firstQueryValue(
+  value: string | string[] | undefined,
+): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 /** Helper that keeps a definition's generics inferred rather than widened. */

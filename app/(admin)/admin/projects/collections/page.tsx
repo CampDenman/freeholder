@@ -79,17 +79,17 @@ export default async function ProjectCollectionsPage({
           <form action={createCollectionAction} className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.collections.field.name")}</span>
-              <input name="name" required maxLength={160} className="rounded-md border border-rule bg-field px-3 py-2" />
+              <input name="name" required maxLength={160} className="rounded-md border border-rule-strong bg-field px-3 py-2" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.collections.field.kind")}</span>
-              <select name="kind" defaultValue="portfolio" className="rounded-md border border-rule bg-field px-3 py-2">
+              <select name="kind" defaultValue="portfolio" className="rounded-md border border-rule-strong bg-field px-3 py-2">
                 {KINDS.map((kind) => <option key={kind} value={kind}>{t(`projects.collections.kind.${kind}`)}</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm sm:col-span-2">
               <span className="text-ink-muted">{t("projects.collections.field.description")}</span>
-              <textarea name="description" maxLength={2000} rows={3} className="rounded-md border border-rule bg-field px-3 py-2" />
+              <textarea name="description" maxLength={2000} rows={3} className="rounded-md border border-rule-strong bg-field px-3 py-2" />
             </label>
             <input type="hidden" name="position" value="0" />
             <div className="sm:col-span-2"><Button type="submit">{t("projects.collections.action.create")}</Button></div>

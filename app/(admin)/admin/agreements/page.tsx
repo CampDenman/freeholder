@@ -126,7 +126,7 @@ export default async function AgreementsPage({
                           required
                           placeholder={t("agreements.field.signer")}
                           autoComplete="name"
-                          className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                          className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                         />
                       </label>
                       <Button type="submit" variant="quiet">
@@ -177,7 +177,7 @@ export default async function AgreementsPage({
                       <select
                         name="contactId"
                         required
-                        className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                        className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                       >
                         {(people?.rows ?? []).map((contact) => (
                           <option key={contact.id} value={contact.id}>
@@ -213,14 +213,14 @@ export default async function AgreementsPage({
                 <input
                   name="name"
                   required
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <label className="grid gap-1 text-sm">
                 <span className="text-ink-muted">{t("agreements.field.kind")}</span>
                 <select
                   name="kind"
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 >
                   <option value="waiver">{t("agreements.kind.waiver")}</option>
                   <option value="agreement">{t("agreements.kind.agreement")}</option>
@@ -236,7 +236,7 @@ export default async function AgreementsPage({
               <input
                 name="title"
                 required
-                className="max-w-prose rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="max-w-prose rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -245,7 +245,7 @@ export default async function AgreementsPage({
                 name="body"
                 required
                 rows={10}
-                className="max-w-prose rounded-md border border-rule bg-field px-2 py-1 font-mono text-sm"
+                className="max-w-prose rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-sm"
               />
             </label>
             {Array.from({ length: VARIABLE_ROWS }, (_, index) => (
@@ -255,7 +255,7 @@ export default async function AgreementsPage({
                   <input
                     name="variableKey"
                     placeholder={t("agreements.field.variable")}
-                    className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-sm"
                   />
                 </label>
                 <label className="grid gap-1 text-sm">
@@ -263,7 +263,7 @@ export default async function AgreementsPage({
                   <input
                     name="variableLabel"
                     placeholder={t("agreements.field.variableLabel")}
-                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                 </label>
                 <label className="grid gap-1 text-sm">
@@ -271,7 +271,7 @@ export default async function AgreementsPage({
                   <input
                     name="variableFallback"
                     placeholder={t("agreements.field.fallback")}
-                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                 </label>
               </div>

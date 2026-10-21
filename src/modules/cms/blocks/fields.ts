@@ -21,7 +21,9 @@ export type FieldKind =
   | "boolean"
   | "choice"
   | "list"
-  | "asset";
+  | "asset"
+  | "collection"
+  | "product";
 
 export interface FieldChoice {
   value: string;
@@ -56,7 +58,7 @@ export interface FieldHint {
    * names something the editor should offer a chooser for, which is why a
    * plugin can ask for one without touching the editor (§24).
    */
-  control?: "multiline" | "asset" | "rich";
+  control?: "multiline" | "asset" | "rich" | "collection" | "product";
   /** When `control` is `asset`, limit the picker to one media kind. */
   assetKind?: "image" | "video";
   hidden?: boolean;
@@ -138,6 +140,12 @@ function describeField(
   if (def.type === "string") {
     if (hint?.control === "asset") {
       return { ...base, kind: "asset", assetKind: hint.assetKind };
+    }
+    if (hint?.control === "collection" || hint?.control === "product") {
+      // Entity picks are string props (the public slug), exactly like an asset
+      // id — the editor supplies the choices and both the form select and the
+      // on-canvas replace affordance read them from the field.
+      return { ...base, kind: hint.control };
     }
     return { ...base, kind: hint?.control === "multiline" ? "multiline" : "text" };
   }

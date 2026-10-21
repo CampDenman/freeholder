@@ -6,6 +6,7 @@
 // A key is a standing grant against the whole service registry, so minting one
 // is closer to creating a user than to changing a setting.
 import { z } from "zod";
+import personalKeyServices from "./personal";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { apiKeys } from "@/core/apikeys/schema";
 import { mintApiKey } from "@/core/apikeys/tokens";
@@ -242,4 +243,4 @@ export const revokeApiKey = defineService({
   },
 });
 
-export default [listScopes, createApiKey, listApiKeys, revokeApiKey];
+export default [listScopes, createApiKey, listApiKeys, revokeApiKey, ...personalKeyServices];

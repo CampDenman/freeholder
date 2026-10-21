@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 "use server";
 import { encodeQR } from "qr";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import {
   LOGIN_CHALLENGE_COOKIE,
+  beginPasskeyLogin,
+  completePasskeyLogin,
   beginTotpEnrollment,
   beginWebAuthnRegistration,
   beginWebAuthnStepUp,
@@ -21,6 +23,7 @@ import {
   removeWebAuthnFactor,
   verifyStepUpCode,
 } from "@/core/auth/two-factor";
+import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { ServiceError } from "@/core/service";
@@ -258,4 +261,25 @@ export async function revokeOtherSessionsAction(): Promise<SecurityActionState> 
 
 function safeReturnTo(value: string): string {
   return value.startsWith("/") && !value.startsWith("//") ? value : "/admin";
+}
+
+const PASSKEY_COOKIE = "freeholder_passkey_challenge";
+export async function beginPasskeyLoginAction(email: string) {
+  try {
+    const result = await beginPasskeyLogin.call({ email }, { kind: "anonymous", request: requestMetadataFromHeaders(await headers()) });
+    (await cookies()).set(PASSKEY_COOKIE, result.challengeToken, {
+      httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 600,
+    });
+    return { options: result.options };
+  } catch (error) { return present(error); }
+}
+export async function finishPasskeyLoginAction(credentialResponse: Record<string, unknown>): Promise<SecurityActionState> {
+  const token = (await cookies()).get(PASSKEY_COOKIE)?.value;
+  if (!token) return { error: "That sign-in attempt expired. Start again." };
+  try {
+    const result = await completePasskeyLogin.call({ challengeToken: token, credentialResponse }, { kind: "anonymous" });
+    await establishSession(result);
+    (await cookies()).delete(PASSKEY_COOKIE);
+  } catch (error) { return present(error); }
+  redirect("/admin");
 }

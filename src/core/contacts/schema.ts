@@ -117,6 +117,8 @@ export const contacts = pgTable(
     // email (walk-ins, phone-only leads) are unaffected. Addresses are
     // lowercased by the service layer before they ever reach this column.
     uniqueIndex("contacts_email_idx").on(t.email),
+    // C11.11: newest-first paging, including contacts imported in one batch.
+    index("contacts_created_id_idx").on(t.createdAt, t.id),
     index("contacts_lifecycle_stage_idx").on(t.lifecycleStage),
     index("contacts_tags_idx").using("gin", t.tags),
     index("contacts_name_search_idx").using("gin", t.name.op("gin_trgm_ops")),

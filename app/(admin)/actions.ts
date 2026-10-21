@@ -21,6 +21,15 @@ import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import {
+  applyUpdate,
+  checkUpdates,
+  getUpdatePolicy,
+  openForkUpdate,
+  preflightUpdate,
+  rollbackUpdate,
+  saveUpdatePolicy,
+} from "@/core/update/service";
+import {
   createContact,
   mergeContacts,
   undoContactMerge,
@@ -57,6 +66,7 @@ import { createApiKey, revokeApiKey } from "@/core/apikeys/service";
 import {
   createWebhook,
   deleteWebhook,
+  replayDelivery,
   revealWebhookSecret,
   testWebhook,
   updateWebhook,
@@ -669,6 +679,130 @@ export async function jobControlAction(
   return { saved: true, message: t(messageKey) };
 }
 
+/* ------------------------------------------------- platform updates (C10.20) */
+
+/**
+ * Every §39.10 update action the admin offers, through the same services the
+ * CLI and MCP will call. The admin is a caller, never a shortcut.
+ *
+ * Applying an update is the only one that carries a typed confirmation: it
+ * cuts a live site over to a new build, and §39's whole argument is that this
+ * is safe *because* it is deliberate, snapshotted and reversible — not because
+ * it is easy to trigger by accident.
+ */
+export async function updateControlAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const intent = field(form, "intent");
+  let messageKey = "updates.message.saved";
+  try {
+    const actor = await currentActor();
+    switch (intent) {
+      case "hostApply": {
+        const { requestHostUpdate } = await import("@/core/update/host");
+        await requestHostUpdate.call({}, actor);
+        messageKey = "updates.host.queued";
+        break;
+      }
+      case "check": {
+        const result = await checkUpdates.call({}, actor);
+        messageKey = result.checked
+          ? "updates.message.checked"
+          : result.reason === "off"
+            ? "updates.message.checksOff"
+            : "updates.message.notMySlot";
+        break;
+      }
+      case "preflight":
+        await preflightUpdate.call(
+          { targetVersion: field(form, "version") || undefined },
+          actor,
+        );
+        messageKey = "updates.message.preflighted";
+        break;
+      case "apply":
+        await applyUpdate.call(
+          { toVersion: field(form, "version") || undefined },
+          actor,
+        );
+        messageKey = "updates.message.applied";
+        break;
+      case "pause":
+      case "resume":
+      case "savePolicy": {
+        const current = await getUpdatePolicy.call({}, actor);
+        // Pause and resume are the policy save with one field changed, rather
+        // than a second write path: two ways to change `pausedUntil` is two
+        // places for the snapshot pruning and validation to diverge.
+        const pausedUntil =
+          intent === "pause"
+            ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+            : intent === "resume"
+              ? null
+              : field(form, "pausedUntil")
+                ? new Date(field(form, "pausedUntil"))
+                : null;
+        const days = form.getAll("windowDays").filter((day): day is string => typeof day === "string");
+        await saveUpdatePolicy.call(
+          {
+            channel: (intent === "savePolicy"
+              ? field(form, "channel")
+              : current.channel) as "security" | "stable" | "edge" | "off",
+            applyLevel: (intent === "savePolicy"
+              ? field(form, "applyLevel")
+              : current.applyLevel) as "security" | "patch" | "minor" | "none",
+            window:
+              intent === "savePolicy" && days.length > 0
+                ? { days: days as never, start: field(form, "windowStart", "03:00") }
+                : (current.window as never),
+            drain: intent === "savePolicy" ? field(form, "drain") === "on" : current.drain,
+            notifyChannels: (intent === "savePolicy"
+              ? form.getAll("notifyChannels").filter((c): c is string => typeof c === "string")
+              : current.notifyChannels) as ("email" | "sms")[],
+            keepSnapshots:
+              intent === "savePolicy"
+                ? Number(field(form, "keepSnapshots", "5"))
+                : current.keepSnapshots,
+            pausedUntil,
+          },
+          actor,
+        );
+        messageKey =
+          intent === "pause"
+            ? "updates.message.paused"
+            : intent === "resume"
+              ? "updates.message.resumed"
+              : "updates.message.saved";
+        break;
+      }
+      case "forkUpdate": {
+        const result = await openForkUpdate.call({}, actor);
+        if (!result.opened) {
+          return {
+            error: result.refusal ?? "The fork lane could not open a pull request.",
+            ...echo(previous, form),
+          };
+        }
+        messageKey = "updates.message.forkOpened";
+        break;
+      }
+      case "rollback":
+        await rollbackUpdate.call({}, actor);
+        messageKey = "updates.message.rolledBack";
+        break;
+      default:
+        throw new ServiceError("validation", "Choose an update action.");
+    }
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  revalidatePath("/admin/updates");
+  revalidatePath("/admin/health");
+  const t = await getT();
+  return { saved: true, message: t(messageKey) };
+}
+
 /* --------------------------------------------- contact data depth (C1.06) */
 
 function optionsOf(form: FormData): string[] {
@@ -1005,23 +1139,44 @@ export async function saveServiceAreaAction(
     .split(/[\n,]/)
     .map((line) => line.trim())
     .filter(Boolean);
+  const postalCodes = field(form, "postalCodes")
+    .split(/[\n,]/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   const latitude = optionalNumber(form, "centerLatitude");
   const longitude = optionalNumber(form, "centerLongitude");
   const radiusKm = optionalNumber(form, "radiusKm");
+  // The delivery window saves as a whole (days + both times); the service
+  // validates the shape, so this only collects what the owner ticked.
+  const deliveryDays = form
+    .getAll("deliveryDays")
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6);
+  const deliveryOpens = field(form, "deliveryOpens").trim();
+  const deliveryCloses = field(form, "deliveryCloses").trim();
 
   let area:
     | { kind: "radius"; centerLatitude: number; centerLongitude: number; radiusKm: number }
     | { kind: "regions"; regions: string[] }
+    | { kind: "postal_codes"; postalCodes: string[] }
     | null = null;
   if (kind === "radius" && latitude !== undefined && longitude !== undefined && radiusKm) {
     area = { kind: "radius", centerLatitude: latitude, centerLongitude: longitude, radiusKm };
   } else if (kind === "regions" && regions.length > 0) {
     area = { kind: "regions", regions };
+  } else if (kind === "postal_codes" && postalCodes.length > 0) {
+    area = { kind: "postal_codes", postalCodes };
   }
+
+  const delivery =
+    deliveryDays.length > 0 || deliveryOpens || deliveryCloses
+      ? { weekdays: deliveryDays, opens: deliveryOpens, closes: deliveryCloses }
+      : null;
 
   try {
     await setServiceArea.call(
-      { locationId: field(form, "locationId"), area },
+      { locationId: field(form, "locationId"), area, delivery },
       await currentActor(),
     );
   } catch (error) {
@@ -1250,6 +1405,18 @@ export async function webhookAction(
   }
   revalidatePath("/admin/settings");
   return { saved: true };
+}
+
+export async function replayWebhookDeliveryAction(form: FormData): Promise<void> {
+  const id = field(form, "id");
+  try {
+    await replayDelivery.call({ id }, await currentActor());
+  } catch (error) {
+    const message = error instanceof ServiceError ? error.message : "That delivery could not be replayed.";
+    redirect(`/admin/settings?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/admin/settings");
+  redirect("/admin/settings?webhook=replayed");
 }
 
 /* ------------------------------------------------------------------- mail */

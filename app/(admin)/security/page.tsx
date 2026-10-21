@@ -12,6 +12,7 @@ import {
 } from "@/core/auth/session-management/service";
 import { actorFromToken } from "@/core/http/actor";
 import { getT } from "../../i18n";
+import { securityLabels } from "./labels";
 import { SecurityControls } from "./SecurityControls";
 
 export const dynamic = "force-dynamic";
@@ -43,24 +44,7 @@ export default async function SecurityPage() {
           sessions: activeSessions,
           loginActivity,
         }}
-        labels={{
-          ...Object.fromEntries([
-            "requiredReady", "requiredMissing", "saved", "saveCodes", "authenticator",
-            "authenticatorIntro", "enrolled", "notEnrolled", "remove", "setUpAuthenticator",
-            "manualSecret", "code", "confirm", "keys", "keysIntro", "addKey", "defaultKeyName",
-            "keyFailed", "keyName", "keyNameHint", "recovery", "verifyFirst", "regenerate",
-            "sessions", "sessionsIntro", "currentSession", "lastSeen", "expires", "network",
-            "unknownNetwork", "signOutSession", "signOutOthers", "signOutOthersIntro",
-            "loginActivity", "loginActivityIntro", "noLoginActivity", "newDevice",
-            "newNetwork", "noticeSent", "noticePending", "noticeUnavailable", "noticed",
-          ].map((key) => [key, t(`security.${key}`)])),
-          // ICU placeholders are resolved on the server. Passing the raw
-          // catalog entry to the client used to make this page throw before a
-          // newly registered owner could enrol their required second factor.
-          recoveryIntro: t("security.recoveryIntro", {
-            count: status.recoveryCodesRemaining,
-          }),
-        }}
+        labels={securityLabels(t, status.recoveryCodesRemaining)}
       />
     </main>
   );

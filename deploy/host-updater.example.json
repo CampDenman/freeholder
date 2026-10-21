@@ -1,0 +1,23 @@
+{
+  "state_directory": "/var/lib/freeholder-host-updater",
+  "socket": "/run/freeholder-host-updater/updater.sock",
+  "app_gid": 1001,
+  "backup_produces": "/backups/freeholder-pre-update.dump",
+  "health_timeout_seconds": 180,
+  "artifact": {
+    "url": "https://releases.example.com/freeholder/freeholder-0.1.0.tar.gz",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "cosign_identity": "https://github.com/CampDenman/freeholder/.github/workflows/publish-host-artifact.yml@refs/heads/main",
+    "signature_url": "https://releases.example.com/freeholder/freeholder-0.1.0.tar.gz.sig"
+  },
+  "hooks": {
+    "backup": "systemctl stop freeholder && pg_dump --format=custom freeholder > /backups/freeholder-pre-update.dump && systemctl start freeholder",
+    "maintenance_on": "touch /var/www/maintenance.on",
+    "apply": "tar -C /opt/freeholder -xzf \"$FH_ARTIFACT\" && systemctl restart freeholder",
+    "health": "curl -fsS http://127.0.0.1:3000/api/health | grep -q '\"ok\":true'",
+    "rollback": "/opt/freeholder/bin/restore-previous && systemctl restart freeholder",
+    "maintenance_off": "rm -f /var/www/maintenance.on"
+  },
+  "automatic": false,
+  "utc_hour": 10
+}

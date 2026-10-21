@@ -2,14 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // One catalog for every kind of sellable value (MASTER.md §4.2, C5.09).
 import { defineModule } from "@/core/module";
+import { catalogSettingsSchema } from "./checkout-policy";
 
 export default defineModule({
   name: "catalog",
   version: "0.1.0",
+  settingsSchema: catalogSettingsSchema,
   requires: ["core", "cms", "invoicing", "forms"],
   tables: () => import("./tables"),
   services: () => import("./service"),
   jobs: () => import("./jobs"),
+  onboarding: () => import("./onboarding"),
   events: {
     emits: [
       "catalog.productCreated",
@@ -41,6 +44,8 @@ export default defineModule({
       "catalog.cartAbandoned",
       "catalog.orderPlaced",
       "catalog.orderPaid",
+      "catalog.orderPartiallyPaid",
+      "catalog.orderPaymentReleased",
       "catalog.orderCancelled",
       "catalog.fulfillmentCreated",
       "catalog.fulfillmentShipped",
@@ -52,6 +57,20 @@ export default defineModule({
       "catalog.returnRefunded",
       "catalog.couponCreated",
       "catalog.giftCardIssued",
+      "catalog.giftCardSent",
+      "catalog.wishlistShared",
+      "catalog.collectionCreated",
+      "catalog.collectionUpdated",
+      "catalog.collectionPublished",
+      "catalog.collectionUnpublished",
+      "catalog.collectionTrashed",
+      "catalog.collectionRestored",
+      "catalog.collectionPurged",
+      "catalog.collectionProductAdded",
+      "catalog.collectionProductRemoved",
+      "catalog.collectionProductsReordered",
+      "catalog.collectionMembershipRecomputed",
     ],
   },
+  seo: { sitemapSources: ["catalog.collectionPaths"] },
 });

@@ -1,0 +1,10 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=Reset the disposable Freeholder playground
+After=docker.service
+Requires=docker.service
+[Service]
+Type=oneshot
+ExecStart=/opt/freeholder-playground/reset.sh
+TimeoutStartSec=300

@@ -5,7 +5,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
-import { agentRuns, agentSteps, agentTasks } from "@/core/agents/schema";
+import { agentTasks } from "@/core/agents/schema";
+import { runSteps, runs } from "@/core/runs/schema";
 import {
   cancelTask,
   connectAgentRuntime,
@@ -56,7 +57,7 @@ describe.runIf(hasDatabase)("live run inspection (C4.02)", { timeout: 30_000 }, 
       },
       asAgent("Worker"),
     );
-    const [stored] = await db().select().from(agentSteps);
+    const [stored] = await db().select().from(runSteps);
     expect(stored?.input).toMatchObject({ token: "[redacted]", email: "rae@example.test" });
     const inspected = await inspectRun.call({ runId: claim!.runId }, OWNER);
     expect(inspected?.steps[0]?.input).toMatchObject({ token: "[redacted]" });
@@ -88,7 +89,7 @@ describe.runIf(hasDatabase)("live run inspection (C4.02)", { timeout: 30_000 }, 
     const task = await createTask.call({ title: "Work" }, OWNER);
     const claim = await claimTask.call({}, asAgent("Worker"));
     await cancelTask.call({ id: task.id, reason: "Stop now." }, OWNER);
-    const [run] = await db().select().from(agentRuns).where(eq(agentRuns.id, claim!.runId));
+    const [run] = await db().select().from(runs).where(eq(runs.id, claim!.runId));
     expect(run?.status).toBe("cancelled");
     expect(run?.leaseExpiresAt).toBeNull();
     const viewed = await getTask.call({ id: task.id }, OWNER);

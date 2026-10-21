@@ -300,6 +300,7 @@ export const bookings = pgTable(
   "bookings",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    publicRequestKey: uuid("public_request_key"),
     contactId: uuid("contact_id")
       .notNull()
       .references(() => contacts.id, { onDelete: "restrict" }),
@@ -386,6 +387,7 @@ export const bookings = pgTable(
     updatedAt: updatedAtColumn(),
   },
   (t) => [
+    uniqueIndex("bookings_public_request_idx").on(t.contactId, t.publicRequestKey).where(sql`${t.publicRequestKey} is not null`),
     index("bookings_calendar_idx").on(t.calendarId, t.startsAt),
     index("bookings_contact_idx").on(t.contactId, t.startsAt),
     index("bookings_status_idx").on(t.status, t.startsAt),

@@ -6,7 +6,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
-import { agentApprovals } from "@/core/agents/schema";
+import { runApprovals } from "@/core/runs/schema";
 import { createContact, getContact } from "@/core/contacts/service";
 import { connectAgentRuntime, createTask, getTask, hireAgent } from "@/core/agents/service";
 import { claimTask } from "@/core/agents/execution";
@@ -74,6 +74,15 @@ describe.runIf(hasDatabase)("the approval inbox (C4.04)", { timeout: 30_000 }, (
   });
   afterAll(closeDb);
 
+  it("refuses a parked internal phase and rolls back its approval claim", async () => {
+    const { task, approval } = await parkedWrite("PrivateApproval", "private-approval@example.test");
+    await db().update(runApprovals).set({ serviceName: "invoicing.applyCustomerPayment", input: {} })
+      .where(eq(runApprovals.id, approval.id));
+    expect((await failure(approveWrite.call({ id: approval.id }, OWNER))).code).toBe("not_found");
+    expect((await listApprovals.call({ taskId: task.id }, OWNER))[0]?.status).toBe("pending");
+    expect((await getTask.call({ id: task.id }, OWNER))?.status).toBe("waiting_approval");
+  });
+
   it("approving executes the stored input exactly once and releases the task", async () => {
     const { person, task, approval } = await parkedWrite("Approver1", "a1@example.test");
     const before = await getTask.call({ id: task.id }, OWNER);
@@ -134,9 +143,9 @@ describe.runIf(hasDatabase)("the approval inbox (C4.04)", { timeout: 30_000 }, (
   it("expiry lapses unanswered approvals and releases their tasks", async () => {
     const { person, task, approval } = await parkedWrite("Approver5", "a5@example.test");
     await db()
-      .update(agentApprovals)
+      .update(runApprovals)
       .set({ expiresAt: sql`now() - interval '1 minute'` })
-      .where(eq(agentApprovals.id, approval.id));
+      .where(eq(runApprovals.id, approval.id));
     const swept = await expireApprovals.call({}, { kind: "system" });
     expect(swept.expired).toBe(1);
     expect((await getTask.call({ id: task.id }, OWNER))?.status).toBe("queued");

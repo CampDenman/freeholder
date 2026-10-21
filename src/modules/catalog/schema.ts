@@ -4,6 +4,7 @@
 // pricing and inventory attach to Product in later C5 milestones; none of them
 // gets to invent a parallel notion of what the business sells.
 
+import { users } from "@/core/auth/schema";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -28,6 +29,8 @@ import {
   ATTRIBUTE_KINDS,
   BUNDLE_PRICE_MODES,
   CANCELLATION_FEE_TYPES,
+  COLLECTION_RULE_TYPES,
+  COLLECTION_SORT_ORDERS,
   MEDIA_ROLES,
   PRICE_BREAK_MODES,
   PRICE_LIST_KINDS,
@@ -94,6 +97,12 @@ export const products = pgTable(
     /** First activation. Retained after archive/restore as lifecycle evidence. */
     publishedAt: timestamp("published_at", { withTimezone: true }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
+    /**
+     * §44.8: the member who sells this listing. Null means the site itself
+     * sells it. Member listings stay out of the site's own shop and cannot be
+     * checked out until seller payouts (C12.09) exist.
+     */
+    sellerUserId: uuid("seller_user_id").references(() => users.id, { onDelete: "restrict" }),
     /** Compare-and-swap token for humans, API clients and agents alike. */
     version: integer("version").notNull().default(1),
     createdAt: createdAtColumn(),
@@ -105,6 +114,7 @@ export const products = pgTable(
     index("products_visibility_updated_idx").on(t.visibility, t.updatedAt),
     index("products_kind_updated_idx").on(t.kind, t.updatedAt),
     index("products_tax_category_idx").on(t.taxCategoryId),
+    index("products_seller_idx").on(t.sellerUserId, t.status),
     check(
       "products_slug_valid",
       sql`char_length(${t.slug}) between 1 and 180 and ${t.slug} ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'`,
@@ -1108,13 +1118,36 @@ export const cartItems = pgTable(
     }),
     quantity: integer("quantity").notNull(),
     reservationId: uuid("reservation_id"),
+    /**
+     * Where this line came from, when it came from a gallery (§4.5, C8.08).
+     *
+     * Null for ordinary shopping. Present together or not at all: a print
+     * of nothing is not a line anybody can fulfil.
+     */
+    galleryId: uuid("gallery_id"),
+    assetId: uuid("asset_id"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
-    uniqueIndex("cart_items_unique_idx").on(t.cartId, t.variantId),
+    // Ordinary shopping keeps one line per variant, so adding the same
+    // thing twice still increases a quantity.
+    uniqueIndex("cart_items_unique_idx")
+      .on(t.cartId, t.variantId)
+      .where(sql`${t.assetId} is null`),
+    // A gallery sale is one line per photograph. Without this, two frames
+    // ordered as the same 8x10 would merge into a single line of two and
+    // the lab would have no idea which images to print.
+    uniqueIndex("cart_items_gallery_unique_idx")
+      .on(t.cartId, t.variantId, t.assetId)
+      .where(sql`${t.assetId} is not null`),
     index("cart_items_variant_idx").on(t.variantId),
+    index("cart_items_gallery_idx").on(t.galleryId),
     check("cart_items_qty", sql`${t.quantity} > 0`),
+    check(
+      "cart_items_provenance",
+      sql`(${t.galleryId} is null and ${t.assetId} is null) or (${t.galleryId} is not null and ${t.assetId} is not null)`,
+    ),
   ],
 );
 
@@ -1126,11 +1159,19 @@ export const wishlists = pgTable(
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
     name: text("name").notNull().default("Wishlist"),
+    /**
+     * HMAC of the public registry token (C9.35). Null until the owner of
+     * this list shares it; rotating mints a new hash and the old link dies.
+     */
+    shareTokenHash: text("share_token_hash"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
     uniqueIndex("wishlists_contact_idx").on(t.contactId),
+    uniqueIndex("wishlists_share_token_idx")
+      .on(t.shareTokenHash)
+      .where(sql`${t.shareTokenHash} is not null`),
     check("wishlists_name_valid", sql`char_length(${t.name}) between 1 and 80`),
   ],
 );
@@ -1172,6 +1213,8 @@ export const orders = pgTable(
     couponId: uuid("coupon_id"),
     shippingMethodId: uuid("shipping_method_id"),
     shippingAddress: jsonb("shipping_address").$type<Record<string, unknown>>(),
+    checkoutTermsSnapshot: jsonb("checkout_terms_snapshot").$type<Record<string, unknown>>(),
+    checkoutPaymentSnapshot: jsonb("checkout_payment_snapshot").$type<Record<string, unknown>>(),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -1181,9 +1224,29 @@ export const orders = pgTable(
     check("orders_currency", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check(
       "orders_status_valid",
-      sql`${t.status} in ('pending_payment','paid','fulfilling','fulfilled','refunded','cancelled')`,
+      sql`${t.status} in ('pending_payment','partially_paid','paid','fulfilling','fulfilled','refunded','cancelled')`,
     ),
     check("orders_totals", sql`${t.subtotalMinor} >= 0 and ${t.discountMinor} >= 0 and ${t.shippingMinor} >= 0 and ${t.taxMinor} >= 0 and ${t.totalMinor} >= 0`),
+  ],
+);
+
+/** Exact checkout stages. Only released rows are payable; dates are never inferred. */
+export const orderPaymentMilestones = pgTable(
+  "order_payment_milestones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id").notNull().references(() => orders.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    label: text("label").notNull(),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    releasedBy: text("released_by"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("order_payment_milestones_position_idx").on(t.orderId, t.position),
+    check("order_payment_milestones_amount_positive", sql`${t.amountMinor} > 0`),
+    check("order_payment_milestones_position_nonnegative", sql`${t.position} >= 0`),
   ],
 );
 
@@ -1201,10 +1264,22 @@ export const orderItems = pgTable(
     unitAmountMinor: bigint("unit_amount_minor", { mode: "number" }).notNull(),
     lineTotalMinor: bigint("line_total_minor", { mode: "number" }).notNull(),
     snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull().default({}),
+    /**
+     * Carried from the cart line, as columns rather than inside `snapshot`
+     * (§4.5, C8.08). "Which orders came from this gallery" is a question the
+     * owner asks, and a jsonb blob cannot answer it with an index.
+     */
+    galleryId: uuid("gallery_id"),
+    assetId: uuid("asset_id"),
     createdAt: createdAtColumn(),
   },
   (t) => [
     index("order_items_order_idx").on(t.orderId),
+    index("order_items_gallery_idx").on(t.galleryId),
+    check(
+      "order_items_provenance",
+      sql`(${t.galleryId} is null and ${t.assetId} is null) or (${t.galleryId} is not null and ${t.assetId} is not null)`,
+    ),
     check("order_items_qty", sql`${t.quantity} > 0`),
     check("order_items_amounts", sql`${t.unitAmountMinor} >= 0 and ${t.lineTotalMinor} >= 0`),
   ],
@@ -1418,11 +1493,19 @@ export const giftCards = pgTable(
     status: text("status", { enum: GIFT_CARD_STATUSES }).notNull().default("active"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     note: text("note"),
+    /**
+     * HMAC of the claim link (C9.35). The code stays off the public URL;
+     * holding this token is how a recipient opens the card.
+     */
+    shareTokenHash: text("share_token_hash"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
     uniqueIndex("gift_cards_code_idx").on(t.code),
+    uniqueIndex("gift_cards_share_token_idx")
+      .on(t.shareTokenHash)
+      .where(sql`${t.shareTokenHash} is not null`),
     index("gift_cards_contact_idx").on(t.contactId, t.status),
     check("gift_cards_code_valid", sql`${t.code} ~ '^[A-Z0-9][A-Z0-9-]{7,31}$'`),
     check("gift_cards_currency", sql`${t.currency} ~ '^[A-Z]{3}$'`),
@@ -1485,4 +1568,113 @@ export const cartRecoveries = pgTable(
     recoveredAt: timestamp("recovered_at", { withTimezone: true }),
   },
   (t) => [uniqueIndex("cart_recoveries_cart_idx").on(t.cartId)],
+);
+
+/** SEO overrides, same shape and limits the CMS and products use (§5). */
+export interface CollectionSeo {
+  title?: string;
+  description?: string;
+}
+
+/**
+ * A named group of products the storefront can browse (C3.25 slice 1).
+ *
+ * The catalog was a flat list; this is the taxonomy layer the parity mapping
+ * (`deploy/c324-storefront-parity-2026-09-29.md`, gap G1) proved missing.
+ * Rows are owner-scoped the same way every catalog table is: one Freeholder
+ * instance, one owner, reads and writes riding the module's scoped grant.
+ *
+ * Membership has two honest modes, never a third hidden one. `manual` rows
+ * in `collection_products` are the membership, pinned and ordered by the
+ * owner. `segment` membership is derived by the recompute job from one saved
+ * segment (§4.14) and the paid orders its contacts placed — the rows exist
+ * so the public read is one indexed join, but the job, not a hand, decides
+ * what is in. A segment collection refuses manual add/remove/reorder rather
+ * than letting an edit silently fight the next recompute.
+ *
+ * Removal is trash, never deletion (C11.14): `trashed_at` keeps the slug
+ * taken and the row recoverable for thirty days, and trashing or purging a
+ * collection touches nothing on the products it grouped — the taxonomy
+ * points at products; it does not own them.
+ */
+export const collections = pgTable(
+  "collections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    /** Public address is /c/<slug>; unique even while trashed, so a recovering collection's name cannot be taken. */
+    slug: text("slug").notNull(),
+    description: text("description"),
+    seo: jsonb("seo").$type<CollectionSeo>().notNull().default({}),
+    ruleType: text("rule_type", { enum: COLLECTION_RULE_TYPES })
+      .notNull()
+      .default("manual"),
+    /** `segment` collections store { segmentId }; `manual` collections store {}. */
+    ruleConfig: jsonb("rule_config")
+      .$type<{ segmentId?: string }>()
+      .notNull()
+      .default({}),
+    sortOrder: text("sort_order", { enum: COLLECTION_SORT_ORDERS })
+      .notNull()
+      .default("manual"),
+    published: boolean("published").notNull().default(false),
+    imageId: uuid("image_id").references(() => assets.id, { onDelete: "set null" }),
+    trashedAt: timestamp("trashed_at", { withTimezone: true }),
+    /** Compare-and-swap token, the same stale-write refusal products use. */
+    version: integer("version").notNull().default(1),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("collections_slug_idx").on(t.slug),
+    index("collections_published_idx").on(t.published, t.updatedAt),
+    index("collections_rule_idx").on(t.ruleType),
+    check(
+      "collections_slug_valid",
+      sql`char_length(${t.slug}) between 1 and 180 and ${t.slug} ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'`,
+    ),
+    check("collections_title_valid", sql`char_length(${t.title}) between 1 and 240`),
+    check(
+      "collections_rule_type_valid",
+      sql`${t.ruleType} in ('manual','segment')`,
+    ),
+    check(
+      "collections_sort_order_valid",
+      sql`${t.sortOrder} in ('manual','title','newest')`,
+    ),
+    check(
+      "collections_segment_rule_config",
+      sql`(${t.ruleType} = 'segment') = (${t.ruleConfig} ? 'segmentId')`,
+    ),
+    check("collections_version_positive", sql`${t.version} > 0`),
+  ],
+);
+
+/**
+ * Membership of one product in one collection, ordered by `position`.
+ *
+ * For `manual` collections the owner manages these rows. For `segment`
+ * collections the recompute job rewrites them wholesale, so a read never has
+ * to ask who derived what. Deleting a collection cascades to its membership;
+ * deleting a product cascades out of every collection it was in — the join
+ * is the only thing that disappears.
+ */
+export const collectionProducts = pgTable(
+  "collection_products",
+  {
+    collectionId: uuid("collection_id")
+      .notNull()
+      .references(() => collections.id, { onDelete: "cascade" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("collection_products_unique_idx").on(t.collectionId, t.productId),
+    index("collection_products_product_idx").on(t.productId),
+    index("collection_products_position_idx").on(t.collectionId, t.position),
+    check("collection_products_position_valid", sql`${t.position} between 0 and 100000`),
+  ],
 );

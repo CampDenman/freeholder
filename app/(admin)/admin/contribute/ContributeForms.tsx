@@ -58,7 +58,7 @@ export function SubmitForm({
           required
           maxLength={20_000}
           rows={8}
-          className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+          className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
         />
       </Field>
       <Field htmlFor="email" label={labels.email}>
@@ -181,7 +181,7 @@ export function DetermineForm({
           id="note"
           name="note"
           rows={3}
-          className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+          className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
         />
       </Field>
       <Button type="submit">{labels.save}</Button>

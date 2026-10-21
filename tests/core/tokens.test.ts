@@ -19,6 +19,9 @@ const ROLES = [
   "ink",
   "inkMuted",
   "rule",
+  // Controls border with this rather than `rule`, because WCAG 1.4.11 asks 3:1
+  // of a control's edge and nothing of a decorative divider.
+  "ruleStrong",
   "accent",
   "onAccent",
   "accentSoft",
@@ -77,6 +80,7 @@ describe("the token set", () => {
       it(`${scheme}: muted text clears AA on paper and surface`, () => {
         expect(contrast(c.inkMuted, c.paper)).toBeGreaterThanOrEqual(4.5);
         expect(contrast(c.inkMuted, c.surface)).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(c.inkMuted, c.surfaceMuted)).toBeGreaterThanOrEqual(4.5);
       });
 
       it(`${scheme}: text on the accent is legible`, () => {

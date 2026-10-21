@@ -100,7 +100,8 @@ export const joinWaitlist = defineService({
     seatCount: z.number().int().min(1).max(100).default(1),
     notes: z.string().trim().max(1_000).nullish(),
   }),
-  output: waitlistRow,
+  // C6.08/C11.10: an email is an enrollment request, never proof of identity.
+  output: z.object({ ok: z.literal(true) }),
   handler: async (input, ctx) => {
     const windowStart = new Date(input.windowStart);
     const windowEnd = new Date(input.windowEnd);
@@ -146,7 +147,7 @@ export const joinWaitlist = defineService({
         ),
       )
       .limit(1);
-    if (existing) return existing;
+    if (existing) return { ok: true as const };
 
     const [created] = await ctx.tx
       .insert(bookingWaitlist)
@@ -172,7 +173,7 @@ export const joinWaitlist = defineService({
       id: created!.id,
       contactId: resolved.contact.id,
     });
-    return created!;
+    return { ok: true as const };
   },
 });
 

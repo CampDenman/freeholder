@@ -26,14 +26,16 @@ or backlog.
   opens a second transaction on a second connection, so half the mutation can
   commit while the other half rolls back. Elevation is `ctx.callAsSystem` and
   nothing else — it is deliberately greppable.
-  One sanctioned exception exists: `mail.completeOAuth` commits its one-time
-  state claim on a second connection before exchanging the provider code,
-  because provider codes are single-use and rolling the claim back would
-  advertise an impossible retry. The rationale and its pool-deadlock caveat
-  live at the call site in `src/core/mail/oauth.ts`. Do not add a second
-  exception without recording it here.
-- **Single-tenant.** One deploy = one business. No tenant-isolation
-  abstractions.
+  Provider I/O never happens in a service transaction. A synchronous flow
+  that must cross a provider boundary uses `defineOrchestratedService` around
+  ordinary short claim/apply services; an orchestrator refuses `ctx.call`, so
+  it cannot be moved back under a caller's transaction by composition. OAuth
+  state claims commit before single-use codes are exchanged, and provider
+  responses are applied in a fresh transaction afterwards.
+- **One site, many members.** One deploy = one site, with no tenant-isolation
+  abstractions between sites. That site serves any number of members who
+  publish, connect, message, call, buy and sell with each other (`MASTER.md`
+  §44). When a choice is open, pick what is best for the people using the site.
 - **Monolith + toggleable modules.** No microservices. Adapters for the
   swappable edges: payments (Stripe default, PayPal), mail
   (Google/Outlook OAuth for transactional, provider adapter for bulk),
@@ -51,7 +53,7 @@ or backlog.
 - **Replit-first deployability.** Changes must not break single-command
   deploy. Seed/demo mode must keep working.
 - **SEO as architecture**, first-party analytics, KISS auth
-  (email + password + OTP for owners, magic links for customers).
+  (passkeys for owners, password + OTP fallback, magic links for customers).
 
 ## Conventions
 

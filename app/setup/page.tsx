@@ -18,7 +18,7 @@ export default async function SetupOwnerPage() {
   // admin reachable only through the raw API used by CI.
   if (state.hasOwner) {
     if (state.completed) redirect("/");
-    redirect("/setup/business");
+    redirect("/setup/security");
   }
 
   const t = await getT();
@@ -39,6 +39,8 @@ export default async function SetupOwnerPage() {
           emailPlaceholder: t("setup.owner.emailPlaceholder"),
           password: t("setup.owner.password"),
           passwordHint: t("setup.owner.passwordHint"),
+          bootstrapSecret: t("setup.owner.bootstrapSecret"),
+          bootstrapSecretHint: t("setup.owner.bootstrapSecretHint"),
           submit: t("setup.owner.submit"),
           pending: t("setup.owner.pending"),
         }}

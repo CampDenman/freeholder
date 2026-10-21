@@ -6,14 +6,17 @@
 // settlement stays on the invoicing module; paying the order consumes stock
 // holds. Fulfillment shipments are C5.19.
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { clipSnippet, matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { listLocations } from "@/core/locations/service";
+import { checkCoverage } from "@/core/locations/coverage";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { QUANTITY_SCALE } from "@/modules/invoicing/money";
+import { payments } from "@/modules/invoicing/schema";
 import {
   createDraftInvoice,
   getInvoice,
@@ -24,7 +27,10 @@ import { ORDER_STATUSES } from "./contract";
 import { releaseReservation, reserveStock } from "./inventory";
 import { attachCartToContact, getCart, requireContactAuthority } from "./cart";
 import { quoteShipping } from "./shipping";
-import { carts, orderItems, orders, stockReservations } from "./schema";
+import { issuePass } from "@/core/entitlements/service";
+import { carts, orderItems, orderPaymentMilestones, orders, products, productVariants, stockReservations } from "./schema";
+import { assertSellable } from "./market";
+import { checkoutSettings, checkoutTermsHash, paymentMilestones, termsSnapshot } from "./checkout-policy";
 
 const id = z.string().uuid();
 
@@ -43,6 +49,8 @@ const orderRow = row({
   couponId: uuid.nullable(),
   shippingMethodId: uuid.nullable(),
   shippingAddress: z.unknown().nullable(),
+  checkoutTermsSnapshot: z.unknown().nullable(),
+  checkoutPaymentSnapshot: z.unknown().nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -56,7 +64,12 @@ const orderItemRow = row({
   snapshot: z.unknown(),
   createdAt: timestamp,
 });
-const orderDetail = z.object({ order: orderRow, lines: listed(orderItemRow) });
+const paymentMilestoneRow = row({
+  id: uuid, orderId: uuid, position: z.number().int(), label: z.string(),
+  amountMinor: z.number().int(), releasedAt: timestamp.nullable(),
+  releasedBy: z.string().nullable(), createdAt: timestamp,
+});
+const orderDetail = z.object({ order: orderRow, lines: listed(orderItemRow), milestones: listed(paymentMilestoneRow) });
 const address = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   street1: z.string().trim().min(1).max(300).optional(),
@@ -100,7 +113,7 @@ registerContactReference({
 
 registerContactPrivacySource({
   scope: "catalog.orders",
-  tables: ["orders", "order_items"],
+  tables: ["orders", "order_items", "order_payment_milestones"],
   exportData: async (tx: Tx, contactId: string) =>
     tx
       .select({ id: orders.id, status: orders.status, currency: orders.currency, totalMinor: orders.totalMinor })
@@ -132,6 +145,8 @@ export const checkoutCart = defineService({
     contactId: id,
     idempotencyKey: z.string().trim().min(8).max(240),
     acceptedTerms: z.literal(true),
+    termsVersion: z.string().trim().min(1).max(100).optional(),
+    termsHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     shippingAddress: address.optional(),
     shippingMethodId: id.optional(),
     locationId: id.optional(),
@@ -156,10 +171,10 @@ export const checkoutCart = defineService({
     // storefront checkout (when it lands) verifies the shopper's email first
     // and composes through ctx.callAsSystem.
     requireContactAuthority(ctx, "catalog.checkoutCart");
-    let basket = await ctx.call(getCart, { cartId: input.cartId });
+    let basket = await ctx.callAsSystem(getCart, { cartId: input.cartId });
     if (basket.cart.status === "converted") {
       const [existing] = await ctx.tx.select().from(orders).where(eq(orders.cartId, basket.cart.id)).limit(1);
-      if (existing) return ctx.call(getOrder, { id: existing.id });
+      if (existing) return ctx.callAsSystem(getOrder, { id: existing.id });
       throw new ServiceError("conflict", "That cart was already converted.");
     }
     if (basket.cart.status !== "open" || basket.cart.kind !== "cart") {
@@ -169,7 +184,8 @@ export const checkoutCart = defineService({
       throw new ServiceError("conflict", "That cart belongs to a different contact.");
     }
     if (!basket.cart.contactId) {
-      basket = await ctx.call(attachCartToContact, {
+      if (!basket.cart.token) throw new ServiceError("conflict", "The checked-out cart has no private token.");
+      basket = await ctx.callAsSystem(attachCartToContact, {
         token: basket.cart.token,
         contactId: input.contactId,
       });
@@ -177,15 +193,44 @@ export const checkoutCart = defineService({
     if (basket.lines.length === 0) {
       throw new ServiceError("validation", "The cart is empty.");
     }
+    // §44.8: member listings sell only when their sellers can be paid.
+    await assertSellable(ctx, basket.lines.map((line) => line.variantId));
     if (!basket.allPriced) {
       throw new ServiceError("validation", "Every line needs a price in this currency before checkout.");
     }
     if (!basket.allAvailable) {
       throw new ServiceError("validation", "A line is no longer available.");
     }
+    const settings = await checkoutSettings(ctx);
+    if (settings.checkoutPayment.mode === "milestones" && settings.checkoutPayment.currency !== basket.cart.currency) {
+      throw new ServiceError("conflict", "The checkout payment policy does not match this cart's currency.");
+    }
+    if (settings.checkoutTerms && (settings.checkoutTerms.version !== input.termsVersion || checkoutTermsHash(settings.checkoutTerms.body) !== input.termsHash)) {
+      throw new ServiceError("conflict", "The checkout terms changed. Review and accept the current version.");
+    }
     const needsShipping = basket.lines.some((line) => line.requiresShipping);
     if (needsShipping && !input.shippingAddress) {
       throw new ServiceError("validation", "A shipping address is required for physical items.");
+    }
+
+    // C6.18: the coverage check a visitor ran on the page was information;
+    // this is the gate. The order's destination is re-validated against the
+    // areas the owner actually named, in the same transaction, because a
+    // client-side answer is a hint and only the server can refuse. A definite
+    // "outside" refuses cleanly; "unconfirmed" never does — coverage is never
+    // inferred in either direction, so an address an unnamed area might reach
+    // is never turned away on a guess.
+    if (needsShipping && input.shippingAddress?.postalCode) {
+      const coverage = await ctx.callAsSystem(checkCoverage, {
+        postalCode: input.shippingAddress.postalCode,
+        locationId: input.locationId,
+      });
+      if (coverage.answer === "outside") {
+        throw new ServiceError(
+          "validation",
+          `${coverage.postalCode} is outside the areas we have listed for delivery. Check the postcode, or contact us and we will tell you whether we can come to you.`,
+        );
+      }
     }
 
     let shippingMinor = 0;
@@ -222,7 +267,7 @@ export const checkoutCart = defineService({
 
     const { quoteCartPromotions } = await import("./promotions");
     const { allocateDiscount } = await import("./promo-quote");
-    const promo = await ctx.call(quoteCartPromotions, {
+    const promo = await ctx.callAsSystem(quoteCartPromotions, {
       cartId: basket.cart.id,
       couponCode: input.couponCode,
       subtotalMinor: basket.subtotalMinor,
@@ -249,6 +294,8 @@ export const checkoutCart = defineService({
         couponId: promo.couponId,
         shippingMethodId,
         shippingAddress: input.shippingAddress ?? null,
+        checkoutTermsSnapshot: settings.checkoutTerms ? termsSnapshot(settings.checkoutTerms, new Date()) : null,
+        checkoutPaymentSnapshot: settings.checkoutPayment,
       })
       .returning();
 
@@ -260,6 +307,11 @@ export const checkoutCart = defineService({
         unitAmountMinor: line.unitAmountMinor!,
         lineTotalMinor: line.lineTotalMinor!,
         snapshot: { sku: line.sku, productName: line.productName, requiresShipping: line.requiresShipping },
+        // Provenance survives checkout, or it was never provenance: the
+        // owner has to know which gallery and which frame an order line is
+        // for long after the cart is gone.
+        galleryId: line.galleryId ?? null,
+        assetId: line.assetId ?? null,
       });
     }
 
@@ -316,6 +368,18 @@ export const checkoutCart = defineService({
         couponId: promo.couponId,
       })
       .where(eq(orders.id, order!.id));
+
+    if (settings.checkoutPayment.mode === "milestones") {
+      const stages = paymentMilestones(issued.invoice.totalMinor, settings.checkoutPayment);
+      await ctx.tx.insert(orderPaymentMilestones).values(stages.map((stage, position) => ({
+        orderId: order!.id,
+        position,
+        label: stage.label,
+        amountMinor: stage.amountMinor,
+        releasedAt: position === 0 ? new Date() : null,
+        releasedBy: position === 0 ? "checkout" : null,
+      })));
+    }
 
     const { recordCouponRedemption, applyGiftCardToInvoice } = await import("./promotions");
     if (promo.couponId) {
@@ -380,7 +444,7 @@ export const checkoutCart = defineService({
           quantity: line.quantity,
           holderType: "order",
           holderId: order!.id,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          expiresAt: new Date(Date.now() + (issued.invoice.paidMinor > 0 ? 30 : 7) * 86_400_000),
         });
       }
     }
@@ -403,7 +467,7 @@ export const checkoutCart = defineService({
         currency: basket.cart.currency,
       },
     });
-    return ctx.call(getOrder, { id: order!.id });
+    return ctx.callAsSystem(getOrder, { id: order!.id });
   },
 });
 
@@ -418,7 +482,10 @@ export const payOrder = defineService({
   handler: async (input, ctx) => {
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.id)).for("update");
     if (!order) throw new ServiceError("not_found", "That order is not here.");
-    if (order.status !== "pending_payment") {
+    if (["paid", "fulfilling", "fulfilled"].includes(order.status)) {
+      return ctx.callAsSystem(getOrder, { id: order.id });
+    }
+    if (order.status !== "pending_payment" && order.status !== "partially_paid") {
       throw new ServiceError("conflict", "Only an unpaid order can be marked paid.");
     }
     if (!order.invoiceId) {
@@ -447,6 +514,31 @@ export const payOrder = defineService({
     await ctx.tx.update(orders).set({ status: "paid", updatedAt: new Date() }).where(eq(orders.id, order.id));
     const { grantDigitalFulfillment } = await import("./fulfillment");
     await ctx.call(grantDigitalFulfillment, { orderId: order.id });
+    const lines = await ctx.tx
+      .select({
+        quantity: orderItems.quantity,
+        productId: products.id,
+        productName: products.name,
+        kind: products.kind,
+      })
+      .from(orderItems)
+      .innerJoin(productVariants, eq(productVariants.id, orderItems.variantId))
+      .innerJoin(products, eq(products.id, productVariants.productId))
+      .where(eq(orderItems.orderId, order.id));
+    for (const line of lines) {
+      if (line.kind !== "pass") continue;
+      const punches =
+        line.quantity >= QUANTITY_SCALE
+          ? Math.max(1, Math.floor(line.quantity / QUANTITY_SCALE))
+          : Math.max(1, line.quantity);
+      await ctx.callAsSystem(issuePass, {
+        contactId: order.contactId,
+        productId: line.productId,
+        productName: line.productName,
+        quantity: punches,
+        sourceOrderId: order.id,
+      });
+    }
     ctx.setSubject("order", order.id);
     ctx.queueEvent("catalog.orderPaid", { orderId: order.id });
     await ctx.emitTimeline({
@@ -456,7 +548,7 @@ export const payOrder = defineService({
       subjectId: order.id,
       payload: { invoiceId: order.invoiceId, totalMinor: order.totalMinor, currency: order.currency },
     });
-    return ctx.call(getOrder, { id: order.id });
+    return ctx.callAsSystem(getOrder, { id: order.id });
   },
 });
 
@@ -473,6 +565,13 @@ export const cancelOrder = defineService({
     if (!order) throw new ServiceError("not_found", "That order is not here.");
     if (order.status !== "pending_payment") {
       throw new ServiceError("conflict", "Only an unpaid order can be cancelled here.");
+    }
+    if (order.invoiceId) {
+      const invoice = await ctx.callAsSystem(getInvoice, { id: order.invoiceId });
+      if (invoice.invoice.paidMinor > 0) {
+        throw new ServiceError("conflict", "This order has a payment. Resolve its refund before cancelling.");
+      }
+      await ctx.callAsSystem(voidInvoice, { id: order.invoiceId, reason: "Order cancelled." });
     }
     const reservations = await ctx.tx
       .select()
@@ -491,13 +590,6 @@ export const cancelOrder = defineService({
         /* already gone */
       }
     }
-    if (order.invoiceId) {
-      try {
-        await ctx.callAsSystem(voidInvoice, { id: order.invoiceId, reason: "Order cancelled." });
-      } catch {
-        /* already void, or invoicing refused â€” the order still cancels */
-      }
-    }
     await ctx.tx.update(orders).set({ status: "cancelled", updatedAt: new Date() }).where(eq(orders.id, order.id));
     ctx.setSubject("order", order.id);
     ctx.queueEvent("catalog.orderCancelled", { orderId: order.id });
@@ -508,22 +600,66 @@ export const cancelOrder = defineService({
       subjectId: order.id,
       payload: { invoiceId: order.invoiceId },
     });
-    return ctx.call(getOrder, { id: order.id });
+    return ctx.callAsSystem(getOrder, { id: order.id });
+  },
+});
+
+export const releaseOrderPaymentMilestone = defineService({
+  name: "catalog.releaseOrderPaymentMilestone",
+  writeClass: "money",
+  summary: "Release the next owner-approved order milestone after earlier payments settle.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ orderId: id, position: z.number().int().positive() }),
+  output: paymentMilestoneRow,
+  handler: async (input, ctx) => {
+    const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.orderId)).for("update");
+    if (!order || !order.invoiceId) throw new ServiceError("not_found", "That order is not here.");
+    const stages = await ctx.tx.select().from(orderPaymentMilestones)
+      .where(eq(orderPaymentMilestones.orderId, order.id)).orderBy(orderPaymentMilestones.position);
+    const stage = stages[input.position];
+    if (!stage || stage.position !== input.position) throw new ServiceError("not_found", "That payment milestone is not here.");
+    if (stage.releasedAt) return stage;
+    if (order.status !== "partially_paid") {
+      throw new ServiceError("conflict", "Only a partially paid order can release another payment.");
+    }
+    if (stages.find((candidate) => !candidate.releasedAt)?.position !== input.position) {
+      throw new ServiceError("conflict", "Milestones must be released in order.");
+    }
+    const invoice = await ctx.callAsSystem(getInvoice, { id: order.invoiceId });
+    const priorMinor = stages.slice(0, input.position).reduce((sum, item) => sum + item.amountMinor, 0);
+    if (invoice.invoice.paidMinor < priorMinor) {
+      throw new ServiceError("conflict", "The previous payment must settle before the next milestone is released.");
+    }
+    const [active] = await ctx.tx.select({ id: payments.id }).from(payments).where(and(
+      eq(payments.invoiceId, order.invoiceId), inArray(payments.status, ["created", "processing"]),
+    )).limit(1);
+    if (active) throw new ServiceError("conflict", "A payment attempt needs reconciliation before the next milestone is released.");
+    const [updated] = await ctx.tx.update(orderPaymentMilestones)
+      .set({ releasedAt: new Date(), releasedBy: ctx.actor.kind === "user" ? ctx.actor.userId : ctx.actor.kind })
+      .where(eq(orderPaymentMilestones.id, stage.id)).returning();
+    ctx.setSubject("order", order.id);
+    ctx.queueEvent("catalog.orderPaymentReleased", { orderId: order.id, milestoneId: stage.id, position: stage.position });
+    await ctx.emitTimeline({ contactId: order.contactId, eventType: "order.paymentReleased", subjectType: "order", subjectId: order.id,
+      payload: { milestoneId: stage.id, position: stage.position, amountMinor: stage.amountMinor, currency: order.currency } });
+    return updated!;
   },
 });
 
 export const getOrder = defineService({
   name: "catalog.getOrder",
-  summary: "One order and its lines.",
+  summary: "One order and its lines for an authorized catalog reader.",
   kind: "query",
-  permission: "public",
+  permission: "scoped",
   input: z.object({ id }),
   output: orderDetail,
   handler: async (input, ctx) => {
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.id)).limit(1);
     if (!order) throw new ServiceError("not_found", "That order is not here.");
     const lines = await ctx.tx.select().from(orderItems).where(eq(orderItems.orderId, order.id));
-    return { order, lines };
+    const milestones = await ctx.tx.select().from(orderPaymentMilestones)
+      .where(eq(orderPaymentMilestones.orderId, order.id)).orderBy(orderPaymentMilestones.position);
+    return { order, lines, milestones };
   },
 });
 
@@ -532,6 +668,11 @@ export const listOrders = defineService({
   summary: "Orders for the owner workspace or one contact.",
   kind: "query",
   permission: "scoped",
+  // C8.11: the customer this asks about may ask it themselves. The
+  // contract layer verifies the field is present and is their own contact
+  // before the handler runs, so this widens what a customer can *see*
+  // about themselves and nothing else.
+  selfService: { contactField: "contactId" },
   input: z.object({ contactId: id.optional() }),
   output: listed(orderRow),
   handler: (input, ctx) =>
@@ -543,4 +684,18 @@ export const listOrders = defineService({
       .limit(200),
 });
 
-export default [checkoutCart, payOrder, cancelOrder, getOrder, listOrders];
+registerSearchSource({
+  kind: "order", module: "catalog", readService: "catalog.getOrder", tables: ["orders", "order_items"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx.select({ id: orders.id, contactId: orders.contactId,
+      product: sql<string | null>`(select oi.snapshot->>'productName' from order_items oi where oi.order_id = ${orders.id} order by oi.id limit 1)` })
+      .from(orders).where(or(matchesIlike(sql`${orders.id}::text`, pattern), matchesIlike(sql`${orders.contactId}::text`, pattern),
+        sql`exists (select 1 from order_items oi where oi.order_id = ${orders.id} and
+          ((oi.snapshot->>'productName') ilike ${pattern} escape ${"\\"} or (oi.snapshot->>'sku') ilike ${pattern} escape ${"\\"}))`))
+      .orderBy(desc(orders.createdAt), desc(orders.id)).limit(limit);
+    return rows.map(item => ({ kind: "order", id: item.id, title: item.id.slice(0, 8), href: `/admin/orders/${item.id}`,
+      snippet: clipSnippet(item.product), contactId: item.contactId, module: "catalog" }));
+  },
+});
+
+export default [checkoutCart, payOrder, cancelOrder, releaseOrderPaymentMilestone, getOrder, listOrders];

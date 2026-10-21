@@ -35,9 +35,7 @@ export function createResendMail(options: {
           text: message.text,
           html: message.html,
           reply_to: message.replyTo,
-          headers: message.deliveryId
-            ? { "x-freeholder-delivery": message.deliveryId }
-            : undefined,
+          headers: { ...message.headers, ...(message.deliveryId ? { "x-freeholder-delivery": message.deliveryId } : {}) },
         }),
       });
       const body = await providerJson<{ id?: string }>(response, "Resend");

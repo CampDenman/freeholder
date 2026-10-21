@@ -73,16 +73,14 @@ const RULES = [
 export async function auditHtml(html, url) {
   // axe binds to the globals of the window it runs *inside*, so it is injected
   // into the jsdom window rather than imported beside it. That means enabling
-  // scripting — and the page's own scripts must go first, because running
-  // React's hydration bundle inside jsdom proves nothing about accessibility
-  // and fails in ways that have nothing to do with the page.
-  const markup = html
-    .replace(/<script\b(?![^>]*type="application\/ld\+json")[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<script\b[^>]*\/>/gi, "");
-
-  const dom = new JSDOM(markup, {
+  // only explicit outside injection. Executing a page's own scripts would
+  // add code execution to a markup check and can fail for reasons unrelated
+  // to accessibility.
+  const dom = new JSDOM(html, {
     url,
-    runScripts: "dangerously",
+    // Only our explicit axe injection can run; page scripts and inline event
+    // handlers cannot execute, regardless of malformed markup or attributes.
+    runScripts: "outside-only",
     pretendToBeVisual: true,
   });
 

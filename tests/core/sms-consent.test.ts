@@ -59,6 +59,15 @@ describe("mandatory SMS control words", () => {
       intent: "stop",
       locale: "en",
     });
+    expect(classifySmsComplianceKeyword("توقف")).toMatchObject({
+      intent: "stop",
+      locale: "ar",
+      keyword: "توقف",
+    });
+    expect(classifySmsComplianceKeyword("مساعدة")).toMatchObject({
+      intent: "help",
+      locale: "ar",
+    });
   });
 
   it("does not turn an ordinary sentence into a control command", () => {
@@ -70,6 +79,7 @@ describe("mandatory SMS control words", () => {
     expect(smsComplianceReply("help", "fr-CA")).toContain("ARRÊT");
     expect(smsComplianceReply("start", "es-MX")).toContain("ALTO");
     expect(smsComplianceReply("stop", "de")).toContain("START");
+    expect(smsComplianceReply("stop", "ar-EG")).toContain("ابدأ");
   });
 });
 

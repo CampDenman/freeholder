@@ -1,0 +1,73 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# Confirm and pin the image GitHub already published. This file lives on the
+# private forge on purpose. Do not copy it to .github/workflows: a public
+# repository's hosted runner would then hold the production SSH key, and the
+# host address would pass through GitHub. Host, key and known_hosts are
+# secrets. They are not in this file.
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DEPLOY PRODUCTION to continue
+        required: true
+        type: string
+      revision:
+        description: Commit SHA, sha-<12>, or ghcr.io/campdenman/freeholder@sha256:<64> already published by main CI
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: freeholder-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Pin and deploy the published image
+    runs-on: freeholder-release
+    timeout-minutes: 30
+    steps:
+      - name: Require explicit production confirmation
+        env:
+          CONFIRMATION: ${{ forgejo.event.inputs.confirmation }}
+        run: test "$CONFIRMATION" = "DEPLOY PRODUCTION"
+
+      - name: Checkout
+        uses: https://data.forgejo.org/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: https://data.forgejo.org/actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+
+      - name: Configure the dedicated deploy identity
+        env:
+          DEPLOY_KEY: ${{ secrets.FREEHOLDER_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.FREEHOLDER_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/freeholder_deploy"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/freeholder_deploy" "$HOME/.ssh/known_hosts"
+
+      - name: Verify attestation and deploy
+        env:
+          REVISION: ${{ forgejo.event.inputs.revision }}
+          DEPLOY_HOST: ${{ secrets.FREEHOLDER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.FREEHOLDER_DEPLOY_USER }}
+          DEPLOY_HEALTH_URL: ${{ secrets.FREEHOLDER_DEPLOY_HEALTH_URL }}
+          FREEHOLDER_GH_TOKEN: ${{ secrets.FREEHOLDER_GH_TOKEN }}
+        run: |
+          if [ -n "${FREEHOLDER_GH_TOKEN:-}" ]; then
+            export GH_TOKEN="$FREEHOLDER_GH_TOKEN"
+          fi
+          export DEPLOY_SSH_KEY_PATH="$HOME/.ssh/freeholder_deploy"
+          export DEPLOY_KNOWN_HOSTS_FILE="$HOME/.ssh/known_hosts"
+          node scripts/deploy-droplet.mjs --revision "$REVISION"

@@ -166,7 +166,7 @@ export default async function MyAppointmentPage({
                     type="datetime-local"
                     name="startsAt"
                     required
-                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                 </label>
                 <Button type="submit">{t("myBooking.action.move")}</Button>
@@ -191,7 +191,7 @@ export default async function MyAppointmentPage({
                   <span className="text-ink-muted">{t("myBooking.field.reason")}</span>
                   <input
                     name="reason"
-                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                 </label>
                 {/* Never disabled on what a field contains: the control acts,

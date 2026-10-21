@@ -13,6 +13,7 @@ export default defineModule({
   tables: () => import("./tables"),
   services: () => import("./service"),
   jobs: () => import("./jobs"),
+  onboarding: () => import("./onboarding"),
   events: {
     emits: [
       "gallery.created",
@@ -26,6 +27,7 @@ export default defineModule({
       "gallery.roundReopened",
       "gallery.archiveRequested",
       "gallery.ready",
+      "gallery.ordered",
     ],
   },
 });

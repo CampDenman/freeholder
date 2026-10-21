@@ -3,7 +3,7 @@
 // Transaction-safe invoice, payment, refund, and credit-note state machines.
 
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   registerContactReference,
@@ -11,8 +11,14 @@ import {
 import { contacts } from "@/core/contacts/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
+import {
   actorString,
   defineService,
+  permits,
   ServiceError,
   type ServiceContext,
   type Tx,
@@ -241,6 +247,35 @@ registerPointer(
   (tx, from, to) => tx.update(paymentMethods).set({ contactId: to }).where(eq(paymentMethods.contactId, from)),
 );
 
+registerSearchSource({
+  kind: "invoice",
+  readService: "invoicing.list",
+  module: "invoicing",
+  tables: ["invoices"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: invoices.id,
+        number: invoices.number,
+        memo: invoices.memo,
+        contactId: invoices.contactId,
+      })
+      .from(invoices)
+      .where(or(matchesIlike(invoices.number, pattern), matchesIlike(invoices.memo, pattern)))
+      .orderBy(desc(invoices.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "invoice",
+      id: row.id,
+      title: row.number ?? clipSnippet(row.memo) ?? "Invoice",
+      href: `/admin/invoices/${row.id}`,
+      snippet: clipSnippet(row.memo),
+      contactId: row.contactId,
+      module: "invoicing",
+    }));
+  },
+});
+
 registerContactPrivacySource({
   scope: "commerce.money",
   tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods"],
@@ -286,28 +321,58 @@ registerContactPrivacySource({
   },
 });
 
+const invoiceListRow = invoiceRow.extend({
+  sequenceKey: z.string().optional(),
+  idempotencyKey: z.string().optional(),
+  requestHash: z.string().optional(),
+});
+
 export const listInvoices = defineService({
   name: "invoicing.list",
   summary: "List invoices by contact or lifecycle state.",
   kind: "query",
   permission: "scoped",
+  // C8.11: the customer this asks about may ask it themselves. The
+  // contract layer verifies the field is present and is their own contact
+  // before the handler runs, so this widens what a customer can *see*
+  // about themselves and nothing else.
+  selfService: { contactField: "contactId" },
   input: z.object({
     contactId: z.string().uuid().optional(),
     status: z.enum(["draft", "sent", "viewed", "partially_paid", "paid", "overdue", "void", "refunded"]).optional(),
     limit: z.number().int().min(1).max(500).default(100),
   }),
-  output: listed(invoiceRow),
-  handler: async (input, ctx) => {
+  output: listed(invoiceListRow),
+  handler: async (input, ctx): Promise<z.output<typeof invoiceListRow>[]> => {
+    const staffRead = permits(ctx.actor, "scoped", "invoicing.list", "query");
     const filters = [
       input.contactId ? eq(invoices.contactId, input.contactId) : undefined,
       input.status ? eq(invoices.status, input.status) : undefined,
+      staffRead ? undefined : and(ne(invoices.status, "draft"), sql`${invoices.issuedAt} is not null`),
     ].filter((value): value is NonNullable<typeof value> => Boolean(value));
-    return ctx.tx
+    const found = await ctx.tx
       .select()
       .from(invoices)
       .where(filters.length ? and(...filters) : undefined)
       .orderBy(desc(invoices.createdAt))
       .limit(input.limit);
+    if (staffRead) return found;
+    // Named projection: future provider/workflow columns must not silently
+    // become customer-visible just because this shared query gains a column.
+    return found.map(invoice => ({
+      id: invoice.id, contactId: invoice.contactId, number: invoice.number,
+      sourceType: invoice.sourceType, sourceId: invoice.sourceId, status: invoice.status,
+      currency: invoice.currency, subtotalMinor: invoice.subtotalMinor,
+      discountMinor: invoice.discountMinor, shippingMinor: invoice.shippingMinor,
+      taxMinor: invoice.taxMinor, taxZoneId: invoice.taxZoneId, totalMinor: invoice.totalMinor,
+      paidMinor: invoice.paidMinor, refundedMinor: invoice.refundedMinor,
+      billingAddress: invoice.billingAddress, customerTaxId: invoice.customerTaxId,
+      requiredTaxLegend: invoice.requiredTaxLegend, memo: invoice.memo,
+      schedule: invoice.schedule, depositOfInvoiceId: invoice.depositOfInvoiceId,
+      dueAt: invoice.dueAt, issuedAt: invoice.issuedAt, viewedAt: invoice.viewedAt,
+      paidAt: invoice.paidAt, voidedAt: invoice.voidedAt,
+      createdAt: invoice.createdAt, updatedAt: invoice.updatedAt,
+    }));
   },
 });
 
@@ -481,7 +546,7 @@ export const reconcileMoney = defineService({
 const createDraftInput = z.object({
   contactId: z.string().uuid(),
   currency,
-  sourceType: z.enum(["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock"]).default("manual"),
+  sourceType: z.enum(["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock", "ad_campaign", "event"]).default("manual"),
   sourceId: z.string().trim().max(240).optional(),
   idempotencyKey,
   lines: z.array(lineInput).min(1).max(1_000),
@@ -738,9 +803,18 @@ export const issueInvoice = defineService({
       eventType: zero ? "invoice.paid" : "invoice.sent",
       subjectType: "invoice",
       subjectId: updated.id,
-      payload: { number, currency: updated.currency, totalMinor: updated.totalMinor },
+      payload: { number, currency: updated.currency, totalMinor: updated.totalMinor, sourceType: updated.sourceType },
     });
     ctx.queueEvent(zero ? "invoice.paid" : "invoice.sent", { invoiceId: updated.id, contactId: updated.contactId, number });
+    if (zero && updated.sourceType === "unlock") {
+      const { issueUnlock } = await import("@/core/entitlements/service");
+      await ctx.callAsSystem(issueUnlock, {
+        contactId: updated.contactId,
+        invoiceId: updated.id,
+        name: number,
+        resource: { kind: "content", selector: updated.sourceId ?? updated.id },
+      });
+    }
     ctx.setSubject("invoice", updated.id);
     return invoiceBundle(ctx.tx, updated.id);
   },
@@ -758,9 +832,11 @@ export const markInvoiceViewed = defineService({
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.id)).limit(1);
     if (!invoice) throw new ServiceError("not_found", "That invoice is not here.");
     if (invoice.status === "viewed" || invoice.viewedAt) return invoice;
-    if (invoice.status !== "sent") throw new ServiceError("conflict", "Only a sent invoice can be marked viewed.");
-    const [updated] = await ctx.tx.update(invoices).set({ status: "viewed", viewedAt: new Date() }).where(eq(invoices.id, invoice.id)).returning();
-    await stateEvent(ctx, "invoice", invoice.id, "sent", "viewed");
+    if (!["sent", "overdue", "partially_paid"].includes(invoice.status)) throw new ServiceError("conflict", "Only an open invoice can be marked viewed.");
+    const status = invoice.status === "sent" ? "viewed" : invoice.status;
+    const [updated] = await ctx.tx.update(invoices).set({ status, viewedAt: new Date() }).where(eq(invoices.id, invoice.id)).returning();
+    if (status !== invoice.status) await stateEvent(ctx, "invoice", invoice.id, invoice.status, status);
+    await ctx.emitTimeline({ contactId: invoice.contactId, eventType: "invoice.viewed", subjectType: "invoice", subjectId: invoice.id, payload: { number: invoice.number } });
     ctx.queueEvent("invoice.viewed", { invoiceId: invoice.id, contactId: invoice.contactId });
     ctx.setSubject("invoice", invoice.id);
     return updated!;
@@ -811,6 +887,10 @@ export const voidInvoice = defineService({
     if (invoice.status === "paid" || invoice.status === "refunded" || invoice.paidMinor > 0) {
       throw new ServiceError("conflict", "A paid invoice cannot be voided. Issue a credit note and refund instead.");
     }
+    const [activeAttempt] = await ctx.tx.select({ id: payments.id }).from(payments).where(and(
+      eq(payments.invoiceId, invoice.id), inArray(payments.status, ["created", "processing"]),
+    )).limit(1);
+    if (activeAttempt) throw new ServiceError("conflict", "A payment attempt is still active. Reconcile or cancel it before voiding the invoice.");
     const [updated] = await ctx.tx
       .update(invoices)
       .set({ status: "void", voidedAt: new Date() })
@@ -965,6 +1045,9 @@ export const cancelPayment = defineService({
     if (!inArrayValue(payment.status, ["created", "processing"])) {
       throw new ServiceError("conflict", "A terminal payment cannot be cancelled.");
     }
+    if (payment.method === "hosted_checkout") {
+      throw new ServiceError("conflict", "A hosted checkout must be reconciled with its provider before its payment can be closed.");
+    }
     const [updated] = await ctx.tx
       .update(payments)
       .set({ status: "cancelled", failureCode: null, failureMessage: null })
@@ -995,9 +1078,28 @@ export const settlePayment = defineService({
     if (!inArrayValue(payment.status, ["created", "processing"])) {
       throw new ServiceError("conflict", "A failed or cancelled payment cannot settle.");
     }
+    // A cancellation locks the order before its invoice. Match that order so
+    // provider settlement and cancellation cannot deadlock or race past one
+    // another while deciding whether any money has arrived.
+    const [source] = await ctx.tx.select({ sourceType: invoices.sourceType, sourceId: invoices.sourceId })
+      .from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
+    if (source?.sourceType === "order" && source.sourceId) {
+      const { orders } = await import("@/modules/catalog/schema");
+      await ctx.tx.select({ id: orders.id }).from(orders).where(eq(orders.id, source.sourceId)).for("update");
+    }
+    if (source?.sourceType === "event" && source.sourceId) {
+      // Same lock order as the registration flows: the seat row settles before
+      // its invoice, so settlement and hold expiry cannot race past each other.
+      const { eventRegistrations } = await import("@/modules/events/schema");
+      await ctx.tx.select({ id: eventRegistrations.id }).from(eventRegistrations)
+        .where(eq(eventRegistrations.id, source.sourceId)).for("update");
+    }
     await lock(ctx.tx, "invoice", payment.invoiceId);
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
     if (!invoice) throw new ServiceError("not_found", "That payment's invoice is not here.");
+    if (!inArrayValue(invoice.status, ["sent", "viewed", "partially_paid", "overdue"])) {
+      throw new ServiceError("conflict", "That invoice is no longer open for payment.");
+    }
     const paidMinor = sumMinor([invoice.paidMinor, payment.amountMinor], "Paid balance");
     if (paidMinor > invoice.totalMinor) {
       throw new ServiceError("conflict", "Settling this payment would overpay the invoice. Refund or cancel the competing attempt first.");
@@ -1006,6 +1108,35 @@ export const settlePayment = defineService({
     const [updatedPayment] = await ctx.tx.update(payments).set({ status: "succeeded", providerRef: input.providerRef, processedAt: input.processedAt, failureCode: null, failureMessage: null }).where(eq(payments.id, payment.id)).returning();
     await ctx.tx.update(invoices).set({ status: invoiceStatus, paidMinor, ...(invoiceStatus === "paid" ? { paidAt: input.processedAt } : {}) }).where(eq(invoices.id, invoice.id));
     await allocateSettledPayment(ctx, updatedPayment!, input.processedAt);
+    if (invoice.sourceType === "order" && invoice.sourceId) {
+      const { orders, stockReservations } = await import("@/modules/catalog/schema");
+      const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, invoice.sourceId)).limit(1);
+      if (!order || order.invoiceId !== invoice.id || order.status === "cancelled") {
+        throw new ServiceError("conflict", "The order linked to this payment is not open.");
+      }
+      if (invoiceStatus === "paid") {
+        const { payOrder } = await import("@/modules/catalog/orders");
+        await ctx.callAsSystem(payOrder, { id: order.id });
+      } else if (order.status === "pending_payment") {
+        await ctx.tx.update(orders).set({ status: "partially_paid", updatedAt: new Date() }).where(eq(orders.id, order.id));
+        await ctx.tx.update(stockReservations).set({
+          expiresAt: new Date(Date.now() + 30 * 86_400_000), updatedAt: new Date(),
+        }).where(and(eq(stockReservations.holderType, "order"), eq(stockReservations.holderId, order.id), eq(stockReservations.status, "active")));
+        ctx.queueEvent("catalog.orderPartiallyPaid", { orderId: order.id, invoiceId: invoice.id, paidMinor });
+        await ctx.emitTimeline({ contactId: order.contactId, eventType: "order.partiallyPaid", subjectType: "order", subjectId: order.id,
+          payload: { invoiceId: invoice.id, paidMinor, totalMinor: invoice.totalMinor, currency: invoice.currency } });
+      }
+    }
+    if (invoice.sourceType === "event" && invoice.sourceId && invoiceStatus === "paid") {
+      // Full payment confirms the held seat, atomically with settlement — the
+      // same precedent as orders above. A partial payment leaves the seat
+      // reserved; the hold-expiry sweep skips invoices with money arrived.
+      const { confirmPaidRegistration } = await import("@/modules/events/service");
+      await ctx.callAsSystem(confirmPaidRegistration, {
+        registrationId: invoice.sourceId,
+        invoiceId: invoice.id,
+      });
+    }
     await stateEvent(ctx, "payment", payment.id, payment.status, "succeeded");
     if (invoice.status !== invoiceStatus) {
       await stateEvent(ctx, "invoice", invoice.id, invoice.status, invoiceStatus, "payment_settled", { paymentId: payment.id, amountMinor: payment.amountMinor });
@@ -1015,10 +1146,25 @@ export const settlePayment = defineService({
       eventType: invoiceStatus === "paid" ? "invoice.paid" : "invoice.partiallyPaid",
       subjectType: "invoice",
       subjectId: invoice.id,
-      payload: { paymentId: payment.id, amountMinor: payment.amountMinor, paidMinor, totalMinor: invoice.totalMinor, currency: invoice.currency },
+      // `sourceType` rides along so a listener can tell what was actually
+      // bought without reading this module's tables. §4.3 makes the invoice
+      // "the single money object", which means every listener that cares
+      // about money resolves to an invoice and would otherwise have to guess
+      // whether it settled an order, a booking or a subscription — and
+      // guessing wrong misfiles somebody's commission (C9.10).
+      payload: { paymentId: payment.id, amountMinor: payment.amountMinor, paidMinor, totalMinor: invoice.totalMinor, currency: invoice.currency, sourceType: invoice.sourceType },
     });
     ctx.queueEvent("payment.succeeded", { paymentId: payment.id, invoiceId: invoice.id, contactId: invoice.contactId, amountMinor: payment.amountMinor });
     ctx.queueEvent(invoiceStatus === "paid" ? "invoice.paid" : "invoice.partiallyPaid", { invoiceId: invoice.id, contactId: invoice.contactId, paidMinor });
+    if (invoiceStatus === "paid" && invoice.sourceType === "unlock") {
+      const { issueUnlock } = await import("@/core/entitlements/service");
+      await ctx.callAsSystem(issueUnlock, {
+        contactId: invoice.contactId,
+        invoiceId: invoice.id,
+        name: invoice.number ?? "Unlock",
+        resource: { kind: "content", selector: invoice.sourceId ?? invoice.id },
+      });
+    }
     ctx.setSubject("payment", payment.id);
     return updatedPayment!;
   },

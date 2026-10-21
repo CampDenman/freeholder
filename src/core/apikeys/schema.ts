@@ -54,6 +54,12 @@ export const apiKeys = pgTable(
      * credential for a public read without also handing them the contact list.
      */
     scopes: text("scopes").array().notNull().default(sql`'{}'`),
+    /**
+     * C12.14: a key a person made for their own agent. It acts as that person
+     * (their own permissions, narrowed by `scopes`), never as the business,
+     * and goes when they do.
+     */
+    actsAsUserId: uuid("acts_as_user_id").references(() => users.id, { onDelete: "cascade" }),
     /** The owner who minted it. Kept when they leave; the key is the business's. */
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",

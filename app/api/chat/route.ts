@@ -11,6 +11,7 @@ import {
 } from "@/core/messaging/chat-cookie";
 import { endSiteChat, getSiteChat, postSiteChat } from "@/core/messaging/chat";
 import { ServiceError } from "@/core/service";
+import { readBoundedText } from "@/core/http/body";
 
 export const dynamic = "force-dynamic";
 const MAX_BODY_BYTES = 16_384;
@@ -38,14 +39,7 @@ const read = serviceRoute(getSiteChat, {
 
 const post = serviceRoute(postSiteChat, {
   readInput: async (request) => {
-    const contentLength = Number(request.headers.get("content-length") ?? 0);
-    if (contentLength > MAX_BODY_BYTES) {
-      throw new ServiceError("validation", "That chat message is too large.");
-    }
-    const raw = await request.text();
-    if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) {
-      throw new ServiceError("validation", "That chat message is too large.");
-    }
+    const raw = await readBoundedText(request, MAX_BODY_BYTES);
     let message = "";
     try {
       const parsed: unknown = JSON.parse(raw);

@@ -21,6 +21,7 @@ artifacts:
 required_environment:
   - DATABASE_URL
   - APP_URL
+  - BOOTSTRAP_SECRET
   - SESSION_SECRET
   - CREDENTIAL_KEY
   - REPLIT_BUCKET_ID
@@ -34,6 +35,6 @@ operations:
   update: "corepack enable && pnpm install --frozen-lockfile && pnpm build"
   rollback: "git switch --detach $PREVIOUS_FREEHOLDER_TAG && pnpm install --frozen-lockfile && pnpm build"
 update:
-  strategy: image-swap
-  rollback: pin the previous sha tag and redeploy
+  strategy: source-pull
+  rollback: pin the previous commit, reinstall and rebuild
 tested_on: "2026-08-25"

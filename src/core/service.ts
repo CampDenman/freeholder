@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // The service registry — the single choke point (MASTER.md §11). Admin UI,
 // REST API, and MCP all call services; nothing else touches business logic.
-// Every mutation, regardless of caller: validates with Zod, checks
+// Every database mutation, regardless of caller: validates with Zod, checks
 // permissions, executes in a transaction, can emit TimelineEvents, and writes
-// AuditLog *inside the same transaction*. A service method that skips any of
-// these cannot be constructed — the invariant lives in this wrapper, not in
-// code review.
+// AuditLog *inside the same transaction*. Slow provider workflows preserve
+// their public service contract through `defineOrchestratedService`, with all
+// database work delegated to ordinary short services on either side of I/O.
 //
 // Services compose through `ctx.call` / `ctx.callAsSystem`, which reuse the
 // caller's transaction. That is deliberate: §11 routes all inter-module
@@ -14,6 +14,12 @@
 // multi-table mutation — so composition must not mean a second transaction on
 // a second connection.
 import type { z } from "zod";
+import { sql } from "drizzle-orm";
+import { env } from "@/core/env";
+import {
+  PLAYGROUND_ROW_CAPS,
+  playgroundAllows,
+} from "@/core/demo/playground-policy";
 import { db, type Database } from "@/core/db";
 import { auditLog } from "@/core/events/schema";
 import { writeTimelineEvent } from "@/core/events";
@@ -39,6 +45,8 @@ export interface ModuleGrant {
 export interface RequestMetadata {
   /** Transient source address reported by the deployment proxy. */
   ip?: string;
+  /** Only populated from the explicitly configured, proxy-overwritten header. */
+  trustedIp?: string;
   /** Sanitized and bounded at the HTTP boundary. */
   userAgent?: string;
 }
@@ -57,6 +65,11 @@ type ActorIdentity =
         twoFactorVerified: boolean;
         stepUpValid: boolean;
       };
+      /**
+       * C12.14: present when a person's own key acts for them. The key may
+       * call only these services, and never staff or system ones.
+       */
+      keyScopes?: readonly string[];
     }
   | { kind: "agent"; keyName: string; scopes: string[] }
   | { kind: "system" }
@@ -113,6 +126,11 @@ export function actorString(actor: Actor): string {
   }
 }
 
+/** An API key is acting: an agent's key, or (C12.14) a person's own key. */
+export function actsByKey(actor: Actor): boolean {
+  return actor.kind === "agent" || (actor.kind === "user" && Boolean(actor.keyScopes));
+}
+
 /**
  * The whole authorization decision, as one pure function — exported so the
  * matrix can be tested exhaustively without a database standing behind it.
@@ -128,6 +146,13 @@ export function permits(
 ): boolean {
   if (actor.kind === "system") return true;
   if (required === "system") return false;
+  if (actor.kind === "user" && actor.keyScopes) {
+    // A personal key: only what it names (even public reads, which as the
+    // person can show what only they may see), and never staff services.
+    const family = `${serviceName.split(".")[0]}.*`;
+    if (!actor.keyScopes.includes(serviceName) && !actor.keyScopes.includes(family)) return false;
+    if (required === "scoped") return false;
+  }
   if (required === "public") return true;
   if (actor.kind === "anonymous") return false;
   if (actor.kind === "agent") {
@@ -151,6 +176,8 @@ export function hasModuleAccess(
 ): boolean {
   if (actor.kind === "system") return true;
   if (actor.kind !== "user") return false;
+  // A personal key never carries its person's staff access.
+  if (actor.keyScopes) return false;
   if (
     actor.security?.twoFactorRequired &&
     (!actor.security.twoFactorEnrolled || !actor.security.twoFactorVerified)
@@ -271,7 +298,7 @@ export interface ServiceRateLimit extends RateLimitPolicy {
    * What to count separately — the email being attempted, the caller's IP.
    * Return undefined to skip counting this particular call.
    */
-  subject: (input: never) => string | undefined;
+  subject: (input: never, actor: Actor) => string | undefined;
   /** Message shown when the limit is hit. Written for a person, not a log. */
   message: string;
 }
@@ -313,7 +340,9 @@ export interface ServiceDef<In extends z.ZodType, Out> {
    */
   output?: z.ZodType;
   /** Optional throttle, consumed before the transaction opens. */
-  rateLimit?: ServiceRateLimit & { subject: (input: z.output<In>) => string | undefined };
+  rateLimit?: ServiceRateLimit & {
+    subject: (input: z.output<In>, actor: Actor) => string | undefined;
+  };
   /** Require a fresh second-factor proof from an interactive user session. */
   stepUp?: boolean;
   /**
@@ -328,6 +357,38 @@ export interface ServiceDef<In extends z.ZodType, Out> {
    * agent is never invited to guess a password.
    */
   mcpExclude?: boolean;
+  /**
+   * False for a short service phase that exists only to support trusted
+   * orchestration. Unlike `permission: "system"`, this does not change who
+   * the service authorizes; it only keeps the phase off HTTP, OpenAPI and MCP
+   * while the public orchestrator preserves the caller's identity.
+   */
+  external?: boolean;
+  /**
+   * C8.11: a signed-in customer may run this **query** about themselves.
+   *
+   * The portal is meant to be a second audience for the owner's queries
+   * rather than a second implementation of them — and those queries already
+   * take a contact id, because an owner needed to ask "what does this
+   * person have?". A customer asking that about themselves is the identical
+   * query with the identical filter. Without this, the portal would have to
+   * grow a parallel read path per domain, which is the drift C8.11 exists
+   * to prevent.
+   *
+   * Three things have to hold, and the framework checks all three so a
+   * module cannot get any of them wrong:
+   *
+   *   - the service opted in, here, by naming the field that carries the
+   *     contact id;
+   *   - it is a query, so this can never widen what a customer may *do*;
+   *   - the field is **present** and equals the caller's own contact.
+   *
+   * That last clause is the one that matters most. `contactId` is optional
+   * on every one of these services and an absent filter means "everybody",
+   * so treating a missing field as harmless would hand a customer the whole
+   * table. Absent is refused, not ignored.
+   */
+  selfService?: { contactField: string };
   handler: (input: z.output<In>, ctx: ServiceContext) => Promise<Out>;
 }
 
@@ -340,6 +401,147 @@ export interface Service<In extends z.ZodType = z.ZodType, Out = unknown> {
   ): Promise<Out>;
 }
 
+type OrchestratedServiceDef<In extends z.ZodType, Out> = Omit<
+  ServiceDef<In, Out>,
+  "handler" | "selfService"
+> & {
+  /**
+   * Runs with no database transaction open. Database reads and writes must be
+   * delegated to ordinary short services so their authorization and audit
+   * records remain structural rather than hand-written.
+   */
+  handler: (input: z.output<In>, actor: Actor) => Promise<Out>;
+};
+
+function authorizeInput<In extends z.ZodType, Out>(
+  def: ServiceDef<In, Out>,
+  rawInput: unknown,
+  actor: Actor,
+): { input: z.output<In>; viaSelfService: boolean } {
+  if (env().FREEHOLDER_PLAYGROUND === "1" && actor.kind !== "system" && !playgroundAllows(def.name, def.kind)) {
+    throw new ServiceError("permission", "This action is unavailable in the public playground.");
+  }
+  const viaSelfService =
+    def.selfService !== undefined &&
+    def.kind === "query" &&
+    actor.kind === "user" &&
+    !permits(actor, def.permission, def.name, def.kind);
+
+  if (!viaSelfService && !permits(actor, def.permission, def.name, def.kind)) {
+    throw new ServiceError(
+      "permission",
+      actor.kind === "anonymous"
+        ? "You are not signed in, or your session has expired. Sign in and try again."
+        : actor.kind === "agent"
+          ? `This API key is not allowed to call ${def.name}. Grant it "${def.name}" or "${def.name.split(".")[0]}.*" in Settings.`
+          : `Your role does not have permission to ${def.kind === "query" ? "view" : "manage"} ${def.name.split(".")[0]}.`,
+    );
+  }
+  if (def.agentCallable === false && actsByKey(actor)) {
+    throw new ServiceError(
+      "permission",
+      "Sign in as a person to perform this human-review action.",
+    );
+  }
+  if (def.stepUp && actor.kind !== "system" && actor.kind === "agent") {
+    throw new ServiceError(
+      "permission",
+      "Sign in as a person to perform this security-sensitive action.",
+    );
+  }
+  if (
+    def.stepUp &&
+    actor.kind === "user" &&
+    actor.security !== undefined &&
+    !actor.security.stepUpValid
+  ) {
+    throw new ServiceError(
+      "step_up_required",
+      "Confirm your identity with two-factor authentication to continue.",
+    );
+  }
+  const parsed = def.input.safeParse(rawInput);
+  if (!parsed.success) {
+    const details = parsed.error.issues
+      .map((issue) => `${issue.path.join(".") || "input"}: ${issue.message}`)
+      .join("; ");
+    throw new ServiceError("validation", `${def.name}: ${details}`);
+  }
+  return { input: parsed.data, viaSelfService };
+}
+
+async function enforcePlaygroundRowCap<In extends z.ZodType, Out>(
+  def: ServiceDef<In, Out>,
+  actor: Actor,
+): Promise<void> {
+  if (env().FREEHOLDER_PLAYGROUND !== "1" || actor.kind === "system") return;
+  const cap = PLAYGROUND_ROW_CAPS[def.name];
+  if (!cap) return;
+  const [row] = await db().execute<{ count: number }>(sql`
+    select count(*)::int as count from ${sql.identifier(cap.table)}
+  `);
+  if (Number(row?.count ?? 0) >= cap.limit) {
+    throw new ServiceError(
+      "rate_limited",
+      "This playground surface is full. The shared demo holds a bounded sample — try again after the hourly reset.",
+    );
+  }
+}
+
+async function enforceRateLimit<In extends z.ZodType, Out>(
+  def: ServiceDef<In, Out>,
+  input: z.output<In>,
+  actor: Actor,
+): Promise<void> {
+  if (env().FREEHOLDER_PLAYGROUND === "1" && actor.kind !== "system" && def.kind === "mutation") {
+    const verdict = await consume("playground:all-mutations", { limit: 300, windowSeconds: 60 });
+    if (!verdict.allowed) throw new ServiceError("rate_limited", "The shared playground is busy. Please try again shortly.", verdict.retryAfterSeconds);
+  }
+  if (!def.rateLimit || actor.kind === "system") return;
+  const subject = def.rateLimit.subject(input, actor);
+  if (subject === undefined) return;
+  const verdict = await consume(rateLimitKey(def.name, subject), def.rateLimit);
+  if (!verdict.allowed) {
+    throw new ServiceError(
+      "rate_limited",
+      def.rateLimit.message,
+      verdict.retryAfterSeconds,
+    );
+  }
+}
+
+/**
+ * A public service contract whose slow/provider work is an orchestrator, not
+ * a transaction owner. It cannot be composed through `ctx.call`: doing so
+ * would put its I/O back inside the caller's transaction. Each database phase
+ * remains an ordinary `defineService` call and therefore keeps atomic writes,
+ * caller authorization, audit records and post-commit event dispatch.
+ */
+export function defineOrchestratedService<In extends z.ZodType, Out>(
+  orchestration: OrchestratedServiceDef<In, Out>,
+): Service<In, Out> {
+  const unavailableInsideTransaction = async (): Promise<Out> => {
+    throw new ServiceError(
+      "internal",
+      `${orchestration.name} must run outside a service transaction.`,
+    );
+  };
+  const def = {
+    ...orchestration,
+    handler: unavailableInsideTransaction,
+  } as ServiceDef<In, Out>;
+  return {
+    def,
+    async call(rawInput, actor, options): Promise<Out> {
+      if (options?.tx) return unavailableInsideTransaction();
+      const { input } = authorizeInput(def, rawInput, actor);
+      await ready();
+      await enforceRateLimit(def, input, actor);
+      return assertOutput(def, await orchestration.handler(input, actor));
+    },
+  };
+}
+
 export function defineService<In extends z.ZodType, Out>(
   def: ServiceDef<In, Out>,
 ): Service<In, Out> {
@@ -350,61 +552,16 @@ export function defineService<In extends z.ZodType, Out>(
       actor: Actor,
       options?: ServiceCallOptions,
     ): Promise<Out> {
-      if (!permits(actor, def.permission, def.name, def.kind)) {
-        // Written for whoever reads it, which is a business owner looking at a
-        // form that just refused them — not the author of this file. The old
-        // message ("anonymous may not call settings.updateBusiness.") reached
-        // the setup wizard verbatim and named an internal service to someone
-        // who has no idea what one is. The actor and service still reach the
-        // audit trail and the server log, where they are useful.
-        throw new ServiceError(
-          "permission",
-          actor.kind === "anonymous"
-            ? "You are not signed in, or your session has expired. Sign in and try again."
-            : actor.kind === "agent"
-              // An API key is read by a developer, not by a business owner, and
-              // naming the missing scope is the whole difference between a
-              // five-second fix and an afternoon. The service name is safe to
-              // give them: they already hold a credential for this instance,
-              // and §28 publishes the whole registry to them anyway.
-              ? `This API key is not allowed to call ${def.name}. Grant it "${def.name}" or "${def.name.split(".")[0]}.*" in Settings.`
-              : `Your role does not have permission to ${def.kind === "query" ? "view" : "manage"} ${def.name.split(".")[0]}.`,
-        );
-      }
-      if (def.agentCallable === false && actor.kind === "agent") {
-        throw new ServiceError(
-          "permission",
-          "Sign in as a person to perform this human-review action.",
-        );
-      }
-      if (
-        def.stepUp &&
-        actor.kind !== "system" &&
-        actor.kind === "agent"
-      ) {
-        throw new ServiceError(
-          "permission",
-          "Sign in as a person to perform this security-sensitive action.",
-        );
-      }
-      if (
-        def.stepUp &&
-        actor.kind === "user" &&
-        actor.security !== undefined &&
-        !actor.security.stepUpValid
-      ) {
-        throw new ServiceError(
-          "step_up_required",
-          "Confirm your identity with two-factor authentication to continue.",
-        );
-      }
-      const parsed = def.input.safeParse(rawInput);
-      if (!parsed.success) {
-        const details = parsed.error.issues
-          .map((i) => `${i.path.join(".") || "input"}: ${i.message}`)
-          .join("; ");
-        throw new ServiceError("validation", `${def.name}: ${details}`);
-      }
+      // Ownership cannot be decided by `permits`: it is pure by design, and
+      // whether this contact belongs to this user is a fact about rows. So
+      // eligibility is decided here and *verified inside the transaction*,
+      // below, before the handler runs.
+      const { input: parsedInput, viaSelfService } = authorizeInput(
+        def,
+        rawInput,
+        actor,
+      );
+      await enforcePlaygroundRowCap(def, actor);
 
       // A composed call inherits its parent's transaction and event queue; a
       // top-level call owns both. Exactly one transaction per outermost call.
@@ -423,26 +580,35 @@ export function defineService<In extends z.ZodType, Out>(
       // caller was already allowed to make — charging it again would let an
       // internal refactor that adds a step start failing under a limit nobody
       // changed. See rate-limit.ts for why the counter commits separately.
-      if (def.rateLimit && !inheritedTx && actor.kind !== "system") {
-        const subject = def.rateLimit.subject(parsed.data);
-        if (subject !== undefined) {
-          const verdict = await consume(
-            rateLimitKey(def.name, subject),
-            def.rateLimit,
-          );
-          if (!verdict.allowed) {
-            throw new ServiceError(
-              "rate_limited",
-              def.rateLimit.message,
-              verdict.retryAfterSeconds,
-            );
-          }
-        }
-      }
+      if (!inheritedTx) await enforceRateLimit(def, parsedInput, actor);
       const queued: QueuedEvent[] = options?.queued ?? [];
       let subject: { subjectType: string; subjectId: string } | undefined;
 
       const run = async (tx: Tx): Promise<Out> => {
+        // A caller who got here only because the service is self-service has
+        // proved nothing yet. Prove it now, against the same transaction the
+        // handler is about to read from.
+        if (viaSelfService && actor.kind === "user") {
+          const { contacts } = await import("@/core/contacts/schema");
+          const { eq } = await import("drizzle-orm");
+          const asked = (parsedInput as Record<string, unknown>)[
+            def.selfService!.contactField
+          ];
+          const [own] = await tx
+            .select({ id: contacts.id })
+            .from(contacts)
+            .where(eq(contacts.userId, actor.userId))
+            .limit(1);
+          if (!own || typeof asked !== "string" || asked !== own.id) {
+            // One message for "you are not a customer", "you asked about
+            // somebody else" and "you asked about everybody". Distinguishing
+            // them would tell a prober which contact ids exist.
+            throw new ServiceError(
+              "permission",
+              "You can only see your own records.",
+            );
+          }
+        }
         const ctx: ServiceContext = {
           tx,
           actor,
@@ -463,7 +629,11 @@ export function defineService<In extends z.ZodType, Out>(
             enqueueJob(tx, name, data, jobOptions),
           call: (service, input) => service.call(input, actor, { tx, queued }),
           callAsSystem: (service, input) =>
-            service.call(input, { kind: "system" }, { tx, queued }),
+            service.call(
+              input,
+              { kind: "system", request: actor.request },
+              { tx, queued },
+            ),
           callAsAgent: (keyName, scopes, service, input) =>
             service.call(
               input,
@@ -471,7 +641,7 @@ export function defineService<In extends z.ZodType, Out>(
               { tx, queued },
             ),
         };
-        const out = assertOutput(def, await def.handler(parsed.data, ctx));
+        const out = assertOutput(def, await def.handler(parsedInput, ctx));
 
         // The outermost call owns the outbox rows: a composed call shares the
         // queue, and writing them per-nested-call would order them by who
@@ -488,7 +658,7 @@ export function defineService<In extends z.ZodType, Out>(
             action: def.name,
             subjectType: subject?.subjectType,
             subjectId: subject?.subjectId,
-            diff: redact(parsed.data) ?? {},
+            diff: redact(parsedInput) ?? {},
           });
         }
         return out;
@@ -566,7 +736,7 @@ export function getService(name: string): Service {
  * internal implementation detail into an anonymous/API-key back door.
  */
 export function isExternallyExposed(service: Service): boolean {
-  return service.def.permission !== "system";
+  return service.def.permission !== "system" && service.def.external !== false;
 }
 
 /** Resolve exactly the services the versioned HTTP dispatcher may expose. */

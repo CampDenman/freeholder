@@ -22,6 +22,7 @@ import {
   hasDatabase,
   truncateSpine,
 } from "../helpers/spine";
+import { flushQueuedMail } from "../helpers/mail";
 
 const EMAIL = "owner@example.test";
 const OLD = "the-original-owner-password";
@@ -55,6 +56,7 @@ describe.runIf(hasDatabase)("asking for a reset", () => {
     // A database leak must not hand somebody a working reset link for every
     // account on the instance.
     await requestPasswordReset.call({ email: EMAIL }, ANONYMOUS);
+    await flushQueuedMail();
     const token = tokenFrom(logged);
 
     const [row] = await db().select().from(passwordResets);
@@ -102,9 +104,11 @@ describe.runIf(hasDatabase)("asking for a reset", () => {
     // Somebody pressing "send it again" expects the newest email to work, and
     // leaving the older links live widens the window for nothing.
     await requestPasswordReset.call({ email: EMAIL }, ANONYMOUS);
+    await flushQueuedMail();
     const first = tokenFrom(logged);
     logged = [];
     await requestPasswordReset.call({ email: EMAIL }, ANONYMOUS);
+    await flushQueuedMail();
     const second = tokenFrom(logged);
 
     const stale = await failure(
@@ -118,6 +122,7 @@ describe.runIf(hasDatabase)("asking for a reset", () => {
 
   it("never writes the token to the audit trail", async () => {
     await requestPasswordReset.call({ email: EMAIL }, ANONYMOUS);
+    await flushQueuedMail();
     const token = tokenFrom(logged);
     const rows = await db().select().from(auditLog);
     expect(JSON.stringify(rows)).not.toContain(token);
@@ -129,6 +134,7 @@ describe.runIf(hasDatabase)("using a reset link", () => {
   const requestToken = async (): Promise<string> => {
     logged = [];
     await requestPasswordReset.call({ email: EMAIL }, ANONYMOUS);
+    await flushQueuedMail();
     return tokenFrom(logged);
   };
 
@@ -155,6 +161,32 @@ describe.runIf(hasDatabase)("using a reset link", () => {
       resetPassword.call({ token, newPassword: "yet-another-password" }, ANONYMOUS),
     );
     expect(reused.code).toBe("permission");
+  });
+
+  it("allows exactly one concurrent redemption of a reset link", async () => {
+    const token = await requestToken();
+    const passwords = [NEW, "a-concurrent-password-that-must-not-overwrite"];
+    const outcomes = await Promise.allSettled(passwords.map(newPassword =>
+      resetPassword.call({ token, newPassword }, ANONYMOUS),
+    ));
+
+    const successful = outcomes.flatMap((outcome, index) =>
+      outcome.status === "fulfilled" ? [index] : [],
+    );
+    expect(successful).toHaveLength(1);
+    const rejected = outcomes.find(outcome => outcome.status === "rejected");
+    expect(rejected).toMatchObject({ status: "rejected", reason: { code: "permission" } });
+    await expect(login.call({ email: EMAIL, password: passwords[successful[0]!]! }, ANONYMOUS))
+      .resolves.toMatchObject({ role: "owner" });
+  });
+
+  it("does not let invented tokens spend a valid link's reset allowance", async () => {
+    const token = await requestToken();
+    await Promise.all(Array.from({ length: 20 }, () => failure(
+      resetPassword.call({ token: "invented-reset-link-with-no-account", newPassword: NEW }, ANONYMOUS),
+    )));
+    await expect(resetPassword.call({ token, newPassword: NEW }, ANONYMOUS))
+      .resolves.toMatchObject({ ok: true });
   });
 
   it("signs out every session, including the attacker's", async () => {

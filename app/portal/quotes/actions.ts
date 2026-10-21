@@ -9,14 +9,18 @@
 // message: "this quote has expired, ask for a fresh one" is what somebody
 // needs, and a generic failure would send them to the support email §4.3's
 // pipeline exists to avoid.
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ServiceError } from "@/core/service";
+import { QUOTE_PARTNER_INVITE_COOKIE } from "@/modules/quotes/cookies";
 import {
   acceptQuote,
   chooseQuoteOptions,
   declineQuote,
+  inviteQuotePartner,
   postQuoteMessage,
+  revokeQuotePartner,
 } from "@/modules/quotes/service";
 
 const ANON = { kind: "anonymous" } as const;
@@ -74,6 +78,45 @@ export async function acceptQuoteAction(form: FormData): Promise<void> {
   // The token is spent at acceptance, so the page it returns to is the
   // confirmation rather than the offer.
   redirect(`/portal/quotes/accepted`);
+}
+
+export async function inviteQuotePartnerAction(form: FormData): Promise<void> {
+  const token = text(form, "token");
+  try {
+    const guest = await inviteQuotePartner.call(
+      {
+        token,
+        email: text(form, "email"),
+        name: text(form, "name") || undefined,
+      },
+      ANON,
+    );
+    (await cookies()).set(QUOTE_PARTNER_INVITE_COOKIE, guest.link, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/portal/quotes",
+      maxAge: 300,
+    });
+  } catch (error) {
+    refused(error, token, "That partner could not be invited.");
+  }
+  revalidatePath(here(token));
+  redirect(`${here(token)}?invited=1`);
+}
+
+export async function revokeQuotePartnerAction(form: FormData): Promise<void> {
+  const token = text(form, "token");
+  try {
+    await revokeQuotePartner.call(
+      { token, id: text(form, "id") },
+      ANON,
+    );
+  } catch (error) {
+    refused(error, token, "That partner could not be revoked.");
+  }
+  revalidatePath(here(token));
+  redirect(here(token));
 }
 
 export async function declineQuoteAction(form: FormData): Promise<void> {

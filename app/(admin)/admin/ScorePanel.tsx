@@ -9,7 +9,7 @@
 import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { formatDateTime } from "@/core/i18n";
 import { explainScore } from "@/core/scoring/service";
-import type { Actor } from "@/core/service";
+import { hasModuleAccess, type Actor } from "@/core/service";
 import { getT } from "../../i18n";
 import { domainOrNull } from "../read-helpers";
 import { awardPointsAction } from "../scoring-actions";
@@ -25,6 +25,8 @@ export async function ScorePanel({
   locale: string;
   timezone: string;
 }) {
+  // C1.38/C7.05: an unavailable module is not a failed read.
+  if (!hasModuleAccess(actor, "scoring")) return null;
   const [t, explained] = await Promise.all([
     getT(),
     domainOrNull(explainScore.call({ contactId }, actor)),
@@ -81,7 +83,7 @@ export async function ScorePanel({
                 <input
                   name="reason"
                   required
-                  className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <label className="grid gap-1 text-sm">
@@ -90,7 +92,7 @@ export async function ScorePanel({
                   type="number"
                   name="points"
                   defaultValue={10}
-                  className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                  className="w-20 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                 />
               </label>
               <label className="grid gap-1 text-sm">
@@ -100,7 +102,7 @@ export async function ScorePanel({
                   name="decayDays"
                   min={0}
                   defaultValue={0}
-                  className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                  className="w-20 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                 />
               </label>
               <Button type="submit" variant="quiet">

@@ -6,6 +6,7 @@
 // layout never applies to it — a login page behind an auth check is an
 // infinite redirect.
 import type { Metadata } from "next";
+import { env } from "@/core/env";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Storefront } from "@phosphor-icons/react/dist/ssr";
@@ -24,11 +25,15 @@ export const dynamic = "force-dynamic";
 
 // §5: admin surfaces are noindexed. They are also behind auth, but a login
 // page is not, so this one needs saying explicitly.
-export const metadata: Metadata = { robots: { index: false, follow: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: `${t("auth.login.title")} — ${t("common.appName")}`, robots: { index: false, follow: false } };
+}
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
 export default async function LoginPage() {
+  if (env().FREEHOLDER_PLAYGROUND === "1") redirect("/playground");
   const state = await setupState.call({}, ANONYMOUS);
   // Nothing to sign in to yet.
   if (!state.hasOwner) redirect("/setup");
@@ -79,6 +84,7 @@ export default async function LoginPage() {
             password: t("auth.login.password"),
             submit: t("auth.login.submit"),
             pending: t("auth.login.pending"),
+            passkey: { submit: t("auth.passkey.submit"), intro: t("auth.passkey.intro"), failed: t("auth.passkey.failed") },
           }}
         />
         <a href="/forgot" className="mt-6 inline-block text-sm text-ink-muted">

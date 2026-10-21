@@ -32,8 +32,18 @@ export interface ColorTokens {
   ink: string;
   /** Secondary text, labels, captions. */
   inkMuted: string;
-  /** Hairlines and borders. */
+  /** Hairlines and dividers. Decorative — see `ruleStrong` for controls. */
   rule: string;
+  /**
+   * The edge of something you can operate: inputs, selects, checkboxes.
+   *
+   * Separate from `rule` because WCAG 1.4.11 asks 3:1 of a *control's*
+   * boundary and nothing of a decorative divider. `rule` was 1.17:1 against
+   * every ground, so field edges were invisible to low-vision users — and
+   * raising `rule` itself would have darkened all 828 hairlines in the
+   * product to fix the 60 that are controls. Reported by a third party.
+   */
+  ruleStrong: string;
   /** The one colour that means "act". Used sparingly, on purpose. */
   accent: string;
   /** Text and icons placed on `accent`. */
@@ -74,14 +84,19 @@ export const colors: ThemeTokens = {
     surfaceMuted: "#f4f4f1",
     field: "#ffffff",
     ink: "#23262a",
-    inkMuted: "#6b7076",
+    // Darker than the original #6b7076: that pair was 4.53:1 on surfaceMuted,
+    // which axe fails on 11px labels and quiet controls (C11 settings).
+    inkMuted: "#5a5f66",
     rule: "#e3e3de",
+    // 3.32:1 on the lightest ground it borders, with headroom over the 3:1
+    // floor rather than sitting on it.
+    ruleStrong: "#868681",
     accent: "#2551e0",
     onAccent: "#ffffff",
     accentSoft: "#e6ecfd",
-    // Darker than it first looked right: the original #1a7f52 read at 4.32:1
-    // on its own soft ground, which fails AA. Contrast decided this, not taste.
-    success: "#17734a",
+    // Darker than it first looked right: #1a7f52 was 4.32:1 on its soft ground,
+    // and #17734a still failed axe on 11px "On" pills. Contrast, not taste.
+    success: "#146640",
     successSoft: "#e3f2ea",
     warning: "#8c5b0e",
     warningSoft: "#fbeed6",
@@ -98,6 +113,8 @@ export const colors: ThemeTokens = {
     ink: "#eceef0",
     inkMuted: "#9aa0a8",
     rule: "#2b2e34",
+    // 3.41:1 against `surfaceMuted`, the lightest dark ground.
+    ruleStrong: "#6e747c",
     // Lifted and desaturated: the light-mode cobalt is unreadable on a dark
     // ground, and a theme that merely inverts is how contrast gets lost.
     accent: "#5c86ff",
@@ -204,6 +221,7 @@ export const COLOR_ROLES = [
   "ink",
   "inkMuted",
   "rule",
+  "ruleStrong",
   "accent",
   "onAccent",
   "accentSoft",
@@ -254,11 +272,21 @@ export function contrastFailures(theme: ThemeTokens): ContrastFailure[] {
     }
     fail("inkMuted on paper", contrastRatio(c.inkMuted, c.paper), 4.5);
     fail("inkMuted on surface", contrastRatio(c.inkMuted, c.surface), 4.5);
+    fail("inkMuted on surfaceMuted", contrastRatio(c.inkMuted, c.surfaceMuted), 4.5);
     fail("onAccent on accent", contrastRatio(c.onAccent, c.accent), 4.5);
     fail("success on successSoft", contrastRatio(c.success, c.successSoft), 4.5);
     fail("warning on warningSoft", contrastRatio(c.warning, c.warningSoft), 4.5);
     fail("danger on dangerSoft", contrastRatio(c.danger, c.dangerSoft), 4.5);
     fail("onDanger on danger", contrastRatio(c.onDanger, c.danger), 4.5);
+    // WCAG 1.4.11: a control's boundary needs 3:1, on every ground a
+    // control sits on. `rule` is exempt because a divider is decoration.
+    for (const ground of ["paper", "surface", "surfaceMuted", "field"] as const) {
+      fail(
+        `ruleStrong on ${ground}`,
+        contrastRatio(c.ruleStrong, c[ground]),
+        3,
+      );
+    }
     fail("focus on paper", contrastRatio(c.focus, c.paper), 3);
     fail("focus on surface", contrastRatio(c.focus, c.surface), 3);
   }

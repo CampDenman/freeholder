@@ -14,6 +14,7 @@
 // Zod-validated against a registered block type before it is written (see
 // blocks/registry.ts), so this is a typed tree that happens to be stored as
 // JSON, not a bag anyone can put anything in.
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -28,6 +29,33 @@ import {
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 /**
+ * How the help centre is arranged (§4.6, C8.12).
+ *
+ * Categories are per-locale rows rather than one row with translated names,
+ * because §4.9 already made that choice for pages and a help centre that
+ * arranges itself differently from the site it lives on is a second CMS by
+ * another route.
+ */
+export const helpCategories = pgTable(
+  "help_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull(),
+    locale: text("locale").notNull().default("en"),
+    name: text("name").notNull(),
+    description: text("description"),
+    /** Owner-chosen order. Ties break by name so a list never flickers. */
+    position: integer("position").notNull().default(0),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("help_categories_slug_locale_idx").on(t.slug, t.locale),
+    index("help_categories_position_idx").on(t.locale, t.position),
+  ],
+);
+
+/**
  * A page with a public face.
  *
  * `slug` is the path with no leading or trailing slash, and the home page is
@@ -38,6 +66,12 @@ export const pages = pgTable(
   "pages",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /**
+     * Set = in trash (C11.14). The row stays — slug, revisions, working copy
+     * and all — until an explicit purge or the thirty-day sweep, so removal
+     * is reversible and the slug stays reserved by the trashed row.
+     */
+    trashedAt: timestamp("trashed_at", { withTimezone: true }),
     /** "" for home, "about", "services/weddings". No leading slash. */
     slug: text("slug").notNull(),
     /** BCP-47. The default locale is unprefixed in URLs (§4.9). */
@@ -71,6 +105,27 @@ export const pages = pgTable(
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     editLeaseActor: text("edit_lease_actor"),
     editLeaseUntil: timestamp("edit_lease_until", { withTimezone: true }),
+    /**
+     * Set = this page is a help-centre article (§4.6, C8.12).
+     *
+     * Not a second table. "The help centre is the CMS, not a second CMS" —
+     * an article is a page with a category, so it inherits the block editor,
+     * locale variants, SEO, the working copy, approval and the publish flow,
+     * and it keeps inheriting whatever the CMS gains next. This is the same
+     * choice `sections.kind` made: one object, one discriminator, listed
+     * separately in admin because that is the only place the difference
+     * matters.
+     */
+    helpCategoryId: uuid("help_category_id").references(() => helpCategories.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * "Did this help — yes/no", and deliberately no comment box (§4.6).
+     * A free-text field here is a support queue nobody staffed, and an
+     * unanswered one is worse than none.
+     */
+    helpfulYes: integer("helpful_yes").notNull().default(0),
+    helpfulNo: integer("helpful_no").notNull().default(0),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -79,6 +134,11 @@ export const pages = pgTable(
     // "unlikely", it is the thing that makes a URL ambiguous.
     uniqueIndex("pages_slug_locale_idx").on(t.slug, t.locale),
     index("pages_status_idx").on(t.status),
+    index("pages_help_category_idx").on(t.helpCategoryId),
+    index("pages_trash_idx").on(t.trashedAt).where(sql`${t.trashedAt} is not null`),
+    // Help search is trigram over the title (§4.6): somebody looking for
+    // help types a fragment of the problem, not a stemmed keyword.
+    index("pages_title_search_idx").using("gin", t.title.op("gin_trgm_ops")),
   ],
 );
 
@@ -248,6 +308,7 @@ export const TEMPLATE_PRESETS = [
   "creator",
   "service-business",
   "shop",
+  "community",
   "everything",
   "custom",
 ] as const;

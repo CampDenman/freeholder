@@ -14,6 +14,11 @@
 import type { ReactNode } from "react";
 import { cookies, headers } from "next/headers";
 import { PATH_HEADER, REQUEST_TARGET_HEADER } from "@/core/http/headers";
+import {
+  CSP_NONCE_HEADER,
+  THIRD_PARTY_CREATIVE_CONSENT_COOKIE,
+  parseThirdPartyCreativeConsent,
+} from "@/core/http/csp";
 import { renderBlocks } from "@/modules/cms/render";
 import {
   ANNOUNCEMENT_KEY,
@@ -34,13 +39,19 @@ import {
   parseAnalyticsConsentState,
 } from "@/modules/analytics/visitor";
 import { AnalyticsRuntime } from "./AnalyticsRuntime";
+import { IncomingCall } from "./call/IncomingCall";
+import { myMembership } from "@/modules/members/service";
 import { AnalyticsConsentControl } from "./AnalyticsConsentControl";
 import { SkipLink } from "@/ui/SkipLink";
 import { actorFromToken } from "@/core/http/actor";
+import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { assignmentsFor } from "@/modules/cms/experiments";
 import { ANON_HEADER, SESSION_HEADER } from "@/modules/analytics/visitor";
 import { recordExperimentImpressions } from "@/modules/analytics/service";
+import { PopupMount } from "@/modules/popups/mount";
+import { POPUP_TALLY_COOKIE } from "@/modules/popups/tally";
 import { MagicWand } from "@phosphor-icons/react/dist/ssr";
+import { loadShopperCartSnapshot } from "./shopper-cart";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +76,10 @@ export default async function PublicLayout({
     cookieJar.get(SESSION_COOKIE_NAME)?.value,
   );
   const showBuilder = publicActor.kind === "user" && publicActor.role === "owner";
+  // §44.7: an active member hears a ringing call on any public page. This
+  // reads the sign-in session; `publicActor` above reads the analytics cookie.
+  const signedIn = await actorFromToken(cookieJar.get(SESSION_COOKIE)?.value);
+  const member = signedIn.kind === "user" ? await myMembership.call({}, signedIn).catch(() => null) : null;
 
   const [announcement, header, navigation, footer] = await Promise.all([
     publishedSection(ANNOUNCEMENT_KEY, locale),
@@ -113,6 +128,11 @@ export default async function PublicLayout({
     path: requestHeaders.get(PATH_HEADER) ?? "/",
     visitorId,
     experimentAssignments,
+    thirdPartyConsent: parseThirdPartyCreativeConsent(
+      cookieJar.get(THIRD_PARTY_CREATIVE_CONSENT_COOKIE)?.value,
+    ),
+    cspNonce: requestHeaders.get(CSP_NONCE_HEADER) ?? undefined,
+    shopperCart: loadShopperCartSnapshot,
     localizeHref: business
       ? (href: string) => localizeCustomerHref(href, locale, business)
       : undefined,
@@ -164,35 +184,25 @@ export default async function PublicLayout({
       ) : null}
 
       {/*
-        Colophon. Deliberately quiet: Freeholder is a demonstration of what
-        WeVibeSites builds, so the phone number is here for anyone who wants it
-        rather than pushed as a call-to-action the way it is on wevibesites.com.
-        Rendered outside the CMS footer above so it does not depend on a
-        Section existing, and so an editor cannot remove the attribution.
+        The popup surface (C9.30). Last in the document because both of its
+        non-modal shapes are fixed to the bottom of the viewport, so this is
+        where the tab order should meet them; the modal shape goes to the
+        browser's top layer and does not care where it was written.
+
+        The visitor's cap tally is handed over as the raw cookie value. The
+        service owns that encoding — the shell's job is to carry it, not to
+        understand it.
       */}
-      <div className="border-t border-rule bg-surface">
-        <div
-          className="mx-auto flex flex-col gap-1 px-[var(--fh-gutter,1.5rem)] py-4 text-xs text-ink-muted sm:flex-row sm:items-center sm:justify-between"
-          style={{ maxWidth: "var(--fh-measure, 48rem)" }}
-        >
-          <span>
-            {t("colophon.builtBy")}{" "}
-            <a
-              href="https://wevibesites.com"
-              className="underline underline-offset-2 hover:text-ink"
-            >
-              {t("colophon.builder")}
-            </a>
-          </span>
-          <a
-            href="tel:+16393834662"
-            className="tabular-nums hover:text-ink"
-            aria-label={t("colophon.callAria")}
-          >
-            {t("colophon.phone")}
-          </a>
-        </div>
-      </div>
+      <PopupMount
+        path={ctx.path}
+        locale={locale}
+        t={t}
+        business={ctx.business}
+        localizeHref={ctx.localizeHref}
+        visitorKey={visitorId ?? cookieJar.get(ANON_COOKIE)?.value ?? null}
+        tally={cookieJar.get(POPUP_TALLY_COOKIE)?.value ?? null}
+        actor={publicActor}
+      />
       <AnalyticsConsentControl
         policy={analytics.consentPolicy}
         state={consent}
@@ -200,6 +210,16 @@ export default async function PublicLayout({
         returnTo={requestHeaders.get(REQUEST_TARGET_HEADER) ?? "/"}
         t={t}
       />
+      {member?.status === "active" ? (
+        <IncomingCall
+          labels={{
+            incomingVoice: t("members.calls.incomingVoice", { name: "{name}" }),
+            incomingVideo: t("members.calls.incomingVideo", { name: "{name}" }),
+            answer: t("members.calls.answer"),
+            decline: t("members.calls.decline"),
+          }}
+        />
+      ) : null}
       <AnalyticsRuntime
         policy={analytics.consentPolicy}
         state={consent}

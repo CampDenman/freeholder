@@ -1,8 +1,73 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-import { index, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { contacts } from "@/core/contacts/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+
+export const voiceVideoRooms = pgTable(
+  "voice_video_rooms",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id"),
+    kind: text("kind").notNull(),
+    provider: text("provider").notNull(),
+    title: text("title").notNull(),
+    status: text("status").notNull().default("pending"),
+    externalRef: text("external_ref"),
+    providerRoomId: text("provider_room_id"),
+    providerDomain: text("provider_domain"),
+    providerLeaseToken: uuid("provider_lease_token"),
+    providerLeaseExpiresAt: timestamp("provider_lease_expires_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("voice_video_rooms_contact_idx").on(t.contactId),
+    index("voice_video_rooms_status_idx").on(t.status),
+  ],
+);
+
+export const voiceVideoJoins = pgTable(
+  "voice_video_joins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => voiceVideoRooms.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id"),
+    status: text("status").notNull().default("joined"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("voice_video_joins_room_contact_idx").on(t.roomId, t.contactId),
+    index("voice_video_joins_contact_idx").on(t.contactId),
+  ],
+);
+
+export const voiceVideoWebhookDeliveries = pgTable(
+  "voice_video_webhook_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** PM envelope id (evt_…): one row per event, redeliveries de-dupe on it. */
+    eventId: text("event_id").notNull(),
+    /** PM delivery attempt id, kept for cross-relay tracing. */
+    deliveryId: text("delivery_id").notNull(),
+    eventType: text("event_type").notNull(),
+    resourceId: text("resource_id").notNull(),
+    /** What applying the event did: room-ended | recording-dropped | ignored | received. */
+    action: text("action").notNull(),
+    receivedAt: createdAtColumn(),
+  },
+  (t) => [uniqueIndex("voice_video_webhook_deliveries_event_idx").on(t.eventId)],
+);
 
 export const voiceVideoArtifacts = pgTable(
   "voice_video_artifacts",
@@ -11,12 +76,30 @@ export const voiceVideoArtifacts = pgTable(
     contactId: uuid("contact_id")
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
+    roomId: uuid("room_id").references(() => voiceVideoRooms.id, { onDelete: "set null" }),
     kind: text("kind").notNull(),
     provider: text("provider").notNull(),
     title: text("title").notNull(),
     externalRef: text("external_ref"),
+    providerLeaseToken: uuid("provider_lease_token"),
+    providerLeaseExpiresAt: timestamp("provider_lease_expires_at", { withTimezone: true }),
+    status: text("status").notNull().default("recorded"),
+    conversationId: uuid("conversation_id"),
+    transcript: text("transcript"),
+    durationSeconds: integer("duration_seconds"),
+    lastError: text("last_error"),
+    importStatus: text("import_status"),
+    storageKey: text("storage_key"),
+    storageContentType: text("storage_content_type"),
+    storageChecksumSha256: text("storage_checksum_sha256"),
+    transcriptStorageKey: text("transcript_storage_key"),
+    importedAt: timestamp("imported_at", { withTimezone: true }),
+    importError: text("import_error"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
-  (t) => [index("voice_video_artifacts_contact_idx").on(t.contactId)],
+  (t) => [
+    index("voice_video_artifacts_contact_idx").on(t.contactId),
+    index("voice_video_artifacts_room_idx").on(t.roomId),
+  ],
 );

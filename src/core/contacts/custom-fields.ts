@@ -36,7 +36,6 @@ const optionSchema = z.string().trim().min(1).max(100);
 const optionsSchema = z
   .array(optionSchema)
   .max(50)
-  .default([])
   .transform((values) => [...new Set(values)]);
 
 function isCalendarDate(value: string): boolean {
@@ -151,7 +150,7 @@ export const createCustomField = defineService({
     label: z.string().trim().min(1).max(100),
     kind: kindSchema,
     helpText: z.string().trim().max(300).nullable().optional(),
-    options: optionsSchema,
+    options: optionsSchema.default([]),
     position: z.number().int().min(0).max(10_000).default(0),
   }),
   output: customFieldRow,

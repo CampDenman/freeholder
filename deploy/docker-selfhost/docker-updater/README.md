@@ -1,0 +1,121 @@
+# Docker host updates (C10.31)
+
+The first supported automatic lane requires the standard Linux `app` / PostgreSQL 16 `db` /
+`caddy` Compose deployment, S3 media and no custom app mounts except its private
+control socket. Other recipes, local media and (by default) schema-changing
+updates remain manual; schema-changing releases can join the automatic lane
+only through the explicit `allow_schema_changes` opt-in below. It never mounts
+Docker's socket inside Freeholder.
+
+This directory ships that recipe ready to adapt: `compose.yml` is the exact
+`app`/`db`/`caddy` shape the executor inventories (app behind Caddy, no
+published app port, the updater socket mounted read-only, `FREEHOLDER_STORAGE:
+s3`), and `Caddyfile` is the live proxy config the executor swaps for a 503
+maintenance response during a cutover and restores afterwards. Copy both into
+your deployment directory, set `FREEHOLDER_DOMAIN`, and point the updater
+configuration's `directory` at that directory.
+
+Install Python 3, Docker Compose and a checksum-verified current `cosign` from
+the official Sigstore release. The verifier requires the exact main-branch
+`publish-image.yml` signing identity; that workflow verifies CI build provenance
+before promotion. No personal GitHub token is needed on the host.
+
+As root, copy `scripts/docker-updater.py` to
+`/usr/local/lib/freeholder/docker-updater.py`, copy the three systemd files here
+to `/etc/systemd/system`, and copy `config.example.json` to
+`/etc/freeholder/updater.json` with mode 600, owned by root. Adjust the paths and
+app GID. The deployment's `compose.yml` must use `${FREEHOLDER_IMAGE}` and keep
+the app behind Caddy, with no published app port. Add to the app:
+
+```yaml
+environment:
+  FREEHOLDER_UPDATE_SOCKET: /run/freeholder-updater/updater.sock
+volumes:
+  - /run/freeholder-updater:/run/freeholder-updater:ro
+```
+
+Run `systemctl daemon-reload` and
+`systemctl enable --now freeholder-updater.service`, then recreate the app to
+mount the socket. `/admin/updates` shows host status and provides an owner-only
+update request requiring fresh two-factor authentication. A queued request is
+not a completed deployment; refresh for durable progress. The socket accepts
+only status and an apply request for the fixed upstream repository.
+
+Start with `automatic: false`. Exercise the CLI with a verified candidate:
+
+```sh
+python3 /usr/local/lib/freeholder/docker-updater.py apply --digest sha256:...
+python3 /usr/local/lib/freeholder/docker-updater.py status
+```
+
+Older images did not include a source revision label. For the first upgrade
+from one of those images, verify its exact digest and source commit against
+the original successful main CI artifact/provenance. Add `initial_image`
+(`ghcr.io/campdenman/freeholder@sha256:...`) and `initial_revision` (the full
+40-character commit) to the root-owned configuration. This baseline applies
+only when the running image matches that exact digest. Never guess its commit
+from a mutable tag. New candidate images must carry their own revision label;
+the bootstrap baseline cannot authorize an unlabelled candidate.
+
+Every candidate is signature-checked, restored against a real database backup
+and checked against upstream commit history so a stale channel tag cannot
+downgrade the installation. Missing revision labels, unavailable commit-history
+verification, or divergent/older revisions refuse before maintenance. The public
+GitHub comparison endpoint receives only the two public release revisions.
+The restored candidate runs
+on a network with no egress, booted and smoke-tested. By default a change in
+database schema or migration journal refuses cutover.
+
+## Migration-changing releases (opt-in)
+
+An operator who has rehearsed the manual migration procedure can set
+`allow_schema_changes: true` in the root-owned configuration. The lane then
+admits candidates whose rehearsal proves they migrate the restored backup:
+
+1. The rehearsal restores the backup, boots the candidate (its migrations run
+   at boot against the scratch database), and requires the schema/journal
+   signature to change. A candidate that changes nothing takes the standard
+   lane above; a candidate that changes schema without the opt-in still
+   refuses before maintenance.
+2. Cutover puts Caddy into maintenance, stops the app, and takes the final
+   backup before the candidate ever boots against production. Maintenance
+   then blocks writes for the entire window.
+3. The candidate boots against production, migrates, and is health-checked
+   and smoke-tested behind maintenance. Traffic reopens only after both pass.
+4. On failure before reopening, rollback restores the write-free cutover
+   backup — the previous image may not read a migrated schema, so an image
+   swap alone is not a rollback — repins the previous image, verifies it,
+   and reopens. Because maintenance blocked writes from the backup onward,
+   no accepted write is rewound. Failed recovery leaves maintenance enabled
+   and blocks another update.
+
+A failure discovered after traffic reopened cannot be rolled back
+automatically: writes have landed that a restore cannot replay. The durable
+status records what happened; an operator follows the manual procedure.
+
+## Standard lane
+
+An unchanged-schema candidate puts Caddy into
+maintenance, stops the app, takes a final backup, pins the image and verifies
+readiness and routes before reopening traffic. Failure restores the previous
+image and verifies it; database writes are preserved. Failed recovery leaves
+maintenance enabled and blocks another update. Interrupted runs also block.
+
+After proving recovery on your installation, set `automatic: true`, select
+`channel` (`stable` uses `latest`; `edge` uses the latest tested main image), and
+`utc_hour` (0–23). Restart the updater service and enable
+`freeholder-update-check.timer`. The host checks once in that UTC hour each day;
+this operator schedule is independent of the in-app signed-release-feed policy.
+Disable the timer or set `automatic: false` to pause unattended changes. An
+absent stable tag fails safely. No automatic migration or forced downgrade is
+inferred from a version number.
+
+Backups, exact configs, image identities and status live under
+`state_directory`, readable only by root. They contain production secrets and
+personal data: include them in your encrypted backup/retention policy. They are
+not automatically deleted. Monitor free disk and systemd failures. An operator
+must diagnose an interrupted/recovery-required run, verify the live image,
+database and proxy, and archive `status.json` before another run is permitted.
+Never clear a failure solely to make the scheduler retry.
+
+Host tests: `python3 -m unittest discover -s tests/host -v`.

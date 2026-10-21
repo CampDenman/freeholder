@@ -33,6 +33,19 @@ function recipe(target: string): Recipe {
   return yaml(join(DEPLOY, target, "recipe.yaml")) as Recipe;
 }
 
+describe("health version in executable recipes (C11.15)", () => {
+  it("refuses a 0.0.0 health payload on every gate that waits for /api/health", () => {
+    for (const file of [
+      "scripts/public-gates.sh",
+      "scripts/recipe-matrix.sh",
+      "scripts/upgrade-gate.sh",
+    ]) {
+      const source = readFileSync(join(ROOT, file), "utf8");
+      expect(source, file).toContain('version":"0.0.0"');
+    }
+  });
+});
+
 describe("Tier-1 recipe contracts (C3.16, C3.17)", () => {
   it.each(TIER1_RECIPES)("%s has parsed metadata, artifacts and executable operations", (target) => {
     for (const file of REQUIRED_RECIPE_FILES) {
@@ -77,10 +90,11 @@ describe("Tier-1 recipe contracts (C3.16, C3.17)", () => {
     const envs = web.envs as Array<{ key: string; value: string }>;
     expect(spec.databases[0]).toMatchObject({ engine: "PG", version: "16" });
     expect(web.health_check).toMatchObject({ http_path: "/api/health" });
-    expect(web.liveness_health_check).toMatchObject({ http_path: "/api/health" });
+    expect(web.liveness_health_check).toMatchObject({ http_path: "/api/health/live" });
     expect(envs).toContainEqual(expect.objectContaining({ key: "DATABASE_URL", value: "${freeholder-db.DATABASE_PRIVATE_URL}" }));
     expect(envs).toContainEqual(expect.objectContaining({ key: "FREEHOLDER_STORAGE", value: "s3" }));
     const rendered = renderAppSpec(readFileSync(templatePath, "utf8"), {
+      BOOTSTRAP_SECRET: "b".repeat(32),
       SESSION_SECRET: "s".repeat(32),
       CREDENTIAL_KEY: "a".repeat(64),
       S3_BUCKET: "bucket",
@@ -92,6 +106,7 @@ describe("Tier-1 recipe contracts (C3.16, C3.17)", () => {
     expect(rendered).not.toContain("REPLACE_WITH_");
     expect(parse(rendered)).toMatchObject({ databases: [{ engine: "PG" }] });
     expect(() => renderAppSpec(readFileSync(templatePath, "utf8"), {
+      BOOTSTRAP_SECRET: "b".repeat(32),
       SESSION_SECRET: "short",
       CREDENTIAL_KEY: "invalid",
       S3_BUCKET: "bucket",
@@ -110,6 +125,11 @@ describe("Tier-1 recipe contracts (C3.16, C3.17)", () => {
       expect(compose.services.app!.restart).toBe("unless-stopped");
       expect(compose.services.app!.env_file).not.toContain(".env.example");
       expect(compose.services.db!.healthcheck).toBeTruthy();
+      const current = recipe(target);
+      expect(current.required_environment).toContain("POSTGRES_PASSWORD");
+      const databaseUrl = (compose.services.app!.environment as Record<string, string>).DATABASE_URL;
+      expect(databaseUrl).toContain("${POSTGRES_PASSWORD:?");
+      expect(databaseUrl).not.toContain("freeholder:freeholder");
     }
   });
 
@@ -173,6 +193,20 @@ describe("Tier-1 recipe contracts (C3.16, C3.17)", () => {
     expect(matrix).toContain("node scripts/doctor.mjs");
     expect(matrix).toContain("FREEHOLDER_STORAGE=s3");
     expect(workflow).toContain("bash scripts/recipe-matrix.sh");
-    expect(workflow).toContain("minio/minio:");
+
+    // The gate has to run against a real S3-compatible server rather than the
+    // local filesystem adapter, which is what this used to prove by naming
+    // `quay.io/minio/minio`. MinIO closed public distribution in September 2026,
+    // so naming a vendor made the assertion a hostage: the gate went red for
+    // somebody else's licensing decision with nothing wrong in the candidate.
+    //
+    // So assert the two properties that actually matter. Storage is served on
+    // the endpoint recipe-matrix.sh points the image at, and the image for it
+    // comes from our own registry, so the next upstream withdrawal is a mirror
+    // commit rather than a red build.
+    expect(matrix).toContain("S3_ENDPOINT=http://127.0.0.1:9000");
+    expect(workflow).toMatch(/docker run .*127\.0\.0\.1:9000:/s);
+    expect(workflow).toContain("freeholder-ci-s3");
+    expect(workflow).toContain("ghcr.io/$(echo \"$OWNER\"");
   });
 });

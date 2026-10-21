@@ -40,6 +40,7 @@ Two things that bite:
 | `en` | Source. |
 | `fr` | **AI-drafted, not yet reviewed by a native speaker.** |
 | `es` | **AI-drafted, not yet reviewed by a native speaker.** |
+| `ar` | **AI-drafted (Modern Standard Arabic), not yet reviewed by a native speaker.** Right-to-left; the root layout derives `dir` from the script, and `tests/browser/accessibility.spec.ts` proves the catalog-driven RTL rendering. |
 
 The French and Spanish catalogs were machine-drafted. They are complete and
 they render correctly, but "grammatical" is not the same as "sounds like a

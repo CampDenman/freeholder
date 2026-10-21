@@ -17,11 +17,15 @@ import {
 import { saveServiceAreaAction, type ActionState } from "../../actions";
 
 export interface ServiceAreaValues {
-  kind: "none" | "radius" | "regions";
+  kind: "none" | "radius" | "regions" | "postal_codes";
   centerLatitude: string;
   centerLongitude: string;
   radiusKm: string;
   regions: string;
+  postalCodes: string;
+  deliveryWeekdays: number[];
+  deliveryOpens: string;
+  deliveryCloses: string;
 }
 
 export interface ServiceAreaFormLabels {
@@ -31,6 +35,9 @@ export interface ServiceAreaFormLabels {
   none: string;
   radius: string;
   regions: string;
+  postalCodes: string;
+  postalCodeList: string;
+  postalCodeHint: string;
   centerLatitude: string;
   centerLongitude: string;
   radiusKm: string;
@@ -40,6 +47,12 @@ export interface ServiceAreaFormLabels {
   submit: string;
   pending: string;
   saved: string;
+  deliveryDays: string;
+  deliveryOpens: string;
+  deliveryCloses: string;
+  deliveryHint: string;
+  /** The seven weekday names in the reader's language, Sunday first. */
+  deliveryDayNames: string[];
 }
 
 /**
@@ -88,6 +101,7 @@ export function ServiceAreaForm({
               <option value="none">{labels.none}</option>
               <option value="radius">{labels.radius}</option>
               <option value="regions">{labels.regions}</option>
+              <option value="postal_codes">{labels.postalCodes}</option>
             </Select>
           </Field>
 
@@ -129,6 +143,74 @@ export function ServiceAreaForm({
           >
             <Input id="regions" name="regions" defaultValue={values.regions} />
           </Field>
+
+          {/*
+            The only shape a delivery form can actually check. A radius and a
+            region describe coverage to a reader; neither answers "do you come
+            to L4C 2K1?" without a geocoder, and answering it by guessing is
+            the invented coverage §4.18 forbids.
+          */}
+          <Field
+            label={labels.postalCodeList}
+            htmlFor="postalCodes"
+            hint={labels.postalCodeHint}
+          >
+            <Input
+              id="postalCodes"
+              name="postalCodes"
+              defaultValue={values.postalCodes}
+            />
+          </Field>
+
+          {/*
+            The weekly window when this area receives deliveries. Optional,
+            and saved as a whole: tick days, set both times. An area without a
+            window answers "do we come there" only — the coverage check never
+            invents a "when" the owner did not name.
+          */}
+          <fieldset className="grid gap-3">
+            <legend className="text-sm font-medium text-ink">
+              {labels.deliveryDays}
+            </legend>
+            <p className="max-w-prose text-xs text-ink-muted">
+              {labels.deliveryHint}
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {labels.deliveryDayNames.map((name, weekday) => (
+                <label
+                  key={weekday}
+                  className="flex items-center gap-1.5 text-sm text-ink"
+                >
+                  <input
+                    type="checkbox"
+                    name="deliveryDays"
+                    value={weekday}
+                    defaultChecked={values.deliveryWeekdays.includes(weekday)}
+                    className="rounded-sm border-rule-strong bg-field"
+                  />
+                  {name}
+                </label>
+              ))}
+            </div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label={labels.deliveryOpens} htmlFor="deliveryOpens">
+                <Input
+                  id="deliveryOpens"
+                  name="deliveryOpens"
+                  type="time"
+                  defaultValue={values.deliveryOpens}
+                />
+              </Field>
+              <Field label={labels.deliveryCloses} htmlFor="deliveryCloses">
+                <Input
+                  id="deliveryCloses"
+                  name="deliveryCloses"
+                  type="time"
+                  defaultValue={values.deliveryCloses}
+                />
+              </Field>
+            </div>
+          </fieldset>
         </CardBody>
         <CardFooter>
           <Button type="submit" disabled={pending}>

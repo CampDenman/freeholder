@@ -16,6 +16,7 @@ import {
   listAttributeDefinitions,
   listCancellationPolicies,
   listBundleComponents,
+  listCollections,
   listOptionTypes,
   listPriceLists,
   listPriceRules,
@@ -49,7 +50,7 @@ import {
   Select,
 } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
-import { productAction } from "../../../catalog-actions";
+import { collectionAction, productAction } from "../../../catalog-actions";
 import { requireStaffActor } from "../../guard";
 import { editorBlockTypes, editorLabels } from "../../editorLabels";
 import { ProductEditor } from "./ProductEditor";
@@ -66,7 +67,7 @@ export default async function ProductPage({
 }) {
   const actor = await requireStaffActor("catalog");
   const { id } = await params;
-  const [bundle, categories, optionTypes, variantBundle, attributes, facts, media, prices, relations, components, catalog, offering, policies, rules, intakeForms, query, business, t] = await Promise.all([
+  const [bundle, categories, optionTypes, variantBundle, attributes, facts, media, prices, relations, components, catalog, offering, policies, rules, intakeForms, productCollections, allCollections, query, business, t] = await Promise.all([
     getProduct.call({ id }, actor).catch((error: unknown) => {
       if (error instanceof ServiceError) notFound();
       throw error;
@@ -87,6 +88,8 @@ export default async function ProductPage({
     hasModuleAccess(actor, "forms")
       ? domainOrNull(listForms.call({}, actor)).then((rows) => rows ?? [])
       : Promise.resolve([]),
+    listCollections.call({ productId: id }, actor),
+    listCollections.call({}, actor),
     searchParams,
     currentBusiness(),
     getT(),
@@ -169,6 +172,55 @@ export default async function ProductPage({
               <div><dt className="font-mono text-xs text-ink-muted">{t("catalog.brand")}</dt><dd>{product.brand ?? "—"}</dd></div>
             </dl>
           )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("catalog.collections.assignTitle")} />
+        <CardBody>
+          {productCollections.length === 0 ? (
+            <p className="text-sm text-ink-muted">{t("catalog.collections.assignEmpty")}</p>
+          ) : (
+            <ul className="mb-4 grid list-none gap-2 p-0">
+              {productCollections.map((collection) => (
+                <li key={collection.id} className="flex flex-wrap items-center gap-3">
+                  <a href={`/admin/collections/${collection.id}`} className="min-w-0 flex-1 font-medium text-ink">
+                    {collection.title}
+                  </a>
+                  <Pill>{t(`catalog.collections.rule.${collection.ruleType}`)}</Pill>
+                  {canManage && collection.ruleType === "manual" ? (
+                    <form action={collectionAction}>
+                      <input type="hidden" name="intent" value="removeProduct" />
+                      <input type="hidden" name="collectionId" value={collection.id} />
+                      <input type="hidden" name="productId" value={product.id} />
+                      <Button type="submit" variant="quiet">{t("catalog.collections.remove")}</Button>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {canManage && product.status !== "archived" ? (
+            (() => {
+              const assignable = allCollections.filter(
+                (collection) =>
+                  collection.ruleType === "manual" &&
+                  !productCollections.some((member) => member.id === collection.id),
+              );
+              return assignable.length > 0 ? (
+                <form action={collectionAction} className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                  <input type="hidden" name="intent" value="addProduct" />
+                  <input type="hidden" name="productId" value={product.id} />
+                  <Select name="collectionId" aria-label={t("catalog.collections.assignAdd")}>
+                    {assignable.map((collection) => (
+                      <option key={collection.id} value={collection.id}>{collection.title}</option>
+                    ))}
+                  </Select>
+                  <Button type="submit">{t("catalog.collections.assignAdd")}</Button>
+                </form>
+              ) : null;
+            })()
+          ) : null}
         </CardBody>
       </Card>
 
@@ -667,7 +719,14 @@ export default async function ProductPage({
               id={product.id}
               initialVersion={product.version}
               initialBlocks={product.description}
-              blockTypes={editorBlockTypes(t, "page", library.rows.map((asset) => ({ id: asset.id, filename: asset.filename })))}
+              blockTypes={editorBlockTypes(t, "page", library.rows.map((asset) => ({ id: asset.id, filename: asset.filename })), {
+                collections: allCollections
+                  .filter((collection) => collection.published)
+                  .map((collection) => ({ slug: collection.slug, title: collection.title })),
+                products: catalog
+                  .filter((row) => row.status === "active")
+                  .map((row) => ({ slug: row.slug, name: row.name })),
+              })}
               labels={editorLabels(t)}
             />
           </CardBody>
@@ -688,7 +747,16 @@ export default async function ProductPage({
                 <LifecycleReasonForm productId={product.id} version={product.version} intent="archive" label={t("catalog.archive")} reasonLabel={t("catalog.archiveReason")} />
               </div>
             ) : product.status === "active" ? (
-              <LifecycleReasonForm productId={product.id} version={product.version} intent="archive" label={t("catalog.archive")} reasonLabel={t("catalog.archiveReason")} />
+              <div className="grid gap-5 sm:grid-cols-2">
+                <form action={productAction} className="grid content-start gap-3">
+                  <input type="hidden" name="intent" value="publish" />
+                  <input type="hidden" name="id" value={product.id} />
+                  <input type="hidden" name="expectedVersion" value={product.version} />
+                  <p className="text-sm text-ink-muted">{t("catalog.publishHint")}</p>
+                  <div><Button type="submit">{t("catalog.publish")}</Button></div>
+                </form>
+                <LifecycleReasonForm productId={product.id} version={product.version} intent="archive" label={t("catalog.archive")} reasonLabel={t("catalog.archiveReason")} />
+              </div>
             ) : (
               <LifecycleReasonForm productId={product.id} version={product.version} intent="restore" label={t("catalog.restore")} reasonLabel={t("catalog.restoreReason")} />
             )}

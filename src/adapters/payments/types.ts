@@ -9,6 +9,8 @@ export interface PaymentAdapterCapabilities {
   partialRefunds: boolean;
   savedMethods: boolean;
   subscriptions: boolean;
+  /** Charge a stored method without a customer present (C9.33). */
+  offSessionCharges: boolean;
   disputes: boolean;
   /** Can initiate outbound payouts; tracking inbound provider deposits is ledger-wide. */
   payouts: boolean;
@@ -58,6 +60,32 @@ export interface CheckoutSession {
   expiresAt?: string;
 }
 
+/**
+ * Save a card without charging it.
+ *
+ * A card-required trial whose setup fee is zero has nothing to invoice. A
+ * zero-total invoice would mark itself paid, so this session is the capture
+ * instead. Providers that cannot do it leave the method off the adapter, and
+ * the plan stays unavailable rather than starting an unverified trial.
+ */
+export interface MethodSetupRequest {
+  contactId: string;
+  subscriptionId: string;
+  customer: { email: string; name?: string };
+  /** Provider customer reference, never a card or bank-account number. */
+  providerCustomerRef?: string;
+  successUrl: string;
+  cancelUrl: string;
+  idempotencyKey: string;
+}
+
+export interface MethodSetupSession {
+  providerRef: string;
+  url: string;
+  expiresAt?: string;
+  providerCustomerRef?: string;
+}
+
 export interface CheckoutCaptureRequest {
   checkoutRef: string;
   idempotencyKey: string;
@@ -87,6 +115,60 @@ export interface RefundResult {
 
 export interface SavedMethodRevocationRequest {
   providerRef: string;
+  idempotencyKey: string;
+}
+
+export interface OffSessionChargeRequest {
+  methodRef: string;
+  customerRef?: string;
+  invoiceId: string;
+  contactId: string;
+  currency: string;
+  amountMinor: number;
+  description: string;
+  idempotencyKey: string;
+}
+
+export interface OffSessionChargeResult {
+  providerRef: string;
+  status: "pending" | "succeeded" | "failed";
+  amountMinor?: number;
+  currency?: string;
+  occurredAt?: string;
+  failureMessage?: string;
+}
+
+export interface RecurringScheduleRequest {
+  /** First renewal after an already paid period or free trial. */
+  firstBillingAt?: string;
+  customerRef: string;
+  methodRef: string;
+  currency: string;
+  amountMinor: number;
+  interval: "day" | "week" | "month" | "year";
+  intervalCount: number;
+  description: string;
+  idempotencyKey: string;
+  metadata: {
+    subscriptionId: string;
+    contactId: string;
+    planId: string;
+  };
+}
+
+export interface RecurringScheduleResult {
+  providerRef: string;
+  customerRef?: string;
+}
+
+export interface RecurringScheduleUpdateRequest {
+  providerRef: string;
+  amountMinor: number;
+  currency: string;
+  interval: "day" | "week" | "month" | "year";
+  intervalCount: number;
+  description: string;
+  proration: "create_prorations" | "none";
   idempotencyKey: string;
 }
 
@@ -153,6 +235,17 @@ export type PaymentProviderEvent =
       expectedAt?: string;
       statementRef?: string;
       failureReason?: string;
+    }
+  | {
+      id: string;
+      kind: "subscription_period_paid" | "subscription_period_failed" | "subscription_cancelled";
+      providerRef: string;
+      occurredAt: string;
+      amountMinor?: number;
+      currency?: string;
+      periodStart?: string;
+      periodEnd?: string;
+      invoiceProviderRef?: string;
     };
 
 export interface PaymentAdapter {
@@ -166,8 +259,17 @@ export interface PaymentAdapter {
     recurring: boolean;
   }): Promise<readonly PaymentMethodOffer[]>;
   createCheckout(invoice: InvoiceForCharge): Promise<CheckoutSession>;
+  /**
+   * Optional. A missing method means this provider cannot save a card without
+   * a charge. Callers must check before offering a zero-fee card trial.
+   */
+  createMethodSetup?(request: MethodSetupRequest): Promise<MethodSetupSession>;
   captureCheckout(request: CheckoutCaptureRequest): Promise<CheckoutCaptureResult>;
   refund(request: RefundRequest): Promise<RefundResult>;
   revokeSavedMethod(request: SavedMethodRevocationRequest): Promise<void>;
+  chargeSavedMethod(request: OffSessionChargeRequest): Promise<OffSessionChargeResult>;
+  createRecurringSchedule(request: RecurringScheduleRequest): Promise<RecurringScheduleResult>;
+  updateRecurringSchedule(request: RecurringScheduleUpdateRequest): Promise<RecurringScheduleResult>;
+  cancelRecurringSchedule(request: { providerRef: string; idempotencyKey: string }): Promise<void>;
   verifyWebhook(request: RawProviderRequest): Promise<readonly PaymentProviderEvent[]>;
 }

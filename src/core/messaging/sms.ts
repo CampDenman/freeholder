@@ -34,8 +34,11 @@ import type { SmsAdapter } from "@/adapters/sms";
 import { AdapterError } from "@/adapters/types";
 import { storage } from "@/adapters/storage";
 import { contacts } from "@/core/contacts/schema";
+import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy";
+import { env } from "@/core/env";
 import { assets } from "@/core/media/schema";
 import {
+  defineOrchestratedService,
   defineService,
   getService,
   ServiceError,
@@ -440,6 +443,15 @@ export const sendSms = defineService({
     messageId: uuid.nullable(),
   }),
   handler: async (input, ctx) => {
+    if (playgroundBlocksExternalDelivery(env())) {
+      // C1.38: the playground's container network has no route out, and this
+      // refusal is the in-app twin of that: reminder and compliance jobs run
+      // as system and reach here without a person at the keyboard.
+      throw new ServiceError(
+        "permission",
+        "Text message delivery is disabled in the public playground.",
+      );
+    }
     requirePerson(ctx.actor);
     const contactId =
       input.contactId ??
@@ -607,44 +619,54 @@ function recordOutbound(
  * and threads with their email — which is the whole point of C7.08 existing
  * before this.
  */
-export const applySmsEvents = defineService({
-  name: "messaging.applySmsEvents",
-  summary: "Record what the carrier said, and thread anything it delivered.",
+const smsEventsInput = z.object({
+  events: z
+    .array(
+      z.object({
+        id: z.string().max(200),
+        kind: z.enum(["delivered", "failed", "received", "sent", "undelivered"]),
+        providerRef: z.string().max(300),
+        from: z.string().max(40).optional(),
+        to: z.string().max(40).optional(),
+        body: z.string().max(4_000).optional(),
+        media: z
+          .array(
+            z.object({
+              sourceUrl: z.string().url().max(2_000),
+              filename: z.string().min(1).max(255),
+              contentType: z.string().min(1).max(255),
+              bytes: z.instanceof(Uint8Array),
+            }),
+          )
+          .max(10)
+          .optional(),
+        errorCode: z.string().max(50).optional(),
+        errorText: z.string().max(500).optional(),
+        segments: z.number().int().min(0).max(1_000).optional(),
+        costMinor: z.number().int().min(0).optional(),
+        costCurrency: z.string().trim().toUpperCase().length(3).optional(),
+        occurredAt: z.string().max(60),
+      }),
+    )
+    .max(100),
+});
+
+const applySmsEventsApply = defineService({
+  name: "messaging.applySmsEventsApply",
+  summary: "Record carrier events after inbound media has been stored.",
   kind: "mutation",
   permission: "system",
   writeClass: "message",
   agentCallable: false,
   mcpExclude: true,
-  input: z.object({
-    events: z
-      .array(
-        z.object({
-          id: z.string().max(200),
-          kind: z.enum(["delivered", "failed", "received", "sent", "undelivered"]),
-          providerRef: z.string().max(300),
-          from: z.string().max(40).optional(),
-          to: z.string().max(40).optional(),
-          body: z.string().max(4_000).optional(),
-          media: z
-            .array(
-              z.object({
-                sourceUrl: z.string().url().max(2_000),
-                filename: z.string().min(1).max(255),
-                contentType: z.string().min(1).max(255),
-                bytes: z.instanceof(Uint8Array),
-              }),
-            )
-            .max(10)
-            .optional(),
-          errorCode: z.string().max(50).optional(),
-          errorText: z.string().max(500).optional(),
-          segments: z.number().int().min(0).max(1_000).optional(),
-          costMinor: z.number().int().min(0).optional(),
-          costCurrency: z.string().trim().toUpperCase().length(3).optional(),
-          occurredAt: z.string().max(60),
-        }),
-      )
-      .max(100),
+  input: smsEventsInput.extend({
+    uploaded: z.record(
+      z.string(),
+      z.object({
+        assetIds: z.array(z.string().uuid()),
+        failed: z.number().int().nonnegative(),
+      }),
+    ),
   }),
   output: row({ received: z.number().int(), reported: z.number().int() }),
   handler: async (input, ctx) => {
@@ -684,24 +706,12 @@ export const applySmsEvents = defineService({
           phone: event.from,
           channel: (event.media?.length ?? 0) > 0 ? "mms" : "sms",
         });
-        const mediaAssetIds: string[] = [];
-        let failedMedia = 0;
-        for (const item of event.media ?? []) {
-          try {
-            const asset = (await ctx.callAsSystem(getService("media.upload"), {
-              filename: item.filename,
-              contentType: item.contentType,
-              bytes: item.bytes,
-              source: "import",
-              provenance: { sourceUrl: item.sourceUrl, note: "Inbound MMS attachment" },
-              metadata: {},
-            })) as { id: string };
-            mediaAssetIds.push(asset.id);
-          } catch (error) {
-            if (!(error instanceof ServiceError) || error.code !== "validation") throw error;
-            failedMedia += 1;
-          }
-        }
+        const imported = input.uploaded[event.providerRef] ?? {
+          assetIds: [] as string[],
+          failed: 0,
+        };
+        const mediaAssetIds = imported.assetIds;
+        const failedMedia = imported.failed;
         const suppliedBody = event.body?.trim() ?? "";
         const fallbackBody = failedMedia > 0
           ? `(${failedMedia} attachment${failedMedia === 1 ? "" : "s"} could not be imported safely)`
@@ -788,6 +798,48 @@ export const applySmsEvents = defineService({
     }
 
     return { received, reported };
+  },
+});
+
+export const applySmsEvents = defineOrchestratedService({
+  name: "messaging.applySmsEvents",
+  summary: "Record what the carrier said, and thread anything it delivered.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "message",
+  agentCallable: false,
+  mcpExclude: true,
+  input: smsEventsInput,
+  output: row({ received: z.number().int(), reported: z.number().int() }),
+  handler: async (input, actor) => {
+    requirePerson(actor);
+    const uploaded: Record<string, { assetIds: string[]; failed: number }> = {};
+    for (const event of input.events) {
+      if (event.kind !== "received" || !event.media?.length) continue;
+      const assetIds: string[] = [];
+      let failed = 0;
+      for (const item of event.media) {
+        try {
+          const asset = await getService("media.upload").call(
+            {
+              filename: item.filename,
+              contentType: item.contentType,
+              bytes: item.bytes,
+              source: "import",
+              provenance: { sourceUrl: item.sourceUrl, note: "Inbound MMS attachment" },
+              metadata: {},
+            },
+            { kind: "system" },
+          );
+          assetIds.push((asset as { id: string }).id);
+        } catch (error) {
+          if (!(error instanceof ServiceError) || error.code !== "validation") throw error;
+          failed += 1;
+        }
+      }
+      uploaded[event.providerRef] = { assetIds, failed };
+    }
+    return applySmsEventsApply.call({ events: input.events, uploaded }, actor);
   },
 });
 
@@ -996,4 +1048,5 @@ export default [
   setRegistration,
   sendSms,
   applySmsEvents,
+  applySmsEventsApply,
 ];

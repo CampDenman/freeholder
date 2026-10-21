@@ -8,6 +8,10 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
+import {
+  GIFT_CARD_SHARE_COOKIE,
+  WISHLIST_SHARE_COOKIE,
+} from "@/modules/catalog/cookies";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import {
@@ -20,12 +24,15 @@ import {
   createFulfillment,
   createOfferRule,
   issueGiftCard,
+  sendGiftCard,
+  shareWishlist,
   decideReturn,
   deliverFulfillment,
   failFulfillment,
   getOrCreateCart,
   packFulfillment,
   payOrder,
+  releaseOrderPaymentMilestone,
   receiveReturn,
   refundReturn,
   requestReturn,
@@ -38,6 +45,9 @@ import {
   addPurchaseOrderLine,
   adjustStock,
   activateProduct,
+  grantDigitalFulfillment,
+  publishProduct,
+  releaseReservation,
   addOptionValue,
   applyVariantMatrix,
   archiveProduct,
@@ -81,6 +91,15 @@ import {
   updateProduct,
   updateProductDescription,
   upsertServiceOffering,
+  addCollectionProduct,
+  createCollection,
+  getCollection,
+  purgeCollection,
+  removeCollection,
+  removeCollectionProduct,
+  reorderCollectionProducts,
+  restoreCollection,
+  updateCollection,
 } from "@/modules/catalog/service";
 import type { EditorNode } from "./admin/BlockEditor";
 
@@ -145,6 +164,14 @@ export async function productAction(form: FormData): Promise<void> {
         );
       } else if (intent === "activate") {
         await activateProduct.call({ id, expectedVersion }, actor);
+      } else if (intent === "publish") {
+        await publishProduct.call({ id, expectedVersion }, actor);
+      } else if (intent === "grantDigital") {
+        await grantDigitalFulfillment.call({ orderId: field(form, "orderId") }, actor);
+        destination = `/admin/orders/${field(form, "orderId")}?saved=grantDigital`;
+      } else if (intent === "releaseReservation") {
+        await releaseReservation.call({ id: field(form, "reservationId") }, actor);
+        destination = `/admin/inventory?item=${field(form, "itemId")}&saved=releaseReservation`;
       } else if (intent === "archive") {
         await archiveProduct.call(
           { id, expectedVersion, reason: field(form, "reason") },
@@ -708,6 +735,10 @@ export async function productAction(form: FormData): Promise<void> {
       } else if (intent === "cancelOrder") {
         await cancelOrder.call({ id: field(form, "id") }, actor);
         destination = `/admin/orders/${field(form, "id")}?saved=cancelOrder`;
+      } else if (intent === "releaseOrderPaymentMilestone") {
+        const orderId = field(form, "orderId");
+        await releaseOrderPaymentMilestone.call({ orderId, position: Number(field(form, "position")) }, actor);
+        destination = `/admin/orders/${orderId}?saved=releaseOrderPaymentMilestone`;
       } else if (intent === "createFulfillment") {
         const shipped = await createFulfillment.call(
           {
@@ -807,6 +838,36 @@ export async function productAction(form: FormData): Promise<void> {
           actor,
         );
         destination = "/admin/promotions?saved=issueGiftCard";
+      } else if (intent === "sendGiftCard") {
+        const sent = await sendGiftCard.call(
+          {
+            id: field(form, "id"),
+            email: field(form, "email"),
+            ...(field(form, "name") ? { name: field(form, "name") } : {}),
+          },
+          actor,
+        );
+        (await cookies()).set(GIFT_CARD_SHARE_COOKIE, sent.link, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          path: "/admin/promotions",
+          maxAge: 300,
+        });
+        destination = "/admin/promotions?saved=sendGiftCard";
+      } else if (intent === "shareWishlist") {
+        const shared = await shareWishlist.call(
+          { contactId: field(form, "contactId") },
+          actor,
+        );
+        (await cookies()).set(WISHLIST_SHARE_COOKIE, shared.link, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          path: "/admin/contacts",
+          maxAge: 300,
+        });
+        destination = `/admin/contacts/${field(form, "contactId")}?saved=shareWishlist`;
       } else if (intent === "createOfferRule") {
         await createOfferRule.call(
           {
@@ -879,4 +940,115 @@ export async function saveProductDescriptionAction(
   } catch (error) {
     return { error: errorMessage(error) };
   }
+}
+
+/**
+ * Thin collection admin callers (C3.25 slice 1). The services carry the
+ * rules — stale-write refusal, segment liveness, derived-membership
+ * protection — so this stays a translation from form fields to calls.
+ */
+export async function collectionAction(form: FormData): Promise<void> {
+  const intent = field(form, "intent");
+  let destination = "/admin/collections";
+  try {
+    const actor = await currentActor();
+    if (intent === "create") {
+      const ruleType = field(form, "ruleType") || "manual";
+      const collection = await createCollection.call(
+        {
+          title: field(form, "title"),
+          slug: field(form, "slug"),
+          ruleType: ruleType === "segment" ? "segment" : "manual",
+          ...(ruleType === "segment" && field(form, "segmentId")
+            ? { ruleConfig: { segmentId: field(form, "segmentId") } }
+            : {}),
+          sortOrder:
+            field(form, "sortOrder") === "title" || field(form, "sortOrder") === "newest"
+              ? field(form, "sortOrder")
+              : "manual",
+        },
+        actor,
+      );
+      destination = `/admin/collections/${collection.id}?saved=created`;
+    } else if (intent === "update") {
+      const id = field(form, "id");
+      const expectedVersion = Number(field(form, "expectedVersion"));
+      const ruleType = field(form, "ruleType") || "manual";
+      destination = `/admin/collections/${id}`;
+      await updateCollection.call(
+        {
+          id,
+          expectedVersion,
+          title: field(form, "title"),
+          slug: field(form, "slug"),
+          description: field(form, "description") || null,
+          ruleType: ruleType === "segment" ? "segment" : "manual",
+          ...(ruleType === "segment" && field(form, "segmentId")
+            ? { ruleConfig: { segmentId: field(form, "segmentId") } }
+            : {}),
+          sortOrder:
+            field(form, "sortOrder") === "title" || field(form, "sortOrder") === "newest"
+              ? field(form, "sortOrder")
+              : "manual",
+          published: field(form, "published") === "true",
+          seo: {
+            ...(field(form, "seoTitle") ? { title: field(form, "seoTitle") } : {}),
+            ...(field(form, "seoDescription")
+              ? { description: field(form, "seoDescription") }
+              : {}),
+          },
+        },
+        actor,
+      );
+      destination += "?saved=updated";
+    } else if (intent === "addProduct") {
+      const collectionId = field(form, "collectionId");
+      await addCollectionProduct.call(
+        { collectionId, productId: field(form, "productId") },
+        actor,
+      );
+      destination = `/admin/collections/${collectionId}?saved=productAdded`;
+    } else if (intent === "removeProduct") {
+      const collectionId = field(form, "collectionId");
+      await removeCollectionProduct.call(
+        { collectionId, productId: field(form, "productId") },
+        actor,
+      );
+      destination = `/admin/collections/${collectionId}?saved=productRemoved`;
+    } else if (intent === "move") {
+      const collectionId = field(form, "collectionId");
+      const productId = field(form, "productId");
+      const direction = field(form, "direction");
+      const current = await getCollection.call({ id: collectionId }, actor);
+      const ids = current.products.map((row) => row.productId);
+      const index = ids.indexOf(productId);
+      const target = direction === "up" ? index - 1 : index + 1;
+      if (index >= 0 && target >= 0 && target < ids.length) {
+        [ids[index], ids[target]] = [ids[target]!, ids[index]!];
+        await reorderCollectionProducts.call({ collectionId, productIds: ids }, actor);
+      }
+      destination = `/admin/collections/${collectionId}`;
+    } else if (intent === "trash") {
+      const id = field(form, "id");
+      await removeCollection.call({ id }, actor);
+      destination = `/admin/collections?saved=trashed`;
+    } else if (intent === "restore") {
+      const id = field(form, "id");
+      await restoreCollection.call({ id }, actor);
+      destination = `/admin/collections/${id}?saved=restored`;
+    } else if (intent === "purge") {
+      await purgeCollection.call(
+        { id: field(form, "id"), confirmation: "PURGE" as const },
+        actor,
+      );
+      destination = `/admin/collections?saved=purged`;
+    } else {
+      throw new ServiceError("validation", "Unknown collection action.");
+    }
+  } catch (error) {
+    destination += `${destination.includes("?") ? "&" : "?"}error=${encodeURIComponent(errorMessage(error))}`;
+  }
+  revalidatePath("/admin/collections");
+  revalidatePath("/admin/products");
+  redirect(destination);
 }

@@ -113,7 +113,7 @@ export default async function AgreementPage({
                     name="signerName"
                     required
                     autoComplete="name"
-                    className="max-w-sm rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="max-w-sm rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                 </label>
                 <p className="max-w-prose text-sm text-ink-muted">
@@ -131,7 +131,7 @@ export default async function AgreementPage({
                   <span className="text-ink-muted">{t("agreement.field.reason")}</span>
                   <input
                     name="reason"
-                    className="max-w-sm rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="max-w-sm rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                 </label>
                 <div>

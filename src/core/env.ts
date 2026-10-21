@@ -10,8 +10,40 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
+  /** Only for a separate disposable instance with blocked network egress. */
+  FREEHOLDER_PLAYGROUND: z.enum(["0", "1"]).optional(),
+  /** Public playground link on the main website; absent on ordinary client sites. */
+  FREEHOLDER_PLAYGROUND_URL: z.string().url().optional(),
+  FREEHOLDER_UPDATE_SOCKET: z.string().startsWith("/").optional(),
+  /** C3.13: Daily private room and recording provider. */
+  DAILY_API_KEY: z.string().optional(),
+  DAILY_DOMAIN: z.string().optional(),
+  /** C3.13: own-store Shopify app credentials; never exposed by channel reads. */
+  SHOPIFY_SHOP: z.string().optional(),
+  SHOPIFY_CLIENT_ID: z.string().optional(),
+  SHOPIFY_CLIENT_SECRET: z.string().optional(),
   /** Postgres connection string. Required at runtime, not at build time. */
   DATABASE_URL: z.string().url().optional(),
+  /**
+   * Connections per pool. Coerced to a number on purpose.
+   *
+   * An idle instance held 21 connections: postgres.js defaults to 10, the
+   * instrumentation graph and the request graph each hold their own copy of the
+   * pool (see `src/core/runtime.ts`), and pg-boss adds 2. DigitalOcean's
+   * smallest managed Postgres allows 22, and App Platform starts the new
+   * instance beside the old one — so the second deploy could not connect at all
+   * ("remaining connection slots are reserved for roles with the SUPERUSER
+   * attribute"). Reported by a third party deploying Freeholder.
+   *
+   * 4 keeps two instances inside a 22-connection database with room to spare:
+   * 2 graphs x 4, plus 2 for pg-boss, is 10 per instance and 20 for a rollover.
+   *
+   * Coercion is the point. postgres.js reads `PGMAX` from the environment but
+   * leaves it a string, and `[...Array("6")]` has length 1 — so setting PGMAX
+   * to any value silently produced a *one*-connection pool. A setting that
+   * cannot be passed as a number is not a setting.
+   */
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(4),
   /**
    * Throwaway database for the test suite. Declared here because this file is
    * the single register of what the platform reads — vitest.config.ts maps it
@@ -22,6 +54,10 @@ const envSchema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
   /** 32+ char secret for session-token hashing. Required in production. */
   SESSION_SECRET: z.string().min(32).optional(),
+  /** Independent deployment secret required to claim a fresh production instance. */
+  BOOTSTRAP_SECRET: z.string().min(32).optional(),
+  /** Only set behind a proxy that overwrites this header and blocks direct access. */
+  TRUSTED_CLIENT_IP_HEADER: z.enum(["x-freeholder-client-ip", "cf-connecting-ip", "x-real-ip"]).optional(),
   /**
    * Encrypts an owner's third-party credentials at rest (§41's addendum to
    * §17). 32 bytes as hex or base64url. Absent is fine until something is
@@ -37,6 +73,36 @@ const envSchema = z.object({
   CREDENTIAL_KEY: z.string().optional(),
   /** The previous key, during a rotation. See core/connections/crypto.ts. */
   CREDENTIAL_KEY_PREVIOUS: z.string().optional(),
+
+  /**
+   * Member calls (§44.7). WebRTC needs a relay for people behind strict
+   * networks. These name the site's own TURN server (for example coturn with
+   * `use-auth-secret`); calls then get short-lived credentials. STUN_URLS is
+   * optional and defaults to the TURN servers. Nothing defaults to a third
+   * party: without these, calls connect only when a direct path exists.
+   */
+  TURN_URLS: z.string().optional(),
+  TURN_SECRET: z.string().min(16).optional(),
+  STUN_URLS: z.string().optional(),
+
+  /**
+   * Group calls (§44.7, C12.24) go through the site's own SFU. LiveKit is the
+   * first adapter: the server's WebSocket URL and an API key and secret from
+   * its config. Media is end-to-end encrypted, so the SFU forwards frames it
+   * cannot read. Without these, group calls are not offered.
+   */
+  /**
+   * Known-abuse-imagery hash matching on upload (C12.30). Each provider needs
+   * the site owner's own agreement with it: PhotoDNA through Microsoft's
+   * review, Safer through Thorn. Off by default.
+   */
+  ABUSE_SCAN_PROVIDER: z.enum(["none", "photodna", "safer"]).default("none"),
+  PHOTODNA_SUBSCRIPTION_KEY: z.string().optional(),
+  PHOTODNA_ENDPOINT: z.string().url().default("https://api.microsoftmoderator.com/photodna/v1.0"),
+
+  LIVEKIT_URL: z.string().url().optional(),
+  LIVEKIT_API_KEY: z.string().min(1).optional(),
+  LIVEKIT_API_SECRET: z.string().min(1).optional(),
 
   /**
    * S3-compatible object storage (§12). One set of names for DigitalOcean
@@ -85,6 +151,22 @@ const envSchema = z.object({
   MICROSOFT_OAUTH_CLIENT_SECRET: z.string().optional(),
   MICROSOFT_OAUTH_TENANT: z.string().default("common"),
 
+  /**
+   * Social OAuth apps (C9.24). YouTube and Google Business Profile reuse the
+   * Google client above; Instagram and Facebook share the Meta client. A
+   * missing pair just means that network's Connect button stays off.
+   */
+  META_OAUTH_CLIENT_ID: z.string().optional(),
+  META_OAUTH_CLIENT_SECRET: z.string().optional(),
+  TIKTOK_OAUTH_CLIENT_ID: z.string().optional(),
+  TIKTOK_OAUTH_CLIENT_SECRET: z.string().optional(),
+  LINKEDIN_OAUTH_CLIENT_ID: z.string().optional(),
+  LINKEDIN_OAUTH_CLIENT_SECRET: z.string().optional(),
+  X_OAUTH_CLIENT_ID: z.string().optional(),
+  X_OAUTH_CLIENT_SECRET: z.string().optional(),
+  PINTEREST_OAUTH_CLIENT_ID: z.string().optional(),
+  PINTEREST_OAUTH_CLIENT_SECRET: z.string().optional(),
+
   /** Bulk mail is separate so personal Gmail/Outlook can never broadcast. */
   MAIL_BULK_ADAPTER: z
     .enum(["resend", "postmark", "ses", "none"])
@@ -115,9 +197,14 @@ const envSchema = z.object({
   TWILIO_FROM_NUMBER: z.string().optional(),
   TWILIO_WEBHOOK_URL: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
+  /** C3.13: the print fulfillment plugin's merchant account. */
+  PRINTIFY_API_TOKEN: z.string().optional(),
+  PRINTIFY_SHOP_ID: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   /** Kept only during Stripe endpoint-secret rotation. */
   STRIPE_WEBHOOK_SECRET_PREVIOUS: z.string().optional(),
+  /** C12.26: the signing secret of the Connect webhook endpoint (account events). */
+  STRIPE_CONNECT_WEBHOOK_SECRET: z.string().optional(),
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_WEBHOOK_ID: z.string().optional(),
@@ -217,6 +304,71 @@ const envSchema = z.object({
    * with an owner's uploads on a disk that a rebuild throws away.
    */
   FREEHOLDER_UNSAFE_LOCAL_STORAGE: z.enum(["1"]).optional(),
+  /**
+   * SHA-256 digest of replaceable core files (`sha256:…`). When set, doctor
+   * and `platform.inspectSeams` fail if the running tree does not match —
+   * live edits of core files are not a supported customization.
+   */
+  FREEHOLDER_CORE_DIGEST: z
+    .string()
+    .trim()
+    .regex(/^sha256:[a-f0-9]{64}$/)
+    .optional(),
+
+  /**
+   * Daily signed-feed check (C10.04). On unless set to `off`. Reporting does
+   * not exist; this is a GET of a static file, never an instance identifier.
+   */
+  FREEHOLDER_UPDATE_CHECK: z.enum(["on", "off"]).optional(),
+  /** Override the signed `releases.json` URL. Must be a public http(s) origin. */
+  FREEHOLDER_UPDATE_FEED_URL: z.string().url().optional(),
+
+  /**
+   * Upstream, for the fork lane (§39.7, C10.09).
+   *
+   * Only forks read these. An instance updating by image swap never fetches a
+   * git remote at all, which is why neither is required and neither has a
+   * credential: the fork lane clones what is already public and opens a pull
+   * request with the repository token it already has.
+   */
+  FREEHOLDER_UPSTREAM_REMOTE: z
+    .string()
+    .url()
+    .refine((value) => value.startsWith("https://"), "must be an https URL")
+    .optional(),
+  /**
+   * Where to send a customer whose app binary is too old (§35.1, C10.12).
+   *
+   * Absent is the normal state: most owners never publish an app, and a
+   * discovery document that invents a store link would send someone to a
+   * listing that does not exist.
+   */
+  MOBILE_APP_STORE_URL: z.string().url().optional(),
+  MOBILE_PLAY_STORE_URL: z.string().url().optional(),
+
+  /**
+   * Which Tier-1 recipe this instance is deployed with (§39.8, C10.10).
+   *
+   * Absent means the updater migrates and smokes but swaps nothing: guessing a
+   * deploy strategy from the environment and then running a container command
+   * against it is how an update takes down a host nobody meant to touch.
+   */
+  FREEHOLDER_RECIPE_TARGET: z
+    .enum([
+      "replit",
+      "digitalocean-app",
+      "digitalocean-droplet",
+      "railway",
+      "render",
+      "docker-selfhost",
+    ])
+    .optional(),
+  /** The upstream branch a fork merges from. Defaults to `main`. */
+  FREEHOLDER_UPSTREAM_REF: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9._\-/]{1,200}$/)
+    .optional(),
 
   /**
    * Control Aurora Coast demo installation at boot.
@@ -303,6 +455,11 @@ export function requireProductionEnv(): void {
         .join("\n")}\nSee .env.example.`,
     );
   }
+}
+
+/** Connections per pool, as a number. See DATABASE_POOL_MAX for the why. */
+export function databasePoolMax(): number {
+  return env().DATABASE_POOL_MAX;
 }
 
 /** Fails loudly, in plain English, when the database is needed but absent. */

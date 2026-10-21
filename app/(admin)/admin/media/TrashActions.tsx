@@ -82,7 +82,7 @@ export function TrashActions({
               name="confirmation"
               required
               autoComplete="off"
-              className="w-full rounded-md border border-rule bg-field px-3 py-2 font-mono text-sm text-ink"
+              className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 font-mono text-sm text-ink"
             />
           </Field>
           <div className="flex gap-2">

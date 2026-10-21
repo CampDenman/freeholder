@@ -11,6 +11,8 @@
 //
 // So this runs the real script and hands what it produced to the real verifier.
 import { execFileSync } from "node:child_process";
+import { readFileSync, statSync, rmSync } from "node:fs";
+import { dirname } from "node:path";
 import { describe, expect, it } from "vitest";
 import { hashPassword, verifyPassword } from "@/core/auth/passwords";
 
@@ -27,6 +29,20 @@ function hashFrom(output: string): string {
   const match = /password_hash = '([^']+)'/.exec(output);
   if (!match) throw new Error(`no hash in the script's output:\n${output}`);
   return match[1]!;
+}
+
+function generatedPassword() {
+  const output = runScript();
+  const path = /Generated password saved privately to: (.+)/.exec(output)?.[1];
+  if (!path) throw new Error("Recovery script did not report a private password file.");
+  try {
+    const password = readFileSync(path, "utf8").trim();
+    const mode = statSync(path).mode & 0o777;
+    const directoryMode = statSync(dirname(path)).mode & 0o777;
+    return { output, password, mode, directoryMode };
+  } finally {
+    rmSync(dirname(path), { recursive: true });
+  }
 }
 
 describe("the owner password script", () => {
@@ -50,18 +66,24 @@ describe("the owner password script", () => {
     expect(theirs.split(":").slice(0, 4)).toEqual(mine.split(":").slice(0, 4));
   });
 
-  it("generates a password when given none, and shows it once", async () => {
-    const output = runScript();
-    const shown = /^ {4}(\S{20,})$/m.exec(output);
-    expect(shown).not.toBeNull();
-    expect(await verifyPassword(shown![1]!, hashFrom(output))).toBe(true);
+  it("saves generated passwords privately without exposing them in output", async () => {
+    const { output, password, mode, directoryMode } = generatedPassword();
+    expect(password).toHaveLength(24);
+    expect(output).not.toContain(password);
+    expect(mode).toBe(0o600);
+    expect(directoryMode).toBe(0o700);
+    expect(await verifyPassword(password, hashFrom(output))).toBe(true);
   });
 
   it("avoids the characters people misread when typing one out", () => {
     // It is read off a terminal and typed by hand exactly once, by somebody
     // already having a bad day.
-    const shown = /^ {4}(\S{20,})$/m.exec(runScript())![1]!;
-    expect(shown).not.toMatch(/[l1IO0]/);
+    expect(generatedPassword().password).not.toMatch(/[l1IO0]/);
+  });
+
+  it("never echoes a supplied password into redirected output", () => {
+    const chosen = "a-secret-known-only-to-the-operator";
+    expect(runScript(chosen)).not.toContain(chosen);
   });
 
   it("revokes the owner's sessions as well", () => {

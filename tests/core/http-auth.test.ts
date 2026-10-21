@@ -10,6 +10,7 @@ import { GET as sessionRoute } from "../../app/api/auth/session/route";
 import { POST as registerOwnerRoute } from "../../app/api/setup/owner/route";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { CSRF_COOKIE, CSRF_HEADER } from "@/core/http/csrf";
+import { actorFromRequest } from "@/core/http/actor";
 import { closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
 
 const PASSWORD = "a-sufficiently-long-owner-password";
@@ -68,6 +69,21 @@ describe.runIf(hasDatabase)("the auth routes", () => {
         password: PASSWORD,
       }),
     );
+
+  it("never lets explicit invalid credentials fall back to cookies or bypass cookie CSRF (C10.25)", async () => {
+    const created = await registerOwner();
+    const { cookie } = clientState(created);
+    for (const authorization of ["Bearer invalid", "Bearer fh_live_invalid", "Basic invalid", ""]) {
+      const actor = await actorFromRequest(new Request("https://example.test", { headers: { cookie, authorization } }));
+      expect(actor.kind).toBe("anonymous");
+      const response = await logoutRoute(new Request("https://example.test/api/auth/logout", { method: "POST", headers: { cookie, authorization } }));
+      expect(response.status).toBe(401);
+    }
+    const session = await sessionRoute(get("https://example.test/api/auth/session", cookie));
+    expect((await session.json() as { user: unknown }).user).not.toBeNull();
+    const bearerActor = await actorFromRequest(new Request("https://example.test", { headers: { authorization: `Bearer ${sessionTokenFrom(created)}` } }));
+    expect(bearerActor.kind).toBe("user");
+  });
 
   it("creates the owner on first boot and signs them straight in", async () => {
     const response = await registerOwner();

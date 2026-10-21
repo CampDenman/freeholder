@@ -110,7 +110,7 @@ export default async function CalendarsPage({
                       <input
                         name="name"
                         defaultValue={calendar.name}
-                        className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                        className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                       />
                     </label>
                     <label className="grid gap-1 text-sm">
@@ -118,7 +118,7 @@ export default async function CalendarsPage({
                       <input
                         name="timezone"
                         defaultValue={calendar.timezone}
-                        className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                        className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                       />
                     </label>
                     <label className="grid gap-1 text-sm">
@@ -128,7 +128,7 @@ export default async function CalendarsPage({
                         type="number"
                         min={1}
                         defaultValue={calendar.capacityDefault}
-                        className="w-24 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                        className="w-24 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                       />
                     </label>
                     <label className="grid gap-1 text-sm">
@@ -138,7 +138,7 @@ export default async function CalendarsPage({
                         type="number"
                         min={0}
                         defaultValue={calendar.minNoticeMin}
-                        className="w-24 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                        className="w-24 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                       />
                     </label>
                     <label className="grid gap-1 text-sm">
@@ -148,7 +148,7 @@ export default async function CalendarsPage({
                         type="number"
                         min={1}
                         defaultValue={calendar.bookingHorizonDays}
-                        className="w-24 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                        className="w-24 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                       />
                     </label>
                     <Button type="submit" variant="quiet">
@@ -181,7 +181,7 @@ export default async function CalendarsPage({
               <select
                 name="kind"
                 defaultValue={hasBusiness ? "resource" : "business"}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {!hasBusiness ? (
                   <option value="business">{t("calendars.kind.business")}</option>
@@ -196,14 +196,14 @@ export default async function CalendarsPage({
                 name="name"
                 required
                 placeholder={t("calendars.namePlaceholder")}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("calendars.field.person")}</span>
               <select
                 name="userId"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="">{t("calendars.noPerson")}</option>
                 {(people ?? [])
@@ -220,7 +220,7 @@ export default async function CalendarsPage({
               <input
                 name="timezone"
                 placeholder={timezone}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <Button type="submit">{t("calendars.create")}</Button>

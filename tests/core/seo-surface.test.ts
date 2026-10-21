@@ -1,7 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Public-entity SEO surface (MASTER.md §5, BigDataSEO.com RIBA, C2.21).
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { resetEnvForTests } from "@/core/env";
 import {
   kindFromSlug,
   priorityFromSlug,
@@ -15,12 +16,14 @@ import {
   indexNowPayload,
   isIndexablePublicHost,
   submitIndexNow,
+  queueIndexNow,
 } from "@/core/seo/indexnow";
 import {
   articleJsonLd,
   collectionPageJsonLd,
   creativeWorkJsonLd,
   productJsonLd,
+  serializeJsonLd,
   serviceJsonLd,
 } from "@/core/seo/jsonld";
 import {
@@ -92,6 +95,19 @@ describe("the public entity registry", () => {
 });
 
 describe("JSON-LD builders for products, services and articles", () => {
+  it("serializes owner content without allowing a script-tag breakout", () => {
+    const serialized = serializeJsonLd({
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: "</script><script>alert('owned')</script>&\u2028",
+    });
+    expect(serialized).not.toContain("<");
+    expect(serialized).not.toContain("&");
+    expect(JSON.parse(serialized)).toMatchObject({
+      headline: "</script><script>alert('owned')</script>&\u2028",
+    });
+  });
+
   it("emits Product + Offer with a decimal price it did not invent", () => {
     const json = productJsonLd({
       name: "Print set",
@@ -163,6 +179,18 @@ describe("JSON-LD builders for products, services and articles", () => {
 });
 
 describe("IndexNow", () => {
+  afterEach(() => { vi.unstubAllEnvs(); resetEnvForTests(); });
+
+  it("does not enqueue or deliver external pings from an isolated playground", async () => {
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1");
+    resetEnvForTests();
+    const fetchImpl = vi.fn<typeof fetch>();
+    const queueJob = vi.fn();
+    expect(await submitIndexNow(["https://demo.example.test/about"], { origin: "https://demo.example.test", fetchImpl })).toEqual({ submitted: 0, skipped: true, batches: 0 });
+    await queueIndexNow({ queueJob }, ["about"], "playground-publish", "https://demo.example.test");
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(queueJob).not.toHaveBeenCalled();
+  });
   it("derives a stable key and refuses localhost", () => {
     expect(indexNowKey()).toMatch(/^[a-f0-9]{32}$/);
     expect(isIndexablePublicHost("http://localhost:3000")).toBe(false);
