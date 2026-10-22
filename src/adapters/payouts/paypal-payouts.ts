@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.27: PayPal Payouts. A seller gives the PayPal email they want to be
 // paid at; each due payout is a one-item payout batch whose sender ids are
-// the ledger's payout id, so a retry is refused by PayPal rather than paid
-// twice. PayPal confirms by webhook. A payout a seller has claimed cannot be
+// the ledger's payout id, so PayPal never pays it twice. A retry carries the
+// same PayPal-Request-Id, so PayPal answers with the original batch; past
+// that, a duplicate sender_batch_id is refused with a link to the original
+// batch, which is read as the answer. PayPal confirms by webhook. A payout a seller has claimed cannot be
 // pulled back, so a refund after payment goes to the site owner to settle.
 import { env } from "@/core/env";
 import { AdapterError } from "../types";
@@ -21,6 +23,18 @@ export interface PayPalPayoutOptions {
 }
 
 const text = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
+/** The original batch's id, from a duplicate-batch refusal's link to it. */
+function duplicateOf(body: unknown): string | undefined {
+  const links = object(body)?.links;
+  if (!Array.isArray(links)) return undefined;
+  for (const link of links) {
+    const href = text(object(link)?.href);
+    const match = href ? /\/v1\/payments\/payouts\/([A-Za-z0-9_-]{1,64})(?:[/?#]|$)/.exec(href) : null;
+    if (match) return match[1];
+  }
+  return undefined;
+}
+
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 
 export function createPayPalPayouts(options: PayPalPayoutOptions = {}): PayoutProvider {
@@ -44,13 +58,16 @@ export function createPayPalPayouts(options: PayPalPayoutOptions = {}): PayoutPr
     return value;
   }
 
-  async function api(path: string, body: unknown): Promise<Record<string, unknown>> {
-    const response = await paymentFetch(fetcher, `${apiBase}${path}`, {
+  async function post(path: string, body: unknown, requestId?: string): Promise<Response> {
+    return paymentFetch(fetcher, `${apiBase}${path}`, {
       method: "POST",
-      headers: { authorization: `Bearer ${await token()}`, "content-type": "application/json", accept: "application/json" },
+      headers: { authorization: `Bearer ${await token()}`, "content-type": "application/json", accept: "application/json", ...(requestId ? { "paypal-request-id": requestId } : {}) },
       body: JSON.stringify(body),
     });
-    return providerJson("paypal_payouts", response);
+  }
+
+  async function api(path: string, body: unknown): Promise<Record<string, unknown>> {
+    return providerJson("paypal_payouts", await post(path, body));
   }
 
   return {
@@ -67,7 +84,7 @@ export function createPayPalPayouts(options: PayPalPayoutOptions = {}): PayoutPr
       return EMAIL.test(email) ? "ready" : "disabled";
     },
     async transfer(request) {
-      const value = await api("/v1/payments/payouts", {
+      const response = await post("/v1/payments/payouts", {
         sender_batch_header: { sender_batch_id: request.idempotencyKey, email_subject: "You have been paid", recipient_type: "EMAIL" },
         items: [
           {
@@ -78,7 +95,13 @@ export function createPayPalPayouts(options: PayPalPayoutOptions = {}): PayoutPr
             sender_item_id: request.idempotencyKey,
           },
         ],
-      });
+      }, `freeholder-payout-${request.idempotencyKey}`);
+      if (!response.ok && response.status < 500) {
+        // A refused duplicate sender_batch_id links to the original batch: that batch is this payout.
+        const original = await response.clone().json().then(duplicateOf, () => undefined);
+        if (original) return { reference: original, settled: false };
+      }
+      const value = await providerJson("paypal_payouts", response);
       const reference = text(object(value.batch_header)?.payout_batch_id);
       if (!reference) throw new AdapterError("payments", "paypal_payouts", "provider_failure", "PayPal did not accept the payout.");
       return { reference, settled: false };
@@ -108,11 +131,13 @@ export function createPayPalPayouts(options: PayPalPayoutOptions = {}): PayoutPr
       if (verified.verification_status !== "SUCCESS") throw new AdapterError("payments", "paypal_payouts", "authentication", "PayPal could not verify that event.");
       const resource = object(event.resource);
       const batch = text(resource?.payout_batch_id);
+      const ours = text(object(resource?.payout_item)?.sender_item_id);
+      const payoutId = ours ? { payoutId: ours } : {};
       const type = text(event.event_type) ?? "";
       const events: PayoutWebhookEvent[] = [];
-      if (batch && type === "PAYMENT.PAYOUTS-ITEM.SUCCEEDED") events.push({ kind: "transfer", reference: batch, state: "settled" });
+      if (batch && type === "PAYMENT.PAYOUTS-ITEM.SUCCEEDED") events.push({ kind: "transfer", reference: batch, ...payoutId, state: "settled" });
       if (batch && /^PAYMENT\.PAYOUTS-ITEM\.(FAILED|RETURNED|BLOCKED|DENIED|CANCELED|UNCLAIMED)$/.test(type)) {
-        events.push({ kind: "transfer", reference: batch, state: "failed", error: type.split(".").at(-1)!.toLowerCase() });
+        events.push({ kind: "transfer", reference: batch, ...payoutId, state: "failed", error: type.split(".").at(-1)!.toLowerCase() });
       }
       return events;
     },

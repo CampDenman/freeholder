@@ -6245,6 +6245,19 @@ payment, tax, inventory and reporting path, with no floating-point money.
   this item uses the shared audit/outbox; product-wide
   export/restore/retention/erasure proof is still open. **F12**
   `tests/core/events.test.ts` is the composition proof.)
+  Audit follow-up 2026-10-21: the hold sweep ran up to 100 cancellations in
+  one transaction, so one failing promotion (the next person's email
+  erased) rolled every release back on every run. It is now an orchestrated
+  service: each hold is released by `events.expireHeldRegistration` in its
+  own transaction, failures are counted (`failed`) and logged, and a
+  payment in flight is counted `blocked`. Admission invoices said tax was
+  applied at issue but were created `not_applicable`. Decision: admission is
+  taxed like every other sale, with place of supply where the event
+  happens, from the primary business location to the event's venue location
+  (or the business location when none is set); `not_applicable` remains
+  only when the business has no location. Regression:
+  `tests/core/events.test.ts`; changeset
+  `event-hold-sweep-and-admission-tax.md`.
 
 #### Quotes, contracts, projects, and time
 - [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/
@@ -10932,6 +10945,19 @@ whatever is best for the people using the site.
   `tests/modules/member-provider-payouts.test.ts`. Still open: a run against
   a Stripe test account (waits for test keys, Tony 2026-10-15) and direct
   and destination charges with application fees, now C12.38.)*
+  Audit follow-up 2026-10-21: the payout job could pay a seller after the
+  buyer's refund had cancelled the payout, because a queued transfer was
+  claimed whatever the payout's state, and settlement only ever moved a
+  "due" payout. Now only a still-due payout is sent; a queued transfer for a
+  refunded, disputed or hand-paid payout is dropped, or goes to review when
+  an earlier attempt's outcome is unknown; money that reaches a seller after
+  the payout left "due" moves it to review and queues a reversal. A failure
+  after the provider call (the result not recorded) is no longer counted as
+  a provider refusal: the row stays claimed and marked "Outcome unknown", and
+  the next run's idempotent call returns the same transfer. Settlement and
+  failure webhooks no longer reopen a cancelled payout. Regression:
+  `tests/modules/member-provider-payouts.test.ts`; changeset
+  `payout-refund-retry-safety.md`.
 - [ ] **C12.27** Add marketplace payout adapters for providers other than
   Stripe (for example PayPal, Adyen for Platforms, Mollie), selectable by the
   site owner without code changes.
@@ -10943,6 +10969,18 @@ whatever is best for the people using the site.
   a linked account with Route and bank settlement, direct transfers and
   reversals, signed webhooks), selectable under Admin → Members, proven
   against recorded HTTP. Still open: sandbox runs with test credentials.)*
+  Audit follow-up 2026-10-21: retries after an uncertain outcome were unsafe.
+  Razorpay transfers now carry the payout id in Razorpay's documented
+  `X-Transfer-Idempotency` header. PayPal batches carry `PayPal-Request-Id`
+  (kept 30 days), and a refused duplicate `sender_batch_id` is read through
+  its link to the original batch instead of counting as a failure. Webhook
+  transfer events carry the payout id the transfer was sent with (PayPal
+  `sender_item_id`, Razorpay `notes.freeholder_payout_id`), so a
+  confirmation that beats the "sent" row is still applied; one for this
+  site's payout that cannot be matched gets a 503 so the provider retries.
+  Regression: `tests/adapters/payout-providers.test.ts`,
+  `tests/modules/member-provider-payouts.test.ts`; changeset
+  `payout-refund-retry-safety.md`. Not yet proven against live sandboxes.
 - [x] **C12.28** Publish a prohibited-items policy: the site owner edits it
   under Admin → Members, it is public at `/market/policy`, sellers accept it
   before listing, and the report queue offers it as a reason.
@@ -11192,6 +11230,19 @@ whatever is best for the people using the site.
   Still open: a provider agreement (Tony, not now), a live run, and
   submitting reports through a provider API rather than by hand. End-to-end
   encrypted files (C12.36) cannot be scanned.)*
+  Audit follow-up 2026-10-21: an image the matcher could not check (an
+  outage, or one over 64 MB) was tagged like a match, so an ordinary photo
+  became permanently undeletable and unrescannable. Unchecked images now
+  carry `abuse-hash-error:<provider>` and stay rescannable and deletable;
+  legal hold (`underLegalHold` in `src/core/media/abuse-evidence.ts`)
+  requires an actual match (`scanStatus "infected"`), which also releases
+  rows held under the old tagging without a migration. Reports link to
+  distinct matched assets, oldest first, so a second uploader of the same
+  image is linked and suspended too. Matches are recorded by core media
+  rather than the members module, and an unrecorded match refuses the
+  upload. Regression: `tests/adapters/abuse-scan.test.ts`,
+  `tests/modules/member-abuse.test.ts`; changeset
+  `abuse-scan-unchecked-images.md`.
 
 ---
 

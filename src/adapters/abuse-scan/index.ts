@@ -30,13 +30,20 @@ export interface AbuseMatchRecord extends AbuseMatch {
   bytes: number;
 }
 
+/** Scan engine prefix on a file that matched: evidence under legal hold. */
+export const ABUSE_MATCH_ENGINE = "abuse-hash:";
+/** Scan engine prefix on an image the matcher could not check: held, but rescannable. */
+export const ABUSE_UNCHECKED_ENGINE = "abuse-hash-error:";
+
 type Handler = (record: AbuseMatchRecord) => Promise<void>;
 const handlers: Handler[] = [];
-/** The members module records matches for the legal report. */
+/** Core media records matches for the legal report (src/core/media/abuse-evidence.ts). */
 export function onAbuseMatch(handler: Handler): void {
   handlers.push(handler);
 }
 
 export async function recordAbuseMatch(record: AbuseMatchRecord): Promise<void> {
+  // Fails closed: a match nobody records must not be accepted quietly.
+  if (handlers.length === 0) throw new Error("No recorder is registered for abuse matches.");
   for (const handler of handlers) await handler(record);
 }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Events: venue, sessions, seats, tickets, waitlists, ICS, check-in (C6.11).
 
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { mailDeliveries } from "@/core/mail/schema";
@@ -34,6 +34,9 @@ import {
 } from "@/modules/invoicing/payment-provider-service";
 import { beginCustomerCheckout } from "@/modules/invoicing/customer-service";
 import { invoices } from "@/modules/invoicing/schema";
+import { addTaxRate, createTaxZone, setTaxRegistration } from "@/modules/invoicing/tax-service";
+import { createLocationService } from "@/core/locations/service";
+import { contacts } from "@/core/contacts/schema";
 import { ANONYMOUS, closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 describe.runIf(hasDatabase)("events module", { timeout: 30_000 }, () => {
@@ -262,6 +265,56 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     expect(swept.expired).toBe(0);
     const [still] = await db().select().from(eventRegistrations).where(eq(eventRegistrations.id, held.registration.id));
     expect(still?.status).toBe("reserved");
+  });
+
+  it("taxes admission where the event happens, the way every other sale is taxed", async () => {
+    await createLocationService.call({ name: "Studio", slug: "studio", city: "Courtenay", region: "BC", country: "CA" }, OWNER);
+    const zone = await createTaxZone.call(
+      { name: "Canada", country: "CA", regions: [], postalPatterns: [], basis: "destination", pricesIncludeTax: false, roundingScope: "invoice", roundingMode: "half_up" },
+      OWNER,
+    );
+    await setTaxRegistration.call({ zoneId: zone.id, number: "123456789RT0001", status: "active" }, OWNER);
+    await addTaxRate.call({ zoneId: zone.id, name: "GST", jurisdiction: "Canada", ratePpm: 50_000, appliesToShipping: false }, OWNER);
+    const { event, session, ticket } = await paidClass(2);
+    const held = await registerForEvent.call(
+      { eventId: event.id, sessionId: session.id, ticketId: ticket.id, email: "taxed@example.test" },
+      ANONYMOUS,
+    );
+    const [invoice] = await db().select().from(invoices).where(eq(invoices.id, held.registration.invoiceId!));
+    expect(invoice).toMatchObject({ subtotalMinor: 6_500, taxMinor: 325, totalMinor: 6_825 });
+  });
+
+  it("releases every other lapsed hold when one cannot be released", async () => {
+    const first = await paidClass(1);
+    const stuck = await registerForEvent.call(
+      { eventId: first.event.id, sessionId: first.session.id, ticketId: first.ticket.id, email: "stuck@example.test" },
+      ANONYMOUS,
+    );
+    await registerForEvent.call(
+      { eventId: first.event.id, sessionId: first.session.id, ticketId: first.ticket.id, email: "erased@example.test" },
+      ANONYMOUS,
+    );
+    // The next in line has since had their email erased, so promoting them
+    // cannot send the invoice that is their notification.
+    await db().update(contacts).set({ email: null }).where(eq(contacts.email, "erased@example.test"));
+    const second = await paidClass(1);
+    const lapsed = await registerForEvent.call(
+      { eventId: second.event.id, sessionId: second.session.id, ticketId: second.ticket.id, email: "lapsed3@example.test" },
+      ANONYMOUS,
+    );
+    await db().update(eventRegistrations).set({ holdExpiresAt: new Date(Date.now() - 120_000) }).where(eq(eventRegistrations.id, stuck.registration.id));
+    await db().update(eventRegistrations).set({ holdExpiresAt: new Date(Date.now() - 60_000) }).where(eq(eventRegistrations.id, lapsed.registration.id));
+
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const swept = await expireHeldRegistrations.call({}, { kind: "system" });
+    expect(swept).toEqual({ expired: 1, blocked: 0, failed: 1 });
+    expect(errors).toHaveBeenCalledTimes(1);
+    errors.mockRestore();
+    const [released] = await db().select().from(eventRegistrations).where(eq(eventRegistrations.id, lapsed.registration.id));
+    expect(released?.status).toBe("cancelled");
+    // The one that failed is left exactly as it was, for the next sweep or the owner.
+    const [kept] = await db().select().from(eventRegistrations).where(eq(eventRegistrations.id, stuck.registration.id));
+    expect(kept?.status).toBe("reserved");
   });
 
   it("expires a lapsed hold: seat released, invoice voided, waitlisted paid row promoted with a fresh invoice by email", async () => {

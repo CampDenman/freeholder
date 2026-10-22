@@ -28,6 +28,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
     if (error instanceof AdapterError) return new Response(null, { status: error.code === "authentication" ? 401 : error.code === "unavailable" ? 503 : 400 });
     throw error;
   }
-  await applyPayoutWebhook.call({ provider: provider.id, events }, { kind: "system" });
-  return new Response(null, { status: 200 });
+  const { unmatched } = await applyPayoutWebhook.call({ provider: provider.id, events }, { kind: "system" });
+  // One of this site's transfers it could not match yet: the provider retries.
+  return new Response(null, { status: unmatched ? 503 : 200 });
 }

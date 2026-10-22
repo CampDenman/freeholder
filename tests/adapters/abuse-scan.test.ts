@@ -9,7 +9,7 @@ import { createPhotoDna } from "@/adapters/abuse-scan/photodna";
 import { saferScanner } from "@/adapters/abuse-scan/safer";
 import { createCompositeScanner } from "@/adapters/malware";
 import { noMalwareScanner } from "@/adapters/malware/none";
-import type { AbuseScanner } from "@/adapters/abuse-scan";
+import { onAbuseMatch, type AbuseMatchRecord, type AbuseScanner } from "@/adapters/abuse-scan";
 import type { MalwareScanner } from "@/adapters/malware/types";
 
 const body = (bytes: Uint8Array) => (async function* () { yield bytes as Uint8Array<ArrayBuffer>; })();
@@ -60,11 +60,22 @@ describe("abuse matching in front of the malware scan (C12.30)", () => {
     },
   });
 
+  const image = new Uint8Array([9, 9, 9]);
+  const input = (contentType: string) => ({ filename: "x", contentType, bytes: image.byteLength, body: body(image) });
+
+  // Runs first: no recorder is registered yet in this file.
+  it("refuses a match when nothing would record it for the legal report", async () => {
+    await expect(createCompositeScanner(inner, abuse("match")).scan(input("image/jpeg"))).rejects.toThrow(/No recorder/);
+  });
+
   it("holds a match, holds when the check cannot run, and passes everything else on", async () => {
-    const image = new Uint8Array([9, 9, 9]);
-    const input = (contentType: string) => ({ filename: "x", contentType, bytes: image.byteLength, body: body(image) });
+    const matches: AbuseMatchRecord[] = [];
+    onAbuseMatch(async (record) => { matches.push(record); });
     expect(await createCompositeScanner(inner, abuse("match")).scan(input("image/jpeg"))).toMatchObject({ status: "infected", engine: "abuse-hash:photodna" });
-    expect(await createCompositeScanner(inner, abuse("fail")).scan(input("image/jpeg"))).toMatchObject({ status: "error", engine: "abuse-hash:photodna" });
+    expect(matches).toHaveLength(1);
+    // Unchecked is not a match: its own tag, so it is never taken for evidence.
+    expect(await createCompositeScanner(inner, abuse("fail")).scan(input("image/jpeg"))).toMatchObject({ status: "error", engine: "abuse-hash-error:photodna" });
+    expect(await createCompositeScanner(inner, abuse("clean")).scan({ ...input("image/jpeg"), bytes: 65 * 1024 * 1024 })).toMatchObject({ status: "error", engine: "abuse-hash-error:photodna" });
     recorded.length = 0;
     expect(await createCompositeScanner(inner, abuse("clean")).scan(input("image/jpeg"))).toEqual({ status: "clean", engine: "fake-av" });
     expect(Buffer.concat(recorded).equals(Buffer.from(image))).toBe(true);

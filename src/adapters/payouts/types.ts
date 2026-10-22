@@ -48,7 +48,8 @@ export type ReverseResult = { reference: string } | { unsupported: string };
 
 export type PayoutWebhookEvent =
   | { kind: "account"; externalAccountId: string; status: PayoutAccountStatus }
-  | { kind: "transfer"; reference: string; state: "settled" | "failed"; error?: string };
+  /** payoutId is the ledger id the transfer carried, when the provider echoes it back. */
+  | { kind: "transfer"; reference: string; payoutId?: string; state: "settled" | "failed"; error?: string };
 
 export interface PayoutWebhookRequest {
   headers: Record<string, string | undefined>;

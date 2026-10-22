@@ -5,7 +5,7 @@
 // sale's payout is transferred exactly once, a refund reverses it, and a
 // provider that keeps refusing hands the payout to the owner to review.
 import { createHmac } from "node:crypto";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
@@ -15,8 +15,8 @@ import { updateBusiness } from "@/core/settings/service";
 import { joinSite, updateMembershipRules } from "@/modules/members/service";
 import { createListing } from "@/modules/members/listings";
 import { myPayoutAccount, onOrderPaid, reversePayouts, sitePayouts } from "@/modules/members/payouts";
-import { payoutSetup, sendProviderPayouts, startPayoutSetup } from "@/modules/members/provider-payouts";
-import { memberPayoutTransfers } from "@/modules/members/schema";
+import { applyPayoutWebhook, applyProviderTransfer, payoutSetup, sendProviderPayouts, startPayoutSetup } from "@/modules/members/provider-payouts";
+import { memberPayouts, memberPayoutTransfers } from "@/modules/members/schema";
 import { setPayoutProviderForTests } from "@/adapters/payouts";
 import { createStripeConnect } from "@/adapters/payouts/stripe-connect";
 import { addCartItem, getOrCreateCart } from "@/modules/catalog/cart";
@@ -33,6 +33,8 @@ const SECRET = "whsec_test_connect";
 type Call = { path: string; body: URLSearchParams; idempotencyKey?: string };
 let calls: Call[] = [];
 let refuseTransfers = false;
+let timeoutTransfers = false;
+let onTransfer: (() => Promise<void>) | undefined;
 const fakeStripe = (async (input: string | URL, init: RequestInit = {}) => {
   const url = new URL(String(input));
   const headers = (init.headers ?? {}) as Record<string, string>;
@@ -40,6 +42,8 @@ const fakeStripe = (async (input: string | URL, init: RequestInit = {}) => {
   const reply = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
   if (url.pathname === "/v1/accounts") return reply({ id: "acct_rae" });
   if (url.pathname === "/v1/account_links") return reply({ url: "https://connect.stripe.test/onboarding/rae" });
+  if (url.pathname === "/v1/transfers" && timeoutTransfers) throw new TypeError("fetch failed");
+  if (url.pathname === "/v1/transfers") await onTransfer?.();
   if (url.pathname === "/v1/transfers") return refuseTransfers ? reply({ error: { code: "balance_insufficient" } }, 400) : reply({ id: `tr_${calls.length}` });
   if (url.pathname.endsWith("/reversals")) return reply({ id: "trr_1" });
   return reply({});
@@ -71,6 +75,8 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
   beforeEach(async () => {
     calls = [];
     refuseTransfers = false;
+    timeoutTransfers = false;
+    onTransfer = undefined;
     setPayoutProviderForTests("stripe_connect", createStripeConnect({ secretKey: "sk_test_x", webhookSecrets: [SECRET], fetch: fakeStripe }));
     await truncateSpine();
     await db().insert(users).values([
@@ -81,7 +87,17 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
     await joinSite.call({ handle: "rae", displayName: "Rae", meetsMinimumAge: true, isAdult: true }, RAE);
     await updateMembershipRules.call({ marketplaceEnabled: true, listingReview: false, siteFeeBps: 1000, payoutModel: "instant", payoutAdapter: "stripe_connect" }, OWNER);
   });
-  afterEach(() => setPayoutProviderForTests("stripe_connect", null));
+  afterEach(() => {
+    setPayoutProviderForTests("stripe_connect", null);
+    vi.restoreAllMocks();
+  });
+
+  async function readySeller() {
+    await startPayoutSetup.call({}, RAE);
+    await signed({ type: "account.updated", data: { object: { id: "acct_rae", payouts_enabled: true, capabilities: { transfers: "active" } } } });
+  }
+  const retryNow = () => db().update(memberPayoutTransfers).set({ nextAttemptAt: new Date(Date.now() - 1000) });
+  const transferCalls = () => calls.filter((c) => c.path === "/v1/transfers");
   afterAll(closeDb);
 
   it("sets a seller up with Stripe, pays each due payout once, and reverses it on refund", { timeout: 60_000 }, async () => {
@@ -125,5 +141,107 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
     const [payout] = (await sitePayouts.call({ state: "review" }, OWNER)).payouts;
     expect(payout?.state).toBe("review");
     expect(calls.filter((c) => c.path === "/v1/transfers")).toHaveLength(5);
+  });
+  it("never sends a transfer for a payout refunded before it went out", { timeout: 60_000 }, async () => {
+    await readySeller();
+    const invoice = await sell("30");
+    refuseTransfers = true;
+    expect((await sendProviderPayouts()).failed).toBe(1);
+    await reversePayouts.call({ invoiceId: invoice.id, amountMinor: invoice.totalMinor }, { kind: "system" });
+    refuseTransfers = false;
+    await retryNow();
+    expect(await sendProviderPayouts()).toEqual({ sent: 0, failed: 0 });
+    expect(transferCalls()).toHaveLength(1);
+    const [t] = await db().select().from(memberPayoutTransfers);
+    expect(t?.state).toBe("failed");
+    expect(t?.lastError).toMatch(/^Not sent: the payout was cancelled/);
+    expect((await sitePayouts.call({}, OWNER)).payouts.map((p) => p.state)).toEqual(["cancelled"]);
+  });
+
+  it("sends a refunded payout whose earlier attempt timed out to the owner instead of retrying", { timeout: 60_000 }, async () => {
+    await readySeller();
+    const invoice = await sell("30");
+    timeoutTransfers = true;
+    expect((await sendProviderPayouts()).failed).toBe(1);
+    const [pending] = await db().select().from(memberPayoutTransfers);
+    expect(pending).toMatchObject({ state: "pending", attempts: 1 });
+    expect(pending?.lastError).toMatch(/^Outcome unknown: /);
+    await reversePayouts.call({ invoiceId: invoice.id, amountMinor: invoice.totalMinor }, { kind: "system" });
+    timeoutTransfers = false;
+    await retryNow();
+    expect(await sendProviderPayouts()).toEqual({ sent: 0, failed: 0 });
+    expect(transferCalls()).toHaveLength(1);
+    const [payout] = (await sitePayouts.call({}, OWNER)).payouts;
+    expect(payout?.state).toBe("review");
+    expect(payout?.note).toMatch(/unknown outcome/);
+  });
+
+  it("retries a timed-out transfer with the same idempotency key, and a refusal after a timeout stays uncertain to the owner", { timeout: 60_000 }, async () => {
+    await readySeller();
+    await sell("30");
+    timeoutTransfers = true;
+    for (let i = 0; i < 5; i++) {
+      await retryNow();
+      expect((await sendProviderPayouts()).failed).toBe(1);
+    }
+    const [payout] = (await sitePayouts.call({ state: "review" }, OWNER)).payouts;
+    expect(payout?.note).toMatch(/never confirmed/);
+  });
+
+  it("records a transfer whose result could not be saved on the next run, without counting it as a provider failure", { timeout: 60_000 }, async () => {
+    await readySeller();
+    await sell("30");
+    const real = applyProviderTransfer.call.bind(applyProviderTransfer);
+    const spy = vi.spyOn(applyProviderTransfer, "call").mockImplementationOnce(async () => { throw new Error("database went away"); });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await sendProviderPayouts()).toEqual({ sent: 0, failed: 1 });
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [t] = await db().select().from(memberPayoutTransfers);
+    expect(t).toMatchObject({ state: "pending", attempts: 1 });
+    expect(t?.lastError).toMatch(/^Outcome unknown: /);
+    spy.mockImplementation(real);
+    await retryNow();
+    expect(await sendProviderPayouts()).toEqual({ sent: 1, failed: 0 });
+    const keys = transferCalls().map((c) => c.idempotencyKey);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(keys[1]);
+    expect((await sitePayouts.call({}, OWNER)).payouts.map((p) => p.state)).toEqual(["paid"]);
+  });
+
+  it("reverses a transfer the provider confirms after the buyer was refunded", { timeout: 60_000 }, async () => {
+    const stripe = createStripeConnect({ secretKey: "sk_test_x", webhookSecrets: [SECRET], fetch: fakeStripe });
+    // A provider that confirms later by webhook, as PayPal does.
+    setPayoutProviderForTests("stripe_connect", { ...stripe, transfer: async (r) => ({ ...(await stripe.transfer(r)), settled: false }) });
+    await readySeller();
+    const invoice = await sell("30");
+    expect(await sendProviderPayouts()).toEqual({ sent: 1, failed: 0 });
+    const [sent] = await db().select().from(memberPayoutTransfers);
+    expect(sent?.state).toBe("sent");
+    await reversePayouts.call({ invoiceId: invoice.id, amountMinor: invoice.totalMinor }, { kind: "system" });
+    expect((await sitePayouts.call({}, OWNER)).payouts.map((p) => p.state)).toEqual(["cancelled"]);
+    await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: sent!.reference!, state: "settled" }] }, { kind: "system" });
+    const [payout] = (await sitePayouts.call({}, OWNER)).payouts;
+    expect(payout?.state).toBe("review");
+    expect(payout?.note).toMatch(/after this payout was cancelled/);
+    expect(await sendProviderPayouts()).toEqual({ sent: 1, failed: 0 });
+    expect(calls.at(-1)!.path).toMatch(/\/reversals$/);
+    expect((await sitePayouts.call({}, OWNER)).payouts.map((p) => p.state)).toEqual(["cancelled"]);
+  });
+
+  it("applies a confirmation that arrives before the transfer's reference is recorded, and asks again for one it cannot match", { timeout: 60_000 }, async () => {
+    await readySeller();
+    await sell("30");
+    const [due] = await db().select().from(memberPayouts);
+    onTransfer = async () => {
+      onTransfer = undefined;
+      const result = await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: "tr_early", payoutId: due!.id, state: "settled" }] }, { kind: "system" });
+      expect(result).toEqual({ applied: 1, unmatched: 0 });
+    };
+    expect(await sendProviderPayouts()).toEqual({ sent: 1, failed: 0 });
+    const [t] = await db().select().from(memberPayoutTransfers);
+    expect(t).toMatchObject({ state: "settled", reference: "tr_early" });
+    expect((await sitePayouts.call({}, OWNER)).payouts.map((p) => p.state)).toEqual(["paid"]);
+    const unknown = await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: "tr_other", payoutId: crypto.randomUUID(), state: "settled" }] }, { kind: "system" });
+    expect(unknown).toEqual({ applied: 0, unmatched: 1 });
   });
 });

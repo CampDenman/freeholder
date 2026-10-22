@@ -11,13 +11,12 @@
 // be deleted, and the site owner is given what they need to report it —
 // Cybertip.ca in Canada, NCMEC's CyberTipline in the United States — and
 // records the report's reference when done. Nobody here is shown the image.
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@/core/db";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError } from "@/core/service";
 import { assets } from "@/core/media/schema";
-import { onAbuseMatch } from "@/adapters/abuse-scan";
+import { ABUSE_MATCH_ENGINE } from "@/adapters/abuse-scan";
 import { abuseReports, memberProfiles } from "./schema";
 
 /** Where a site reports, by its country. Others should take legal advice. */
@@ -26,23 +25,8 @@ export const REPORT_CHANNELS = {
   US: { id: "ncmec", url: "https://report.cybertip.org" },
 } as const;
 
-// Recorded on its own connection: the evidence must survive even if the
-// upload that carried it is rolled back.
-onAbuseMatch(async (record) => {
-  await db().insert(abuseReports).values({
-    provider: record.provider,
-    matchId: record.matchId ?? null,
-    matchSource: record.source ?? null,
-    sha256: record.sha256,
-    contentType: record.contentType,
-    bytes: record.bytes,
-  });
-});
-
-/** True for a file the abuse scanner held: it may not be trashed or purged. */
-export function underLegalHold(asset: { scanEngine: string | null; status: string }): boolean {
-  return asset.status === "quarantined" && Boolean(asset.scanEngine?.startsWith("abuse-hash:"));
-}
+// Matches are recorded by core media (src/core/media/abuse-evidence.ts), so
+// one is never lost while this module is off; this module links and acts.
 
 export const linkAbuseReports = defineService({
   name: "members.linkAbuseReports",
@@ -53,14 +37,22 @@ export const linkAbuseReports = defineService({
   input: z.object({}),
   output: z.object({ linked: z.number().int(), suspended: z.number().int() }),
   handler: async (_input, ctx) => {
-    const open = await ctx.tx.select().from(abuseReports).where(isNull(abuseReports.assetId)).limit(100);
+    const open = await ctx.tx.select().from(abuseReports).where(isNull(abuseReports.assetId)).orderBy(asc(abuseReports.detectedAt), asc(abuseReports.id)).limit(100);
     let linked = 0;
     let suspended = 0;
     for (const report of open) {
+      // Each report is one matched upload: the same image sent twice is two
+      // uploads, two uploaders perhaps, each linked to its own report.
       const [asset] = await ctx.tx
         .select({ id: assets.id, uploadedBy: assets.uploadedBy })
         .from(assets)
-        .where(and(eq(assets.checksumSha256, report.sha256), sql`${assets.scanEngine} like 'abuse-hash:%'`))
+        .where(and(
+          eq(assets.checksumSha256, report.sha256),
+          eq(assets.scanStatus, "infected"),
+          sql`starts_with(${assets.scanEngine}, ${ABUSE_MATCH_ENGINE})`,
+          sql`not exists (select 1 from ${abuseReports} r where r.asset_id = ${assets.id})`,
+        ))
+        .orderBy(asc(assets.createdAt), asc(assets.id))
         .limit(1);
       if (!asset) continue;
       await ctx.tx.update(abuseReports).set({ assetId: asset.id, uploadedBy: asset.uploadedBy }).where(eq(abuseReports.id, report.id));

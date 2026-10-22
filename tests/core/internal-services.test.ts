@@ -95,6 +95,8 @@ const INTERNAL = [
   // nobody's behalf — a webhook, a job, or a bus event is not a person.
   "events.confirmPaidRegistration",
   "events.expireHeldRegistrations",
+  "events.lapsedHolds",
+  "events.expireHeldRegistration",
   "events.cancelRegistrationForInvoice",
   "forms.briefingEnquiries",
   "galleries.buildArchive",
