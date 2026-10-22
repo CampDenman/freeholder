@@ -263,7 +263,7 @@ describe.runIf(hasDatabase)("intake, waivers and reminders", { timeout: 90_000 }
         signerName: "Rae Lane",
         ip: "198.51.100.66",
         userAgent: "typed by the caller",
-      } as Parameters<typeof signContract.call>[0],
+      },
       { ...ANON, request: { ip: "203.0.113.7", userAgent: "Mozilla/5.0 (iPhone)" } },
     );
     expect(signed.signatureHash).toMatch(/^[0-9a-f]{64}$/);
