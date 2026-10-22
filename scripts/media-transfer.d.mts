@@ -5,7 +5,11 @@ export interface TransferStore {
   put(key: string, bytes: Uint8Array<ArrayBuffer>, contentType: string): Promise<void>;
 }
 
-export function createS3Store(environment: Record<string, string | undefined>, prefix: string): TransferStore;
+export function createS3Store(
+  environment: Record<string, string | undefined>,
+  prefix: string,
+  options?: { allowInsecureHttp?: boolean; warn?: (message: string) => void },
+): TransferStore;
 
 export interface MediaTransferManifest {
   format: "freeholder-media-manifest/v1";
@@ -19,4 +23,4 @@ export function copyManifestObjects(options: {
   source: TransferStore;
   target: TransferStore;
   dryRun?: boolean;
-}): Promise<{ objects: number; bytes: number; dryRun: boolean }>;
+}): Promise<{ objects: number; bytes: number; dryRun: boolean; skipped: number }>;

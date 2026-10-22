@@ -4957,6 +4957,16 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   refuses GET/PUT redirects. Actual signed request tests preserve literal percent
   keys in path/virtual addressing. Cloud ACLs, live transfers, production backup
   freshness and production recovery acceptance remain open.
+  Overwrite/transport follow-up (2026-10-22): the transfer never overwrites a
+  target object. Identical bytes (full-body SHA-256, not ETags) are skipped and
+  counted; a different object at the key stops the run naming it, with dry runs
+  reporting would-skip/would-refuse. HTTPS stays the default; plain HTTP to a
+  non-loopback endpoint needs `--allow-insecure-http` or
+  `MEDIA_TRANSFER_ALLOW_INSECURE_HTTP=true` and warns. Regressions in
+  `tests/core/media-transfer.test.ts` and
+  `tests/core/media-transfer-transport.test.ts`; changeset
+  `media-migration-checksums`. Live provider transfers and production recovery
+  acceptance remain open.
 - [x] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
   (Platform and packages are `0.2.0-beta.3`; SDK `PLATFORM_VERSION` is stamped from

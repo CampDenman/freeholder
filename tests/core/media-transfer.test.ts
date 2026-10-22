@@ -37,7 +37,7 @@ describe("media migration", () => {
       .rejects.toThrow(/source.*checksum/i);
     expect(target.entries.size).toBe(0);
     await expect(copyManifestObjects({ manifest: legacy, source: memoryStore({ [manifest.objects[0]!.key]: bytes }), target }))
-      .resolves.toEqual({ objects: 1, bytes: bytes.length, dryRun: false });
+      .resolves.toEqual({ objects: 1, bytes: bytes.length, dryRun: false, skipped: 0 });
   });
 
   it("rejects conflicting object and asset digests before any store access", async () => {
@@ -96,7 +96,7 @@ describe("media migration", () => {
     expect(target.entries.size).toBe(0);
     const checksum = createHash("sha256").update(bytes).digest("hex").toUpperCase();
     await expect(copyManifestObjects({ manifest: { ...manifest, objects: [{ ...manifest.objects[0]!, checksumSha256: checksum }] }, source, target }))
-      .resolves.toEqual({ objects: 1, bytes: bytes.length, dryRun: false });
+      .resolves.toEqual({ objects: 1, bytes: bytes.length, dryRun: false, skipped: 0 });
   });
 
   it("copies every manifest object and verifies target bytes", async () => {
@@ -106,8 +106,42 @@ describe("media migration", () => {
       objects: 1,
       bytes: bytes.byteLength,
       dryRun: false,
+      skipped: 0,
     });
     expect(target.entries.get("2026/08/asset.txt")).toEqual(bytes);
+  });
+
+  it("skips a target object that already holds identical bytes, in live and dry runs", async () => {
+    const source = memoryStore({ "2026/08/asset.txt": bytes });
+    const target = memoryStore({ "2026/08/asset.txt": bytes });
+    let writes = 0;
+    const counted = { ...target, async put(key: string, value: Uint8Array<ArrayBuffer>, type: string) { writes++; await target.put(key, value, type); } };
+    for (const dryRun of [true, false]) {
+      await expect(copyManifestObjects({ manifest, source, target: counted, dryRun })).resolves.toEqual({
+        objects: 1, bytes: bytes.byteLength, dryRun, skipped: 1,
+      });
+    }
+    expect(writes).toBe(0);
+  });
+
+  it("refuses to overwrite a differing target object, naming the key, in live and dry runs", async () => {
+    const different = new TextEncoder().encode("someone else's bytes");
+    const second = new TextEncoder().encode("second");
+    const twoObjects = { ...manifest, objects: [
+      { key: "2026/08/occupied.txt", bytes: bytes.byteLength, contentType: "text/plain" },
+      { key: "2026/08/free.txt", bytes: second.byteLength, contentType: "text/plain" },
+    ] };
+    const source = memoryStore({ "2026/08/occupied.txt": bytes, "2026/08/free.txt": second });
+    const target = memoryStore({ "2026/08/occupied.txt": different });
+    let writes = 0;
+    const counted = { ...target, async put(key: string, value: Uint8Array<ArrayBuffer>, type: string) { writes++; await target.put(key, value, type); } };
+    await expect(copyManifestObjects({ manifest: twoObjects, source, target: counted, dryRun: true }))
+      .rejects.toThrow(/would refuse to overwrite.*2026\/08\/occupied\.txt/i);
+    await expect(copyManifestObjects({ manifest: twoObjects, source, target: counted }))
+      .rejects.toThrow(/refusing to overwrite.*2026\/08\/occupied\.txt/i);
+    expect(writes).toBe(0);
+    expect(target.entries.get("2026/08/occupied.txt")).toEqual(different);
+    expect(target.entries.has("2026/08/free.txt")).toBe(false);
   });
 
   it("refuses incomplete source inventories and missing bytes", async () => {

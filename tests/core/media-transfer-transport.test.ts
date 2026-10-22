@@ -36,6 +36,21 @@ describe("migration S3 transport", () => {
     expect(() => createS3Store({ ...config, SOURCE_S3_ENDPOINT: "http://storage.example", SOURCE_S3_ALLOW_LOOPBACK_HTTP: "true" }, "SOURCE")).toThrow(/HTTPS/);
   });
 
+  it("permits plain HTTP to a non-loopback endpoint only with an explicit, warned opt-out", () => {
+    const insecure = { ...config, SOURCE_S3_ENDPOINT: "http://storage.example" };
+    const warn = vi.fn();
+    expect(() => createS3Store(insecure, "SOURCE", { warn })).toThrow(/HTTPS.*--allow-insecure-http/);
+    expect(warn).not.toHaveBeenCalled();
+    expect(() => createS3Store(insecure, "SOURCE", { allowInsecureHttp: true, warn })).not.toThrow();
+    expect(() => createS3Store({ ...insecure, MEDIA_TRANSFER_ALLOW_INSECURE_HTTP: "true" }, "SOURCE", { warn })).not.toThrow();
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0]![0]).toMatch(/WARNING.*SOURCE_S3_ENDPOINT.*plain HTTP/);
+    // The opt-out covers the scheme only: credentials in the URL and other schemes stay refused.
+    expect(() => createS3Store({ ...config, SOURCE_S3_ENDPOINT: userinfoFixture.href.replace("https:", "http:") }, "SOURCE", { allowInsecureHttp: true, warn })).toThrow(/HTTPS/);
+    expect(() => createS3Store({ ...config, SOURCE_S3_ENDPOINT: "ftp://storage.example" }, "SOURCE", { allowInsecureHttp: true, warn })).toThrow(/HTTPS/);
+    expect(() => createS3Store({ ...insecure, MEDIA_TRANSFER_ALLOW_INSECURE_HTTP: "yes" }, "SOURCE", { warn })).toThrow(/HTTPS/);
+  });
+
   it.each([".", "..", "a/../private", "a/./object", "", "a\0b"])("rejects unsafe key %s before any manifest write", async (key) => {
     const source = { get: vi.fn(async () => new Uint8Array([1])), put: vi.fn() };
     const target = { get: vi.fn(), put: vi.fn() };
