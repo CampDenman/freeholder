@@ -4171,6 +4171,48 @@ project without silent telemetry, and ready to carry money.
 
 - [x] **C1.38** Provide a public, disposable shared playground on a separate database and network: restricted visitor sessions, prominent reset/privacy notice, blocked privileged operations and external delivery, hourly reset, bounded resources, and a live demo entry link. Prove content edits, denied sensitive actions, reset recovery, and separation from the production instance.
   (Checked 2026-09-27. The isolated playground base (own compose project, database container and internal-only networks; synthetic visitor entry; mutation allow-list policy) is hardened to the full contract. **Restricted visitor sessions:** `src/core/demo/playground.ts` issues sessions only for the synthetic, passwordless `visitor@playground.invalid` principal in the grant-less `playground` role with a one-hour expiry; `tests/core/playground.test.ts` proves the resolved session's grants stay inside `PLAYGROUND_MANAGE`/`PLAYGROUND_VIEW` with manage only on content modules, that no credential flow (`auth.login`) can start from it, and that role creation, staff invitations, host updates, mail test sends, uploads, SMS, payment and settings mutations are refused *server-side* with `permission` — the refusal lives in `authorizeInput` (`src/core/service.ts`), so the admin UI, REST API and MCP hit the same wall, and the test calls the services directly as the playground principal. **Reset/privacy notice:** the root-layout banner (`app/layout.tsx`, key `playground.banner`) rides every playground surface and the `/playground` entry page (`app/playground/page.tsx`, key `playground.limits`) states the hourly reset and the no-personal-information rule, in all four locale catalogs; the demo also serves `Disallow: /` robots. **Blocked external delivery:** `playgroundBlocksExternalDelivery` (`src/core/demo/playground-policy.ts`) fails closed at the three live choke points — `deliverQueuedMail` (`src/core/mail/service.ts`), `messaging.sendSms` (`src/core/messaging/sms.ts`) and the webhook sweep (`src/core/webhooks/deliver.ts`) — so background jobs running as `system` (reminders, compliance replies, queued webhooks) cannot send mail/SMS/webhooks even though the mutation allow-list never covered them; the same test proves each refusal carries the playground reason while a playground-off control takes the ordinary path, and the container gate proves blocked egress on the built image. **Hourly reset:** `deploy/docker-selfhost/playground/reset.sh` recreates the disposable project and is driven hourly by `freeholder-playground-reset.timer`; `tests/core/playground.test.ts` ("playground separation and reset recovery") simulates that cycle (fresh database + migrate + the same boot phases `instrumentation.node.ts` runs) and proves reset recovery: the old visitor session no longer validates, visitor pages are gone, the sample site is reinstalled to the same page count, and a new visitor can edit again. **Bounded resources:** uploads are refused outright (allow-list), all visitor mutations share a 300-per-minute ceiling (`enforceRateLimit`, `src/core/service.ts`), and per-surface row caps (`PLAYGROUND_ROW_CAPS` + `enforcePlaygroundRowCap`) bound pages, sections, forms, contacts, products, notes and tasks; the exact bound (299 further mutations after entry, then refusal; contacts capped at the declared limit while pages still accept edits) is asserted in `tests/core/playground.test.ts`. **Separation:** the playground is its own compose project with its own database container, tmpfs volumes and internal-only networks (`deploy/docker-selfhost/playground/compose.yml`), and the same file proves it on a live cluster: a production-shaped database and a playground database on distinct `DATABASE_URL`s, the playground flag failing closed ("disposable database") against real accounts, the synthetic pair the only users the playground database ever holds, and visitor sessions/content never appearing in the production database. **Live demo entry link:** `FREEHOLDER_PLAYGROUND_URL` renders the "Try the live demo" banner link on a main site (`app/layout.tsx`). **Browser proof:** `tests/browser/playground.spec.ts` (config `playwright.playground.config.ts`, `pnpm test:playground`) drives Chromium through entry, the notice, a real editor edit + publish, three privileged API denials as the visitor (staff invitation, mail test send, upload staging — each 403 with the playground message), the reset (session dead → `/playground` redirect, visitor page 404, reseeded sample back, re-entry and editing restored); CI's `scripts/playground-gate.sh` proves boot, sign-in, editor render and blocked egress on the built container. **F04** entry page + root banner: `app/playground/page.tsx`, `app/layout.tsx`. **F05** one refusal across every projection via the service choke point `src/core/service.ts`; container entry exercised over HTTP by `scripts/playground-gate.sh`. **F07** threat model and bounds: `src/core/demo/playground-policy.ts`, `tests/core/playground.test.ts`. **F09** hourly reset job `deploy/docker-selfhost/playground/reset.sh` + `freeholder-playground-reset.timer`, recovery proof in the same file. **F12** the browser journey composes entry → edit → publish → denial → reset → re-entry: `tests/browser/playground.spec.ts`.)
+  Capacity follow-up 2026-10-21 (demo.freeholder.ai shares production's
+  4 GB / 2 vCPU droplet): the recipe had no restart policy, so an
+  out-of-memory kill left the demo down until the next reset. It also had
+  equal CPU priority with production, and Node sized the heap from the 768 MB
+  cgroup, so a measured 48-connection burst peaked at 736 MB. Both
+  playground containers now restart, carry `cpu_shares: 256`,
+  `oom_score_adj: 1000` and no swap. The app has 896 MB with a fixed 384 MB
+  old space; the live heap measured ~315 MB. The tmpfs-tuned database keeps
+  512 MB. The same burst peaked at 649 MB. A database restart comes back empty
+  from tmpfs. The app's health check is therefore a narrow schema probe,
+  `/api/health/db` (`src/core/runtime/schema-probe.ts`: one `to_regclass`
+  query, 3 s timeout). Readiness is not used because it also fails when a busy
+  demo's job heartbeats are late. `freeholder-playground-heal.timer` runs
+  `reset.sh --heal` every two minutes. It rebuilds when nothing serves, or
+  after two consecutive failed probes. Without overlap room it never stops a
+  playground that still answers HTTP unless its schema is missing. `FREEHOLDER_JOBS_POLL_SECONDS`
+  (default unchanged) is 15 in the playground, cutting measured idle database
+  transactions from ~70 to ~17 a second. `reset.sh` alternates two fixed
+  projects, picking the old one by which app holds the proxy network: the
+  fresh one boots privately and joins the proxy alias only once ready, then
+  the old one stops. Until that hand-over any failure removes the fresh stack
+  (an `EXIT` trap) and leaves the serving one alone. With less than
+  `PLAYGROUND_OVERLAP_MIN_MB` available (default 2200: the second stack's
+  1,408 MB of caps plus ~800 MB for production) it stops the old one first.
+  The demo Caddy site compresses (45 KB home page to 8.5 KB), queues at 16
+  upstream connections, allows 120 s for a response, retries for 20 s, and
+  otherwise answers a plain 503 with `Retry-After`. In playground mode the proxy mints no
+  analytics cookies, and only cookie-less, query-less GETs of CMS-rendered
+  pages carry `public, s-maxage=10, stale-while-revalidate=30` for a CDN
+  (`src/core/demo/playground-cache.ts`; every `app/` route root is listed and
+  never shared). Behind a CDN, viewers of one cached copy share its CSP
+  nonce for up to 40 s; query strings are never cached, so reflected markup
+  cannot reach it. Per-request render cost is unchanged: ~27 anonymous and ~30
+  admin renders a second per CPU, measured locally. Regressions:
+  `tests/core/playground-cache.test.ts`, `tests/core/playground-reset.test.ts`
+  (hand-over, failure clean-up and heal decisions against a stand-in
+  `docker`), `tests/core/deploy-recipe.test.ts`,
+  `tests/core/transactional-jobs.test.ts`. Changeset `playground-capacity.md`.
+  Not verified on a Docker host: overlap, alias hand-over and heal ran
+  against the stand-in `docker` only, and Caddy behaviour with Caddy 2.10.2 against a
+  local app. Isolation from production's kernel, disk, Caddy and TLS still
+  needs a CDN or a separate host.
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable

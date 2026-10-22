@@ -1,0 +1,9 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=Check the Freeholder playground every two minutes
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=2min
+[Install]
+WantedBy=timers.target

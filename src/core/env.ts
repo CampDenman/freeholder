@@ -392,6 +392,18 @@ const envSchema = z.object({
    * suppressed so a suite never races a scheduler.
    */
   FREEHOLDER_JOBS: z.enum(["on", "off"]).optional(),
+
+  /**
+   * Seconds each job worker waits between empty polls of its queue.
+   *
+   * Every registered job has a worker, so pg-boss's two-second default is
+   * dozens of small queries a second against an idle database. That is the
+   * right trade for a business site whose confirmations should leave
+   * promptly; a box that shares its CPU (the public playground beside
+   * production, a small VPS) can raise it. Scheduled jobs still run — a cron
+   * firing waits at most this long for a worker to claim it.
+   */
+  FREEHOLDER_JOBS_POLL_SECONDS: z.coerce.number().min(0.5).max(300).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

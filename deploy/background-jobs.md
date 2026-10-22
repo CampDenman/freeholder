@@ -149,6 +149,13 @@ for a dedicated worker. A separate process must run the same image with
 all processes, so a web process with workers disabled is healthy only while a
 current-version worker is actually alive.
 
+Each registered job has a worker that polls its queue every two seconds while
+idle — about seventy small database transactions a second in total, measured
+on a seeded instance. `FREEHOLDER_JOBS_POLL_SECONDS` lengthens that wait for a
+host that shares its CPU (the public playground uses 15, which measured ~17 a
+second). Work is then claimed up to that many seconds later; scheduled jobs
+still run every time they fire.
+
 During `next build`, neither producer nor worker starts. In tests, workers are
 off unless explicitly forced on, preventing maintenance schedules from racing
 database fixtures.
