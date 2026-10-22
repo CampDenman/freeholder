@@ -1115,6 +1115,11 @@ up gated by a boolean somebody forgot to check.
   help doc.
 - **Trials, upgrades and downgrades are proration decisions, and they are
   stated per plan** rather than discovered at the first mid-cycle change.
+  A customer's own change in the portal follows the same rule, with one
+  guard: when it raises a proration invoice, the new plan is granted only once
+  that invoice is paid in full (a `provider` schedule prorates at the provider).
+  A change deferred to period end bills the new plan's own variant from the
+  first renewal after it.
 - **Dunning is a policy with a schedule**, not a single failed charge: retries
   at stated offsets, a grace period during which access continues, notices on
   the channels the contact consented to (§4.14), and a final action the owner
@@ -9635,24 +9640,34 @@ schema they inherit reads as a designed thing rather than an excavation.
   the remaining API-token/ephemeral-Basic hashing findings for independent
   disposition. These repairs do not close C11.10.)*
   Audit follow-up 2026-10-21 (access control): a security review of main found
-  and this change repaired eleven reproducible access-control defects. Anonymous
-  media uploads (`media.beginUpload`/`media.upload`) now require a capture token
-  naming an open, unexpired capture session. `subscriptions.changeMine` and
+  and this change repaired eleven reproducible access-control defects, then an
+  independent review of the repair found six more problems, also fixed here.
+  Anonymous media uploads (`media.beginUpload`/`media.upload`) need a capture
+  token naming an open, unexpired capture session, checked before storage I/O,
+  inside the apply transaction and again when a resumable upload completes; a
+  bare `captureSessionId` needs media authority. `subscriptions.changeMine` and
   `subscriptions.listOffered` accept and offer only public, active plans from
-  the subscription's own seller; a customer's change that would cost money now
-  waits for the period end instead of granting before settlement, and a target
-  plan unpriced in the subscription currency is refused rather than billed at
-  zero. `subscriptions.join` refuses a staff-entered or foreign card and never
-  lets a saved card skip a card trial's setup-fee invoice. `quotes.message`
-  speaks for the business only with a quotes grant. `messaging.startSiteChat`
-  gives an unverified email its own thread. Contact-import undo restores a
-  field only while it still holds what the import wrote. `contracts.sign` takes
-  IP and user agent from request metadata. `members.callConfig` needs an active
-  member on a live call; `members.claimKeyPackages` returns an outstanding claim
-  instead of draining another device. `briefing.*` reads and shared
-  `views.list` rows require a staff grant. Coupon attempts through
-  `catalog.applyCouponToCart` and `catalog.quoteCartPromotions` are rate limited.
-  Each regression failed before its repair: `tests/core/media-capture.test.ts`,
+  the subscription's own seller. A customer's change follows the plan's stated
+  proration (§4.15): a `none` plan defers to period end, and a prorating change
+  raises its invoice but is granted by `subscriptions.completePaidPlanChange`
+  only once that invoice is paid in full. A deferred change now moves the
+  subscription to the new plan's variant, so renewals bill the new price; a
+  target plan with no price in the subscription currency is refused rather
+  than billed at zero. `subscriptions.join` refuses a staff-entered or foreign
+  card and never lets a saved card skip a card trial's setup-fee invoice.
+  `quotes.message` speaks for the business only with a quotes grant.
+  `messaging.startSiteChat` continues a Contact's thread only for its signed-in
+  owner (the public chat block now passes the session actor) and gives anyone
+  else a new thread. Contact-import undo restores a field only while it still
+  holds what the import wrote. `contracts.sign` takes IP and user agent from
+  request metadata. `members.callConfig` needs an active member on a live call;
+  `members.claimKeyPackages` returns an outstanding claim instead of draining
+  another device. `briefing.*` and shared `views.list` rows use
+  `hasModuleAccess`, two-factor state included. Coupon attempts are limited per
+  shopper (trusted client address, else the reported one, with a site-wide
+  ceiling for untrusted traffic), and `catalog.getOrCreateCart` is limited per
+  shopper so new carts do not reset the count. Each regression failed before
+  its repair: `tests/core/media-capture.test.ts`, `tests/core/media.test.ts`,
   `tests/modules/subscription-billing.test.ts`, `tests/core/quotes.test.ts`,
   `tests/core/site-chat.test.ts`, `tests/core/contact-import.test.ts`,
   `tests/core/intake-waivers-reminders.test.ts`,

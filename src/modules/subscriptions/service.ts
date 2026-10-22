@@ -1464,7 +1464,6 @@ export async function onInvoicePaid(
   if (!invoiceId) return;
   await recoverDunning.call({ invoiceId }, { kind: "system" });
   await activatePaidSignup.call({ invoiceId }, { kind: "system" });
-  const { completePaidPlanChange } = await import("./billing");
   await completePaidPlanChange.call({ invoiceId }, { kind: "system" });
 }
 
@@ -1698,6 +1697,7 @@ import {
   changePlan,
   chargePlatformDue,
   chargePlatformInvoice,
+  completePaidPlanChange,
   enroll,
   proratedDifference,
   reconcileProviderPeriod,
@@ -1731,6 +1731,7 @@ export default [
   attachProviderSchedule,
   changePlan,
   changeMyPlan,
+  completePaidPlanChange,
   reconcileProviderPeriod,
   pauseSubscription,
   resumeSubscription,

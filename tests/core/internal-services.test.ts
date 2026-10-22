@@ -151,6 +151,9 @@ const INTERNAL = [
   // not something anybody did; a job raises the invoice and charges on
   // nobody's behalf.
   "subscriptions.chargePlatformDue",
+  // A customer's plan change is granted when its proration invoice is paid
+  // (C11.10); the payment event, not a person, triggers it.
+  "subscriptions.completePaidPlanChange",
   // Provider schedules are the truth (C9.33). A verified webhook applies the
   // period on nobody's behalf.
   "subscriptions.reconcileProviderPeriod",
