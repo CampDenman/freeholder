@@ -9671,13 +9671,19 @@ schema they inherit reads as a designed thing rather than an excavation.
   `members.claimKeyPackages` returns an outstanding claim instead of draining
   another device. `briefing.*` and shared `views.list` rows use
   `hasModuleAccess`, two-factor state included, with the shared-view filter in
-  SQL before the page limit. Every unusable coupon code (unknown, inactive,
-  not started, ended, used up) gets one identical answer, so codes cannot be
-  told apart. Coupon attempts through `catalog.applyCouponToCart` and
-  `catalog.quoteCartPromotions` are limited per shopper and per cart, and
-  `catalog.getOrCreateCart` is limited per shopper. Per-shopper keys are only
-  as strong as the deploy's trusted client-IP header
-  (`deploy/client-readiness.md`); the per-cart cap holds regardless. Each regression failed before
+  SQL before the page limit. Unusable coupon codes (unknown, inactive, not
+  started, ended, used up) share one answer; a working code is still
+  distinguishable from them. Coupon attempts through
+  `catalog.applyCouponToCart` and `catalog.quoteCartPromotions` are limited per
+  shopper and per cart, and `catalog.getOrCreateCart` is limited per shopper.
+  **Open residual risk, not fixed:** without `TRUSTED_CLIENT_IP_HEADER`, every
+  per-shopper key can be forged, so coupon guessing remains effectively
+  unbounded (forge an address, open a new cart, take its 10 guesses). With the
+  header (the Caddy recipes after #563; `deploy/client-readiness.md`) it is
+  bounded. **Latent risk:** `catalog.checkoutCart` accepts `couponCode` with no
+  rate limit and resolves promotions as system; it is safe today only because
+  `requireContactAuthority` refuses anonymous callers, and it must gain the
+  same limits before a public storefront checkout ships. Each regression failed before
   its repair: `tests/core/media-capture.test.ts`, `tests/core/media.test.ts`,
   `tests/modules/subscription-billing.test.ts`, `tests/core/quotes.test.ts`,
   `tests/core/site-chat.test.ts`, `tests/core/contact-import.test.ts`,
