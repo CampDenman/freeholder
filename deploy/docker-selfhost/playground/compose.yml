@@ -43,9 +43,12 @@ services:
     # The seeded database is ~32 MB; tmpfs pages count against mem_limit.
     tmpfs:
       - /var/lib/postgresql/data:size=268435456
+    # A restart comes back empty (tmpfs). The app's readiness check then
+    # fails and `reset.sh --heal` rebuilds the whole playground; the limit
+    # stays at 512m so that path is rare.
     restart: unless-stopped
-    mem_limit: 384m
-    memswap_limit: 384m
+    mem_limit: 512m
+    memswap_limit: 512m
     cpus: 0.5
     cpu_shares: 256
     oom_score_adj: 1000
@@ -93,12 +96,15 @@ services:
     pids_limit: 256
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
+    # Readiness, not liveness: it reads the database, so a database that was
+    # killed and restarted empty from tmpfs turns this unhealthy, and
+    # `reset.sh --heal` (freeholder-playground-heal.timer) rebuilds the demo.
     healthcheck:
-      test: [CMD, node, -e, 'fetch("http://localhost:3000/api/health/live").then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))']
-      interval: 15s
-      timeout: 5s
+      test: [CMD, node, -e, 'fetch("http://localhost:3000/api/health").then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))']
+      interval: 30s
+      timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 180s
     depends_on:
       db:
         condition: service_healthy

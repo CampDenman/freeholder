@@ -37,7 +37,7 @@ demo.example.com {
     lb_try_interval 500ms
     transport http {
       dial_timeout 2s
-      response_header_timeout 30s
+      response_header_timeout 120s
       max_conns_per_host 16
     }
   }
@@ -69,17 +69,23 @@ Compose project and `.env`; never copy production secrets into it. Point demo
 DNS at the host only after the playground boots, a visitor can edit a sample
 page, egress is blocked, and a reset recovers the editor.
 
-Copy the reset service and timer to `/etc/systemd/system`, run
-`systemctl daemon-reload`, then `systemctl enable --now freeholder-playground-reset.timer`
-and `systemctl start freeholder-playground-reset.service`.
+Copy the reset and heal services and timers to `/etc/systemd/system`, run
+`systemctl daemon-reload`, then `systemctl enable --now freeholder-playground-reset.timer
+freeholder-playground-heal.timer` and `systemctl start freeholder-playground-reset.service`.
 The fixed reset script alternates between the two fixed projects
 `freeholder-playground` and `freeholder-playground-b`: it boots the fresh one
 while the current one serves, waits for readiness (health, jobs, the entry page
-and a warm home page), gives it the proxy alias, then stops the old one. If the
-fresh one never becomes ready it is removed and the previous playground keeps
-serving. When the host has less than `PLAYGROUND_OVERLAP_MIN_MB` (default 1400)
-available, the old playground stops first instead, so a reset never borrows
-memory production may need. Its PostgreSQL data and media use bounded tmpfs
+and a warm home page), gives it the proxy alias, then stops the old one. The serving
+project is whichever app holds the proxy network. Until the hand-over, any
+failure removes the fresh stack and the previous playground keeps serving.
+When the host has less than `PLAYGROUND_OVERLAP_MIN_MB` available, the old
+playground stops first instead. The default, 2200, is the second stack's caps
+(1,408 MB) plus about 800 MB left for production's growth and page cache, so
+a reset never borrows memory production may need. Every two minutes the heal
+timer runs `reset.sh --heal`, which resets only when nothing is serving or
+Docker reports the app unhealthy. The app's health check is readiness, which
+reads the database, so a database restarted empty after an out-of-memory kill
+is rebuilt within minutes rather than at the next hourly reset. Its PostgreSQL data and media use bounded tmpfs
 mounts. The app filesystem is read-only. Both networks
 are internal: external delivery is blocked even if a background listener runs.
 The existing main-site network must never be attached to the demo app or database.
@@ -113,8 +119,8 @@ before production does. `compose.yml` gives both playground containers
 to one under contention), `oom_score_adj: 1000` (a host out-of-memory kill
 picks the playground first), swap disabled, and `restart: unless-stopped` (an
 out-of-memory kill recovers in seconds rather than at the next reset). The
-hard caps total 1,280 MB: 896 MB for the app with a fixed 384 MB heap, and
-384 MB for a database tuned for tmpfs. Job workers poll every 15 seconds.
+hard caps total 1,408 MB: 896 MB for the app with a fixed 384 MB heap, and
+512 MB for a database tuned for tmpfs. Job workers poll every 15 seconds.
 Caddy compresses responses, queues a burst at 16 connections to the app
 rather than rendering everything at once, retries for 20 seconds while the
 app is being swapped or restarted, and otherwise answers a short plain-text
@@ -125,7 +131,11 @@ Anonymous, cookie-less visits to the sample site's pages carry
 and no cookies, so a CDN in front of the demo can absorb a traffic spike.
 Signed-in visitors, query strings, the entry page and every app route stay
 `private, no-store`. Stock Caddy does not cache, so without a CDN the header
-changes nothing on the host.
+changes nothing on the host. With one, every visitor served the same cached
+copy also shares its Content-Security-Policy nonce for up to forty seconds.
+That weakens the nonce only against markup injected into that same cached
+response; query strings, which reflected injection would need, are never
+cached, and stored content is re-rendered with a fresh nonce.
 
 Measured locally on 2026-10-21 under a 1-CPU, 768/896 MB cgroup: about 27
 anonymous page renders and 30 admin

@@ -193,13 +193,26 @@ describe("the playground cannot take production down with it (C1.38 capacity)", 
 
   it("bounds the whole demo well inside the droplet, and the heap inside its container", () => {
     const { app, db } = compose.services;
-    expect(megabytes(app!.mem_limit) + megabytes(db!.mem_limit)).toBeLessThanOrEqual(1280);
+    expect(megabytes(app!.mem_limit) + megabytes(db!.mem_limit)).toBeLessThanOrEqual(1408);
+    // Its tmpfs data counts against this limit, and a killed database comes
+    // back empty, so it keeps room to spare.
+    expect(megabytes(db!.mem_limit)).toBeGreaterThanOrEqual(512);
     const heap = Number(/--max-old-space-size=(\d+)/.exec(app!.environment!.NODE_OPTIONS ?? "")?.[1]);
     // Measured: the live heap is ~315 MB, and ~300 MB of code and native
     // memory sits outside it.
     expect(heap).toBeGreaterThanOrEqual(384);
     expect(heap + 300).toBeLessThan(megabytes(app!.mem_limit));
     expect(Number(app!.environment!.FREEHOLDER_JOBS_POLL_SECONDS)).toBeGreaterThanOrEqual(10);
+  });
+
+  it("reports an emptied database as unhealthy, and a timer acts on it", () => {
+    // Liveness would stay green while every page errors against an empty
+    // database; readiness reads it.
+    const check = JSON.stringify(compose.services.app!.healthcheck);
+    expect(check).toContain("localhost:3000/api/health");
+    expect(check).not.toContain("/api/health/live");
+    expect(readFileSync(join(dir, "freeholder-playground-heal.service"), "utf8")).toMatch(/reset\.sh --heal/);
+    expect(readFileSync(join(dir, "freeholder-playground-heal.timer"), "utf8")).toMatch(/OnUnitActiveSec=/);
   });
 
   it("joins the proxy network only through reset.sh, after readiness", () => {
@@ -219,6 +232,8 @@ describe("the playground cannot take production down with it (C1.38 capacity)", 
     expect(caddy).toMatch(/encode zstd gzip/);
     expect(caddy).toMatch(/lb_try_duration \d+s/);
     expect(caddy).toMatch(/max_conns_per_host \d+/);
+    // Long admin actions (imports, exports) must not become a 503.
+    expect(Number(/response_header_timeout (\d+)s/.exec(caddy)?.[1])).toBeGreaterThanOrEqual(120);
     expect(caddy).toMatch(/handle_errors 502 503 504/);
     expect(caddy).toMatch(/Retry-After/);
   });

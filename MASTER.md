@@ -4178,25 +4178,36 @@ project without silent telemetry, and ready to carry money.
   cgroup, so a measured 48-connection burst peaked at 736 MB. Both
   playground containers now restart, carry `cpu_shares: 256`,
   `oom_score_adj: 1000` and no swap. The app has 896 MB with a fixed 384 MB
-  old space; the live heap measured ~315 MB. The tmpfs-tuned database has
-  384 MB. The same burst peaked at 649 MB. `FREEHOLDER_JOBS_POLL_SECONDS`
+  old space; the live heap measured ~315 MB. The tmpfs-tuned database keeps
+  512 MB. The same burst peaked at 649 MB. A database restart comes back empty
+  from tmpfs, so the app's health check is readiness (which reads the
+  database), and `freeholder-playground-heal.timer` runs `reset.sh --heal`
+  every two minutes to rebuild the demo when nothing serves or the app is
+  unhealthy. `FREEHOLDER_JOBS_POLL_SECONDS`
   (default unchanged) is 15 in the playground, cutting measured idle database
   transactions from ~70 to ~17 a second. `reset.sh` alternates two fixed
-  projects: the fresh one boots privately and joins the proxy alias only once
-  ready, then the old one stops. With less than `PLAYGROUND_OVERLAP_MIN_MB`
-  available it stops the old one first, and a failed boot leaves the old one
-  serving. The demo Caddy site compresses (45 KB home page to 8.5 KB),
-  queues at 16 upstream connections, retries for 20 s, and otherwise answers
-  a plain 503 with `Retry-After`. In playground mode the proxy mints no
+  projects, picking the old one by which app holds the proxy network: the
+  fresh one boots privately and joins the proxy alias only once ready, then
+  the old one stops. Until that hand-over any failure removes the fresh stack
+  (an `EXIT` trap) and leaves the serving one alone. With less than
+  `PLAYGROUND_OVERLAP_MIN_MB` available (default 2200: the second stack's
+  1,408 MB of caps plus ~800 MB for production) it stops the old one first.
+  The demo Caddy site compresses (45 KB home page to 8.5 KB), queues at 16
+  upstream connections, allows 120 s for a response, retries for 20 s, and
+  otherwise answers a plain 503 with `Retry-After`. In playground mode the proxy mints no
   analytics cookies, and only cookie-less, query-less GETs of CMS-rendered
   pages carry `public, s-maxage=10, stale-while-revalidate=30` for a CDN
   (`src/core/demo/playground-cache.ts`; every `app/` route root is listed and
-  never shared). Per-request render cost is unchanged: ~27 anonymous and ~30
+  never shared). Behind a CDN, viewers of one cached copy share its CSP
+  nonce for up to 40 s; query strings are never cached, so reflected markup
+  cannot reach it. Per-request render cost is unchanged: ~27 anonymous and ~30
   admin renders a second per CPU, measured locally. Regressions:
-  `tests/core/playground-cache.test.ts`, `tests/core/deploy-recipe.test.ts`,
+  `tests/core/playground-cache.test.ts`, `tests/core/playground-reset.test.ts`
+  (hand-over, failure clean-up and heal decisions against a stand-in
+  `docker`), `tests/core/deploy-recipe.test.ts`,
   `tests/core/transactional-jobs.test.ts`. Changeset `playground-capacity.md`.
-  Not verified on a Docker host: overlap and alias hand-over were checked
-  against a stubbed `docker`, and Caddy behaviour with Caddy 2.10.2 against a
+  Not verified on a Docker host: overlap, alias hand-over and heal ran
+  against the stand-in `docker` only, and Caddy behaviour with Caddy 2.10.2 against a
   local app. Isolation from production's kernel, disk, Caddy and TLS still
   needs a CDN or a separate host.
 

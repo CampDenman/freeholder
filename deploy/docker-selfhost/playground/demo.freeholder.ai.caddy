@@ -20,7 +20,7 @@ demo.freeholder.ai {
 		lb_try_interval 500ms
 		transport http {
 			dial_timeout 2s
-			response_header_timeout 30s
+			response_header_timeout 120s
 			# A spike queues here, in Caddy, rather than as dozens of
 			# simultaneous renders in a 768 MB app container: past this
 			# many connections a request waits for one to free up.
