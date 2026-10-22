@@ -5,10 +5,33 @@
 // log nobody can read does not keep it. This is the read side of the rows the
 // service wrapper has been writing since the spine landed.
 import { z } from "zod";
-import { desc } from "drizzle-orm";
+import { desc, notInArray } from "drizzle-orm";
 import { auditLog } from "@/core/events/schema";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService } from "@/core/service";
+
+/**
+ * Work that is never news to an owner even when it acts: editor presence
+ * clean-up, expiring guest and capture sessions, stats roll-ups, search
+ * reindexing, IndexNow pings, and demo entry.
+ *
+ * Named one by one rather than "everything the system actor did": payment
+ * and payout webhooks, refunds, disputes and every nested `ctx.callAsSystem`
+ * are recorded as `system` too, and an owner must still see "invoice paid".
+ * Sweeps that *can* do something an owner cares about (scheduled publishing,
+ * cart-recovery emails, released event seats, finished signups) are not
+ * listed here: they declare `auditWhen` so a no-op tick writes no row and a
+ * run that acted appears like any other change.
+ */
+export const HOUSEKEEPING_ACTIONS = [
+  "playground.enter",
+  "cms.expireStalePresence",
+  "media.expireCaptureSessions",
+  "galleries.expireSessions",
+  "ads.rollUpStats",
+  "assistant.reindex",
+  "seo.submitIndexNow",
+] as const;
 
 export const recentActivity = defineService({
   name: "events.recentActivity",
@@ -17,6 +40,14 @@ export const recentActivity = defineService({
   permission: "scoped",
   input: z.object({
     limit: z.number().int().min(1).max(100).default(20),
+    /**
+     * `people` leaves out HOUSEKEEPING_ACTIONS (scheduled sweeps, presence
+     * clean-up, signup recovery, demo entry): true, but meaningless in an
+     * owner's "what changed". System-recorded business events such as a
+     * webhook-applied payment stay. `all` is the full trail for diagnostics
+     * and stays the default for API callers.
+     */
+    include: z.enum(["all", "people"]).default("all"),
   }),
   output: listed(
     row({
@@ -30,6 +61,11 @@ export const recentActivity = defineService({
     ctx.tx
       .select()
       .from(auditLog)
+      .where(
+        input.include === "people"
+          ? notInArray(auditLog.action, [...HOUSEKEEPING_ACTIONS])
+          : undefined,
+      )
       .orderBy(desc(auditLog.at))
       .limit(input.limit),
 });

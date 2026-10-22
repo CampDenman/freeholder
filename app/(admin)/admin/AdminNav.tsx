@@ -65,6 +65,7 @@ import {
   Star,
   Bell,
   BookOpen,
+  List,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -250,13 +251,100 @@ const LINKS = [
   { href: "/admin/jobs", key: "jobs", module: "platform", Icon: ListChecks },
 ] as const;
 
+export type AdminNavKey = (typeof LINKS)[number]["key"];
+export type AdminNavGroupKey =
+  | "home"
+  | "website"
+  | "sell"
+  | "bookings"
+  | "customers"
+  | "marketing"
+  | "system";
+
+export type AdminNavGroupLabels = Record<AdminNavGroupKey, string> & {
+  /** The phone-width disclosure button. */
+  menu: string;
+};
+
+/**
+ * How the screens are arranged for a person, not how the code is split into
+ * modules. Twenty-eight screens in four wrapping rows was a wall a new owner
+ * had to read end to end; a handful of named groups lets them skip straight
+ * to "the shop" or "my customers". Every link belongs to exactly one group —
+ * `tests/core/admin-nav-layout.test.ts` holds that — and which links show is
+ * still decided by `LINKS` and the grants below, never by the grouping.
+ */
+export const ADMIN_NAV_GROUPS: ReadonlyArray<{
+  key: AdminNavGroupKey;
+  links: readonly AdminNavKey[];
+}> = [
+  { key: "home", links: ["overview", "search", "briefing", "guidance", "notifications"] },
+  {
+    key: "website",
+    links: [
+      "pages", "sections", "templates", "design", "media", "forms", "popups",
+      "builder", "demos", "translations", "redirects", "assessments", "facts",
+      "calculators",
+    ],
+  },
+  {
+    key: "sell",
+    links: [
+      "products", "collections", "prices", "inventory", "procurement",
+      "shipping", "carts", "orders", "fulfillment", "returns", "promotions",
+      "invoices", "payments", "pos", "subscriptions", "access", "paywalls",
+      "loyalty", "gifts", "printOnDemand", "marketplace",
+    ],
+  },
+  {
+    key: "bookings",
+    links: [
+      "calendar", "appointments", "calendars", "events", "hire", "quotes",
+      "agreements", "projects", "galleries", "documents", "time", "tasks",
+    ],
+  },
+  {
+    key: "customers",
+    links: [
+      "contacts", "inbox", "messaging", "pipeline", "segments", "scoring",
+      "members", "community", "reviews", "referrals", "voiceVideo",
+    ],
+  },
+  {
+    key: "marketing",
+    links: [
+      "newsletters", "ads", "social", "sharing", "automations", "assistant",
+      "traffic", "reports", "experiments",
+    ],
+  },
+  {
+    key: "system",
+    links: [
+      "settings", "locations", "roles", "invitations", "retention", "work",
+      "contribute", "plugins", "imports", "health", "updates", "jobs",
+    ],
+  },
+];
+
+/** Every nav entry, for the grouping and title tests. */
+export const ADMIN_NAV_ENTRIES: ReadonlyArray<{ key: AdminNavKey; href: string }> =
+  LINKS.map(({ key, href }) => ({ key, href }));
+
+/** `/admin/calendar` is not active on `/admin/calendars`: match whole segments. */
+export function isActiveAdminHref(href: string, pathname: string): boolean {
+  if (href === "/admin") return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function AdminNav({
   labels,
+  groupLabels,
   multilingual,
   grants,
   owner,
 }: {
   labels: AdminNavLabels;
+  groupLabels: AdminNavGroupLabels;
   /**
    * Whether the site publishes more than one language. Translations is the
    * one entry that is conditional: on a single-language site it leads to a
@@ -275,31 +363,96 @@ export function AdminNav({
       (grant) => grant.module === "*" || grant.module === link.module,
     );
   });
+  const byKey = new Map<AdminNavKey, (typeof links)[number]>(
+    links.map((link) => [link.key, link]),
+  );
+  const current = links.find((link) => isActiveAdminHref(link.href, pathname));
+
+  const groups = ADMIN_NAV_GROUPS.map((group) => {
+    const items = group.links.flatMap((key) => {
+      const link = byKey.get(key);
+      return link ? [link] : [];
+    });
+    if (items.length === 0) return null;
+    const headingId = `admin-nav-${group.key}`;
+    return (
+      <div key={group.key} className="pb-3">
+        <p
+          id={headingId}
+          className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted"
+        >
+          {groupLabels[group.key]}
+        </p>
+        <ul aria-labelledby={headingId} className="grid list-none gap-0.5 p-0">
+          {items.map(({ href, key, Icon }) => {
+            const active = isActiveAdminHref(href, pathname);
+            return (
+              <li key={href}>
+                <a
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  className={cx(
+                    "flex items-center gap-2 rounded-md border-s-2 px-3 py-1.5 text-sm hover:bg-surface-muted hover:text-ink",
+                    active
+                      ? "border-accent bg-surface-muted font-semibold text-ink"
+                      : "border-transparent text-ink-muted",
+                  )}
+                >
+                  <Icon size={16} weight={active ? "fill" : "regular"} />
+                  {labels[key]}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  });
+
   return (
-    <nav aria-label={labels.region}>
-      <ul className="-mb-px flex list-none flex-wrap gap-1 p-0">
-        {links.map(({ href, key, Icon }) => {
-          const active =
-            href === "/admin" ? pathname === href : pathname.startsWith(href);
-          return (
-            <li key={href}>
-              <a
-                href={href}
-                aria-current={active ? "page" : undefined}
-                className={cx(
-                  "inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm",
-                  active
-                    ? "border-accent font-semibold text-ink"
-                    : "border-transparent text-ink-muted",
-                )}
-              >
-                <Icon size={16} weight={active ? "fill" : "regular"} />
-                {labels[key]}
-              </a>
-            </li>
-          );
-        })}
-      </ul>
+    // A sidebar from the lg breakpoint; below it, one "Menu" toggle so the
+    // page's own content starts near the top of a phone screen instead of
+    // under every link the admin has.
+    //
+    // One list, rendered once: a second copy for phones put every link in
+    // the document twice, which broke "the invitations link" for anyone
+    // (or any test) looking for it. The toggle is a real checkbox styled as
+    // a button, so it works before and without JavaScript, is reachable by
+    // keyboard (Space toggles it) and reports its state to a screen reader;
+    // Escape closes the open menu back to it. The sidebar scrolls with the
+    // page rather than inside its own box, so no link is clipped out of
+    // sight (axe could not judge the contrast of links scrolled away).
+    <nav
+      aria-label={labels.region}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        const toggle = event.currentTarget.querySelector<HTMLInputElement>("#admin-nav-toggle");
+        if (!toggle?.checked) return;
+        toggle.checked = false;
+        toggle.focus();
+      }}
+    >
+      <input
+        id="admin-nav-toggle"
+        type="checkbox"
+        aria-controls="admin-nav-groups"
+        className="peer sr-only lg:hidden"
+      />
+      <label
+        htmlFor="admin-nav-toggle"
+        className="flex w-full cursor-pointer items-center gap-2 rounded-md border border-rule bg-surface px-3 py-2 text-start text-sm font-semibold text-ink peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent lg:hidden"
+      >
+        <List size={16} weight="bold" aria-hidden="true" />
+        <span>{groupLabels.menu}</span>
+        {current ? (
+          <span className="ms-auto truncate font-normal text-ink-muted">
+            {labels[current.key]}
+          </span>
+        ) : null}
+      </label>
+      <div id="admin-nav-groups" className="hidden pt-2 peer-checked:block lg:block lg:pt-0">
+        {groups}
+      </div>
     </nav>
   );
 }

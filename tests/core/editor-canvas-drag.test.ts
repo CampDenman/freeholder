@@ -12,7 +12,11 @@
 // canvas DOM so a refused drop simply never lands.
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
+import { createElement, Fragment } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { CANVAS_BRIDGE, CANVAS_DRAG } from "../../app/(preview)/canvas-bridge";
+import { translator } from "@/core/i18n";
+import { renderBlocks } from "@/modules/cms/render";
 
 const ORIGIN = "http://localhost";
 
@@ -50,6 +54,9 @@ function canvas(body: string = CANVAS_HTML) {
   });
   window.HTMLElement.prototype.scrollIntoView = () => undefined;
   window.eval(LABELS + CANVAS_BRIDGE + CANVAS_DRAG);
+  // The script defers grips to DOMContentLoaded, which jsdom dispatches
+  // asynchronously; these tests start from a fully parsed document.
+  window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
   return { window, parentPost, document: window.document };
 }
 
@@ -344,5 +351,60 @@ describe("the canvas drag script", () => {
     expect(movesOf(parentPost)).toEqual([
       { blockId: "y", targetId: "x", position: "before" },
     ]);
+  });
+});
+
+describe("grips and hydration", () => {
+  it("waits for the document to finish parsing before adding any grip", async () => {
+    // Run while the document is still streaming, the script must not touch
+    // blocks yet: a block whose server grip has not arrived would get a
+    // second one, and React would hydrate a tree it did not render.
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><body><div class="fh-canvas"><div data-block-id="z"><h2>Z</h2></div></div>` +
+        `<script>${LABELS}${CANVAS_BRIDGE}${CANVAS_DRAG};window.__gripsAtParse = document.querySelectorAll(".fh-grip").length;</script>` +
+        `<div data-block-id="late"><h2>Late</h2></div></body></html>`,
+      { runScripts: "dangerously", url: `${ORIGIN}/preview/page/p1`, pretendToBeVisual: true },
+    );
+    const window = dom.window as unknown as Window & { __gripsAtParse: number };
+    expect(window.__gripsAtParse).toBe(0);
+    if (dom.window.document.readyState === "loading") {
+      await new Promise((resolve) =>
+        dom.window.document.addEventListener("DOMContentLoaded", resolve, { once: true }),
+      );
+    }
+    // After DOMContentLoaded, blocks without a server grip still get one.
+    expect(dom.window.document.querySelectorAll('[data-block-id="late"] > .fh-grip')).toHaveLength(1);
+  });
+
+  it("are server-rendered, so the script never edits the tree React hydrates", async () => {
+    // Injecting a grip into every block while the document parsed gave React
+    // elements it had not rendered: hydration error #418 on every editor
+    // load, then a full client re-render of the frame. The canvas now renders
+    // the grip itself; run over that markup, the script must change nothing.
+    const nodes = [
+      { id: "a", type: "heading", props: { text: "Alpha", level: 1 } },
+      { id: "b", type: "text", props: { body: "Bravo" } },
+    ];
+    const rendered = await renderBlocks(nodes, {
+      locale: "en",
+      t: translator("en"),
+      business: { name: "Aurora", tagline: null, defaultLocale: "en", enabledLocales: ["en"] },
+      path: "/",
+      identifyBlocks: true,
+    });
+    const html = renderToStaticMarkup(createElement(Fragment, null, ...rendered));
+    expect(html.match(/class="fh-grip"/g)).toHaveLength(2);
+
+    const before = new JSDOM(`<!DOCTYPE html><body><div class="fh-canvas">${html}</div></body>`)
+      .window.document.body.innerHTML;
+    const { document } = canvas(`<div class="fh-canvas">${html}</div>`);
+    expect(document.body.innerHTML).toBe(before);
+    expect(document.querySelectorAll('[data-block-id="a"] > .fh-grip')).toHaveLength(1);
+    // First child: the parser places it before anything could ask whether the
+    // block already has one.
+    expect(document.querySelector('[data-block-id="a"]')?.firstElementChild?.className).toBe("fh-grip");
+    expect(document.querySelector(".fh-grip")?.getAttribute("aria-label")).toBe(
+      translator("en")("cms.editor.dragBlock"),
+    );
   });
 });

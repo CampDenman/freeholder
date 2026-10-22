@@ -122,7 +122,15 @@ export async function generateMetadata({
     publishedPage(await pathFor(slug), locale),
     currentBusiness(),
   ]);
-  if (!page) return {};
+  if (!page) {
+    // The 404 still needs a document title: an empty <title> is the first
+    // thing a screen reader announces (WCAG 2.4.2).
+    const t = await getT();
+    return {
+      title: composeDocumentTitle(t("notFound.title"), business?.name, false),
+      robots: { index: false, follow: true },
+    };
+  }
 
   // §5 per-page requirements: a unique title and description on every page,
   // "with sane auto-generated defaults" — the stored override wins, and the

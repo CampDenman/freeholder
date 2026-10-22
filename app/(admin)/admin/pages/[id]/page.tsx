@@ -142,10 +142,14 @@ export default async function EditPagePage({
           <PagePresence
             pageId={page.id}
             self={actorString(actor)}
+            names={Object.fromEntries(
+              staff.map((person) => [`user:${person.id}`, person.email]),
+            )}
             labels={{
               alone: t("cms.presence.alone"),
               others: t("cms.presence.others"),
               editing: t("cms.presence.editing"),
+              teammate: t("cms.comments.teammate"),
             }}
           />
         </div>
@@ -266,6 +270,8 @@ export default async function EditPagePage({
           approve: t("cms.comments.approve"),
           requestChanges: t("cms.comments.requestChanges"),
           mentionsHint: t("cms.comments.mentionsHint"),
+          notify: t("cms.comments.notify"),
+          teammate: t("cms.comments.teammate"),
         }}
       />
 
