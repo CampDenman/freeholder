@@ -347,7 +347,7 @@ describe("the §37 builder's provider choice (owner decision 2026-10-22)", () =>
     const agent = builderAgent();
     expect(agent.id).toBe("gateway");
     expect(agent.configured).toBe(true);
-    const result = await agent.propose(proposal as never);
+    const result = await agent.propose(proposal);
     expect(result.arguments).toEqual({ ok: true });
     expect(seen?.url).toBe("https://llm.example.test/v1/chat/completions");
     expect(seen?.headers.authorization).toBe("Bearer gw-key");
@@ -362,7 +362,7 @@ describe("the §37 builder's provider choice (owner decision 2026-10-22)", () =>
     resetEnvForTests();
     const agent = builderAgent();
     expect(agent.configured).toBe(false);
-    await expect(agent.propose(proposal as never)).rejects.toThrow(
+    await expect(agent.propose(proposal)).rejects.toThrow(
       /AGENT_GATEWAY_URL, AGENT_GATEWAY_MODEL/,
     );
     expect(seen).toBeNull();
@@ -375,7 +375,7 @@ describe("the §37 builder's provider choice (owner decision 2026-10-22)", () =>
     const agent = builderAgent();
     expect(agent.id).toBe("paradise");
     expect(agent.configured).toBe(true);
-    await agent.propose(proposal as never);
+    await agent.propose(proposal);
     expect(seen?.url).toBe("https://paradisemodern.com/v1/chat/completions");
     expect(seen?.headers["x-api-key"]).toBe("pm-key");
     expect(seen?.body.model).toBe("pm-brain:quality");
