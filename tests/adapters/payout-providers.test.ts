@@ -8,7 +8,7 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createStripeConnect, stripeAccountStatus } from "@/adapters/payouts/stripe-connect";
 import { createPayPalPayouts } from "@/adapters/payouts/paypal-payouts";
-import { createRazorpayRoute } from "@/adapters/payouts/razorpay-route";
+import { createRazorpayRoute, razorpayKey } from "@/adapters/payouts/razorpay-route";
 
 type Call = { url: string; method: string; headers: Record<string, string>; body: string };
 
@@ -77,16 +77,33 @@ describe("PayPal Payouts (C12.27)", () => {
     expect(await paypal.transfer({ externalAccountId: "sam@example.test", amountMinor: 1234, currency: "CAD", idempotencyKey: "p1", description: "Payout p1" })).toEqual({ reference: "BATCH1", settled: false });
     const payout = JSON.parse(calls.at(-1)!.body) as { sender_batch_header: { sender_batch_id: string }; items: { amount: { value: string; currency: string }; receiver: string; sender_item_id: string }[] };
     expect(payout.sender_batch_header.sender_batch_id).toBe("p1");
+    expect(calls.at(-1)!.headers["paypal-request-id"]).toBe("freeholder-payout-p1");
     expect(payout.items[0]).toMatchObject({ amount: { value: "12.34", currency: "CAD" }, receiver: "sam@example.test", sender_item_id: "p1" });
     expect(calls.at(-1)!.url).toBe("https://api-m.sandbox.paypal.com/v1/payments/payouts");
     expect("unsupported" in (await paypal.reverse({ reference: "BATCH1", amountMinor: 1234, currency: "CAD", idempotencyKey: "p1" }))).toBe(true);
 
-    const event = JSON.stringify({ event_type: "PAYMENT.PAYOUTS-ITEM.SUCCEEDED", resource: { payout_batch_id: "BATCH1" } });
-    expect(await paypal.webhook({ headers: { "paypal-transmission-sig": "good" }, body: body(event), receivedAt: new Date().toISOString() })).toEqual([{ kind: "transfer", reference: "BATCH1", state: "settled" }]);
+    const event = JSON.stringify({ event_type: "PAYMENT.PAYOUTS-ITEM.SUCCEEDED", resource: { payout_batch_id: "BATCH1", payout_item: { sender_item_id: "p1" } } });
+    expect(await paypal.webhook({ headers: { "paypal-transmission-sig": "good" }, body: body(event), receivedAt: new Date().toISOString() })).toEqual([{ kind: "transfer", reference: "BATCH1", key: "p1", state: "settled" }]);
     expect((JSON.parse(calls.at(-1)!.body) as { webhook_id: string }).webhook_id).toBe("WH1");
     await expect(paypal.webhook({ headers: { "paypal-transmission-sig": "bad" }, body: body(event), receivedAt: new Date().toISOString() })).rejects.toThrow(/verify/);
     const returned = JSON.stringify({ event_type: "PAYMENT.PAYOUTS-ITEM.RETURNED", resource: { payout_batch_id: "BATCH1" } });
     expect(await paypal.webhook({ headers: { "paypal-transmission-sig": "good" }, body: body(returned), receivedAt: new Date().toISOString() })).toEqual([{ kind: "transfer", reference: "BATCH1", state: "failed", error: "returned" }]);
+    const refunded = JSON.stringify({ event_type: "PAYMENT.PAYOUTS-ITEM.REFUNDED", resource: { payout_batch_id: "BATCH1" } });
+    expect(await paypal.webhook({ headers: { "paypal-transmission-sig": "good" }, body: body(refunded), receivedAt: new Date().toISOString() })).toEqual([{ kind: "transfer", reference: "BATCH1", state: "failed", error: "refunded" }]);
+    // Unclaimed money can still be claimed: its own state, not a failure.
+    const unclaimed = JSON.stringify({ event_type: "PAYMENT.PAYOUTS-ITEM.UNCLAIMED", resource: { payout_batch_id: "BATCH1", payout_item: { sender_item_id: "p1:2" } } });
+    expect(await paypal.webhook({ headers: { "paypal-transmission-sig": "good" }, body: body(unclaimed), receivedAt: new Date().toISOString() })).toEqual([{ kind: "transfer", reference: "BATCH1", key: "p1:2", state: "unclaimed" }]);
+  });
+
+  it("reads a refused duplicate batch as the original payout, not a failure", async () => {
+    const { fetcher } = recorder((c) =>
+      c.url.endsWith("/v1/oauth2/token") ? { access_token: "tok" }
+      : { __status: 400, name: "USER_BUSINESS_ERROR", message: "Batch with given sender_batch_id already exists", links: [{ href: "https://api-m.sandbox.paypal.com/v1/payments/payouts/BATCH9", rel: "self", method: "GET" }] },
+    );
+    const paypal = createPayPalPayouts({ clientId: "id", clientSecret: "secret", webhookId: "WH1", environment: "sandbox", fetch: fetcher });
+    expect(await paypal.transfer({ externalAccountId: "sam@example.test", amountMinor: 1234, currency: "CAD", idempotencyKey: "p1", description: "Payout p1" })).toEqual({ reference: "BATCH9", settled: false });
+    const refused = createPayPalPayouts({ clientId: "id", clientSecret: "secret", webhookId: "WH1", environment: "sandbox", fetch: recorder((c) => (c.url.endsWith("/v1/oauth2/token") ? { access_token: "tok" } : { __status: 422, name: "INSUFFICIENT_FUNDS" })).fetcher });
+    await expect(refused.transfer({ externalAccountId: "sam@example.test", amountMinor: 1234, currency: "CAD", idempotencyKey: "p1", description: "Payout p1" })).rejects.toThrow(/INSUFFICIENT_FUNDS/);
   });
 });
 
@@ -113,6 +130,16 @@ describe("Razorpay Route (C12.27)", () => {
     expect(await razorpay.accountStatus("acc_1:acc_prd_1")).toBe("ready");
     expect(await razorpay.transfer({ externalAccountId: "acc_1:acc_prd_1", amountMinor: 50000, currency: "INR", idempotencyKey: "p1", description: "Payout p1" })).toEqual({ reference: "trf_1", settled: true });
     expect(JSON.parse(calls.at(-1)!.body)).toMatchObject({ account: "acc_1", amount: 50000, currency: "INR", notes: { freeholder_payout_id: "p1" } });
+    // Razorpay's documented idempotency header: a retry returns the first transfer.
+    expect(calls.at(-1)!.headers["x-transfer-idempotency"]).toBe("p1");
+    // A later attempt's key fits Razorpay's 4–36 character alphabet.
+    const later = razorpayKey("0f8fad5b-d9cb-469f-a165-70867728950e:2");
+    expect(later).toBe("0f8fad5bd9cb469fa16570867728950e_2");
+    expect(later).toMatch(/^[A-Za-z0-9_ -]{4,36}$/);
+    expect(razorpayKey("0f8fad5b-d9cb-469f-a165-70867728950e")).toBe("0f8fad5b-d9cb-469f-a165-70867728950e");
+    // 409: the same key is still being processed — the outcome is unknown, not refused.
+    const busy = createRazorpayRoute({ keyId: "k", keySecret: "s", webhookSecrets: ["whs"], fetch: recorder(() => ({ __status: 409, error: { code: "BAD_REQUEST_ERROR" } })).fetcher });
+    await expect(busy.transfer({ externalAccountId: "acc_1:acc_prd_1", amountMinor: 50000, currency: "INR", idempotencyKey: "p1", description: "Payout p1" })).rejects.toMatchObject({ code: "provider_failure", retryable: true });
     expect(await razorpay.reverse({ reference: "trf_1", amountMinor: 50000, currency: "INR", idempotencyKey: "p1" })).toEqual({ reference: "rvrsl_1" });
   });
 
@@ -121,8 +148,8 @@ describe("Razorpay Route (C12.27)", () => {
     const sign = (s: string) => createHmac("sha256", "whs").update(s).digest("hex");
     const activated = JSON.stringify({ event: "product.route.activated", payload: { account: { entity: { id: "acc_1" } }, merchant_product: { entity: { id: "acc_prd_1", activation_status: "activated" } } } });
     expect(await razorpay.webhook({ headers: { "x-razorpay-signature": sign(activated) }, body: body(activated), receivedAt: "" })).toEqual([{ kind: "account", externalAccountId: "acc_1:acc_prd_1", status: "ready" }]);
-    const failed = JSON.stringify({ event: "transfer.failed", payload: { transfer: { entity: { id: "trf_1" } } } });
-    expect(await razorpay.webhook({ headers: { "x-razorpay-signature": sign(failed) }, body: body(failed), receivedAt: "" })).toEqual([{ kind: "transfer", reference: "trf_1", state: "failed", error: "failed" }]);
+    const failed = JSON.stringify({ event: "transfer.failed", payload: { transfer: { entity: { id: "trf_1", notes: { freeholder_payout_id: "p1" } } } } });
+    expect(await razorpay.webhook({ headers: { "x-razorpay-signature": sign(failed) }, body: body(failed), receivedAt: "" })).toEqual([{ kind: "transfer", reference: "trf_1", key: "p1", state: "failed", error: "failed" }]);
     await expect(razorpay.webhook({ headers: { "x-razorpay-signature": sign("other") }, body: body(failed), receivedAt: "" })).rejects.toThrow(/invalid/);
   });
 });

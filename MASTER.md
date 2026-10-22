@@ -6247,6 +6247,36 @@ payment, tax, inventory and reporting path, with no floating-point money.
   this item uses the shared audit/outbox; product-wide
   export/restore/retention/erasure proof is still open. **F12**
   `tests/core/events.test.ts` is the composition proof.)
+  Audit follow-up 2026-10-21: the hold sweep ran up to 100 cancellations in
+  one transaction, so one failing promotion (the next person's email
+  erased) rolled every release back on every run. It is now an orchestrated
+  service: each hold is released by `events.expireHeldRegistration` in its
+  own transaction, failures are counted (`failed`) and logged, and a
+  payment in flight is counted `blocked`. The lapsed-hold query itself
+  leaves out holds whose invoice has money on it (the owner reconciles
+  those) and orders holds with a payment attempt in flight after every
+  other, so neither can fill a batch and starve holds that lapsed later.
+  (A hold whose release keeps failing is still retried oldest-first; that
+  residual is logged on every run.)
+  Admission invoices said tax was applied at issue but were created
+  `not_applicable`; the reason text now says plainly that no tax is
+  added. Regression: `tests/core/events.test.ts`; changeset
+  `event-hold-sweep.md`.
+  Admission tax 2026-10-21 (proposed; awaiting the site owner's
+  confirmation, kept in its own commit so it can be reverted alone):
+  admission is taxed through the same calculate path as every other sale,
+  with the place of supply where the event happens — from the primary
+  business location to the event's saved venue location, or to the
+  business location when the event names no venue. A venue typed only as
+  free text (`venueName`/`venueAddress` without a saved `venueLocationId`)
+  cannot be placed in a tax jurisdiction, so it is taxed as if held at the
+  business and the invoice memo says so (follow-up commit, droppable with
+  the first); choosing a saved location as the venue taxes it there. A
+  business with no location at all gets `not_applicable`, as catalog
+  orders do. Ticket prices are shown as entered, as store prices are; in a
+  tax-exclusive zone the tax is its own line on the invoice the attendee
+  lands on before paying. Regression: `tests/core/events.test.ts` ("taxes
+  admission where the event happens…"); changeset `event-admission-tax.md`.
 
 #### Quotes, contracts, projects, and time
 - [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/
@@ -11048,6 +11078,51 @@ whatever is best for the people using the site.
   `tests/modules/member-provider-payouts.test.ts`. Still open: a run against
   a Stripe test account (waits for test keys, Tony 2026-10-15) and direct
   and destination charges with application fees, now C12.38.)*
+  Audit follow-up 2026-10-21 (final design after two further reviews):
+  each provider attempt has one idempotency key — the payout id for the
+  first attempt (as before), then `<payout id>:<n>` — and every retry of an
+  attempt reuses its key (Razorpay's 36-character alphabet gets the id
+  without hyphens and `_<n>`). A new attempt is made only once the last is
+  dead at the provider: refused before money moved, or returned, blocked or
+  refunded (PayPal). An attempt whose outcome is unknown (timeout, outage,
+  409, unrecorded result) or that PayPal holds unclaimed is never resent
+  automatically; same-key retries also stop after 23 hours (Stripe keeps
+  keys 24). Such a payout goes to review telling the owner to check the
+  provider, and the owner records "Provider paid" (→ paid) or "Provider did
+  not pay — send again" (`members.settlePayouts` `providerPaid` /
+  `sendAgain`, buttons under Admin → Members); "still owed" alone does not
+  resend it. Earlier attempts are kept on the transfer
+  (`previous_attempts`, migration `0053_member_payout_attempts.sql`, which
+  also adds the `unknown` and `unclaimed` states), and a webhook applies
+  only to the attempt with its reference or key: a late success for a dead
+  attempt updates that attempt and moves the payout to review with "paid
+  after all — do not pay by hand"; it never touches the current attempt.
+  Events matching no attempt here are acknowledged (200) and ignored.
+  "Send again" answers only that check: one payout at a time (its own
+  form under Admin → Members, not the bulk list), an attempt in `unknown`
+  (never `sent` or `unclaimed`), under a review the check raised (a
+  partial-refund review goes through "still owed"). Migration
+  `0054_member_payout_attempts_backfill.sql` marks every transfer the earlier
+  code left pending or failed (even with no attempt counted: it counted
+  only after the call returned) as `unknown`, dated
+  for the 23-hour guard, because it never recorded unknown outcomes and
+  its Razorpay calls had no idempotency key; it also adds a GIN index for
+  the `previous_attempts` lookup.
+  Regression: `tests/modules/member-provider-payouts.test.ts`,
+  `tests/adapters/payout-providers.test.ts`.
+  Audit follow-up 2026-10-21: the payout job could pay a seller after the
+  buyer's refund had cancelled the payout, because a queued transfer was
+  claimed whatever the payout's state, and settlement only ever moved a
+  "due" payout. Now only a still-due payout is sent; a queued transfer for a
+  refunded, disputed or hand-paid payout is dropped, or goes to review when
+  an earlier attempt's outcome is unknown; money that reaches a seller after
+  the payout left "due" moves it to review and queues a reversal. A failure
+  after the provider call (the result not recorded) is no longer counted as
+  a provider refusal: the row stays claimed and marked "Outcome unknown", and
+  the next run's idempotent call returns the same transfer. Settlement and
+  failure webhooks no longer reopen a cancelled payout. Regression:
+  `tests/modules/member-provider-payouts.test.ts`; changeset
+  `payout-refund-retry-safety.md`.
 - [ ] **C12.27** Add marketplace payout adapters for providers other than
   Stripe (for example PayPal, Adyen for Platforms, Mollie), selectable by the
   site owner without code changes.
@@ -11059,6 +11134,23 @@ whatever is best for the people using the site.
   a linked account with Route and bank settlement, direct transfers and
   reversals, signed webhooks), selectable under Admin → Members, proven
   against recorded HTTP. Still open: sandbox runs with test credentials.)*
+  Audit follow-up 2026-10-21: retries after an uncertain outcome were unsafe.
+  Razorpay transfers now carry the attempt key in Razorpay's documented
+  `X-Transfer-Idempotency` header. PayPal batches carry `PayPal-Request-Id`
+  (kept 30 days), and a refused duplicate `sender_batch_id` is read through
+  its link to the original batch instead of counting as a failure. Webhook
+  transfer events carry the attempt key the transfer was sent with (PayPal
+  `sender_item_id`, Razorpay `notes.freeholder_payout_id`), so a
+  confirmation that beats the "sent" row is still applied to that attempt.
+  PayPal UNCLAIMED is its own state (claimable for 30 days, never resent);
+  RETURNED, BLOCKED, REFUNDED, FAILED, DENIED and CANCELED mean the attempt
+  is dead. Events that match no attempt here are acknowledged (200) and
+  ignored: a shared provider account carries other integrations' payouts.
+  Razorpay offers idempotency only on direct transfers, not reversals; a
+  retried full reversal is refused once the first went through.
+  Regression: `tests/adapters/payout-providers.test.ts`,
+  `tests/modules/member-provider-payouts.test.ts`; changeset
+  `payout-refund-retry-safety.md`. Not yet proven against live sandboxes.
 - [x] **C12.28** Publish a prohibited-items policy: the site owner edits it
   under Admin → Members, it is public at `/market/policy`, sellers accept it
   before listing, and the report queue offers it as a reason.
@@ -11308,6 +11400,22 @@ whatever is best for the people using the site.
   Still open: a provider agreement (Tony, not now), a live run, and
   submitting reports through a provider API rather than by hand. End-to-end
   encrypted files (C12.36) cannot be scanned.)*
+  Audit follow-up 2026-10-21: an image the matcher could not check (an
+  outage, or one over 64 MB) was tagged like a match, so an ordinary photo
+  became permanently undeletable and unrescannable. Unchecked images now
+  carry `abuse-hash-error:<provider>` and stay rescannable and deletable;
+  legal hold (`underLegalHold` in `src/core/media/abuse-evidence.ts`)
+  requires an actual match (`scanStatus "infected"`), which also releases
+  rows held under the old tagging without a migration. Reports link to
+  distinct matched assets, oldest first, so a second uploader of the same
+  image is linked and suspended too. Matches are recorded by core media
+  rather than the members module: `abuse_reports` is defined in
+  `src/core/media/abuse-schema.ts` (same table, no SQL change), boot
+  installs the one recorder (`installAbuseRecorder`, a single slot, so a
+  reload never records twice), and an unrecorded match refuses the
+  upload. Regression: `tests/adapters/abuse-scan.test.ts`,
+  `tests/modules/member-abuse.test.ts`; changeset
+  `abuse-scan-unchecked-images.md`.
 
 ---
 

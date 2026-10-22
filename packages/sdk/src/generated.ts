@@ -5637,7 +5637,7 @@ export interface ServiceCatalog {
   };
   "members.myPayouts": {
     input: Record<string, never>;
-    output: { totals: { currency: string; state: "held" | "due" | "paid" | "cancelled" | "review"; netMinor: number; [key: string]: unknown }[]; payouts: { id: string; orderId: string | null; invoiceId: string | null; sellerId: string; sellerHandle: string; currency: string; grossMinor: number; feeMinor: number; netMinor: number; state: "held" | "due" | "paid" | "cancelled" | "review"; model: "hold" | "seller_merchant" | "instant"; releaseAt: string | null; paidAt: string | null; reference: string | null; note: string | null; createdAt: string; [key: string]: unknown }[] };
+    output: { totals: { currency: string; state: "held" | "due" | "paid" | "cancelled" | "review"; netMinor: number; [key: string]: unknown }[]; payouts: { id: string; orderId: string | null; invoiceId: string | null; sellerId: string; sellerHandle: string; currency: string; grossMinor: number; feeMinor: number; netMinor: number; state: "held" | "due" | "paid" | "cancelled" | "review"; model: "hold" | "seller_merchant" | "instant"; releaseAt: string | null; paidAt: string | null; reference: string | null; note: string | null; providerCheck: boolean; createdAt: string; [key: string]: unknown }[] };
   };
   "members.myPurchases": {
     input: Record<string, never>;
@@ -5681,7 +5681,7 @@ export interface ServiceCatalog {
   };
   "members.payouts": {
     input: { state?: "held" | "due" | "paid" | "cancelled" | "review" };
-    output: { payouts: { id: string; orderId: string | null; invoiceId: string | null; sellerId: string; sellerHandle: string; currency: string; grossMinor: number; feeMinor: number; netMinor: number; state: "held" | "due" | "paid" | "cancelled" | "review"; model: "hold" | "seller_merchant" | "instant"; releaseAt: string | null; paidAt: string | null; reference: string | null; note: string | null; createdAt: string; [key: string]: unknown }[]; accounts: { userId: string; handle: string; status: "pending" | "ready" | "disabled"; instructions: string | null; [key: string]: unknown }[] };
+    output: { payouts: { id: string; orderId: string | null; invoiceId: string | null; sellerId: string; sellerHandle: string; currency: string; grossMinor: number; feeMinor: number; netMinor: number; state: "held" | "due" | "paid" | "cancelled" | "review"; model: "hold" | "seller_merchant" | "instant"; releaseAt: string | null; paidAt: string | null; reference: string | null; note: string | null; providerCheck: boolean; createdAt: string; [key: string]: unknown }[]; accounts: { userId: string; handle: string; status: "pending" | "ready" | "disabled"; instructions: string | null; [key: string]: unknown }[] };
   };
   "members.pendingListings": {
     input: Record<string, never>;
@@ -5860,7 +5860,7 @@ export interface ServiceCatalog {
     output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; adultContent: boolean; federation: boolean; [key: string]: unknown };
   };
   "members.settlePayouts": {
-    input: { ids: string[]; action: "release" | "paid" | "cancel" | "owe"; reference?: string; note?: string };
+    input: { ids: string[]; action: "release" | "paid" | "cancel" | "owe" | "providerPaid" | "sendAgain"; reference?: string; note?: string };
     output: { changed: number };
   };
   "members.signal": {
