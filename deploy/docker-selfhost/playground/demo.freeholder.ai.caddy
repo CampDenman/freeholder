@@ -7,7 +7,8 @@ demo.freeholder.ai {
 		max_size 64KB
 	}
 	# C11.10: overwritten per request; the playground app trusts only this.
+	# {client_ip} is the connecting address unless trusted_proxies is set.
 	reverse_proxy playground-app:3000 {
-		header_up X-Freeholder-Client-Ip {remote_host}
+		header_up X-Freeholder-Client-Ip {client_ip}
 	}
 }

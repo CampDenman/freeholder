@@ -338,6 +338,23 @@ describe.runIf(hasDatabase)("hiring things out", { timeout: 90_000 }, () => {
     expect(confirmed?.status).toBe("confirmed");
   });
 
+  it("lets only a signed-in person waive booking requirements at hand-over (C11.10)", async () => {
+    const { variantId } = await tripod();
+    const hire = await reserve(variantId);
+    // A person's own API key is a user actor too, but it carries no session.
+    const keyed = { ...OWNER, keyScopes: ["rentals.handOver"] } as const;
+    const refused = await failure(handOver.call({ id: hire.id, overrideRequirements: true }, keyed));
+    expect(refused.code).toBe("permission");
+    // An agent is refused before anything else.
+    const agent = await failure(
+      handOver.call({ id: hire.id, overrideRequirements: true }, { kind: "agent", keyName: "bot", scopes: ["*"] }),
+    );
+    expect(agent.code).toBe("permission");
+    // The owner at the counter, in a browser session, may.
+    const out = await handOver.call({ id: hire.id, overrideRequirements: true }, { ...OWNER, sessionId: "counter" });
+    expect(out.status).toBe("out");
+  });
+
   it("bounds how many hires one address can request (C11.10)", async () => {
     const { variantId } = await tripod();
     const codes: string[] = [];

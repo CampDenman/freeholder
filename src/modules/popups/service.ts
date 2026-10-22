@@ -742,9 +742,13 @@ export const capturePopup = defineService({
       `popup-capture:${input.popupId}:${
         actor.kind === "user" || actor.kind === "agent"
           ? actorString(actor)
-          : anonymousClientKey(actor)
+          : actor.request?.trustedIp
+            ? anonymousClientKey(actor)
+            // Without a validated address, the submitted email: forging it
+            // only spends that address's own allowance, and the newsletter's
+            // per-recipient confirmation limit bounds the mail (C11.10).
+            : `email:${input.email}`
       }`,
-    untrustedBackstop: { limit: 1_000, windowSeconds: 10 * 60 },
     message: "This popup has taken a lot of sign-ups just now. Try again shortly.",
   },
   output: row({

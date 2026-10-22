@@ -466,6 +466,24 @@ export const handOver = defineService({
   output: agreementRow,
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
+    // Waiving intake or a waiver is the owner's own statement, so it carries
+    // `bookings.setStatus`'s rule (not agent-callable, booking authority):
+    // only a person in a signed-in session who may set booking status. The
+    // confirmation below is elevated, so the check has to happen here.
+    if (
+      input.overrideRequirements &&
+      !(
+        ctx.actor.kind === "user" &&
+        !ctx.actor.keyScopes &&
+        ctx.actor.sessionId &&
+        permits(ctx.actor, "scoped", "bookings.setStatus", "mutation")
+      )
+    ) {
+      throw new ServiceError(
+        "permission",
+        "Only a signed-in person who manages bookings can confirm a hire with intake or a waiver outstanding.",
+      );
+    }
     const [agreement] = await ctx.tx
       .select()
       .from(rentalAgreements)

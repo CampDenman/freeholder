@@ -31,11 +31,13 @@ access to the application is blocked. Supported headers are
 forwarding headers are not trusted by default.
 
 The Caddy recipes (DigitalOcean droplet, Docker host-updater, playground) set
-`X-Freeholder-Client-Ip` from the connecting address on every request and
+`X-Freeholder-Client-Ip` from Caddy's `{client_ip}` on every request and
 configure `TRUSTED_CLIENT_IP_HEADER=x-freeholder-client-ip`; their app port is
-not published. If a CDN such as Cloudflare sits in front of Caddy, that address
-is the CDN's, so per-visitor limits group by CDN edge until the proxy is told
-the real client. The plain Docker Compose recipe (`docker-selfhost/infra`)
+not published. `{client_ip}` is the connecting address unless Caddy's global
+`trusted_proxies` option names a fronting proxy, so the default is correct for
+a directly exposed droplet. If a CDN sits in front of Caddy, that address is
+the CDN's, and per-visitor limits group by CDN edge until `trusted_proxies` is
+configured for that CDN's published ranges. The plain Docker Compose recipe (`docker-selfhost/infra`)
 publishes port 3000 directly and sets no trusted header; only set one after
 putting an overwriting proxy in front and blocking direct access. Render,
 Railway, Replit and DigitalOcean App Platform are unchanged: no platform header

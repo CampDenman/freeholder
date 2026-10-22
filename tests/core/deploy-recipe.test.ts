@@ -130,7 +130,7 @@ describe("a trusted client address only where a proxy overwrites it (C11.10)", (
     it(`${recipe.compose}: Caddy sets the header the app trusts, and the app is not published`, () => {
       const caddy = readFileSync(join(DEPLOY, recipe.caddy), "utf8");
       const compose = readFileSync(join(DEPLOY, recipe.compose), "utf8");
-      expect(caddy).toMatch(/header_up X-Freeholder-Client-Ip \{remote_host\}/);
+      expect(caddy).toMatch(/header_up X-Freeholder-Client-Ip \{client_ip\}/);
       expect(compose).toMatch(/TRUSTED_CLIENT_IP_HEADER:\s*x-freeholder-client-ip/);
       // A published app port would let a client reach the app directly and
       // write the trusted header itself.
@@ -139,6 +139,15 @@ describe("a trusted client address only where a proxy overwrites it (C11.10)", (
       expect(appSection).not.toMatch(/^\s{4}ports:/m);
     });
   }
+
+  it("documented proxy snippets overwrite the trusted header too", () => {
+    // Following a README must not produce a proxy that passes a client's own
+    // X-Freeholder-Client-Ip through to an app that trusts it.
+    const readme = readFileSync(join(DEPLOY, "docker-selfhost/playground/README.md"), "utf8");
+    const proxies = [...readme.matchAll(/reverse_proxy [^\n]*\n[^\n]*/g)].map((m) => m[0]);
+    expect(proxies.length).toBeGreaterThan(0);
+    for (const proxy of proxies) expect(proxy).toMatch(/header_up X-Freeholder-Client-Ip \{client_ip\}/);
+  });
 
   it("the plain compose recipe, which publishes the app, trusts no header", () => {
     const compose = readFileSync(join(DEPLOY, "docker-selfhost/infra/compose.yml"), "utf8");

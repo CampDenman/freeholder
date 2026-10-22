@@ -154,6 +154,18 @@ describe.runIf(hasDatabase)("rate limiting", () => {
       await expect(probe.call({}, from("198.51.100.99", "192.0.2.7"))).resolves.toEqual({ ok: true });
     });
 
+    it("does not let one client over its own limit spend the shared ceiling", async () => {
+      // Two allowed, eight refused by the client's own bucket.
+      for (let index = 0; index < 10; index += 1) {
+        await probe.call({}, from("203.0.113.77")).catch(() => undefined);
+      }
+      // Only the two accepted calls reached the backstop (limit 5), so three
+      // other visitors still get through.
+      for (const ip of ["192.0.2.11", "192.0.2.12", "192.0.2.13"]) {
+        await expect(probe.call({}, from(ip))).resolves.toEqual({ ok: true });
+      }
+    });
+
     it("prefers the validated address when the deployment provides one", () => {
       expect(anonymousClientKey(from("203.0.113.1", "192.0.2.7"))).toBe("ip:192.0.2.7");
       expect(anonymousClientKey(from("203.0.113.1"))).toBe("untrusted-ip:203.0.113.1");
