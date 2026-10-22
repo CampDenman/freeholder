@@ -9737,7 +9737,8 @@ schema they inherit reads as a designed thing rather than an excavation.
   `untrustedBackstop` bounds forged addresses. The droplet, host-updater and
   playground Caddy recipes overwrite `X-Freeholder-Client-Ip` and set
   `TRUSTED_CLIENT_IP_HEADER` (app port unpublished); the plain compose recipe
-  and managed platforms set none (`deploy/client-readiness.md`).
+  sets none, App Platform and Railway set their documented headers from
+  2026-10-21, and Render and Replit set none (`deploy/client-readiness.md`).
   `safeLocalPath` also refuses dot segments (raw or `%2e`) and any resolved
   result beginning `//` or `/\`. `ads.creativeTag` is system-only.
   `rentals.reserve` books a non-staff hire as a `requested` booking, which
@@ -9831,7 +9832,20 @@ schema they inherit reads as a designed thing rather than an excavation.
   per-shopper key can be forged, so coupon guessing remains effectively
   unbounded (forge an address, open a new cart, take its 10 guesses). With the
   header (the Caddy recipes after #563; `deploy/client-readiness.md`) it is
-  bounded. **Latent risk:** `catalog.checkoutCart` accepts `couponCode` with no
+  bounded. Audit follow-up 2026-10-21 (managed-platform client address):
+  `TRUSTED_CLIENT_IP_HEADER` also accepts `do-connecting-ip` and
+  `x-forwarded-for`, the latter read `TRUSTED_PROXY_HOPS` entries from the
+  right so visitor-written entries on the left are ignored and a short list or
+  malformed entry at that position yields no trusted address. The App Platform
+  spec sets `do-connecting-ip` and the Railway config sets `x-real-ip`, each as
+  documented by the platform, so coupon guessing and the other per-client
+  limits are bounded there too. Render and Replit document no client-address
+  header or proxy depth, so their recipes still set none and the residual
+  above remains open for them (`deploy/client-readiness.md` cites the sources).
+  Regressions: `tests/core/bootstrap-security.test.ts` (header parsing:
+  spoofed leftmost entries, malformed values, IPv6, hop counts),
+  `tests/core/deploy-recipe.test.ts` (per-platform recipe values). Changeset
+  `managed-platform-client-address.md`. **Latent risk:** `catalog.checkoutCart` accepts `couponCode` with no
   rate limit and resolves promotions as system; it is safe today only because
   `requireContactAuthority` refuses anonymous callers, and it must gain the
   same limits before a public storefront checkout ships. Each regression failed before

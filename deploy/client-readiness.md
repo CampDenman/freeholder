@@ -27,8 +27,13 @@ consume another visitor's bucket. This application limit is not a network flood
 defense. Configure edge request limits for public endpoints. Only configure
 `TRUSTED_CLIENT_IP_HEADER` when the proxy overwrites the named header and direct
 access to the application is blocked. Supported headers are
-`x-freeholder-client-ip`, `cf-connecting-ip`, and `x-real-ip`. Client-supplied
-forwarding headers are not trusted by default.
+`x-freeholder-client-ip`, `cf-connecting-ip`, `x-real-ip`, `do-connecting-ip`
+and `x-forwarded-for`. The last is for an edge that appends to
+X-Forwarded-For rather than replacing it: the address is read
+`TRUSTED_PROXY_HOPS` entries from the right (default 1, the address the last
+proxy saw), so entries a visitor wrote on the left are ignored, and a list
+shorter than the hop count or a malformed entry at that position yields no
+trusted address. Client-supplied forwarding headers are not trusted by default.
 
 The Caddy recipes (DigitalOcean droplet, Docker host-updater, playground) set
 `X-Freeholder-Client-Ip` from Caddy's `{client_ip}` on every request and
@@ -39,9 +44,39 @@ a directly exposed droplet. If a CDN sits in front of Caddy, that address is
 the CDN's, and per-visitor limits group by CDN edge until `trusted_proxies` is
 configured for that CDN's published ranges. The plain Docker Compose recipe (`docker-selfhost/infra`)
 publishes port 3000 directly and sets no trusted header; only set one after
-putting an overwriting proxy in front and blocking direct access. Render,
-Railway, Replit and DigitalOcean App Platform are unchanged: no platform header
-is assumed until verified for that platform. Without a trusted header,
+putting an overwriting proxy in front and blocking direct access.
+
+Managed platforms, checked against each platform's own documentation on
+2026-10-22:
+
+- **DigitalOcean App Platform** sets `TRUSTED_CLIENT_IP_HEADER=do-connecting-ip`
+  in `digitalocean-app/infra/app.yaml`. DigitalOcean documents that App
+  Platform adds `do-connecting-ip` with the client's address and uses
+  X-Forwarded-For for its own ingress server
+  (https://docs.digitalocean.com/support/where-can-i-find-the-client-ip-address-of-a-request-connecting-to-my-app/).
+  Apps are reachable only through that ingress.
+- **Railway** sets `TRUSTED_CLIENT_IP_HEADER=x-real-ip` in
+  `.railway/railway.ts`. Railway documents `X-Real-IP` "for identifying
+  client's remote IP" among the headers its edge sets
+  (https://docs.railway.com/networking/public-networking/specs-and-limits).
+  The page does not say in words that a visitor's own X-Real-IP is replaced;
+  Railway staff answers on its community forum say the edge overwrites it, and
+  some users report it carrying a CDN address for some traffic, which groups
+  those visitors together rather than separating them.
+- **Render** sets nothing. Render's documentation names no client-address
+  header and no proxy depth. A 2021 staff reply on its feedback board says the
+  first X-Forwarded-For entry is the client, while users report Render appends
+  to a visitor's own X-Forwarded-For, so the first entry is forgeable and the
+  right-hand depth is undocumented
+  (https://feedback.render.com/features/p/send-the-correct-xforwardedfor).
+- **Replit** sets nothing. Replit says deployments "support the
+  X-Forwarded-For Header" (https://replit.com/blog/deployments-updates) but
+  documents neither whether it overwrites or appends nor how many proxies sit
+  in front.
+
+An operator who confirms an appending edge's depth for their own deployment can
+set `TRUSTED_CLIENT_IP_HEADER=x-forwarded-for` with that `TRUSTED_PROXY_HOPS`;
+the recipes do not guess it. Without a trusted header,
 anonymous limits key on the forwarded address (forgeable, so each service also
 has a site-wide ceiling for unvalidated callers) rather than one shared bucket
 (C11.10).

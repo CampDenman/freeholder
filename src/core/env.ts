@@ -56,8 +56,22 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(32).optional(),
   /** Independent deployment secret required to claim a fresh production instance. */
   BOOTSTRAP_SECRET: z.string().min(32).optional(),
-  /** Only set behind a proxy that overwrites this header and blocks direct access. */
-  TRUSTED_CLIENT_IP_HEADER: z.enum(["x-freeholder-client-ip", "cf-connecting-ip", "x-real-ip"]).optional(),
+  /**
+   * Only set behind a proxy that overwrites this header and blocks direct
+   * access. `do-connecting-ip` is DigitalOcean App Platform's. `x-forwarded-for`
+   * is for an edge that appends rather than overwrites: the client address is
+   * read `TRUSTED_PROXY_HOPS` entries from the right, so anything a visitor
+   * wrote on the left is ignored.
+   */
+  TRUSTED_CLIENT_IP_HEADER: z
+    .enum(["x-freeholder-client-ip", "cf-connecting-ip", "x-real-ip", "do-connecting-ip", "x-forwarded-for"])
+    .optional(),
+  /**
+   * With `TRUSTED_CLIENT_IP_HEADER=x-forwarded-for`: how many appending
+   * proxies the application sits behind. 1 (the default) takes the rightmost
+   * entry, the address the last proxy saw. Ignored for the other headers.
+   */
+  TRUSTED_PROXY_HOPS: z.coerce.number().int().min(1).max(10).default(1),
   /**
    * Encrypts an owner's third-party credentials at rest (§41's addendum to
    * §17). 32 bytes as hex or base64url. Absent is fine until something is

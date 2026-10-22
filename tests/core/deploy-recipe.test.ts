@@ -153,6 +153,22 @@ describe("a trusted client address only where a proxy overwrites it (C11.10)", (
     const compose = readFileSync(join(DEPLOY, "docker-selfhost/infra/compose.yml"), "utf8");
     expect(compose).not.toMatch(/TRUSTED_CLIENT_IP_HEADER/);
   });
+
+  it("managed platforms trust the header their documentation names, and only those", () => {
+    // DigitalOcean App Platform documents do-connecting-ip; its X-Forwarded-For
+    // carries the ingress address, so trusting that would group every visitor.
+    const appSpec = readFileSync(join(DEPLOY, "digitalocean-app/infra/app.yaml"), "utf8");
+    expect(appSpec).toMatch(/key: TRUSTED_CLIENT_IP_HEADER\n\s+value: do-connecting-ip\n/);
+    // Railway documents X-Real-IP as the client's address at its edge.
+    expect(readFileSync(".railway/railway.ts", "utf8")).toMatch(
+      /TRUSTED_CLIENT_IP_HEADER: "x-real-ip"/,
+    );
+    // Render and Replit document no client-address header or proxy depth, so
+    // naming one would be a guess an attacker could exploit.
+    for (const file of ["render.yaml", ".replit"]) {
+      expect(readFileSync(file, "utf8")).not.toMatch(/TRUSTED_CLIENT_IP_HEADER|TRUSTED_PROXY_HOPS/);
+    }
+  });
 });
 
 describe("the droplet backup is a verifiable restore artifact", () => {

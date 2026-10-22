@@ -1,0 +1,4 @@
+---
+"freeholder": patch
+---
+Sites on DigitalOcean App Platform and Railway now recognise each visitor's real address, so per-visitor limits on coupon codes, sharing, pop-ups, rentals, event registration and handle checks apply to the person rather than to whatever address a visitor claims. New deployments from those recipes get this automatically; an existing App Platform site gains it by adding `TRUSTED_CLIENT_IP_HEADER=do-connecting-ip`, and an existing Railway site by adding `TRUSTED_CLIENT_IP_HEADER=x-real-ip`. Render and Replit do not yet document how they pass the visitor's address, so those recipes are unchanged. Operators behind a proxy that adds to `X-Forwarded-For` can set `TRUSTED_CLIENT_IP_HEADER=x-forwarded-for` and `TRUSTED_PROXY_HOPS` to the number of proxies in front of the site.
