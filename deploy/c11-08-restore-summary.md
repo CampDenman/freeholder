@@ -17,13 +17,13 @@ storage sync → verify before cutover) and the drill-record fields in
   `e78527321bb2fb93675a57d83f7e7782499c4936e5a8dc19b8eb119a46279123`,
   6,918,459 bytes, custom-format `pg_dump --no-owner --no-privileges`. Verified
   identical on the target box before `pg_restore`.
-- **Source:** droplet `freeholder-ref` (id 604232042, 104.131.118.196),
+- **Source:** droplet `freeholder-ref` (id <source-droplet-id>, <source-droplet-ip>),
   app+db in compose at /opt/freeholder, running
   `ghcr.io/campdenman/freeholder:edge@sha256:0827de96…0a46a`. Export was
   read-only; the source stayed healthy throughout (its `/perf-home` still
   serves 200 after the drill) and the transient dump file was removed from its
   disk.
-- **Target:** droplet `freeholder-restore` (id 604504844, 209.97.155.248,
+- **Target:** droplet `freeholder-restore` (id <restore-droplet-id>, <restore-droplet-ip>,
   nyc3, s-1vcpu-1gb) provisioned from
   [`deploy/digitalocean-droplet`](../deploy/digitalocean-droplet/README.md):
   recipe `cloud-init.yml`, then recipe `compose.yml`/`Caddyfile`/`backup.sh`
@@ -83,7 +83,7 @@ storage sync → verify before cutover) and the drill-record fields in
   (`scripts/owner-password.mjs --disable-2fa`, then doctor `--enroll-totp` —
   the designed enrollment for a fresh disposable instance); no secret left the
   box.
-- **Served-page proof:** `GET http://209.97.155.248/perf-home` → 200 through
+- **Served-page proof:** `GET http://<restore-droplet-ip>/perf-home` → 200 through
   Caddy on the target (and via ssh port-forward), 26,351 bytes, the seeded
   "Performance home" page rendered. Diff against the source-rendered page
   shows only the origin in canonical/OG URLs (`localhost:3000` vs the target
@@ -109,5 +109,5 @@ storage sync → verify before cutover) and the drill-record fields in
 ## Infrastructure left running
 
 Both droplets are **leave-running** for the owner to decide (per drill
-instructions): `freeholder-ref` (604232042, 104.131.118.196) and
-`freeholder-restore` (604504844, 209.97.155.248). Two $6/mo droplets.
+instructions): `freeholder-ref` (<source-droplet-id>, <source-droplet-ip>) and
+`freeholder-restore` (<restore-droplet-id>, <restore-droplet-ip>). Two $6/mo droplets.

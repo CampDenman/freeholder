@@ -1,0 +1,12 @@
+Freeholder
+Copyright (C) 2026 Tony Aly
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product bundles third-party material that remains under its own license:
+
+- Font files under public/fonts/, licensed under the SIL Open Font License 1.1.
+  Their license texts are kept alongside the font files.
+
+Third-party dependencies installed from package registries are not bundled in
+this repository and carry their own licenses.
