@@ -6258,6 +6258,21 @@ payment, tax, inventory and reporting path, with no floating-point money.
   `not_applicable`; the reason text now says plainly that no tax is
   added. Regression: `tests/core/events.test.ts`; changeset
   `event-hold-sweep.md`.
+  Admission tax 2026-10-21 (proposed; awaiting the site owner's
+  confirmation, kept in its own commit so it can be reverted alone):
+  admission is taxed through the same calculate path as every other sale,
+  with the place of supply where the event happens — from the primary
+  business location to the event's saved venue location, or to the
+  business location when the event names no venue. A venue typed only as
+  free text (`venueName`/`venueAddress` without `venueLocationId`) cannot
+  be placed in a tax jurisdiction, so it is not guessed: the invoice is
+  `not_applicable` with a legend saying the venue is not a saved location,
+  and the owner chooses a saved location to have tax worked out. A
+  business with no location at all also gets `not_applicable`, as catalog
+  orders do. Ticket prices are shown as entered, as store prices are; in a
+  tax-exclusive zone the tax is its own line on the invoice the attendee
+  lands on before paying. Regression: `tests/core/events.test.ts` ("taxes
+  admission where the event happens…"); changeset `event-admission-tax.md`.
 
 #### Quotes, contracts, projects, and time
 - [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/

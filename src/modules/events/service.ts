@@ -8,6 +8,7 @@ import { isUniqueViolation } from "@/core/db";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineOrchestratedService, defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
+import { listLocations } from "@/core/locations/service";
 import { resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { recordRedirect } from "@/core/seo/service";
@@ -229,6 +230,42 @@ async function loadEvent(ctx: ServiceContext, eventId: string) {
 type AdmissionTicket = typeof eventTickets.$inferSelect;
 
 /**
+ * How admission is taxed. Admission is supplied where the event happens, so
+ * tax runs from the business's primary location to the venue, through the
+ * same calculate path as every other sale; the attendee's own address plays
+ * no part, so none is asked for. An event with no venue of its own is held
+ * at the business. A venue typed in as free text cannot be placed in a tax
+ * jurisdiction, and guessing would be worse than not charging: such an
+ * admission, like a sale by a business with no location at all (catalog
+ * orders do the same), carries no tax and its invoice says why.
+ */
+async function admissionTax(ctx: ServiceContext, eventId: string) {
+  const locations = await ctx.callAsSystem(listLocations, {});
+  const origin = locations.find((each) => each.isPrimary) ?? locations[0];
+  if (!origin) {
+    return { mode: "not_applicable" as const, reason: "This business has no location to tax event admission from, so no tax was added." };
+  }
+  const [event] = await ctx.tx
+    .select({ venueLocationId: events.venueLocationId, venueName: events.venueName, venueAddress: events.venueAddress })
+    .from(events)
+    .where(eq(events.id, eventId))
+    .limit(1);
+  const saved = event?.venueLocationId ? locations.find((each) => each.id === event.venueLocationId) : undefined;
+  const elsewhere = Boolean(event?.venueName?.trim() || event?.venueAddress?.trim());
+  const venue = saved ?? (event?.venueLocationId || elsewhere ? undefined : origin);
+  if (!venue) {
+    return { mode: "not_applicable" as const, reason: "The venue is not one of this business's saved locations, so no tax was added." };
+  }
+  const place = (at: typeof origin) => ({
+    country: at.country,
+    region: at.region ?? undefined,
+    postalCode: at.postalCode ?? undefined,
+    city: at.city ?? undefined,
+  });
+  return { mode: "calculate" as const, origin: place(origin), destination: place(venue) };
+}
+
+/**
  * Create and issue the invoice that holds a paid seat, in the caller's
  * transaction. One registration ever has one invoice: `invoices_source_idx`
  * makes (sourceType, sourceId) unique, and the idempotency key is the
@@ -245,6 +282,7 @@ async function issueAdmissionInvoice(
     holdExpiresAt: Date;
   },
 ) {
+  const tax = await admissionTax(ctx, args.ticket.eventId);
   const draft = await ctx.callAsSystem(createDraftInvoice, {
     contactId: args.contactId,
     currency: args.ticket.currency,
@@ -260,12 +298,7 @@ async function issueAdmissionInvoice(
         unitAmountMinor: args.ticket.priceMinor,
       },
     ],
-    // No tax is added to admission: the invoice says so rather than
-    // implying tax is worked out later.
-    tax: {
-      mode: "not_applicable" as const,
-      reason: "Event admission; no tax added.",
-    },
+    tax,
     dueAt: args.holdExpiresAt,
   });
   return ctx.callAsSystem(issueInvoice, { id: draft.invoice.id });
