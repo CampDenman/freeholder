@@ -372,6 +372,7 @@ export const SERVICE_NAMES = [
   "catalog.packFulfillment",
   "catalog.payOrder",
   "catalog.placePurchaseOrder",
+  "catalog.productHeroImage",
   "catalog.publicBookingQuote",
   "catalog.publishProduct",
   "catalog.purchaseOptions",
@@ -508,6 +509,7 @@ export const SERVICE_NAMES = [
   "cms.saveHelpCategory",
   "cms.schedulePage",
   "cms.searchHelp",
+  "cms.searchPublishedPages",
   "cms.sendSmsTemplate",
   "cms.snapshotRevision",
   "cms.submitQuoteRequest",
@@ -3019,6 +3021,10 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { id: string; supplierId: string; locationId: string; status: "draft" | "ordered" | "partial" | "received" | "cancelled"; currency: string; expectedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "catalog.productHeroImage": {
+    input: { slug: string };
+    output: { assetId: string | null };
+  };
   "catalog.publicBookingQuote": {
     input: { productId: string; currency: string; mode?: "full" | "deposit_balance"; seats?: number };
     output: { productId: string; offeringId: string; name: string; durationMin: number; capacity: number; currency: string; totalMinor: number; dueNowMinor: number; balanceMinor: number; mode: "full" | "deposit_balance"; termsHash: string; policy: { name: string; freeUntilHours: number; feeType: "none" | "fixed" | "percent" | "forfeit_deposit"; feeValue: number | null; rescheduleLimit: number; noShowFeeMinor: number } | null };
@@ -3562,6 +3568,10 @@ export interface ServiceCatalog {
   "cms.searchHelp": {
     input: { q: string; locale?: string; limit?: number };
     output: { id: string; slug: string; locale: string; title: string; categoryId: string | null; categorySlug: string | null; categoryName: string | null; helpfulYes: number; helpfulNo: number; updatedAt: string; [key: string]: unknown }[];
+  };
+  "cms.searchPublishedPages": {
+    input: { term: string; limit?: number };
+    output: { slug: string; title: string; description: string | null; kind: string; [key: string]: unknown }[];
   };
   "cms.sendSmsTemplate": {
     input: { key: string; contactId: string; bookingId?: string; purpose?: "transactional" | "marketing" | "support"; variables?: { [key: string]: string }; mediaAssetIds?: string[]; idempotencyKey: string };
@@ -8117,6 +8127,7 @@ export interface FreeholderApi {
     packFulfillment: (input: ServiceCatalog["catalog.packFulfillment"]["input"]) => Promise<ServiceCatalog["catalog.packFulfillment"]["output"]>;
     payOrder: (input: ServiceCatalog["catalog.payOrder"]["input"]) => Promise<ServiceCatalog["catalog.payOrder"]["output"]>;
     placePurchaseOrder: (input: ServiceCatalog["catalog.placePurchaseOrder"]["input"]) => Promise<ServiceCatalog["catalog.placePurchaseOrder"]["output"]>;
+    productHeroImage: (input: ServiceCatalog["catalog.productHeroImage"]["input"]) => Promise<ServiceCatalog["catalog.productHeroImage"]["output"]>;
     publicBookingQuote: (input: ServiceCatalog["catalog.publicBookingQuote"]["input"]) => Promise<ServiceCatalog["catalog.publicBookingQuote"]["output"]>;
     publishProduct: (input: ServiceCatalog["catalog.publishProduct"]["input"]) => Promise<ServiceCatalog["catalog.publishProduct"]["output"]>;
     purchaseOptions: (input?: ServiceCatalog["catalog.purchaseOptions"]["input"]) => Promise<ServiceCatalog["catalog.purchaseOptions"]["output"]>;
@@ -8257,6 +8268,7 @@ export interface FreeholderApi {
     saveHelpCategory: (input: ServiceCatalog["cms.saveHelpCategory"]["input"]) => Promise<ServiceCatalog["cms.saveHelpCategory"]["output"]>;
     schedulePage: (input: ServiceCatalog["cms.schedulePage"]["input"]) => Promise<ServiceCatalog["cms.schedulePage"]["output"]>;
     searchHelp: (input: ServiceCatalog["cms.searchHelp"]["input"]) => Promise<ServiceCatalog["cms.searchHelp"]["output"]>;
+    searchPublishedPages: (input: ServiceCatalog["cms.searchPublishedPages"]["input"]) => Promise<ServiceCatalog["cms.searchPublishedPages"]["output"]>;
     sendSmsTemplate: (input: ServiceCatalog["cms.sendSmsTemplate"]["input"]) => Promise<ServiceCatalog["cms.sendSmsTemplate"]["output"]>;
     snapshotRevision: (input: ServiceCatalog["cms.snapshotRevision"]["input"]) => Promise<ServiceCatalog["cms.snapshotRevision"]["output"]>;
     submitQuoteRequest: (input: ServiceCatalog["cms.submitQuoteRequest"]["input"]) => Promise<ServiceCatalog["cms.submitQuoteRequest"]["output"]>;

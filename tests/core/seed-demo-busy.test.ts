@@ -16,7 +16,7 @@ import { db } from "@/core/db";
 import { installDemo } from "@/modules/seed/service";
 import { installBusyDemo } from "@/modules/seed/busy";
 import { demoSeedBusy, demoSeedMode } from "@/modules/seed/boot";
-import { getSection } from "@/modules/cms/service";
+import { getSection, searchPublishedPages } from "@/modules/cms/service";
 import { HEADER_KEY, NAV_KEY } from "@/modules/cms/defaults";
 import { browseProducts, purchaseOptions } from "@/modules/catalog/service";
 import { bookableServices } from "@/modules/catalog/public-booking";
@@ -117,17 +117,22 @@ async function seedAtPinnedClock(pinned: Date): Promise<Array<{ source: string; 
       const w = { ...world(pinned), ownerUserId: null, staffUserId: staff!.id, liveReminders: false };
       for (const [, seeder] of AREAS) await seeder(tx, w);
       const at = pinned.toISOString();
+      // Only rows this transaction wrote: other test files share the
+      // database and may commit their own (off-hours) bookings meanwhile.
+      const mine = sql.raw("xmin::text::bigint = txid_current() % 4294967296");
       findings = (await tx.execute(sql`
-        select 'timeline' as source, count(*)::int as n from timeline_events where occurred_at > ${at}::timestamptz
-        union all select 'analytics', count(*)::int from analytics_events where at > ${at}::timestamptz
-        union all select 'messages', count(*)::int from messages where created_at > ${at}::timestamptz
-        union all select 'payments', count(*)::int from payments where created_at > ${at}::timestamptz
-        union all select 'runs', count(*)::int from runs where started_at > ${at}::timestamptz
-        union all select 'contacts', count(*)::int from contacts where email like '%@example.com' and created_at > ${at}::timestamptz
+        select 'timeline' as source, count(*)::int as n from timeline_events where ${mine} and occurred_at > ${at}::timestamptz
+        union all select 'analytics', count(*)::int from analytics_events where ${mine} and at > ${at}::timestamptz
+        union all select 'messages', count(*)::int from messages where ${mine} and created_at > ${at}::timestamptz
+        union all select 'payments', count(*)::int from payments where ${mine} and created_at > ${at}::timestamptz
+        union all select 'runs', count(*)::int from runs where ${mine} and started_at > ${at}::timestamptz
+        union all select 'contacts', count(*)::int from contacts where ${mine} and created_at > ${at}::timestamptz
+        union all select 'seeded-bookings', least(count(*), 1)::int - 1 from bookings where ${mine}
         union all select 'off-hours', count(*)::int from bookings
-          where extract(dow from starts_at at time zone 'America/Vancouver') = 0
+          where ${mine} and (
+                extract(dow from starts_at at time zone 'America/Vancouver') = 0
              or extract(hour from starts_at at time zone 'America/Vancouver') < 9
-             or (ends_at at time zone 'America/Vancouver')::time > time '17:00'`)) as unknown as Array<{
+             or (ends_at at time zone 'America/Vancouver')::time > time '17:00')`)) as unknown as Array<{
         source: string;
         n: number;
       }>;
@@ -220,6 +225,13 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
     expect(slots.length).toBeGreaterThan(0);
     const events = await listPublicEvents.call({}, ANONYMOUS);
     for (const entry of EVENTS) expect(events.map((event) => event.slug)).toContain(entry.slug);
+  });
+
+  it("finds pages and journal posts by title and summary, not the shop's pages", async () => {
+    const hits = await searchPublishedPages.call({ term: "wedding", limit: 20 }, ANONYMOUS);
+    expect(hits.length).toBeGreaterThanOrEqual(3);
+    expect(hits.some((hit) => hit.slug.startsWith("blog/"))).toBe(true);
+    expect(hits.every((hit) => hit.slug !== "products" && !hit.slug.startsWith("products/"))).toBe(true);
   });
 
   it("keeps the share bar to content pages", async () => {

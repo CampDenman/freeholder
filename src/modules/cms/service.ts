@@ -610,7 +610,8 @@ export const searchPublishedPages = defineService({
           isNull(pages.trashedAt),
           eq(pages.locale, business?.defaultLocale ?? "en"),
           visibleLocationPage,
-          sql`${pages.slug} not like 'products/%'`,
+          // The product results beside these already cover the shop.
+          sql`${pages.slug} <> 'products' and ${pages.slug} not like 'products/%'`,
           or(
             sql`${pages.title} ilike ${pattern}`,
             sql`${pages.seo}->>'title' ilike ${pattern}`,

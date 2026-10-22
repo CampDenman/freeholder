@@ -96,12 +96,12 @@ export async function generateMetadata({
   const canonical = `${origin}${localePath("search", defaultLocale, defaultLocale)}`;
   return {
     title,
-    description: t("store.search.prompt"),
+    description: t("site.search.prompt"),
     robots: { index: false, follow: true },
     alternates: { canonical },
     openGraph: {
       title,
-      description: t("store.search.prompt"),
+      description: t("site.search.prompt"),
       type: "website",
       url: canonical,
       siteName: siteName ?? undefined,
@@ -160,14 +160,14 @@ export default async function StorefrontSearchPage({
     <div className="grid gap-6">
       <header className="grid gap-2">
         <h1 className="text-3xl font-bold tracking-tight text-balance text-ink">
-          {t("store.search.heading")}
+          {t("site.search.heading")}
         </h1>
         <SearchBox
           action={searchPath}
           term={term ?? ""}
           labels={{
             aria: t("store.search.title"),
-            placeholder: t("store.search.placeholder"),
+            placeholder: t("site.search.placeholder"),
             submit: t("store.search.submit"),
           }}
         />
@@ -176,7 +176,7 @@ export default async function StorefrontSearchPage({
             {t("store.search.resultsFor", { count: total + pageHits.length, query: term })}
           </p>
         ) : (
-          <p className="text-ink-muted">{t("store.search.prompt")}</p>
+          <p className="text-ink-muted">{t("site.search.prompt")}</p>
         )}
       </header>
       {pageHits.length > 0 ? (
@@ -248,7 +248,7 @@ export default async function StorefrontSearchPage({
                 ? pageHits.length > 0
                   ? t("store.search.noProducts")
                   : t("store.search.empty")
-                : t("store.search.prompt"),
+                : t("site.search.prompt"),
               previous: t("store.collection.previous"),
               next: t("store.collection.next"),
               page: t("store.collection.page", { page: parsed.page, pages: pageCount }),
