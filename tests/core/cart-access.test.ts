@@ -104,4 +104,18 @@ describe.runIf(hasDatabase)("cart capabilities", { timeout: 30_000 }, () => {
   expect(await listCartOffers.call({ cartId: basket.cart.id, cartToken: basket.cart.token }, ANONYMOUS)).toEqual([]);
  });
 
+ it("bounds how many coupon codes one shopper can try (C11.10)", async () => {
+  const guest = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
+  const attempt = (n: number) => applyCouponToCart.call({ cartId: guest.cart.id, cartToken: guest.cart.token, code: `GUESS${n}` }, ANONYMOUS);
+  for (let n = 0; n < 20; n++) {
+   await expect(attempt(n)).rejects.not.toMatchObject({ code: "rate_limited" });
+  }
+  await expect(attempt(20)).rejects.toMatchObject({ code: "rate_limited" });
+  const quote = (couponCode?: string) => quoteCartPromotions.call({ cartId: guest.cart.id, cartToken: guest.cart.token, couponCode, subtotalMinor: 1000, shippingMinor: 0, currency: "CAD" }, ANONYMOUS);
+  for (let n = 0; n < 20; n++) await expect(quote(`PEEK${n}`)).rejects.not.toMatchObject({ code: "rate_limited" });
+  await expect(quote("PEEK20")).rejects.toMatchObject({ code: "rate_limited" });
+  // Without a code to test, the cart's own promotions still quote.
+  await expect(quote()).resolves.toMatchObject({ discountMinor: 0 });
+ });
+
 });

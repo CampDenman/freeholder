@@ -16,7 +16,7 @@ import { registerContactPrivacySource } from "@/core/privacy/service";
 import { sendMail } from "@/core/mail/service";
 import { businessProfile } from "@/core/settings/schema";
 import { env } from "@/core/env";
-import { defineService, ServiceError, type Tx } from "@/core/service";
+import { defineService, permits, ServiceError, type Actor, type Tx } from "@/core/service";
 import { decimalToMinor } from "@/adapters/payments/currency";
 import {
   adjustCustomerBalance,
@@ -277,11 +277,23 @@ export const listCoupons = defineService({
   handler: (_input, ctx) => ctx.tx.select().from(coupons).orderBy(desc(coupons.createdAt)).limit(200),
 });
 
+/**
+ * Guessing coupon codes is bounded per caller (C11.10). The trusted client
+ * address when the deploy names one, else the cart; staff who manage
+ * catalogue promotions already see every code and are not limited.
+ */
+const COUPON_ATTEMPTS = { limit: 20, windowSeconds: 10 * 60, message: "Too many coupon codes tried. Wait a few minutes and try again." };
+function couponAttemptSubject(cartId: string, actor: Actor): string | undefined {
+  if (permits(actor, "scoped", "catalog.listCoupons", "query")) return undefined;
+  return `coupon-try:${actor.request?.trustedIp ?? cartId}`;
+}
+
 export const applyCouponToCart = defineService({
   name: "catalog.applyCouponToCart",
   summary: "Attach one valid coupon to an open cart.",
   kind: "mutation",
   permission: "public",
+  rateLimit: { ...COUPON_ATTEMPTS, subject: (input, actor) => couponAttemptSubject(input.cartId, actor) },
   input: z.object({ cartId: id, cartToken: z.string().uuid().optional(), code: couponCode }),
   output: z.object({ cartId: uuid, coupon: couponRow }),
   handler: async (input, ctx) => {
@@ -303,6 +315,10 @@ export const quoteCartPromotions = defineService({
   summary: "Resolve attached coupons into a discount and a free-shipping flag.",
   kind: "query",
   permission: "public",
+  rateLimit: {
+    ...COUPON_ATTEMPTS,
+    subject: (input, actor) => (input.couponCode ? couponAttemptSubject(input.cartId, actor) : undefined),
+  },
   input: z.object({
     cartId: id, cartToken: z.string().uuid().optional(),
     couponCode: couponCode.optional(),
