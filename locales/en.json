@@ -5726,6 +5726,7 @@
   "subscriptions.portal.cancelIntro": "Cancelling keeps access until the end of the period already paid for, unless the plan says otherwise.",
   "subscriptions.portal.changeIntro": "Moving plan now follows this plan's proration rule: charge the unused fraction, or wait until the period ends.",
   "subscriptions.portal.changed": "Your plan has been updated.",
+  "subscriptions.portal.awaitingPayment": "Your new plan starts as soon as the invoice for the difference is paid.",
   "subscriptions.portal.deferred": "Your plan will change at the end of this period.",
   "subscriptions.portal.failed": "That membership could not be cancelled. Try again, or contact us.",
   "subscriptions.proration.create_prorations": "Charge or credit the unused fraction now",

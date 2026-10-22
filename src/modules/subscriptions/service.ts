@@ -296,9 +296,17 @@ export async function applyPendingPlan(
   if (!subscription.pendingPlanId || subscription.cancelAtPeriodEnd) return subscription;
   const [nextPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.pendingPlanId));
   if (!nextPlan) return subscription;
+  // The new plan is priced by its own product's variant. Keeping the old
+  // variant would bill the old price at every renewal after the switch.
+  const [nextVariant] = await ctx.tx
+    .select({ id: productVariants.id })
+    .from(productVariants)
+    .where(and(eq(productVariants.productId, nextPlan.productId), eq(productVariants.isDefault, true)))
+    .limit(1);
+  const productVariantId = nextVariant?.id ?? subscription.productVariantId;
   await ctx.tx
     .update(subscriptions)
-    .set({ planId: nextPlan.id, pendingPlanId: null, billingMode: nextPlan.billingMode })
+    .set({ planId: nextPlan.id, pendingPlanId: null, billingMode: nextPlan.billingMode, productVariantId })
     .where(eq(subscriptions.id, subscription.id));
   await ctx.tx.insert(subscriptionEvents).values({
     subscriptionId: subscription.id,
@@ -312,6 +320,7 @@ export async function applyPendingPlan(
     planId: nextPlan.id,
     pendingPlanId: null,
     billingMode: nextPlan.billingMode,
+    productVariantId,
   };
 }
 
@@ -1455,6 +1464,8 @@ export async function onInvoicePaid(
   if (!invoiceId) return;
   await recoverDunning.call({ invoiceId }, { kind: "system" });
   await activatePaidSignup.call({ invoiceId }, { kind: "system" });
+  const { completePaidPlanChange } = await import("./billing");
+  await completePaidPlanChange.call({ invoiceId }, { kind: "system" });
 }
 
 /* -------------------------------------------------------------- reading */

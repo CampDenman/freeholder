@@ -5726,6 +5726,7 @@
   "subscriptions.portal.cancelIntro": "La résiliation conserve l’accès jusqu’à la fin de la période déjà payée, sauf si le forfait en dispose autrement.",
   "subscriptions.portal.changeIntro": "Changer de forfait maintenant suit la règle de prorata de ce forfait : facturer la fraction inutilisée, ou attendre la fin de la période.",
   "subscriptions.portal.changed": "Votre forfait a été mis à jour.",
+  "subscriptions.portal.awaitingPayment": "Votre nouveau forfait commence dès que la facture de la différence est payée.",
   "subscriptions.portal.deferred": "Votre forfait changera à la fin de cette période.",
   "subscriptions.portal.failed": "Cet abonnement n’a pas pu être résilié. Réessayez, ou contactez-nous.",
   "subscriptions.proration.create_prorations": "Facturer ou créditer maintenant la fraction inutilisée",

@@ -7,6 +7,18 @@ import { contacts } from "@/core/contacts/schema";
 import { hasModuleAccess, permits, ServiceError, type Actor, type ServiceContext } from "@/core/service";
 import { carts } from "./schema";
 
+/**
+ * Who a public shopper is, for rate limits (C11.10): the trusted client
+ * address when the deploy names one, else the address the request reported.
+ * The second can be spoofed, so a limit keyed on it pairs with a site-wide
+ * backstop that only untrusted traffic shares.
+ */
+export function shopperClientKey(actor: Actor): { key: string; trusted: boolean } {
+  const trusted = actor.request?.trustedIp;
+  if (trusted) return { key: `ip:${trusted}`, trusted: true };
+  return { key: `ip:untrusted:${actor.request?.ip ?? "unknown"}`, trusted: false };
+}
+
 export function managesCartTokens(actor: Actor): boolean {
   return hasModuleAccess(actor, "catalog", "manage") || (actor.kind === "agent" && actor.scopes.includes("catalog.*"));
 }

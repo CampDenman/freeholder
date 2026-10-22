@@ -10,6 +10,7 @@ import {
   defineService,
   ServiceError,
   type Actor,
+  type ServiceContext,
 } from "@/core/service";
 import { createPayment, failPayment, settlePayment } from "@/modules/invoicing/invoice-service";
 import { invoices, paymentMethods } from "@/modules/invoicing/schema";
@@ -573,6 +574,8 @@ const planChangeOutput = z.object({
   currency: z.string(),
   description: z.string(),
   proration: z.enum(["create_prorations", "none"]),
+  /** A customer's switch is recorded but waits for `invoiceId` to be paid. */
+  awaitingPayment: z.boolean(),
   methodRef: z.string().nullable(),
   customerRef: z.string().nullable(),
 });
@@ -586,10 +589,10 @@ const applyPlanChange = defineService({
   input: planChangeInput.extend({
     /**
      * A customer's own change never grants a dearer plan ahead of payment:
-     * when the switch would cost money now, it waits for the period end and
-     * the renewal invoice bills it like any other period (C11.10).
+     * when the plan's proration raises an invoice now, the switch waits for
+     * that invoice to be paid in full (C11.10, §4.15).
      */
-    holdUpgradeToPeriodEnd: z.boolean().default(false),
+    settleBeforeGrant: z.boolean().default(false),
   }),
   output: planChangeOutput,
   handler: async (input, ctx) => {
@@ -626,6 +629,7 @@ const applyPlanChange = defineService({
         invoiceId: null,
         proratedMinor: 0,
         deferred: false,
+        awaitingPayment: false,
         billingMode: subscription.billingMode,
         provider: subscription.provider,
         providerRef: subscription.providerRef,
@@ -652,18 +656,7 @@ const applyPlanChange = defineService({
       throw new ServiceError("conflict", "That plan is not priced in this subscription's currency.");
     }
     const newMinor = newPrice.amountMinor;
-    const oldPrice = await priceFor(ctx, subscription);
-    const deferUpgrade =
-      input.holdUpgradeToPeriodEnd &&
-      ("refused" in oldPrice ||
-        proratedDifference(
-          oldPrice.amountMinor,
-          newMinor,
-          subscription.currentPeriodStart,
-          subscription.currentPeriodEnd,
-          new Date(),
-        ) > 0);
-    if (fromPlan.proration === "none" || deferUpgrade) {
+    if (fromPlan.proration === "none") {
       await ctx.tx
         .update(subscriptions)
         .set({ pendingPlanId: toPlan.id })
@@ -679,10 +672,11 @@ const applyPlanChange = defineService({
         provider: subscription.provider,
         providerRef: subscription.providerRef,
         amountMinor: newMinor,
+        awaitingPayment: false,
         ...schedule,
-        proration: "none" as const,
       };
     }
+    const oldPrice = await priceFor(ctx, subscription);
     if ("refused" in oldPrice) {
       throw new ServiceError("conflict", "Both plans must be priced in this currency to prorate.");
     }
@@ -701,46 +695,128 @@ const applyPlanChange = defineService({
         periodEnd: subscription.currentPeriodEnd,
       });
     }
-    await ctx.tx
-      .update(subscriptions)
-      .set({
-        planId: toPlan.id,
-        productVariantId: nextVariantId,
-        billingMode: toPlan.billingMode,
-        pendingPlanId: null,
-      })
-      .where(eq(subscriptions.id, subscription.id));
-    await ctx.tx.insert(subscriptionEvents).values({
-      subscriptionId: subscription.id,
-      kind: "plan_changed",
-      fromPlanId: fromPlan.id,
-      toPlanId: toPlan.id,
-      invoiceId,
-    });
-    ctx.setSubject("subscription", subscription.id);
-    ctx.queueEvent("subscription.planChanged", {
-      subscriptionId: subscription.id,
-      fromPlanId: fromPlan.id,
-      toPlanId: toPlan.id,
-    });
-    await keepAccess(
-      ctx,
-      { ...subscription, planId: toPlan.id },
-      toPlan.name,
-      subscription.currentPeriodEnd,
-      "active",
-    );
+    // The plan bills the difference now. A customer's own switch is recorded
+    // as waiting on that invoice and granted by `completePaidPlanChange` once
+    // it settles; until then they keep the plan they have paid for. A provider
+    // schedule bills its own proration, so that lane is not held here.
+    if (input.settleBeforeGrant && invoiceId && subscription.billingMode !== "provider") {
+      await ctx.tx.insert(subscriptionEvents).values({
+        subscriptionId: subscription.id,
+        kind: "plan_change_pending",
+        fromPlanId: fromPlan.id,
+        toPlanId: toPlan.id,
+        invoiceId,
+        detail: nextVariantId,
+      });
+      ctx.setSubject("subscription", subscription.id);
+      return {
+        subscriptionId: subscription.id,
+        invoiceId,
+        proratedMinor: net,
+        deferred: false,
+        awaitingPayment: true,
+        billingMode: subscription.billingMode,
+        provider: subscription.provider,
+        providerRef: subscription.providerRef,
+        amountMinor: newMinor,
+        ...schedule,
+      };
+    }
+    await switchPlan(ctx, subscription, fromPlan, toPlan, nextVariantId, invoiceId);
     return {
       subscriptionId: subscription.id,
       invoiceId,
       proratedMinor: net,
       deferred: false,
+      awaitingPayment: false,
       billingMode: toPlan.billingMode,
       provider: subscription.provider,
       providerRef: subscription.providerRef,
       amountMinor: newMinor,
       ...schedule,
     };
+  },
+});
+
+async function switchPlan(
+  ctx: ServiceContext,
+  subscription: typeof subscriptions.$inferSelect,
+  fromPlan: typeof plans.$inferSelect,
+  toPlan: typeof plans.$inferSelect,
+  nextVariantId: string,
+  invoiceId: string | null,
+): Promise<void> {
+  await ctx.tx
+    .update(subscriptions)
+    .set({
+      planId: toPlan.id,
+      productVariantId: nextVariantId,
+      billingMode: toPlan.billingMode,
+      pendingPlanId: null,
+    })
+    .where(eq(subscriptions.id, subscription.id));
+  await ctx.tx.insert(subscriptionEvents).values({
+    subscriptionId: subscription.id,
+    kind: "plan_changed",
+    fromPlanId: fromPlan.id,
+    toPlanId: toPlan.id,
+    invoiceId,
+  });
+  ctx.setSubject("subscription", subscription.id);
+  ctx.queueEvent("subscription.planChanged", {
+    subscriptionId: subscription.id,
+    fromPlanId: fromPlan.id,
+    toPlanId: toPlan.id,
+  });
+  await keepAccess(
+    ctx,
+    { ...subscription, planId: toPlan.id },
+    toPlan.name,
+    subscription.currentPeriodEnd,
+    "active",
+  );
+}
+
+/**
+ * Grant a customer's plan change once its proration invoice is paid in full.
+ * A change superseded in the meantime (the subscription is no longer on the
+ * plan it started from, or no longer running) is left alone (C11.10).
+ */
+export const completePaidPlanChange = defineService({
+  name: "subscriptions.completePaidPlanChange",
+  writeClass: "write",
+  summary: "Switch plan once the proration invoice for a customer's change is paid.",
+  kind: "mutation",
+  permission: "system",
+  input: z.object({ invoiceId: uuidSchema }),
+  output: z.object({ switched: z.boolean() }),
+  handler: async (input, ctx) => {
+    const [pending] = await ctx.tx
+      .select()
+      .from(subscriptionEvents)
+      .where(and(eq(subscriptionEvents.kind, "plan_change_pending"), eq(subscriptionEvents.invoiceId, input.invoiceId)))
+      .limit(1);
+    if (!pending?.fromPlanId || !pending.toPlanId || !pending.detail) return { switched: false };
+    const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
+    if (!invoice || invoice.status !== "paid" || invoice.paidMinor < invoice.totalMinor) return { switched: false };
+    const [subscription] = await ctx.tx
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.id, pending.subscriptionId))
+      .limit(1)
+      .for("update");
+    if (
+      !subscription ||
+      subscription.planId !== pending.fromPlanId ||
+      (subscription.status !== "active" && subscription.status !== "trialing")
+    ) {
+      return { switched: false };
+    }
+    const [fromPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, pending.fromPlanId));
+    const [toPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, pending.toPlanId));
+    if (!fromPlan || !toPlan) return { switched: false };
+    await switchPlan(ctx, subscription, fromPlan, toPlan, pending.detail, input.invoiceId);
+    return { switched: true };
   },
 });
 
@@ -840,10 +916,10 @@ export const changeMyPlan = defineOrchestratedService({
   handler: async (input, actor) => {
     const allowed = await assertOwnSubscription.call(input, actor);
     const applied = await applyPlanChange.call(
-      { ...allowed, holdUpgradeToPeriodEnd: true },
+      { ...allowed, settleBeforeGrant: true },
       { kind: "system" },
     );
-    await syncProviderAfterPlanChange(applied, actor);
+    if (!applied.awaitingPayment) await syncProviderAfterPlanChange(applied, actor);
     if (applied.billingMode === "platform" && applied.invoiceId) {
       await chargePlatformInvoice.call(
         { subscriptionId: applied.subscriptionId, invoiceId: applied.invoiceId },

@@ -59,7 +59,7 @@ export async function changeMyPlanAction(form: FormData): Promise<void> {
   };
   try {
     const result = await changeMyPlan.call({ id, planId }, actor);
-    redirect(`${back}?${result.deferred ? "deferred" : "changed"}=1`);
+    redirect(`${back}?${result.awaitingPayment ? "awaiting" : result.deferred ? "deferred" : "changed"}=1`);
   } catch (error) {
     if (error instanceof ServiceError) {
       redirect(`${back}?error=1`);

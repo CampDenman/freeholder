@@ -36,7 +36,7 @@ export default async function PortalSubscriptionPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ cancelled?: string; error?: string; changed?: string; deferred?: string }>;
+  searchParams: Promise<{ cancelled?: string; error?: string; changed?: string; deferred?: string; awaiting?: string }>;
 }) {
   const { id } = await params;
   const query = await searchParams;
@@ -81,6 +81,11 @@ export default async function PortalSubscriptionPage({
       {query.changed ? (
         <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
           {t("subscriptions.portal.changed")}
+        </p>
+      ) : null}
+      {query.awaiting ? (
+        <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          {t("subscriptions.portal.awaitingPayment")}
         </p>
       ) : null}
       {query.deferred ? (

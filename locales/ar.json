@@ -4617,6 +4617,7 @@
   "subscriptions.portal.cancelIntro": "يبقي الإلغاء الوصول حتى نهاية الفترة المدفوعة بالفعل، ما لم تقرر الخطة خلاف ذلك.",
   "subscriptions.portal.changeIntro": "يتبع نقل الخطة الآن قاعدة التناسب في هذه الخطة: خصم الكسر غير المستخدم، أو الانتظار حتى تنتهي الفترة.",
   "subscriptions.portal.changed": "حُدّثت خطتك.",
+  "subscriptions.portal.awaitingPayment": "تبدأ خطتك الجديدة فور دفع فاتورة الفرق.",
   "subscriptions.portal.deferred": "ستتغير خطتك في نهاية هذه الفترة.",
   "subscriptions.portal.failed": "تعذّر إلغاء تلك العضوية. حاول مجددًا أو اتصل بنا.",
   "subscriptions.proration.create_prorations": "خصم أو ائتمان الكسر غير المستخدم الآن",

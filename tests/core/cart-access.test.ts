@@ -104,18 +104,35 @@ describe.runIf(hasDatabase)("cart capabilities", { timeout: 30_000 }, () => {
   expect(await listCartOffers.call({ cartId: basket.cart.id, cartToken: basket.cart.token }, ANONYMOUS)).toEqual([]);
  });
 
- it("bounds how many coupon codes one shopper can try (C11.10)", async () => {
-  const guest = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
-  const attempt = (n: number) => applyCouponToCart.call({ cartId: guest.cart.id, cartToken: guest.cart.token, code: `GUESS${n}` }, ANONYMOUS);
+ it("bounds how many coupon codes one shopper can try, however many carts they open (C11.10)", async () => {
+  const shopper = { kind: "anonymous" as const, request: { ip: "198.51.100.9" } };
+  const attempt = async (n: number) => {
+   // A fresh cart for every guess: the limit follows the shopper, not the cart.
+   const cart = await getOrCreateCart.call({ currency: "CAD" }, shopper);
+   return applyCouponToCart.call({ cartId: cart.cart.id, cartToken: cart.cart.token, code: `GUESS${n}` }, shopper);
+  };
   for (let n = 0; n < 20; n++) {
    await expect(attempt(n)).rejects.not.toMatchObject({ code: "rate_limited" });
   }
   await expect(attempt(20)).rejects.toMatchObject({ code: "rate_limited" });
-  const quote = (couponCode?: string) => quoteCartPromotions.call({ cartId: guest.cart.id, cartToken: guest.cart.token, couponCode, subtotalMinor: 1000, shippingMinor: 0, currency: "CAD" }, ANONYMOUS);
+  // Somebody else is not caught by this shopper's limit.
+  const other = { kind: "anonymous" as const, request: { ip: "198.51.100.10" } };
+  const theirs = await getOrCreateCart.call({ currency: "CAD" }, other);
+  await expect(applyCouponToCart.call({ cartId: theirs.cart.id, cartToken: theirs.cart.token, code: "GUESS" }, other)).rejects.not.toMatchObject({ code: "rate_limited" });
+
+  const guest = await getOrCreateCart.call({ currency: "CAD" }, other);
+  const quote = (couponCode?: string) => quoteCartPromotions.call({ cartId: guest.cart.id, cartToken: guest.cart.token, couponCode, subtotalMinor: 1000, shippingMinor: 0, currency: "CAD" }, other);
   for (let n = 0; n < 20; n++) await expect(quote(`PEEK${n}`)).rejects.not.toMatchObject({ code: "rate_limited" });
   await expect(quote("PEEK20")).rejects.toMatchObject({ code: "rate_limited" });
   // Without a code to test, the cart's own promotions still quote.
   await expect(quote()).resolves.toMatchObject({ discountMinor: 0 });
+ });
+
+ it("bounds how many carts one shopper can open (C11.10)", async () => {
+  const shopper = { kind: "anonymous" as const, request: { ip: "198.51.100.11" } };
+  for (let n = 0; n < 60; n++) await getOrCreateCart.call({ currency: "CAD" }, shopper);
+  await expect(getOrCreateCart.call({ currency: "CAD" }, shopper)).rejects.toMatchObject({ code: "rate_limited" });
+  await expect(getOrCreateCart.call({ currency: "CAD" }, OWNER)).resolves.toBeTruthy();
  });
 
 });

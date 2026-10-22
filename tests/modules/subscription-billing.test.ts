@@ -35,6 +35,7 @@ import {
   listOfferedPlans,
   proratedDifference,
   reconcileProviderPeriod,
+  renewDue,
   savePlan,
   subscribe,
 } from "@/modules/subscriptions/service";
@@ -669,13 +670,41 @@ describe.runIf(hasDatabase)("subscription billing", () => {
       expect(refused.code).toBe("conflict");
     }
 
-    const invoicesBefore = (await db().select().from(invoices).where(eq(invoices.contactId, member.id))).length;
+    // The plan says "prorate", so the difference is invoiced now — but the
+    // dearer plan is not granted until that invoice is paid.
     const changed = await changeMyPlan.call({ id: started.subscription.id, planId: upgrade.id }, CUSTOMER);
-    expect(changed).toMatchObject({ deferred: true, invoiceId: null, proratedMinor: 0 });
-    const [row] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
-    expect(row?.planId).toBe(from.id);
-    expect(row?.pendingPlanId).toBe(upgrade.id);
-    expect(await db().select().from(invoices).where(eq(invoices.contactId, member.id))).toHaveLength(invoicesBefore);
+    expect(changed).toMatchObject({ deferred: false, awaitingPayment: true });
+    expect(changed.invoiceId).not.toBeNull();
+    expect(changed.proratedMinor).toBeGreaterThan(0);
+    const [held] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
+    expect(held).toMatchObject({ planId: from.id, productVariantId: started.subscription.productVariantId, pendingPlanId: null });
+
+    const [owed] = await db().select().from(invoices).where(eq(invoices.id, changed.invoiceId!));
+    const payment = await createPayment.call({ invoiceId: owed!.id, provider: "manual", method: "card", amountMinor: owed!.totalMinor - owed!.paidMinor, idempotencyKey: "upgrade-proration" }, OWNER);
+    await settlePayment.call({ id: payment.id, providerRef: "upgrade-proration" }, OWNER);
+    const [upgradeVariant] = await db().select().from(productVariants).where(eq(productVariants.productId, upgrade.productId));
+    const [granted] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
+    expect(granted).toMatchObject({ planId: upgrade.id, productVariantId: upgradeVariant!.id });
+  });
+
+  it("bills the new plan's price at the renewal after a deferred change (C11.10)", async () => {
+    const member = await person("renew-after-change");
+    const from = await plan({ proration: "none" }, 2_500);
+    const to = await plan({ name: "Yearly", proration: "none" }, 20_000);
+    const started = await subscribe.call({ contactId: member.id, planId: from.id }, OWNER);
+    expect((await changePlan.call({ id: started.subscription.id, planId: to.id }, OWNER)).deferred).toBe(true);
+    await db()
+      .update(subscriptions)
+      .set({ currentPeriodStart: new Date(Date.now() - 40 * 86_400_000), currentPeriodEnd: new Date(Date.now() - 60_000) })
+      .where(eq(subscriptions.id, started.subscription.id));
+    const before = new Set((await db().select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, member.id))).map((row) => row.id));
+    await renewDue.call({}, { kind: "system" });
+    const raised = (await db().select().from(invoices).where(eq(invoices.contactId, member.id))).filter((row) => !before.has(row.id));
+    expect(raised).toHaveLength(1);
+    const lines = await db().select().from(invoiceLines).where(eq(invoiceLines.invoiceId, raised[0]!.id));
+    expect(lines.map((line) => line.unitAmountMinor)).toEqual([20_000]);
+    const [renewed] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
+    expect(renewed?.planId).toBe(to.id);
   });
 
   it("lets a customer change only their own plan", async () => {

@@ -8,7 +8,7 @@
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { requireCartAccess } from "./cart-access";
+import { requireCartAccess, shopperClientKey } from "./cart-access";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { createNotification } from "@/core/notifications/service";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
@@ -16,7 +16,7 @@ import { registerContactPrivacySource } from "@/core/privacy/service";
 import { sendMail } from "@/core/mail/service";
 import { businessProfile } from "@/core/settings/schema";
 import { env } from "@/core/env";
-import { defineService, permits, ServiceError, type Actor, type Tx } from "@/core/service";
+import { defineOrchestratedService, defineService, permits, ServiceError, type Actor, type Tx } from "@/core/service";
 import { decimalToMinor } from "@/adapters/payments/currency";
 import {
   adjustCustomerBalance,
@@ -278,24 +278,66 @@ export const listCoupons = defineService({
 });
 
 /**
- * Guessing coupon codes is bounded per caller (C11.10). The trusted client
- * address when the deploy names one, else the cart; staff who manage
- * catalogue promotions already see every code and are not limited.
+ * Guessing coupon codes is bounded per shopper, not per cart — carts are
+ * free to open (C11.10). Staff who manage catalogue promotions already see
+ * every code and are not limited.
  */
 const COUPON_ATTEMPTS = { limit: 20, windowSeconds: 10 * 60, message: "Too many coupon codes tried. Wait a few minutes and try again." };
-function couponAttemptSubject(cartId: string, actor: Actor): string | undefined {
+function couponAttemptSubject(actor: Actor): string | undefined {
   if (permits(actor, "scoped", "catalog.listCoupons", "query")) return undefined;
-  return `coupon-try:${actor.request?.trustedIp ?? cartId}`;
+  return `coupon-try:${shopperClientKey(actor).key}`;
 }
 
-export const applyCouponToCart = defineService({
+/**
+ * The site-wide ceiling for coupon attempts whose client address cannot be
+ * trusted, so rotating a spoofable address does not reset the per-shopper
+ * limit (C11.10).
+ */
+const couponBackstop = defineService({
+  name: "catalog.couponAttemptBackstop",
+  summary: "Count one untrusted coupon attempt against the site-wide ceiling.",
+  kind: "query",
+  permission: "public",
+  external: false,
+  rateLimit: {
+    limit: 300,
+    windowSeconds: 10 * 60,
+    message: "Too many coupon codes are being tried on this site. Wait a few minutes and try again.",
+    subject: (_input, actor) =>
+      couponAttemptSubject(actor) && !shopperClientKey(actor).trusted ? "untrusted" : undefined,
+  },
+  input: z.object({}),
+  output: z.object({ ok: z.literal(true) }),
+  handler: () => Promise.resolve({ ok: true as const }),
+});
+
+const applyCouponInput = z.object({ cartId: id, cartToken: z.string().uuid().optional(), code: couponCode });
+const applyCouponOutput = z.object({ cartId: uuid, coupon: couponRow });
+
+export const applyCouponToCart = defineOrchestratedService({
   name: "catalog.applyCouponToCart",
   summary: "Attach one valid coupon to an open cart.",
   kind: "mutation",
   permission: "public",
-  rateLimit: { ...COUPON_ATTEMPTS, subject: (input, actor) => couponAttemptSubject(input.cartId, actor) },
-  input: z.object({ cartId: id, cartToken: z.string().uuid().optional(), code: couponCode }),
-  output: z.object({ cartId: uuid, coupon: couponRow }),
+  writeClass: "write",
+  rateLimit: { ...COUPON_ATTEMPTS, subject: (_input, actor) => couponAttemptSubject(actor) },
+  input: applyCouponInput,
+  output: applyCouponOutput,
+  handler: async (input, actor) => {
+    await couponBackstop.call({}, actor);
+    return applyCouponToCartApply.call(input, actor);
+  },
+});
+
+const applyCouponToCartApply = defineService({
+  name: "catalog.applyCouponToCartApply",
+  summary: "Attach one valid coupon to an open cart, after the attempt is counted.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  writeClass: "write",
+  input: applyCouponInput,
+  output: applyCouponOutput,
   handler: async (input, ctx) => {
     await requireCartAccess(ctx, input, "catalog.applyCouponToCart", "mutation");
     const [cart] = await ctx.tx.select().from(carts).where(eq(carts.id, input.cartId)).limit(1);
@@ -317,7 +359,7 @@ export const quoteCartPromotions = defineService({
   permission: "public",
   rateLimit: {
     ...COUPON_ATTEMPTS,
-    subject: (input, actor) => (input.couponCode ? couponAttemptSubject(input.cartId, actor) : undefined),
+    subject: (input, actor) => (input.couponCode ? couponAttemptSubject(actor) : undefined),
   },
   input: z.object({
     cartId: id, cartToken: z.string().uuid().optional(),
