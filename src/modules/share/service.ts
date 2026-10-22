@@ -40,6 +40,7 @@ import {
   ServiceError,
   type ServiceContext,
 } from "@/core/service";
+import { anonymousClientKey } from "@/core/security/rate-limit";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -235,11 +236,13 @@ export const shareVia = defineService({
     windowSeconds: 15 * 60,
     // A path-based bucket is bypassed by changing the path and lets one caller
     // grow the table without a ceiling. Prefer a signed-in identity, then the
-    // deployment-validated client address, with one bounded fallback bucket.
+    // client address (validated when the deployment says so), and bound the
+    // forgeable remainder with a high site-wide ceiling (C11.10).
     subject: (_input, actor) =>
       actor.kind === "user" || actor.kind === "agent"
         ? actorString(actor)
-        : `ip:${actor.request?.ip ?? "unknown"}`,
+        : anonymousClientKey(actor),
+    untrustedBackstop: { limit: 5_000, windowSeconds: 15 * 60 },
     message: "That is a lot of sharing at once. Wait a few minutes and try again.",
   },
   handler: async (input, ctx) => {
@@ -596,6 +599,7 @@ export const linkReport = defineService({
 
 registerContactReference({
   table: "shared_links",
+  columns: ["sharer_contact_id"],
   repoint: (tx, duplicateId, survivingId) =>
     tx
       .update(sharedLinks)

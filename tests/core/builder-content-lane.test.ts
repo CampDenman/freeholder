@@ -4,11 +4,12 @@
 // CMS services in one transaction, and rolls back without overwriting drift.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { setBuilderAgentFetchForTests } from "@/adapters/agent/pm-brain";
+import { setBuilderAgentFetchForTests } from "@/adapters/agent/gateway";
 import { resetEnvForTests } from "@/core/env";
 import { db } from "@/core/db";
 import { auditLog } from "@/core/events/schema";
 import { contentRevisions } from "@/modules/cms/schema";
+import { builderCodeProposals, builderProposals } from "@/modules/builder/schema";
 import { ensureDefaults, listPages, listSections, updateSection } from "@/modules/cms/service";
 import {
   applyProposal,
@@ -24,6 +25,7 @@ import {
   STAFF,
   truncateSpine,
 } from "../helpers/spine";
+import { openTransactions } from "../helpers/open-transactions";
 
 const prior = {
   agent: process.env.FREEHOLDER_AGENT,
@@ -72,7 +74,7 @@ function snapshotFromPrompt(init: RequestInit) {
 
 describe.runIf(hasDatabase)("the owner-facing content builder", () => {
   beforeEach(async () => {
-    process.env.FREEHOLDER_AGENT = "pm_brain";
+    process.env.FREEHOLDER_AGENT = "paradise";
     process.env.PARADISEMODERN_API_KEY = "test-purpose-bound-site-key";
     process.env.BUILDER_MONTHLY_TOKEN_BUDGET = "250000";
     process.env.BUILDER_MAX_OUTPUT_TOKENS = "4000";
@@ -245,5 +247,68 @@ describe.runIf(hasDatabase)("the owner-facing content builder", () => {
     });
     const row = await propose.call({ brief: "Owner says this exact sentinel" }, OWNER);
     expect(row).toMatchObject({ lane: "refused", status: "ready", changes: [] });
+  }, 30_000);
+
+  // MASTER.md §11: the model call can take a minute and must not hold a
+  // transaction (or the builder lock) open. Budget is reserved by a committed
+  // row instead, visible while the provider runs and released if it fails.
+  it("asks the model with no transaction open, against a committed reservation", async () => {
+    const seen: { open: number; reserved: number }[] = [];
+    setBuilderAgentFetchForTests(async () => {
+      seen.push({
+        open: await openTransactions(),
+        reserved: (await db().select().from(builderProposals)).length,
+      });
+      return responseFor({
+        lane: "refused",
+        summary: "No safe content change",
+        rationale: "The request does not identify a site-content outcome.",
+        changes: [],
+      });
+    });
+    const row = await propose.call({ brief: "Tell me about the weather" }, OWNER);
+    expect(seen).toEqual([{ open: 0, reserved: 1 }]);
+    expect(row).toMatchObject({ lane: "refused", status: "ready", totalTokens: 1500 });
+    expect(await db().select().from(builderProposals)).toHaveLength(1);
+
+    setBuilderAgentFetchForTests(async () => new Response("nope", { status: 502 }));
+    await failure(propose.call({ brief: "Tell me about the weather again" }, OWNER));
+    // The failed call's reservation is released, not left counted.
+    expect(await db().select().from(builderProposals)).toHaveLength(1);
+  }, 30_000);
+
+  it("drafts code with no transaction open, and releases the reservation on failure", async () => {
+    const { proposeCode } = await import("@/modules/builder/code-service");
+    const seen: number[] = [];
+    setBuilderAgentFetchForTests(async (_url, init) => {
+      seen.push(await openTransactions());
+      const body = JSON.parse(typeof init.body === "string" ? init.body : "{}") as {
+        tool_choice: { function: { name: string } };
+      };
+      expect(body.tool_choice.function.name).toBe("propose_plugin");
+      return new Response(JSON.stringify({
+        model: "pm-brain:quality",
+        pm_provider: "test-provider",
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        choices: [{
+          message: {
+            tool_calls: [{
+              function: {
+                name: "propose_plugin",
+                arguments: JSON.stringify({ pluginName: "tides", summary: "s", rationale: "r", files: [] }),
+              },
+            }],
+          },
+        }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    const row = await proposeCode.call({ brief: "add a tide times block" }, OWNER);
+    expect(seen).toEqual([0]);
+    expect(row).toMatchObject({ pluginName: "tides", totalTokens: 150 });
+    expect(await db().select().from(builderCodeProposals)).toHaveLength(1);
+
+    setBuilderAgentFetchForTests(async () => new Response("nope", { status: 502 }));
+    await proposeCode.call({ brief: "add a tide times block" }, OWNER).catch(() => undefined);
+    expect(await db().select().from(builderCodeProposals)).toHaveLength(1);
   }, 30_000);
 });

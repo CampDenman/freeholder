@@ -9,6 +9,7 @@
 // function that really is an action.
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { safeLocalPath } from "@/core/http/local-path";
 import {
   parseThemePreference,
   THEME_COOKIE,
@@ -48,7 +49,5 @@ export async function setThemeAction(formData: FormData): Promise<void> {
   const target = formData.get("returnTo");
   // A path on this site and nothing else: accepting a full URL here would make
   // this an open redirect.
-  const safe =
-    typeof target === "string" && /^\/(?!\/)/.test(target) ? target : "/";
-  redirect(safe);
+  redirect(safeLocalPath(target, "/"));
 }

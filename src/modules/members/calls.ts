@@ -147,7 +147,23 @@ export const callSettings = defineService({
     iceServers: listed(z.object({ urls: z.array(z.string()), username: z.string().optional(), credential: z.string().optional() })),
     relayConfigured: z.boolean(),
   }),
-  handler: async (_input, ctx) => relayCredentials(viewerOf(ctx.actor)),
+  handler: async (_input, ctx) => {
+    // Relay credentials are bandwidth on the site's TURN server: only an
+    // active member with a call ringing or live gets them (C11.10).
+    const me = await activeSelf(ctx);
+    const [live] = await ctx.tx
+      .select({ id: memberCalls.id })
+      .from(memberCalls)
+      .where(
+        and(
+          inArray(memberCalls.state, ["ringing", "active"]),
+          or(eq(memberCalls.callerId, me.userId), eq(memberCalls.calleeId, me.userId)),
+        ),
+      )
+      .limit(1);
+    if (!live) throw new ServiceError("conflict", "Start or answer a call first.");
+    return relayCredentials(me.userId);
+  },
 });
 
 export const startCall = defineService({

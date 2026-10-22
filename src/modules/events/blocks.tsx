@@ -3,6 +3,8 @@
 import { z } from "zod";
 import { formatMoney } from "@/core/i18n";
 import { defineBlock } from "@/modules/cms/blocks/types";
+import { env } from "@/core/env";
+import { failureFromQuery, failureMessageKey } from "@/core/http/public-form-return";
 import { registerForEventAction } from "../../../app/(public)/event-actions";
 
 export const eventsIndex = defineBlock({
@@ -185,7 +187,7 @@ export const eventDetail = defineBlock({
                 role="alert"
                 className="rounded-md border border-rule bg-danger-soft px-4 py-3 text-sm text-danger"
               >
-                {ctx.t("events.register.error")}
+                {ctx.t(failureMessageKey(failureFromQuery(ctx.query?.failure), "events.register.error"))}
               </p>
             ) : null}
             <div className="grid gap-1.5">
@@ -217,6 +219,9 @@ export const eventDetail = defineBlock({
                 maxLength={320}
                 className={control}
               />
+              {env().FREEHOLDER_PLAYGROUND === "1" ? (
+                <p className="text-xs text-ink-muted">{ctx.t("playground.fictionalHint")}</p>
+              ) : null}
             </div>
             <div className="grid gap-1.5">
               <label htmlFor={`${formId}-quantity`} className="text-sm font-medium text-ink">

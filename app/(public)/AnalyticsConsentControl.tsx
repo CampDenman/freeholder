@@ -72,7 +72,9 @@ export function AnalyticsConsentControl({
 
   const enabled = analyticsCollectionAllowed(policy, state);
   return (
-    <details className="fixed end-4 bottom-4 z-40 max-w-sm rounded-md border border-rule bg-surface px-3 py-2 text-sm shadow-sm">
+    // Below the sm breakpoint the control sits in the page flow after the
+    // footer: floating, it covered the last form field on a phone.
+    <details className="mx-4 mb-4 w-fit max-w-sm rounded-md border border-rule bg-surface px-3 py-2 text-sm shadow-sm sm:fixed sm:end-4 sm:bottom-4 sm:z-40 sm:m-0">
       <summary className="cursor-pointer text-ink-muted">
         {t("analytics.consent.choices")}
       </summary>

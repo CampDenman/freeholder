@@ -78,6 +78,7 @@ import { ready } from "@/core/runtime";
 import { getService } from "@/core/service";
 import {
   ANONYMOUS,
+  CUSTOMER,
   closeDb,
   failure,
   hasDatabase,
@@ -1300,6 +1301,74 @@ describe.runIf(hasDatabase)("the asset library", () => {
         .from(mediaObjects)
         .where(eq(mediaObjects.uploadId, reservation.id));
       expect(object).toMatchObject({ role: "original", state: "attached" });
+    } finally {
+      vi.restoreAllMocks();
+      process.env = previous;
+      resetEnvForTests();
+      resetStorageForTests();
+      resetMalwareScannerForTests();
+    }
+  });
+
+  it("finishes a phone's resumable upload only while its capture link is open (C11.10)", async () => {
+    const previous = { ...process.env };
+    const pdf = new Uint8Array(Buffer.from("%PDF-1.7\n"));
+    let assembled = false;
+    const { createUploadLink } = await import("@/core/media/capture");
+    const { mediaCaptureItems, mediaCaptureSessions } = await import("@/core/media/schema");
+    try {
+      Object.assign(process.env, {
+        FREEHOLDER_STORAGE: "s3",
+        S3_ENDPOINT: "https://s3.example.test",
+        S3_REGION: "test-1",
+        S3_BUCKET: "media",
+        S3_ACCESS_KEY_ID: "key",
+        S3_SECRET_ACCESS_KEY: "secret",
+        S3_PUBLIC: "false",
+        MALWARE_SCANNER: "none",
+      });
+      resetEnvForTests();
+      resetStorageForTests();
+      resetMalwareScannerForTests();
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        const request = input instanceof Request ? input : new Request(input, init);
+        const url = new URL(request.url);
+        if (request.method === "POST" && url.searchParams.has("uploads")) {
+          return new Response("<InitiateMultipartUploadResult><UploadId>upload-2</UploadId></InitiateMultipartUploadResult>");
+        }
+        if (request.method === "POST" && url.searchParams.get("uploadId")) {
+          assembled = true;
+          return new Response("<CompleteMultipartUploadResult />");
+        }
+        if (request.method === "HEAD") {
+          if (!assembled) return new Response(null, { status: 404 });
+          return new Response(null, { headers: { "content-length": String(pdf.byteLength), "content-type": "application/pdf" } });
+        }
+        if (request.method === "GET") {
+          return new Response(pdf, { status: request.headers.has("range") ? 206 : 200, headers: { "content-type": "application/pdf" } });
+        }
+        if (request.method === "DELETE") return new Response(null, { status: 204 });
+        return new Response(null, { status: 500 });
+      });
+
+      const link = await createUploadLink.call({ source: "upload_link" }, OWNER);
+      // A signed-in customer holding only the session id is not the link.
+      expect((await failure(beginUpload.call(
+        { filename: "phone.pdf", contentType: "application/pdf", bytes: pdf.byteLength, provenance: { captureSessionId: link.id } },
+        CUSTOMER,
+      ))).code).toBe("permission");
+
+      const reservation = await beginUpload.call(
+        { filename: "phone.pdf", contentType: "application/pdf", bytes: pdf.byteLength, provenance: { captureToken: link.token } },
+        ANONYMOUS,
+      );
+      // The link expires while the bytes are still uploading.
+      await db().update(mediaCaptureSessions).set({ expiresAt: new Date(Date.now() - 1_000) }).where(eq(mediaCaptureSessions.id, link.id));
+      const finished = await completeUpload
+        .call({ id: reservation.id, parts: [{ partNumber: 1, etag: '"part-etag"' }] }, ANONYMOUS)
+        .catch((error: unknown) => error);
+      expect(finished).not.toMatchObject({ ok: true });
+      expect(await db().select().from(mediaCaptureItems).where(eq(mediaCaptureItems.sessionId, link.id))).toHaveLength(0);
     } finally {
       vi.restoreAllMocks();
       process.env = previous;

@@ -200,6 +200,13 @@ export default async function InboxPage({
                     <Pill tone={CHANNEL_TONES[thread.replyChannel] ?? "neutral"}>
                       {t(`conversations.channel.${thread.replyChannel}`)}
                     </Pill>
+                    {/* Typing an address proves nothing: this chat is kept
+                        apart from the person's own conversation (C11.10). */}
+                    {thread.unverified ? (
+                      <Pill tone="warning">
+                        {t("inbox.unverifiedChat", { email: thread.contactEmail ?? "" })}
+                      </Pill>
+                    ) : null}
                     {thread.assistantEscalatedAt && !thread.assistantEscalationResolvedAt ? (
                       <Pill tone="warning">{t("inbox.assistantNeedsYou")}</Pill>
                     ) : null}

@@ -19,7 +19,8 @@ import { productAction } from "../../../catalog-actions";
 import { listInvoices } from "@/modules/invoicing/invoice-service";
 import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { invoiceTone, money } from "../../invoices/format";
-import { getT } from "../../../../i18n";
+import { getLocale, getT } from "../../../../i18n";
+import { localeOptions, timezoneOptions } from "@/ui/pickers";
 import { contactFormLabels, mergePanelLabels } from "../contactLabels";
 import { ContactForm } from "../ContactForm";
 import { MergePanel } from "./MergePanel";
@@ -206,6 +207,10 @@ export default async function ContactDetailPage({
         labels={contactFormLabels(t)}
         organizations={organizationResult.rows}
         customFields={customFields}
+        pickers={{
+          locales: localeOptions(await getLocale(), contact.preferredLocale ?? undefined),
+          timezones: timezoneOptions(contact.timezone ?? undefined),
+        }}
         values={{
           id: contact.id,
           name: contact.name,

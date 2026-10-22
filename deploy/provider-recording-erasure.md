@@ -3,11 +3,9 @@
 
 # Provider recording erasure (C1.08 / C3.13)
 
-The implemented flow documented below is the in-tree Daily adapter's: the
-Daily adapter remains as optional non-first-party code, while the de-facto
-first-party provider is paradisemodern's Paradise Comms (owner decision
-2026-09-27), whose recording-delete API is not shipped yet (see the
-PM-path note at the end).
+The implemented flow documented below is the in-tree Daily adapter's. The
+other provider, Paradise Comms (Paradise Modern's hosted relay; neither is
+preselected, owner decisions 2026-09-27 and 2026-10-22), has its own path at the end.
 
 A verified contact erasure commits cleanup jobs in the same database transaction
 that removes local Daily room and artifact rows. The privacy receipt lists the
@@ -76,10 +74,10 @@ by these workers.
 Owner-storage import is implemented (see above); live provider acceptance
 remains open in C3.13.
 
-## Paradise Comms (first-party) path
+## Paradise Comms path
 
-The de-facto first-party voice/video provider is paradisemodern's Paradise
-Comms (owner decision 2026-09-27): prod `https://paradisemodern.com/v1`,
+Paradise Comms is Paradise Modern's hosted voice/video relay, one optional
+provider (owner decisions 2026-09-27 and 2026-10-22): prod `https://paradisemodern.com/v1`,
 per-site `x-api-key` or legacy portfolio bearer tokens. PM shipped the
 recording lifecycle on 2026-09-28 (contract
 `2026-09-28.comms-recording-lifecycle`): `GET /v1/recordings?room_id=…`

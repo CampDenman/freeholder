@@ -288,6 +288,7 @@ export const claimKeyPackages = defineService({
   permission: "authenticated",
   agentCallable: false,
   writeClass: "write",
+  rateLimit: { limit: 120, windowSeconds: 3600, message: "Too many encryption setup attempts. Please wait a little.", subject: (_i, actor) => (actor.kind === "user" ? actor.userId : undefined) },
   input: z.object({ conversationId: uuid, deviceId: uuid, devices: z.array(uuid).min(1).max(200) }),
   output: z.object({ packages: listed(row({ deviceId: uuid, keyPackageId: uuid, keyPackage: z.string() })) }),
   handler: async (input, ctx) => {
@@ -299,6 +300,27 @@ export const claimKeyPackages = defineService({
     const packages = [];
     for (const deviceId of new Set(input.devices)) {
       if (!allowed.has(deviceId) || deviceId === input.deviceId) throw new ServiceError("validation", "That device is not in this conversation.");
+      // One outstanding claim per claiming device and target: a package this
+      // device already took and has not yet welcomed anyone with is handed
+      // back, so repeated claims cannot drain another member's one-time
+      // packages (C11.10).
+      const [held] = await ctx.tx
+        .select()
+        .from(memberKeyPackages)
+        .where(
+          and(
+            eq(memberKeyPackages.deviceId, deviceId),
+            eq(memberKeyPackages.claimedBy, input.deviceId),
+            eq(memberKeyPackages.lastResort, false),
+            sql`not exists (select 1 from ${memberMlsLog} where ${memberMlsLog.keyPackageId} = ${memberKeyPackages.id})`,
+          ),
+        )
+        .orderBy(asc(memberKeyPackages.claimedAt))
+        .limit(1);
+      if (held) {
+        packages.push({ deviceId, keyPackageId: held.id, keyPackage: held.keyPackage });
+        continue;
+      }
       const [oneTime] = await ctx.tx
         .select()
         .from(memberKeyPackages)

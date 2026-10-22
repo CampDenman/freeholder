@@ -880,7 +880,10 @@ export const postQuoteMessage = defineService({
   }),
   output: row({ id: uuid, author: z.enum(QUOTE_AUTHORS), body: z.string() }),
   handler: async (input, ctx) => {
-    const fromOwner = ctx.actor.kind === "user";
+    // Staff speak for the business. A signed-in customer is also a "user",
+    // so the role comes from the quotes grant, never the actor kind (C11.10).
+    const fromOwner =
+      ctx.actor.kind === "user" && permits(ctx.actor, "scoped", "quotes.message", "mutation");
     if (!fromOwner && !input.token) {
       throw new ServiceError("permission", "That link is no longer valid.");
     }
@@ -1338,6 +1341,7 @@ export const expireQuotes = defineService({
  */
 registerContactReference({
   table: "quote_partner_links",
+  columns: ["contact_id", "invited_by_contact_id"],
   repoint: async (tx, duplicateId, survivingId) => {
     const duplicateLinks = await tx
       .select()

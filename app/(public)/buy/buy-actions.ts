@@ -16,6 +16,7 @@ import { redirect } from "next/navigation";
 import { addCartItem, getOrCreateCart } from "@/modules/catalog/cart";
 import { ServiceError } from "@/core/service";
 import { PATH_HEADER } from "@/core/http/headers";
+import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { currentBusiness } from "@/core/settings/read";
 import { getLocale } from "../../i18n";
 import { localizeCustomerHref } from "@/core/i18n/customer";
@@ -79,7 +80,8 @@ export async function addToCartAction(form: FormData): Promise<void> {
           token: credential?.token,
           currency: business?.baseCurrency ?? "USD",
         },
-        ANONYMOUS,
+        // Request metadata keys the per-shopper cart-opening limit (C11.10).
+        { ...ANONYMOUS, request: requestMetadataFromHeaders(await headers()) },
       );
       cart = await addCartItem.call(
         { cartId: opened.cart.id, cartToken: opened.cart.token!, variantId, quantity: 1 },

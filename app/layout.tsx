@@ -15,17 +15,29 @@
 // French pages arrived — which a validator passes, an axe rule passes, and a
 // screen reader reads aloud in the wrong accent. §4.9's locale has to reach
 // the element that declares it.
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { currentBusiness } from "@/core/settings/read";
 import { headers } from "next/headers";
 import { themeStylesheet } from "@/core/design/tokens";
 import { currentDesign } from "@/core/design/read";
 import { CSP_NONCE_HEADER } from "@/core/http/csp";
+import { PATH_HEADER } from "@/core/http/headers";
 import { themeAttribute } from "@/core/design/theme";
 import { readThemePreference } from "./theme";
 import { getLocale, getT } from "./i18n";
 import { env } from "@/core/env";
 import { localeDirection } from "@/core/i18n";
 import "./globals.css";
+
+/**
+ * The fallback document title. Routes set their own; this is what a route
+ * that forgot (or a framework 404) shows instead of an empty <title>.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const [business, t] = await Promise.all([currentBusiness(), getT()]);
+  return { title: business?.name ?? t("common.appName") };
+}
 
 export default async function RootLayout({
   children,
@@ -42,6 +54,11 @@ export default async function RootLayout({
   const t = await getT();
   const playground = env().FREEHOLDER_PLAYGROUND === "1";
   const playgroundUrl = env().FREEHOLDER_PLAYGROUND_URL;
+  const path = requestHeaders.get(PATH_HEADER) ?? "";
+  const insideAdmin = /^\/admin(?:\/|$)/.test(path);
+  // The editor's preview frame shows the page as visitors will see it; the
+  // demo banner belongs to the window around it, not inside the page.
+  const showPlaygroundBanner = playground && !/^\/preview(?:\/|$)/.test(path);
 
   return (
     <html lang={locale} dir={localeDirection(locale)} data-theme={theme}>
@@ -54,12 +71,30 @@ export default async function RootLayout({
         />
       </head>
       <body className="bg-paper font-sans text-ink antialiased">
-        {playground ? <aside className="border-b border-rule bg-surface px-6 py-3 text-center text-sm">
-          {t("playground.banner")} {" "}<a className="text-accent underline" href="/playground">{t("playground.enter")}</a>
-        </aside> : playgroundUrl ? <aside className="border-b border-rule bg-surface px-6 py-3 text-center text-sm">
-          <a className="font-semibold text-accent underline" href={playgroundUrl}>{t("playground.try")}</a>
-        </aside> : null}
-        {children}
+        {showPlaygroundBanner ? (
+          // The banner is written after the page so the page's skip link
+          // stays the first keyboard stop (WCAG 2.4.1); `order-first` still
+          // paints it at the top. Inside the admin the visitor has already
+          // entered, so the link offers the public site instead.
+          <div className="flex min-h-svh flex-col">
+            <div className="flex-1">{children}</div>
+            <aside className="order-first border-b border-rule bg-surface px-6 py-3 text-center text-sm">
+              {t("playground.banner")}{" "}
+              {insideAdmin ? (
+                <a className="text-accent underline" href="/">{t("playground.viewSite")}</a>
+              ) : (
+                <a className="text-accent underline" href="/playground">{t("playground.enter")}</a>
+              )}
+            </aside>
+          </div>
+        ) : (
+          <>
+            {playgroundUrl && !playground ? <aside className="border-b border-rule bg-surface px-6 py-3 text-center text-sm">
+              <a className="font-semibold text-accent underline" href={playgroundUrl}>{t("playground.try")}</a>
+            </aside> : null}
+            {children}
+          </>
+        )}
       </body>
     </html>
   );

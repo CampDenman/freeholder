@@ -156,6 +156,7 @@ function labels(): EditorLabels {
     bullet: "Bullet",
     numbered: "Numbered",
     richHint: "Rich hint",
+    richHtmlRefused: "HTML refused",
     live: "Live",
     draft: "Draft",
     publishChanges: "Publish changes",

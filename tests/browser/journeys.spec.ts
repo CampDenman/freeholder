@@ -354,7 +354,7 @@ test.describe("real-browser product journeys", () => {
       await page.goto("/admin/products/new");
       await expect(page.getByRole("heading", { name: "New product" })).toBeVisible();
       await page.getByLabel("Name").fill("Portrait session");
-      await page.getByLabel("Product address").fill("portrait-session");
+      await page.getByLabel("Page link").fill("portrait-session");
       await page.getByLabel("Product kind").selectOption("service");
       await page.getByLabel("Tax category").selectOption(taxCategory.id);
       await page.getByRole("button", { name: "Create draft product" }).click();
@@ -520,8 +520,8 @@ test.describe("real-browser product journeys", () => {
       await page.getByLabel("Name").fill("Ada Journey");
       await page.getByLabel("Email").fill("ada-journey@example.test");
       await page.getByLabel("Phone").fill("+1 250 555 0199");
-      await page.getByLabel("Preferred language").fill("fr-CA");
-      await page.getByLabel("Time zone").fill("America/Vancouver");
+      await page.getByLabel("Preferred language").selectOption("fr-CA");
+      await page.getByLabel("Time zone").selectOption("America/Vancouver");
       await page.getByLabel("Country").fill("CA");
       await page.getByRole("button", { name: "Add contact" }).click();
       await expect(page).toHaveURL(/\/admin\/contacts\/[0-9a-f-]+$/);
@@ -533,7 +533,12 @@ test.describe("real-browser product journeys", () => {
     });
 
     await test.step("guidance completes only after the real business outcomes", async () => {
+      // The overview leads with the next unfinished first win once this one
+      // is done (2026-10-22 first-run audit); the completed record lives on
+      // the guides page.
       await page.goto("/admin");
+      await expect(page.locator('[data-guidance-flow="core.owner-first-win"]')).toHaveCount(0);
+      await page.goto("/admin/guidance");
       const ownerGuide = page.locator('[data-guidance-flow="core.owner-first-win"]');
       await expect(ownerGuide.locator("header").getByText("Completed")).toBeVisible();
       await expect(ownerGuide.getByRole("progressbar")).toHaveAttribute(

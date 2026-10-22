@@ -236,6 +236,7 @@ export function editorLabels(t: Translate): EditorLabels {
     bullet: t("cms.editor.bullet"),
     numbered: t("cms.editor.numbered"),
     richHint: t("cms.editor.richHint"),
+    richHtmlRefused: t("cms.editor.richHtmlRefused"),
     saveAsSection: t("cms.editor.saveAsSection"),
     detachSection: t("cms.editor.detachSection"),
     sectionName: t("cms.editor.sectionName"),

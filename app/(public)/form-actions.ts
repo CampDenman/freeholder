@@ -14,14 +14,29 @@
 // public surface stays plain server-rendered HTML with no client component and
 // no hydration boundary — which is what §5 and the SEO gate both rest on.
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { submitForm } from "@/modules/forms/service";
+import { HONEYPOT_FIELD, STAMP_FIELD } from "@/modules/forms/antispam";
+import {
+  encodeFormReturn,
+  FORM_RETURN_COOKIE,
+  FORM_RETURN_MAX_AGE,
+  publicFailure,
+} from "@/core/http/public-form-return";
 import { PATH_HEADER } from "@/core/http/headers";
+import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale } from "../i18n";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
+/**
+ * A signed-out visitor, carrying the request's client address so per-client
+ * limits (the playground's among them) key on this visitor rather than on
+ * one bucket every visitor shares.
+ */
+async function visitor() {
+  return { kind: "anonymous" as const, request: requestMetadataFromHeaders(await headers()) };
+}
 
 /**
  * Only a code travels in the URL, never a message.
@@ -52,18 +67,35 @@ export async function submitPublicForm(form: FormData): Promise<void> {
     values[key] = value === "on" ? true : value;
   }
 
+  const jar = await cookies();
   try {
     await submitForm.call(
       { slug, values, sourceUrl: path },
-      ANONYMOUS,
+      await visitor(),
     );
-  } catch {
-    // Deliberately not distinguishing between validation, rate limiting and a
-    // genuine fault in the redirect: a public form that reports *why* it
-    // refused a submission is also telling a script how to get past it.
-    // The owner sees the real reason in the audit log either way.
-    redirect(`${path}?formError=${encodeURIComponent(slug)}`);
+  } catch (error) {
+    // A coarse reason, never the service's text: "check your answers", "wait
+    // a moment", "not available here" or "our fault". That is what a person
+    // needs to know what to do next, and no more than the form's own fields
+    // already say — the spam traps still answer "sent", and the owner sees
+    // the real reason in the audit log either way.
+    const failure = publicFailure(error);
+    // Their answers come back with them, so a refusal is never also the loss
+    // of a carefully written message. The traps are not echoed: refilling
+    // them would mark the next, honest attempt as a bot.
+    const kept = encodeFormReturn(`form:${slug}`, values, [HONEYPOT_FIELD, STAMP_FIELD]);
+    if (kept) {
+      jar.set(FORM_RETURN_COOKIE, kept, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: FORM_RETURN_MAX_AGE,
+      });
+    }
+    redirect(`${path}?formError=${encodeURIComponent(slug)}&failure=${failure}`);
   }
 
+  jar.delete(FORM_RETURN_COOKIE);
   redirect(`${path}?sent=${encodeURIComponent(slug)}`);
 }

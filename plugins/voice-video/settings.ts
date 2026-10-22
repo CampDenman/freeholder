@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { moduleSettings } from "@/core/settings/schema";
 import { decryptSecret, encryptSecret } from "@/core/connections/crypto";
+import { ServiceError } from "@/core/service";
 
 /**
  * The settingsSchema registered on the plugin manifest (§11). Secret fields
@@ -17,6 +18,9 @@ import { decryptSecret, encryptSecret } from "@/core/connections/crypto";
  * them, through `sealParadiseSecrets`.
  */
 export const voiceVideoSettingsSchema = z.object({
+  // The default only reads rows saved before `provider` was always written.
+  // It does not choose a provider for a new instance: with no stored row,
+  // `voiceVideoProvider` refuses until the owner picks one (2026-10-22).
   provider: z.enum(["paradise", "daily"]).default("paradise"),
   paradise: z
     .object({
@@ -32,6 +36,21 @@ export const voiceVideoSettingsSchema = z.object({
 });
 
 export type VoiceVideoSettings = z.infer<typeof voiceVideoSettingsSchema>;
+
+export type VoiceVideoProviderId = VoiceVideoSettings["provider"];
+
+/**
+ * A provider choice from a form. Nothing is preselected (2026-10-22), so an
+ * empty or unknown value is an owner-facing validation refusal, never a
+ * silent default and never a server error.
+ */
+export function parseVoiceVideoProviderChoice(value: unknown): VoiceVideoProviderId {
+  const parsed = voiceVideoSettingsSchema.shape.provider.unwrap().safeParse(value);
+  if (!parsed.success) {
+    throw new ServiceError("validation", "Choose a call provider: Daily or Paradise Comms.");
+  }
+  return parsed.data;
+}
 
 /**
  * The stored settings row (or null when the owner never saved any). Reads
@@ -107,10 +126,10 @@ export interface ParadiseConfig {
 }
 
 /**
- * Defaults applied where the stored config is silent. New instances default
- * to Paradise Comms; instances configured for Daily keep their provider
- * until an owner switches them (owner decision 2026-09-27, no forced
- * migration).
+ * Paradise Comms defaults applied where its stored config is silent.
+ * Neither provider is preselected for a new instance (owner decision
+ * 2026-10-22); instances configured for Daily keep their provider until an
+ * owner switches them (owner decision 2026-09-27, no forced migration).
  */
 export function resolveParadiseConfig(settings: VoiceVideoSettings): ParadiseConfig {
   const paradise = settings.paradise ?? {};

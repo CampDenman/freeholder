@@ -830,6 +830,7 @@ export const expireReservations = defineService({
   permission: "scoped",
   input: z.object({}),
   output: z.object({ expired: z.number().int() }),
+  auditWhen: (out: { expired: number }) => out.expired > 0,
   handler: async (_input, ctx) => {
     const expired = await ctx.tx
       .update(stockReservations)

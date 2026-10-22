@@ -37,6 +37,8 @@ import { hiddenListings } from "./listing-gate";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { requestCustomerMagicLink } from "@/core/auth/magic-links/service";
+import { env } from "@/core/env";
+import { isFictionalEmail, PLAYGROUND_FICTIONAL_EMAIL } from "@/core/demo/playground-policy";
 import { resolveContact } from "@/core/contacts/service";
 import { contacts } from "@/core/contacts/schema";
 import { permits, defineService, ServiceError, type Tx } from "@/core/service";
@@ -389,6 +391,25 @@ export const shopperCheckout = defineService({
         });
         contactId = resolved.contact.id;
       }
+    }
+
+    // C1.38: the public playground sends no mail, so the usual proof (a
+    // magic link) can never arrive. A reserved, undeliverable address is
+    // accepted as its own proof there — nobody can receive at it — and a
+    // real-looking one is refused, so the shared demo never files orders
+    // against a real inbox. Everywhere else the proof below is unchanged.
+    if (!contactId && env().FREEHOLDER_PLAYGROUND === "1" && ctx.actor.kind !== "system") {
+      if (!isFictionalEmail(input.email)) {
+        throw new ServiceError("validation", PLAYGROUND_FICTIONAL_EMAIL);
+      }
+      const resolved = await ctx.callAsSystem(resolveContact, {
+        email: input.email,
+        name: input.name,
+        source: "storefront_checkout",
+        ...(input.locale ? { preferredLocale: input.locale } : {}),
+        ...(input.shippingAddress?.country ? { country: input.shippingAddress.country } : {}),
+      });
+      contactId = resolved.contact.id;
     }
 
     if (!contactId) {

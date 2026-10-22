@@ -10,6 +10,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { ServiceError } from "@/core/service";
 import { declineContract, signContract } from "@/modules/contracts/service";
 
@@ -18,28 +19,10 @@ function text(form: FormData, key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-/**
- * The address the request came from, as far as this deploy can honestly tell.
- *
- * Behind the reverse proxy the platform ships with, `x-forwarded-for` is the
- * client and the left-most entry is the one to keep. It is recorded as
- * evidence of where a signature came from, not relied on as identity — an
- * address is a fact about a request, not a fact about a person.
- */
-async function requestOrigin(): Promise<{ ip: string | null; userAgent: string | null }> {
-  const jar = await headers();
-  const forwarded = jar.get("x-forwarded-for");
-  return {
-    ip: forwarded?.split(",")[0]?.trim() || jar.get("x-real-ip") || null,
-    userAgent: jar.get("user-agent"),
-  };
-}
-
 export async function signAgreementAction(form: FormData): Promise<void> {
   const token = text(form, "token");
   const here = `/portal/agreements/${encodeURIComponent(token)}`;
   try {
-    const origin = await requestOrigin();
     await signContract.call(
       {
         token,
@@ -47,10 +30,8 @@ export async function signAgreementAction(form: FormData): Promise<void> {
         // autofilled name that looks empty to React must not be able to
         // silently stop somebody signing (§15.10).
         signerName: text(form, "signerName"),
-        ip: origin.ip,
-        userAgent: origin.userAgent,
       },
-      { kind: "anonymous" },
+      { kind: "anonymous", request: requestMetadataFromHeaders(await headers()) },
     );
   } catch (error) {
     const message =

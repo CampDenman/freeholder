@@ -288,6 +288,12 @@ function senderRoute(sender: SenderRow): {
 
 /** Preflight the same route used by sendMail, without staging a message. */
 export async function assertMailReady(tx: Tx, purpose: Purpose): Promise<void> {
+  // C1.38: the public playground's transactional mail is a sink. Queuing is
+  // allowed so a visitor's newsletter sign-up or enquiry behaves as it would
+  // on a real site; `deliverQueuedMail` then fails every message closed
+  // before any provider is contacted. Campaign sending stays an owner flow
+  // the playground refuses.
+  if (purpose === "transactional" && playgroundBlocksExternalDelivery(env())) return;
   const sender = await defaultSender(tx, purpose);
   if (!sender && purpose === "bulk") {
     throw new ServiceError("conflict", "Choose and verify a default bulk sender before sending a campaign.");
@@ -424,7 +430,9 @@ export async function sendMail(
       "A personal or transactional mailbox cannot be used for a broadcast.",
     );
   }
-  if (options.requireDelivery && !route.delivers) {
+  // C1.38: in the playground the queue itself is the sink (see
+  // assertMailReady); delivery fails closed in deliverQueuedMail.
+  if (options.requireDelivery && !route.delivers && !(purpose === "transactional" && playgroundBlocksExternalDelivery(env()))) {
     throw new ServiceError(
       "conflict",
       "This instance has no delivering mail adapter. Connect a mailbox or configure SMTP.",

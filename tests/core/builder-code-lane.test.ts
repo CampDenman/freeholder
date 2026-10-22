@@ -6,7 +6,8 @@
 // a droplet is not a build server." So the thing under test is not a sandbox.
 // It is a set of gates written in trusted code, standing between a model's
 // output and an owner's repository, and a delivery path that runs nothing.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { resetEnvForTests } from "@/core/env";
 import { describeProposal, runCodeGates } from "@/modules/builder/code-gates";
 import { toPatch } from "@/modules/builder/code-delivery";
 
@@ -209,5 +210,74 @@ describe("handing a proposal over", () => {
   it("carries every file in one patch", () => {
     const patch = toPatch(goodPlugin());
     expect(patch.match(/diff --git/g)).toHaveLength(2);
+  });
+});
+
+describe("opening the pull request again after a lost result", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.BUILDER_CODE_REPOSITORY;
+    delete process.env.BUILDER_CODE_TOKEN;
+    resetEnvForTests();
+  });
+
+  it("finds the first pull request on the delivery's branch instead of opening a second", async () => {
+    process.env.BUILDER_CODE_REPOSITORY = "owner/site";
+    process.env.BUILDER_CODE_TOKEN = "test-token";
+    resetEnvForTests();
+    // A small GitHub that remembers branches, files and pull requests.
+    const branches = new Set<string>();
+    const files = new Map<string, string>();
+    const pulls: { head: string; number: number }[] = [];
+    let opened = 0;
+    vi.stubGlobal("fetch", async (input: string | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      const body = init?.body ? (JSON.parse(init.body as string) as Record<string, unknown>) : {};
+      const json = (value: unknown, status = 200) =>
+        new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
+      if (url.pathname.endsWith("/pulls") && method === "GET") {
+        const head = url.searchParams.get("head")!.split(":")[1];
+        return json(
+          pulls
+            .filter((pull) => pull.head === head)
+            .map((pull) => ({ html_url: `https://github.test/pull/${pull.number}`, number: pull.number })),
+        );
+      }
+      if (url.pathname.endsWith("/pulls") && method === "POST") {
+        opened += 1;
+        pulls.push({ head: String(body.head), number: opened });
+        return json({ html_url: `https://github.test/pull/${opened}`, number: opened }, 201);
+      }
+      if (url.pathname.includes("/git/ref/heads/")) return json({ object: { sha: "base" } });
+      if (url.pathname.endsWith("/git/refs")) {
+        const ref = String(body.ref);
+        if (branches.has(ref)) return json({ message: "Reference already exists" }, 422);
+        branches.add(ref);
+        return json({ ref }, 201);
+      }
+      if (url.pathname.includes("/contents/")) {
+        const key = `${url.searchParams.get("ref") ?? String(body.branch)}:${url.pathname}`;
+        if (method === "GET") return files.has(key) ? json({ sha: files.get(key) }) : json({}, 404);
+        if (files.has(key) && body.sha !== files.get(key)) return json({ message: "sha required" }, 422);
+        files.set(key, `sha-${files.size}`);
+        return json({ content: {} }, 201);
+      }
+      return json({ message: "unexpected" }, 500);
+    });
+    const { openPullRequest } = await import("@/modules/builder/code-delivery");
+    const request = {
+      files: goodPlugin(),
+      pluginName: "tide-times",
+      title: "tide-times: add",
+      body: "Proposed.",
+      branch: "builder/tide-times-0000abcd",
+    };
+    const first = await openPullRequest(request);
+    // The result was lost (the record step failed); the claim reopens and
+    // the owner retries the same delivery.
+    const second = await openPullRequest(request);
+    expect(second).toEqual(first);
+    expect(opened).toBe(1);
   });
 });

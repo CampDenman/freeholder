@@ -5,8 +5,10 @@
 import { Users, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { contactStats } from "@/core/contacts/service";
 import { recentActivity } from "@/core/events/service";
-import { formatDateTime, type Translate } from "@/core/i18n";
+import { formatDateTime } from "@/core/i18n";
 import { describeAction } from "./describeAction";
+import { actorLabel } from "./actorLabel";
+import { chooseFirstWin } from "@/core/guidance/first-win";
 import { Callout, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { getT } from "../../i18n";
 import { requireStaffActor } from "./guard";
@@ -24,24 +26,24 @@ export const dynamic = "force-dynamic";
 
 
 
-function actorLabel(actor: string, t: Translate): string {
-  if (actor.startsWith("agent:")) return t("actor.agent", { name: actor.slice(6) });
-  if (actor.startsWith("user:")) return t("actor.staff");
-  if (actor === "system") return t("actor.system");
-  return t("actor.visitor");
-}
-
-export default async function AdminOverviewPage() {
+export default async function AdminOverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ activity?: string }>;
+}) {
   // Its own guard, not the layout's: layouts and pages render in parallel, so
   // this must not assume anybody has vetted the caller yet.
   const actor = await requireStaffActor("admin");
+  // The owner's feed is what people did; the platform's own housekeeping is
+  // one click away for anyone diagnosing it, never the default.
+  const includeSystem = (await searchParams).activity === "all";
   const canViewPlatform = hasModuleAccess(actor, "platform", "view");
   const canViewContacts = hasModuleAccess(actor, "contacts", "view");
   const canViewEvents = hasModuleAccess(actor, "events", "view");
   const [business, stats, activity, t, jobSummary, guidance] = await Promise.all([
     currentBusiness(),
     canViewContacts ? contactStats.call({}, actor) : Promise.resolve(null),
-    canViewEvents ? recentActivity.call({ limit: 12 }, actor) : Promise.resolve(null),
+    canViewEvents ? recentActivity.call({ limit: 12, include: includeSystem ? "all" : "people" }, actor) : Promise.resolve(null),
     getT(),
     canViewPlatform ? getJobSummary.call({}, actor) : Promise.resolve(null),
     listGuidance.call({}, actor),
@@ -52,8 +54,7 @@ export default async function AdminOverviewPage() {
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
-  const preferredGuidance =
-    guidance.find((flow) => flow.audienceMatch) ?? guidance[0];
+  const preferredGuidance = chooseFirstWin(guidance);
 
   return (
     <div className="grid gap-6">
@@ -123,7 +124,19 @@ export default async function AdminOverviewPage() {
       </Card> : null}
 
       {activity ? <Card>
-        <CardHeader title={t("admin.overview.activity")} />
+        <CardHeader
+          title={t("admin.overview.activity")}
+          status={
+            <a
+              href={includeSystem ? "/admin" : "/admin?activity=all"}
+              className="text-xs font-medium text-accent underline"
+            >
+              {includeSystem
+                ? t("admin.overview.activityPeople")
+                : t("admin.overview.activityAll")}
+            </a>
+          }
+        />
         <CardBody>
           {activity.length === 0 ? (
             <p className="text-sm text-ink-muted">

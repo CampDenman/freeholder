@@ -20,6 +20,13 @@ import {
   type ActionState,
 } from "../../actions";
 import type { ContactFormLabels } from "./contactLabels";
+import { OptionSelect, type PickerOption } from "@/ui/pickers";
+
+/** A value the owner typed earlier (or an import stored) stays selectable. */
+function withOption(options: PickerOption[], value: string): PickerOption[] {
+  if (!value || options.some((option) => option.value === value)) return options;
+  return [{ value, label: value }, ...options];
+}
 import {
   CustomFieldInputs,
   type CustomFieldInputDefinition,
@@ -45,12 +52,15 @@ export function ContactForm({
   labels,
   organizations,
   customFields,
+  pickers,
   readOnly = false,
 }: {
   values: ContactValues;
   labels: ContactFormLabels;
   organizations: Array<{ id: string; name: string }>;
   customFields: CustomFieldInputDefinition[];
+  /** Built on the server (see src/ui/pickers.tsx) so both renders agree. */
+  pickers: { locales: PickerOption[]; timezones: PickerOption[] };
   readOnly?: boolean;
 }) {
   const editing = Boolean(values.id);
@@ -191,12 +201,13 @@ export function ContactForm({
               htmlFor="preferredLocale"
               hint={labels.preferredLocaleHint}
             >
-              <Input
+              <OptionSelect
                 key={`locale-${generation}`}
                 id="preferredLocale"
                 name="preferredLocale"
                 defaultValue={seed.preferredLocale}
-                placeholder={labels.preferredLocalePlaceholder}
+                options={withOption(pickers.locales, seed.preferredLocale)}
+                emptyLabel={labels.notSet}
                 disabled={readOnly}
               />
             </Field>
@@ -205,12 +216,13 @@ export function ContactForm({
               htmlFor="timezone"
               hint={labels.timezoneHint}
             >
-              <Input
+              <OptionSelect
                 key={`timezone-${generation}`}
                 id="timezone"
                 name="timezone"
                 defaultValue={seed.timezone}
-                placeholder={labels.timezonePlaceholder}
+                options={withOption(pickers.timezones, seed.timezone)}
+                emptyLabel={labels.notSet}
                 disabled={readOnly}
               />
             </Field>

@@ -67,6 +67,18 @@ C11.10 remains unchecked. Validate private object-provider policy and external
 mail/payment acceptance separately; a green mocked provider is not evidence of
 live delivery or settlement.
 
+## 2026-10-21 pre-launch audit
+
+Four read-only agent reviews found access-control, money-path and
+transaction-boundary defects. Each repair (#559–#565) was reviewed by a
+separate agent until nothing blocking remained.
+`security/pre-launch-audit-2026-10-21.md` maps every finding to its PR and
+lists the open residuals. Give these the closest look: the playground
+allow-list, unverified site chat, payout retry and resend rules, the payment
+claim/apply phases and their system elevation, and per-client rate limits
+where no trusted client-IP header is set. This is agent work, not independent
+review. C11.10 stays open.
+
 ## How to use this packet
 
 1. Read `SECURITY.md` for reporting, dependency policy, and 2FA/recovery.
@@ -317,14 +329,15 @@ The ledger of accepted dependency advisories is currently empty.
 
 ### paradisemodern Comms surface (C3.13)
 
-The de-facto first-party voice/video provider is paradisemodern's Paradise
-Comms (owner decision 2026-09-27): prod `https://paradisemodern.com/v1`,
+Paradise Comms is Paradise Modern's hosted voice/video relay, one of two
+interchangeable providers with Daily and not preselected
+(owner decisions 2026-09-27 and 2026-10-22): prod `https://paradisemodern.com/v1`,
 staging `https://comms-staging.paradisemodern.com/v1`; auth is a per-site
 `x-api-key` (carrying comms scopes) or a legacy portfolio bearer token.
 Capabilities `comms.calls/rooms/streams/conversations` are reported by
 `/api/integration/capabilities`.
 
-**Code.** The first-party adapter is the Paradise one —
+**Code.** The Paradise adapter —
 `plugins/voice-video/paradise.ts` (HTTP client), `paradise-provider.ts`
 (seam mapping), `settings.ts` (§41-encrypted secrets in module settings),
 `webhook.ts` plus `app/api/plugins/voice-video/webhooks/paradise/route.ts`

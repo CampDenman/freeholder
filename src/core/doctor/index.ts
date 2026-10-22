@@ -775,11 +775,15 @@ async function checkManagedAgentConnections(): Promise<Check[]> {
         );
       }
       if (!adapter.configured) {
+        // Name every missing setting at once — a gateway can lack both its
+        // URL and its key — so one restart fixes it.
+        const needed = adapter.missing?.length ? adapter.missing : [adapter.credentialRef ?? "its API key"];
+        const missing = needed.join(" and ");
         return fail(
           "agents.managedConnections",
           `Managed runtime — ${connection.name}`,
-          `${adapter.id} is selected but ${adapter.credentialRef} is not set in the environment.`,
-          `Set ${adapter.credentialRef} and restart, or pause the connection. Doctor makes no billable test request.`,
+          `${adapter.id} is selected but ${missing} ${needed.length === 1 ? "is" : "are"} not set.`,
+          `Set ${missing} and restart, or pause the connection. Doctor makes no billable test request.`,
         );
       }
       return ok(

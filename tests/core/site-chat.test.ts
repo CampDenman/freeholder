@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Site live chat, assistant handoff, and click-to-chat boundaries (MASTER C7.15).
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { desc, eq } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { db } from "@/core/db";
 import { SITE_CHAT_COOKIE } from "@/core/messaging/chat-cookie";
@@ -13,10 +13,11 @@ import {
   postSiteChat,
   sendAssistantChatMessage,
   startSiteChat,
+  UNVERIFIED_CHAT_PREFIX,
 } from "@/core/messaging/chat";
-import { replyToConversation } from "@/core/messaging/inbox";
-import { messages, siteChatSessions } from "@/core/messaging/schema";
-import { recordMessage } from "@/core/messaging/service";
+import { replyToConversation, searchInbox } from "@/core/messaging/inbox";
+import { conversations, messages, siteChatSessions } from "@/core/messaging/schema";
+import { getConversation, recordMessage } from "@/core/messaging/service";
 import { consentRecords } from "@/core/privacy/schema";
 import { ready } from "@/core/runtime";
 import { GET as getChatRoute, POST as postChatRoute } from "../../app/api/chat/route";
@@ -24,13 +25,33 @@ import {
   messengerDeepLink,
   whatsappDeepLink,
 } from "@/modules/cms/blocks/surfaces";
+import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
+import { contacts } from "@/core/contacts/schema";
+import { createContact } from "@/core/contacts/service";
 import {
   closeDb,
+  CUSTOMER,
   failure,
   hasDatabase,
   OWNER,
   truncateSpine,
 } from "../helpers/spine";
+
+// The public chat block posts through a Server Action that reads the session
+// cookie and request headers; these stand in for Next's request scope.
+const jar = vi.hoisted((): { cookies: Record<string, string> } => ({ cookies: {} }));
+vi.mock("next/headers", () => ({
+  headers: async () => ({ get: () => null }),
+  cookies: async () => ({
+    get: (name: string) => (jar.cookies[name] === undefined ? undefined : { value: jar.cookies[name] }),
+    set: (name: string, value: string) => {
+      jar.cookies[name] = value;
+    },
+    delete: (name: string) => {
+      delete jar.cookies[name];
+    },
+  }),
+}));
 
 const ASSISTANT = {
   kind: "agent" as const,
@@ -100,6 +121,77 @@ describe.runIf(hasDatabase)("site live chat", { timeout: 90_000 }, () => {
     expect(new Set(rows.map((message) => message.conversationId))).toEqual(
       new Set([started.conversationId]),
     );
+  });
+
+  it("gives an unverified chat start its own thread so it cannot take over another visitor's (C11.10)", async () => {
+    const victim = await begin();
+    const impostor = await begin();
+    expect(impostor.contactId).toBe(victim.contactId);
+    expect(impostor.conversationId).not.toBe(victim.conversationId);
+    // The first visitor keeps their session, and a reply on their thread goes
+    // to them alone.
+    await replyToConversation.call(
+      { id: victim.conversationId, body: "Your booking is confirmed.", close: false },
+      OWNER,
+    );
+    expect((await getSiteChat.call({ token: victim.token }, ANONYMOUS)).messages.map((m) => m.body))
+      .toContain("Your booking is confirmed.");
+    expect((await getSiteChat.call({ token: impostor.token }, ANONYMOUS)).messages.map((m) => m.body))
+      .not.toContain("Your booking is confirmed.");
+  });
+
+  it("continues a signed-in customer's own thread through the chat block, and nobody else's (C11.10)", async () => {
+    const { submitInboundAction } = await import("../../app/(public)/inbound-actions");
+    await db().insert(users).values({ id: CUSTOMER.userId, email: "ada@example.test", role: "customer" });
+    const contact = await createContact.call({ name: "Ada", email: "ada@example.test" }, OWNER);
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, contact.id));
+    const session = await db().transaction((tx) => createSession(tx, CUSTOMER.userId));
+    const chat = async (signedIn: boolean) => {
+      jar.cookies = signedIn ? { [SESSION_COOKIE]: session.token } : {};
+      const form = new FormData();
+      form.set("kind", "chat");
+      form.set("name", "Ada");
+      form.set("email", "ada@example.test");
+      form.set("message", "Hello again");
+      await expect(submitInboundAction(form)).rejects.toThrow(/NEXT_REDIRECT/);
+      const [own] = await db()
+        .select()
+        .from(siteChatSessions)
+        .where(eq(siteChatSessions.contactId, contact.id))
+        .orderBy(desc(siteChatSessions.createdAt))
+        .limit(1);
+      return own!.conversationId;
+    };
+    const first = await chat(true);
+    expect(await chat(true)).toBe(first);
+    expect(await chat(false)).not.toBe(first);
+  });
+
+  it("keeps an unverified chat off the customer's own conversation and its reply channel (C11.10)", async () => {
+    const enquiry = await recordMessage.call(
+      { email: "ada@example.test", name: "Ada", direction: "inbound", channel: "form", subject: "Enquiry", body: "A sitting, please." },
+      { kind: "system" },
+    );
+    const [opened] = await db().select().from(conversations).where(eq(conversations.id, enquiry.conversation.id));
+    const before = opened!.replyChannel;
+    expect(before).not.toBe("chat");
+    const impostor = await begin();
+    expect(impostor.contactId).toBe(enquiry.conversation.contactId);
+    expect(impostor.conversationId).not.toBe(enquiry.conversation.id);
+    const [canonical] = await db().select().from(conversations).where(eq(conversations.id, enquiry.conversation.id));
+    expect(canonical?.replyChannel).toBe(before);
+    // The owner's answer to the enquiry goes to the customer's address, never
+    // to the browser that typed it.
+    const reply = await replyToConversation.call({ id: enquiry.conversation.id, body: "Next month works.", close: false }, OWNER);
+    expect(reply.channel).toBe("email");
+    expect((await getSiteChat.call({ token: impostor.token }, ANONYMOUS)).messages.map((m) => m.body)).not.toContain("Next month works.");
+    const [unverified] = await db().select().from(conversations).where(eq(conversations.id, impostor.conversationId));
+    expect(unverified?.threadKey?.startsWith(UNVERIFIED_CHAT_PREFIX)).toBe(true);
+    // The owner sees two rows, and the chat is marked for what it is.
+    const listed = await searchInbox.call({}, OWNER);
+    expect(listed.find((row) => row.id === impostor.conversationId)).toMatchObject({ unverified: true, contactEmail: "ada@example.test" });
+    expect(listed.find((row) => row.id === enquiry.conversation.id)).toMatchObject({ unverified: false });
+    expect(await getConversation.call({ id: impostor.conversationId }, OWNER)).toMatchObject({ unverified: true });
   });
 
   it("never exposes another channel from the shared Contact conversation", async () => {

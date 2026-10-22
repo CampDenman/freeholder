@@ -13,8 +13,39 @@ import { closeDb, db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { validateSession } from "@/core/auth/sessions";
 import { resetEnvForTests } from "@/core/env";
-import { enterPlayground, initializePlayground } from "@/core/demo/playground";
-import { PLAYGROUND_MANAGE, PLAYGROUND_ROW_CAPS, PLAYGROUND_VIEW, playgroundAllows } from "@/core/demo/playground-policy";
+import { enterPlayground, initializePlayground, markPlaygroundBaseline } from "@/core/demo/playground";
+import {
+  PLAYGROUND_MANAGE,
+  PLAYGROUND_CLIENT_LIMITS,
+  PLAYGROUND_PUBLIC,
+  PLAYGROUND_PUBLIC_CONTACT_CAP,
+  PLAYGROUND_PUBLIC_REFUSED,
+  PLAYGROUND_SUBMISSION_BYTES,
+  PLAYGROUND_ROW_CAPS,
+  PLAYGROUND_VIEW,
+  playgroundAllows,
+  playgroundScreenIsReadOnly,
+} from "@/core/demo/playground-policy";
+import { ready } from "@/core/runtime";
+import { listServices, permits } from "@/core/service";
+import { contacts } from "@/core/contacts/schema";
+import { createForm, submitForm } from "@/modules/forms/service";
+import { formSubmissions } from "@/modules/forms/schema";
+import { createNewsletter, subscribeToNewsletter } from "@/modules/newsletters/service";
+import { addEventSession, addEventTicket, createEvent, publishEvent, registerForEvent } from "@/modules/events/service";
+import {
+  addCartItem,
+  applyVariantMatrix,
+  createPriceList,
+  createProduct,
+  getOrCreateCart,
+  getProductVariants,
+  setPriceListEntry,
+} from "@/modules/catalog/service";
+import { submitQuoteRequest } from "@/modules/cms/inbound";
+import { beginCustomerCheckout } from "@/modules/invoicing/customer-service";
+import { requestCustomerMagicLink } from "@/core/auth/magic-links/service";
+import { updateBusiness } from "@/core/settings/service";
 import { createPage, updatePage, getPage, publishPage } from "@/modules/cms/service";
 import { pages } from "@/modules/cms/schema";
 import { seedDemoIfRequested } from "@/modules/seed/boot";
@@ -40,6 +71,54 @@ it("requires explicit opt-in for each editing action", () => {
     expect(playgroundAllows(name, "mutation")).toBe(false);
   }
   expect(playgroundAllows("cms.updatePage", "mutation")).toBe(true);
+});
+
+it("treats only the content modules as editable admin screens", () => {
+  // Editable: the screens whose saves the mutation allow-list accepts.
+  for (const path of ["/admin", "/admin/pages", "/admin/pages/new", "/admin/forms/abc", "/admin/contacts", "/admin/products/new"]) {
+    expect(playgroundScreenIsReadOnly(path), path).toBe(false);
+  }
+  // A read-only tour stop: the admin shell says so above the form.
+  for (const path of ["/admin/promotions", "/admin/events", "/admin/invoices", "/admin/inbox", "/admin/design", "/admin/pagesx"]) {
+    expect(playgroundScreenIsReadOnly(path), path).toBe(true);
+  }
+});
+
+describe("playground public-site policy (2026-10-22)", () => {
+  it("lets the public site's own actions through and keeps credential and provider flows out", () => {
+    for (const name of ["forms.submit", "newsletters.subscribe", "events.register", "catalog.addCartItem", "catalog.shopperCheckout", "cms.submitSiteChat", "share.shareVia", "popups.capture", "reviews.submit"]) {
+      expect(playgroundAllows(name, "mutation"), name).toBe(true);
+    }
+    for (const name of ["auth.requestCustomerMagicLink", "portal.requestSignIn", "invoicing.beginCustomerCheckout", "invoicing.claimCustomerCheckout", "assistant.answer", "media.signUploadClaim"]) {
+      expect(playgroundAllows(name, "mutation"), name).toBe(false);
+    }
+  });
+
+  it("classifies every public mutation exactly once, so a new public verb is a decision", async () => {
+    await ready();
+    const publicMutations = [...listServices().values()]
+      .filter((service) => service.def.kind === "mutation" && service.def.permission === "public")
+      .map((service) => service.def.name);
+    const allowed = new Set<string>(PLAYGROUND_PUBLIC);
+    const unclassified = publicMutations.filter(
+      (name) => !allowed.has(name) && !(name in PLAYGROUND_PUBLIC_REFUSED) && name !== "playground.enter",
+    );
+    expect(unclassified).toEqual([]);
+    for (const name of PLAYGROUND_PUBLIC) {
+      expect(name in PLAYGROUND_PUBLIC_REFUSED, name).toBe(false);
+      // Named services must exist and be public mutations; a rename fails here.
+      expect(publicMutations, name).toContain(name);
+    }
+    // Public verbs that add a row of their own carry a cap; the community
+    // join (a member row per email) was missed once.
+    for (const name of ["forms.submit", "events.register", "community.joinBySlug", "catalog.getOrCreateCart", "reviews.submit"]) {
+      expect(PLAYGROUND_ROW_CAPS[name], name).toBeDefined();
+    }
+    // Every capped public surface is one the policy actually allows.
+    for (const name of Object.keys(PLAYGROUND_ROW_CAPS)) {
+      expect(playgroundAllows(name, "mutation"), name).toBe(true);
+    }
+  });
 });
 
 describe.runIf(hasDatabase)("playground row caps name real tables", () => {
@@ -249,6 +328,264 @@ describe.runIf(hasDatabase)("disposable playground", () => {
       message: "The shared playground is busy. Please try again shortly.",
     });
   });
+
+  it("accepts the public site's visitor actions without letting them reach the outside world", async () => {
+    await initializePlayground();
+    // Fixtures as an ordinary install would hold them: the playground policy
+    // rightly refuses this setup to every non-system caller.
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "0"); resetEnvForTests();
+    await updateBusiness.call({ name: "Aurora Coast Photography", country: "CA", baseCurrency: "CAD", timezone: "America/Vancouver" }, OWNER);
+    await createForm.call({
+      slug: "contact",
+      name: "Enquiry",
+      fields: [
+        { key: "name", label: "Your name", kind: "text", required: true },
+        { key: "email", label: "Email", kind: "email", required: true },
+        { key: "message", label: "Message", kind: "multiline", required: true },
+      ],
+    }, OWNER);
+    const newsletter = await createNewsletter.call({ name: "Letter", slug: "letter" }, OWNER);
+    const event = await createEvent.call({ name: "Coast walk", slug: "coast-walk" }, OWNER);
+    const session = await addEventSession.call({
+      eventId: event.id,
+      startsAt: new Date(Date.now() + 7 * 86_400_000),
+      endsAt: new Date(Date.now() + 7 * 86_400_000 + 7_200_000),
+      timezone: "America/Vancouver",
+      capacity: 10,
+      waitlistEnabled: false,
+    }, OWNER);
+    const ticket = await addEventTicket.call({ eventId: event.id, name: "Free", priceMinor: 0, currency: "CAD" }, OWNER);
+    const published = await publishEvent.call({ id: event.id, expectedVersion: event.version }, OWNER);
+    const product = await createProduct.call({ name: "Print", slug: "print", kind: "physical" }, OWNER);
+    const matrix = await applyVariantMatrix.call({ productId: product.id, expectedVersion: product.version }, OWNER);
+    const variant = (await getProductVariants.call({ productId: matrix.id }, OWNER)).variants[0]!;
+    const list = await createPriceList.call({ name: "CAD retail", currency: "CAD", kind: "retail" }, OWNER);
+    await setPriceListEntry.call({ priceListId: list.id, variantId: variant.id, amount: "40.00" }, OWNER);
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1"); resetEnvForTests();
+
+    // Signed out, as a visitor to the demo's public site.
+    const sent = await submitForm.call({
+      slug: "contact",
+      values: { name: "Ada", email: "ada@example.test", message: "Do you shoot in October?" },
+      sourceUrl: "/contact",
+    }, ANONYMOUS);
+    expect(sent.ok).toBe(true);
+    const subscribed = await subscribeToNewsletter.call({ newsletterId: newsletter.id, email: "ada@example.test" }, ANONYMOUS);
+    expect(subscribed.status).toBe("pending");
+    const registered = await registerForEvent.call({
+      eventId: published.id, sessionId: session.id, ticketId: ticket.id, email: "ada@example.test", name: "Ada",
+    }, ANONYMOUS);
+    expect(registered.registration.status).toBe("confirmed");
+    const cart = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
+    const filled = await addCartItem.call({ cartId: cart.cart.id, cartToken: cart.cart.token, variantId: variant.id, quantity: 1 }, ANONYMOUS);
+    expect(filled.lines).toHaveLength(1);
+    await submitQuoteRequest.call({ name: "Ada", email: "ada@example.test", message: "A quote for prints, please." }, ANONYMOUS);
+
+    // The same actions as the signed-in playground visitor browsing the site.
+    const visitor = await visitorActor();
+    expect((await submitForm.call({
+      slug: "contact",
+      values: { name: "Grace", email: "grace@example.test", message: "Hello from the playground." },
+    }, visitor)).ok).toBe(true);
+
+    // Nothing they did can leave the box: the subscription's confirmation
+    // was queued like any other mail and fails closed at delivery.
+    const queued = await db().select().from(mailDeliveries);
+    expect(queued.length).toBeGreaterThan(0);
+    for (const delivery of queued) {
+      await expect(deliverQueuedMail(delivery.id)).resolves.toEqual({ status: "failed" });
+    }
+    expect(
+      (await db().select({ lastError: mailDeliveries.lastError }).from(mailDeliveries))
+        .every((row) => row.lastError === "External mail delivery is disabled in the public playground."),
+    ).toBe(true);
+    // Credential and payment-provider flows stay refused, signed out or not.
+    const unavailable = { code: "permission", message: "This action is unavailable in the public playground." };
+    await expect(requestCustomerMagicLink.call({ email: "ada@example.test" }, ANONYMOUS)).rejects.toMatchObject(unavailable);
+    await expect(
+      beginCustomerCheckout.call({ id: "00000000-0000-4000-8000-000000000009", token: "x".repeat(43) }, ANONYMOUS),
+    ).rejects.toMatchObject(unavailable);
+  }, 60_000);
+
+  it("caps the public contact form like every other writable surface", async () => {
+    await initializePlayground();
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "0"); resetEnvForTests();
+    const form = await createForm.call({
+      slug: "contact",
+      name: "Enquiry",
+      fields: [{ key: "message", label: "Message", kind: "multiline", required: true }],
+      destination: "none",
+    }, OWNER);
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1"); resetEnvForTests();
+    const cap = PLAYGROUND_ROW_CAPS["forms.submit"]!.limit;
+    await db().insert(formSubmissions).values(
+      Array.from({ length: cap }, (_, index) => ({ formId: form.id, data: { message: `filler ${index}` }, status: "received" as const })),
+    );
+    await expect(
+      submitForm.call({ slug: "contact", values: { message: "one too many" } }, ANONYMOUS),
+    ).rejects.toMatchObject({ code: "rate_limited" });
+  });
+
+  it("queues transactional mail to the playground sink where an ordinary install without a provider refuses", async () => {
+    await initializePlayground();
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "0"); resetEnvForTests();
+    const newsletter = await createNewsletter.call({ name: "Letter", slug: "letter" }, OWNER);
+    // No delivering provider: an ordinary install refuses before queuing.
+    await expect(
+      subscribeToNewsletter.call({ newsletterId: newsletter.id, email: "ada@example.test" }, ANONYMOUS),
+    ).rejects.toThrow(/delivering mail provider|delivering mail adapter/);
+    expect(await db().select().from(mailDeliveries)).toHaveLength(0);
+    // The playground queues it to the sink, and the sink never delivers.
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1"); resetEnvForTests();
+    const subscribed = await subscribeToNewsletter.call({ newsletterId: newsletter.id, email: "ada@example.test" }, ANONYMOUS);
+    expect(subscribed.status).toBe("pending");
+    const [queued] = await db().select().from(mailDeliveries);
+    expect(queued?.status).toBe("queued");
+    await expect(deliverQueuedMail(queued!.id)).resolves.toEqual({ status: "failed" });
+    const [after] = await db().select().from(mailDeliveries).where(eq(mailDeliveries.id, queued!.id));
+    expect(after?.lastError).toBe("External mail delivery is disabled in the public playground.");
+  });
+
+  it("bounds one public submission's size, tighter in the playground", async () => {
+    await initializePlayground();
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "0"); resetEnvForTests();
+    await createForm.call({
+      slug: "long",
+      name: "Long answers",
+      destination: "none",
+      fields: [
+        { key: "a", label: "A", kind: "multiline", maxLength: 5_000 },
+        { key: "b", label: "B", kind: "multiline", maxLength: 5_000 },
+      ],
+    }, OWNER);
+    const long = { a: "x".repeat(4_500), b: "y".repeat(4_500) };
+    expect(JSON.stringify(long).length).toBeGreaterThan(PLAYGROUND_SUBMISSION_BYTES);
+    // An ordinary install takes it: under the global ceiling.
+    expect((await submitForm.call({ slug: "long", values: long }, ANONYMOUS)).ok).toBe(true);
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1"); resetEnvForTests();
+    await expect(submitForm.call({ slug: "long", values: long }, ANONYMOUS)).rejects.toMatchObject({ code: "validation" });
+    await expect(submitForm.call({ slug: "long", values: long }, ANONYMOUS)).rejects.toThrow(/too long/);
+    expect((await submitForm.call({ slug: "long", values: { a: "short" } }, ANONYMOUS)).ok).toBe(true);
+  });
+
+  it("caps the contacts every public verb grows behind its own cap", async () => {
+    await initializePlayground();
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "0"); resetEnvForTests();
+    await createForm.call({
+      slug: "contact",
+      name: "Enquiry",
+      destination: "none",
+      fields: [{ key: "message", label: "Message", kind: "multiline", required: true }],
+    }, OWNER);
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1"); resetEnvForTests();
+    await db().insert(contacts).values(
+      Array.from({ length: PLAYGROUND_PUBLIC_CONTACT_CAP.limit }, (_, index) => ({
+        name: `Filler ${index}`,
+        email: `filler-${index}@example.test`,
+      })),
+    );
+    // forms.submit's own cap has room; the shared contacts cap does not.
+    await expect(
+      submitForm.call({ slug: "contact", values: { message: "hello" } }, ANONYMOUS),
+    ).rejects.toMatchObject({ code: "rate_limited" });
+  });
+
+  it("counts caps from the seeded sample, so a large seed never closes the public site", async () => {
+    await initializePlayground();
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "0"); resetEnvForTests();
+    const form = await createForm.call({
+      slug: "contact",
+      name: "Enquiry",
+      destination: "none",
+      fields: [{ key: "message", label: "Message", kind: "multiline", required: true }],
+    }, OWNER);
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1"); resetEnvForTests();
+    // A seed bigger than either cap: contacts and form submissions alike.
+    const seededContacts = PLAYGROUND_PUBLIC_CONTACT_CAP.limit + 50;
+    const seededSubmissions = PLAYGROUND_ROW_CAPS["forms.submit"]!.limit + 50;
+    await db().insert(contacts).values(
+      Array.from({ length: seededContacts }, (_, index) => ({ name: `Seed ${index}`, email: `seed-${index}@example.test` })),
+    );
+    await db().insert(formSubmissions).values(
+      Array.from({ length: seededSubmissions }, (_, index) => ({ formId: form.id, data: { message: `seed ${index}` }, status: "received" as const })),
+    );
+    // Without a baseline the seed alone would fill both caps…
+    await expect(submitForm.call({ slug: "contact", values: { message: "hello" } }, ANONYMOUS)).rejects.toMatchObject({ code: "rate_limited" });
+    // …with the boot-time baseline, visitors keep their whole allowance.
+    await markPlaygroundBaseline();
+    expect((await submitForm.call({ slug: "contact", values: { message: "hello" } }, ANONYMOUS)).ok).toBe(true);
+    // A restart mid-hour re-runs boot; it must not re-baseline visitor rows.
+    await submitForm.call({ slug: "contact", values: { message: "before restart" } }, ANONYMOUS);
+    await markPlaygroundBaseline();
+    const [stored] = await db().execute<{ baseline: Record<string, number> }>(
+      sql`select config->'baseline' as baseline from module_settings where module = 'playground'`,
+    );
+    expect(stored?.baseline.form_submissions).toBe(seededSubmissions);
+    // And the cap still bites on what visitors add past the seed.
+    await db().insert(formSubmissions).values(
+      Array.from({ length: PLAYGROUND_ROW_CAPS["forms.submit"]!.limit }, (_, index) => ({ formId: form.id, data: { message: `visitor ${index}` }, status: "received" as const })),
+    );
+    await expect(submitForm.call({ slug: "contact", values: { message: "one too many" } }, ANONYMOUS)).rejects.toMatchObject({ code: "rate_limited" });
+  }, 120_000);
+
+  it("spends one client's budget before the ceiling every visitor shares", async () => {
+    await initializePlayground();
+    const actor = await visitorActor();
+    const script = { ...actor, request: { trustedIp: "203.0.113.5" } };
+    const neighbour = { ...actor, request: { trustedIp: "203.0.113.6" } };
+    let allowed = 0;
+    let refusal: unknown;
+    for (let index = 0; index < 80 && !refusal; index += 1) {
+      await logout.call({ token: `client-${index}` }, script).then(
+        () => { allowed += 1; },
+        (error: unknown) => { refusal = error; },
+      );
+    }
+    expect(allowed).toBe(PLAYGROUND_CLIENT_LIMITS.perMinute.limit);
+    expect(refusal).toMatchObject({ code: "rate_limited" });
+    expect((refusal as Error).message).toMatch(/this connection/);
+    // Another visitor is unaffected: the script spent its own budget only.
+    await expect(logout.call({ token: "neighbour" }, neighbour)).resolves.toBeDefined();
+  });
+
+  it("shows the visitor no secret-shaped field from any query it may read", async () => {
+    vi.stubEnv("FREEHOLDER_SEED_DEMO", "1"); resetEnvForTests();
+    await initializePlayground();
+    await seedDemoIfRequested();
+    const actor = await visitorActor();
+    await ready();
+    const secretShaped = /(secret|token|password|credential|private_?key|api_?key|access_?key|signing_?key|^key_?hash$|^hash$)/i;
+    // Reviewed: identifiers named like secrets that are not secrets.
+    const reviewed = new Set<string>([]);
+    const findings: string[] = [];
+    const walk = (value: unknown, path: string) => {
+      if (Array.isArray(value)) value.forEach((item, index) => walk(item, `${path}[${index}]`));
+      else if (value && typeof value === "object" && !(value instanceof Date)) {
+        for (const [key, inner] of Object.entries(value)) {
+          if (secretShaped.test(key) && !reviewed.has(key) && typeof inner === "string" && inner.length > 0) {
+            findings.push(`${path}.${key}`);
+          }
+          walk(inner, `${path}.${key}`);
+        }
+      }
+    };
+    let read = 0;
+    for (const service of listServices().values()) {
+      const { def } = service;
+      if (def.kind !== "query" || def.permission === "public" || def.permission === "system") continue;
+      if (!permits(actor, def.permission, def.name, "query")) continue;
+      let output: unknown;
+      try {
+        output = await service.call({}, actor);
+      } catch {
+        continue; // needs an id or refused: nothing returned to scan
+      }
+      read += 1;
+      walk(output, def.name);
+    }
+    expect(read).toBeGreaterThan(20);
+    expect(findings).toEqual([]);
+  }, 180_000);
 
   it("refuses entry on ordinary client installations", async () => {
     vi.stubEnv("FREEHOLDER_PLAYGROUND", "0"); resetEnvForTests();

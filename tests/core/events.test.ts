@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Events: venue, sessions, seats, tickets, waitlists, ICS, check-in (C6.11).
 
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { mailDeliveries } from "@/core/mail/schema";
@@ -34,7 +34,11 @@ import {
 } from "@/modules/invoicing/payment-provider-service";
 import { beginCustomerCheckout } from "@/modules/invoicing/customer-service";
 import { invoices } from "@/modules/invoicing/schema";
+import { addTaxRate, createTaxZone, setTaxRegistration } from "@/modules/invoicing/tax-service";
+import { createLocationService } from "@/core/locations/service";
+import { contacts } from "@/core/contacts/schema";
 import { ANONYMOUS, closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { consume, rateLimitKey } from "@/core/security/rate-limit";
 
 describe.runIf(hasDatabase)("events module", { timeout: 30_000 }, () => {
   beforeEach(async () => {
@@ -264,6 +268,95 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     expect(still?.status).toBe("reserved");
   });
 
+  it("taxes admission where the event happens, and a free-text venue at the business's location", async () => {
+    const studio = await createLocationService.call({ name: "Studio", slug: "studio", city: "Courtenay", region: "BC", country: "CA" }, OWNER);
+    const zone = await createTaxZone.call(
+      { name: "Canada", country: "CA", regions: [], postalPatterns: [], basis: "destination", pricesIncludeTax: false, roundingScope: "invoice", roundingMode: "half_up" },
+      OWNER,
+    );
+    await setTaxRegistration.call({ zoneId: zone.id, number: "123456789RT0001", status: "active" }, OWNER);
+    await addTaxRate.call({ zoneId: zone.id, name: "GST", jurisdiction: "Canada", ratePpm: 50_000, appliesToShipping: false }, OWNER);
+    const invoiceFor = async (venue: { venueLocationId?: string; venueName?: string; venueAddress?: string }) => {
+      const event = await createEvent.call({ name: "Taxed class", slug: `taxed-${crypto.randomUUID().slice(0, 8)}`, ...venue }, OWNER);
+      const session = await addEventSession.call(
+        { eventId: event.id, startsAt: new Date(Date.now() + 7 * 86_400_000), endsAt: new Date(Date.now() + 7 * 86_400_000 + 3_600_000), capacity: 5, waitlistEnabled: false },
+        OWNER,
+      );
+      const ticket = await addEventTicket.call({ eventId: event.id, name: "General", priceMinor: 6_500, currency: "CAD" }, OWNER);
+      await publishEvent.call({ id: event.id, expectedVersion: event.version }, OWNER);
+      const held = await registerForEvent.call(
+        { eventId: event.id, sessionId: session.id, ticketId: ticket.id, email: `taxed-${crypto.randomUUID().slice(0, 8)}@example.test` },
+        ANONYMOUS,
+      );
+      const [invoice] = await db().select().from(invoices).where(eq(invoices.id, held.registration.invoiceId!));
+      return invoice!;
+    };
+    // At the business, or at a saved location: taxed there.
+    expect(await invoiceFor({})).toMatchObject({ subtotalMinor: 6_500, taxMinor: 325, totalMinor: 6_825 });
+    expect(await invoiceFor({ venueLocationId: studio.id })).toMatchObject({ taxMinor: 325, totalMinor: 6_825 });
+    // A venue typed as free text cannot be placed in a jurisdiction: it is
+    // taxed as if held at the business, and the invoice says so.
+    const elsewhere = await invoiceFor({ venueName: "Community hall", venueAddress: "12 Main St, Banff" });
+    expect(elsewhere).toMatchObject({ taxMinor: 325, totalMinor: 6_825 });
+    expect(elsewhere.memo).toMatch(/worked out at the business's location/);
+  });
+
+  it("reaches newer lapsed holds before ones a payment attempt is still holding", async () => {
+    const first = await paidClass(1);
+    const inflight = await registerForEvent.call(
+      { eventId: first.event.id, sessionId: first.session.id, ticketId: first.ticket.id, email: "inflight2@example.test" },
+      ANONYMOUS,
+    );
+    await createPayment.call(
+      { invoiceId: inflight.registration.invoiceId!, provider: "manual", method: "bank_transfer", amountMinor: first.ticket.priceMinor, idempotencyKey: `inflight2-${inflight.registration.id}` },
+      OWNER,
+    );
+    const second = await paidClass(1);
+    const lapsed = await registerForEvent.call(
+      { eventId: second.event.id, sessionId: second.session.id, ticketId: second.ticket.id, email: "lapsed4@example.test" },
+      ANONYMOUS,
+    );
+    // The held one lapsed first, so oldest-first alone would pick it every time.
+    await db().update(eventRegistrations).set({ holdExpiresAt: new Date(Date.now() - 120_000) }).where(eq(eventRegistrations.id, inflight.registration.id));
+    await db().update(eventRegistrations).set({ holdExpiresAt: new Date(Date.now() - 60_000) }).where(eq(eventRegistrations.id, lapsed.registration.id));
+    expect(await expireHeldRegistrations.call({ limit: 1 }, { kind: "system" })).toEqual({ expired: 1, blocked: 0, failed: 0 });
+    const [released] = await db().select().from(eventRegistrations).where(eq(eventRegistrations.id, lapsed.registration.id));
+    expect(released?.status).toBe("cancelled");
+  });
+
+  it("releases every other lapsed hold when one cannot be released", async () => {
+    const first = await paidClass(1);
+    const stuck = await registerForEvent.call(
+      { eventId: first.event.id, sessionId: first.session.id, ticketId: first.ticket.id, email: "stuck@example.test" },
+      ANONYMOUS,
+    );
+    await registerForEvent.call(
+      { eventId: first.event.id, sessionId: first.session.id, ticketId: first.ticket.id, email: "erased@example.test" },
+      ANONYMOUS,
+    );
+    // The next in line has since had their email erased, so promoting them
+    // cannot send the invoice that is their notification.
+    await db().update(contacts).set({ email: null }).where(eq(contacts.email, "erased@example.test"));
+    const second = await paidClass(1);
+    const lapsed = await registerForEvent.call(
+      { eventId: second.event.id, sessionId: second.session.id, ticketId: second.ticket.id, email: "lapsed3@example.test" },
+      ANONYMOUS,
+    );
+    await db().update(eventRegistrations).set({ holdExpiresAt: new Date(Date.now() - 120_000) }).where(eq(eventRegistrations.id, stuck.registration.id));
+    await db().update(eventRegistrations).set({ holdExpiresAt: new Date(Date.now() - 60_000) }).where(eq(eventRegistrations.id, lapsed.registration.id));
+
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const swept = await expireHeldRegistrations.call({}, { kind: "system" });
+    expect(swept).toEqual({ expired: 1, blocked: 0, failed: 1 });
+    expect(errors).toHaveBeenCalledTimes(1);
+    errors.mockRestore();
+    const [released] = await db().select().from(eventRegistrations).where(eq(eventRegistrations.id, lapsed.registration.id));
+    expect(released?.status).toBe("cancelled");
+    // The one that failed is left exactly as it was, for the next sweep or the owner.
+    const [kept] = await db().select().from(eventRegistrations).where(eq(eventRegistrations.id, stuck.registration.id));
+    expect(kept?.status).toBe("reserved");
+  });
+
   it("expires a lapsed hold: seat released, invoice voided, waitlisted paid row promoted with a fresh invoice by email", async () => {
     const { event, session, ticket } = await paidClass(1);
     const held = await registerForEvent.call(
@@ -482,4 +575,43 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     expect(second.registration.status).toBe("reserved");
     expect(second.registration.id).not.toBe(first.registration.id);
   });
+
+  it("caps the free seats one public registration can take, but not staff's (C11.10)", async () => {
+    const { event, session, ticket } = await paidClass(100, 0);
+    const base = { eventId: event.id, sessionId: session.id, ticketId: ticket.id };
+    expect(
+      await failure(registerForEvent.call({ ...base, email: "made-up@example.test", quantity: 50 }, ANONYMOUS)),
+    ).toMatchObject({ code: "validation" });
+    const party = await registerForEvent.call({ ...base, email: "party@example.test", quantity: 10 }, ANONYMOUS);
+    expect(party.registration.status).toBe("confirmed");
+    const block = await registerForEvent.call({ ...base, email: "school@example.test", quantity: 40 }, OWNER);
+    expect(block.registration.quantity).toBe(40);
+  });
+
+  it("bounds public registrations per address (C11.10)", async () => {
+    const codes: string[] = [];
+    for (let index = 0; index < 11; index++) {
+      const { event, session, ticket } = await paidClass(5, 0);
+      codes.push(
+        await registerForEvent.call(
+          { eventId: event.id, sessionId: session.id, ticketId: ticket.id, email: "flood@example.test" },
+          ANONYMOUS,
+        ).then(() => "ok", (error: { code?: string }) => error.code ?? "error"),
+      );
+    }
+    expect(codes.slice(0, 10).every((code) => code === "ok")).toBe(true);
+    expect(codes[10]).toBe("rate_limited");
+  }, 120_000);
+
+  it("stops one client cycling made-up addresses, even without a trusted proxy (C11.10)", async () => {
+    const { event, session, ticket } = await paidClass(100, 0);
+    const key = rateLimitKey("events.register", "untrusted-ip:203.0.113.60");
+    for (let index = 0; index < 30; index++) await consume(key, { limit: 30, windowSeconds: 3600 });
+    const base = { eventId: event.id, sessionId: session.id, ticketId: ticket.id };
+    expect(
+      await failure(registerForEvent.call({ ...base, email: "new-name@example.test" }, { kind: "anonymous", request: { ip: "203.0.113.60" } })),
+    ).toMatchObject({ code: "rate_limited" });
+    const other = await registerForEvent.call({ ...base, email: "neighbour@example.test" }, { kind: "anonymous", request: { ip: "203.0.113.61" } });
+    expect(other.registration.status).toBe("confirmed");
+  }, 120_000);
 });

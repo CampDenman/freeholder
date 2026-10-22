@@ -8,7 +8,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/core/env";
 import { AdapterError } from "../types";
-import { object, paymentFetch, providerJson } from "../payments/http";
+import { object, paymentFetch } from "../payments/http";
+import { payoutJson } from "./http";
 import type { PayoutAccountStatus, PayoutProvider } from "./types";
 
 export interface StripeConnectOptions {
@@ -51,7 +52,7 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
         ...rest.headers,
       },
     });
-    return providerJson("stripe_connect", response);
+    return payoutJson("stripe_connect", response);
   }
 
   return {

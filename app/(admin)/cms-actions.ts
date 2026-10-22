@@ -230,8 +230,10 @@ export async function leavePresenceAction(pageId: string): Promise<void> {
 }
 
 export async function addCommentAction(form: FormData): Promise<void> {
-  const mentions = text(form, "mentions")
-    .split(",")
+  // One `mentions` value per ticked teammate; a comma list is still accepted.
+  const mentions = form
+    .getAll("mentions")
+    .flatMap((value) => (typeof value === "string" ? value.split(",") : []))
     .map((value) => value.trim())
     .filter(Boolean);
   await addComment.call(

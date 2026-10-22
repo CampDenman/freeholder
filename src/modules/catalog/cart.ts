@@ -22,7 +22,7 @@ import {
   type ServiceContext,
   type Tx,
 } from "@/core/service";
-import { managesCartTokens, requireCartAccess, requireOwnedContact } from "./cart-access";
+import { managesCartTokens, requireCartAccess, requireOwnedContact, shopperClientKey } from "./cart-access";
 import { CART_KINDS, CART_STATUSES } from "./contract";
 import { availability, releaseReservation, reserveStock } from "./inventory";
 import { resolvePrice } from "./pricing";
@@ -290,6 +290,14 @@ export const getOrCreateCart = defineService({
   summary: "Open a guest or authorized contact cart and issue its private access token.",
   kind: "mutation",
   permission: "public",
+  // Opening carts is bounded per shopper, so fresh carts cannot reset limits
+  // that other cart services count (C11.10). Staff are not limited.
+  rateLimit: {
+    limit: 60,
+    windowSeconds: 10 * 60,
+    message: "Too many carts opened. Wait a few minutes and try again.",
+    subject: (_input, actor) => (managesCartTokens(actor) ? undefined : `cart-open:${shopperClientKey(actor).key}`),
+  },
   input: z.object({
     token: z.string().uuid().optional(),
     contactId: id.optional(),
@@ -962,6 +970,7 @@ export const abandonStaleCarts = defineService({
   permission: "scoped",
   input: z.object({}),
   output: z.object({ abandoned: z.number().int() }),
+  auditWhen: (out: { abandoned: number }) => out.abandoned > 0,
   handler: async (_input, ctx) => {
     const cutoff = new Date(Date.now() - ABANDON_AFTER_MS);
     const stale = await ctx.tx

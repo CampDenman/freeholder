@@ -85,7 +85,7 @@ export default async function PromotionsPage({
                 </Select>
               </Field>
               <Field label={t("catalog.promo.percentPpm")} htmlFor="coupon-ppm">
-                <Input id="coupon-ppm" name="percentOffPpm" inputMode="numeric" defaultValue="100000" />
+                <Input id="coupon-ppm" name="percentOff" inputMode="decimal" defaultValue="10" />
               </Field>
               <Field label={t("catalog.promo.amount")} htmlFor="coupon-amount">
                 <Input id="coupon-amount" name="amount" inputMode="decimal" />

@@ -317,6 +317,27 @@ describe.runIf(hasDatabase)("contact import", { timeout: 90_000 }, () => {
     expect(await db().select().from(contacts)).toHaveLength(1);
   });
 
+  it("keeps a field somebody edited after the import when it is undone (C11.10)", async () => {
+    await getService("contacts.resolve").call(
+      { email: "rae@example.test", name: "Rae Lane", source: "form" },
+      { kind: "system" },
+    );
+    const batch = await mapped();
+    await commitContactImport.call({ id: batch.id }, OWNER);
+    // Staff correct the phone after the import; the country is untouched.
+    await db()
+      .update(contacts)
+      .set({ phone: "+44 7700 900999" })
+      .where(eq(contacts.email, "rae@example.test"));
+
+    await revertContactImport.call({ id: batch.id }, OWNER);
+    const [rae] = await db()
+      .select()
+      .from(contacts)
+      .where(eq(contacts.email, "rae@example.test"));
+    expect(rae).toMatchObject({ phone: "+44 7700 900999", country: null, tags: [] });
+  });
+
   // The rule that makes undo safe to offer at all.
   it("keeps somebody the import created who has done business since", async () => {
     const batch = await mapped();

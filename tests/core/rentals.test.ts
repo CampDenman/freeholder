@@ -35,6 +35,7 @@ import {
 } from "@/modules/rentals/service";
 import { quoteRental, returnOutcome, unitsBetween } from "@/modules/rentals/pricing";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { consume, rateLimitKey } from "@/core/security/rate-limit";
 
 const TERMS = {
   unit: "day" as const,
@@ -302,6 +303,93 @@ describe.runIf(hasDatabase)("hiring things out", { timeout: 90_000 }, () => {
 
     const held = await db().select({ id: bookings.id }).from(bookings);
     expect(held).toHaveLength(1);
+  });
+
+  it("lands a visitor's hire as a request the owner confirms (C11.10)", async () => {
+    const { variantId } = await tripod();
+    const visitor = await reserve(variantId);
+    const [requested] = await db()
+      .select({ status: bookings.status })
+      .from(bookings)
+      .where(eq(bookings.id, visitor.bookingId!));
+    expect(requested?.status).toBe("requested");
+    // Handing it over is the owner's confirmation of the request.
+    await handOver.call({ id: visitor.id }, OWNER);
+    const [accepted] = await db()
+      .select({ status: bookings.status })
+      .from(bookings)
+      .where(eq(bookings.id, visitor.bookingId!));
+    expect(accepted?.status).toBe("confirmed");
+
+    const staff = await reserveHire.call(
+      {
+        variantId,
+        contact: { email: "walk-in@example.test" },
+        startsAt: "2026-10-14T09:00:00.000Z",
+        endsAt: "2026-10-15T09:00:00.000Z",
+        currency: "GBP",
+      },
+      OWNER,
+    );
+    const [confirmed] = await db()
+      .select({ status: bookings.status })
+      .from(bookings)
+      .where(eq(bookings.id, staff.bookingId!));
+    expect(confirmed?.status).toBe("confirmed");
+  });
+
+  it("lets only a signed-in person waive booking requirements at hand-over (C11.10)", async () => {
+    const { variantId } = await tripod();
+    const hire = await reserve(variantId);
+    // A person's own API key is a user actor too, but it carries no session.
+    const keyed = { ...OWNER, keyScopes: ["rentals.handOver"] } as const;
+    const refused = await failure(handOver.call({ id: hire.id, overrideRequirements: true }, keyed));
+    expect(refused.code).toBe("permission");
+    // An agent is refused before anything else.
+    const agent = await failure(
+      handOver.call({ id: hire.id, overrideRequirements: true }, { kind: "agent", keyName: "bot", scopes: ["*"] }),
+    );
+    expect(agent.code).toBe("permission");
+    // The owner at the counter, in a browser session, may.
+    const out = await handOver.call({ id: hire.id, overrideRequirements: true }, { ...OWNER, sessionId: "counter" });
+    expect(out.status).toBe("out");
+  });
+
+  it("bounds how many hires one address can request (C11.10)", async () => {
+    const { variantId } = await tripod();
+    const codes: string[] = [];
+    for (let week = 0; week < 6; week++) {
+      const from = new Date(Date.UTC(2026, 10, 2 + week * 7, 9)).toISOString();
+      const to = new Date(Date.UTC(2026, 10, 3 + week * 7, 9)).toISOString();
+      codes.push(await reserve(variantId, "flood@example.test", from, to).then(() => "ok", (error: { code?: string }) => error.code ?? "error"));
+    }
+    expect(codes).toEqual(["ok", "ok", "ok", "ok", "ok", "rate_limited"]);
+  });
+
+  it("stops one client cycling made-up addresses, even without a trusted proxy (C11.10)", async () => {
+    const { variantId } = await tripod();
+    // The client's earlier requests this hour, under twenty different emails.
+    const key = rateLimitKey("rentals.reserve", "untrusted-ip:203.0.113.50");
+    for (let index = 0; index < 20; index++) await consume(key, { limit: 20, windowSeconds: 3600 });
+    const refused = await failure(
+      reserveHire.call(
+        {
+          variantId,
+          contact: { email: "fresh-name@example.test" },
+          startsAt: FROM,
+          endsAt: TO,
+          currency: "GBP",
+        },
+        { kind: "anonymous", request: { ip: "203.0.113.50" } },
+      ),
+    );
+    expect(refused.code).toBe("rate_limited");
+    // Somebody else at another address is unaffected.
+    const other = await reserveHire.call(
+      { variantId, contact: { email: "neighbour@example.test" }, startsAt: FROM, endsAt: TO, currency: "GBP" },
+      { kind: "anonymous", request: { ip: "203.0.113.51" } },
+    );
+    expect(other.status).toBe("reserved");
   });
 
   it("holds the turnaround time as well as the hire", async () => {

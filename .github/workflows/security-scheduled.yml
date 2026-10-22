@@ -33,13 +33,16 @@ jobs:
           path: artifacts/dependency-audit.json
           if-no-files-found: error
           retention-days: 30
+      # The exclusions name only files whose credential-shaped strings are
+      # deliberate fixtures (example.com URLs, .env.example placeholders).
+      # Unreachable fixtures verify as "unknown" and failed every run.
       - name: Full-history secret scan
         uses: trufflesecurity/trufflehog@363923b901c911a9164f50b6c423f47c15372b1c # v3.97.4
         with:
           base: ""
           head: HEAD
           version: 3.97.4
-          extra_args: --results=verified,unknown --fail-on-scan-errors
+          extra_args: --results=verified,unknown --fail-on-scan-errors --exclude-paths=.github/trufflehog-exclude.txt
       - uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           languages: javascript-typescript
