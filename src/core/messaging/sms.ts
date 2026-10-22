@@ -577,6 +577,11 @@ export const sendSms = defineService({
 
     // A retry with the same key is the same message. The delivery job's id is
     // the message id, so its idempotency claim leads straight back to it.
+    // Two concurrent sends with one key queue on this lock, so the second
+    // sees the first's claim instead of colliding with it.
+    await ctx.tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`sms-send:${input.idempotencyKey}`}, 0))`,
+    );
     const [staged] = await ctx.tx
       .select({ jobId: jobIdempotencyKeys.jobId })
       .from(jobIdempotencyKeys)
@@ -765,9 +770,79 @@ const applySmsSendResult = defineService({
  * retried job cannot send twice; a text that already has a provider reference
  * or a recorded failure is left alone.
  */
+type QueuedSms = { messageId: string; provider: string; from: string; idempotencyKey: string };
+
+/**
+ * Whether a staged text may still go, decided again at delivery time: a STOP,
+ * an invalid-number mark or a changed number that arrived while the message
+ * waited in the queue must stop it, exactly as it would have stopped a send.
+ */
+const checkSmsDelivery = defineService({
+  name: "messaging.checkSmsDelivery",
+  summary: "Re-check consent and number validity for a staged text before it is sent.",
+  kind: "query",
+  permission: "system",
+  agentCallable: false,
+  mcpExclude: true,
+  external: false,
+  input: z.object({ messageId: id }),
+  output: row({ allowed: z.boolean(), reason: z.string().nullable() }),
+  handler: async (input, ctx) => {
+    const [message] = await ctx.tx
+      .select()
+      .from(messages)
+      .where(eq(messages.id, input.messageId))
+      .limit(1);
+    if (!message?.recipientAddress) {
+      return { allowed: false, reason: "The message is no longer here to send." };
+    }
+    try {
+      await smsContact(ctx, message.contactId, message.recipientAddress);
+      if (message.purpose) {
+        await assertSmsPurposeAllowed(ctx, {
+          contactId: message.contactId,
+          to: message.recipientAddress,
+          purpose: message.purpose,
+        });
+      }
+    } catch (error) {
+      if (error instanceof ServiceError) return { allowed: false, reason: error.message };
+      throw error;
+    }
+    return { allowed: true, reason: null };
+  },
+});
+
 export async function deliverQueuedSms(
-  data: { messageId: string; provider: string; from: string; idempotencyKey: string },
+  data: QueuedSms,
   attempt = 1,
+): Promise<{ status: "submitted" | "failed" | "skipped" }> {
+  try {
+    return await attemptQueuedSms(data);
+  } catch (error) {
+    // Transient — a provider outage, a storage URL, a database read: the
+    // queue retries with the same provider idempotency token. The last
+    // attempt records a failure an owner can see instead of leaving the
+    // message queued forever.
+    if (attempt <= SMS_DELIVERY_RETRIES) throw error;
+    await applySmsSendResult.call(
+      {
+        outcome: "failed",
+        messageId: data.messageId,
+        errorCode: error instanceof AdapterError ? (error.providerCode ?? null) : null,
+        errorText: (error instanceof AdapterError || error instanceof ServiceError
+          ? error.message
+          : "The message could not be sent."
+        ).slice(0, 500),
+      },
+      { kind: "system" },
+    );
+    return { status: "failed" };
+  }
+}
+
+async function attemptQueuedSms(
+  data: QueuedSms,
 ): Promise<{ status: "submitted" | "failed" | "skipped" }> {
   const system: Actor = { kind: "system" };
   const [message] = await db()
@@ -795,6 +870,8 @@ export async function deliverQueuedSms(
   }
   const adapter = smsAdapter(data.provider);
   if (!adapter.available) return fail(adapter.status.message);
+  const still = await checkSmsDelivery.call({ messageId: message.id }, system);
+  if (!still.allowed) return fail(still.reason ?? "This text may no longer be sent.");
 
   let mediaUrls: string[] = [];
   if (message.mediaAssetIds.length > 0) {
@@ -828,14 +905,6 @@ export async function deliverQueuedSms(
       HARD_INVALID_NUMBER_CODES.has(error.providerCode)
     ) {
       return fail(error.message, error.providerCode);
-    }
-    // Transient: the queue retries with the same provider idempotency token.
-    // Only the last attempt is recorded as a failure an owner can see.
-    if (attempt > SMS_DELIVERY_RETRIES) {
-      return fail(
-        error instanceof AdapterError ? error.message : "The message could not be sent.",
-        error instanceof AdapterError ? (error.providerCode ?? null) : null,
-      );
     }
     throw error;
   }
@@ -1294,6 +1363,7 @@ export default [
   setRegistration,
   sendSms,
   applySmsSendResult,
+  checkSmsDelivery,
   importMessagingNumbersApply,
   checkNumberHealthApply,
   applySmsEvents,

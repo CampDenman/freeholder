@@ -19,6 +19,7 @@ const INTERNAL = [
   // C11.10: records a carrier's answer for a text staged by messaging.sendSms,
   // from the post-commit delivery job.
   "messaging.applySmsSendResult",
+  "messaging.checkSmsDelivery",
   // C11.10: the phases around a gallery package's storage reads and write.
   "galleries.buildArchiveApply",
   "galleries.buildArchiveFail",
@@ -207,6 +208,7 @@ const CALLER_AUTHORIZED_PHASES = [
   // I/O, so no service transaction is held open across it.
   "messaging.applySmsSendResult",
   "messaging.checkNumbersApply",
+  "messaging.checkSmsDelivery",
   "messaging.importNumbersApply",
   "media.applyCaptureAssembly",
   "media.applyCaptureChunk",
@@ -219,6 +221,10 @@ const CALLER_AUTHORIZED_PHASES = [
   "connections.syncCalendarsApply",
   "connections.syncCalendarsDiscover",
   "connections.syncCalendarsSource",
+  "agents.claimApproval",
+  "agents.completeApproval",
+  "agents.proposeWriteGate",
+  "agents.releaseApproval",
   "builder.claimCodeDelivery",
   "builder.recordCodeDelivery",
   "builder.releaseCodeDelivery",

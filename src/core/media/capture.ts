@@ -228,6 +228,17 @@ async function authorizedSession(
   return load(ctx, row.id);
 }
 
+async function lockedSession(ctx: ServiceContext, sessionId: string) {
+  const [row] = await ctx.tx
+    .select()
+    .from(mediaCaptureSessions)
+    .where(eq(mediaCaptureSessions.id, sessionId))
+    .for("update")
+    .limit(1);
+  if (!row) throw new ServiceError("not_found", "That capture session is not here.");
+  return row;
+}
+
 function assertOpen(existing: typeof mediaCaptureSessions.$inferSelect): void {
   if (["confirmed", "discarded", "expired"].includes(existing.status)) {
     throw new ServiceError("conflict", "That capture session is closed.");
@@ -1147,8 +1158,12 @@ const applyCaptureChunk = defineService({
     bytes: z.number().int(),
   }),
   handler: async (input, ctx) => {
-    const existing = await authorizedSession(ctx, input, "media.appendCaptureChunk");
-    assertSameSession(existing, input.sessionId);
+    const authorized = await authorizedSession(ctx, input, "media.appendCaptureChunk");
+    assertSameSession(authorized, input.sessionId);
+    // The session row, not the (possibly not yet existing) chunk row, is the
+    // lock: two uploads of one timeslice serialize here, so the second sees
+    // the first's key as `previous` and queues it for deletion.
+    const existing = await lockedSession(ctx, authorized.id);
     assertOpen(existing);
     const [previous] = await ctx.tx
       .select({ storageKey: mediaCaptureChunks.storageKey })
@@ -1329,8 +1344,12 @@ const applyCaptureAssembly = defineService({
     .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
   output: z.object({ session: captureSessionView, asset: z.null() }),
   handler: async (input, ctx) => {
-    const existing = await authorizedSession(ctx, input, "media.assembleCapture");
-    assertSameSession(existing, input.sessionId);
+    const authorized = await authorizedSession(ctx, input, "media.assembleCapture");
+    assertSameSession(authorized, input.sessionId);
+    // Re-read under lock: a session confirmed or discarded while the bytes
+    // were assembled must not be reopened as a preview.
+    const existing = await lockedSession(ctx, authorized.id);
+    assertOpen(existing);
     const chunks = await ctx.tx
       .select({ storageKey: mediaCaptureChunks.storageKey })
       .from(mediaCaptureChunks)

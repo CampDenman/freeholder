@@ -639,6 +639,10 @@ export const deliverCode = defineOrchestratedService({
         pluginName: claimed.pluginName,
         title: claimed.title,
         body: claimed.body,
+        // One branch per proposal, so a retry after GitHub succeeded but the
+        // result was not recorded finds that pull request instead of opening
+        // a second one.
+        branch: `builder/${claimed.pluginName}-${input.id.slice(0, 8)}`,
       });
     } catch (error) {
       await releaseCodeDelivery.call({ id: input.id }, actor);

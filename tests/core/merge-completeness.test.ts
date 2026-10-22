@@ -121,7 +121,15 @@ function columnsNamedLikeContactReferences(): Array<{
   return found;
 }
 
-/** `table.column` for every column a registered repoint covers. */
+/**
+ * `table.column` for every column a registered repoint *declares*.
+ *
+ * Limit, stated rather than hidden: this trusts the declaration. Whether each
+ * repoint really moves every column it names is proven per module by its own
+ * merge test (documents, referrals-commission, …), not by this reflection —
+ * seeding every table's required parents generically is not something a
+ * schema scan can do honestly.
+ */
 function repointedColumns(): Set<string> {
   return new Set(
     contactReferences().flatMap((reference) =>
@@ -130,44 +138,67 @@ function repointedColumns(): Set<string> {
   );
 }
 
+/** The discriminator/id pairs a polymorphic pointer is written with. */
+const POLYMORPHIC_PAIRS: ReadonlyArray<readonly [kind: string, id: string]> = [
+  ["subject_type", "subject_id"],
+  ["subject_kind", "subject_id"],
+  ["target_type", "target_id"],
+  ["target_kind", "target_id"],
+  ["entity_type", "entity_id"],
+  ["parent_type", "parent_id"],
+  ["owner_type", "owner_id"],
+  ["resource_type", "resource_id"],
+];
+
 /**
- * Tables that point at a record through a `subject_type` + `subject_id` pair.
- * When the subject can be a contact, `subject_id` is a contact reference no
- * foreign key will ever show — so each such table needs a decision.
+ * `table.id_column` for every polymorphic pointer (`subject_type` +
+ * `subject_id`, `subject_kind`, `target_type`, `entity_type`, …). When the
+ * pointer can name a contact, the id column is a contact reference no foreign
+ * key will ever show — so each needs a decision.
  */
-function polymorphicSubjectTables(): string[] {
-  return allTables()
-    .map((table) => getTableConfig(table))
-    .filter(
-      (config) =>
-        config.columns.some((column) => column.name === "subject_type") &&
-        config.columns.some((column) => column.name === "subject_id"),
-    )
-    .map((config) => config.name);
+function polymorphicPointers(): string[] {
+  const found: string[] = [];
+  for (const table of allTables()) {
+    const config = getTableConfig(table);
+    const names = new Set(config.columns.map((column) => column.name));
+    for (const [kind, id] of POLYMORPHIC_PAIRS) {
+      if (names.has(kind) && names.has(id)) found.push(`${config.name}.${id}`);
+    }
+  }
+  return [...new Set(found)];
 }
 
 /**
- * Polymorphic subject columns the merge leaves alone, with why. Everything
- * else that can name a contact as its subject must declare `subject_id` in
- * its registerContactReference() columns and repoint it.
+ * Polymorphic pointers the merge leaves alone, with why. Every other pointer
+ * that can name a contact must be declared in its table's
+ * registerContactReference() columns and repointed.
  */
-const POLYMORPHIC_SUBJECT_EXCLUSIONS: Record<string, string> = {
-  audit_log:
+const POLYMORPHIC_EXCLUSIONS: Record<string, string> = {
+  "audit_log.subject_id":
     "The audit log is an immutable record of what happened to which id; rewriting it would falsify history.",
-  timeline_events:
+  "timeline_events.subject_id":
     "A timeline entry's subject records the id the event was about at the time; the entry itself follows its contact_id.",
-  demo_records:
+  "demo_records.subject_id":
     "Demo bookkeeping names the fixture rows it created so a reset removes exactly those; a merged demo contact is removed by its surviving id.",
-  content_revisions:
-    "CMS revisions are about pages and sections, never contacts.",
-  money_state_events:
+  "content_revisions.subject_id": "CMS revisions are about pages and sections, never contacts.",
+  "money_state_events.subject_id":
     "Money state history is an append-only ledger of invoice/payment/refund transitions, never contacts.",
-  reviews:
+  "reviews.subject_id":
     "A review's subject is the thing reviewed (a product, service or location), never a contact; the reviewer follows contact_id.",
-  review_requests:
-    "Same as reviews: the subject is what is to be reviewed, never a contact.",
-  contract_documents:
+  "review_requests.subject_id": "Same as reviews: the subject is what is to be reviewed, never a contact.",
+  "contract_documents.subject_id":
     "A contract's subject is the quote, booking, rental or project it governs; the signer follows contact_id.",
+  "runs.subject_id": "RUN_SUBJECTS is agent_task | automation (an enum); a run is never about a contact.",
+  "run_approvals.subject_id": "Same RUN_SUBJECTS enum as runs: an approval belongs to an agent task.",
+  "media_consents.subject_id":
+    "The consent covers a project (subject_kind 'project'); the person who gave it follows contact_id.",
+  "entity_translations.entity_id":
+    "Translations belong to published content (pages, events, locations, catalogue), never to a contact record.",
+  "content_layouts.entity_id": "LAYOUT_ENTITY_TYPES is an enum of content types, none of them contacts.",
+  "member_reports.target_id":
+    "REPORT_TARGETS are member-network objects (posts, comments, messages, listings, reviews, members), not CRM contacts.",
+  "member_attachments.parent_id": "ATTACHMENT_PARENTS is post | comment | message.",
+  "media_capture_sessions.target_id": "A capture lands on the library, a product or a page, never a contact.",
 };
 
 describe("contacts.merge covers the whole spine", () => {
@@ -235,25 +266,28 @@ describe("contacts.merge covers the whole spine", () => {
     ).toEqual([]);
   });
 
-  it("decides what a merge means for every polymorphic subject that can be a contact", () => {
+  it("decides what a merge means for every polymorphic pointer that can be a contact", () => {
     const covered = repointedColumns();
-    const tables = polymorphicSubjectTables();
-    // Guards the reflection itself.
-    expect(tables).toContain("commission_events");
-    expect(tables).toContain("documents");
-    const undecided = tables.filter(
-      (table) => !covered.has(`${table}.subject_id`) && !(table in POLYMORPHIC_SUBJECT_EXCLUSIONS),
+    const pointers = polymorphicPointers();
+    // Guards the reflection itself, across the pair shapes it reads.
+    expect(pointers).toContain("commission_events.subject_id");
+    expect(pointers).toContain("documents.subject_id");
+    expect(pointers).toContain("attestations.subject_id");
+    expect(pointers).toContain("runs.subject_id");
+    expect(pointers).toContain("entity_translations.entity_id");
+    const undecided = pointers.filter(
+      (pointer) => !covered.has(pointer) && !(pointer in POLYMORPHIC_EXCLUSIONS),
     );
     expect(
       undecided,
       undecided.length === 0
         ? ""
-        : `These tables can name a contact through subject_type/subject_id but contacts.merge ` +
-            `neither repoints subject_id nor records why it is left alone: ${undecided.join(", ")}. ` +
-            `Repoint subject_id where subject_type = 'contact' (and name it in columns), or ` +
-            `document the decision in POLYMORPHIC_SUBJECT_EXCLUSIONS.`,
+        : `These polymorphic pointers can name a contact but contacts.merge neither repoints ` +
+            `them nor records why they are left alone: ${undecided.join(", ")}. Repoint the id ` +
+            `where the kind is 'contact' (and name it in columns), or document the decision in ` +
+            `POLYMORPHIC_EXCLUSIONS.`,
     ).toEqual([]);
-    const stale = Object.keys(POLYMORPHIC_SUBJECT_EXCLUSIONS).filter((table) => !tables.includes(table));
+    const stale = Object.keys(POLYMORPHIC_EXCLUSIONS).filter((pointer) => !pointers.includes(pointer));
     expect(stale).toEqual([]);
   });
 
@@ -264,7 +298,7 @@ describe("contacts.merge covers the whole spine", () => {
     const real = new Set([
       ...tablesReferencingContacts().map(({ table, column }) => `${table}.${column}`),
       ...columnsNamedLikeContactReferences().map(({ table, column }) => `${table}.${column}`),
-      ...polymorphicSubjectTables().map((table) => `${table}.subject_id`),
+      ...polymorphicPointers(),
     ]);
     const stale = [...repointedColumns()].filter((column) => !real.has(column));
 

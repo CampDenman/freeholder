@@ -241,6 +241,75 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
     expect(asset.bytes).toBe(original.byteLength);
   });
 
+  it("queues the losing object when one timeslice is uploaded twice at once", async () => {
+    const session = await createCaptureSession.call({ source: "screen" }, OWNER);
+    await grantCapturePermission.call({ id: session.id }, OWNER);
+    const { appendCaptureChunk } = await import("@/core/media/capture");
+    const { mediaCaptureChunks } = await import("@/core/media/schema");
+    const { startJobProducer } = await import("@/core/jobs");
+    const { db } = await import("@/core/db");
+    const { eq } = await import("drizzle-orm");
+    const store = storage();
+    const put = store.put.bind(store);
+    const written: string[] = [];
+    const recording = vi.spyOn(store, "put").mockImplementation(async (key, ...rest) => {
+      written.push(key);
+      return put(key, ...rest);
+    });
+    try {
+      const bytes = new Uint8Array([1, 2, 3]);
+      await Promise.all([
+        appendCaptureChunk.call({ id: session.id, sequence: 0, contentType: "video/webm", bytes }, OWNER),
+        appendCaptureChunk.call({ id: session.id, sequence: 0, contentType: "video/webm", bytes }, OWNER),
+      ]);
+    } finally {
+      recording.mockRestore();
+    }
+    expect(written).toHaveLength(2);
+    const [kept] = await db()
+      .select()
+      .from(mediaCaptureChunks)
+      .where(eq(mediaCaptureChunks.sessionId, session.id));
+    const loser = written.find((key) => key !== kept!.storageKey)!;
+    const jobs = (await (await startJobProducer())!.findJobs("core.deleteCaptureObjects")) as Array<{
+      data: { keys: string[] };
+    }>;
+    // Without a lock both applies saw no earlier chunk, and the loser's
+    // object was left in storage with nothing pointing at it.
+    expect(jobs.some((job) => job.data.keys.includes(loser))).toBe(true);
+  });
+
+  it("does not reopen a capture confirmed while its recording was assembled", async () => {
+    const session = await createCaptureSession.call({ source: "screen" }, OWNER);
+    await grantCapturePermission.call({ id: session.id }, OWNER);
+    const { appendCaptureChunk, assembleCapture } = await import("@/core/media/capture");
+    const { mediaCaptureSessions } = await import("@/core/media/schema");
+    const { db } = await import("@/core/db");
+    const { eq } = await import("drizzle-orm");
+    await appendCaptureChunk.call(
+      { id: session.id, sequence: 0, contentType: "image/png", bytes: await png() },
+      OWNER,
+    );
+    const store = storage();
+    const put = store.put.bind(store);
+    const racing = vi.spyOn(store, "put").mockImplementation(async (key, ...rest) => {
+      if (key.includes("/item/")) {
+        await db()
+          .update(mediaCaptureSessions)
+          .set({ status: "confirmed", completedAt: new Date() })
+          .where(eq(mediaCaptureSessions.id, session.id));
+      }
+      return put(key, ...rest);
+    });
+    try {
+      const closed = await failure(assembleCapture.call({ id: session.id, filename: "late.png" }, OWNER));
+      expect(closed.code).toBe("conflict");
+    } finally {
+      racing.mockRestore();
+    }
+    expect((await getCaptureSession.call({ id: session.id }, OWNER))?.status).toBe("confirmed");
+  });
+
   it("refuses to assemble a recording with a missing chunk", async () => {
     // Local playback on the recording device always looks whole, so the
     // server is the only place a dropped upload can be caught before the

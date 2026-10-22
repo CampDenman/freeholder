@@ -728,6 +728,37 @@ describe.runIf(hasDatabase)("commission, holdbacks and payouts", () => {
     expect(restored!.subjectId).toBe(dupe.id);
   });
 
+  it("merges two people who both earned the same code's signup commission", async () => {
+    // One commission per code per conversion: repointing the duplicate's row
+    // onto the survivor would collide and abort the whole merge.
+    const { mergeContacts, undoContactMerge } = await import("@/core/contacts/service");
+    await referredSale({ totalMinor: 10_000 });
+    const dupe = await contact("twice.second@example.com", "Sam");
+    const survivor = await contact("twice@example.com", "Sam");
+    const [event] = await db().select().from(commissionEvents);
+    const { id: _id, createdAt: _c, updatedAt: _u, ...copy } = event!;
+    void _id; void _c; void _u;
+    await db()
+      .update(commissionEvents)
+      .set({ subjectType: "contact", subjectId: dupe.id, status: "pending" })
+      .where(eq(commissionEvents.id, event!.id));
+    const [kept] = await db()
+      .insert(commissionEvents)
+      .values({ ...copy, subjectType: "contact", subjectId: survivor.id, status: "pending" })
+      .returning();
+
+    const merged = await mergeContacts.call({ duplicateId: dupe.id, survivingId: survivor.id }, OWNER);
+    const [duplicateRow] = await db().select().from(commissionEvents).where(eq(commissionEvents.id, event!.id));
+    const [survivorRow] = await db().select().from(commissionEvents).where(eq(commissionEvents.id, kept!.id));
+    // The survivor's stands; the duplicate's double payment is reversed.
+    expect(survivorRow).toMatchObject({ subjectId: survivor.id, status: "pending" });
+    expect(duplicateRow).toMatchObject({ subjectId: dupe.id, status: "reversed" });
+
+    await undoContactMerge.call({ operationId: merged.mergeOperationId }, OWNER);
+    const [restored] = await db().select().from(commissionEvents).where(eq(commissionEvents.id, event!.id));
+    expect(restored).toMatchObject({ subjectId: dupe.id, status: "pending" });
+  });
+
   it("reacts without writing itself into the owner's activity feed", async () => {
     // Every mutation service writes an audit_log row, which is right for
     // something a person did and wrong for an automatic reaction. This

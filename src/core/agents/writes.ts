@@ -5,6 +5,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
+  defineOrchestratedService,
   defineService,
   getService,
   getExternalService,
@@ -82,22 +83,40 @@ async function beforeBlocks(
   }
 }
 
-export const proposeWrite = defineService({
-  name: "agents.proposeWrite",
-  summary: "The managed write gate: execute, propose, or wait for approval.",
+const proposeInput = z.object({
+  runId: z.uuid(),
+  serviceName: z.string().min(1).max(120),
+  input: z.record(z.string(), z.unknown()).default({}),
+  summary: z.string().max(500).optional(),
+});
+const proposeOutput = row({
+  outcome: z.enum(["executed", "proposed", "awaiting_approval"]),
+  result: z.unknown().nullable(),
+  approval: approvalRow.nullable(),
+});
+
+/**
+ * Execute one gated call. An ordinary service composes into the gate's own
+ * transaction; an orchestrator cannot (it refuses a caller's transaction),
+ * so the gate returns `deferred` and its orchestrator runs it after commit.
+ */
+async function executeOrDefer(
+  ctx: ServiceContext,
+  service: ReturnType<typeof getExternalService>,
+  input: unknown,
+): Promise<{ outcome: "executed"; result: unknown; approval: null } | { outcome: "deferred" }> {
+  if (service.def.orchestrated) return { outcome: "deferred" };
+  return { outcome: "executed", result: await ctx.call(service, input), approval: null };
+}
+
+const proposeWriteGate = defineService({
+  name: "agents.proposeWriteGate",
+  summary: "Decide whether a managed write executes, is proposed, or waits for approval.",
   kind: "mutation",
   permission: "public",
-  input: z.object({
-    runId: z.uuid(),
-    serviceName: z.string().min(1).max(120),
-    input: z.record(z.string(), z.unknown()).default({}),
-    summary: z.string().max(500).optional(),
-  }),
-  output: row({
-    outcome: z.enum(["executed", "proposed", "awaiting_approval"]),
-    result: z.unknown().nullable(),
-    approval: approvalRow.nullable(),
-  }),
+  external: false,
+  input: proposeInput,
+  output: z.union([proposeOutput, z.object({ outcome: z.literal("deferred") })]),
   handler: async (input, ctx) => {
     // Resolves through the key join and refuses paused agents and paused
     // connections — the same gate every other agent verb passes through, so
@@ -145,10 +164,7 @@ export const proposeWrite = defineService({
       );
     }
 
-    if (service.def.kind === "query") {
-      const result = await ctx.call(service, input.input);
-      return { outcome: "executed" as const, result, approval: null };
-    }
+    if (service.def.kind === "query") return executeOrDefer(ctx, service, input.input);
 
     const classification = classifyManagedWrite(service.def);
     const kind = classification.kind;
@@ -164,10 +180,7 @@ export const proposeWrite = defineService({
     );
     const mustApprove = autonomy !== "autonomous" || alwaysRequiresApproval(classification);
 
-    if (!mustApprove) {
-      const result = await ctx.call(service, input.input);
-      return { outcome: "executed" as const, result, approval: null };
-    }
+    if (!mustApprove) return executeOrDefer(ctx, service, input.input);
 
     // Suggest is the lowest rung: it only ever records a proposal. Approval
     // requests come from the approve rung, or from autonomous work that hit
@@ -210,6 +223,28 @@ export const proposeWrite = defineService({
       result: null,
       approval: redactedApproval(inserted!),
     };
+  },
+});
+
+/**
+ * The managed write gate (C4.03). Every check and any parked approval happen
+ * in one short transaction; a write that may run now and belongs to an
+ * orchestrated service (provider or storage I/O, §11) runs after that commit,
+ * as the same agent, through its own top-level authorization.
+ */
+export const proposeWrite = defineOrchestratedService({
+  name: "agents.proposeWrite",
+  summary: "The managed write gate: execute, propose, or wait for approval.",
+  kind: "mutation",
+  permission: "public",
+  input: proposeInput,
+  output: proposeOutput,
+  handler: async (input, actor) => {
+    const decided = await proposeWriteGate.call(input, actor);
+    if (decided.outcome !== "deferred") return decided;
+    const service = getExternalService(input.serviceName);
+    const result = await service.call(input.input, actor);
+    return { outcome: "executed" as const, result: result ?? null, approval: null };
   },
 });
 
@@ -295,15 +330,37 @@ async function releaseTask(ctx: ServiceContext, taskId: string): Promise<void> {
     .where(and(eq(agentTasks.id, taskId), eq(agentTasks.status, "waiting_approval")));
 }
 
-export const approveWrite = defineService({
-  name: "agents.approveWrite",
-  summary: "Approve one parked managed write and execute it exactly once.",
+const approveInput = z.object({ id: z.uuid(), note: z.string().trim().max(2000).optional() });
+const approveOutput = row({ approval: approvalRow, result: z.unknown().nullable() });
+
+async function finishApproval(
+  ctx: ServiceContext,
+  approval: typeof runApprovals.$inferSelect,
+  result: unknown,
+) {
+  await releaseTask(ctx, approval.subjectId);
+  ctx.setSubject("agent_approval", approval.id);
+  ctx.queueEvent("agentApproval.approved", {
+    id: approval.id,
+    taskId: approval.subjectId,
+    serviceName: approval.serviceName,
+  });
+  return { approval: redactedApproval(approval), result: result ?? null };
+}
+
+const claimApproval = defineService({
+  name: "agents.claimApproval",
+  summary: "Claim one parked managed write, executing it here unless it must run after commit.",
   kind: "mutation",
   permission: "scoped",
   stepUp: true,
   agentCallable: false,
-  input: z.object({ id: z.uuid(), note: z.string().trim().max(2000).optional() }),
-  output: row({ approval: approvalRow, result: z.unknown().nullable() }),
+  external: false,
+  input: approveInput,
+  output: z.union([
+    z.object({ done: approveOutput }),
+    z.object({ deferred: z.object({ id: uuid, serviceName: z.string(), input: z.unknown() }) }),
+  ]),
   handler: async (input, ctx) => {
     const decidedBy = requireDecider(ctx);
     // The atomic claim IS the once-only guarantee: two concurrent decisions
@@ -327,16 +384,87 @@ export const approveWrite = defineService({
     // so their own permissions govern the write and the audit trail names
     // who let it happen.
     const service = getExternalService(claimed!.serviceName);
+    if (service.def.orchestrated) {
+      // Committed as approved so a second decision loses the race; the
+      // orchestrator below runs the write and puts the row back to pending
+      // if it fails, so approved still means executed.
+      return {
+        deferred: { id: claimed!.id, serviceName: claimed!.serviceName, input: claimed!.input },
+      };
+    }
     const result = await ctx.call(service, claimed!.input);
+    return { done: await finishApproval(ctx, claimed!, result) };
+  },
+});
 
-    await releaseTask(ctx, claimed!.subjectId);
-    ctx.setSubject("agent_approval", claimed!.id);
-    ctx.queueEvent("agentApproval.approved", {
-      id: claimed!.id,
-      taskId: claimed!.subjectId,
-      serviceName: claimed!.serviceName,
-    });
-    return { approval: redactedApproval(claimed!), result: result ?? null };
+const releaseApproval = defineService({
+  name: "agents.releaseApproval",
+  summary: "Return a claimed approval to pending after its deferred write failed.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  external: false,
+  input: z.object({ id: z.uuid() }),
+  output: row({ released: z.boolean() }),
+  handler: async (input, ctx) => {
+    requireDecider(ctx);
+    const released = await ctx.tx
+      .update(runApprovals)
+      .set({ status: "pending", decidedBy: null, decidedAt: null, decisionNote: null })
+      .where(and(eq(runApprovals.id, input.id), eq(runApprovals.status, "approved")))
+      .returning({ id: runApprovals.id });
+    return { released: released.length > 0 };
+  },
+});
+
+const completeApproval = defineService({
+  name: "agents.completeApproval",
+  summary: "Record that a claimed approval's deferred write executed.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  external: false,
+  input: z.object({ id: z.uuid(), result: z.unknown().optional() }),
+  output: approveOutput,
+  handler: async (input, ctx) => {
+    requireDecider(ctx);
+    const [approval] = await ctx.tx
+      .select()
+      .from(runApprovals)
+      .where(and(eq(runApprovals.id, input.id), eq(runApprovals.status, "approved")))
+      .limit(1);
+    if (!approval) throw new ServiceError("conflict", "That approval changed while it ran.");
+    return finishApproval(ctx, approval, input.result);
+  },
+});
+
+export const approveWrite = defineOrchestratedService({
+  name: "agents.approveWrite",
+  summary: "Approve one parked managed write and execute it exactly once.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  input: approveInput,
+  output: approveOutput,
+  handler: async (input, actor): Promise<z.output<typeof approveOutput>> => {
+    const claimed = await claimApproval.call(input, actor);
+    type Approved = z.output<typeof approveOutput>;
+    if ("done" in claimed && claimed.done) return claimed.done as Approved;
+    if (!("deferred" in claimed) || !claimed.deferred) {
+      throw new ServiceError("internal", "The approval claim returned nothing to run.");
+    }
+    const service = getExternalService(claimed.deferred.serviceName);
+    let result: unknown;
+    try {
+      result = await service.call(claimed.deferred.input, actor);
+    } catch (error) {
+      await releaseApproval.call({ id: claimed.deferred.id }, actor);
+      throw error;
+    }
+    return (await completeApproval.call({ id: claimed.deferred.id, result }, actor)) as Approved;
   },
 });
 
@@ -404,4 +532,14 @@ export const expireApprovals = defineService({
   },
 });
 
-export default [proposeWrite, listApprovals, approveWrite, rejectWrite, expireApprovals];
+export default [
+  proposeWrite,
+  proposeWriteGate,
+  listApprovals,
+  approveWrite,
+  claimApproval,
+  releaseApproval,
+  completeApproval,
+  rejectWrite,
+  expireApprovals,
+];

@@ -83,6 +83,54 @@ describe.runIf(hasDatabase)("the approval inbox (C4.04)", { timeout: 30_000 }, (
     expect((await getTask.call({ id: task.id }, OWNER))?.status).toBe("waiting_approval");
   });
 
+  // An orchestrated service refuses a caller's transaction (§11). Approving
+  // one used to crash inside the approval transaction and stay pending forever.
+  it("approves a write to an orchestrated service, running it after the claim commits", async () => {
+    const { task, approval } = await parkedWrite("Orchestrated", "orchestrated@example.test");
+    await db().update(runApprovals).set({ serviceName: "messaging.checkNumbers", input: {} })
+      .where(eq(runApprovals.id, approval.id));
+    const decided = await approveWrite.call({ id: approval.id }, OWNER);
+    expect(decided.approval.status).toBe("approved");
+    expect(decided.result).toEqual({ checked: 0, problems: 0 });
+    expect((await getTask.call({ id: task.id }, OWNER))?.status).toBe("queued");
+    expect((await failure(approveWrite.call({ id: approval.id }, OWNER))).code).toBe("conflict");
+  });
+
+  it("lets an autonomous agent's orchestrated write run after the gate commits", async () => {
+    const link = await connectAgentRuntime.call({ name: "runtime-auto", kind: "inbound" }, OWNER);
+    await hireAgent.call(
+      {
+        connectionId: link.id,
+        name: "AutoNumbers",
+        role: "writer",
+        toolScopes: ["messaging.checkNumbers"],
+        autonomy: "autonomous",
+      },
+      OWNER,
+    );
+    await createTask.call({ title: "Check the numbers" }, OWNER);
+    const agent = asAgent("AutoNumbers", ["messaging.checkNumbers"]);
+    const claim = await claimTask.call({}, agent);
+    // The service itself refuses an agent (only a person or the platform may
+    // check numbers). Reaching that refusal proves it ran top-level; before,
+    // it failed as "must run outside a service transaction".
+    const refused = await failure(
+      proposeWrite.call({ runId: claim!.runId, serviceName: "messaging.checkNumbers", input: {} }, agent),
+    );
+    expect(refused.code).toBe("permission");
+    expect(refused.message).toContain("text messaging");
+  });
+
+  it("returns an orchestrated approval to pending when its write fails", async () => {
+    const { task, approval } = await parkedWrite("OrchestratedFail", "orchestrated-fail@example.test");
+    // No SMS provider is configured, so the import is refused.
+    await db().update(runApprovals).set({ serviceName: "messaging.importNumbers", input: {} })
+      .where(eq(runApprovals.id, approval.id));
+    expect((await failure(approveWrite.call({ id: approval.id }, OWNER))).code).toBe("validation");
+    expect((await listApprovals.call({ taskId: task.id }, OWNER))[0]?.status).toBe("pending");
+    expect((await getTask.call({ id: task.id }, OWNER))?.status).toBe("waiting_approval");
+  });
+
   it("approving executes the stored input exactly once and releases the task", async () => {
     const { person, task, approval } = await parkedWrite("Approver1", "a1@example.test");
     const before = await getTask.call({ id: task.id }, OWNER);

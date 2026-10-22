@@ -487,6 +487,97 @@ describe.runIf(hasDatabase)("text messaging", { timeout: 90_000 }, () => {
       });
     });
 
+    it("does not send a queued marketing text after consent is withdrawn", async () => {
+      const { recordConsent } = await import("@/core/privacy/service");
+      const contact = await recipient();
+      const consent = (state: "granted" | "withdrawn") =>
+        recordConsent.call(
+          {
+            contactId: contact.id,
+            purpose: "marketing",
+            channel: "sms",
+            state,
+            method: "written",
+            termsVersion: "campaign-v1",
+            evidence: { source: "signed-card" },
+            occurredAt: new Date().toISOString(),
+          },
+          OWNER,
+        );
+      await consent("granted");
+      const result = await sendSms.call(
+        { contactId: contact.id, to: contact.phone!, body: "Sale", purpose: "marketing", idempotencyKey: "stop-race" },
+        OWNER,
+      );
+      // STOP arrives while the text waits in the queue.
+      await consent("withdrawn");
+      await expect(deliverQueuedSms(delivery(result.messageId, "stop-race"))).resolves.toEqual({
+        status: "failed",
+      });
+      expect(carrier.sent).toHaveLength(0);
+    });
+
+    it("does not send a queued text to a number marked invalid meanwhile", async () => {
+      const contact = await recipient();
+      const result = await sendSms.call(
+        { contactId: contact.id, to: contact.phone!, body: "Hi", idempotencyKey: "invalid-race" },
+        OWNER,
+      );
+      await db()
+        .update(contacts)
+        .set({ phoneStatus: "invalid", phoneInvalidAt: new Date(), phoneInvalidReason: "Carrier said so.", phoneInvalidProviderCode: "21614" })
+        .where(eq(contacts.id, contact.id));
+      await expect(deliverQueuedSms(delivery(result.messageId, "invalid-race"))).resolves.toEqual({
+        status: "failed",
+      });
+      expect(carrier.sent).toHaveLength(0);
+    });
+
+    it("records a failure that is not the carrier's on the last attempt", async () => {
+      const { storage } = await import("@/adapters/storage");
+      const { vi } = await import("vitest");
+      await number({ country: "GB", provider: "aaa-carrier-double", capabilities: { sms: true, mms: true, inbound: true } });
+      const contact = await recipient();
+      const [asset] = await db()
+        .insert(assets)
+        .values({
+          kind: "image",
+          storageKey: `test/${crypto.randomUUID()}.png`,
+          filename: "pic.png",
+          mime: "image/png",
+          legacyBytes: 10,
+          bytes: 10,
+          status: "ready",
+        })
+        .returning();
+      const result = await sendSms.call(
+        { contactId: contact.id, to: contact.phone!, body: "Pic", mediaAssetIds: [asset!.id], idempotencyKey: "url-fails" },
+        OWNER,
+      );
+      const signing = vi.spyOn(storage(), "url").mockRejectedValue(new Error("signer offline"));
+      try {
+        await expect(deliverQueuedSms(delivery(result.messageId, "url-fails"), 1)).rejects.toThrow(/signer/);
+        await expect(deliverQueuedSms(delivery(result.messageId, "url-fails"), 9)).resolves.toEqual({
+          status: "failed",
+        });
+      } finally {
+        signing.mockRestore();
+      }
+      const reports = await db()
+        .select()
+        .from(messageDeliveries)
+        .where(eq(messageDeliveries.messageId, result.messageId));
+      expect(reports.map((report) => report.status)).toContain("failed");
+    });
+
+    it("returns one message for two concurrent sends with the same key", async () => {
+      const contact = await recipient();
+      const input = { contactId: contact.id, to: contact.phone!, body: "Once", idempotencyKey: "racing" };
+      const [first, second] = await Promise.all([sendSms.call(input, OWNER), sendSms.call(input, OWNER)]);
+      expect(second.messageId).toBe(first.messageId);
+      expect(await db().select().from(messages)).toHaveLength(1);
+    });
+
     it("lists and checks numbers with no transaction held across the carrier", async () => {
       await expect(importMessagingNumbers.call({}, OWNER)).resolves.toEqual({ found: 1, added: 1 });
       expect(carrier.listed).toBe(1);

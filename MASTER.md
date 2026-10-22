@@ -9661,6 +9661,22 @@ schema they inherit reads as a designed thing rather than an excavation.
   `referrals-commission.test.ts`, `lint-gates.test.ts`,
   `colour-literals.test.ts`. Changeset
   `provider-calls-outside-transactions.md`. Not independent review evidence.
+  Review follow-up 2026-10-21: the agent write gate and approval inbox now
+  run orchestrated services after their own claim commits (an approval whose
+  deferred write fails returns to pending); a merge where both contacts hold
+  the same code's signup commission keeps the survivor's and reverses the
+  duplicate's unpaid one (undo restores it); deferred SMS delivery re-checks
+  number validity and marketing consent, records non-provider failures on the
+  last attempt, and serializes same-key sends; capture chunk/assembly applies
+  lock the session row and refuse a session closed meanwhile; builder PR
+  delivery uses one branch per proposal and resumes an existing PR. The merge
+  gate now covers subject_kind/target_type/entity_type/parent_type pointers
+  (attestation subjects are repointed). Known gate limits: the boundary gate
+  follows only same-file helpers, and the merge gate trusts each
+  registration's declared `columns` — per-module merge tests prove the moves.
+  Evidence: `agents-approvals.test.ts`, `referrals-commission.test.ts`,
+  `sms.test.ts`, `media-capture.test.ts`, `builder-code-lane.test.ts`,
+  `attestations.test.ts`, `merge-completeness.test.ts`.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.
