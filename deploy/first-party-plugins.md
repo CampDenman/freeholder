@@ -6,9 +6,9 @@ the instance; disable one from Admin → Plugins if the business does not use it
 
 **These are not complete products.** Community, voice/video and marketplace
 channel sync have landed as first-party plugins. Shopify and Daily have real
-HTTP adapters; the Daily adapter remains in-tree as optional non-first-party
-code — the de-facto first-party voice/video provider is paradisemodern's
-Paradise Comms (owner decision 2026-09-27). Print-on-demand's Printify
+HTTP adapters. Voice/video has two interchangeable providers and none is
+preselected: Daily and Paradise Comms, Paradise Modern's hosted relay
+(owner decisions 2026-09-27 and 2026-10-22). Print-on-demand's Printify
 adapter likewise remains in-tree as working optional code, but the
 print-on-demand product is **deferred to v2** (MASTER.md §43.18, owner
 decision 2026-09-27).
@@ -76,8 +76,10 @@ land on the session-linked contact timeline.
 
 ## Voice and video
 
-The de-facto first-party provider is paradisemodern's Paradise Comms
-(owner decision 2026-09-27): prod `https://paradisemodern.com/v1`, staging
+The site owner chooses the provider; none is preselected
+(owner decisions 2026-09-27 and 2026-10-22). **Daily** reads `DAILY_API_KEY` and `DAILY_DOMAIN` from
+the environment. **Paradise Comms** (Paradise Modern's hosted relay, one
+optional provider): prod `https://paradisemodern.com/v1`, staging
 `https://comms-staging.paradisemodern.com/v1`; auth is a per-site
 `x-api-key` (carrying comms scopes) or a legacy portfolio bearer token;
 capabilities `comms.calls/rooms/streams/conversations` per

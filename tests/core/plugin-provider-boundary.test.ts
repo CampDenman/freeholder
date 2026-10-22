@@ -30,9 +30,10 @@ describe("first-party provider fixture boundary", () => {
     vi.stubEnv("NODE_ENV", environment);
     expect(() => podProvider()).toThrow("No live print provider");
     expect(() => marketplaceProvider()).toThrow("No live marketplace provider");
-    // With no stored settings and no Daily environment variables, the default
-    // Paradise adapter refuses for want of a credential — never a fixture.
-    await expect(voiceVideoProvider()).rejects.toThrow("Configure a Paradise Comms site API key");
+    // With no stored settings and no Daily environment variables there is no
+    // provider at all: none is chosen on the owner's behalf (2026-10-22) and
+    // a fixture never stands in.
+    await expect(voiceVideoProvider()).rejects.toThrow("No live voice/video provider is configured");
   });
 
   it("keeps explicitly test-only provider fixtures available to acceptance suites", async () => {

@@ -1068,12 +1068,14 @@ monolith that has to boot on a $6 droplet. What core owns is the seam: a
 plugin registering a voice or video adapter attaches its artifacts — a
 recording asset, a transcript, a duration, a missed-call event — to the
 same `Conversation` and the same timeline, so a call is part of a person's
-history without core learning what a SIP trunk is. The de-facto provider
-behind that seam is paradisemodern's Paradise Comms — the owner's own
-platform (rooms, credentials and recordings per
-`/api/integration/capabilities`), so the compliance posture and pricing are
-the owner's; the Daily adapter remains in-tree as optional non-first-party
-code (owner decision 2026-09-27, §36).
+history without core learning what a SIP trunk is. Behind that seam sit
+interchangeable provider adapters, and no provider is chosen on a site
+owner's behalf: today Daily (hosted rooms) and Paradise Comms (Paradise
+Modern's hosted, LiveKit-based relay: rooms, credentials and recordings per
+`/api/integration/capabilities`). Each carries its own compliance posture
+and pricing, which the site owner accepts by choosing it. Member-to-member
+group calls can instead run on the owner's own LiveKit server (C12.24).
+(Owner decisions 2026-09-27 and 2026-10-22, §36.)
 
 ### 4.15 Subscriptions, entitlements and paywalls
 
@@ -1518,7 +1520,7 @@ freeholder/                          # Apache-2.0
 │   │   ├── calendar/  (none/ — Google/Microsoft live in core/connections)
 │   │   ├── sms/       (twilio/, none/)
 │   │   ├── ai/        (anthropic/, openai/, none/)   # BYO key — grounding, drafting
-│   │   └── agent/     (pm_brain/, anthropic/, openai/, local/, none/)  # the builder (§37)
+│   │   └── agent/     (gateway/, paradise/, anthropic/, openai/, local/, none/)  # the builder (§37)
 │   │
 │   └── mcp/                         # bundled MCP server — tools generated from service registry
 │
@@ -1850,7 +1852,7 @@ export default defineConfig({
     calendar: "google",
     sms: "none",
     ai: "anthropic",
-    agent: "pm_brain",      // who builds this site (§37); "none" disables it
+    agent: "gateway",       // who builds this site (§37); "none" disables it
     fx: "manual",
   },
   preset: "service-business",
@@ -2543,11 +2545,11 @@ the native store — not an ongoing dependency.
   (§43.18, owner decision 2026-09-27); its adapter code remains in-tree as
   working optional code.
 - **Voice and video** (calls, video rooms, recordings, transcripts) through
-  provider adapters — de-facto first-party via paradisemodern's Paradise
-  Comms (owner decision 2026-09-27): rooms, credentials and recordings per
-  `/api/integration/capabilities`; transcripts unavailable until PM ships
-  them; provider erasure lands with PM's recording-delete API. The Daily
-  adapter remains in-tree as optional non-first-party code. Core owns the
+  interchangeable provider adapters, none preselected (owner decision
+  2026-10-22): Daily (hosted rooms, recordings, transcripts) and Paradise
+  Comms, Paradise Modern's hosted relay (rooms, credentials and recordings
+  per `/api/integration/capabilities`; transcripts unavailable until that
+  provider ships them; provider erasure via its recording-delete API). Core owns the
   conversation and the timeline; a provider's SDK, its compliance posture
   and its pricing stay behind a plugin boundary (§4.14).
 
@@ -2621,7 +2623,7 @@ Every accepted change is already audited with `actor = agent:<name>` (§4.8), an
 
 `adapters/agent/` — a family distinct from `adapters/ai` (§12), because these are different jobs with different risk: `ai` grounds answers and drafts translations; `agent` writes changes.
 
-**Default: `pm_brain` (Kimi K3).** That is *our* default and nothing more. Whoever clones this repository sets `adapters.agent` in `freeholder.config.ts` to whatever they run — a hosted provider, a local model, or `none`, which removes the builder entirely. A platform that hardcodes its owner's choice of intelligence has not understood §1.
+**Default: `none`.** The builder is off until a site owner chooses who runs it. Whoever deploys this repository sets `adapters.agent` in `freeholder.config.ts` (or `FREEHOLDER_AGENT`) to whatever they run: `gateway` — any OpenAI-compatible endpoint, hosted or self-hosted, named by `AGENT_GATEWAY_URL`, `AGENT_GATEWAY_API_KEY` and `AGENT_GATEWAY_MODEL`; `paradise` — Paradise Modern's hosted gateway, one optional provider (`PARADISEMODERN_API_KEY`; the older name `pm_brain` remains an accepted alias); or `none`, which removes the builder entirely. A platform that hardcodes its owner's choice of intelligence has not understood §1. (Owner decision 2026-10-22: provider choices carry neutral names.)
 
 ### The envelope
 
@@ -4666,11 +4668,12 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   (`scaffoldPlugin` + `inspectPluginFolder`; `tests/fixtures/sample-plugin`.
   Coverage in `tests/core/plugin-scaffold.test.ts`. **F04** `/admin/imports` start/preview/commit. **F05** N/A — `packages/plugin-kit` scaffold/dev harness and `tests/fixtures/sample-plugin`, not an HTTP/MCP route. **F07** `tests/core/plugin-scaffold.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugin-scaffold.test.ts` is the composition proof.)
 - [x] **C3.13** Ship first-party plugins for gift options/registries,
-  advanced communities, and voice and video artifacts — voice/video via
-  paradisemodern's Paradise Comms as the de-facto provider (rooms,
-  credentials, provider-confirmed end, recordings; transcripts unavailable
-  until PM ships them; provider erasure lands with PM's recording-delete
-  API) — and marketplace channel sync seams, as assigned by §§4.14 and 36.
+  advanced communities, and voice and video artifacts — voice/video through
+  interchangeable provider adapters with none preselected, Daily and
+  Paradise Comms today (rooms, credentials, provider-confirmed end,
+  recordings; transcripts where the provider ships them; provider erasure
+  through the provider's recording-delete API) — and marketplace channel
+  sync seams, as assigned by §§4.14 and 36.
   The marketplace plugin's Shopify import is a MIGRATION BRIDGE (import
   your Shopify history into the native store), not an ongoing dependency;
   the native store is the product (owner decision 2026-09-27, C3.24).
@@ -4759,6 +4762,22 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   droplet `CREDENTIAL_KEY`/owner-storage config) — each logged with
   before/after evidence; the adapter failed visibly and honestly at each
   one exactly as the #430 contract tests specify.)
+  **Provider naming, 2026-10-22 (owner decision, Tony Aly):** Paradise
+  Comms is presented as one optional provider, not the first-party one. The
+  normative text above, §4.14 and §36 now say "interchangeable provider
+  adapters, none preselected"; the dated pivot and live-acceptance records
+  are unchanged history. `/admin/voice-video` preselects no provider until
+  one is saved (an instance configured only through the Daily environment
+  variables still shows and runs Daily), the provider labels drop
+  "first-party"/"optional", and `voiceVideoProvider` refuses with a neutral
+  message instead of falling back to Paradise when nothing is configured.
+  The `paradise` provider id, its stored settings, webhook path and secrets
+  are unchanged, so existing sites keep working with no migration. Member
+  group calls on the owner's own LiveKit server (C12.24) are the self-hosted
+  alternative; no self-hosted LiveKit adapter exists for this plugin.
+  Evidence: `tests/browser/first-party-plugins.spec.ts` (no preselection,
+  neutral refusal), `tests/core/paradise-*.test.ts` unchanged and passing,
+  changeset `neutral-provider-names.md`.
 
 #### Packages, installation, export, and target parity
 
@@ -5129,6 +5148,25 @@ deployments are portable, testable and incapable of silently forking the truth.
   no longer overwrites a task the gate parked as `waiting_approval`.
   Provider pricing into `cost_cents` is C4.06's ledger. Coverage in
   `tests/core/agents-managed-loop.test.ts` with a scripted provider. **F04** `/admin/work` pause/kill. **F05** `agents.connect`/`claimTask`/`reportStep`/`completeTask` at `/api/v1/agents.*`; the managed loop's tool surface is `mcp/tools.toolsFor` (same catalogue). **F07** `tests/core/agents-workforce-adapter.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-workforce-adapter.test.ts` is the composition proof.)
+  **Provider naming, 2026-10-22 (owner decision, Tony Aly):** the
+  OpenAI-compatible family is neutral. `gateway` reaches any
+  OpenAI-compatible endpoint (bearer key, base URL and model named on the
+  connection or by `AGENT_GATEWAY_URL`/`AGENT_GATEWAY_API_KEY`/
+  `AGENT_GATEWAY_MODEL`; no host or model is guessed); `paradise` is
+  Paradise Modern's hosted gateway, one optional provider, with its
+  unchanged `x-api-key`, default host and model and `PARADISEMODERN_API_KEY`.
+  The §37 builder takes the same two choices. `pm_brain` stays an accepted
+  alias everywhere it was accepted (`FREEHOLDER_AGENT`, `adapters.agent`,
+  `agents.connect`, stored rows), through one map in
+  `src/adapters/agent/aliases.ts`. Stored rows are aliased on read and never
+  rewritten, so rolling back finds them; new writes store `paradise`, which
+  older builds do not know (the changeset says so). The instance-wide
+  `AGENT_GATEWAY_API_KEY` is sent only to `AGENT_GATEWAY_URL`: a gateway
+  connection on another host must name its own `credential_ref`, and
+  doctor names every missing gateway setting. Evidence:
+  `tests/core/agents-workforce-adapter.test.ts` (gateway wire shape, no
+  guessed host, key scoping, legacy env and stored-row aliases, doctor),
+  `src/core/config.test.ts`, changeset `neutral-provider-names.md`.
 - [x] **C4.06** Enforce per-run/task/agent/period budgets before every step;
   build spend ledger, estimates, alerts and owner-readable reporting.
   (`src/core/agents/pricing.ts` prices a turn in integer cents with bigint
@@ -5318,6 +5356,20 @@ deployments are portable, testable and incapable of silently forking the truth.
   `timezone`, `next_run_at`, `last_run_at`, `catch_up` and `last_outcome` with
   a partial index on the due predicate. Coverage in
   `tests/core/agents-schedule.test.ts`. **F04** `/admin/briefing` daily briefing. **F05** `agents.setPlaybookSchedule` at `/api/v1/agents.setPlaybookSchedule`, MCP `agents_setPlaybookSchedule`; `agents.runDuePlaybooks` is the system tick (hidden). **F07** `tests/core/agents-schedule.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-schedule.test.ts` is the composition proof.)
+  Audit follow-up 2026-10-21: a merge-queue failure (`expected 1792641000000 to
+  be greater than 1792641000004`) was investigated as a possible double run and
+  is a test-harness defect, not a product one. A tick at hh:m4:59.996 correctly
+  schedules the boundary four milliseconds away; the assertion read the real
+  clock after the call and saw that genuine next occurrence as already due.
+  `next_run_at` is computed strictly after the tick's `now`, and a tick is only
+  claimed when `next_run_at <= now`, so it is already strictly after
+  max(now, scheduled); claims are row-locked `skip locked`, so a second
+  scheduler skips or re-reads the advanced row. The suite now pins the
+  JavaScript clock (Date only), and adds a boundary regression (tick 4 ms
+  before the boundary schedules exactly the boundary, nothing runs before it,
+  the boundary occurrence runs once and advances one window) and a concurrent
+  two-scheduler tick that starts exactly one run, in
+  `tests/core/agents-schedule.test.ts`. No product or release-note change.
 - [x] **C4.15** Build briefing entities, contributor registry, preassembly,
   needs-me-first ordering, read state and per-section preferences.
   (`src/core/briefing/` holds the three tables §42 names and the mechanism
@@ -9838,7 +9890,8 @@ schema they inherit reads as a designed thing rather than an excavation.
   `untrustedBackstop` bounds forged addresses. The droplet, host-updater and
   playground Caddy recipes overwrite `X-Freeholder-Client-Ip` and set
   `TRUSTED_CLIENT_IP_HEADER` (app port unpublished); the plain compose recipe
-  and managed platforms set none (`deploy/client-readiness.md`).
+  sets none, App Platform and Railway set their documented headers from
+  2026-10-21, and Render and Replit set none (`deploy/client-readiness.md`).
   `safeLocalPath` also refuses dot segments (raw or `%2e`) and any resolved
   result beginning `//` or `/\`. `ads.creativeTag` is system-only.
   `rentals.reserve` books a non-staff hire as a `requested` booking, which
@@ -9932,7 +9985,28 @@ schema they inherit reads as a designed thing rather than an excavation.
   per-shopper key can be forged, so coupon guessing remains effectively
   unbounded (forge an address, open a new cart, take its 10 guesses). With the
   header (the Caddy recipes after #563; `deploy/client-readiness.md`) it is
-  bounded. **Latent risk:** `catalog.checkoutCart` accepts `couponCode` with no
+  bounded. Audit follow-up 2026-10-21 (managed-platform client address):
+  `TRUSTED_CLIENT_IP_HEADER` also accepts `do-connecting-ip` and
+  `x-forwarded-for`, the latter read `TRUSTED_PROXY_HOPS` entries from the
+  right so visitor-written entries on the left are ignored and a short list or
+  malformed entry at that position yields no trusted address. The App Platform
+  spec sets `do-connecting-ip` and the Railway config sets `x-real-ip`, each as
+  documented by the platform, so coupon guessing and the other per-client
+  limits are bounded there too. Neither platform documents overwriting a
+  client-supplied value, so the site-wide backstop now applies to validated
+  anonymous callers as well (default ten times the unvalidated ceiling, its own
+  bucket, still counted only after the caller's own limit passes), and rate
+  limits key IPv6 clients on their /64 and IPv4-mapped IPv6 as IPv4 on both
+  paths, which also closes per-address rotation inside a /64 for the Caddy
+  recipes. Railway's CDN case (X-Real-IP becomes the CDN address) coarsens
+  per-client limits for that traffic; the backstop prevents a global lockout. Render and Replit document no client-address
+  header or proxy depth, so their recipes still set none and the residual
+  above remains open for them (`deploy/client-readiness.md` cites the sources).
+  Regressions: `tests/core/bootstrap-security.test.ts` (header parsing:
+  spoofed leftmost entries, malformed values, IPv6, hop counts),
+  `tests/core/rate-limit.test.ts` (trusted backstop, /64 and mapped keys),
+  `tests/core/deploy-recipe.test.ts` (per-platform recipe values). Changeset
+  `managed-platform-client-address.md`. **Latent risk:** `catalog.checkoutCart` accepts `couponCode` with no
   rate limit and resolves promotions as system; it is safe today only because
   `requireContactAuthority` refuses anonymous callers, and it must gain the
   same limits before a public storefront checkout ships. Each regression failed before

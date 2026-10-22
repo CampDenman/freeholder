@@ -4,7 +4,7 @@
 // CMS services in one transaction, and rolls back without overwriting drift.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { setBuilderAgentFetchForTests } from "@/adapters/agent/pm-brain";
+import { setBuilderAgentFetchForTests } from "@/adapters/agent/gateway";
 import { resetEnvForTests } from "@/core/env";
 import { db } from "@/core/db";
 import { auditLog } from "@/core/events/schema";
@@ -74,7 +74,7 @@ function snapshotFromPrompt(init: RequestInit) {
 
 describe.runIf(hasDatabase)("the owner-facing content builder", () => {
   beforeEach(async () => {
-    process.env.FREEHOLDER_AGENT = "pm_brain";
+    process.env.FREEHOLDER_AGENT = "paradise";
     process.env.PARADISEMODERN_API_KEY = "test-purpose-bound-site-key";
     process.env.BUILDER_MONTHLY_TOKEN_BUDGET = "250000";
     process.env.BUILDER_MAX_OUTPUT_TOKENS = "4000";

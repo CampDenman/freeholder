@@ -26,6 +26,32 @@ function cleanIp(value: string): string | undefined {
   return isIP(candidate) ? candidate.toLowerCase() : undefined;
 }
 
+/**
+ * The address the deployment vouches for, or nothing.
+ *
+ * An overwritten header is read whole. `X-Forwarded-For` behind an appending
+ * edge is read from the right: the visitor controls everything to the left of
+ * what the proxies added, so the entry `hops` from the end is the first one a
+ * proxy wrote. Too few entries, or a malformed one at that position, is no
+ * answer rather than a guess at a neighbour.
+ */
+function trustedClientIp(
+  headers: Headers,
+  name: string | undefined,
+  hops: number,
+): string | undefined {
+  if (!name) return undefined;
+  const value = headers.get(name);
+  if (!value) return undefined;
+  if (name !== "x-forwarded-for") return cleanIp(value);
+  // `Headers.get` joins repeated header lines with ", ", which keeps their
+  // order, so a second line a visitor adds still lands to the left.
+  const entries = value.split(",");
+  if (entries.length < hops) return undefined;
+  const entry = entries[entries.length - hops]!.trim();
+  return entry ? cleanIp(entry) : undefined;
+}
+
 export function requestMetadataFromHeaders(headers: Headers): RequestMetadata {
   let ip: string | undefined;
   for (const name of IP_HEADERS) {
@@ -38,8 +64,12 @@ export function requestMetadataFromHeaders(headers: Headers): RequestMetadata {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 512);
-  const trustedHeader = env().TRUSTED_CLIENT_IP_HEADER;
-  const trustedIp = trustedHeader ? cleanIp(headers.get(trustedHeader) ?? "") : undefined;
+  const config = env();
+  const trustedIp = trustedClientIp(
+    headers,
+    config.TRUSTED_CLIENT_IP_HEADER,
+    config.TRUSTED_PROXY_HOPS,
+  );
   return { ip, userAgent: userAgent || undefined, ...(trustedIp ? { trustedIp } : {}) };
 }
 

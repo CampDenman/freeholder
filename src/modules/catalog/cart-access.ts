@@ -5,6 +5,7 @@ import { timingSafeEqual } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { contacts } from "@/core/contacts/schema";
 import { hasModuleAccess, permits, ServiceError, type Actor, type ServiceContext } from "@/core/service";
+import { clientNetwork } from "@/core/security/rate-limit";
 import { carts } from "./schema";
 
 /**
@@ -15,8 +16,9 @@ import { carts } from "./schema";
  */
 export function shopperClientKey(actor: Actor): { key: string; trusted: boolean } {
   const trusted = actor.request?.trustedIp;
-  if (trusted) return { key: `ip:${trusted}`, trusted: true };
-  return { key: `ip:untrusted:${actor.request?.ip ?? "unknown"}`, trusted: false };
+  if (trusted) return { key: `ip:${clientNetwork(trusted)}`, trusted: true };
+  const forwarded = actor.request?.ip;
+  return { key: `ip:untrusted:${forwarded ? clientNetwork(forwarded) : "unknown"}`, trusted: false };
 }
 
 export function managesCartTokens(actor: Actor): boolean {

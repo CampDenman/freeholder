@@ -53,7 +53,13 @@ export default async function VoiceVideoPage({
     ? await domainOrNull(listVoiceVideoJoins.call({ roomId: chosen.id }, actor))
     : [];
   const recordings = (artifacts ?? []).filter((row) => row.kind !== "transcript");
-  const provider = configuration?.provider ?? "paradise";
+  // No provider is preselected until the owner saves one; an instance set up
+  // only through the Daily environment variables already runs on Daily.
+  const provider: "" | "paradise" | "daily" = configuration?.stored
+    ? configuration.provider
+    : configuration?.dailyConfigured
+      ? "daily"
+      : "";
   const credentialLabels = {
     serverLabel: t("voiceVideo.credential.server"),
     tokenLabel: t("voiceVideo.credential.token"),
@@ -82,9 +88,10 @@ export default async function VoiceVideoPage({
           <p className="text-sm text-ink-muted">{t("voiceVideo.setupHelpParadise")}</p>
           <form action={voiceVideoConfigureAction} className="mt-3 grid gap-3 sm:grid-cols-2">
             <Field label={t("voiceVideo.field.provider")} htmlFor="vv-provider">
-              <Select id="vv-provider" name="provider" defaultValue={provider}>
-                <option value="paradise">{t("voiceVideo.provider.paradise")}</option>
+              <Select id="vv-provider" name="provider" defaultValue={provider} required>
+                <option value="" disabled>{t("voiceVideo.provider.choose")}</option>
                 <option value="daily">{t("voiceVideo.provider.daily")}</option>
+                <option value="paradise">{t("voiceVideo.provider.paradise")}</option>
               </Select>
             </Field>
             <Field label={t("voiceVideo.field.authScheme")} htmlFor="vv-auth-scheme">
@@ -127,7 +134,9 @@ export default async function VoiceVideoPage({
           <p className="mt-3 text-sm text-ink-muted">
             {provider === "daily"
               ? t(configuration?.dailyConfigured ? "voiceVideo.configured" : "voiceVideo.setupHelpDaily", { domain: configuration?.dailyDomain ?? "" })
-              : t("voiceVideo.webhookSetup", { url: "/api/plugins/voice-video/webhooks/paradise" })}
+              : provider === "paradise"
+                ? t("voiceVideo.webhookSetup", { url: "/api/plugins/voice-video/webhooks/paradise" })
+                : null}
           </p>
         </CardBody>
       </Card>
@@ -155,9 +164,10 @@ export default async function VoiceVideoPage({
               <Input id="vv-title" name="title" required />
             </Field>
             <Field label={t("voiceVideo.field.provider")} htmlFor="vv-start-provider">
-              <Select id="vv-start-provider" name="provider" defaultValue={provider}>
-                <option value="paradise">{t("voiceVideo.provider.paradise")}</option>
+              <Select id="vv-start-provider" name="provider" defaultValue={provider} required>
+                <option value="" disabled>{t("voiceVideo.provider.choose")}</option>
                 <option value="daily">{t("voiceVideo.provider.daily")}</option>
+                <option value="paradise">{t("voiceVideo.provider.paradise")}</option>
               </Select>
             </Field>
             <div className="sm:col-span-2">
