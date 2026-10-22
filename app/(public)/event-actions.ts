@@ -16,6 +16,7 @@ import { PATH_HEADER } from "@/core/http/headers";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale } from "../i18n";
+import { publicFailure } from "@/core/http/public-form-return";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
@@ -61,8 +62,9 @@ export async function registerForEventAction(form: FormData): Promise<void> {
     if (error && typeof error === "object" && "digest" in error) throw error;
     // The visitor sees a code; the audit log keeps the real reason. A public
     // form that explains *why* it refused is telling a script how to get past
-    // it — full, duplicate and closed all read the same.
-    redirect(`${path}${join}eventError=${encodeURIComponent(slug)}`);
+    // it — full, duplicate and closed all read the same ("invalid"). Only the
+    // coarse class travels: wait, unavailable here, or our fault.
+    redirect(`${path}${join}eventError=${encodeURIComponent(slug)}&failure=${publicFailure(error)}`);
   }
 
   if (outcome.paymentUrl) {

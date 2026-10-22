@@ -1,0 +1,8 @@
+---
+"freeholder": patch
+---
+The public demo now works like a real site for its visitors. The contact form, newsletter sign-up, event registration, cart, site chat, quote requests, sharing, popups and reviews all go through in the playground, each with a cap so the shared demo cannot fill up before its hourly reset; anything they would email is held in the demo and never sent, and payments and sign-in links stay switched off. The demo also no longer reports a page-speed error on every page.
+
+When a public form is refused, it now keeps what the visitor typed and says why: answers that need another look are marked field by field, while "wait a moment", "not available here" and "something went wrong on our side" each get their own honest message instead of "check the fields below". This applies to forms, quote requests, site chat, newsletter sign-ups, event registration and checkout.
+
+In the admin, playground visitors can now look around the inbox, invoices, payments, appointments and calendars, newsletters, galleries, quotes, members, the assistant and the other business screens; screens where saving is switched off say so at the top, and areas the demo cannot show explain what they are instead of quietly returning to the overview. Settings no longer lists a module as "On" without saying when it is outside what you can open. For every site: Products → Collections no longer fails for a role that cannot read customer segments, a refused coupon on Promotions now shows its message on Promotions rather than on "New product", any admin screen that forgot to show a refusal (such as adding an event) now shows it, and the customer sign-in page has a proper page title.

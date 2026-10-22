@@ -17,6 +17,12 @@ import {
   submitTipIntent,
 } from "@/modules/cms/inbound";
 import { rateHelpArticle } from "@/modules/cms/help-service";
+import {
+  encodeFormReturn,
+  FORM_RETURN_COOKIE,
+  FORM_RETURN_MAX_AGE,
+  publicFailure,
+} from "@/core/http/public-form-return";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
@@ -88,7 +94,26 @@ export async function submitInboundAction(form: FormData): Promise<void> {
     }
   } catch (error) {
     if (typeof error === "object" && error && "digest" in error) throw error;
-    redirect(`${path}?inboundError=1`);
+    // A reason code, and the visitor's own words back in their own browser
+    // (src/core/http/public-form-return.ts): a refused quote request must not
+    // also be a lost message.
+    if (kind === "quote" || kind === "chat") {
+      const kept = encodeFormReturn(`inbound:${kind}`, {
+        name: text(form, "name"),
+        email: text(form, "email"),
+        message: text(form, "message"),
+      });
+      if (kept) {
+        (await cookies()).set(FORM_RETURN_COOKIE, kept, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          path: "/",
+          maxAge: FORM_RETURN_MAX_AGE,
+        });
+      }
+    }
+    redirect(`${path}?inboundError=1&failure=${publicFailure(error)}`);
   }
   redirect(`${path}?inboundError=1`);
 }
@@ -107,8 +132,8 @@ export async function postSiteChatAction(form: FormData): Promise<void> {
       },
       ANONYMOUS,
     );
-  } catch {
-    redirect(`${path}?inboundError=1`);
+  } catch (error) {
+    redirect(`${path}?inboundError=1&failure=${publicFailure(error)}`);
   }
   redirect(`${path}?chatted=1`);
 }

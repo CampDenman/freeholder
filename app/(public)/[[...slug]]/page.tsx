@@ -22,6 +22,7 @@ import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import { setupState } from "@/core/settings/service";
 import { collectJsonLd } from "@/modules/cms/blocks/registry";
 import { renderBlocks } from "@/modules/cms/render";
+import { decodeFormReturn, FORM_RETURN_COOKIE } from "@/core/http/public-form-return";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { resolveRedirect } from "@/core/seo/service";
 import {
@@ -307,6 +308,7 @@ export default async function PublicPage({
     // name, while a block asking "was this form just sent?" compares against
     // a string, and a comparison with an array is simply false.
     query: { ...query },
+    formReturn: decodeFormReturn(cookieJar.get(FORM_RETURN_COOKIE)?.value),
   });
 
   // Structured data comes from two places, and neither is a setting an owner

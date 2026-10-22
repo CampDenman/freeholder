@@ -14,7 +14,34 @@ import { users } from "@/core/auth/schema";
 import { validateSession } from "@/core/auth/sessions";
 import { resetEnvForTests } from "@/core/env";
 import { enterPlayground, initializePlayground } from "@/core/demo/playground";
-import { PLAYGROUND_MANAGE, PLAYGROUND_ROW_CAPS, PLAYGROUND_VIEW, playgroundAllows } from "@/core/demo/playground-policy";
+import {
+  PLAYGROUND_MANAGE,
+  PLAYGROUND_PUBLIC,
+  PLAYGROUND_PUBLIC_REFUSED,
+  PLAYGROUND_ROW_CAPS,
+  PLAYGROUND_VIEW,
+  playgroundAllows,
+  playgroundScreenIsReadOnly,
+} from "@/core/demo/playground-policy";
+import { ready } from "@/core/runtime";
+import { listServices } from "@/core/service";
+import { createForm, submitForm } from "@/modules/forms/service";
+import { formSubmissions } from "@/modules/forms/schema";
+import { createNewsletter, subscribeToNewsletter } from "@/modules/newsletters/service";
+import { addEventSession, addEventTicket, createEvent, publishEvent, registerForEvent } from "@/modules/events/service";
+import {
+  addCartItem,
+  applyVariantMatrix,
+  createPriceList,
+  createProduct,
+  getOrCreateCart,
+  getProductVariants,
+  setPriceListEntry,
+} from "@/modules/catalog/service";
+import { submitQuoteRequest } from "@/modules/cms/inbound";
+import { beginCustomerCheckout } from "@/modules/invoicing/customer-service";
+import { requestCustomerMagicLink } from "@/core/auth/magic-links/service";
+import { updateBusiness } from "@/core/settings/service";
 import { createPage, updatePage, getPage, publishPage } from "@/modules/cms/service";
 import { pages } from "@/modules/cms/schema";
 import { seedDemoIfRequested } from "@/modules/seed/boot";
@@ -40,6 +67,49 @@ it("requires explicit opt-in for each editing action", () => {
     expect(playgroundAllows(name, "mutation")).toBe(false);
   }
   expect(playgroundAllows("cms.updatePage", "mutation")).toBe(true);
+});
+
+it("treats only the content modules as editable admin screens", () => {
+  // Editable: the screens whose saves the mutation allow-list accepts.
+  for (const path of ["/admin", "/admin/pages", "/admin/pages/new", "/admin/forms/abc", "/admin/contacts", "/admin/products/new"]) {
+    expect(playgroundScreenIsReadOnly(path), path).toBe(false);
+  }
+  // A read-only tour stop: the admin shell says so above the form.
+  for (const path of ["/admin/promotions", "/admin/events", "/admin/invoices", "/admin/inbox", "/admin/design", "/admin/pagesx"]) {
+    expect(playgroundScreenIsReadOnly(path), path).toBe(true);
+  }
+});
+
+describe("playground public-site policy (2026-10-22)", () => {
+  it("lets the public site's own actions through and keeps credential and provider flows out", () => {
+    for (const name of ["forms.submit", "newsletters.subscribe", "events.register", "catalog.addCartItem", "catalog.shopperCheckout", "cms.submitSiteChat", "share.shareVia", "popups.capture", "reviews.submit"]) {
+      expect(playgroundAllows(name, "mutation"), name).toBe(true);
+    }
+    for (const name of ["auth.requestCustomerMagicLink", "portal.requestSignIn", "invoicing.beginCustomerCheckout", "invoicing.claimCustomerCheckout", "assistant.answer", "media.signUploadClaim"]) {
+      expect(playgroundAllows(name, "mutation"), name).toBe(false);
+    }
+  });
+
+  it("classifies every public mutation exactly once, so a new public verb is a decision", async () => {
+    await ready();
+    const publicMutations = [...listServices().values()]
+      .filter((service) => service.def.kind === "mutation" && service.def.permission === "public")
+      .map((service) => service.def.name);
+    const allowed = new Set<string>(PLAYGROUND_PUBLIC);
+    const unclassified = publicMutations.filter(
+      (name) => !allowed.has(name) && !(name in PLAYGROUND_PUBLIC_REFUSED) && name !== "playground.enter",
+    );
+    expect(unclassified).toEqual([]);
+    for (const name of PLAYGROUND_PUBLIC) {
+      expect(name in PLAYGROUND_PUBLIC_REFUSED, name).toBe(false);
+      // Named services must exist and be public mutations; a rename fails here.
+      expect(publicMutations, name).toContain(name);
+    }
+    // Every capped public surface is one the policy actually allows.
+    for (const name of Object.keys(PLAYGROUND_ROW_CAPS)) {
+      expect(playgroundAllows(name, "mutation"), name).toBe(true);
+    }
+  });
 });
 
 describe.runIf(hasDatabase)("playground row caps name real tables", () => {
@@ -248,6 +318,103 @@ describe.runIf(hasDatabase)("disposable playground", () => {
       code: "rate_limited",
       message: "The shared playground is busy. Please try again shortly.",
     });
+  });
+
+  it("accepts the public site's visitor actions without letting them reach the outside world", async () => {
+    await initializePlayground();
+    // Fixtures as an ordinary install would hold them: the playground policy
+    // rightly refuses this setup to every non-system caller.
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "0"); resetEnvForTests();
+    await updateBusiness.call({ name: "Aurora Coast Photography", country: "CA", baseCurrency: "CAD", timezone: "America/Vancouver" }, OWNER);
+    await createForm.call({
+      slug: "contact",
+      name: "Enquiry",
+      fields: [
+        { key: "name", label: "Your name", kind: "text", required: true },
+        { key: "email", label: "Email", kind: "email", required: true },
+        { key: "message", label: "Message", kind: "multiline", required: true },
+      ],
+    }, OWNER);
+    const newsletter = await createNewsletter.call({ name: "Letter", slug: "letter" }, OWNER);
+    const event = await createEvent.call({ name: "Coast walk", slug: "coast-walk" }, OWNER);
+    const session = await addEventSession.call({
+      eventId: event.id,
+      startsAt: new Date(Date.now() + 7 * 86_400_000),
+      endsAt: new Date(Date.now() + 7 * 86_400_000 + 7_200_000),
+      timezone: "America/Vancouver",
+      capacity: 10,
+      waitlistEnabled: false,
+    }, OWNER);
+    const ticket = await addEventTicket.call({ eventId: event.id, name: "Free", priceMinor: 0, currency: "CAD" }, OWNER);
+    const published = await publishEvent.call({ id: event.id, expectedVersion: event.version }, OWNER);
+    const product = await createProduct.call({ name: "Print", slug: "print", kind: "physical" }, OWNER);
+    const matrix = await applyVariantMatrix.call({ productId: product.id, expectedVersion: product.version }, OWNER);
+    const variant = (await getProductVariants.call({ productId: matrix.id }, OWNER)).variants[0]!;
+    const list = await createPriceList.call({ name: "CAD retail", currency: "CAD", kind: "retail" }, OWNER);
+    await setPriceListEntry.call({ priceListId: list.id, variantId: variant.id, amount: "40.00" }, OWNER);
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1"); resetEnvForTests();
+
+    // Signed out, as a visitor to the demo's public site.
+    const sent = await submitForm.call({
+      slug: "contact",
+      values: { name: "Ada", email: "ada@example.test", message: "Do you shoot in October?" },
+      sourceUrl: "/contact",
+    }, ANONYMOUS);
+    expect(sent.ok).toBe(true);
+    const subscribed = await subscribeToNewsletter.call({ newsletterId: newsletter.id, email: "ada@example.test" }, ANONYMOUS);
+    expect(subscribed.status).toBe("pending");
+    const registered = await registerForEvent.call({
+      eventId: published.id, sessionId: session.id, ticketId: ticket.id, email: "ada@example.test", name: "Ada",
+    }, ANONYMOUS);
+    expect(registered.registration.status).toBe("confirmed");
+    const cart = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
+    const filled = await addCartItem.call({ cartId: cart.cart.id, cartToken: cart.cart.token, variantId: variant.id, quantity: 1 }, ANONYMOUS);
+    expect(filled.lines).toHaveLength(1);
+    await submitQuoteRequest.call({ name: "Ada", email: "ada@example.test", message: "A quote for prints, please." }, ANONYMOUS);
+
+    // The same actions as the signed-in playground visitor browsing the site.
+    const visitor = await visitorActor();
+    expect((await submitForm.call({
+      slug: "contact",
+      values: { name: "Grace", email: "grace@example.test", message: "Hello from the playground." },
+    }, visitor)).ok).toBe(true);
+
+    // Nothing they did can leave the box: the subscription's confirmation
+    // was queued like any other mail and fails closed at delivery.
+    const queued = await db().select().from(mailDeliveries);
+    expect(queued.length).toBeGreaterThan(0);
+    for (const delivery of queued) {
+      await expect(deliverQueuedMail(delivery.id)).resolves.toEqual({ status: "failed" });
+    }
+    expect(
+      (await db().select({ lastError: mailDeliveries.lastError }).from(mailDeliveries))
+        .every((row) => row.lastError === "External mail delivery is disabled in the public playground."),
+    ).toBe(true);
+    // Credential and payment-provider flows stay refused, signed out or not.
+    const unavailable = { code: "permission", message: "This action is unavailable in the public playground." };
+    await expect(requestCustomerMagicLink.call({ email: "ada@example.test" }, ANONYMOUS)).rejects.toMatchObject(unavailable);
+    await expect(
+      beginCustomerCheckout.call({ id: "00000000-0000-4000-8000-000000000009", token: "x".repeat(43) }, ANONYMOUS),
+    ).rejects.toMatchObject(unavailable);
+  }, 60_000);
+
+  it("caps the public contact form like every other writable surface", async () => {
+    await initializePlayground();
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "0"); resetEnvForTests();
+    const form = await createForm.call({
+      slug: "contact",
+      name: "Enquiry",
+      fields: [{ key: "message", label: "Message", kind: "multiline", required: true }],
+      destination: "none",
+    }, OWNER);
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1"); resetEnvForTests();
+    const cap = PLAYGROUND_ROW_CAPS["forms.submit"]!.limit;
+    await db().insert(formSubmissions).values(
+      Array.from({ length: cap }, (_, index) => ({ formId: form.id, data: { message: `filler ${index}` }, status: "received" as const })),
+    );
+    await expect(
+      submitForm.call({ slug: "contact", values: { message: "one too many" } }, ANONYMOUS),
+    ).rejects.toMatchObject({ code: "rate_limited" });
   });
 
   it("refuses entry on ordinary client installations", async () => {

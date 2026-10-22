@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { z } from "zod";
 import { defineBlock } from "@/modules/cms/blocks/types";
+import { env } from "@/core/env";
+import { failureFromQuery, failureMessageKey } from "@/core/http/public-form-return";
 import { subscribePublicNewsletter } from "../../../app/(public)/newsletter-actions";
 
 export const newsletterArchive = defineBlock({
@@ -92,7 +94,8 @@ export const newsletterSubscribe = defineBlock({
     if (ctx.query?.subscribed === "1") {
       return (
         <p role="status" className="max-w-prose rounded-md border border-rule bg-success-soft px-4 py-3 text-sm text-success">
-          {ctx.t("newsletters.confirmPending")}
+          {/* C1.38: the playground queues the confirmation but never sends it. */}
+          {ctx.t(env().FREEHOLDER_PLAYGROUND === "1" ? "newsletters.playgroundPending" : "newsletters.confirmPending")}
         </p>
       );
     }
@@ -101,7 +104,7 @@ export const newsletterSubscribe = defineBlock({
       <form action={subscribePublicNewsletter} className="grid max-w-md gap-3">
         {ctx.query?.subscribeError === "1" ? (
           <p role="alert" className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
-            {ctx.t("newsletters.subscribeError")}
+            {ctx.t(failureMessageKey(failureFromQuery(ctx.query?.failure), "newsletters.subscribeError"))}
           </p>
         ) : null}
         {resolved.length === 1 ? (

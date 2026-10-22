@@ -4166,6 +4166,51 @@ project without silent telemetry, and ready to carry money.
 
 - [x] **C1.38** Provide a public, disposable shared playground on a separate database and network: restricted visitor sessions, prominent reset/privacy notice, blocked privileged operations and external delivery, hourly reset, bounded resources, and a live demo entry link. Prove content edits, denied sensitive actions, reset recovery, and separation from the production instance.
   (Checked 2026-09-27. The isolated playground base (own compose project, database container and internal-only networks; synthetic visitor entry; mutation allow-list policy) is hardened to the full contract. **Restricted visitor sessions:** `src/core/demo/playground.ts` issues sessions only for the synthetic, passwordless `visitor@playground.invalid` principal in the grant-less `playground` role with a one-hour expiry; `tests/core/playground.test.ts` proves the resolved session's grants stay inside `PLAYGROUND_MANAGE`/`PLAYGROUND_VIEW` with manage only on content modules, that no credential flow (`auth.login`) can start from it, and that role creation, staff invitations, host updates, mail test sends, uploads, SMS, payment and settings mutations are refused *server-side* with `permission` — the refusal lives in `authorizeInput` (`src/core/service.ts`), so the admin UI, REST API and MCP hit the same wall, and the test calls the services directly as the playground principal. **Reset/privacy notice:** the root-layout banner (`app/layout.tsx`, key `playground.banner`) rides every playground surface and the `/playground` entry page (`app/playground/page.tsx`, key `playground.limits`) states the hourly reset and the no-personal-information rule, in all four locale catalogs; the demo also serves `Disallow: /` robots. **Blocked external delivery:** `playgroundBlocksExternalDelivery` (`src/core/demo/playground-policy.ts`) fails closed at the three live choke points — `deliverQueuedMail` (`src/core/mail/service.ts`), `messaging.sendSms` (`src/core/messaging/sms.ts`) and the webhook sweep (`src/core/webhooks/deliver.ts`) — so background jobs running as `system` (reminders, compliance replies, queued webhooks) cannot send mail/SMS/webhooks even though the mutation allow-list never covered them; the same test proves each refusal carries the playground reason while a playground-off control takes the ordinary path, and the container gate proves blocked egress on the built image. **Hourly reset:** `deploy/docker-selfhost/playground/reset.sh` recreates the disposable project and is driven hourly by `freeholder-playground-reset.timer`; `tests/core/playground.test.ts` ("playground separation and reset recovery") simulates that cycle (fresh database + migrate + the same boot phases `instrumentation.node.ts` runs) and proves reset recovery: the old visitor session no longer validates, visitor pages are gone, the sample site is reinstalled to the same page count, and a new visitor can edit again. **Bounded resources:** uploads are refused outright (allow-list), all visitor mutations share a 300-per-minute ceiling (`enforceRateLimit`, `src/core/service.ts`), and per-surface row caps (`PLAYGROUND_ROW_CAPS` + `enforcePlaygroundRowCap`) bound pages, sections, forms, contacts, products, notes and tasks; the exact bound (299 further mutations after entry, then refusal; contacts capped at the declared limit while pages still accept edits) is asserted in `tests/core/playground.test.ts`. **Separation:** the playground is its own compose project with its own database container, tmpfs volumes and internal-only networks (`deploy/docker-selfhost/playground/compose.yml`), and the same file proves it on a live cluster: a production-shaped database and a playground database on distinct `DATABASE_URL`s, the playground flag failing closed ("disposable database") against real accounts, the synthetic pair the only users the playground database ever holds, and visitor sessions/content never appearing in the production database. **Live demo entry link:** `FREEHOLDER_PLAYGROUND_URL` renders the "Try the live demo" banner link on a main site (`app/layout.tsx`). **Browser proof:** `tests/browser/playground.spec.ts` (config `playwright.playground.config.ts`, `pnpm test:playground`) drives Chromium through entry, the notice, a real editor edit + publish, three privileged API denials as the visitor (staff invitation, mail test send, upload staging — each 403 with the playground message), the reset (session dead → `/playground` redirect, visitor page 404, reseeded sample back, re-entry and editing restored); CI's `scripts/playground-gate.sh` proves boot, sign-in, editor render and blocked egress on the built container. **F04** entry page + root banner: `app/playground/page.tsx`, `app/layout.tsx`. **F05** one refusal across every projection via the service choke point `src/core/service.ts`; container entry exercised over HTTP by `scripts/playground-gate.sh`. **F07** threat model and bounds: `src/core/demo/playground-policy.ts`, `tests/core/playground.test.ts`. **F09** hourly reset job `deploy/docker-selfhost/playground/reset.sh` + `freeholder-playground-reset.timer`, recovery proof in the same file. **F12** the browser journey composes entry → edit → publish → denial → reset → re-entry: `tests/browser/playground.spec.ts`.)
+  Audit follow-up 2026-10-22 (public demo): a hands-on audit of
+  demo.freeholder.ai found the playground refusing its own public site. The
+  allow-list covered only the visitor's editing verbs, so every anonymous
+  public mutation (`forms.submit` on `/contact`, newsletter, event, cart,
+  chat, share, popups, reviews) failed with the playground refusal, and
+  `POST /api/analytics/vitals` answered 401 on every page. `PLAYGROUND_PUBLIC`
+  now admits the public site's verbs under new `PLAYGROUND_ROW_CAPS`
+  entries; `PLAYGROUND_PUBLIC_REFUSED` keeps credential flows (magic links,
+  portal sign-in), payment-provider checkout, uploads, the model-backed
+  assistant and visitor analytics refused with a stated reason, and a test
+  fails on any public mutation in neither list. Transactional mail queues to
+  a sink in the playground (`assertMailReady`/`sendMail`) and still fails
+  closed in `deliverQueuedMail`; the vitals route answers 204 there, keeping
+  "no visitor analytics". Public form actions no longer answer every
+  refusal with "check the fields below" and an empty form: a coarse reason
+  code (`src/core/http/public-form-return.ts`) separates answers to fix
+  (marked per field from the form's own schema), wait, unavailable here and
+  server fault, and the visitor's answers return in a two-minute httpOnly
+  cookie read by the routing layer (forms, quote and chat blocks; reason
+  codes also on newsletter, event and checkout). `PLAYGROUND_VIEW` now
+  grants read access to the business modules (inbox, invoices/payments,
+  scheduling, calendar, newsletters, galleries, quotes, assistant and the
+  rest) while writes stay governed by the allow-list; in playground mode
+  `requireStaffActor` opens a manage-only screen to a viewer and sends
+  operator machinery to `/admin/unavailable`, which explains the area,
+  instead of silently redirecting to the overview. The admin shell shows a
+  read-only notice on every non-content screen and a fallback for `?error=`
+  messages a screen did not render (adding an event); catalog refusals
+  return to the posting screen (Promotions, not New product); collections
+  treats a refused segment read as none (was a 500); settings explains
+  modules a role cannot open; `/portal/login` has a title and explains the
+  playground. Regressions: `tests/core/playground.test.ts` (public verbs
+  pass signed out and as the visitor, mail fails closed, credential and
+  checkout verbs refused, every public mutation classified, contact-form
+  cap, read-only screens), `tests/browser/playground.spec.ts` (signed-out
+  contact form, refusal keeps answers, vitals 204, portal title, admin tour
+  without bounces or 500s). Changeset
+  `playground-public-site-and-honest-refusals.md`. A local production
+  build with `FREEHOLDER_PLAYGROUND=1` was checked by hand: every static
+  admin route as the visitor answers without a 500 (translations 404s on a
+  one-language site by design), and the contact form, newsletter, vitals,
+  portal, Promotions and Events behaviours above were observed. The browser
+  suite was not run here (its database-name guard refused the assigned
+  database), and the "separation and reset recovery" cases were blocked by
+  a shared cluster stuck on `DROP DATABASE`; both need a clean run.
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable

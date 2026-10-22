@@ -20,6 +20,7 @@ import { MailSettingsCard } from "./MailSettingsCard";
 import { ready } from "@/core/runtime";
 import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { setModuleEnabledAction } from "../../settings-module-actions";
+import { env } from "@/core/env";
 import { domainOrNull } from "../../read-helpers";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,7 @@ export default async function AdminSettingsPage({
     alwaysOn: name === "core",
   }));
   const canManageSettings = hasModuleAccess(actor, "settings", "manage");
+  const playground = env().FREEHOLDER_PLAYGROUND === "1";
 
   // Sensitive integration cards are fetched only when this stored role may
   // manage their modules, rather than rendered from calls that would refuse.
@@ -107,6 +109,15 @@ export default async function AdminSettingsPage({
                   <Pill tone={row.enabled ? "success" : "neutral"}>
                     {row.enabled ? t("settings.modules.on") : t("settings.modules.off")}
                   </Pill>
+                  {/*
+                    "On" beside a module this person cannot open reads as a
+                    broken link waiting to happen; say why it is not in the nav.
+                  */}
+                  {row.enabled && !row.alwaysOn && !hasModuleAccess(actor, row.module, "view") ? (
+                    <span className="text-sm text-ink-muted">
+                      {t(playground ? "settings.modules.playgroundHidden" : "settings.modules.noAccess")}
+                    </span>
+                  ) : null}
                   {row.alwaysOn ? (
                     <span className="text-sm text-ink-muted">{t("settings.modules.alwaysOn")}</span>
                   ) : canManageSettings ? (

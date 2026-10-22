@@ -9,6 +9,7 @@ import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale } from "../i18n";
 import { subscribeToNewsletter } from "@/modules/newsletters/service";
+import { publicFailure } from "@/core/http/public-form-return";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
@@ -50,6 +51,6 @@ export async function subscribePublicNewsletter(form: FormData): Promise<void> {
     redirect(`${path}${join}subscribed=1`);
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
-    redirect(`${path}${join}subscribeError=1`);
+    redirect(`${path}${join}subscribeError=1&failure=${publicFailure(error)}`);
   }
 }

@@ -17,6 +17,7 @@ import type { z } from "zod";
 import { sql } from "drizzle-orm";
 import { env } from "@/core/env";
 import {
+  PLAYGROUND_REFUSAL,
   PLAYGROUND_ROW_CAPS,
   playgroundAllows,
 } from "@/core/demo/playground-policy";
@@ -426,7 +427,7 @@ function authorizeInput<In extends z.ZodType, Out>(
   actor: Actor,
 ): { input: z.output<In>; viaSelfService: boolean } {
   if (env().FREEHOLDER_PLAYGROUND === "1" && actor.kind !== "system" && !playgroundAllows(def.name, def.kind)) {
-    throw new ServiceError("permission", "This action is unavailable in the public playground.");
+    throw new ServiceError("permission", PLAYGROUND_REFUSAL);
   }
   const viaSelfService =
     def.selfService !== undefined &&

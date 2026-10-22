@@ -1,6 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Shared plumbing for admin server actions.
+import { headers } from "next/headers";
+import { safeLocalPath } from "@/core/http/local-path";
 
 /**
  * A service message with its machine addressing removed.
@@ -18,4 +20,29 @@
  */
 export function ownerFacing(message: string): string {
   return message.replace(/^[a-z][\w.]*: (?:[\w.[\]]+: )?/, "");
+}
+
+/**
+ * The admin screen whose form posted this action, for sending a refusal back
+ * where the person was rather than to whichever screen an action file
+ * happens to default to (a coupon refused on Promotions used to land on "New
+ * product"). The browser's same-origin Referer names it; anything else —
+ * absent, foreign, or not a local path — falls back. Stale `error` and
+ * `saved` flags are dropped so the new outcome is the only one shown.
+ */
+export async function postedFromPath(fallback: string): Promise<string> {
+  const requestHeaders = await headers();
+  const referer = requestHeaders.get("referer");
+  if (!referer) return fallback;
+  try {
+    const url = new URL(referer);
+    const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+    if (!host || url.host !== host || !url.pathname.startsWith("/admin")) return fallback;
+    url.searchParams.delete("error");
+    url.searchParams.delete("saved");
+    const query = url.searchParams.toString();
+    return safeLocalPath(`${url.pathname}${query ? `?${query}` : ""}`, fallback);
+  } catch {
+    return fallback;
+  }
 }
