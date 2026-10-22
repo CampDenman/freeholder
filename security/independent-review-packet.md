@@ -67,6 +67,18 @@ C11.10 remains unchecked. Validate private object-provider policy and external
 mail/payment acceptance separately; a green mocked provider is not evidence of
 live delivery or settlement.
 
+## 2026-10-21 pre-launch audit
+
+Four read-only agent reviews found access-control, money-path and
+transaction-boundary defects. Each repair (#559–#565) was reviewed by a
+separate agent until nothing blocking remained.
+`security/pre-launch-audit-2026-10-21.md` maps every finding to its PR and
+lists the open residuals. Give these the closest look: the playground
+allow-list, unverified site chat, payout retry and resend rules, the payment
+claim/apply phases and their system elevation, and per-client rate limits
+where no trusted client-IP header is set. This is agent work, not independent
+review. C11.10 stays open.
+
 ## How to use this packet
 
 1. Read `SECURITY.md` for reporting, dependency policy, and 2FA/recovery.
