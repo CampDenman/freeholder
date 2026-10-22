@@ -2873,6 +2873,7 @@
   "inbox.search": "ابحث فيما قيل",
   "inbox.select": "اختر المحادثة مع {who}",
   "inbox.someone": "شخص ما",
+  "inbox.unverifiedChat": "غير متحقَّق منه — يقول إنه {email}",
   "inbox.theirRecord": "سجلهم",
   "inbox.thread": "ما قيل",
   "inbox.title": "صندوق الوارد",

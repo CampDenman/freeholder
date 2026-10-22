@@ -24,6 +24,8 @@ import { contacts } from "@/core/contacts/schema";
 import { conversations, messages, siteChatSessions } from "./schema";
 
 const CHAT_LIFETIME_HOURS = 24;
+/** Thread key prefix of a chat whose email nobody has verified (C11.10). */
+export const UNVERIFIED_CHAT_PREFIX = "site-chat:";
 const token = z.string().trim().min(32).max(200);
 const messageBody = z.string().trim().min(1).max(4_000);
 const locale = z
@@ -153,7 +155,7 @@ async function transcriptFor(ctx: ServiceContext, session: ActiveSession) {
 
 export const startSiteChat = defineService({
   name: "messaging.startSiteChat",
-  summary: "Start a bearer-scoped site chat on the Contact's thread, never taking over a chat already live for that Contact unless its signed-in owner asks.",
+  summary: "Start a bearer-scoped site chat: on the Contact's thread for its signed-in owner, otherwise on a separate unverified conversation.",
   kind: "mutation",
   permission: "public",
   writeClass: "message",
@@ -192,35 +194,21 @@ export const startSiteChat = defineService({
         source: "chat",
       })) as { contact: { id: string } };
       contactId = resolved.contact.id;
-      // With no chat live for this Contact, the message joins their canonical
-      // thread like any other inbound channel (§4.14: one conversation per
-      // person). While somebody is already chatting as them, an unverified
-      // start never replaces that browser: it gets a thread of its own, with
-      // a key that keeps other channels from threading onto it.
-      const [live] = await ctx.tx
-        .select({ id: siteChatSessions.id })
-        .from(siteChatSessions)
-        .where(
-          and(
-            eq(siteChatSessions.contactId, contactId),
-            isNull(siteChatSessions.closedAt),
-            gt(siteChatSessions.expiresAt, new Date()),
-          ),
-        )
-        .limit(1);
-      if (live) {
-        const [opened] = await ctx.tx
-          .insert(conversations)
-          .values({
-            contactId,
-            subject: "Website chat",
-            replyChannel: "chat",
-            threadKey: `site-chat:${randomBytes(16).toString("hex")}`,
-          })
-          .returning({ id: conversations.id });
-        conversationId = opened!.id;
-        ctx.queueEvent("conversation.opened", { id: conversationId, contactId, channel: "chat" });
-      }
+      // Typing an address proves nothing, so an unverified start always gets
+      // a conversation of its own, keyed so no other channel threads onto it.
+      // The Contact's canonical thread, its reply channel and any live chat
+      // are left exactly as they were (C11.10).
+      const [opened] = await ctx.tx
+        .insert(conversations)
+        .values({
+          contactId,
+          subject: "Website chat",
+          replyChannel: "chat",
+          threadKey: `${UNVERIFIED_CHAT_PREFIX}${randomBytes(16).toString("hex")}`,
+        })
+        .returning({ id: conversations.id });
+      conversationId = opened!.id;
+      ctx.queueEvent("conversation.opened", { id: conversationId, contactId, channel: "chat" });
     }
     const recorded = (await ctx.callAsSystem(getService("conversations.record"), {
       name: input.name,

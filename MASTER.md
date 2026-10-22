@@ -9733,13 +9733,14 @@ schema they inherit reads as a designed thing rather than an excavation.
   subscription currency is refused rather than billed at zero. `subscriptions.join` refuses a staff-entered or foreign
   card and never lets a saved card skip a card trial's setup-fee invoice.
   `quotes.message` speaks for the business only with a quotes grant.
-  `messaging.startSiteChat` never replaces a chat already live for a Contact
-  unless its signed-in owner asks (the public chat block now passes the
-  session actor): an unverified start while one is live gets a thread of its
-  own; otherwise it joins the Contact's canonical thread, so a form enquiry
-  and the chat that follows stay one conversation (§4.14). Residual: an
-  unverified chat on a thread with no live chat receives the owner's chat
-  replies on that thread, as any unverified chat does. Contact-import undo restores a field only while it still
+  `messaging.startSiteChat` continues a Contact's canonical thread only for
+  the signed-in owner of that address (the public chat block now passes the
+  session actor). Every unverified start opens a separate conversation keyed
+  `site-chat:…`, so it never changes the canonical thread's reply channel,
+  never closes a live chat, and never receives replies meant for the
+  customer. The inbox list and thread show it as "Unverified — says they are
+  <email>", linked to the Contact's record for context without merging
+  threads. Contact-import undo restores a field only while it still
   holds what the import wrote. `contracts.sign` takes IP and user agent from
   request metadata. `members.callConfig` needs an active member on a live call;
   `members.claimKeyPackages` returns an outstanding claim instead of draining
@@ -9763,8 +9764,9 @@ schema they inherit reads as a designed thing rather than an excavation.
   `tests/core/site-chat.test.ts`, `tests/core/contact-import.test.ts`,
   `tests/core/intake-waivers-reminders.test.ts`,
   `tests/modules/member-calls.test.ts`, `tests/modules/member-e2ee.test.ts`,
-  `tests/core/briefing.test.ts`, `tests/core/saved-views.test.ts` and
-  `tests/core/cart-access.test.ts`. Changeset
+  `tests/core/briefing.test.ts`, `tests/core/saved-views.test.ts`,
+  `tests/core/cart-access.test.ts` and
+  `tests/browser/c11-01-visitor-to-paid.spec.ts`. Changeset
   `c11-10-access-control-20261021.md`. Independent review remains open.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,

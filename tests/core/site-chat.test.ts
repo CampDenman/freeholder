@@ -13,10 +13,11 @@ import {
   postSiteChat,
   sendAssistantChatMessage,
   startSiteChat,
+  UNVERIFIED_CHAT_PREFIX,
 } from "@/core/messaging/chat";
-import { replyToConversation } from "@/core/messaging/inbox";
-import { messages, siteChatSessions } from "@/core/messaging/schema";
-import { recordMessage } from "@/core/messaging/service";
+import { replyToConversation, searchInbox } from "@/core/messaging/inbox";
+import { conversations, messages, siteChatSessions } from "@/core/messaging/schema";
+import { getConversation, recordMessage } from "@/core/messaging/service";
 import { consentRecords } from "@/core/privacy/schema";
 import { ready } from "@/core/runtime";
 import { GET as getChatRoute, POST as postChatRoute } from "../../app/api/chat/route";
@@ -166,17 +167,31 @@ describe.runIf(hasDatabase)("site live chat", { timeout: 90_000 }, () => {
     expect(await chat(false)).not.toBe(first);
   });
 
-  it("joins a visitor's chat to the conversation their form enquiry opened (C11.10)", async () => {
+  it("keeps an unverified chat off the customer's own conversation and its reply channel (C11.10)", async () => {
     const enquiry = await recordMessage.call(
       { email: "ada@example.test", name: "Ada", direction: "inbound", channel: "form", subject: "Enquiry", body: "A sitting, please." },
       { kind: "system" },
     );
-    const started = await begin();
-    expect(started.contactId).toBe(enquiry.conversation.contactId);
-    expect(started.conversationId).toBe(enquiry.conversation.id);
-    // The owner's reply on that one conversation reaches this browser.
-    await replyToConversation.call({ id: started.conversationId, body: "Next month works.", close: false }, OWNER);
-    expect((await getSiteChat.call({ token: started.token }, ANONYMOUS)).messages.map((m) => m.body)).toContain("Next month works.");
+    const [opened] = await db().select().from(conversations).where(eq(conversations.id, enquiry.conversation.id));
+    const before = opened!.replyChannel;
+    expect(before).not.toBe("chat");
+    const impostor = await begin();
+    expect(impostor.contactId).toBe(enquiry.conversation.contactId);
+    expect(impostor.conversationId).not.toBe(enquiry.conversation.id);
+    const [canonical] = await db().select().from(conversations).where(eq(conversations.id, enquiry.conversation.id));
+    expect(canonical?.replyChannel).toBe(before);
+    // The owner's answer to the enquiry goes to the customer's address, never
+    // to the browser that typed it.
+    const reply = await replyToConversation.call({ id: enquiry.conversation.id, body: "Next month works.", close: false }, OWNER);
+    expect(reply.channel).toBe("email");
+    expect((await getSiteChat.call({ token: impostor.token }, ANONYMOUS)).messages.map((m) => m.body)).not.toContain("Next month works.");
+    const [unverified] = await db().select().from(conversations).where(eq(conversations.id, impostor.conversationId));
+    expect(unverified?.threadKey?.startsWith(UNVERIFIED_CHAT_PREFIX)).toBe(true);
+    // The owner sees two rows, and the chat is marked for what it is.
+    const listed = await searchInbox.call({}, OWNER);
+    expect(listed.find((row) => row.id === impostor.conversationId)).toMatchObject({ unverified: true, contactEmail: "ada@example.test" });
+    expect(listed.find((row) => row.id === enquiry.conversation.id)).toMatchObject({ unverified: false });
+    expect(await getConversation.call({ id: impostor.conversationId }, OWNER)).toMatchObject({ unverified: true });
   });
 
   it("never exposes another channel from the shared Contact conversation", async () => {

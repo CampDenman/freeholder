@@ -3390,6 +3390,7 @@
   "inbox.search": "Buscar lo que se dijo",
   "inbox.select": "Elegir la conversación con {who}",
   "inbox.someone": "Alguien",
+  "inbox.unverifiedChat": "Sin verificar — dice ser {email}",
   "inbox.theirRecord": "Su ficha",
   "inbox.thread": "Lo que se dijo",
   "inbox.threads": "Conversaciones",
