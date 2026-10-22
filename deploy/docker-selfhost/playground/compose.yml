@@ -1,18 +1,54 @@
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
 # C1.38: independent disposable database; no production keys, mounts or network.
+#
+# Capacity (C1.38, 2026-10-21): the playground usually shares a host with a
+# production site, so every limit here is written so the demo degrades — and,
+# under host pressure, dies — before production does:
+#   - cpu_shares 256 against Docker's default 1024: production's containers win
+#     four to one whenever the CPU is contended; `cpus` stays the hard ceiling.
+#   - oom_score_adj 1000: if the host itself runs out of memory, the kernel
+#     kills a playground process first, never production's app or database.
+#   - memswap_limit equal to mem_limit: the demo never pushes the host to swap.
+#   - restart unless-stopped: an out-of-memory kill comes back in seconds
+#     instead of leaving the demo down until the next hourly reset.
+# reset.sh, not `compose up`, attaches the app to the HTTPS proxy network, and
+# only once it is ready (see README.md).
 name: freeholder-playground
 services:
   db:
     image: postgres:16-alpine
+    # Every byte lives on tmpfs and is discarded hourly, so durability settings
+    # buy nothing: fsync and full-page writes are off, and shared_buffers stays
+    # small because tmpfs already holds the whole database in memory (a large
+    # buffer pool would hold it twice against this container's limit).
+    command:
+      - postgres
+      - -c
+      - shared_buffers=32MB
+      - -c
+      - max_connections=40
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - full_page_writes=off
+      - -c
+      - max_wal_size=64MB
     environment:
       POSTGRES_USER: playground
       POSTGRES_DB: playground
       POSTGRES_PASSWORD: ${PLAYGROUND_DB_PASSWORD:?Set a dedicated random password}
+    # The seeded database is ~32 MB; tmpfs pages count against mem_limit.
     tmpfs:
-      - /var/lib/postgresql/data:size=536870912
-    mem_limit: 768m
+      - /var/lib/postgresql/data:size=268435456
+    restart: unless-stopped
+    mem_limit: 384m
+    memswap_limit: 384m
     cpus: 0.5
+    cpu_shares: 256
+    oom_score_adj: 1000
     pids_limit: 128
     networks: [private]
     healthcheck:
@@ -26,11 +62,21 @@ services:
       SESSION_SECRET: ${PLAYGROUND_SESSION_SECRET:?Set a dedicated random secret}
       APP_URL: https://${PLAYGROUND_DOMAIN:?Set the demo hostname}
       NODE_ENV: production
+      # Measured 2026-10-21: the live heap is ~315 MB (a third of it module
+      # source text) and code plus native memory adds ~300 MB. Node sized its
+      # heap from the old 768m cgroup, so a burst peaked at 736 MB, 32 MB from
+      # an OOM kill. A fixed old space under a larger limit keeps garbage
+      # collection, not the kernel, as the thing that answers a burst.
+      NODE_OPTIONS: --max-old-space-size=384
       FREEHOLDER_PLAYGROUND: '1'
       FREEHOLDER_SEED_DEMO: '1'
       FREEHOLDER_UNSAFE_LOCAL_STORAGE: '1'
       LOCAL_STORAGE_ROOT: /tmp/media
       FREEHOLDER_JOBS: 'on'
+      # Measured idle load at the two-second default: ~70 database
+      # transactions a second; at 15 s, ~17. Nothing in the playground needs
+      # a job claimed faster than this.
+      FREEHOLDER_JOBS_POLL_SECONDS: '15'
       FREEHOLDER_UPDATE_CHECK: 'off'
       MAIL_ADAPTER: console
       # Set per request by the production Caddy (demo.freeholder.ai.caddy);
@@ -38,18 +84,25 @@ services:
       TRUSTED_CLIENT_IP_HEADER: x-freeholder-client-ip
     tmpfs: [/tmp:size=134217728, /app/.next/cache:size=33554432]
     read_only: true
-    mem_limit: 768m
+    restart: unless-stopped
+    mem_limit: 896m
+    memswap_limit: 896m
     cpus: 1
+    cpu_shares: 256
+    oom_score_adj: 1000
     pids_limit: 256
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://localhost:3000/api/health/live").then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     depends_on:
       db:
         condition: service_healthy
-    networks:
-      private: {}
-      proxy:
-        aliases: [playground-app]
+    networks: [private]
     expose: ['3000']
     logging:
       driver: json-file
@@ -57,6 +110,3 @@ services:
 networks:
   private:
     internal: true
-  proxy:
-    name: freeholder-playground-proxy
-    external: true

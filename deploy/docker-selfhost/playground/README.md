@@ -19,17 +19,32 @@ chmod 700 /opt/freeholder-playground/reset.sh
 chmod 600 /opt/freeholder-playground/.env
 ```
 
-Attach only the HTTPS proxy to that network. Add this site to Caddy (replace the
-hostname), keeping the main site's configuration intact:
+Attach only the HTTPS proxy to that network. The playground app joins it under
+the alias `playground-app` only when `reset.sh` has seen it ready, so a plain
+`docker compose up` is not reachable from the proxy. Add this site to Caddy
+(replace the hostname), keeping the main site's configuration intact:
 
 ```caddyfile
 demo.example.com {
+  encode zstd gzip
   header X-Robots-Tag "noindex, nofollow"
   request_body {
     max_size 64KB
   }
   reverse_proxy playground-app:3000 {
     header_up X-Freeholder-Client-Ip {client_ip}
+    lb_try_duration 20s
+    lb_try_interval 500ms
+    transport http {
+      dial_timeout 2s
+      response_header_timeout 30s
+      max_conns_per_host 16
+    }
+  }
+  handle_errors 502 503 504 {
+    header Retry-After 30
+    header Cache-Control no-store
+    respond "The demo is resetting or busy. Please try again in a minute." 503
   }
 }
 ```
@@ -57,9 +72,15 @@ page, egress is blocked, and a reset recovers the editor.
 Copy the reset service and timer to `/etc/systemd/system`, run
 `systemctl daemon-reload`, then `systemctl enable --now freeholder-playground-reset.timer`
 and `systemctl start freeholder-playground-reset.service`.
-The fixed reset script recreates only project `freeholder-playground`, waits for
-readiness, and returns failure if initialization fails. Its PostgreSQL data and
-media use bounded tmpfs mounts. The app filesystem is read-only. Both networks
+The fixed reset script alternates between the two fixed projects
+`freeholder-playground` and `freeholder-playground-b`: it boots the fresh one
+while the current one serves, waits for readiness (health, jobs, the entry page
+and a warm home page), gives it the proxy alias, then stops the old one. If the
+fresh one never becomes ready it is removed and the previous playground keeps
+serving. When the host has less than `PLAYGROUND_OVERLAP_MIN_MB` (default 1400)
+available, the old playground stops first instead, so a reset never borrows
+memory production may need. Its PostgreSQL data and media use bounded tmpfs
+mounts. The app filesystem is read-only. Both networks
 are internal: external delivery is blocked even if a background listener runs.
 The existing main-site network must never be attached to the demo app or database.
 
@@ -82,3 +103,40 @@ and webhook deliveries are refused with a playground reason before any
 provider or endpoint is contacted, so a background job can never make this
 box send — the internal-only networks above are the outer bound, not the
 only one.
+
+## Capacity on a shared host
+
+The project's own demo shares a 4 GB / 2 vCPU droplet with production, so the
+recipe is written for the demo to slow down, and under host pressure to die,
+before production does. `compose.yml` gives both playground containers
+`cpu_shares: 256` (production's default is 1024, so production wins CPU four
+to one under contention), `oom_score_adj: 1000` (a host out-of-memory kill
+picks the playground first), swap disabled, and `restart: unless-stopped` (an
+out-of-memory kill recovers in seconds rather than at the next reset). The
+hard caps total 1,280 MB: 896 MB for the app with a fixed 384 MB heap, and
+384 MB for a database tuned for tmpfs. Job workers poll every 15 seconds.
+Caddy compresses responses, queues a burst at 16 connections to the app
+rather than rendering everything at once, retries for 20 seconds while the
+app is being swapped or restarted, and otherwise answers a short plain-text
+503 with `Retry-After`.
+
+Anonymous, cookie-less visits to the sample site's pages carry
+`Cache-Control: public, max-age=0, s-maxage=10, stale-while-revalidate=30`
+and no cookies, so a CDN in front of the demo can absorb a traffic spike.
+Signed-in visitors, query strings, the entry page and every app route stay
+`private, no-store`. Stock Caddy does not cache, so without a CDN the header
+changes nothing on the host.
+
+Measured locally on 2026-10-21 under a 1-CPU, 768/896 MB cgroup: about 27
+anonymous page renders and 30 admin
+renders a second per CPU, unchanged by this recipe; idle database
+transactions down from ~70 to ~17 a second; a 48-connection burst peaked at
+736 of 768 MB before and 649 of 896 MB after; memory flat over a three-minute
+mixed soak, so the ~630 MB the demo shows is its working set, not a leak.
+
+What configuration cannot fix is that the demo shares a kernel, disk, Caddy
+and TLS with production. For a launch, put a CDN in front of
+`demo.example.com` (with Caddy's global `trusted_proxies` naming the CDN's
+address ranges and `client_ip_headers` its client-address header, so rate
+limits still see visitors), or move the playground to its own small host and
+point its DNS there.

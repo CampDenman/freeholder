@@ -1,7 +1,10 @@
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
 # Append this site to the production Caddyfile after the playground is ready.
+# Stock caddy:2-alpine only: no rate-limit or cache plugins.
 demo.freeholder.ai {
+	# Pages are ~45 KB of HTML; compressed they are a fifth of that.
+	encode zstd gzip
 	header X-Robots-Tag "noindex, nofollow"
 	request_body {
 		max_size 64KB
@@ -10,5 +13,24 @@ demo.freeholder.ai {
 	# {client_ip} is the connecting address unless trusted_proxies is set.
 	reverse_proxy playground-app:3000 {
 		header_up X-Freeholder-Client-Ip {client_ip}
+		# C1.38: while reset.sh swaps playgrounds, or the app restarts after
+		# an out-of-memory kill, the name briefly has nothing behind it.
+		# Retry the connection instead of answering 502 at once.
+		lb_try_duration 20s
+		lb_try_interval 500ms
+		transport http {
+			dial_timeout 2s
+			response_header_timeout 30s
+			# A spike queues here, in Caddy, rather than as dozens of
+			# simultaneous renders in a 768 MB app container: past this
+			# many connections a request waits for one to free up.
+			max_conns_per_host 16
+		}
+	}
+	# Plain text and never cached, so it costs the host nothing to serve.
+	handle_errors 502 503 504 {
+		header Retry-After 30
+		header Cache-Control no-store
+		respond "The Freeholder demo is resetting or busy. Please try again in a minute." 503
 	}
 }

@@ -240,6 +240,12 @@ function workersEnabled(): boolean {
   return Boolean(env().DATABASE_URL);
 }
 
+/** pg-boss's own two-second default unless the deploy chose otherwise. */
+export function workerPolling(): { pollingIntervalSeconds?: number } {
+  const seconds = env().FREEHOLDER_JOBS_POLL_SECONDS;
+  return seconds === undefined ? {} : { pollingIntervalSeconds: seconds };
+}
+
 function producerEnabled(): boolean {
   if (process.env.NEXT_PHASE === "phase-production-build") return false;
   return Boolean(env().DATABASE_URL);
@@ -725,6 +731,7 @@ export async function startJobs(): Promise<PgBoss | undefined> {
         includeMetadata: true,
         localConcurrency: policy.concurrency,
         groupConcurrency: policy.concurrency,
+        ...workerPolling(),
       },
       async (messages) => {
         for (const message of messages) {
