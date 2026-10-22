@@ -17,6 +17,10 @@ const doctorCheck = row({
   verdict: z.enum(["ok", "warn", "fail"]),
   detail: z.string(),
   remedy: z.string().optional(),
+  /** A catalog key and its values, for screens that show the check in the owner's language. */
+  message: z
+    .object({ key: z.string(), params: z.record(z.string(), z.string()) })
+    .optional(),
 });
 const doctorReport = z.object({
   verdict: z.enum(["ok", "warn", "fail"]),

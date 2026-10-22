@@ -5,7 +5,7 @@
 // The tests worth reading first are the two about money that is not one
 // number: revenue never adds two currencies together, and a refund comes back
 // out of the month the money left rather than the month it arrived.
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { invoices } from "@/modules/invoicing/schema";
@@ -242,6 +242,61 @@ describe.runIf(hasDatabase)("reporting", () => {
 
     const report = await revenueReport.call({ days: 30 }, OWNER);
     expect(report.totals).toHaveLength(0);
+  });
+
+  describe("months are the business's months, as the site counts them (§4.9)", () => {
+    // "+05:00" is five hours ahead to Node and five hours behind to Postgres
+    // (POSIX sign convention) — a real, deterministic disagreement between the
+    // two zone sources, standing in for a database whose tz data lags. Paid at
+    // 22:00 UTC on 30 November, it is 03:00 on 1 December in the business's
+    // zone as every page renders it; the old `at time zone` query filed it
+    // under November.
+    const ZONE = "+05:00";
+    const lateNovember = new Date("2026-11-30T22:00:00Z");
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-12-20T00:00:00Z") });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("buckets revenue by the month the site would print", async () => {
+      const buyer = await person("zoned-revenue");
+      await paid({ contactId: buyer.id, currency: "CAD", totalMinor: 9_000, paidAt: lateNovember });
+
+      const report = await revenueReport.call({ days: 60, timezone: ZONE }, OWNER);
+      expect(report.months.map((each) => [each.month, each.amountMinor])).toEqual([
+        ["2026-12", 9_000],
+      ]);
+    });
+
+    it("dates a cohort by the month the site would print", async () => {
+      const buyer = await person("zoned-cohort");
+      await paid({ contactId: buyer.id, currency: "CAD", totalMinor: 1_000, paidAt: lateNovember });
+      await paid({
+        contactId: buyer.id,
+        currency: "CAD",
+        totalMinor: 2_000,
+        paidAt: new Date("2026-12-15T12:00:00Z"),
+      });
+
+      const report = await cohortReport.call({ months: 2, timezone: ZONE }, OWNER);
+      expect(report.cohorts).toEqual([
+        {
+          cohort: "2026-12",
+          currency: "CAD",
+          customers: 1,
+          cells: [{ monthsSince: 0, amountMinor: 3_000, customers: 1 }],
+        },
+      ]);
+    });
+
+    it("refuses a zone the site cannot render", async () => {
+      expect(
+        await failure(revenueReport.call({ days: 30, timezone: "Mars/Olympus_Mons" }, OWNER)),
+      ).toMatchObject({ code: "validation" });
+    });
   });
 
   it("dates a cohort by a customer's first payment", async () => {

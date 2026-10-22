@@ -90,6 +90,19 @@ describe.runIf(hasDatabase)("business settings", () => {
       expect(error.code).toBe("validation");
     });
 
+    it("rejects a time zone the site cannot count in (§4.9)", async () => {
+      // Every local day and month is worked out with Intl, so a zone it does
+      // not know would leave reports and charts with nothing to count in.
+      const error = await failure(
+        updateBusiness.call({ ...A_BUSINESS, timezone: "Mars/Olympus_Mons" }, OWNER),
+      );
+      expect(error.code).toBe("validation");
+      await updateBusiness.call(A_BUSINESS, OWNER);
+      expect(
+        (await failure(patchBusiness.call({ timezone: "Mars/Olympus_Mons" }, OWNER))).code,
+      ).toBe("validation");
+    });
+
     it("rejects a malformed locale", async () => {
       const error = await failure(
         updateBusiness.call({ ...A_BUSINESS, defaultLocale: "english" }, OWNER),

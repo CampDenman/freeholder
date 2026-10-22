@@ -6231,7 +6231,7 @@ export interface ServiceCatalog {
   };
   "platform.doctor": {
     input: Record<string, never>;
-    output: { verdict: "ok" | "warn" | "fail"; checks: { id: string; title: string; verdict: "ok" | "warn" | "fail"; detail: string; remedy?: string; [key: string]: unknown }[]; ranAt: string };
+    output: { verdict: "ok" | "warn" | "fail"; checks: { id: string; title: string; verdict: "ok" | "warn" | "fail"; detail: string; remedy?: string; message?: { key: string; params: { [key: string]: string } }; [key: string]: unknown }[]; ranAt: string };
   };
   "platform.evaluateUpdatePolicy": {
     input: { channel: "stable" | "security" | "edge"; now?: string; timezone?: string };

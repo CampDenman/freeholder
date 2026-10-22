@@ -35,6 +35,7 @@ import {
 } from "@/modules/reporting/export-schema";
 import { exportDate, headerFor, linesFor } from "@/modules/reporting/export-shapes";
 import { deliverScheduledExports } from "@/modules/reporting/jobs";
+import { periodsFor } from "@/modules/reporting/export-service";
 import {
   deleteExport,
   downloadExportForRecipient,
@@ -199,6 +200,61 @@ async function fileOf(runId: string) {
   const rows = parseCsv(file.csv).filter((row) => row.some((cell) => cell !== ""));
   return { filename: file.filename, header: rows[0]!, body: rows.slice(1) };
 }
+
+/* -------------------------------------------------- periods, without a database */
+
+describe("the period an export covers", () => {
+  // §4.9, 2026-10-22: the period is computed in Node, not by `date_trunc` in
+  // Postgres. Each case pins the clock and names the business's own midnight.
+  const bounds = (period: "previous_week" | "previous_month" | "previous_quarter", zone: string, now: string) => {
+    const found = periodsFor([{ period, timezone: zone }], new Date(now)).get(`${period}:${zone}`)!;
+    return [found.from.toISOString(), found.to.toISOString()];
+  };
+
+  it("is last month, midnight to midnight in the business's zone", () => {
+    expect(bounds("previous_month", "America/Vancouver", "2026-11-15T12:00:00Z")).toEqual([
+      "2026-10-01T07:00:00.000Z",
+      "2026-11-01T07:00:00.000Z",
+    ]);
+  });
+
+  it("is last week from Monday, across the spring clock change", () => {
+    // 167 hours: the week the clocks went forward is an hour short.
+    expect(bounds("previous_week", "America/Vancouver", "2026-03-10T20:00:00Z")).toEqual([
+      "2026-03-02T08:00:00.000Z",
+      "2026-03-09T07:00:00.000Z",
+    ]);
+  });
+
+  it("is last quarter in a zone ahead of UTC", () => {
+    expect(bounds("previous_quarter", "Australia/Sydney", "2026-04-10T00:00:00Z")).toEqual([
+      "2025-12-31T13:00:00.000Z",
+      "2026-03-31T13:00:00.000Z",
+    ]);
+  });
+
+  it.each([
+    // zone, now, period, from, to — each across a transition at or near midnight
+    ["America/Santiago", "2026-10-10T12:00:00Z", "previous_month", "2026-09-01T04:00:00.000Z", "2026-10-01T03:00:00.000Z"],
+    ["America/Santiago", "2026-09-08T12:00:00Z", "previous_week", "2026-08-31T04:00:00.000Z", "2026-09-07T03:00:00.000Z"],
+    ["America/Havana", "2026-11-15T12:00:00Z", "previous_month", "2026-10-01T04:00:00.000Z", "2026-11-01T04:00:00.000Z"],
+    ["America/Havana", "2026-03-10T12:00:00Z", "previous_week", "2026-03-02T05:00:00.000Z", "2026-03-09T04:00:00.000Z"],
+  ] as const)("%s at %s: %s spans midnight-moving clock changes", (zone, now, period, from, to) => {
+    expect(bounds(period, zone, now)).toEqual([from, to]);
+  });
+
+  it("follows the zone data the site renders with, not the database's", () => {
+    // "+05:00" is five hours ahead to Node and — POSIX sign convention — five
+    // hours behind to Postgres: a real, deterministic disagreement between the
+    // two zone sources. At 01:00 UTC on 1 December it is already December in
+    // the business's zone, so the completed month is November. The old
+    // `date_trunc(... at time zone)` query answered October.
+    expect(bounds("previous_month", "+05:00", "2026-12-01T01:00:00Z")).toEqual([
+      "2026-10-31T19:00:00.000Z",
+      "2026-11-30T19:00:00.000Z",
+    ]);
+  });
+});
 
 /* -------------------------------------------------- shapes, without a database */
 

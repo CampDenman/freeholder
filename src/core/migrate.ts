@@ -43,7 +43,7 @@ export async function migrateToLatest(): Promise<MigrateResult> {
   // this and should not hold a migration lock for the life of the process.
   // Multiple replicas may boot together, so serialize the complete drizzle
   // migration sequence before any process inspects or creates schema objects.
-  const client = postgres(url, { max: 1, onnotice: () => {} });
+  const client = postgres(url, { max: 1, onnotice: () => {}, connection: { TimeZone: "UTC" } });
   try {
     await client`select pg_advisory_lock(${MIGRATION_LOCK_NAMESPACE}, ${MIGRATION_LOCK_KEY})`;
     await migrate(drizzle(client), { migrationsFolder: "db/migrations" });

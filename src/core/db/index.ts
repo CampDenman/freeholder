@@ -6,6 +6,18 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { databasePoolMax, databaseUrl } from "@/core/env";
 
+/**
+ * Every session runs in UTC, whatever the server or role defaults to.
+ *
+ * The rule (§4.9) is that local-time math lives in Node and SQL sees UTC
+ * instants. What remains in SQL — `date_trunc('month', now())` for a spend
+ * period, a `::date` on a timestamptz — silently reads the session's TimeZone,
+ * and a managed host that defaults it to the datacentre's zone would move
+ * those boundaries without any code changing. Pinning it here makes them UTC
+ * by construction rather than by luck.
+ */
+export const SESSION_SETTINGS = { TimeZone: "UTC" } as const;
+
 function connect() {
   const conn = postgres(databaseUrl(), {
     // Bounded so two instances fit in a small managed database during a
@@ -17,6 +29,7 @@ function connect() {
     // five-second health-check budget.
     connect_timeout: 3,
     onnotice: () => {},
+    connection: SESSION_SETTINGS,
   });
   return { conn, orm: drizzle(conn) };
 }
