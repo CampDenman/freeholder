@@ -244,9 +244,15 @@ jobs:
       - run: pnpm ownership:drill
 
   browser:
-    name: Browser accessibility and journeys
+    name: Browser accessibility and journeys (${{ matrix.shard }})
     runs-on: ubuntu-latest
+    # One job crept from ~15 to 29 minutes against this limit and was
+    # cancelled. Split the files across three runners rather than raise it.
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/3, 2/3, 3/3]
     services:
       postgres:
         image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
@@ -277,8 +283,18 @@ jobs:
           for i in $(seq 1 30); do curl -fs http://127.0.0.1:7880/ > /dev/null && exit 0; sleep 1; done
           cat "$RUNNER_TEMP/livekit.log"; exit 1
       - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium firefox
-      - run: pnpm test:browser
+      # The apt half of --with-deps has stalled for 22-26 minutes on hosted
+      # runners (normally ~30 s) and cancelled whole jobs. Bound each try and
+      # retry, so a stuck mirror costs minutes, not the job.
+      - name: Install Playwright browsers and system dependencies
+        timeout-minutes: 15
+        run: |
+          for attempt in 1 2 3; do
+            timeout 240 pnpm exec playwright install --with-deps chromium firefox && exit 0
+            echo "Playwright install attempt $attempt timed out or failed; retrying."
+          done
+          exit 1
+      - run: pnpm test:browser --shard=${{ matrix.shard }}
 
   deployment:
     name: Image, recipes, public gates and upgrade
