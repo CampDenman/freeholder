@@ -102,6 +102,18 @@ const INTERNAL = [
   "galleries.buildArchive",
   "galleries.expireSessions",
   "invoicing.briefingOverdue",
+  // C11.10: phases of the owner payment orchestrators. The public service
+  // authorizes the caller; these run as the system around provider I/O.
+  "invoicing.claimPaymentCheckout",
+  "invoicing.applyPaymentCheckout",
+  "invoicing.providerPaymentSource",
+  "invoicing.recordProviderPaymentResult",
+  "invoicing.claimProviderRefund",
+  "invoicing.recordProviderRefundResult",
+  "invoicing.savedPaymentMethodSource",
+  "invoicing.applySavedPaymentMethodRevocation",
+  "invoicing.claimInPersonPayment",
+  "invoicing.applyInPersonPayment",
   "mail.applySenderVerification",
   "mail.recordProviderEvent",
   "media.applyWatermarkBackfill",
