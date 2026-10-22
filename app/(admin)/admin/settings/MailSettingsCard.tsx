@@ -74,6 +74,7 @@ export interface MailSenderView {
   isDefault: boolean;
   lastVerified: string | null;
   lastError: string | null;
+  verificationDetail: Record<string, unknown>;
   accountStatus: "active" | "needs_reconnect" | "revoked" | null;
   capabilityEnabled: boolean | null;
 }
@@ -132,6 +133,19 @@ export interface MailLabels {
   reactivate: string;
   test: string;
   verified: string;
+  verifyTitle: string;
+  verifyProves: string;
+  verifyResend: string;
+  verifyPostmark: string;
+  verifySes: string;
+  verifyFailed: string;
+  verifyDkim: string;
+  verifyReturnPath: string;
+  verifyProviderStatus: string;
+  verifyDomain: string;
+  verifyIdentity: string;
+  verifyYes: string;
+  verifyNo: string;
   pending: string;
   failed: string;
   active: string;
@@ -208,6 +222,18 @@ export function MailSettingsCard({
           <p className="max-w-3xl text-sm text-ink-muted">
             {labels.intro}
           </p>
+          <section id="mail-verification" className="grid max-w-3xl gap-2 scroll-mt-6">
+            <h3 className="font-mono text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              {labels.verifyTitle}
+            </h3>
+            <p className="text-sm text-ink-muted">{labels.verifyProves}</p>
+            <ul className="grid list-disc gap-2 ps-5 text-sm text-ink-muted">
+              <li>{labels.verifyResend}</li>
+              <li>{labels.verifyPostmark}</li>
+              <li>{labels.verifySes}</li>
+            </ul>
+            <p className="text-sm text-ink-muted">{labels.verifyFailed}</p>
+          </section>
           {notice ? (
             <Callout
               tone={notice.tone}
@@ -542,6 +568,7 @@ function SenderGroup({
                   {sender.lastError}
                 </Callout>
               ) : null}
+              <VerificationFacts detail={sender.verificationDetail} labels={labels} />
               {canManage ? <SenderActions sender={sender} labels={labels} /> : null}
             </li>
           ))}
@@ -728,6 +755,42 @@ function ReleaseSuppressionForm({
       </div>
       {state.error ? <span className="text-xs text-danger">{state.error}</span> : null}
     </form>
+  );
+}
+
+/** Known keys from the adapters' verification detail. Anything else stays off the page. */
+function VerificationFacts({
+  detail,
+  labels,
+}: {
+  detail: Record<string, unknown>;
+  labels: MailLabels;
+}) {
+  const lines: string[] = [];
+  const flag = (value: unknown): string | null => {
+    if (typeof value === "boolean") return value ? labels.verifyYes : labels.verifyNo;
+    if (typeof value === "string" && value.length > 0 && value.length <= 80) return value;
+    return null;
+  };
+  if (typeof detail.domain === "string" && detail.domain.length > 0 && detail.domain.length <= 80) {
+    lines.push(`${labels.verifyDomain}: ${detail.domain}`);
+  }
+  if (typeof detail.identity === "string" && detail.identity.length > 0 && detail.identity.length <= 80) {
+    lines.push(`${labels.verifyIdentity}: ${detail.identity}`);
+  }
+  const providerStatus = flag(detail.providerStatus);
+  if (providerStatus) lines.push(`${labels.verifyProviderStatus}: ${providerStatus}`);
+  const dkim = flag(detail.dkim);
+  if (dkim) lines.push(`${labels.verifyDkim}: ${dkim}`);
+  const returnPath = flag(detail.returnPath);
+  if (returnPath) lines.push(`${labels.verifyReturnPath}: ${returnPath}`);
+  if (lines.length === 0) return null;
+  return (
+    <ul className="grid list-none gap-1 p-0 text-xs text-ink-muted">
+      {lines.map((line) => (
+        <li key={line}>{line}</li>
+      ))}
+    </ul>
   );
 }
 

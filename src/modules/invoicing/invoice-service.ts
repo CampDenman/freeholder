@@ -546,7 +546,7 @@ export const reconcileMoney = defineService({
 const createDraftInput = z.object({
   contactId: z.string().uuid(),
   currency,
-  sourceType: z.enum(["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock", "ad_campaign"]).default("manual"),
+  sourceType: z.enum(["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock", "ad_campaign", "event"]).default("manual"),
   sourceId: z.string().trim().max(240).optional(),
   idempotencyKey,
   lines: z.array(lineInput).min(1).max(1_000),
@@ -700,7 +700,7 @@ export const createDraftInvoice = defineService({
         customerTaxId: input.customerTaxId,
         requiredTaxLegend:
           quoteDetails.exemption?.kind === "reverse_charge"
-            ? "Tax not charged â€” reverse charge applies."
+            ? "Tax not charged — reverse charge applies."
             : input.tax.mode === "not_applicable"
               ? input.tax.reason
               : quote.totalTaxMinor === 0
@@ -1087,6 +1087,13 @@ export const settlePayment = defineService({
       const { orders } = await import("@/modules/catalog/schema");
       await ctx.tx.select({ id: orders.id }).from(orders).where(eq(orders.id, source.sourceId)).for("update");
     }
+    if (source?.sourceType === "event" && source.sourceId) {
+      // Same lock order as the registration flows: the seat row settles before
+      // its invoice, so settlement and hold expiry cannot race past each other.
+      const { eventRegistrations } = await import("@/modules/events/schema");
+      await ctx.tx.select({ id: eventRegistrations.id }).from(eventRegistrations)
+        .where(eq(eventRegistrations.id, source.sourceId)).for("update");
+    }
     await lock(ctx.tx, "invoice", payment.invoiceId);
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
     if (!invoice) throw new ServiceError("not_found", "That payment's invoice is not here.");
@@ -1119,6 +1126,16 @@ export const settlePayment = defineService({
         await ctx.emitTimeline({ contactId: order.contactId, eventType: "order.partiallyPaid", subjectType: "order", subjectId: order.id,
           payload: { invoiceId: invoice.id, paidMinor, totalMinor: invoice.totalMinor, currency: invoice.currency } });
       }
+    }
+    if (invoice.sourceType === "event" && invoice.sourceId && invoiceStatus === "paid") {
+      // Full payment confirms the held seat, atomically with settlement — the
+      // same precedent as orders above. A partial payment leaves the seat
+      // reserved; the hold-expiry sweep skips invoices with money arrived.
+      const { confirmPaidRegistration } = await import("@/modules/events/service");
+      await ctx.callAsSystem(confirmPaidRegistration, {
+        registrationId: invoice.sourceId,
+        invoiceId: invoice.id,
+      });
     }
     await stateEvent(ctx, "payment", payment.id, payment.status, "succeeded");
     if (invoice.status !== invoiceStatus) {

@@ -7,7 +7,8 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isUniqueViolation } from "@/core/db";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineService, ServiceError, type Tx } from "@/core/service";
+import { defineService, permits, ServiceError, type Tx } from "@/core/service";
+import { consumeAccepted, rateLimitKey } from "@/core/security/rate-limit";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { recordConsent, registerContactPrivacySource } from "@/core/privacy/service";
 import { assertMailReady, sendMail } from "@/core/mail/service";
@@ -454,6 +455,11 @@ export const publishIssue = defineService({
   },
 });
 
+/** A pending address is not sent a second confirmation inside this window. */
+const CONFIRMATION_COOLDOWN_MS = 10 * 60_000;
+/** Confirmation emails one address receives per hour, across every newsletter. */
+const CONFIRMATION_RECIPIENT_LIMIT = { limit: 5, windowSeconds: 60 * 60 } as const;
+
 export const subscribeToNewsletter = defineService({
   name: "newsletters.subscribe",
   summary: "Start a double-opt-in subscription through contacts.resolve.",
@@ -497,6 +503,41 @@ export const subscribeToNewsletter = defineService({
     if (existing?.status === "confirmed") {
       return { status: "confirmed" as const, subscriptionId: existing.id };
     }
+    // C11.10: a public form is a way to make this site email any address.
+    // A recent pending request keeps the link already sent, and each address
+    // gets a bounded number of confirmations whichever form or popup asks —
+    // counted in this transaction, so it holds when the call is composed.
+    if (
+      existing?.status === "pending" &&
+      existing.updatedAt.getTime() > Date.now() - CONFIRMATION_COOLDOWN_MS
+    ) {
+      return { status: "pending" as const, subscriptionId: existing.id };
+    }
+    const delivery = await consumeAccepted(
+      ctx.tx,
+      rateLimitKey("newsletters.subscribe.recipient", input.email),
+      CONFIRMATION_RECIPIENT_LIMIT,
+    );
+    if (!delivery.allowed) {
+      throw new ServiceError(
+        "rate_limited",
+        "That address has been sent several confirmations already. Check its inbox, or try again later.",
+        delivery.retryAfterSeconds,
+      );
+    }
+    // Evidence a trusted caller assembled from stored configuration (a popup's
+    // own statement) is recorded as given. What an anonymous visitor's request
+    // carries is recorded too, but marked as theirs, so the consent trail never
+    // presents a caller's claim as something this site verified.
+    const trustedEvidence =
+      ctx.actor.kind === "system" ||
+      permits(ctx.actor, "scoped", "newsletters.publishIssue", "mutation");
+    const consentEvidence = input.consent
+      ? trustedEvidence
+        ? input.consent.evidence
+        : { ...input.consent.evidence, provenance: "visitor-submitted" }
+      : {};
+    const consentIp = ctx.actor.request?.ip ?? null;
     const confirmToken = token();
     const unsubscribeToken = existing?.unsubscribeToken ?? token();
     const [saved] = existing
@@ -509,8 +550,8 @@ export const subscribeToNewsletter = defineService({
             unsubscribedAt: null,
             consentTermsVersion: input.consent?.termsVersion ?? null,
             consentSourceUrl: input.consent?.sourceUrl ?? null,
-            consentIp: ctx.actor.request?.ip ?? null,
-            consentEvidence: input.consent?.evidence ?? {},
+            consentIp,
+            consentEvidence,
             updatedAt: new Date(),
           })
           .where(eq(newsletterSubscriptions.id, existing.id))
@@ -525,8 +566,8 @@ export const subscribeToNewsletter = defineService({
             unsubscribeToken,
             consentTermsVersion: input.consent?.termsVersion ?? null,
             consentSourceUrl: input.consent?.sourceUrl ?? null,
-            consentIp: ctx.actor.request?.ip ?? null,
-            consentEvidence: input.consent?.evidence ?? {},
+            consentIp,
+            consentEvidence,
           })
           .returning();
     const origin = siteOrigin();
@@ -674,6 +715,7 @@ import templateServices from "./template-service";
 export {
   saveBroadcast,
   testSend,
+  audiencePreview,
   startBroadcast,
   sendNext,
   tick,

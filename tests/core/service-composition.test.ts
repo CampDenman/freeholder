@@ -32,6 +32,7 @@ function sourcePaths(directory: string): string[] {
   const paths: string[] = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = resolve(directory, entry.name);
+    if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
     if (entry.isDirectory()) paths.push(...sourcePaths(path));
     else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith(".d.ts")) paths.push(path);
   }
@@ -63,6 +64,7 @@ function auditSource(file: string, text: string): Finding[] {
   const localFunctions = new Map<string, FunctionNode>();
   const requestReads = new Set<string>();
   const handlers: FunctionNode[] = [];
+  const namedHandlers: string[] = [];
 
   for (const statement of source.statements) {
     if (ts.isFunctionDeclaration(statement) && statement.name && statement.body) {
@@ -103,6 +105,19 @@ function auditSource(file: string, text: string): Finding[] {
           functionNode(member.initializer)
         ) {
           handlers.push(member.initializer);
+        } else if (
+          ts.isPropertyAssignment(member) &&
+          propertyName(member.name) === "handler" &&
+          ts.isIdentifier(member.initializer)
+        ) {
+          // `handler: applyRefund` names a same-file function; resolved after
+          // every declaration in the file has been collected.
+          namedHandlers.push(member.initializer.text);
+        } else if (
+          ts.isShorthandPropertyAssignment(member) &&
+          member.name.text === "handler"
+        ) {
+          namedHandlers.push("handler");
         } else if (ts.isMethodDeclaration(member) && propertyName(member.name) === "handler") {
           handlers.push(member);
         }
@@ -111,8 +126,21 @@ function auditSource(file: string, text: string): Finding[] {
     ts.forEachChild(node, collectHandlers);
   }
   collectHandlers(source);
-
   const findings: Finding[] = [];
+  for (const name of namedHandlers) {
+    const named = localFunctions.get(name);
+    if (named) handlers.push(named);
+    else {
+      // An imported handler cannot be followed by a per-file scan, so it is
+      // refused rather than silently passed.
+      findings.push({
+        file,
+        line: 0,
+        message: `handler ${name} is not a function declared in this file; the composition gate cannot follow it`,
+      });
+    }
+  }
+
   const visited = new Set<string>();
 
   function add(node: ts.Node, message: string): void {
@@ -202,6 +230,20 @@ describe("service composition source boundary", () => {
     expect(findings.every((finding) => finding.message.includes("direct .call()"))).toBe(true);
   });
 
+  it("follows a handler named by identifier or shorthand", () => {
+    const findings = auditSource(
+      "fixture.ts",
+      `
+        async function refund(_input, ctx) { return child.call({}, ctx.actor); }
+        const handler = async () => child.call({}, { kind: "system" });
+        export const first = defineService({ handler: refund });
+        export const second = defineService({ handler });
+      `,
+    );
+    expect(findings).toHaveLength(2);
+    expect(findings.every((finding) => finding.message.includes("direct .call()"))).toBe(true);
+  });
+
   it("detects request-cached reads reached through a helper", () => {
     const findings = auditSource(
       "fixture.ts",
@@ -237,7 +279,8 @@ describe("service composition source boundary", () => {
   });
 
   it("keeps every nested service call in the caller transaction", () => {
-    const findings = sourcePaths(resolve(process.cwd(), "src"))
+    const findings = ["src", "plugins", "app"]
+      .flatMap((root) => sourcePaths(resolve(process.cwd(), root)))
       .flatMap(auditFile)
       .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
     expect(

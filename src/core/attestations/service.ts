@@ -14,10 +14,11 @@
 // history is therefore a byproduct of the storage rather than a feature that
 // could be forgotten.
 import { z } from "zod";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
+import { registerContactReference } from "@/core/contacts/service";
 import { attestations } from "./schema";
 
 /** Namespaced by convention: `rate.30-year-fixed`, `status.service`. */
@@ -341,6 +342,38 @@ export const withdrawFact = defineService({
     ctx.setSubject("attestation", existing.id);
     ctx.queueEvent("attestation.withdrawn", { id: existing.id, key: existing.key });
     return updated!;
+  },
+});
+
+/**
+ * A fact's subject is untyped, so it may name a contact (`subject_kind =
+ * 'contact'`). Left on the duplicate's id after a merge, that fact would stop
+ * being about anybody who still exists. The ledger itself is not rewritten:
+ * only which person the existing rows are about.
+ */
+registerContactReference({
+  table: "attestations",
+  columns: ["subject_id"],
+  repoint: (tx, duplicateId, survivingId) =>
+    tx
+      .update(attestations)
+      .set({ subjectId: survivingId })
+      .where(and(eq(attestations.subjectKind, "contact"), eq(attestations.subjectId, duplicateId))),
+  captureForUndo: async (tx, duplicateId) => ({
+    state: await tx
+      .select({ id: attestations.id })
+      .from(attestations)
+      .where(and(eq(attestations.subjectKind, "contact"), eq(attestations.subjectId, duplicateId))),
+    undoable: true,
+  }),
+  restoreAfterUndo: async (tx, beforeState, _afterState, duplicateId) => {
+    const moved = z.array(z.object({ id: z.string().uuid() })).parse(beforeState);
+    if (moved.length) {
+      await tx
+        .update(attestations)
+        .set({ subjectId: duplicateId })
+        .where(inArray(attestations.id, moved.map((row) => row.id)));
+    }
   },
 });
 

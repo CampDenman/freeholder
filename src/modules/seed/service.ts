@@ -31,13 +31,15 @@ import {
   updatePage,
   updateSection,
 } from "@/modules/cms/service";
-import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
+import { FOOTER_KEY, HEADER_KEY, NAV_KEY } from "@/modules/cms/defaults";
 import { createForm } from "@/modules/forms/service";
 import { setTranslation } from "@/core/i18n/service";
 import * as demo from "../../../seed/demo/content";
 import { installPreset } from "./preset-install";
+import { installDemoBusiness } from "./business";
+import { installBusyDemo } from "./busy";
 
-export { installPreset };
+export { installPreset, installBusyDemo };
 
 const installDemoGuard = defineService({
   name: "demo.installGuard",
@@ -81,7 +83,7 @@ const installDemoApply = defineService({
   }),
   handler: async (input, ctx) => {
     const pack = demo;
-    const { BUSINESS, LOCATION, HOURS, FORMS, PAGES, TRANSLATIONS, header, footer } =
+    const { BUSINESS, LOCATION, HOURS, FORMS, PAGES, TRANSLATIONS, header, nav, footer } =
       pack;
     const assets = input.assets;
 
@@ -123,6 +125,16 @@ const installDemoApply = defineService({
       key: HEADER_KEY,
       name: "Header",
       blocks: header(),
+    });
+    // The menu goes in the Navigation section, the one place chrome reads a
+    // site's menu from (C2.11). Seeding it into the header instead is what
+    // left the demo's menu reading just "Locations": ensureDefaults moves a
+    // header menu out, and the nav section already had the platform's
+    // /locations link.
+    await ctx.callAsSystem(updateSection, {
+      key: NAV_KEY,
+      name: "Navigation",
+      blocks: nav(),
     });
     await ctx.callAsSystem(updateSection, {
       key: FOOTER_KEY,
@@ -202,6 +214,39 @@ const installDemoApply = defineService({
       await ctx.callAsSystem(publishCalculator, { id: made.id });
     }
 
+    // The shop, the bookable services, the events and the share settings —
+    // the parts of the business a visitor can buy, book and attend (C1.38).
+    await installDemoBusiness(ctx, { assets, locationId: location.id });
+
+    // After the pages, so the demo's own /newsletters page is the archive
+    // (ensureIndex will not replace it) and publishing the issue only adds
+    // the leaf. The template is campaign wording, not a page.
+    const { createNewsletter, createIssue, publishIssue, saveTemplate } = await import(
+      "@/modules/newsletters/service"
+    );
+    const letter = pack.NEWSLETTER;
+    const newsletter = await ctx.callAsSystem(createNewsletter, {
+      name: letter.name,
+      slug: letter.slug,
+      description: letter.description,
+    });
+    const issue = await ctx.callAsSystem(createIssue, {
+      newsletterId: newsletter.id,
+      slug: letter.issue.slug,
+      title: letter.issue.title,
+      excerpt: letter.issue.excerpt,
+      body: letter.issue.body,
+    });
+    await ctx.callAsSystem(publishIssue, { id: issue.id, expectedVersion: issue.version });
+    await ctx.callAsSystem(saveTemplate, {
+      kind: "campaign",
+      name: letter.template.name,
+      subject: letter.template.subject,
+      blocks: [{ type: "text", props: { body: letter.template.body } }],
+      variables: ["contact.first_name"],
+      status: "active",
+    });
+
     await ctx.callAsSystem(completeSetup, {});
 
     ctx.queueEvent("demo.installed", { pages: created.length });
@@ -238,7 +283,8 @@ export const installDemo = defineOrchestratedService({
     for (const [slot, image] of Object.entries(IMAGES)) {
       // Encoded here rather than committed as binaries: a repository people
       // fork should not carry megabytes of stock photography, and sharp turns
-      // the vector into a real JPEG the media pipeline treats like any upload.
+      // the illustration into a real JPEG the media pipeline treats like any
+      // upload.
       const jpeg = await sharp(Buffer.from(image.svg))
         .jpeg({ quality: 82, mozjpeg: true })
         .toBuffer();
@@ -257,4 +303,4 @@ export const installDemo = defineOrchestratedService({
   },
 });
 
-export default [installDemo, installDemoGuard, installDemoApply, installPreset];
+export default [installDemo, installDemoGuard, installDemoApply, installPreset, installBusyDemo];

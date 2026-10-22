@@ -151,10 +151,10 @@ export function Field({
   const hintId = hint ? `${htmlFor}-hint` : undefined;
   const errorId = error ? `${htmlFor}-error` : undefined;
   return (
-    <div className="grid gap-1.5">
+    <div className="grid content-start gap-1.5">
       <label
         htmlFor={htmlFor}
-        className="font-mono text-xs font-medium text-ink-muted"
+        className="text-sm font-medium text-ink"
       >
         {label}
       </label>

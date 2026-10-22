@@ -20,7 +20,14 @@ export interface PageAudit {
    * address for one page, which the uniqueness rules must not hold to account.
    */
   isCanonical?: boolean;
+  /** The page asks not to be indexed, so the sitemap rule does not apply. */
+  noindex?: boolean;
 }
+
+/** Whether a crawled link is a page (not a file or calendar download). */
+export function isPage(path: string): boolean;
+/** Whether a path is a private surface, with or without a locale prefix. */
+export function isPrivate(path: string): boolean;
 
 export function auditPage(input: {
   url: string;

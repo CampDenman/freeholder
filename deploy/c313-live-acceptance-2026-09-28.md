@@ -9,7 +9,7 @@ apiKey, no full JWTs). This doc is the summary; the log is the evidence.
 Freeholder's voice/video plugin ran end to end against the **production**
 Paradise Comms API (`https://paradisemodern.com/v1`, contract
 `2026-09-28.comms-recording-lifecycle`) from the Freeholder droplet
-(104.131.118.196, `ghcr.io/campdenman/freeholder:edge` re-pulled at run start to
+(<source-droplet-ip>, `ghcr.io/campdenman/freeholder:edge` re-pulled at run start to
 include the #430 adapter). Every call went through Freeholder's real service
 surface (`voiceVideo.*`, `contacts.*` privacy flow); PM-side reads used only the
 site key for corroboration.

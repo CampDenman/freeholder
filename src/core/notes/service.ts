@@ -462,6 +462,7 @@ async function tellTheMentioned(
  */
 registerContactReference({
   table: "notes",
+  columns: ["contact_id", "subject_id"],
   repoint: (tx, duplicateId, survivingId) =>
     tx.update(notes).set({ contactId: survivingId, subjectId: sql`case when ${notes.subjectType} = 'contact' then ${survivingId}::uuid else ${notes.subjectId} end` }).where(eq(notes.contactId, duplicateId)),
   captureForUndo: async (tx, duplicateId, survivingId) => ({

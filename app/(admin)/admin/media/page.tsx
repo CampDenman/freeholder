@@ -255,32 +255,43 @@ export default async function MediaPage({
                       <span className="break-all text-sm font-semibold">{asset.filename}</span>
                       <Pill tone="neutral">{t(`media.kind.${asset.kind}`)}</Pill>
                       <Pill tone={statusTone(asset.status)}>{t(`media.status.${asset.status}`)}</Pill>
-                      <Pill tone={asset.scanStatus === "infected" || asset.scanStatus === "error" ? "danger" : asset.scanStatus === "clean" ? "success" : "neutral"}>
-                        {t(`media.scan.${asset.scanStatus}`)}
-                      </Pill>
+                      {/* "No scanner connected" is a site setting, not news
+                          about this file; it lives under File details. */}
+                      {asset.scanStatus === "not_configured" ? null : (
+                        <Pill tone={asset.scanStatus === "infected" || asset.scanStatus === "error" ? "danger" : asset.scanStatus === "clean" ? "success" : "neutral"}>
+                          {t(`media.scan.${asset.scanStatus}`)}
+                        </Pill>
+                      )}
                       <time className="ms-auto font-mono text-xs text-ink-muted tabular-nums">
                         {formatDateTime(asset.createdAt, timezone, locale)}
                       </time>
                     </div>
 
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-ink-muted">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
                       <span>{bytes(asset.bytes, locale)}</span>
-                      <span>{asset.mime}</span>
                       {asset.width ? <span>{asset.width}&times;{asset.height}</span> : null}
                       {asset.durationSeconds != null ? <span>{t("media.duration", { seconds: asset.durationSeconds })}</span> : null}
                       {typeof metadata.pageCount === "number" ? <span>{t("media.pages", { pages: metadata.pageCount })}</span> : null}
-                      {asset.checksumSha256 ? <span title={asset.checksumSha256}>{t("media.checksum", { digest: asset.checksumSha256.slice(0, 12) })}</span> : null}
                     </div>
 
                     {asset.scanStatus === "infected" || asset.scanStatus === "error" ? (
                       <Callout tone="danger" icon={<WarningCircle size={16} weight="fill" />}>
                         {asset.scanMessage ?? t("media.quarantineReason")}
                       </Callout>
-                    ) : asset.scanStatus === "not_configured" ? (
-                      <Callout tone="neutral" icon={<ShieldCheck size={16} />}>
-                        {t("media.scannerNotConfigured")}
-                      </Callout>
                     ) : null}
+
+                    {/* File type, fingerprint and scanner state are for
+                        whoever is checking integrity, not everyday browsing. */}
+                    <details className="text-xs text-ink-muted">
+                      <summary className="cursor-pointer w-fit">{t("media.details")}</summary>
+                      <div className="mt-2 grid gap-1">
+                        <span className="font-mono">{asset.mime}</span>
+                        {asset.checksumSha256 ? <span className="break-all font-mono">{t("media.checksum", { digest: asset.checksumSha256 })}</span> : null}
+                        {asset.scanStatus === "not_configured" ? (
+                          <span className="inline-flex items-center gap-1.5"><ShieldCheck size={14} />{t("media.scannerNotConfigured")}</span>
+                        ) : null}
+                      </div>
+                    </details>
 
                     {canManage && trashed ? (
                       <TrashActions

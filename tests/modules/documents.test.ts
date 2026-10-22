@@ -374,6 +374,28 @@ describe.runIf(hasDatabase)("documents shared with a client", () => {
     expect(history[0]!.contactId).toBe(client.id);
   });
 
+  it("moves a document filed against a contact when that contact is merged", async () => {
+    // A document can be *about* a contact (subject_type = 'contact') as well
+    // as *for* one; the merge used to repoint only the second.
+    const { mergeContacts, undoContactMerge } = await import("@/core/contacts/service");
+    const { documents } = await import("@/modules/documents/schema");
+    const { eq } = await import("drizzle-orm");
+    const survivor = await contact("keep@example.com", "Keep");
+    const dupe = await contact("keep.second@example.com", "Keep");
+    const filed = await saveDocument.call(
+      { title: "ID check", subjectType: "contact", subjectId: dupe.id },
+      OWNER,
+    );
+
+    const merged = await mergeContacts.call({ duplicateId: dupe.id, survivingId: survivor.id }, OWNER);
+    const [after] = await db().select().from(documents).where(eq(documents.id, filed.id));
+    expect(after!.subjectId).toBe(survivor.id);
+
+    await undoContactMerge.call({ operationId: merged.mergeOperationId }, OWNER);
+    const [undone] = await db().select().from(documents).where(eq(documents.id, filed.id));
+    expect(undone!.subjectId).toBe(dupe.id);
+  });
+
   it("shows a customer only what was shared with them", async () => {
     const { client, document } = await documentWithFile();
     await share.call({ documentId: document.id, access: "link" }, OWNER);

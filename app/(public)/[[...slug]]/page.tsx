@@ -22,6 +22,7 @@ import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import { setupState } from "@/core/settings/service";
 import { collectJsonLd } from "@/modules/cms/blocks/registry";
 import { renderBlocks } from "@/modules/cms/render";
+import { decodeFormReturn, FORM_RETURN_COOKIE } from "@/core/http/public-form-return";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { resolveRedirect } from "@/core/seo/service";
 import {
@@ -121,7 +122,15 @@ export async function generateMetadata({
     publishedPage(await pathFor(slug), locale),
     currentBusiness(),
   ]);
-  if (!page) return {};
+  if (!page) {
+    // The 404 still needs a document title: an empty <title> is the first
+    // thing a screen reader announces (WCAG 2.4.2).
+    const t = await getT();
+    return {
+      title: composeDocumentTitle(t("notFound.title"), business?.name, false),
+      robots: { index: false, follow: true },
+    };
+  }
 
   // §5 per-page requirements: a unique title and description on every page,
   // "with sane auto-generated defaults" — the stored override wins, and the
@@ -307,6 +316,7 @@ export default async function PublicPage({
     // name, while a block asking "was this form just sent?" compares against
     // a string, and a comparison with an array is simply false.
     query: { ...query },
+    formReturn: decodeFormReturn(cookieJar.get(FORM_RETURN_COOKIE)?.value),
   });
 
   // Structured data comes from two places, and neither is a setting an owner
@@ -432,6 +442,15 @@ async function entityJsonLd(input: {
     const { resolveVisibleProduct } = await import("@/modules/catalog/service");
     const product = await resolveVisibleProduct.call({ slug: leaf }, ANONYMOUS);
     if (!product) return [];
+    // The offer comes from the same purchase projection the buy panel
+    // quotes, so the structured price can never disagree with the page.
+    // A product with no published price still gets no offer.
+    const { purchaseOptions } = await import("@/modules/catalog/service");
+    const { minorToDecimal } = await import("@/adapters/payments/currency");
+    const [purchase] = await purchaseOptions
+      .call({ slugs: [leaf] }, ANONYMOUS)
+      .catch(() => [] as Awaited<ReturnType<typeof purchaseOptions.call>>);
+    const priced = purchase?.priceFromMinor != null && purchase.currency ? purchase : null;
     return [
       productJsonLd({
         name: product.name,
@@ -439,6 +458,13 @@ async function entityJsonLd(input: {
         description: product.seo.description ?? product.subtitle ?? input.description,
         sku: product.slug,
         brand: product.brand,
+        ...(priced
+          ? {
+              price: minorToDecimal(priced.priceFromMinor!, priced.currency!),
+              priceCurrency: priced.currency!,
+              availability: priced.variants.some((variant) => variant.available) ? "InStock" : "OutOfStock",
+            }
+          : {}),
       }),
     ];
   }

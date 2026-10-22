@@ -184,7 +184,7 @@ export function PreviewCanvas({
   /** Persistent block outlines (the zen surface's show-structure toggle). */
   outlines?: boolean;
   /**
-   * `fixed` keeps the classic 32rem editing window; `auto` sizes the frame to
+   * `fixed` is a viewport-tall editing window that scrolls inside; `auto` sizes the frame to
    * the page's true rendered height, which the frame reports after every
    * change — the zen surface's full-page view (audit gap 10).
    */
@@ -539,7 +539,9 @@ export function PreviewCanvas({
                 "block border-0 bg-paper transition-all",
                 device === "mobile" ? "mx-auto w-[24rem]" : "w-full",
                 slot !== live && "hidden",
-                heightMode === "fixed" && "h-[32rem]",
+                // The editing window fills the viewport (less the editor chrome)
+                // rather than a fixed 32rem that cut most pages off mid-section.
+                heightMode === "fixed" && "h-[max(32rem,calc(100svh-10rem))]",
               )}
               style={
                 heightMode === "auto" && slot === live && frameHeight

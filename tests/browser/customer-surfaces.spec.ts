@@ -112,4 +112,23 @@ test.describe("public customer surfaces",()=>{
     await expect(page).toHaveURL(/cancelled=1/);
     expect((await db().select().from(subscriptions).where(eq(subscriptions.id,subscription!.id)))[0]?.status).toBe("cancelled");
   });
+  test("a card-required trial stays unavailable when this adapter cannot save a card", async ({ page, context }) => {
+    await seedC11Owner("Public journeys");
+    const [customer] = await db().insert(users).values({ email: "trial-visitor@example.test", role: "customer" }).returning();
+    await db().insert(contacts).values({ email: customer!.email, name: "Trial visitor", userId: customer!.id });
+    const session = await db().transaction((tx) => createSession(tx, customer!.id));
+    const [membership] = await db().insert(products).values({ name: "Card trial", slug: "card-trial", kind: "digital", status: "active", publishedAt: new Date() }).returning();
+    const [variant] = await db().insert(productVariants).values({ productId: membership!.id, sku: randomUUID(), combinationKey: "default", isDefault: true }).returning();
+    const [priceList] = await db().insert(priceLists).values({ name: "Trial prices", currency: "CAD", active: true }).returning();
+    await db().insert(priceListEntries).values({ priceListId: priceList!.id, variantId: variant!.id, amountMinor: 2500 });
+    await db().insert(plans).values({ productId: membership!.id, name: "Card trial", status: "active", billingMode: "provider", interval: "month", trialDays: 14, trialRequiresCard: true, setupFeeMinor: 0 });
+    await context.addCookies([{ name: SESSION_COOKIE, value: session.token, url: C11_BASE_URL }]);
+    await page.goto("/memberships");
+    await expect(page.getByRole("heading", { name: "Card trial", exact: true })).toBeVisible();
+    await expect(page.getByText("Online signup for this plan is not configured yet. Please contact the business.")).toBeVisible();
+    await expect(page.getByText("Please contact the business to set it up.")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Save a card and start the trial", exact: true })).toHaveCount(0);
+    expect(await db().select().from(subscriptions)).toHaveLength(0);
+    await assertThemes(page);
+  });
 });

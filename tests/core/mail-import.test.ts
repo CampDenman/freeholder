@@ -20,6 +20,7 @@ import { parseAddresses } from "@/core/connections/mail-providers";
 import { importMail } from "@/core/connections/mail-import";
 import { createContact } from "@/core/contacts/service";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { openTransactions } from "../helpers/open-transactions";
 
 /**
  * Only the rows this import wrote.
@@ -139,6 +140,23 @@ describe.runIf(hasDatabase)("importing mail", { timeout: 60_000 }, () => {
     vi.unstubAllGlobals();
     await truncateSpine();
     await closeDb();
+  });
+
+  // §11: the mailbox provider is asked with no service transaction open.
+  it("reads the provider with no transaction open", async () => {
+    await connect();
+    const provider = gmailHolding([
+      { id: "m1", from: "rae@example.test", to: MAILBOX, subject: "Hello" },
+    ]);
+    const open: number[] = [];
+    vi.stubGlobal("fetch", async (...args: Parameters<typeof provider>) => {
+      open.push(await openTransactions());
+      return provider(...args);
+    });
+    const result = await importMail.call({ id: ACCOUNT }, OWNER);
+    expect(result).toMatchObject({ messages: 1, timelineEvents: 1 });
+    expect(open.length).toBeGreaterThan(0);
+    expect(open.every((count) => count === 0), open.join(",")).toBe(true);
   });
 
   it("resolves a correspondent into the spine and puts the message on their timeline", async () => {

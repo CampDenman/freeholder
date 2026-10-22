@@ -20,9 +20,15 @@ import { MailSettingsCard } from "./MailSettingsCard";
 import { ready } from "@/core/runtime";
 import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { setModuleEnabledAction } from "../../settings-module-actions";
+import { env } from "@/core/env";
 import { domainOrNull } from "../../read-helpers";
 
 export const dynamic = "force-dynamic";
+
+/** Modules with a readable name; a plugin's module shows its own key. */
+const MODULE_NAMES = new Set([
+  "core", "cms", "forms", "analytics", "invoicing", "catalog", "seed", "builder", "events", "newsletters", "proof", "contracts", "rentals", "quotes", "projects", "galleries", "reviews", "crm", "ads", "share", "popups", "documents", "automations", "reporting", "subscriptions", "assistant", "social", "loyalty", "referrals", "gift-registry", "print-on-demand", "assessments", "calculators", "community", "voice-video", "marketplace", "members",
+]);
 
 
 export default async function AdminSettingsPage({
@@ -52,6 +58,7 @@ export default async function AdminSettingsPage({
     alwaysOn: name === "core",
   }));
   const canManageSettings = hasModuleAccess(actor, "settings", "manage");
+  const playground = env().FREEHOLDER_PLAYGROUND === "1";
 
   // Sensitive integration cards are fetched only when this stored role may
   // manage their modules, rather than rendered from calls that would refuse.
@@ -103,10 +110,21 @@ export default async function AdminSettingsPage({
             <ul className="mt-3 grid list-none gap-2 p-0">
               {moduleRows.map((row) => (
                 <li key={row.module} className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm">
-                  <span className="font-medium">{row.module}</span>
+                  <span className="font-medium">
+                    {MODULE_NAMES.has(row.module) ? t(`settings.modules.name.${row.module}`) : row.module}
+                  </span>
                   <Pill tone={row.enabled ? "success" : "neutral"}>
                     {row.enabled ? t("settings.modules.on") : t("settings.modules.off")}
                   </Pill>
+                  {/*
+                    "On" beside a module this person cannot open reads as a
+                    broken link waiting to happen; say why it is not in the nav.
+                  */}
+                  {row.enabled && !row.alwaysOn && !hasModuleAccess(actor, row.module, "view") ? (
+                    <span className="text-sm text-ink-muted">
+                      {t(playground ? "settings.modules.playgroundHidden" : "settings.modules.noAccess")}
+                    </span>
+                  ) : null}
                   {row.alwaysOn ? (
                     <span className="text-sm text-ink-muted">{t("settings.modules.alwaysOn")}</span>
                   ) : canManageSettings ? (
@@ -216,6 +234,19 @@ export default async function AdminSettingsPage({
             reactivate: t("mail.reactivate"),
             test: t("mail.test"),
             verified: t("mail.verified"),
+            verifyTitle: t("mail.verify.title"),
+            verifyProves: t("mail.verify.proves"),
+            verifyResend: t("mail.verify.resend"),
+            verifyPostmark: t("mail.verify.postmark"),
+            verifySes: t("mail.verify.ses"),
+            verifyFailed: t("mail.verify.failed"),
+            verifyDkim: t("mail.verify.dkim"),
+            verifyReturnPath: t("mail.verify.returnPath"),
+            verifyProviderStatus: t("mail.verify.providerStatus"),
+            verifyDomain: t("mail.verify.domain"),
+            verifyIdentity: t("mail.verify.identity"),
+            verifyYes: t("mail.verify.yes"),
+            verifyNo: t("mail.verify.no"),
             pending: t("mail.pending"),
             failed: t("mail.failed"),
             active: t("mail.active"),
@@ -382,6 +413,10 @@ async function loadMailAccess(actor: Actor, locale: string) {
         : null,
       lastVerifiedAt: undefined,
       createdAt: undefined,
+      verificationDetail:
+        sender.verificationDetail && typeof sender.verificationDetail === "object"
+          ? (sender.verificationDetail as Record<string, unknown>)
+          : {},
     })),
     deliveries: status.deliveries.map((delivery) => ({
       id: delivery.id,

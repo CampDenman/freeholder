@@ -6,6 +6,7 @@ import { memberServices } from "@/modules/members/member-services";
 import { randomUUID } from "node:crypto";
 import { joinMembershipAction } from "../../memberships/actions";
 import { memberPlans } from "@/modules/members/member-subscriptions";
+import { myMembershipPaymentMethods } from "@/modules/subscriptions/public-signup";
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
@@ -19,7 +20,7 @@ import { profileSections } from "@/modules/members/profile";
 import { formatMoney } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { myMembership } from "@/modules/members/service";
-import { Button, Callout, Pill } from "@/ui/primitives";
+import { Button, Callout, Field, Pill, Select } from "@/ui/primitives";
 import { getLocale, getT } from "../../../i18n";
 import { PostCard, postLabels } from "../PostCard";
 import { memberGraphAction } from "../actions";
@@ -74,6 +75,7 @@ export default async function MemberProfile({
     memberServices.call({ handle: profile.handle }, actor),
   ]);
   const viewer = actor.kind === "user" ? await myMembership.call({}, actor) : null;
+  const methods = actor.kind === "user" ? await myMembershipPaymentMethods.call({}, actor).catch(() => []) : [];
   const canAct = viewer?.status === "active" && !r.self;
   return (
     <div className="mx-auto grid max-w-2xl gap-6 px-6 py-12">
@@ -139,24 +141,46 @@ export default async function MemberProfile({
       {!r.self && !r.blocked && !offers.subscribed && offers.plans.length ? (
         <section className="grid gap-3" aria-labelledby="subscribe">
           <h2 id="subscribe" className="text-xl font-semibold">{t("members.plans.subscribeTitle", { name: profile.displayName })}</h2>
-          {(offers.plans as { id: string; name: string; description: string | null; currency: string; amountMinor: number; interval: string; intervalCount: number; termsHash: string; available: boolean }[]).map((plan) => (
+          {(offers.plans as { id: string; name: string; description: string | null; currency: string; amountMinor: number; setupFeeMinor: number; interval: string; intervalCount: number; trialDays: number; trialRequiresCard: boolean; billingMode: string; termsHash: string; available: boolean }[]).map((plan) => {
+            const needsCard = plan.available && plan.trialDays > 0 && plan.trialRequiresCard && methods.length === 0;
+            return (
             <div key={plan.id} className="grid gap-2 rounded-lg border border-rule bg-surface p-4">
               <p className="font-semibold">{plan.name}</p>
               {plan.description ? <p className="text-sm text-ink-muted">{plan.description}</p> : null}
               <p>{t("memberships.price", { amount: formatMoney(plan.amountMinor, plan.currency, locale), count: plan.intervalCount, interval: t(`memberships.interval.${plan.interval}`) })}</p>
+              {plan.setupFeeMinor > 0 ? <p>{t("memberships.setupFee", { amount: formatMoney(plan.setupFeeMinor, plan.currency, locale) })}</p> : null}
+              {plan.trialDays > 0 ? <p>{t("memberships.trial", { days: plan.trialDays })}</p> : null}
               {!plan.available ? <p className="text-sm text-ink-muted">{t("memberships.unavailable")}</p> : actor.kind !== "user" ? (
                 <a className="underline" href={`/portal/login?returnTo=${encodeURIComponent(`/@${profile.handle}`)}`}>{t("memberships.signIn")}</a>
+              ) : needsCard ? (
+                <form action={joinMembershipAction} className="grid gap-2">
+                  <p>{t("memberships.cardNeeded")}</p>
+                  <input type="hidden" name="planId" value={plan.id} />
+                  <input type="hidden" name="termsHash" value={plan.termsHash} />
+                  <input type="hidden" name="requestKey" value={randomUUID()} />
+                  <label className="flex items-start gap-2"><input type="checkbox" name="saveMethodConsent" value="yes" required /><span>{t("memberships.saveConsent")}</span></label>
+                  <label className="flex items-start gap-2"><input type="checkbox" name="acceptedTerms" value="yes" required /><span>{t("memberships.accept")}</span></label>
+                  <div><Button type="submit">{t("memberships.saveCard")}</Button></div>
+                </form>
               ) : (
                 <form action={joinMembershipAction} className="grid gap-2">
                   <input type="hidden" name="planId" value={plan.id} />
                   <input type="hidden" name="termsHash" value={plan.termsHash} />
                   <input type="hidden" name="requestKey" value={randomUUID()} />
+                  {plan.billingMode !== "manual" && methods.length ? (
+                    <Field label={t("memberships.paymentMethod")} htmlFor={`method-${plan.id}`}>
+                      <Select id={`method-${plan.id}`} name="paymentMethodId" defaultValue={methods[0]?.id}>
+                        {methods.map((method) => <option key={method.id} value={method.id}>{method.label}</option>)}
+                      </Select>
+                    </Field>
+                  ) : null}
                   <label className="flex items-start gap-2"><input type="checkbox" name="acceptedTerms" value="yes" required /><span>{t("memberships.accept")}</span></label>
                   <div><Button type="submit">{t("members.plans.subscribe")}</Button></div>
                 </form>
               )}
             </div>
-          ))}
+            );
+          })}
         </section>
       ) : null}
       {offers.subscribed && !r.self ? <p className="text-sm"><Pill tone="success">{t("members.plans.youSubscribe")}</Pill></p> : null}

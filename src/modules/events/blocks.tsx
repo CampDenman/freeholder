@@ -1,7 +1,11 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import { z } from "zod";
+import { formatMoney } from "@/core/i18n";
 import { defineBlock } from "@/modules/cms/blocks/types";
+import { env } from "@/core/env";
+import { failureFromQuery, failureMessageKey } from "@/core/http/public-form-return";
+import { registerForEventAction } from "../../../app/(public)/event-actions";
 
 export const eventsIndex = defineBlock({
   type: "eventsIndex",
@@ -33,6 +37,11 @@ export const eventsIndex = defineBlock({
   },
 });
 
+// 16px controls, not 14px: iOS Safari zooms the page when a smaller control
+// takes focus. The label stays at 14px; only the control clears the threshold.
+const control =
+  "w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-base text-ink";
+
 export const eventDetail = defineBlock({
   type: "eventDetail",
   labelKey: "cms.block.eventDetail",
@@ -49,6 +58,28 @@ export const eventDetail = defineBlock({
   render: ({ resolved, ctx }) => {
     if (!resolved) return null;
     const venue = [resolved.venueName, resolved.venueAddress].filter(Boolean).join(" — ");
+
+    // Registration is open only for a published event with a session still
+    // ahead; a draft, cancelled or finished event renders no form at all.
+    const futureSessions = resolved.sessions.filter(
+      (session) => session.startsAt.getTime() > Date.now(),
+    );
+    const open = resolved.status === "published" && futureSessions.length > 0;
+    const tickets = resolved.tickets.filter((ticket) => ticket.active);
+    const allFull =
+      futureSessions.length > 0 && futureSessions.every((session) => session.remaining === 0);
+    const waitlistOnly = allFull && futureSessions.every((session) => session.waitlistEnabled);
+    const submitLabel = waitlistOnly
+      ? ctx.t("events.register.submitWaitlist")
+      : tickets.length > 0 && tickets.every((ticket) => ticket.priceMinor > 0)
+        ? ctx.t("events.register.submitPaid")
+        : ctx.t("events.register.submit");
+
+    const registered = ctx.query?.eventRegistered === resolved.slug;
+    const waitlisted = ctx.query?.eventWaitlisted === resolved.slug;
+    const failed = ctx.query?.eventError === resolved.slug;
+    const formId = `event-${resolved.id}`;
+
     return (
       <div className="grid gap-3">
         {resolved.summary ? <p className="text-lg text-ink-muted">{resolved.summary}</p> : null}
@@ -72,6 +103,149 @@ export const eventDetail = defineBlock({
         <a href={`/ics/events/${resolved.slug}`} className="text-sm font-semibold text-accent">
           {ctx.t("events.addToCalendar")}
         </a>
+
+        {registered ? (
+          <p
+            role="status"
+            className="max-w-prose rounded-md border border-rule bg-success-soft px-4 py-3 text-sm text-success"
+          >
+            {ctx.t("events.register.success")}
+          </p>
+        ) : null}
+        {waitlisted ? (
+          <p
+            role="status"
+            className="max-w-prose rounded-md border border-rule bg-success-soft px-4 py-3 text-sm text-success"
+          >
+            {ctx.t("events.register.waitlisted")}
+          </p>
+        ) : null}
+
+        {open && !registered && !waitlisted ? (
+          <form action={registerForEventAction} className="grid max-w-prose gap-4">
+            <input type="hidden" name="eventId" value={resolved.id} />
+            <input type="hidden" name="eventSlug" value={resolved.slug} />
+            {futureSessions.length === 1 ? (
+              <input type="hidden" name="sessionId" value={futureSessions[0]!.id} />
+            ) : (
+              <div className="grid gap-1.5">
+                <label htmlFor={`${formId}-session`} className="text-sm font-medium text-ink">
+                  {ctx.t("events.register.session")}
+                </label>
+                <select
+                  id={`${formId}-session`}
+                  name="sessionId"
+                  required
+                  className={control}
+                >
+                  {futureSessions.map((session) => (
+                    <option key={session.id} value={session.id}>
+                      {session.remaining === 0
+                        ? session.waitlistEnabled
+                          ? ctx.t("events.register.sessionOptionWaitlist", {
+                              starts: session.startsAt.toISOString(),
+                            })
+                          : ctx.t("events.register.sessionOptionFull", {
+                              starts: session.startsAt.toISOString(),
+                            })
+                        : ctx.t("events.register.sessionOption", {
+                            starts: session.startsAt.toISOString(),
+                            remaining: session.remaining,
+                          })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {tickets.length === 0 ? null : tickets.length === 1 ? (
+              <input type="hidden" name="ticketId" value={tickets[0]!.id} />
+            ) : (
+              <div className="grid gap-1.5">
+                <label htmlFor={`${formId}-ticket`} className="text-sm font-medium text-ink">
+                  {ctx.t("events.register.ticket")}
+                </label>
+                <select
+                  id={`${formId}-ticket`}
+                  name="ticketId"
+                  required
+                  className={control}
+                >
+                  {tickets.map((ticket) => (
+                    <option key={ticket.id} value={ticket.id}>
+                      {ticket.name}
+                      {" — "}
+                      {ticket.priceMinor > 0
+                        ? formatMoney(ticket.priceMinor, ticket.currency, ctx.locale)
+                        : ctx.t("events.register.free")}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {failed ? (
+              <p
+                role="alert"
+                className="rounded-md border border-rule bg-danger-soft px-4 py-3 text-sm text-danger"
+              >
+                {ctx.t(failureMessageKey(failureFromQuery(ctx.query?.failure), "events.register.error"))}
+              </p>
+            ) : null}
+            <div className="grid gap-1.5">
+              <label htmlFor={`${formId}-name`} className="text-sm font-medium text-ink">
+                {ctx.t("events.register.name")}
+              </label>
+              <input
+                id={`${formId}-name`}
+                name="name"
+                type="text"
+                autoComplete="name"
+                maxLength={200}
+                className={control}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <label htmlFor={`${formId}-email`} className="text-sm font-medium text-ink">
+                {ctx.t("events.register.email")}
+                <span aria-hidden="true" className="text-ink-muted">
+                  {" *"}
+                </span>
+              </label>
+              <input
+                id={`${formId}-email`}
+                name="email"
+                type="email"
+                required
+                autoComplete="email"
+                maxLength={320}
+                className={control}
+              />
+              {env().FREEHOLDER_PLAYGROUND === "1" ? (
+                <p className="text-xs text-ink-muted">{ctx.t("playground.fictionalHint")}</p>
+              ) : null}
+            </div>
+            <div className="grid gap-1.5">
+              <label htmlFor={`${formId}-quantity`} className="text-sm font-medium text-ink">
+                {ctx.t("events.register.quantity")}
+              </label>
+              <input
+                id={`${formId}-quantity`}
+                name="quantity"
+                type="number"
+                min={1}
+                max={50}
+                defaultValue={1}
+                required
+                className={control}
+              />
+            </div>
+            <button
+              type="submit"
+              className="inline-flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-press"
+            >
+              {submitLabel}
+            </button>
+          </form>
+        ) : null}
       </div>
     );
   },

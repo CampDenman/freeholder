@@ -1637,32 +1637,35 @@ v2.
 
 ## C3.29 — Keep living screenshots of every screen
 
-- **F01** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
-- **F02** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
-- **F03** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
-- **F04** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
-- **F05** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
-- **F06** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
-- **F07** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
-- **F08** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
-- **F09** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
-- **F10** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
-- **F11** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
-- **F12** — `.github/workflows/screenshots.yml`: Pending — capture, branch publication and the freeholder.ai gallery are not yet proven end to end.
+- **F01** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+- **F02** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+- **F03** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+- **F04** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+- **F05** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+- **F06** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+- **F07** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+- **F08** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+- **F09** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+- **F10** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+- **F11** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+- **F12** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+
 ## C3.30 — Launch a new hosted site with one command
 
-- **F01** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
-- **F02** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
-- **F03** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
-- **F04** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
-- **F05** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
-- **F06** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
-- **F07** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
-- **F08** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
-- **F09** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
-- **F10** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
-- **F11** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
-- **F12** — `packages/cli/README.md`: Pending — specified 2026-10-16; built and tested against fakes, not yet run against a real account.
+*Checked 2026-10-22 on owner attestation: the owner reports running Freeholder on DigitalOcean for multiple projects. The tests below use fakes of every outside party; no agent-observed live launch on a real account is recorded.*
+
+- **F01** — N/A — the CLI adds no schema; the site it installs migrates itself on boot.
+- **F02** — N/A — no new service; `packages/cli/src/launch/` drives DigitalOcean's API and the installed stack from outside the app.
+- **F03** — N/A — no contact data; the owner is created by the existing `/setup` claim, never by the CLI.
+- **F04** — N/A — a terminal command, not an admin screen; it ends at the existing `/setup` claim link.
+- **F05** — `packages/cli/README.md`: `--non-interactive`, `--json` and documented exit codes make the command agent-drivable; covered in `tests/core/launch-cli.test.ts`.
+- **F06** — N/A — operator CLI output is English like the rest of `@freeholder/cli`; the claimed site's own surfaces are localized.
+- **F07** — `tests/core/launch-cli.test.ts`: secrets only in the mode-600 env file and redacted from output, scoped and temporary Spaces keys, confirmed `--destroy` that keeps non-empty buckets and reports any deletion it could not make, linear-time argument parsing.
+- **F08** — `tests/core/launch-cli.test.ts` against fakes of DigitalOcean, Spaces' S3, the registry, DNS and SSH.
+- **F09** — `packages/cli/README.md`: resumable state, nightly backups confirmed at launch, cutover, teardown, costs (Spaces billing continues after `--destroy` until cancelled) and safe storage of the env file holding `CREDENTIAL_KEY`.
+- **F10** — N/A — a one-off provisioning command; the installed site's performance is the recipe's (`deploy/digitalocean-droplet/README.md`).
+- **F11** — `packages/cli/README.md`, `deploy/digitalocean-droplet/README.md`, changesets `.changeset/cli-launch.md` and `.changeset/cli-launch-hardening.md`.
+- **F12** — `packages/cli/scripts/copy-recipe.mjs` ships exactly the repository's `deploy/digitalocean-droplet/infra` recipe, asserted byte-for-byte in `tests/core/launch-cli.test.ts`.
 
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
@@ -2551,16 +2554,16 @@ v2.
 
 ## C6.11 — Build events/classes with venue, sessions, seat inventory
 
-- **F01** — `db/migrations/0000_reviewed-baseline.sql` — reviewed baseline (C10.19) folding the item's migration tag `0059_concerned_sumo.sql`; table invariants asserted in `tests/core/events.test.ts`.
-- **F02** — `tests/core/events.test.ts` — event scheduling mutations through the typed service boundary.
+- **F01** — `db/migrations/0000_reviewed-baseline.sql` — reviewed baseline (C10.19) folding the item's original migration tag; paid admission's `event_registrations.invoice_id`/`hold_expires_at` and hold-sweep index land in `db/migrations/0052_event_paid_admission.sql`; invariants asserted in `tests/core/events.test.ts`.
+- **F02** — `tests/core/events.test.ts` — event scheduling, paid registration, settlement, expiry and refund mutations through the typed service boundary.
 - **F03** — `tests/core/merge-completeness.test.ts` — merge repointing is enforced by reflection over every module's tables, so any contact reference this item stores is covered; its contact-facing behaviour is exercised in `tests/core/events.test.ts`.
-- **F04** — /admin/events list/create. — screen file `app/(admin)/admin/events/page.tsx`.
-- **F05** — `events.create`/`update`/`addSession`/`addTicket`/`register`/`list`/`publish` at /api/v1/events.*, MCP `events_*`. — surface equivalence: `tests/core/api.test.ts` (every service has an endpoint, spec schema is the validator), `tests/core/sdk-schema.test.ts` (generated client contract) and `tests/core/mcp.test.ts` (registry-derived MCP tools)..
-- **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG over the surfaces the browser suite visits in `tests/browser/accessibility.spec.ts`.
-- **F07** — `tests/core/events.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing).
-- **F08** — `tests/core/events.test.ts` — the item's unit/service/database coverage.
-- **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared audit/outbox participation it rides on: `tests/core/record-participation.test.ts`.
-- **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; per-item contextual help is not separately evidenced.
+- **F04** — /admin/events list/create plus the public registration form in the eventDetail block (`app/(public)/event-actions.ts`, `src/modules/events/blocks.tsx`). — screen file `app/(admin)/admin/events/page.tsx`.
+- **F05** — `events.create`/`update`/`addSession`/`addTicket`/`register`/`list`/`publish` at /api/v1/events.*, MCP `events_*`; the settlement, hold-sweep and refund-cancellation phases (`events.confirmPaidRegistration`/`expireHeldRegistrations`/`cancelRegistrationForInvoice`) are system services, deliberately off every projection (`tests/core/internal-services.test.ts`). — surface equivalence: `tests/core/api.test.ts` (every service has an endpoint, spec schema is the validator), `tests/core/sdk-schema.test.ts` (generated client contract) and `tests/core/mcp.test.ts` (registry-derived MCP tools).
+- **F06** — axe WCAG A/AA over the public index, the public event page with its registration form and result states, and both admin surfaces, in light and dark, in `tests/browser/events.spec.ts`; the form's strings ship in all four locales, held to ICU parity by `tests/core/i18n-gate.test.ts` + `tests/core/locale-quality.test.ts`.
+- **F07** — `tests/core/events.test.ts` covers paid-hold refusal at check-in, lapsed/cancelled-hold checkout refusal, duplicate refusal and partial-payment containment; `tests/core/client-readiness-security.test.ts` keeps the legacy guards (foreign/inactive tickets, unverifiable paid rows refused at check-in); scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing).
+- **F08** — `tests/core/events.test.ts` plus `tests/browser/events.spec.ts` — service, database and browser coverage.
+- **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. The hold sweeper is the pg-boss job `events.expireHeldRegistrations` (`src/modules/events/jobs.ts`). Shared audit/outbox participation it rides on: `tests/core/record-participation.test.ts`.
+- **F10** — `src/modules/events/onboarding.ts` ships a demo class in en/fr/es, loaded, verified and purged by the tracked demo run; the class is paid, so its public page's form genuinely sells a seat.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping).
 - **F12** — `tests/core/events.test.ts` is the composition proof.
 
@@ -3706,33 +3709,33 @@ v2.
 
 ## C9.37 — Newsletter readiness and sending journey
 
-- **F01** — Additive customer identifiers and asset privacy backfill: `db/migrations/0022_customer_surfaces.sql`.
-- **F02** — Typed shared services: `src/modules/newsletters/broadcast-service.ts`; customer identity and refusal tests: `tests/modules/customer-surfaces.test.ts`.
-- **F03** — Canonical contact, invoice, grant and share-policy composition: `tests/modules/customer-surfaces.test.ts`.
-- **F04** — Human surface: `app/(admin)/admin/newsletters/broadcasts/page.tsx`; browser evidence: `tests/browser/customer-surfaces.spec.ts`.
-- **F05** — The service registry projects the same schemas and permissions to HTTP/MCP: `src/modules/newsletters/broadcast-service.ts`, `packages/sdk/src/generated.ts`.
-- **F06** — Four locale catalogs: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; runtime catalog gate: `tests/core/locale-quality.test.ts`.
-- **F07** — Customer ownership, stale terms, duplicate reservations, payment-bound grants and private downloads: `tests/modules/customer-surfaces.test.ts`.
-- **F08** — Database regressions: `tests/modules/customer-surfaces.test.ts`; browser forms: `tests/browser/customer-surfaces.spec.ts`.
-- **F09** — Provider and deployment limitations remain explicit: `deploy/customer-surfaces-2026-10-07.md`; no mocked live-provider acceptance is claimed.
-- **F10** — Configuration and customer entry points: `deploy/customer-surfaces-2026-10-07.md`.
-- **F11** — Beta release notes: `.changeset/customer-self-service.md`; scope and remaining acceptance: `deploy/customer-surfaces-2026-10-07.md`.
-- **F12** — Composed software journeys: `tests/browser/customer-surfaces.spec.ts`, `tests/modules/customer-surfaces.test.ts`; actual provider acceptance remains open in `MASTER.md`.
+- **F01** — No new migration. Newsletter, broadcast, consent and suppression tables already ship in `db/migrations/0000_reviewed-baseline.sql`; this change adds queries and screens on `src/modules/newsletters/schema.ts` and `src/core/mail/schema.ts`.
+- **F02** — `tests/modules/broadcasts.test.ts` covers `broadcasts.audiencePreview` and the freeze-moment counts on `broadcasts.start`; `tests/core/newsletters.test.ts` covers resubscribe and the stored consent statement.
+- **F03** — Marketing-email consent stays on the contact spine: the preview join and the send both use the latest granted unexpired record plus active suppression. `tests/modules/broadcasts.test.ts`, `tests/core/newsletters.test.ts`.
+- **F04** — Compose `app/(admin)/admin/newsletters/broadcasts/page.tsx`, detail `app/(admin)/admin/newsletters/broadcasts/[id]/page.tsx`, template test-send `app/(admin)/admin/newsletters/templates/page.tsx`, guidance `app/(admin)/admin/settings/MailSettingsCard.tsx`, public subscribe `src/modules/newsletters/blocks.tsx`. Browser: `tests/browser/newsletters.spec.ts`.
+- **F05** — `broadcasts.audiencePreview` and additive `broadcasts.start` / `mail.status` fields project through the registry to HTTP/MCP/SDK: `src/modules/newsletters/broadcast-service.ts`, `src/core/mail/service.ts`, `packages/sdk/src/generated.ts`. Surface equivalence: `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts`, `tests/core/mcp.test.ts`.
+- **F06** — New copy in `locales/en.json`, `locales/es.json`, `locales/fr.json`, `locales/ar.json`. Catalog gate: `tests/core/i18n-gate.test.ts` and `tests/core/locale-quality.test.ts`. Axe on the changed screens: `tests/browser/newsletters.spec.ts`.
+- **F07** — Unverified sender, empty audience, suppressed address, missing consent, archived wording and a statement posted without its box are refusals. `tests/modules/broadcasts.test.ts`, `tests/core/newsletters.test.ts`. Scoped permission enforcement for every service: `tests/core/api.test.ts`.
+- **F08** — `tests/modules/broadcasts.test.ts`, `tests/core/newsletters.test.ts`, `tests/core/mail-ui.test.ts`, `tests/core/seed-demo.test.ts`, `tests/browser/newsletters.spec.ts`.
+- **F09** — `assertMailReady` in `src/core/mail/service.ts` refuses a campaign with no delivering verified bulk sender. SMTP/HTTP doubles prove behavior; live inbox placement stays owner acceptance in `deploy/customer-surfaces-2026-10-07.md`. Product-wide export/restore/retention remains C11.14; shared audit/outbox participation: `tests/core/record-participation.test.ts`.
+- **F10** — Demo letter, published issue and campaign template via ordinary services: `seed/demo/content.ts`, `src/modules/seed/service.ts`, `tests/core/seed-demo.test.ts`. Sender guidance is on the settings card: `app/(admin)/admin/settings/MailSettingsCard.tsx`.
+- **F11** — Changeset `.changeset/c9-37-newsletter-journey.md`. Annotation in `MASTER.md`. Reconciliation row in `deploy/spec-reconciliation.md`. Acceptance boundary: `deploy/customer-surfaces-2026-10-07.md`.
+- **F12** — `tests/modules/broadcasts.test.ts` composes preview, freeze, consent and suppression. Owner path: `tests/browser/newsletters.spec.ts` (jobs off, so the batch itself stays in the vitest proof). Demo site: `tests/core/seed-demo.test.ts`.
 
 ## C9.38 — Public membership signup
 
-- **F01** — Additive customer identifiers and asset privacy backfill: `db/migrations/0022_customer_surfaces.sql`.
-- **F02** — Typed shared services: `src/modules/subscriptions/public-signup.ts`; customer identity and refusal tests: `tests/modules/customer-surfaces.test.ts`.
-- **F03** — Canonical contact, invoice, grant and share-policy composition: `tests/modules/customer-surfaces.test.ts`.
-- **F04** — Human surface: `app/(public)/memberships/page.tsx`; browser evidence: `tests/browser/customer-surfaces.spec.ts`.
-- **F05** — The service registry projects the same schemas and permissions to HTTP/MCP: `src/modules/subscriptions/public-signup.ts`, `packages/sdk/src/generated.ts`.
-- **F06** — Four locale catalogs: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; runtime catalog gate: `tests/core/locale-quality.test.ts`.
-- **F07** — Customer ownership, stale terms, duplicate reservations, payment-bound grants and private downloads: `tests/modules/customer-surfaces.test.ts`.
-- **F08** — Database regressions: `tests/modules/customer-surfaces.test.ts`; browser forms: `tests/browser/customer-surfaces.spec.ts`.
-- **F09** — Provider and deployment limitations remain explicit: `deploy/customer-surfaces-2026-10-07.md`; no mocked live-provider acceptance is claimed.
-- **F10** — Configuration and customer entry points: `deploy/customer-surfaces-2026-10-07.md`.
-- **F11** — Beta release notes: `.changeset/customer-self-service.md`; scope and remaining acceptance: `deploy/customer-surfaces-2026-10-07.md`.
-- **F12** — Composed software journeys: `tests/browser/customer-surfaces.spec.ts`, `tests/modules/customer-surfaces.test.ts`; actual provider acceptance remains open in `MASTER.md`.
+- **F01** — No new migration. Plans, subscriptions, invoices and saved methods already ship in `db/migrations/0000_reviewed-baseline.sql`. `card_setup` is an unconstrained event kind on `src/modules/subscriptions/schema.ts`; its detail is the provider customer reference.
+- **F02** — `tests/modules/subscription-billing.test.ts` covers the paused signup, the setup-fee invoice, card binding and the immediate trial. `tests/core/payment-adapters.test.ts` covers Stripe `createMethodSetup` and a setup-mode webhook.
+- **F03** — The paused row, the setup-fee invoice, the saved method and the site grant stay on the contact spine. `src/modules/subscriptions/public-signup.ts`, `tests/modules/subscription-billing.test.ts`.
+- **F04** — Public plans `app/(public)/memberships/page.tsx`, return `app/(public)/memberships/trial-return/page.tsx`, member profile `app/(public)/m/[handle]/page.tsx`, portal resume `app/portal/(account)/subscriptions/[id]/page.tsx`. Browser: `tests/browser/customer-surfaces.spec.ts`.
+- **F05** — `subscriptions.beginTrialCardSetup` and `subscriptions.startCardTrial`, plus `cardSetup` on `subscriptions.join` and `subscriptions.mine`, project through the registry: `src/modules/subscriptions/public-signup.ts`, `packages/sdk/src/generated.ts`. Surface equivalence: `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts`, `tests/core/mcp.test.ts`.
+- **F06** — New copy in `locales/en.json`, `locales/es.json`, `locales/fr.json`, `locales/ar.json`. Catalog gate: `tests/core/i18n-gate.test.ts` and `tests/core/locale-quality.test.ts`. Axe on the membership screen: `tests/browser/customer-surfaces.spec.ts`.
+- **F07** — A cancelled signup, an older card, an unrelated card, a staff-saved card, and an adapter that cannot save one are refusals. `tests/modules/subscription-billing.test.ts`. A setup session is not a payment: `tests/core/payment-adapters.test.ts`. Scoped permission enforcement for every service: `tests/core/api.test.ts`.
+- **F08** — `tests/modules/subscription-billing.test.ts`, `tests/core/payment-adapters.test.ts`, `tests/browser/customer-surfaces.spec.ts`.
+- **F09** — The adapter double proves the handoff. Live recurring settlement stays owner acceptance in `deploy/customer-surfaces-2026-10-07.md`. Product-wide export/restore/retention remains C11.14; shared audit/outbox participation: `tests/core/record-participation.test.ts`.
+- **F10** — What the customer is promised, and what a manual adapter cannot do: `deploy/customer-surfaces-2026-10-07.md`, `app/(public)/memberships/page.tsx`.
+- **F11** — Changeset `.changeset/c9-38-card-trial.md`. Annotation in `MASTER.md`. Reconciliation row in `deploy/spec-reconciliation.md`. Acceptance boundary: `deploy/customer-surfaces-2026-10-07.md`.
+- **F12** — `tests/modules/subscription-billing.test.ts` composes signup, consent, the saved card and the grant. The browser path in `tests/browser/customer-surfaces.spec.ts` proves an incapable adapter keeps the plan unavailable; the server default is manual, so that run does not render the save-card form.
 
 ## C9.32 — Build scheduled exports and the accounting export shapes
 

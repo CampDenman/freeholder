@@ -17,6 +17,7 @@ import {
   cancelMySubscriptionAction,
   changeMyPlanAction,
 } from "../../../subscription-actions";
+import { continueTrialCardSetupAction } from "../../../../(public)/memberships/actions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -35,7 +36,7 @@ export default async function PortalSubscriptionPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ cancelled?: string; error?: string; changed?: string; deferred?: string }>;
+  searchParams: Promise<{ cancelled?: string; error?: string; changed?: string; deferred?: string; awaiting?: string }>;
 }) {
   const { id } = await params;
   const query = await searchParams;
@@ -52,7 +53,7 @@ export default async function PortalSubscriptionPage({
 
   const [rooms, offered] = await Promise.all([
     myRecords.call({ section: "subscriptions", limit: 100 }, actor),
-    listOfferedPlans.call({}, actor).catch(() => []),
+    listOfferedPlans.call({ subscriptionId: id }, actor).catch(() => []),
   ]);
   const record = rooms[0]?.records.find((each) => each.id === id);
   if (!record) notFound();
@@ -82,6 +83,11 @@ export default async function PortalSubscriptionPage({
           {t("subscriptions.portal.changed")}
         </p>
       ) : null}
+      {query.awaiting ? (
+        <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          {t("subscriptions.portal.awaitingPayment")}
+        </p>
+      ) : null}
       {query.deferred ? (
         <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
           {t("subscriptions.portal.deferred")}
@@ -103,7 +109,19 @@ export default async function PortalSubscriptionPage({
           }
         />
         <CardBody>
-          {membership.pending ? <p role="status">{t("memberships.pending")} {membership.invoiceId ? <a className="underline" href={href(`/portal/invoices/${membership.invoiceId}`)}>{t("portal.record.invoice")}</a> : null}</p> : null}
+          {membership.cardSetup ? (
+            <form action={continueTrialCardSetupAction} className="grid gap-3">
+              <p role="status">{t("memberships.cardSetupPending")}</p>
+              <input type="hidden" name="subscriptionId" value={id} />
+              <label className="flex items-start gap-2 text-sm text-ink">
+                <input type="checkbox" name="saveMethodConsent" value="yes" required className="mt-1" />
+                {t("memberships.saveConsent")}
+              </label>
+              <div>
+                <Button type="submit">{t("memberships.saveCard")}</Button>
+              </div>
+            </form>
+          ) : membership.pending ? <p role="status">{t("memberships.pending")} {membership.invoiceId ? <a className="underline" href={href(`/portal/invoices/${membership.invoiceId}`)}>{t("portal.record.invoice")}</a> : null}</p> : null}
           {record.at && !membership.pending ? (
             <p className="text-sm text-ink-muted">
               {t(

@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // The global browser policy must agree with the capabilities the UI ships.
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import nextConfig from "../../next.config";
@@ -8,7 +9,7 @@ import nextConfig from "../../next.config";
 describe("security headers", () => {
   it("allows only same-origin capture while keeping unused sensors disabled", async () => {
     const groups = await nextConfig.headers!();
-    const application = groups.find((group) => group.source === "/((?!preview|embed).*)");
+    const application = groups.find((group) => group.source === "/((?!preview|embed|api/ads/creative/).*)");
     const policy = application?.headers.find(
       (header) => header.key === "Permissions-Policy",
     )?.value;
@@ -29,6 +30,17 @@ describe("security headers", () => {
     );
     expect(studio).toContain("navigator.mediaDevices.getUserMedia");
     expect(studio).toContain("navigator.mediaDevices.getDisplayMedia");
+  });
+
+  it("keeps Next's image optimizer switched off, since nothing uses it", () => {
+    expect(nextConfig.images?.unoptimized).toBe(true);
+    // git grep exits 1 when nothing matches, which is the passing case.
+    const search = spawnSync(
+      "git",
+      ["grep", "-l", "-E", "from [\"']next/(legacy/)?image[\"']", "--", "app", "src", "plugins"],
+      { encoding: "utf8" },
+    );
+    expect(search.stdout.trim()).toBe("");
   });
 
   it("does not send X-Frame-Options on embed widgets so they can be framed", async () => {

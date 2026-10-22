@@ -21,6 +21,7 @@ import {
   startJobProducer,
   startJobs,
   stopJobs,
+  workerPolling,
   type EnqueuedJob,
 } from "@/core/jobs";
 import { getJobRuntimeEvidence } from "@/core/jobs/health";
@@ -108,6 +109,24 @@ describe("job definitions", () => {
         handler: async () => null,
       }),
     ).toThrow(/reserved/);
+  });
+
+  it("keeps pg-boss's poll unless the deploy slows it (C1.38 playground capacity)", () => {
+    const prior = process.env.FREEHOLDER_JOBS_POLL_SECONDS;
+    try {
+      delete process.env.FREEHOLDER_JOBS_POLL_SECONDS;
+      resetEnvForTests();
+      expect(workerPolling()).toEqual({});
+      // The playground recipe's value: measured idle database transactions
+      // fell from ~70 a second to ~17.
+      process.env.FREEHOLDER_JOBS_POLL_SECONDS = "15";
+      resetEnvForTests();
+      expect(workerPolling()).toEqual({ pollingIntervalSeconds: 15 });
+    } finally {
+      if (prior === undefined) delete process.env.FREEHOLDER_JOBS_POLL_SECONDS;
+      else process.env.FREEHOLDER_JOBS_POLL_SECONDS = prior;
+      resetEnvForTests();
+    }
   });
 });
 

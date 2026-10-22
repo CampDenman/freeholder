@@ -369,6 +369,21 @@ export const sweepMediaOrphans = defineJob({
   },
 });
 
+/** Capture objects are deleted only after the forgetting transaction commits. */
+export const deleteCaptureObjects = defineJob({
+  name: "core.deleteCaptureObjects",
+  summary: "Delete capture storage objects that a committed change released.",
+  retry: { limit: 8, delaySeconds: 30, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 2,
+  handler: async (data) => {
+    if (!Array.isArray(data.keys) || data.keys.some((key) => typeof key !== "string")) {
+      throw new Error("core.deleteCaptureObjects requires storage keys");
+    }
+    const { deleteCaptureObjects: remove } = await import("@/core/media/capture");
+    return remove(data.keys as string[]);
+  },
+});
+
 /** Unconfirmed recordings and leftover chunks must not outlive the session. */
 export const expireCaptureSessions = defineJob({
   name: "core.expireCaptureSessions",
@@ -854,6 +869,39 @@ export const sendSmsComplianceReply = defineJob({
   },
 });
 
+/**
+ * Submit one staged text message to its carrier after the transaction that
+ * staged it committed (§11). The retry limit matches `SMS_DELIVERY_RETRIES`,
+ * after which the message records a failure instead of staying queued.
+ */
+export const deliverSms = defineJob({
+  name: "core.deliverSms",
+  summary: "Submit one transactionally staged text message to its SMS provider.",
+  retry: { limit: 8, delaySeconds: 15, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 4,
+  leaseSeconds: 5 * 60,
+  handler: async (data, context) => {
+    if (
+      typeof data.messageId !== "string" ||
+      typeof data.provider !== "string" ||
+      typeof data.from !== "string" ||
+      typeof data.idempotencyKey !== "string"
+    ) {
+      throw new Error("core.deliverSms received incomplete delivery data");
+    }
+    const { deliverQueuedSms } = await import("@/core/messaging/sms");
+    return deliverQueuedSms(
+      {
+        messageId: data.messageId,
+        provider: data.provider,
+        from: data.from,
+        idempotencyKey: data.idempotencyKey,
+      },
+      context?.attempt ?? 1,
+    );
+  },
+});
+
 /** Owner keyword replies are durable and happen only after inbound commit. */
 export const sendSmsKeywordReply = defineJob({
   name: "core.sendSmsKeywordReply",
@@ -967,6 +1015,7 @@ export default [
   pruneJobKeys,
   sweepMediaOrphans,
   expireCaptureSessions,
+  deleteCaptureObjects,
   expireAgentApprovals,
   runPlaybooks,
   assembleBriefings,
@@ -994,6 +1043,7 @@ export default [
   replyContributions,
   sendSmsComplianceReply,
   sendSmsKeywordReply,
+  deliverSms,
   refreshCatalogue,
   checkUpdates,
   escalateSecurityUpdates,

@@ -12,9 +12,14 @@
 // find a published event from the index, the page states how many seats are
 // left rather than implying availability, a full session says zero instead of
 // going quiet, the calendar link actually returns a calendar, and every surface
-// passes WCAG A/AA in light and dark.
+// passes WCAG A/AA in light and dark. The second journey buys a paid seat for
+// real: the registration form hands the visitor to the invoice's private pay
+// page, the owner records the offline payment at /admin/payments (the C11.01
+// pattern), and the registration confirms and checks in — purchasable
+// admission, proven end to end rather than asserted.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { THEME_COOKIE } from "@/core/design/theme";
 import { contacts } from "@/core/contacts/schema";
@@ -191,5 +196,103 @@ test("a published class is findable, states its seats, and hands over a calendar
 
     await page.goto(`/admin/events/${event.id}`, { waitUntil: "domcontentloaded" });
     await assertAxe(page, "event detail", theme);
+  }
+});
+
+test("a visitor buys a paid seat: form, invoice page, offline settlement, check-in", async ({
+  page,
+  context,
+}) => {
+  const token = await seedC11Owner("Fieldnote Bakery");
+  await useOwnerSession(context, token);
+
+  const starts = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const ends = new Date(starts.getTime() + 4 * 60 * 60 * 1000);
+  const [event] = await db()
+    .insert(events)
+    .values({
+      name: "Paid sourdough class",
+      slug: "paid-sourdough",
+      summary: "Four hours, one loaf each.",
+      venueName: "The back kitchen",
+      status: "published",
+      publishedAt: new Date(),
+    })
+    .returning();
+  if (!event) throw new Error("the event fixture was not created");
+  await db()
+    .insert(eventSessions)
+    .values({ eventId: event.id, startsAt: starts, endsAt: ends, capacity: 2 });
+  await db()
+    .insert(eventTickets)
+    .values({ eventId: event.id, name: "General", priceMinor: 6500, currency: "CAD" });
+  await db()
+    .insert(pages)
+    .values({
+      slug: `events/${event.slug}`,
+      title: "Paid sourdough class",
+      status: "published",
+      publishedAt: new Date(),
+      blocks: [
+        { id: "event-h1", type: "heading", props: { text: "Paid sourdough class", level: 1, align: "start" } },
+        { id: "event-detail", type: "eventDetail", props: { eventId: event.id, slug: event.slug } },
+      ],
+    });
+
+  const visitor = await page.context().browser()!.newContext();
+  const visitorPage = await visitor.newPage();
+  try {
+    await visitorPage.goto(`/events/${event.slug}`, { waitUntil: "domcontentloaded" });
+    // The form is the admission desk: one session and one ticket are
+    // pre-chosen, the visitor answers who and how many.
+    await visitorPage.getByLabel("Your name").fill("Robin Baker");
+    await visitorPage.getByLabel("Email").fill("robin@example.test");
+    await visitorPage.getByRole("button", { name: "Register and pay" }).click();
+
+    // Paid registration hands the browser to the invoice's private page; the
+    // seat is a hold until settlement, and the manual adapter shows offline
+    // instructions rather than pretending money moved.
+    await expect(visitorPage).toHaveURL(/\/portal\/invoices\/[0-9a-f-]+\?token=/);
+    await visitorPage.getByRole("button", { name: "Arrange offline payment" }).click();
+    await expect(visitorPage.getByText(/offline/i).first()).toBeVisible();
+
+    const [held] = await db()
+      .select()
+      .from(eventRegistrations)
+      .where(eq(eventRegistrations.eventId, event.id));
+    expect(held?.status).toBe("reserved");
+    expect(held?.invoiceId).toBeTruthy();
+    if (!held?.invoiceId) throw new Error("the held registration has no invoice");
+
+    // The owner records the cash that actually arrived (the C11.01 pattern).
+    await page.goto("/admin/payments", { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Invoice and outstanding balance", { exact: true }).first().selectOption(held.invoiceId);
+    await page.getByLabel("Amount", { exact: true }).first().fill("65.00");
+    await page.getByLabel("How this payment was verified").fill("Cash counted for the sourdough class.");
+    await page.getByLabel("I confirm this money was received and the evidence is accurate.").check();
+    await page.getByRole("button", { name: "Record payment" }).click();
+    await expect(page.getByText("The payment ledger was updated.")).toBeVisible();
+
+    const [confirmed] = await db()
+      .select()
+      .from(eventRegistrations)
+      .where(eq(eventRegistrations.id, held.id));
+    expect(confirmed?.status).toBe("confirmed");
+
+    await page.goto(`/admin/events/${event.id}`, { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Confirmed · 1")).toBeVisible();
+    await page.getByRole("button", { name: "Check in" }).click();
+    await expect(page.getByText("Checked in · 1")).toBeVisible();
+
+    // The form's states are surfaces too: axe them in both themes.
+    for (const theme of ["light", "dark"] as const) {
+      await visitor.addCookies([{ name: THEME_COOKIE, value: theme, url: C11_BASE_URL }]);
+      await visitorPage.goto(`/events/${event.slug}`, { waitUntil: "domcontentloaded" });
+      await assertAxe(visitorPage, "event registration form", theme);
+      await visitorPage.goto(`/events/${event.slug}?eventError=${event.slug}`, { waitUntil: "domcontentloaded" });
+      await assertAxe(visitorPage, "event registration error state", theme);
+    }
+  } finally {
+    await visitor.close();
   }
 });

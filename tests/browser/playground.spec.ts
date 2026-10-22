@@ -13,6 +13,8 @@
 import { expect, test } from "@playwright/test";
 import { closeDb, db } from "@/core/db";
 import { pages } from "@/modules/cms/schema";
+import { forms, formSubmissions } from "@/modules/forms/schema";
+import { PLAYGROUND_ROW_CAPS } from "@/core/demo/playground-policy";
 import { initializePlayground } from "@/core/demo/playground";
 import { CSRF_COOKIE, CSRF_HEADER } from "@/core/http/csrf";
 import { resetBrowserDatabase } from "./database";
@@ -123,6 +125,82 @@ test.describe("hardened public playground (C1.38)", () => {
           "unavailable in the public playground",
         );
       }
+    });
+
+    await test.step("the public site's own forms work for a signed-out visitor, and a refusal keeps their answers", async () => {
+      // 2026-10-22: the playground refused every anonymous public action, so
+      // the demo's own contact form failed for the people it exists for.
+      const [form] = await db().insert(forms).values({
+        slug: "contact",
+        name: "Enquiry",
+        fields: [
+          { key: "name", label: "Your name", kind: "text", required: true },
+          { key: "email", label: "Email", kind: "email", required: true },
+          { key: "message", label: "Message", kind: "multiline", required: true },
+        ],
+      }).returning({ id: forms.id });
+      await db().insert(pages).values({
+        slug: "contact-proof",
+        title: "Contact proof",
+        status: "published",
+        publishedAt: new Date(),
+        blocks: [{ id: "contact-form", type: "form", props: { formSlug: "contact" } }],
+      });
+      const stranger = await page.context().browser()!.newContext();
+      const visitor = await stranger.newPage();
+      try {
+        await visitor.goto("/contact-proof");
+        await visitor.getByLabel("Your name").fill("Ada");
+        await visitor.getByLabel("Email").fill("ada@example.test");
+        await visitor.getByLabel("Message").fill("Do you shoot in October?");
+        await visitor.getByRole("button", { name: "Send" }).click();
+        await expect(visitor.getByRole("status")).toContainText("Thank you");
+
+        // Full surface: the refusal says why and the answers are still there.
+        const cap = PLAYGROUND_ROW_CAPS["forms.submit"]!.limit;
+        await db().insert(formSubmissions).values(
+          Array.from({ length: cap }, (_, index) => ({ formId: form!.id, data: { message: `filler ${index}` }, status: "received" as const })),
+        );
+        await visitor.goto("/contact-proof");
+        await visitor.getByLabel("Your name").fill("Ada");
+        await visitor.getByLabel("Email").fill("ada@example.test");
+        await visitor.getByLabel("Message").fill("A second, carefully written message.");
+        await visitor.getByRole("button", { name: "Send" }).click();
+        await expect(visitor.getByRole("alert")).toContainText(/wait a moment/i);
+        await expect(visitor.getByRole("alert")).not.toContainText(/check the fields/i);
+        await expect(visitor.getByLabel("Message")).toHaveValue("A second, carefully written message.");
+        await expect(visitor.getByRole("alert")).toContainText(/still in the form below/i);
+        // Where people type contact details, the demo asks for made-up ones.
+        await expect(visitor.getByText(/use made-up details/i).first()).toBeVisible();
+
+        // Web vitals are accepted and discarded, not a 401 on every page.
+        const vitals = await visitor.request.post("/api/analytics/vitals", {
+          data: { name: "LCP", value: 1200, path: "/contact-proof" },
+        });
+        expect(vitals.status()).toBe(204);
+
+        // The customer portal explains itself instead of "not available yet".
+        await visitor.goto("/portal/login");
+        await expect(visitor).toHaveTitle(/Customer sign-in/);
+        await expect(visitor.getByText(/sends no email/i)).toBeVisible();
+      } finally {
+        await stranger.close();
+      }
+    });
+
+    await test.step("the admin is a read-only tour with explanations, not silent bounces or 500s", async () => {
+      for (const path of ["/admin/inbox", "/admin/invoices", "/admin/appointments", "/admin/newsletters", "/admin/collections"]) {
+        const response = await page.goto(path);
+        expect(response?.status(), path).toBe(200);
+        expect(new URL(page.url()).pathname, path).toBe(path);
+      }
+      // Saving is refused here, and the screen says so before the form.
+      await page.goto("/admin/promotions");
+      await expect(page.getByText(/saving changes here is switched off/i)).toBeVisible();
+      // Operator machinery explains itself instead of bouncing to the overview.
+      await page.goto("/admin/plugins");
+      await expect(page).toHaveURL(/\/admin\/unavailable\?module=platform$/);
+      await expect(page.getByRole("heading", { name: "Not available in the public playground" })).toBeVisible();
     });
 
     await test.step("the hourly reset signs the visitor out and restores a clean playground", async () => {

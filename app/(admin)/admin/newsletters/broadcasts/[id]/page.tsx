@@ -12,6 +12,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Button, Card, CardBody, CardHeader, Field, Input, Pill } from "@/ui/primitives";
+import { mailReadiness } from "@/core/mail/service";
 import { currentBusiness } from "@/core/settings/read";
 import {
   broadcastRecipientList,
@@ -55,16 +56,25 @@ export default async function BroadcastPage({
     paused?: string;
     resumed?: string;
     tested?: string;
+    audience?: string;
+    mailable?: string;
+    suppressed?: string;
   }>;
 }) {
   const actor = await requireStaffActor("newsletters", "manage");
   const { id } = await params;
   const query = await searchParams;
+  const counted = (value: string | undefined): number | null =>
+    value && /^\d+$/.test(value) ? Number(value) : null;
+  const startedAudience = counted(query.audience);
+  const startedMailable = counted(query.mailable);
+  const startedSuppressed = counted(query.suppressed);
 
-  const [t, business, all] = await Promise.all([
+  const [t, business, all, readiness] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(listBroadcasts.call({ limit: 200 }, actor)),
+    domainOrNull(mailReadiness.call({}, actor)),
   ]);
   const broadcast = (all ?? []).find((each) => each.id === id);
   if (!broadcast) notFound();
@@ -107,7 +117,13 @@ export default async function BroadcastPage({
       ) : null}
       {query.started ? (
         <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
-          {t("broadcasts.notice.started")}
+          {startedAudience !== null && startedMailable !== null && startedSuppressed !== null
+            ? t("broadcasts.notice.startedDetail", {
+                audience: startedAudience,
+                mailable: startedMailable,
+                suppressed: startedSuppressed,
+              })
+            : t("broadcasts.notice.started")}
         </p>
       ) : null}
       {query.tested ? (
@@ -148,6 +164,22 @@ export default async function BroadcastPage({
           </p>
         </CardBody>
       </Card>
+
+      {!readiness?.bulk ? (
+        <p role="status" className="rounded-md border border-warning bg-warning-soft p-4">
+          {t("broadcasts.senderNeeded")}{" "}
+          <Link href="/admin/settings#mail-verification" className="underline">
+            {t("broadcasts.verificationGuide")}
+          </Link>
+        </p>
+      ) : (
+        <p role="status" className="text-sm text-ink-muted">
+          {t("broadcasts.ready")}{" "}
+          <Link href="/admin/settings#mail-verification" className="underline">
+            {t("broadcasts.verificationGuide")}
+          </Link>
+        </p>
+      )}
 
       <Card>
         <CardHeader title={t("broadcasts.sending")} />

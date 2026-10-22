@@ -10,17 +10,21 @@ import { Button, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "
 import { getT } from "../../../i18n";
 import { collectionAction } from "../../catalog-actions";
 import { requireStaffActor } from "../guard";
+import { domainOrNull } from "../../read-helpers";
 
 export const dynamic = "force-dynamic";
 
 export default async function CollectionsPage() {
   const actor = await requireStaffActor("catalog");
-  const [collections, trashed, segments, t] = await Promise.all([
+  const [collections, trashed, segmentRows, t] = await Promise.all([
     listCollections.call({}, actor),
     listCollections.call({ trashedOnly: true }, actor),
-    listSegments.call({}, actor),
+    // Segments belong to CRM, which a catalog-only role may not read: that
+    // is "no segments to choose", not a broken page.
+    domainOrNull(listSegments.call({}, actor)),
     getT(),
   ]);
+  const segments = segmentRows ?? [];
 
   return (
     <div className="grid gap-6">

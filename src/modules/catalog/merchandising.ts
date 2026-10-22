@@ -444,6 +444,44 @@ export const listProductMedia = defineService({
   },
 });
 
+/**
+ * The picture a public product page leads with (C1.38).
+ *
+ * Public, so it answers only for a product anyone may see: active and
+ * public. The hero if there is one, else the first gallery image — the same
+ * order the admin lists them in. Images only: a 3D model or a video is not
+ * what a product page's lead picture can render.
+ */
+export const productHeroImage = defineService({
+  name: "catalog.productHeroImage",
+  summary: "The lead image of a publicly visible product.",
+  kind: "query",
+  permission: "public",
+  input: z.object({ slug: z.string().trim().min(1).max(200) }),
+  output: z.object({ assetId: z.string().uuid().nullable() }),
+  handler: async (input, ctx) => {
+    const [row] = await ctx.tx
+      .select({ assetId: productMedia.assetId })
+      .from(productMedia)
+      .innerJoin(products, eq(products.id, productMedia.productId))
+      .innerJoin(assets, eq(assets.id, productMedia.assetId))
+      .where(
+        and(
+          eq(products.slug, input.slug),
+          eq(products.status, "active"),
+          eq(products.visibility, "public"),
+          inArray(productMedia.role, ["hero", "gallery"]),
+          sql`${productMedia.variantId} is null`,
+          eq(assets.status, "ready"),
+          eq(assets.kind, "image"),
+        ),
+      )
+      .orderBy(sql`case when ${productMedia.role} = 'hero' then 0 else 1 end`, asc(productMedia.position))
+      .limit(1);
+    return { assetId: row?.assetId ?? null };
+  },
+});
+
 export const attachProductMedia = defineService({
   name: "catalog.attachProductMedia",
   summary: "Attach a ready library asset to a product or one of its variants.",
@@ -517,6 +555,7 @@ export const detachProductMedia = defineService({
 });
 
 export default [
+  productHeroImage,
   listAttributeDefinitions,
   createAttributeDefinition,
   listProductAttributes,

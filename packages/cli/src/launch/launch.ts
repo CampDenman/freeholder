@@ -37,9 +37,23 @@ export interface LaunchDeps {
 const DOMAIN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 const NAME = /^[a-z0-9][a-z0-9-]{1,53}[a-z0-9]$/;
 
+/** `value` without leading and trailing runs of `char`. A loop, not `/^x+|x+$/`, which backtracks polynomially on a long run. */
+export function trimRuns(value: string, char: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === char) start += 1;
+  while (end > start && value[end - 1] === char) end -= 1;
+  return value.slice(start, end);
+}
+
 /** The site's resource name: lowercase, dashes, short enough for `<name>-backups` to be a valid bucket. */
 export function defaultName(domain: string): string {
-  return domain.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 55).replace(/-+$/, "");
+  let name = "";
+  for (const char of domain.toLowerCase()) {
+    if ((char >= "a" && char <= "z") || (char >= "0" && char <= "9")) name += char;
+    else if (!name.endsWith("-")) name += "-";
+  }
+  return trimRuns(trimRuns(name, "-").slice(0, 55), "-");
 }
 
 export const sslipHost = (ip: string) => `${ip.replace(/\./g, "-")}.sslip.io`;
@@ -305,5 +319,6 @@ async function destroy(options: LaunchOptions, deps: LaunchDeps, dir: string, st
   await deps.provider.destroy(state, progress);
   await rename(join(dir, "state.json"), join(dir, "state.destroyed.json"));
   progress(`The launch record is kept as ${join(dir, "state.destroyed.json")}; ${join(dir, "freeholder.env")} is kept too.`);
+  progress("DigitalOcean bills Spaces as a subscription (at least $5/month) until you cancel Spaces in its console; deleting buckets does not cancel it.");
   return LAUNCH_EXIT.ok;
 }

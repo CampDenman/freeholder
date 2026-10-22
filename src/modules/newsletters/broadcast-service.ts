@@ -18,7 +18,7 @@
 // campaign, and the next call picks up exactly where it stopped — the same
 // argument the automation runtime makes about a run being a row.
 import { z } from "zod";
-import { and, asc, count, eq, lte, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, lte, or, sql, type Column, type SQL } from "drizzle-orm";
 import { listed, row, uuid as uuidSchema } from "@/core/contract";
 import {
   defineService,
@@ -28,8 +28,16 @@ import {
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { contacts } from "@/core/contacts/schema";
+import { consentRecords } from "@/core/privacy/schema";
 import { assertMailReady, sendMail } from "@/core/mail/service";
-import { segmentMembership } from "@/core/segments/service";
+import { mailSuppressions } from "@/core/mail/schema";
+import { SAMPLE_EMAIL_VARIABLES } from "@/modules/cms/email-render";
+import {
+  compileDefinition,
+  segmentDefinition,
+  segmentMembership,
+} from "@/core/segments/service";
+import { segmentMembers, segments } from "@/core/segments/schema";
 import {
   BROADCAST_STATUSES,
   RECIPIENT_STATES,
@@ -58,6 +66,51 @@ const broadcastRow = row({
 
 /** How many to send per call. Small enough to commit often, large enough to move. */
 const BATCH = 50;
+
+/**
+ * The send path's consent gate, as a lateral join on an outer contact id.
+ *
+ * "Mailable" means exactly what `sendBatch` decides at the moment of sending:
+ * marketing-email consent whose latest evidence says granted and has not
+ * expired (`contacts.canContact`'s rule), evaluated as a join rather than per
+ * row so a ten-thousand-person segment is one query. The send still re-asks
+ * when it sends — a withdrawal between preview and send belongs to the send —
+ * so a number built on this is a preview, and says so where it is shown.
+ */
+function latestConsentJoin(contactId: SQL | Column): SQL {
+  return sql`left join lateral (
+    select ${consentRecords.state} as state, ${consentRecords.expiresAt} as expires_at
+    from ${consentRecords}
+    where ${consentRecords.contactId} = ${contactId}
+      and ${consentRecords.purpose} = 'marketing'
+      and ${consentRecords.channel} = 'email'
+    order by ${consentRecords.occurredAt} desc, ${consentRecords.createdAt} desc
+    limit 1
+  ) consent on true`;
+}
+
+/** The whole gate: latest consent granted and unexpired, no active suppression. */
+const MAILABLE = sql`consent.state = 'granted'
+  and (consent.expires_at is null or consent.expires_at > now())
+  and suppression.email is null`;
+
+/**
+ * `execute` is a driver result in some builds and the row list in others.
+ * Both shapes have shown up in this repository; reading either keeps the
+ * count from silently becoming zero.
+ */
+function executedRows<T>(result: unknown): T[] {
+  if (Array.isArray(result)) return result as T[];
+  if (
+    result &&
+    typeof result === "object" &&
+    "rows" in result &&
+    Array.isArray(result.rows)
+  ) {
+    return result.rows as T[];
+  }
+  return [];
+}
 
 export const saveBroadcast = defineService({
   name: "broadcasts.save",
@@ -145,7 +198,18 @@ export const testSend = defineService({
   handler: async (input, ctx) => {
     const rendered = await ctx.call(renderTemplate, {
       id: input.templateId,
-      variables: input.variables,
+      // Samples under the caller's own values: a test exists to prove the
+      // rendering, and a declared slot with no value at all would refuse the
+      // very proof the button is for.
+      variables: {
+        ...Object.fromEntries(
+          Object.entries(SAMPLE_EMAIL_VARIABLES).filter(
+            (entry): entry is [string, string] => typeof entry[1] === "string",
+          ),
+        ),
+        "contact.email": input.to,
+        ...input.variables,
+      },
     });
     const subject = input.subject ?? rendered.subject;
     await sendMail(
@@ -154,6 +218,68 @@ export const testSend = defineService({
       { purpose: "bulk" },
     );
     return { sent: true, subject };
+  },
+});
+
+/**
+ * How much of a segment a campaign would actually reach, before it is sent.
+ *
+ * Consent is enforced at the moment of sending and stays there — that is the
+ * doctrine and this does not weaken it. But an owner choosing between two
+ * segments was doing it blind: the picker knew how many people a segment
+ * holds, not how many of them a campaign may lawfully mail. This answers the
+ * second question with the send's own gate, in one query, so the choice is
+ * made with the suppression count in front of it rather than discovered from
+ * the outcomes table afterwards.
+ */
+export const audiencePreview = defineService({
+  name: "broadcasts.audiencePreview",
+  summary: "How many of a segment's members a campaign can lawfully mail right now.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ segmentId: uuidSchema }),
+  output: row({
+    segmentId: uuidSchema,
+    /** Everyone the segment currently matches, with or without an address. */
+    members: z.number().int(),
+    /** Would be mailed now: address, current granted consent, not suppressed. */
+    mailable: z.number().int(),
+    /** Everyone else: no address, no current consent, or a suppressed address. */
+    suppressed: z.number().int(),
+  }),
+  handler: async (input, ctx) => {
+    const [segment] = await ctx.tx
+      .select()
+      .from(segments)
+      .where(and(eq(segments.id, input.segmentId), isNull(segments.trashedAt)))
+      .limit(1);
+    if (!segment) throw new ServiceError("not_found", "That segment is not here.");
+    // The same read `segments.members` makes — a static segment answers from
+    // its frozen rows, a dynamic one from its definition — so the preview and
+    // the freeze can never disagree about who the audience is.
+    const condition =
+      segment.kind === "static"
+        ? sql`${contacts.id} in (
+            select ${segmentMembers.contactId} from ${segmentMembers}
+            where ${segmentMembers.segmentId} = ${segment.id}
+          )`
+        : compileDefinition(segmentDefinition.parse(segment.definition));
+    const result = await ctx.tx.execute(
+      sql`
+        select
+          count(*)::int as members,
+          count(*) filter (where ${contacts.email} is not null and ${MAILABLE})::int as mailable
+        from ${contacts}
+        ${latestConsentJoin(contacts.id)}
+        left join ${mailSuppressions} suppression
+          on lower(suppression.email) = lower(${contacts.email}) and suppression.active
+        where ${condition}
+      `,
+    );
+    const counted = executedRows<{ members: number; mailable: number }>(result)[0];
+    const members = Number(counted?.members ?? 0);
+    const mailable = Number(counted?.mailable ?? 0);
+    return { segmentId: segment.id, members, mailable, suppressed: members - mailable };
   },
 });
 
@@ -170,7 +296,19 @@ export const startBroadcast = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: uuidSchema }),
-  output: row({ broadcastId: uuidSchema, audience: z.number().int() }),
+  output: row({
+    broadcastId: uuidSchema,
+    audience: z.number().int(),
+    /**
+     * Of the frozen audience, how many the send's own gate would mail now —
+     * and how many it will mark suppressed. Consent is still re-asked per
+     * recipient when each copy goes out; these are the freeze-moment numbers,
+     * so an owner learns "188 of these will be skipped" from the start rather
+     * than from the outcomes table an hour later.
+     */
+    mailable: z.number().int(),
+    suppressed: z.number().int(),
+  }),
   handler: async (input, ctx) => {
     const [broadcast] = await ctx.tx
       .select()
@@ -229,21 +367,43 @@ export const startBroadcast = defineService({
       .from(broadcastRecipients)
       .where(eq(broadcastRecipients.broadcastId, broadcast.id));
 
+    // The same gate the send applies, counted over the rows just frozen. Asked
+    // here so the answer is part of the outcome the caller reports.
+    const reachability = await ctx.tx.execute(
+      sql`
+        select count(*) filter (where ${MAILABLE})::int as mailable
+        from ${broadcastRecipients}
+        ${latestConsentJoin(broadcastRecipients.contactId)}
+        left join ${mailSuppressions} suppression
+          on lower(suppression.email) = lower(${broadcastRecipients.email}) and suppression.active
+        where ${broadcastRecipients.broadcastId} = ${broadcast.id}
+      `,
+    );
+    const mailable = Number(
+      executedRows<{ mailable: number }>(reachability)[0]?.mailable ?? 0,
+    );
+    const frozenCount = frozen?.n ?? 0;
+
     await ctx.tx
       .update(broadcasts)
       .set({
         status: "sending",
         startedAt: new Date(),
-        audienceCount: frozen?.n ?? 0,
+        audienceCount: frozenCount,
       })
       .where(eq(broadcasts.id, broadcast.id));
 
     ctx.setSubject("broadcast", broadcast.id);
     ctx.queueEvent("broadcast.started", {
       broadcastId: broadcast.id,
-      audience: frozen?.n ?? 0,
+      audience: frozenCount,
     });
-    return { broadcastId: broadcast.id, audience: frozen?.n ?? 0 };
+    return {
+      broadcastId: broadcast.id,
+      audience: frozenCount,
+      mailable,
+      suppressed: frozenCount - mailable,
+    };
   },
 });
 
@@ -415,6 +575,7 @@ export const tick = defineService({
   permission: "system",
   input: z.object({}),
   output: row({ started: z.number().int(), sent: z.number().int() }),
+  auditWhen: (out: { started: number; sent: number }) => out.started + out.sent > 0,
   handler: async (_input, ctx) => {
     const due = await ctx.tx
       .select({ id: broadcasts.id })
@@ -794,6 +955,7 @@ export async function onMailDeliveryUpdated(payload: unknown): Promise<void> {
 export default [
   saveBroadcast,
   testSend,
+  audiencePreview,
   startBroadcast,
   sendNext,
   tick,

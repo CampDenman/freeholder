@@ -246,24 +246,22 @@ export default async function NotificationsPage({
               <p className="text-sm text-ink-muted">{t("notifications.deliveryIntro")}</p>
               <dl className="grid gap-3 text-sm">
                 <div className="flex items-center justify-between gap-3"><dt>{t("notifications.channel.inApp")}</dt><dd><Pill tone="success">{t("notifications.ready")}</Pill></dd></div>
-                <div className="grid gap-1 border-t border-rule pt-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <dt>{t("notifications.channel.email")}</dt>
-                    <dd><Pill tone={preferences.email.ready ? "success" : "warning"}>{preferences.email.ready ? t("notifications.ready") : t("notifications.needsSetup")}</Pill></dd>
-                  </div>
-                  <dd className="text-xs text-ink-muted">
+                {/* One <div> per term group, holding only <dt>/<dd> children: a
+                    nested wrapper div makes the list invalid (axe dlitem). */}
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-rule pt-3">
+                  <dt>{t("notifications.channel.email")}</dt>
+                  <dd><Pill tone={preferences.email.ready ? "success" : "warning"}>{preferences.email.ready ? t("notifications.ready") : t("notifications.needsSetup")}</Pill></dd>
+                  <dd className="col-span-2 text-xs text-ink-muted">
                     {preferences.email.ready
                       ? t("notifications.emailReady", { provider: preferences.email.provider })
                       : t("notifications.emailNotReady")}
                   </dd>
                 </div>
                 {preferences.adapters.map((adapter) => (
-                  <div className="grid gap-1 border-t border-rule pt-3" key={adapter.channel}>
-                    <div className="flex items-center justify-between gap-3">
-                      <dt>{t(`notifications.channel.${adapter.channel}`)}</dt>
-                      <dd><Pill tone={adapter.available ? "success" : "neutral"}>{adapter.available ? t("notifications.ready") : t("notifications.unavailable")}</Pill></dd>
-                    </div>
-                    <dd className="text-xs text-ink-muted">
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-rule pt-3" key={adapter.channel}>
+                    <dt>{t(`notifications.channel.${adapter.channel}`)}</dt>
+                    <dd><Pill tone={adapter.available ? "success" : "neutral"}>{adapter.available ? t("notifications.ready") : t("notifications.unavailable")}</Pill></dd>
+                    <dd className="col-span-2 text-xs text-ink-muted">
                       {adapter.provider === "none"
                         ? t("notifications.adapterNotConfigured")
                         : t("notifications.adapterFuture", { provider: adapter.provider })}

@@ -11,12 +11,16 @@ import { myProfile } from "@/core/portal/service";
 import { formatMoney } from "@/core/i18n";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { currentBusiness } from "@/core/settings/read";
+import { utilityPageMetadata } from "../utility-metadata";
 import { bookableServices, publicBookingQuote, myBookingSelection } from "@/modules/catalog/public-booking";
 import { Button, Callout, Field, Input, Select } from "@/ui/primitives";
 import { getLocale, getT } from "../../i18n";
 import { bookServiceAction, moveBookingAction } from "./actions";
 export const dynamic = "force-dynamic";
-export async function generateMetadata(): Promise<Metadata> { const t=await getT(); return { title:t("publicBooking.title"), robots:{index:false,follow:true} }; }
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return utilityPageMetadata({ path: "book", title: t("publicBooking.title"), description: t("publicBooking.intro"), index: false });
+}
 type Query = { service?: string; date?: string; mode?: string; seats?: string; error?: string; move?: string; seller?: string };
 export default async function PublicBooking({ searchParams }: { searchParams: Promise<Query> }) {
   const [q,t,locale,business,jar] = await Promise.all([searchParams,getT(),getLocale(),currentBusiness(),cookies()]);

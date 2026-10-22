@@ -32,10 +32,11 @@ import {
   connectedAccounts,
   connectionCapabilities,
 } from "@/core/connections/schema";
-import { accessTokenForAccount } from "@/core/connections/oauth-core";
+import { accessTokenForAccountOutsideTransaction } from "@/core/connections/oauth-core";
 import { mailReadClient, type MailHeader } from "@/core/connections/mail-providers";
 import { MailAdapterError } from "@/adapters/mail/types";
 import {
+  defineOrchestratedService,
   defineService,
   getService,
   hasModuleAccess,
@@ -205,70 +206,130 @@ async function recordMessage(
   return true;
 }
 
+type ImportableAccount = Awaited<ReturnType<typeof readableAccount>>;
+
+async function importableAccount(tx: Tx, actor: Actor, id: string): Promise<ImportableAccount> {
+  const account = await readableAccount(tx, actor, id);
+  if (!(await mayReadMail(tx, account.id))) {
+    throw new ServiceError(
+      "conflict",
+      "Mail reading is switched off for that connection.",
+    );
+  }
+  return account;
+}
+
+const importOutcome = z.object({
+  accountId: z.uuid(),
+  messages: z.number().int(),
+  contactsCreated: z.number().int(),
+  timelineEvents: z.number().int(),
+});
+
+const importMailSource = defineService({
+  name: "connections.importMailSource",
+  summary: "Authorize a mailbox read before its provider is contacted.",
+  kind: "query",
+  permission: "scoped",
+  external: false,
+  agentCallable: false,
+  input: z.object({ id: z.uuid() }),
+  output: z.object({
+    id: z.uuid(),
+    provider: z.enum(["google", "microsoft"]),
+    lastSyncAt: z.date().nullable(),
+  }),
+  handler: async (input, ctx) => {
+    const account = await importableAccount(ctx.tx, ctx.actor, input.id);
+    return { id: account.id, provider: account.provider, lastSyncAt: account.lastSyncAt };
+  },
+});
+
+const mailParticipant = z.object({
+  email: z.string().min(1).max(320),
+  name: z.string().max(500).optional(),
+});
+
+/**
+ * Fold headers that were fetched with no transaction open into the spine.
+ *
+ * Never receives a message body, never creates a contact directly, and never
+ * overwrites a name the owner typed. Holder, capability and sharing are read
+ * again here, so a change made while the provider was answering wins.
+ */
+const importMailApply = defineService({
+  name: "connections.importMailApply",
+  summary: "Record correspondents and timeline entries for fetched mail headers.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  external: false,
+  agentCallable: false,
+  input: z.object({
+    id: z.uuid(),
+    now: z.date(),
+    headers: z
+      .array(
+        z.object({
+          externalId: z.string().min(1).max(1_000),
+          sentAt: z.date(),
+          subject: z.string().max(10_000).optional(),
+          from: mailParticipant.optional(),
+          to: z.array(mailParticipant).max(1_000),
+        }),
+      )
+      .max(PER_RUN),
+  }),
+  output: importOutcome,
+  handler: async (input, ctx) => {
+    const account = await importableAccount(ctx.tx, ctx.actor, input.id);
+    ctx.setSubject("connected_account", account.id);
+    const outcome: MailImportOutcome = {
+      accountId: account.id,
+      messages: 0,
+      contactsCreated: 0,
+      timelineEvents: 0,
+    };
+    const resolve = getService("contacts.resolve");
+    for (const header of input.headers) {
+      outcome.messages += 1;
+      const { participants, direction } = correspondents(header, account.email);
+      for (const participant of participants) {
+        // The one automated door. `resolve` fills blanks and never overwrites,
+        // so a display name a stranger chose cannot rename somebody the owner
+        // has already named.
+        const resolved = (await ctx.callAsSystem(resolve, {
+          email: participant.email,
+          ...(participant.name ? { name: participant.name } : {}),
+          source: `mail:${account.provider}`,
+        })) as { contact: { id: string }; created: boolean };
+        if (resolved.created) outcome.contactsCreated += 1;
+        const written = await recordMessage(ctx, {
+          contactId: resolved.contact.id,
+          header,
+          direction,
+          accountId: account.id,
+          withSubject: account.sharedWithBusiness,
+        });
+        if (written) outcome.timelineEvents += 1;
+      }
+    }
+
+    await ctx.tx
+      .update(connectedAccounts)
+      .set({ lastSyncAt: input.now, lastError: null })
+      .where(eq(connectedAccounts.id, account.id));
+    return outcome;
+  },
+});
+
 /**
  * Read one mailbox and fold what it says into the spine.
  *
- * Never returns a message body, never creates a contact directly, and never
- * overwrites a name the owner typed.
+ * The token refresh and header listing run with no database transaction open
+ * (§11); authorization and the writes are short services either side of it.
  */
-export async function importMailForAccount(
-  ctx: ServiceContext,
-  account: {
-    id: string;
-    provider: "google" | "microsoft";
-    email: string | null;
-    sharedWithBusiness: boolean;
-    lastSyncAt: Date | null;
-  },
-  now: Date,
-): Promise<MailImportOutcome> {
-  const outcome: MailImportOutcome = {
-    accountId: account.id,
-    messages: 0,
-    contactsCreated: 0,
-    timelineEvents: 0,
-  };
-  const since =
-    account.lastSyncAt ?? new Date(now.getTime() - FIRST_SYNC_DAYS * 86_400_000);
-  const accessToken = await accessTokenForAccount(ctx.tx, account);
-  const headers = await mailReadClient(account.provider).listHeaders(accessToken, {
-    since,
-    limit: PER_RUN,
-  });
-
-  const resolve = getService("contacts.resolve");
-  for (const header of headers) {
-    outcome.messages += 1;
-    const { participants, direction } = correspondents(header, account.email);
-    for (const participant of participants) {
-      // The one automated door. `resolve` fills blanks and never overwrites,
-      // so a display name a stranger chose cannot rename somebody the owner
-      // has already named.
-      const resolved = (await ctx.callAsSystem(resolve, {
-        email: participant.email,
-        ...(participant.name ? { name: participant.name } : {}),
-        source: `mail:${account.provider}`,
-      })) as { contact: { id: string }; created: boolean };
-      if (resolved.created) outcome.contactsCreated += 1;
-      const written = await recordMessage(ctx, {
-        contactId: resolved.contact.id,
-        header,
-        direction,
-        accountId: account.id,
-        withSubject: account.sharedWithBusiness,
-      });
-      if (written) outcome.timelineEvents += 1;
-    }
-  }
-
-  await ctx.tx
-    .update(connectedAccounts)
-    .set({ lastSyncAt: now, lastError: null })
-    .where(eq(connectedAccounts.id, account.id));
-  return outcome;
-}
-
-export const importMail = defineService({
+export const importMail = defineOrchestratedService({
   name: "connections.importMail",
   summary: "Read a connected mailbox and fold its correspondents into contacts.",
   kind: "mutation",
@@ -276,22 +337,28 @@ export const importMail = defineService({
   writeClass: "write",
   agentCallable: false,
   input: z.object({ id: z.uuid() }),
-  output: z.object({
-    accountId: z.uuid(),
-    messages: z.number().int(),
-    contactsCreated: z.number().int(),
-    timelineEvents: z.number().int(),
-  }),
-  handler: async (input, ctx) => {
-    const account = await readableAccount(ctx.tx, ctx.actor, input.id);
-    if (!(await mayReadMail(ctx.tx, account.id))) {
-      throw new ServiceError(
-        "conflict",
-        "Mail reading is switched off for that connection.",
-      );
-    }
-    ctx.setSubject("connected_account", account.id);
-    return importMailForAccount(ctx, account, new Date());
+  output: importOutcome,
+  handler: async (input, actor) => {
+    const account = await importMailSource.call(input, actor);
+    const now = new Date();
+    const since =
+      account.lastSyncAt ?? new Date(now.getTime() - FIRST_SYNC_DAYS * 86_400_000);
+    const accessToken = await accessTokenForAccountOutsideTransaction(account);
+    const headers = await mailReadClient(account.provider).listHeaders(accessToken, {
+      since,
+      limit: PER_RUN,
+    });
+    return importMailApply.call(
+      {
+        id: account.id,
+        now,
+        headers: headers.slice(0, PER_RUN).map((header) => ({
+          ...header,
+          to: [...header.to],
+        })),
+      },
+      actor,
+    );
   },
 });
 
@@ -377,4 +444,4 @@ export async function importDueMailboxes(): Promise<{
 /** Exported for the tests that pin the header-splitting rules. */
 export const __testing = { correspondents };
 
-export default [importMail];
+export default [importMail, importMailSource, importMailApply];

@@ -214,12 +214,12 @@ describe.runIf(hasDatabase)("C11.03 discovery to loyalty", { timeout: 90_000 }, 
       { eventId: published.id, sessionId: session.id, ticketId: ticket.id, email: "ada@example.test", name: "Ada" },
       ANONYMOUS,
     );
-    expect(first.status).toBe("confirmed");
+    expect(first.registration.status).toBe("confirmed");
     const waiting = await registerForEvent.call(
       { eventId: published.id, sessionId: session.id, ticketId: ticket.id, email: "grace@example.test", name: "Grace" },
       ANONYMOUS,
     );
-    expect(waiting.status).toBe("waitlisted");
+    expect(waiting.registration.status).toBe("waitlisted");
     expect(
       await db().select().from(eventRegistrations).where(eq(eventRegistrations.status, "waitlisted")),
     ).toHaveLength(1);

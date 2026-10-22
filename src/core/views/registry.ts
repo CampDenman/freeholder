@@ -21,7 +21,7 @@
 // The registry exists for the two things a URL cannot carry on its own: the
 // human names of the parameters, so a view can say what it filters rather than
 // showing raw query keys; and the column set, where a list actually has columns.
-import type { Actor } from "@/core/service";
+import { hasModuleAccess, type Actor } from "@/core/service";
 
 export interface ViewFilter {
   /** The query parameter this reads. */
@@ -82,11 +82,9 @@ export function viewEntity(key: string): ViewEntity | undefined {
 
 /** Can this person see this list at all? A view of it is worth no more. */
 export function mayUseEntity(actor: Actor, entity: ViewEntity): boolean {
-  if (actor.kind === "system") return true;
-  if (actor.kind !== "user") return false;
-  return actor.grants.some(
-    (grant) => grant.module === "*" || grant.module === entity.module,
-  );
+  // The same stored-grant decision services use, so a person who still owes
+  // a two-factor check or acts through a personal key gets no list (C11.10).
+  return hasModuleAccess(actor, entity.module, "view");
 }
 
 /**

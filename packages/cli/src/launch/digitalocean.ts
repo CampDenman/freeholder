@@ -189,8 +189,11 @@ export function digitalOcean(token: string, fetcher: typeof fetch = fetch, sleep
         }
       }
       if (state.spacesKeyId) {
-        await deleteKey(state.spacesKeyId).catch(() => undefined);
-        log("Deleted the site's Spaces key.");
+        const keyId = state.spacesKeyId;
+        log(await deleteKey(keyId).then(
+          () => "Deleted the site's Spaces key.",
+          () => `Could not delete the site's Spaces key ${keyId}; delete it in the DigitalOcean console (API → Spaces Keys).`,
+        ));
       }
     },
   };

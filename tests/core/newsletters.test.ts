@@ -21,6 +21,7 @@ import {
   unsubscribeFromNewsletter,
 } from "@/modules/newsletters/service";
 import { newsletterSubscriptions } from "@/modules/newsletters/schema";
+import { mailDeliveries } from "@/core/mail/schema";
 import { canContact } from "@/core/privacy/service";
 import { ANONYMOUS, closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 import { waitForBlockedQuery } from "../helpers/database-lock";
@@ -174,5 +175,97 @@ describe.runIf(hasDatabase)("newsletters module", { timeout: 30_000 }, () => {
     expect(await confirming).toBe("conflict");
     expect((await db().select().from(newsletterSubscriptions).where(eq(newsletterSubscriptions.id, row!.id)))[0]?.status).toBe("unsubscribed");
     expect(await canContact.call({ contactId: row!.contactId, purpose: "marketing", channel: "email" }, OWNER)).toMatchObject({ allowed: false, reason: "withdrawn" });
+  });
+
+  it("does not resend a fresh confirmation on every request (C11.10)", async () => {
+    const newsletter = await createNewsletter.call({ name: "Quiet", slug: "quiet" }, OWNER);
+    const first = await subscribeToNewsletter.call({ newsletterId: newsletter.id, email: "target@example.test" }, ANONYMOUS);
+    const [before] = await db().select().from(newsletterSubscriptions).where(eq(newsletterSubscriptions.id, first.subscriptionId));
+    const sentBefore = (await db().select().from(mailDeliveries)).length;
+    for (let repeat = 0; repeat < 5; repeat++) {
+      expect(await subscribeToNewsletter.call({ newsletterId: newsletter.id, email: "target@example.test" }, ANONYMOUS))
+        .toEqual({ status: "pending", subscriptionId: first.subscriptionId });
+    }
+    const [after] = await db().select().from(newsletterSubscriptions).where(eq(newsletterSubscriptions.id, first.subscriptionId));
+    expect(after?.confirmToken).toBe(before?.confirmToken);
+    expect((await db().select().from(mailDeliveries)).length).toBe(sentBefore);
+  });
+
+  it("caps confirmations per address across newsletters, even when composed (C11.10)", async () => {
+    const codes: string[] = [];
+    for (let index = 0; index < 7; index++) {
+      const newsletter = await createNewsletter.call({ name: `List ${index}`, slug: `list-${index}` }, OWNER);
+      await db().transaction((tx) =>
+        subscribeToNewsletter.call({ newsletterId: newsletter.id, email: "target@example.test" }, { kind: "system" }, { tx, queued: [] }),
+      ).then(() => codes.push("ok"), (error: { code?: string }) => codes.push(error.code ?? "error"));
+    }
+    expect(codes.filter((code) => code === "ok")).toHaveLength(5);
+    expect(codes.slice(5)).toEqual(["rate_limited", "rate_limited"]);
+  }, 90_000);
+
+  it("marks consent evidence an anonymous visitor submitted as theirs (C11.10)", async () => {
+    const newsletter = await createNewsletter.call({ name: "Evidence", slug: "evidence" }, OWNER);
+    const pending = await subscribeToNewsletter.call(
+      {
+        newsletterId: newsletter.id,
+        email: "reader@example.test",
+        consent: { termsVersion: "v1", sourceUrl: "/", evidence: { popup: "newsletter-subscribe", statement: "Yes please." } },
+      },
+      { kind: "anonymous", request: { ip: "203.0.113.9" } },
+    );
+    const [row] = await db().select().from(newsletterSubscriptions).where(eq(newsletterSubscriptions.id, pending.subscriptionId));
+    expect(row?.consentEvidence).toMatchObject({ statement: "Yes please.", provenance: "visitor-submitted" });
+  });
+
+  it("lets someone who unsubscribed join again, and keeps the words they agreed to", async () => {
+    const newsletter = await createNewsletter.call({ name: "Return", slug: "return" }, OWNER);
+    const statement = "Send me the studio letter. I can unsubscribe from any issue.";
+    const first = await subscribeToNewsletter.call(
+      {
+        newsletterId: newsletter.id,
+        email: "reader@example.test",
+        consent: {
+          termsVersion: statement,
+          sourceUrl: "/newsletters",
+          evidence: { popup: "newsletter-subscribe", statement },
+        },
+      },
+      ANONYMOUS,
+    );
+    const [row] = await db()
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.id, first.subscriptionId));
+    await confirmSubscription.call({ token: row!.confirmToken }, ANONYMOUS);
+    await unsubscribeFromNewsletter.call({ token: row!.unsubscribeToken }, ANONYMOUS);
+
+    const again = await subscribeToNewsletter.call(
+      {
+        newsletterId: newsletter.id,
+        email: "reader@example.test",
+        consent: {
+          termsVersion: statement,
+          sourceUrl: "/newsletters",
+          evidence: { popup: "newsletter-subscribe", statement },
+        },
+      },
+      ANONYMOUS,
+    );
+    expect(again.status).toBe("pending");
+    expect(again.subscriptionId).toBe(first.subscriptionId);
+    const [pending] = await db()
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.id, again.subscriptionId));
+    expect(pending?.status).toBe("pending");
+    expect(pending?.consentEvidence).toMatchObject({ statement });
+    const confirmed = await confirmSubscription.call({ token: pending!.confirmToken }, ANONYMOUS);
+    expect(confirmed.status).toBe("confirmed");
+    expect(
+      await canContact.call(
+        { contactId: pending!.contactId, purpose: "marketing", channel: "email" },
+        OWNER,
+      ),
+    ).toMatchObject({ allowed: true, reason: "granted" });
   });
 });

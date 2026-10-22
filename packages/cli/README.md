@@ -96,9 +96,20 @@ own email and password or passkey; the CLI never creates the owner.
 | `--json` | | Machine-readable summary; no secrets except the claim link |
 | `--non-interactive`, `--no-open` | | Never prompt; never open a browser |
 
+**What it costs.** Launching starts real DigitalOcean billing on your
+account: the droplet (the default `s-2vcpu-2gb` is about $18/month at
+DigitalOcean's list price; see the recipe README for sizing) and Spaces,
+which is a subscription with a $5/month minimum covering both buckets.
+Check DigitalOcean's pricing page for current figures. `--dry-run` creates
+nothing and costs nothing.
+
 **Secrets** go only to `~/.config/freeholder/<name>/freeholder.env` (mode
-600), never to the terminal. **Back that file up.** Losing `CREDENTIAL_KEY`
-means reconnecting every account the site connects to.
+600), never to the terminal. **Back that file up and store it safely**, like a
+password: it holds `CREDENTIAL_KEY`, which decrypts every connected account's
+tokens, plus the database password and session secret. Anyone with the file
+can read those; losing it means reconnecting every account the site connects
+to. Keep a copy in a password manager or encrypted backup, not in a shared
+folder or a repository.
 
 **Until DNS points at the server**, the site runs at `<ip>.sslip.io` so it has
 a certificate at once. Add the `A` records the summary prints, then:
@@ -117,7 +128,12 @@ freeholder launch --destroy --name example-com
 ```
 
 The droplet and the site's Spaces key are deleted; a bucket is deleted only
-if it is empty, because media and backups are your data.
+if it is empty, because media and backups are your data. If a deletion fails,
+the CLI says which resource to remove in the DigitalOcean console. **Spaces
+billing continues after `--destroy`**: the $5/month Spaces subscription (and
+any bucket kept because it holds files) is billed until you empty the
+buckets and cancel Spaces in the DigitalOcean console. The local
+`freeholder.env` is kept, so delete it yourself once you no longer need it.
 
 Exit codes follow `freeholder update`: `0` done, `2` a step failed (the
 message says how to recover), `3` DigitalOcean could not be reached or

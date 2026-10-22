@@ -8,7 +8,8 @@ import { listContacts } from "@/core/contacts/service";
 import { currentBusiness } from "@/core/settings/read";
 import { listTaxConfiguration } from "@/modules/invoicing/tax-service";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Select } from "@/ui/primitives";
-import { getT } from "../../../../i18n";
+import { getLocale, getT } from "../../../../i18n";
+import { OptionSelect, currencyOptions } from "@/ui/pickers";
 import { invoiceAction } from "../../../invoice-actions";
 import { createDepositBalanceAction } from "../../../advanced-money-actions";
 import { requireStaffActor } from "../../guard";
@@ -77,7 +78,7 @@ export default async function NewInvoicePage({
                   </Select>
                 </Field>
                 <Field label={t("invoices.currency")} htmlFor="currency" hint={t("invoices.currencyHint")}>
-                  <Input id="currency" name="currency" required defaultValue={business?.baseCurrency ?? "USD"} maxLength={3} className="font-mono uppercase" />
+                  <OptionSelect id="currency" name="currency" required defaultValue={business?.baseCurrency ?? "USD"} options={currencyOptions(await getLocale(), business?.baseCurrency)} />
                 </Field>
               </div>
 
@@ -177,7 +178,7 @@ export default async function NewInvoicePage({
                 </Select>
               </Field>
               <Field label={t("invoices.currency")} htmlFor="deposit-currency">
-                <Input id="deposit-currency" name="currency" required defaultValue={business?.baseCurrency ?? "USD"} maxLength={3} className="font-mono uppercase" />
+                <OptionSelect id="deposit-currency" name="currency" required defaultValue={business?.baseCurrency ?? "USD"} options={currencyOptions(await getLocale(), business?.baseCurrency)} />
               </Field>
               <Field label={t("invoices.deposit.description")} htmlFor="deposit-description">
                 <Input id="deposit-description" name="depositDescription" required defaultValue={t("invoices.deposit.defaultDescription")} />

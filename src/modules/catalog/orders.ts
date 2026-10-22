@@ -265,9 +265,9 @@ export const checkoutCart = defineService({
       shippingMethodId = chosen?.methodId ?? null;
     }
 
-    const { quoteCartPromotions } = await import("./promotions");
+    const { resolveCartPromotions } = await import("./promotions");
     const { allocateDiscount } = await import("./promo-quote");
-    const promo = await ctx.callAsSystem(quoteCartPromotions, {
+    const promo = await ctx.callAsSystem(resolveCartPromotions, {
       cartId: basket.cart.id,
       couponCode: input.couponCode,
       subtotalMinor: basket.subtotalMinor,
@@ -327,7 +327,7 @@ export const checkoutCart = defineService({
       lines: basket.lines.map((line, index) => ({
         sourceType: "variant",
         sourceId: line.variantId,
-        description: `${line.productName} Â· ${line.sku}`,
+        description: `${line.productName} · ${line.sku}`,
         quantityMicros: line.quantity * QUANTITY_SCALE,
         unitAmountMinor: line.unitAmountMinor!,
         discountMinor: discountShares[index] ?? 0,

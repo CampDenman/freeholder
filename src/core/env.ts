@@ -5,6 +5,7 @@
 // Validation is lazy so `next build` succeeds without a database attached;
 // anything that *uses* env at runtime gets a plain-English failure instead.
 import { z } from "zod";
+import { normalizeAgentProviderId } from "../adapters/agent/aliases";
 
 const envSchema = z.object({
   NODE_ENV: z
@@ -56,8 +57,22 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(32).optional(),
   /** Independent deployment secret required to claim a fresh production instance. */
   BOOTSTRAP_SECRET: z.string().min(32).optional(),
-  /** Only set behind a proxy that overwrites this header and blocks direct access. */
-  TRUSTED_CLIENT_IP_HEADER: z.enum(["x-freeholder-client-ip", "cf-connecting-ip", "x-real-ip"]).optional(),
+  /**
+   * Only set behind a proxy that overwrites this header and blocks direct
+   * access. `do-connecting-ip` is DigitalOcean App Platform's. `x-forwarded-for`
+   * is for an edge that appends rather than overwrites: the client address is
+   * read `TRUSTED_PROXY_HOPS` entries from the right, so anything a visitor
+   * wrote on the left is ignored.
+   */
+  TRUSTED_CLIENT_IP_HEADER: z
+    .enum(["x-freeholder-client-ip", "cf-connecting-ip", "x-real-ip", "do-connecting-ip", "x-forwarded-for"])
+    .optional(),
+  /**
+   * With `TRUSTED_CLIENT_IP_HEADER=x-forwarded-for`: how many appending
+   * proxies the application sits behind. 1 (the default) takes the rightmost
+   * entry, the address the last proxy saw. Ignored for the other headers.
+   */
+  TRUSTED_PROXY_HOPS: z.coerce.number().int().min(1).max(10).default(1),
   /**
    * Encrypts an owner's third-party credentials at rest (§41's addendum to
    * §17). 32 bytes as hex or base64url. Absent is fine until something is
@@ -268,10 +283,20 @@ const envSchema = z.object({
     .optional(),
 
   /** The owner-facing builder is a separate authority from drafting AI. */
+  // `pm_brain` is the deprecated name of the `paradise` choice; still read.
   FREEHOLDER_AGENT: z
-    .enum(["pm_brain", "anthropic", "openai", "local", "none"])
+    .enum(["gateway", "paradise", "pm_brain", "anthropic", "openai", "local", "none"])
+    .transform(normalizeAgentProviderId)
     .optional(),
-  /** Purpose-bound Paradise Modern site credential for the PM Brain adapter. */
+  /**
+   * `gateway`: any OpenAI-compatible chat-completions endpoint. The URL is
+   * the origin the `/v1/chat/completions` path is appended to; the key is
+   * sent as a bearer token; the model is named explicitly, never guessed.
+   */
+  AGENT_GATEWAY_URL: z.string().url().optional(),
+  AGENT_GATEWAY_API_KEY: z.string().trim().min(1).optional(),
+  AGENT_GATEWAY_MODEL: z.string().trim().min(1).max(200).optional(),
+  /** `paradise`: purpose-bound Paradise Modern site credential (optional provider). */
   PARADISEMODERN_API_KEY: z.string().trim().min(1).optional(),
   PARADISEMODERN_URL: z.string().url().optional(),
   /** Visible, hard monthly cap for builder model usage. */
@@ -376,11 +401,14 @@ const envSchema = z.object({
    * Unset means on in development and off everywhere else. `1` asks for it
    * explicitly (demo deploys, the plugin harness and CI); `0` gives a
    * contributor a deliberately blank development instance for setup work.
+   * `busy` installs the demo plus six months of sample customers, sales,
+   * bookings and traffic — what the public playground (which implies it)
+   * shows evaluators; plain `1` stays quick for local development.
    * Read once at startup and never in response to a request — a route that
    * installs a demo business is a route somebody eventually hits on a real
    * instance.
    */
-  FREEHOLDER_SEED_DEMO: z.enum(["0", "1"]).optional(),
+  FREEHOLDER_SEED_DEMO: z.enum(["0", "1", "busy"]).optional(),
 
   /**
    * Whether this process runs background jobs.
@@ -392,6 +420,18 @@ const envSchema = z.object({
    * suppressed so a suite never races a scheduler.
    */
   FREEHOLDER_JOBS: z.enum(["on", "off"]).optional(),
+
+  /**
+   * Seconds each job worker waits between empty polls of its queue.
+   *
+   * Every registered job has a worker, so pg-boss's two-second default is
+   * dozens of small queries a second against an idle database. That is the
+   * right trade for a business site whose confirmations should leave
+   * promptly; a box that shares its CPU (the public playground beside
+   * production, a small VPS) can raise it. Scheduled jobs still run — a cron
+   * firing waits at most this long for a worker to claim it.
+   */
+  FREEHOLDER_JOBS_POLL_SECONDS: z.coerce.number().min(0.5).max(300).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

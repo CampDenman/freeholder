@@ -110,6 +110,109 @@ describe("Stripe payment adapter", () => {
     await expect(adapter.revokeSavedMethod({ providerRef: "pm_test_1", idempotencyKey: "revoke-1" })).resolves.toBeUndefined();
   });
 
+  it("opens a card-setup Checkout with no charge and never reads it as a payment", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    let includeCustomer = true;
+    const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = requestUrl(input);
+      calls.push({ url, init });
+      if (url.endsWith("/v1/checkout/sessions")) {
+        return Response.json({
+          id: "cs_setup_1",
+          url: "https://checkout.stripe.test/setup",
+          ...(includeCustomer ? { customer: "cus_setup" } : {}),
+        });
+      }
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+    const adapter = createStripePayments({
+      secretKey: "sk_test_private",
+      webhookSecrets: ["whsec_current"],
+      apiBase: "https://stripe.example.test",
+      fetch: fetcher,
+    });
+    const createMethodSetup = (request: Parameters<NonNullable<typeof adapter.createMethodSetup>>[0]) => {
+      if (!adapter.createMethodSetup) throw new Error("Stripe must save a card without a charge.");
+      return adapter.createMethodSetup(request);
+    };
+    const subscriptionId = "30000000-0000-4000-8000-000000000003";
+    const setup = await createMethodSetup({
+      contactId: invoice.contactId,
+      subscriptionId,
+      customer: { email: invoice.customer.email, name: invoice.customer.name },
+      successUrl: `https://shop.example.test/memberships/trial-return?subscription=${subscriptionId}`,
+      cancelUrl: "https://shop.example.test/memberships?setup=cancelled",
+      idempotencyKey: `trial-card:${subscriptionId}`,
+    });
+    expect(setup).toEqual({
+      providerRef: "cs_setup_1",
+      url: "https://checkout.stripe.test/setup",
+      expiresAt: undefined,
+      providerCustomerRef: "cus_setup",
+    });
+    const form = new URLSearchParams(bodyText(calls[0]?.init?.body));
+    expect(form.get("mode")).toBe("setup");
+    expect(form.has("line_items[0][price_data][unit_amount]")).toBe(false);
+    expect(bodyText(calls[0]?.init?.body)).not.toContain("unit_amount");
+    expect(form.get("metadata[freeholder_contact_id]")).toBe(invoice.contactId);
+    expect(form.get("metadata[freeholder_subscription_id]")).toBe(subscriptionId);
+    expect(form.get("setup_intent_data[metadata][freeholder_contact_id]")).toBe(invoice.contactId);
+    expect(form.get("setup_intent_data[metadata][freeholder_subscription_id]")).toBe(subscriptionId);
+    expect(form.get("customer_creation")).toBe("always");
+    expect(form.get("customer_email")).toBe(invoice.customer.email);
+    expect(calls[0]?.init?.headers).toMatchObject({ "idempotency-key": `trial-card:${subscriptionId}` });
+    expect(bodyText(calls[0]?.init?.body)).not.toContain("sk_test_private");
+
+    includeCustomer = false;
+    await expect(createMethodSetup({
+      contactId: invoice.contactId,
+      subscriptionId,
+      customer: { email: invoice.customer.email },
+      successUrl: "https://shop.example.test/memberships/trial-return",
+      cancelUrl: "https://shop.example.test/memberships?setup=cancelled",
+      idempotencyKey: `trial-card:${subscriptionId}:again`,
+    })).rejects.toMatchObject({ code: "provider_failure" });
+
+    const secret = "whsec_current";
+    const at = 1_700_000_100;
+    async function events(payload: Record<string, unknown>) {
+      const raw = JSON.stringify({ id: "evt_setup", type: "checkout.session.completed", created: at, data: { object: payload } });
+      const signature = createHmac("sha256", secret).update(`${at}.${raw}`).digest("hex");
+      return adapter.verifyWebhook({
+        headers: { "stripe-signature": `t=${at},v1=${signature}` },
+        body: bytes(raw),
+        receivedAt: new Date(at * 1_000).toISOString(),
+      });
+    }
+    const bare = {
+      id: "cs_setup_1",
+      mode: "setup",
+      payment_status: "no_payment_required",
+      customer: "cus_setup",
+      metadata: { freeholder_contact_id: invoice.contactId, freeholder_subscription_id: subscriptionId },
+    };
+    await expect(events(bare)).resolves.toEqual([]);
+    await expect(events({ ...bare, payment_status: "paid", amount_total: 0 })).resolves.toEqual([]);
+    const saved = await events({
+      ...bare,
+      setup_intent: {
+        id: "seti_1",
+        payment_method: {
+          id: "pm_setup",
+          type: "card",
+          customer: "cus_setup",
+          card: { brand: "visa", last4: "4242", exp_month: 12, exp_year: 2030 },
+        },
+      },
+    });
+    expect(saved[0]?.kind).toBe("saved_method_added");
+    if (saved[0]?.kind === "saved_method_added") {
+      expect(saved[0]).toMatchObject({ contactId: invoice.contactId, providerCustomerRef: "cus_setup" });
+      expect(saved[0].method).toMatchObject({ providerRef: "pm_setup", last4: "4242", kind: "card" });
+    }
+    expect(saved.some((event) => event.kind === "payment_succeeded")).toBe(false);
+  });
+
   it("charges a stored method off-session and creates a recurring schedule", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {

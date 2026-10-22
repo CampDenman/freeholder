@@ -37,6 +37,7 @@ import {
   type ServiceContext,
   type Tx,
 } from "@/core/service";
+import { anonymousClientKey } from "@/core/security/rate-limit";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { withoutHoldCascade } from "@/core/retention/holds";
@@ -664,8 +665,9 @@ export const recordPopupEvent = defineService({
       `popup:${input.popupId}:${
         actor.kind === "user" || actor.kind === "agent"
           ? actorString(actor)
-          : `ip:${actor.request?.ip ?? "unknown"}`
+          : anonymousClientKey(actor)
       }`,
+    untrustedBackstop: { limit: 30_000, windowSeconds: 60 },
     message: "This popup has been reported a lot just now. Try again shortly.",
   },
   output: recordOutput,
@@ -740,7 +742,12 @@ export const capturePopup = defineService({
       `popup-capture:${input.popupId}:${
         actor.kind === "user" || actor.kind === "agent"
           ? actorString(actor)
-          : `ip:${actor.request?.ip ?? "unknown"}`
+          : actor.request?.trustedIp
+            ? anonymousClientKey(actor)
+            // Without a validated address, the submitted email: forging it
+            // only spends that address's own allowance, and the newsletter's
+            // per-recipient confirmation limit bounds the mail (C11.10).
+            : `email:${input.email}`
       }`,
     message: "This popup has taken a lot of sign-ups just now. Try again shortly.",
   },

@@ -36,10 +36,12 @@ signups are paused with paused grants until their first invoice is fully paid.
 Retries reuse the signup. A cancelled pending signup cannot activate, and its
 invoice no longer offers customer checkout. Recurring payment-method consent
 is explicit; only consented provider evidence is stored. A durable sweep recovers
-activation and future provider schedules. New customers starting a trial that
-requires a saved card still need the business to arrange that method; this is
-shown as unavailable rather than granting an unverified trial. Live recurring
-settlement remains C11.05.
+activation and future provider schedules. A card-required trial stays paused,
+with no access, until the customer saves a method: a setup fee is that first
+invoice, and a zero fee opens the provider's card-setup checkout. The trial
+window starts when that card is saved. A manual adapter, or a provider that
+cannot save a card, keeps the plan unavailable. Live recurring settlement
+remains C11.05.
 
 Private client document versions mark their assets private, including existing
 versions in the additive migration. That flag survives archiving, revocation,
@@ -85,6 +87,7 @@ temporary database run exceeded its container memory limit; the container was
 adjusted and affected cases rerun. No production database was used for fixtures.
 Required GitHub CI, merge and hosted deployment are recorded separately in the PR.
 
-Production and playground mail/payment provider acceptance, independent security
-review, and the deferred trial setup above remain explicit open work. Do not
-check those acceptance items from mocked or ledger-only runs.
+Production and playground mail/payment provider acceptance and independent
+security review remain explicit open work. Card-required trial setup is proven
+with the adapter double; live settlement remains C11.05. Do not check
+live-provider acceptance from mocked or ledger-only runs.

@@ -253,6 +253,38 @@ describe("freeholder launch (C3.30)", () => {
     expect(said).toMatch(/Deleted the empty bucket example-com-media/);
     expect(said).toMatch(/Kept example-com-backups: it still holds files/);
     expect(existsSync(join(root, "example-com", "state.destroyed.json"))).toBe(true);
+    expect(said).toMatch(/Deleted the site's Spaces key/);
+    expect(said).toMatch(/bills Spaces as a subscription/);
+  });
+
+  it("says so when the site's Spaces key could not be deleted on destroy", async () => {
+    await runLaunch(args(), setup(w, root));
+    w.failKeyDelete = true;
+    const before = w.out.length;
+    expect(await runLaunch(parseLaunchArgs(["launch", "--destroy", "--name", "example-com", "--confirm", "example-com"], {}), setup(w, root))).toBe(0);
+    const said = w.out.slice(before).join("\n");
+    expect(said).toMatch(/Could not delete the site's Spaces key DOKEY\d+; delete it in the DigitalOcean console/);
+    expect(said).not.toMatch(/Deleted the site's Spaces key/);
+  });
+
+  it("names sites and reads --domain in linear time, whatever the input", () => {
+    expect(defaultName("")).toBe("");
+    expect(defaultName("---")).toBe("");
+    expect(defaultName("--Ex__ample..COM--")).toBe("ex-ample-com");
+    expect(defaultName(`${"a".repeat(54)}.-b.com`)).toBe("a".repeat(54));
+    expect(defaultName("a".repeat(80))).toBe("a".repeat(55));
+    const domainOf = (input: string) => parseLaunchArgs(["launch", "--domain", input], {}).domain;
+    expect(domainOf("HTTPS://Example.com///")).toBe("example.com");
+    expect(domainOf("http://example.com/")).toBe("example.com");
+    expect(domainOf("ftp://example.com")).toBe("ftp://example.com");
+    expect(domainOf("example.com")).toBe("example.com");
+    // Inputs that made the old `/-+$/` and `/\/+$/` patterns backtrack quadratically.
+    const started = performance.now();
+    expect(defaultName(`${"-".repeat(100_000)}x`)).toBe("x");
+    expect(defaultName(`a${"-".repeat(100_000)}.`)).toBe("a");
+    expect(domainOf(`x${"/".repeat(100_000)}`)).toBe("x");
+    expect(domainOf(`a${"/".repeat(100_000)}b`)).toBe(`a${"/".repeat(100_000)}b`);
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it("formats the claim link, redacts secrets, names sites and pins edge to linux/amd64", async () => {

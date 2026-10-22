@@ -32,6 +32,9 @@ export default defineRailway(() => {
       S3_SECRET_ACCESS_KEY: ref(media, "SECRET_ACCESS_KEY"),
       S3_REGION: ref(media, "REGION"),
       S3_ADDRESSING_STYLE: "virtual",
+      // Railway's edge sets X-Real-IP to the client's address
+      // (deploy/client-readiness.md).
+      TRUSTED_CLIENT_IP_HEADER: "x-real-ip",
       APP_URL: preserve(),
       BOOTSTRAP_SECRET: preserve(),
       SESSION_SECRET: preserve(),

@@ -8,6 +8,10 @@ import { ready } from "@/core/runtime";
 import { translator } from "@/core/i18n";
 import { adsTxtDomain, coversSurface, renderAdsTxtFile } from "@/modules/ads/ads-txt";
 import {
+  CREATIVE_FRAME_SANDBOX,
+  creativeDocument,
+  creativeDocumentPolicy,
+  creativeFramePath,
   knownProviderNetwork,
   providerMarkup,
   reviewedTagHtml,
@@ -16,6 +20,7 @@ import {
 import { adSlot } from "@/modules/ads/blocks";
 import {
   adsTxt,
+  creativeTag,
   decideCampaign,
   deleteTxtEntry,
   reviewCreative,
@@ -30,7 +35,10 @@ import {
   txtEntries,
 } from "@/modules/ads/service";
 import { updateBusiness } from "@/core/settings/service";
+import { isExternallyExposed } from "@/core/service";
 import { ANONYMOUS, closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+
+const SYSTEM = { kind: "system" } as const;
 
 const BUSINESS = {
   name: "Coast Weekly",
@@ -79,6 +87,16 @@ describe("third-party tags", () => {
     expect(reviewedTagHtml("<a href='javascript:alert(1)'>x</a>")).toBeNull();
     expect(reviewedTagHtml("<script src='data:text/html,hi'></script>")).toBeNull();
     expect(reviewedTagHtml("")).toBeNull();
+  });
+
+  it("sandboxes the pasted tag's document into an opaque origin (C11.10)", () => {
+    const policy = creativeDocumentPolicy(["https://creative.example"]);
+    expect(policy).toMatch(/^sandbox allow-scripts /);
+    expect(policy).not.toContain("allow-same-origin");
+    expect(policy).toContain("script-src 'unsafe-inline' https://creative.example");
+    expect(policy).toContain("frame-ancestors 'self'");
+    expect(creativeDocumentPolicy([])).toContain("connect-src 'none'");
+    expect(creativeDocument("<p>ad</p>")).toContain("<body><p>ad</p></body>");
   });
 
   it("stamps the request nonce on scripts that do not already have one", () => {
@@ -346,8 +364,46 @@ describe.runIf(hasDatabase)("consent-gated serving and generated ads.txt", () =>
         resolved: allowed,
       })),
     );
-    expect(allowedMarkup).toContain("creative.example");
-    expect(allowedMarkup).toContain('nonce="abc123"');
+    // C11.10: the pasted tag is framed in an opaque origin, not inlined, and
+    // never carries the page's nonce.
+    expect(allowedMarkup).not.toContain("creative.example");
+    expect(allowedMarkup).not.toContain('nonce="abc123"');
+    expect(allowedMarkup).toContain(`src="${creativeFramePath(tag.id)}"`);
+    expect(allowedMarkup).toContain(`sandbox="${CREATIVE_FRAME_SANDBOX}"`);
+    expect(allowedMarkup).not.toContain("allow-same-origin");
     expect(allowedMarkup).not.toContain('rel="sponsored nofollow noopener"');
+
+    // The frame's document is handed out only while the creative is servable.
+    expect((await creativeTag.call({ id: tag.id }, SYSTEM))?.html).toContain("creative.example");
+    await reviewCreative.call({ id: tag.id, decision: "rejected" }, OWNER);
+    expect(await creativeTag.call({ id: tag.id }, SYSTEM)).toBeNull();
+    // Internal only: not a public verb, so the markup is not an API read.
+    expect(isExternallyExposed(creativeTag)).toBe(false);
+    expect((await failure(creativeTag.call({ id: tag.id }, ANONYMOUS))).code).toBe("permission");
+  });
+
+  it("never self-approves a pasted tag, even on a house line (C11.10)", async () => {
+    const slot = await position(true);
+    const house = await booking({
+      email: "us@example.test",
+      name: "The paper",
+      pricing: "house",
+      slotId: slot.id,
+      priority: 0,
+    });
+    const tag = await saveCreative.call(
+      {
+        lineItemId: house.line.id,
+        kind: "html_tag",
+        width: 728,
+        height: 90,
+        tagHtml: "<script>parent.document.title='x'</script>",
+        status: "active",
+      },
+      OWNER,
+    );
+    expect(tag.reviewState).toBe("pending");
+    await goLive(house.campaign.id, false);
+    expect(await creativeTag.call({ id: tag.id }, SYSTEM)).toBeNull();
   });
 });

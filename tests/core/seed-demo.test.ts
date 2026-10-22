@@ -16,6 +16,9 @@
 // failure names the page, rather than in a crawler where it names a URL.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/core/db";
+import { eq, sql } from "drizzle-orm";
+import { moduleSettings } from "@/core/settings/schema";
+import { PLAYGROUND_BASELINE_MODULE } from "@/core/demo/playground-policy";
 import { resetEnvForTests } from "@/core/env";
 import { assets } from "@/core/media/schema";
 import { pages } from "@/modules/cms/schema";
@@ -24,16 +27,27 @@ import {
   seedDemoIfRequested,
 } from "@/modules/seed/boot";
 import { installDemo } from "@/modules/seed/service";
-import { resolvePage, getSection, publishedPaths } from "@/modules/cms/service";
+import { createPage, resolvePage, getSection, publishedPaths } from "@/modules/cms/service";
 import {
   getBusiness,
   setupState,
   updateBusiness,
 } from "@/core/settings/service";
 import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
-import { PAGES, IMAGES, BUSINESS, LOCATION } from "../../seed/demo/content";
+import {
+  PAGES,
+  IMAGES,
+  BUSINESS,
+  LOCATION,
+  NEWSLETTER,
+  CATALOG,
+  COLLECTIONS,
+  EVENTS,
+  SERVICES,
+} from "../../seed/demo/content";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { compute } from "@/modules/calculators/service";
+import { listNewsletters, listPublicIssues, listTemplates } from "@/modules/newsletters/service";
 import {
   ANONYMOUS,
   closeDb,
@@ -153,7 +167,14 @@ describe("the demo content, before anything installs it", () => {
   });
 
   it("links only to pages that exist", () => {
-    const known = new Set(PAGES.map((p) => `/${p.slug}`.replace(/\/$/, "") || "/"));
+    // Pages, plus the routes the demo's shop, booking and events own.
+    const known = new Set([
+      ...PAGES.map((p) => `/${p.slug}`.replace(/\/$/, "") || "/"),
+      "/book",
+      "/products",
+      "/events",
+      ...COLLECTIONS.map((collection) => `/c/${collection.slug}`),
+    ]);
     const ids = Object.fromEntries(
       Object.keys(IMAGES).map((k) => [k, "00000000-0000-4000-8000-000000000000"]),
     ) as Record<keyof typeof IMAGES, string>;
@@ -173,7 +194,7 @@ describe("the demo content, before anything installs it", () => {
   });
 });
 
-describe.runIf(hasDatabase)("installing the demo", () => {
+describe.runIf(hasDatabase)("installing the demo", { timeout: 120_000 }, () => {
   beforeEach(async () => {
     await truncateSpine();
   });
@@ -210,6 +231,70 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     },
     30_000,
   );
+
+  it("finishes the busy layer on a restart that died between the two installs", async () => {
+    // First boot: the plain demo committed, then the process stopped before
+    // the busy layer (simulated by booting without asking for it).
+    const first = await withEnvironment(
+      { NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "1", FREEHOLDER_PLAYGROUND: undefined },
+      () => seedDemoIfRequested(),
+    );
+    expect(first.status).toBe("installed");
+
+    const retry = await withEnvironment(
+      { NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "busy", FREEHOLDER_PLAYGROUND: undefined },
+      () => seedDemoIfRequested(),
+    );
+    expect(retry.status).toBe("already-populated");
+    expect(retry.status === "already-populated" && retry.busy?.crm?.contacts).toBeGreaterThan(150);
+
+    // And only once.
+    const again = await withEnvironment(
+      { NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "busy", FREEHOLDER_PLAYGROUND: undefined },
+      () => seedDemoIfRequested(),
+    );
+    expect(again).toEqual({ status: "already-populated" });
+  });
+
+  it("counts a late busy layer as playground seed, not visitor rows", async () => {
+    await withEnvironment(
+      { NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "1", FREEHOLDER_PLAYGROUND: undefined },
+      () => seedDemoIfRequested(),
+    );
+    // A baseline recorded before the busy layer finished (a restart between
+    // the two installs, after the baseline was taken).
+    const [{ contacts: before } = { contacts: 0 }] = (await db().execute(
+      sql`select count(*)::int as contacts from contacts`,
+    )) as unknown as Array<{ contacts: number }>;
+    await db()
+      .insert(moduleSettings)
+      .values({ module: PLAYGROUND_BASELINE_MODULE, config: { baseline: { contacts: before } } });
+
+    const retry = await withEnvironment(
+      { NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "busy", FREEHOLDER_PLAYGROUND: "1" },
+      () => seedDemoIfRequested(),
+    );
+    expect(retry.status).toBe("already-populated");
+    const [stored] = await db()
+      .select({ config: moduleSettings.config })
+      .from(moduleSettings)
+      .where(eq(moduleSettings.module, PLAYGROUND_BASELINE_MODULE));
+    const [{ contacts: after } = { contacts: 0 }] = (await db().execute(
+      sql`select count(*)::int as contacts from contacts`,
+    )) as unknown as Array<{ contacts: number }>;
+    expect(after).toBeGreaterThan(before + 150);
+    expect((stored!.config as { baseline: Record<string, number> }).baseline.contacts).toBe(after);
+  });
+
+  it("never adds the busy layer to a site that is not the demo business", async () => {
+    await updateBusiness.call({ ...BUSINESS, name: "A real studio" }, OWNER);
+    await createPage.call({ slug: "", title: "Home" }, OWNER);
+    const outcome = await withEnvironment(
+      { NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "busy", FREEHOLDER_PLAYGROUND: undefined },
+      () => seedDemoIfRequested(),
+    );
+    expect(outcome).toEqual({ status: "already-populated" });
+  });
 
   it("lets development opt out without writing any content", async () => {
     const outcome = await withEnvironment(
@@ -264,9 +349,35 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     // rather than through the seed writing them — so this assertion is also
     // the proof that path is wired up end to end.
     const paths = await publishedPaths.call({ locale: "en" }, STAFF);
+    // The shop's products and services and the events earn theirs the
+    // same way, through catalog's and events' own publishing paths.
     expect(paths.map((p: { slug: string }) => p.slug).sort()).toEqual(
-      [...PAGES.map((p) => p.slug), "locations", `locations/${LOCATION.slug}`].sort(),
+      [
+        ...PAGES.map((p) => p.slug),
+        "locations",
+        `locations/${LOCATION.slug}`,
+        `newsletters/${NEWSLETTER.issue.slug}`,
+        "products",
+        ...CATALOG.map((product) => `products/${product.slug}`),
+        ...SERVICES.map((service) => `products/${service.slug}`),
+        "events",
+        ...EVENTS.map((event) => `events/${event.slug}`),
+      ].sort(),
     );
+
+    const letters = await listNewsletters.call({}, OWNER);
+    expect(letters.map((letter) => letter.slug)).toContain(NEWSLETTER.slug);
+    const issues = await listPublicIssues.call({}, ANONYMOUS);
+    expect(issues.map((issue) => issue.slug)).toContain(NEWSLETTER.issue.slug);
+    const templates = await listTemplates.call({}, OWNER);
+    expect(
+      templates.some(
+        (template) => template.name === NEWSLETTER.template.name && template.kind === "campaign",
+      ),
+    ).toBe(true);
+    const archive = await resolvePage.call({ slug: "newsletters", locale: "en" }, ANONYMOUS);
+    const subscribe = (archive!.blocks as BlockNode[]).find((node) => node.type === "newsletterSubscribe");
+    expect(subscribe?.props.consentStatement).toBe(NEWSLETTER.consentStatement);
   });
 
   it("builds real images with real renditions", async () => {
@@ -277,7 +388,7 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     const rows = await db().select().from(assets);
     expect(rows).toHaveLength(Object.keys(IMAGES).length);
     for (const asset of rows) {
-      expect(asset.width).toBe(1600);
+      expect(asset.width).toBe(1200);
       expect(asset.altText ?? "").not.toBe("");
       // AVIF and WebP at several widths — the §36 performance promise.
       expect(Object.keys(asset.variants as object).length).toBeGreaterThan(0);
@@ -337,7 +448,11 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     // And it refused *before* writing anything: no duplicate pages, no second
     // set of images.
     const rows = await db().select().from(pages);
-    expect(rows).toHaveLength(PAGES.length + 2); // + the location and its index
+    // + the location, its index, the demo issue, and the shop's and events'
+    // own pages and indexes.
+    expect(rows).toHaveLength(
+      PAGES.length + 3 + 1 + CATALOG.length + SERVICES.length + 1 + EVENTS.length,
+    );
     expect(await db().select().from(assets)).toHaveLength(
       Object.keys(IMAGES).length,
     );

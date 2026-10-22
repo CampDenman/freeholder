@@ -16,6 +16,14 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  // C11.10: records a carrier's answer for a text staged by messaging.sendSms,
+  // from the post-commit delivery job.
+  "messaging.applySmsSendResult",
+  "messaging.checkSmsDelivery",
+  // C11.10: the phases around a gallery package's storage reads and write.
+  "galleries.buildArchiveApply",
+  "galleries.buildArchiveFail",
+  "galleries.buildArchiveSource",
   "notes.purgeExpired",
   "tasks.purgeExpired",
   // The record-trash sweeps (C11.14): a trash window expiring is not something
@@ -33,6 +41,8 @@ const INTERNAL = [
   // so work already public is taken down on nobody's behalf.
   "projects.sweepLapsedConsent",
   "ads.rollUpStats",
+  // C11.10: the sandboxed creative document reads its markup through this.
+  "ads.creativeTag",
   "agents.runDuePlaybooks",
   "agents.startEventPlaybooks",
   // The wake sweep (C9.02). System rather than scoped because a sleeping run
@@ -90,10 +100,30 @@ const INTERNAL = [
   "entitlements.issueUnlock",
   "entitlements.syncSubscription",
   "entitlements.syncTier",
+  // Paid event admission (C6.11): settlement confirming a held seat, the
+  // five-minute hold sweep, and refund/void cancellation all happen on
+  // nobody's behalf — a webhook, a job, or a bus event is not a person.
+  "events.confirmPaidRegistration",
+  "events.expireHeldRegistrations",
+  "events.lapsedHolds",
+  "events.expireHeldRegistration",
+  "events.cancelRegistrationForInvoice",
   "forms.briefingEnquiries",
   "galleries.buildArchive",
   "galleries.expireSessions",
   "invoicing.briefingOverdue",
+  // C11.10: phases of the owner payment orchestrators. The public service
+  // authorizes the caller; these run as the system around provider I/O.
+  "invoicing.claimPaymentCheckout",
+  "invoicing.applyPaymentCheckout",
+  "invoicing.providerPaymentSource",
+  "invoicing.recordProviderPaymentResult",
+  "invoicing.claimProviderRefund",
+  "invoicing.recordProviderRefundResult",
+  "invoicing.savedPaymentMethodSource",
+  "invoicing.applySavedPaymentMethodRevocation",
+  "invoicing.claimInPersonPayment",
+  "invoicing.applyInPersonPayment",
   "mail.applySenderVerification",
   "mail.recordProviderEvent",
   "media.applyWatermarkBackfill",
@@ -145,6 +175,9 @@ const INTERNAL = [
   // not something anybody did; a job raises the invoice and charges on
   // nobody's behalf.
   "subscriptions.chargePlatformDue",
+  // A customer's plan change is granted when its proration invoice is paid
+  // (C11.10); the payment event, not a person, triggers it.
+  "subscriptions.completePaidPlanChange",
   // Provider schedules are the truth (C9.33). A verified webhook applies the
   // period on nobody's behalf.
   "subscriptions.reconcileProviderPeriod",
@@ -176,7 +209,50 @@ const CALLER_AUTHORIZED_PHASES = [
   // catalog.recomputeSegmentCollections on nobody's behalf and claims nothing
   // on an external protocol.
   "catalog.recomputeCollectionMembership",
+  // Checkout composes this inside its transaction; the public door is the
+  // rate-limited catalog.quoteCartPromotions (C11.10).
+  "catalog.resolveCartPromotions",
   "documents.myDownload",
+  // C11.10: the short phases around model calls, so no transaction waits on
+  // a provider (MASTER.md §11).
+  "assistant.applyAnswer",
+  "assistant.prepareAnswer",
+  "assistant.settingsSnapshot",
+  "builder.recordCodeProposal",
+  "builder.recordProposal",
+  "builder.releaseCodeReservation",
+  "builder.releaseProposalReservation",
+  "builder.reserveCodeProposal",
+  "builder.reserveProposal",
+  "cms.applyPageTranslationDraft",
+  "cms.draftPageTranslationSource",
+  // C11.10: the phases around SMS, capture-storage and calendar/mail provider
+  // I/O, so no service transaction is held open across it.
+  "messaging.applySmsSendResult",
+  "messaging.checkNumbersApply",
+  "messaging.checkSmsDelivery",
+  "messaging.importNumbersApply",
+  "media.applyCaptureAssembly",
+  "media.applyCaptureChunk",
+  "media.applyCaptureOriginal",
+  "media.claimCaptureAssembly",
+  "media.claimCaptureChunk",
+  "media.claimCaptureOriginal",
+  "connections.importMailApply",
+  "connections.importMailSource",
+  "connections.syncCalendarsApply",
+  "connections.syncCalendarsDiscover",
+  "connections.syncCalendarsSource",
+  "agents.claimApproval",
+  "agents.completeApproval",
+  "agents.proposeWriteGate",
+  "agents.releaseApproval",
+  "builder.claimCodeDelivery",
+  "builder.recordCodeDelivery",
+  "builder.releaseCodeDelivery",
+  "galleries.buildArchiveApply",
+  "galleries.buildArchiveFail",
+  "galleries.buildArchiveSource",
   // Storage keys stay behind the gallery's controlled byte routes.
   "galleries.viewItem",
   "galleries.downloadItem",
@@ -187,6 +263,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "invoicing.customerPaymentSource",
   "invoicing.applyCustomerPayment",
   "demo.installApply",
+  // C1.38: the busy demo layer runs as the system after the plain demo.
+  "demo.installBusy",
   "demo.installGuard",
   "connections.applyCalendarOAuthCompletion",
   "connections.applyMailReadOAuthCompletion",

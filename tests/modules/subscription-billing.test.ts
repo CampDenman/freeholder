@@ -9,12 +9,12 @@ import type { PaymentAdapter } from "@/adapters/payments";
 import { contacts } from "@/core/contacts/schema";
 import { beginCustomerCheckout, getCustomerInvoice } from "@/modules/invoicing/customer-service";
 import { processPaymentProviderEvents } from "@/modules/invoicing/payment-provider-service";
-import { publicMembershipPlans, joinMembership, activatePaidSignup } from "@/modules/subscriptions/public-signup";
+import { publicMembershipPlans, joinMembership, activatePaidSignup, beginTrialCardSetup, startCardTrial } from "@/modules/subscriptions/public-signup";
 import { createPayment, settlePayment } from "@/modules/invoicing/invoice-service";
 import { users } from "@/core/auth/schema";
 import { resolveContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
-import { invoices, paymentMethods } from "@/modules/invoicing/schema";
+import { invoiceLines, invoices, paymentMethods, payments } from "@/modules/invoicing/schema";
 import {
   priceListEntries,
   priceLists,
@@ -25,22 +25,28 @@ import { subscriptions } from "@/modules/subscriptions/schema";
 import { hasAccess } from "@/core/entitlements/service";
 import {
   attachProviderSchedule,
+  cancelMySubscription,
   cancelSubscription,
   changeMyPlan,
   changePlan,
   chargePlatformInvoice,
   chargePlatformDue,
   enroll,
+  listOfferedPlans,
   proratedDifference,
   reconcileProviderPeriod,
+  renewDue,
   savePlan,
   subscribe,
 } from "@/modules/subscriptions/service";
+import { env } from "@/core/env";
 import { ready } from "@/core/runtime";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const mocks = vi.hoisted(() => ({
   createCheckout: vi.fn<PaymentAdapter["createCheckout"]>(),
+  createMethodSetup: vi.fn(),
+  offerMethodSetup: { current: true },
   chargeSavedMethod: vi.fn(),
   createRecurringSchedule: vi.fn<PaymentAdapter["createRecurringSchedule"]>(),
   updateRecurringSchedule: vi.fn(),
@@ -66,6 +72,7 @@ vi.mock("@/adapters/payments", async (importOriginal) => {
         strongCustomerAuthentication: true,
       }),
       createCheckout: mocks.createCheckout,
+      ...(mocks.offerMethodSetup.current ? { createMethodSetup: mocks.createMethodSetup } : {}),
       chargeSavedMethod: mocks.chargeSavedMethod,
       createRecurringSchedule: mocks.createRecurringSchedule,
       updateRecurringSchedule: mocks.updateRecurringSchedule,
@@ -188,8 +195,11 @@ describe.runIf(hasDatabase)("subscription billing", () => {
       .values({ id: OWNER.userId, email: "owner@example.test", role: "owner" })
       .onConflictDoNothing();
     await updateBusiness.call(BUSINESS, OWNER);
+    mocks.offerMethodSetup.current = true;
     mocks.createCheckout.mockReset();
     mocks.createCheckout.mockResolvedValue({providerRef:"cs_signup",paymentRef:"pi_signup",url:"https://checkout.example.test/signup"});
+    mocks.createMethodSetup.mockReset();
+    mocks.createMethodSetup.mockResolvedValue({ providerRef: "cs_setup", url: "https://checkout.example.test/setup", providerCustomerRef: "cus_setup" });
     mocks.chargeSavedMethod.mockReset();
     mocks.createRecurringSchedule.mockReset();
     mocks.updateRecurringSchedule.mockReset();
@@ -243,6 +253,170 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     await settlePayment.call({id:payment.id,providerRef:"pi_unconsented"},OWNER);
     expect((await activatePaidSignup.call({invoiceId:invoice!.id},{kind:"system"})).activated).toBe(false);
   });
+
+  it("keeps a card-required trial paused until the saved card is confirmed", async () => {
+    const contact = await person("card-trial");
+    await db().insert(users).values({ id: CUSTOMER.userId, email: contact.email!, role: "customer" });
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, contact.id));
+    const monthly = await plan({ billingMode: "provider", trialDays: 14, trialRequiresCard: true });
+    const offered = (await publicMembershipPlans.call({}, { kind: "anonymous" })).find((entry) => entry.id === monthly.id)!;
+    expect(offered.available).toBe(true);
+    const requestKey = randomUUID();
+    const joined = await joinMembership.call({ planId: monthly.id, termsHash: offered.termsHash, requestKey, acceptedTerms: true }, CUSTOMER);
+    expect(joined).toMatchObject({ pending: true, invoiceId: null, cardSetup: true });
+    expect(await joinMembership.call({ planId: monthly.id, termsHash: offered.termsHash, requestKey, acceptedTerms: true }, CUSTOMER)).toEqual(joined);
+    expect((await failure(joinMembership.call({ planId: monthly.id, termsHash: offered.termsHash, requestKey: randomUUID(), acceptedTerms: true }, CUSTOMER))).code).toBe("conflict");
+    const [waiting] = await db().select().from(subscriptions).where(eq(subscriptions.id, joined.id));
+    expect(waiting).toMatchObject({ status: "paused", signupPending: true, trialEndsAt: null });
+    expect(await db().select().from(invoices).where(eq(invoices.contactId, contact.id))).toHaveLength(0);
+    expect((await hasAccess.call({ contactId: contact.id, resource: { kind: "site" } }, OWNER)).allowed).toBe(false);
+
+    const oldCard = await card(contact.id);
+    await db().update(paymentMethods).set({ providerCustomerRef: "cus_setup" }).where(eq(paymentMethods.id, oldCard.id));
+    const setup = await beginTrialCardSetup.call({ subscriptionId: joined.id, saveMethodConsent: true }, CUSTOMER);
+    expect(setup.url).toBe("https://checkout.example.test/setup");
+    const setupRequest = mocks.createMethodSetup.mock.calls[0]![0] as { contactId: string; subscriptionId: string; idempotencyKey: string; successUrl: string };
+    expect(setupRequest).toMatchObject({ contactId: contact.id, subscriptionId: joined.id, idempotencyKey: `trial-card:${joined.id}` });
+    expect(setupRequest.successUrl).toContain(`/memberships/trial-return?subscription=${joined.id}`);
+    expect(new URL(setupRequest.successUrl).origin).toBe(new URL(env().APP_URL).origin);
+    expect(await db().select().from(payments)).toHaveLength(0);
+    expect((await failure(startCardTrial.call({ subscriptionId: joined.id, paymentMethodId: oldCard.id }, CUSTOMER))).code).toBe("conflict");
+
+    const unrelated = await card(contact.id);
+    expect((await failure(startCardTrial.call({ subscriptionId: joined.id, paymentMethodId: unrelated.id }, CUSTOMER))).code).toBe("conflict");
+    const staffCard = await card(contact.id);
+    await db().update(paymentMethods).set({ providerCustomerRef: "cus_setup", consentSource: "staff" }).where(eq(paymentMethods.id, staffCard.id));
+    expect((await failure(startCardTrial.call({ subscriptionId: joined.id, paymentMethodId: staffCard.id }, CUSTOMER))).code).toBe("conflict");
+
+    await processPaymentProviderEvents.call({
+      provider: "stripe",
+      bodySha256: "b".repeat(64),
+      receivedAt: new Date().toISOString(),
+      events: [{
+        id: "evt_trial_card",
+        kind: "saved_method_added",
+        contactId: contact.id,
+        providerCustomerRef: "cus_setup",
+        occurredAt: new Date().toISOString(),
+        method: { providerRef: "pm_trial", providerCustomerRef: "cus_setup", kind: "card", label: "card ending 4242", last4: "4242" },
+      }],
+    }, OWNER);
+    const [method] = await db().select().from(paymentMethods).where(eq(paymentMethods.providerMethodRef, "pm_trial"));
+    const started = await startCardTrial.call({ subscriptionId: joined.id, paymentMethodId: method!.id }, CUSTOMER);
+    expect(started).toEqual({ id: joined.id, started: true });
+    expect(await startCardTrial.call({ subscriptionId: joined.id, paymentMethodId: method!.id }, CUSTOMER)).toEqual(started);
+    const [trial] = await db().select().from(subscriptions).where(eq(subscriptions.id, joined.id));
+    expect(trial).toMatchObject({ status: "trialing", signupPending: false, paymentMethodId: method!.id });
+    expect(trial!.trialEndsAt).toEqual(trial!.currentPeriodEnd);
+    expect(trial!.trialEndsAt!.getTime() - trial!.currentPeriodStart.getTime()).toBe(14 * 86_400_000);
+    expect((await hasAccess.call({ contactId: contact.id, resource: { kind: "site" } }, OWNER)).allowed).toBe(true);
+  });
+
+  it("starts the trial from a setup fee instead of billing the recurring price", async () => {
+    const contact = await person("setup-fee-trial");
+    await db().insert(users).values({ id: CUSTOMER.userId, email: contact.email!, role: "customer" });
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, contact.id));
+    const monthly = await plan({ billingMode: "provider", trialDays: 14, trialRequiresCard: true, setupFeeMinor: 900 }, 2_500);
+    const offered = (await publicMembershipPlans.call({}, { kind: "anonymous" })).find((entry) => entry.id === monthly.id)!;
+    const joined = await joinMembership.call({ planId: monthly.id, termsHash: offered.termsHash, requestKey: randomUUID(), acceptedTerms: true }, CUSTOMER);
+    expect(joined.cardSetup).toBe(false);
+    expect(joined.invoiceId).toBeTruthy();
+    const [invoice] = await db().select().from(invoices).where(eq(invoices.id, joined.invoiceId!));
+    expect(invoice!.status).not.toBe("paid");
+    expect(invoice!.totalMinor).toBeGreaterThan(0);
+    const lines = await db().select().from(invoiceLines).where(eq(invoiceLines.invoiceId, invoice!.id));
+    expect(lines.map((line) => line.unitAmountMinor).sort((left, right) => left - right)).toEqual([0, 900]);
+    expect((await getCustomerInvoice.call({ id: invoice!.id }, CUSTOMER)).saveMethodRequired).toBe(true);
+    expect((await failure(beginCustomerCheckout.call({ id: invoice!.id }, CUSTOMER))).code).toBe("conflict");
+    await beginCustomerCheckout.call({ id: invoice!.id, saveMethodConsent: true }, CUSTOMER);
+    expect(mocks.createCheckout.mock.calls[0]![0].saveMethod).toBe(true);
+    expect(mocks.createCheckout.mock.calls[0]![0].amountMinor).toBe(invoice!.totalMinor);
+    await processPaymentProviderEvents.call({
+      provider: "stripe",
+      bodySha256: "c".repeat(64),
+      receivedAt: new Date().toISOString(),
+      events: [{
+        id: "evt_setup_fee",
+        kind: "payment_succeeded",
+        providerRef: "pi_signup",
+        checkoutRef: "cs_signup",
+        invoiceId: invoice!.id,
+        amountMinor: invoice!.totalMinor,
+        currency: "CAD",
+        occurredAt: new Date().toISOString(),
+        savedMethod: { providerRef: "pm_fee", providerCustomerRef: "cus_fee", kind: "card", label: "card ending 4242", last4: "4242" },
+      }],
+    }, OWNER);
+    // invoice.paid already opened the trial. Calling activation again must not move the window.
+    expect((await activatePaidSignup.call({ invoiceId: invoice!.id }, { kind: "system" })).activated).toBe(false);
+    const [trial] = await db().select().from(subscriptions).where(eq(subscriptions.id, joined.id));
+    const [method] = await db().select().from(paymentMethods).where(eq(paymentMethods.providerMethodRef, "pm_fee"));
+    expect(trial).toMatchObject({ status: "trialing", signupPending: false, paymentMethodId: method!.id });
+    expect(trial!.trialEndsAt).toEqual(trial!.currentPeriodEnd);
+    expect(trial!.trialEndsAt!.getTime() - trial!.currentPeriodStart.getTime()).toBe(14 * 86_400_000);
+    expect((await hasAccess.call({ contactId: contact.id, resource: { kind: "site" } }, OWNER)).allowed).toBe(true);
+  });
+
+  it("does not start a cancelled card trial or offer one the adapter cannot save", async () => {
+    const contact = await person("cancelled-card-trial");
+    await db().insert(users).values({ id: CUSTOMER.userId, email: contact.email!, role: "customer" });
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, contact.id));
+    const monthly = await plan({ billingMode: "provider", trialDays: 7, trialRequiresCard: true });
+    const offered = (await publicMembershipPlans.call({}, { kind: "anonymous" })).find((entry) => entry.id === monthly.id)!;
+    const joined = await joinMembership.call({ planId: monthly.id, termsHash: offered.termsHash, requestKey: randomUUID(), acceptedTerms: true }, CUSTOMER);
+    await cancelMySubscription.call({ id: joined.id }, CUSTOMER);
+    expect((await failure(beginTrialCardSetup.call({ subscriptionId: joined.id, saveMethodConsent: true }, CUSTOMER))).code).toBe("conflict");
+    expect((await failure(startCardTrial.call({ subscriptionId: joined.id, paymentMethodId: (await card(contact.id)).id }, CUSTOMER))).code).toBe("conflict");
+    expect((await hasAccess.call({ contactId: contact.id, resource: { kind: "site" } }, OWNER)).allowed).toBe(false);
+
+    const manual = await plan({ billingMode: "manual", trialDays: 14, trialRequiresCard: true });
+    const manualOffer = (await publicMembershipPlans.call({}, { kind: "anonymous" })).find((entry) => entry.id === manual.id)!;
+    expect(manualOffer.available).toBe(false);
+    expect((await failure(joinMembership.call({ planId: manual.id, termsHash: manualOffer.termsHash, requestKey: randomUUID(), acceptedTerms: true }, CUSTOMER))).code).toBe("conflict");
+
+    mocks.offerMethodSetup.current = false;
+    const unsupported = await plan({ billingMode: "provider", trialDays: 14, trialRequiresCard: true });
+    const unsupportedOffer = (await publicMembershipPlans.call({}, { kind: "anonymous" })).find((entry) => entry.id === unsupported.id)!;
+    expect(unsupportedOffer.available).toBe(false);
+    const fee = await plan({ billingMode: "provider", trialDays: 14, trialRequiresCard: true, setupFeeMinor: 500 });
+    const feeOffer = (await publicMembershipPlans.call({}, { kind: "anonymous" })).find((entry) => entry.id === fee.id)!;
+    expect(feeOffer.available).toBe(true);
+  });
+
+  it("starts a card trial immediately when the customer already has a saved card", async () => {
+    const contact = await person("card-ready");
+    await db().insert(users).values({ id: CUSTOMER.userId, email: contact.email!, role: "customer" });
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, contact.id));
+    const method = await card(contact.id);
+    const monthly = await plan({ billingMode: "provider", trialDays: 14, trialRequiresCard: true });
+    const offered = (await publicMembershipPlans.call({}, { kind: "anonymous" })).find((entry) => entry.id === monthly.id)!;
+    const joined = await joinMembership.call({ planId: monthly.id, termsHash: offered.termsHash, requestKey: randomUUID(), acceptedTerms: true, paymentMethodId: method.id }, CUSTOMER);
+    expect(joined).toMatchObject({ pending: false, invoiceId: null, cardSetup: false });
+    const [trial] = await db().select().from(subscriptions).where(eq(subscriptions.id, joined.id));
+    expect(trial).toMatchObject({ status: "trialing", signupPending: false, paymentMethodId: method.id });
+    expect(trial!.trialEndsAt!.getTime() - trial!.currentPeriodStart.getTime()).toBe(14 * 86_400_000);
+    expect((await hasAccess.call({ contactId: contact.id, resource: { kind: "site" } }, OWNER)).allowed).toBe(true);
+    expect(mocks.createMethodSetup).not.toHaveBeenCalled();
+  });
+
+  it("does not let a saved or staff-entered card skip a card trial's setup fee (C11.10)", async () => {
+    const contact = await person("fee-skip");
+    await db().insert(users).values({ id: CUSTOMER.userId, email: contact.email!, role: "customer" });
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, contact.id));
+    const method = await card(contact.id);
+    const staffCard = await card(contact.id);
+    await db().update(paymentMethods).set({ consentSource: "staff" }).where(eq(paymentMethods.id, staffCard.id));
+    const fee = await plan({ billingMode: "provider", trialDays: 14, trialRequiresCard: true, setupFeeMinor: 900 });
+    const offered = (await publicMembershipPlans.call({}, { kind: "anonymous" })).find((entry) => entry.id === fee.id)!;
+    expect((await failure(joinMembership.call({ planId: fee.id, termsHash: offered.termsHash, requestKey: randomUUID(), acceptedTerms: true, paymentMethodId: staffCard.id }, CUSTOMER))).code).toBe("conflict");
+    const joined = await joinMembership.call({ planId: fee.id, termsHash: offered.termsHash, requestKey: randomUUID(), acceptedTerms: true, paymentMethodId: method.id }, CUSTOMER);
+    expect(joined.pending).toBe(true);
+    expect(joined.invoiceId).toBeTruthy();
+    const [waiting] = await db().select().from(subscriptions).where(eq(subscriptions.id, joined.id));
+    expect(waiting).toMatchObject({ status: "paused", signupPending: true, trialEndsAt: null });
+    expect((await hasAccess.call({ contactId: contact.id, resource: { kind: "site" } }, OWNER)).allowed).toBe(false);
+  });
+
   it("cancels a provider schedule created while the customer was cancelling",async()=>{
     const member=await person("schedule-race");const method=await card(member.id);
     const monthly=await plan({billingMode:"provider"});
@@ -455,6 +629,127 @@ describe.runIf(hasDatabase)("subscription billing", () => {
       enroll.call({ contactId: member.id, planId: monthly.id }, OWNER),
     );
     expect(error.message).toMatch(/stored payment method/i);
+  });
+
+  it("refuses to defer onto a plan that is not priced in the subscription's currency (C11.10)", async () => {
+    const member = await person("unpriced");
+    const from = await plan({ proration: "none" }, 2_500);
+    const to = await plan({ name: "Unpriced" }, 9_000);
+    const started = await subscribe.call({ contactId: member.id, planId: from.id }, OWNER);
+    await db().delete(priceListEntries);
+    const error = await failure(changePlan.call({ id: started.subscription.id, planId: to.id }, OWNER));
+    expect(error.code).toBe("conflict");
+    expect(mocks.updateRecurringSchedule).not.toHaveBeenCalled();
+  });
+
+  it("offers and accepts only public plans from the same seller, and holds customer upgrades until paid (C11.10)", async () => {
+    const member = await person("self-serve");
+    await db()
+      .insert(users)
+      .values([
+        { id: CUSTOMER.userId, email: "self-serve@billing.test", role: "customer" },
+        { id: randomUUID(), email: "seller@billing.test", role: "customer" },
+      ])
+      .onConflictDoNothing();
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, member.id));
+    const from = await plan({ proration: "create_prorations" }, 1_000);
+    const upgrade = await plan({ name: "Plus" }, 10_000);
+    const hidden = await plan({ name: "Staff comp" }, 1);
+    await db().update(products).set({ visibility: "unlisted" }).where(eq(products.id, hidden.productId));
+    const [seller] = await db().select().from(users).where(eq(users.email, "seller@billing.test"));
+    const foreign = await plan({ name: "Another seller" }, 500);
+    await db().update(products).set({ sellerUserId: seller!.id }).where(eq(products.id, foreign.productId));
+    const started = await subscribe.call({ contactId: member.id, planId: from.id }, OWNER);
+
+    const offered = (await listOfferedPlans.call({ subscriptionId: started.subscription.id }, CUSTOMER)).map((row) => row.id);
+    expect(offered).toContain(upgrade.id);
+    expect(offered).not.toContain(hidden.id);
+    expect(offered).not.toContain(foreign.id);
+    for (const target of [hidden, foreign]) {
+      const refused = await failure(changeMyPlan.call({ id: started.subscription.id, planId: target.id }, CUSTOMER));
+      expect(refused.code).toBe("conflict");
+    }
+
+    // The plan says "prorate", so the difference is invoiced now — but the
+    // dearer plan is not granted until that invoice is paid.
+    const changed = await changeMyPlan.call({ id: started.subscription.id, planId: upgrade.id }, CUSTOMER);
+    expect(changed).toMatchObject({ deferred: false, awaitingPayment: true });
+    expect(changed.invoiceId).not.toBeNull();
+    expect(changed.proratedMinor).toBeGreaterThan(0);
+    const [held] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
+    expect(held).toMatchObject({ planId: from.id, productVariantId: started.subscription.productVariantId, pendingPlanId: null });
+
+    // A second change cannot overtake the one waiting on its invoice.
+    const other = await plan({ name: "Plus annual" }, 12_000);
+    expect((await failure(changeMyPlan.call({ id: started.subscription.id, planId: other.id }, CUSTOMER))).code).toBe("conflict");
+
+    const [owed] = await db().select().from(invoices).where(eq(invoices.id, changed.invoiceId!));
+    const payment = await createPayment.call({ invoiceId: owed!.id, provider: "manual", method: "card", amountMinor: owed!.totalMinor - owed!.paidMinor, idempotencyKey: "upgrade-proration" }, OWNER);
+    await settlePayment.call({ id: payment.id, providerRef: "upgrade-proration" }, OWNER);
+    const [upgradeVariant] = await db().select().from(productVariants).where(eq(productVariants.productId, upgrade.productId));
+    const [granted] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
+    expect(granted).toMatchObject({ planId: upgrade.id, productVariantId: upgradeVariant!.id });
+  });
+
+  it("lets a new change through once the waiting invoice is voided, and never grants the voided one (C11.10)", async () => {
+    const member = await person("superseded");
+    await db().insert(users).values({ id: CUSTOMER.userId, email: "superseded@billing.test", role: "customer" }).onConflictDoNothing();
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, member.id));
+    const from = await plan({ proration: "create_prorations" }, 1_000);
+    const first = await plan({ name: "First choice" }, 10_000);
+    const second = await plan({ name: "Second choice" }, 8_000);
+    const started = await subscribe.call({ contactId: member.id, planId: from.id }, OWNER);
+    const waiting = await changeMyPlan.call({ id: started.subscription.id, planId: first.id }, CUSTOMER);
+    expect(waiting.awaitingPayment).toBe(true);
+    const { voidInvoice } = await import("@/modules/invoicing/invoice-service");
+    await voidInvoice.call({ id: waiting.invoiceId!, reason: "Customer chose another plan." }, OWNER);
+    const next = await changeMyPlan.call({ id: started.subscription.id, planId: second.id }, CUSTOMER);
+    expect(next.awaitingPayment).toBe(true);
+    const [row] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
+    expect(row?.planId).toBe(from.id);
+  });
+
+  it("moves a deferred change onto the plan's active variant when its default is retired (C11.10)", async () => {
+    const member = await person("variant-fallback");
+    const from = await plan({ proration: "none" }, 2_500);
+    const to = await plan({ name: "Retired default", proration: "none" }, 20_000);
+    const [retired] = await db().select().from(productVariants).where(eq(productVariants.productId, to.productId));
+    const [live] = await db()
+      .insert(productVariants)
+      .values({ productId: to.productId, combinationKey: `live-${retired!.id}`, sku: `live-${retired!.id}`, isDefault: false })
+      .returning();
+    const [list] = await db().insert(priceLists).values({ name: "Live variant", currency: "CAD", active: true }).returning();
+    await db().insert(priceListEntries).values({ priceListId: list!.id, variantId: live!.id, amountMinor: 15_000 });
+    const started = await subscribe.call({ contactId: member.id, planId: from.id }, OWNER);
+    expect((await changePlan.call({ id: started.subscription.id, planId: to.id }, OWNER)).deferred).toBe(true);
+    await db().update(productVariants).set({ status: "archived" }).where(eq(productVariants.id, retired!.id));
+    await db()
+      .update(subscriptions)
+      .set({ currentPeriodStart: new Date(Date.now() - 40 * 86_400_000), currentPeriodEnd: new Date(Date.now() - 60_000) })
+      .where(eq(subscriptions.id, started.subscription.id));
+    await renewDue.call({}, { kind: "system" });
+    const [renewed] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
+    expect(renewed).toMatchObject({ planId: to.id, productVariantId: live!.id });
+  });
+
+  it("bills the new plan's price at the renewal after a deferred change (C11.10)", async () => {
+    const member = await person("renew-after-change");
+    const from = await plan({ proration: "none" }, 2_500);
+    const to = await plan({ name: "Yearly", proration: "none" }, 20_000);
+    const started = await subscribe.call({ contactId: member.id, planId: from.id }, OWNER);
+    expect((await changePlan.call({ id: started.subscription.id, planId: to.id }, OWNER)).deferred).toBe(true);
+    await db()
+      .update(subscriptions)
+      .set({ currentPeriodStart: new Date(Date.now() - 40 * 86_400_000), currentPeriodEnd: new Date(Date.now() - 60_000) })
+      .where(eq(subscriptions.id, started.subscription.id));
+    const before = new Set((await db().select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, member.id))).map((row) => row.id));
+    await renewDue.call({}, { kind: "system" });
+    const raised = (await db().select().from(invoices).where(eq(invoices.contactId, member.id))).filter((row) => !before.has(row.id));
+    expect(raised).toHaveLength(1);
+    const lines = await db().select().from(invoiceLines).where(eq(invoiceLines.invoiceId, raised[0]!.id));
+    expect(lines.map((line) => line.unitAmountMinor)).toEqual([20_000]);
+    const [renewed] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
+    expect(renewed?.planId).toBe(to.id);
   });
 
   it("lets a customer change only their own plan", async () => {

@@ -4,7 +4,7 @@
 // engine browsers run, with memory stores) talk through the real services;
 // the database is then searched for anything readable.
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { ready } from "@/core/runtime";
@@ -12,10 +12,10 @@ import { joinSite, updateMyMembership } from "@/modules/members/service";
 import { followMember } from "@/modules/members/graph";
 import { leaveConversation, sendMessage, startConversation, unsendMessage, viewConversation } from "@/modules/members/messages";
 import { reportContent } from "@/modules/members/reports";
-import { e2eeSync, registerDevice, revokeDevice, sendEncrypted } from "@/modules/members/e2ee/service";
+import { claimKeyPackages, e2eeSync, registerDevice, revokeDevice, sendEncrypted } from "@/modules/members/e2ee/service";
 import type { E2eeDevice } from "@/modules/members/e2ee/engine";
 import { deviceFor } from "../helpers/e2ee";
-import { memberReports, memberSealedBlobs } from "@/modules/members/schema";
+import { memberKeyPackages, memberReports, memberSealedBlobs } from "@/modules/members/schema";
 import { purgeSealedBlobs, sealedBlobAccess, uploadSealedBlob } from "@/modules/members/sealed-blobs";
 import { openFile, sealFile } from "@/modules/members/e2ee/wire";
 import { storage } from "@/adapters/storage";
@@ -214,6 +214,19 @@ describe.runIf(hasDatabase)("end-to-end encrypted messages (C12.23)", () => {
     expect(await bodies(tablet, id)).toEqual(expect.arrayContaining(["The gate word is opal-lantern", "Thanks", "And bring snacks"]));
     expect(await db().select().from(memberHistoryTransfers)).toEqual([]);
     expect(await sam.historyAsks()).toEqual([]);
+  });
+
+  it("hands a repeat claim the same key package instead of draining another member's (C11.10)", { timeout: 60_000 }, async () => {
+    const rae = await deviceFor(RAE, "Rae").device();
+    const sam = await deviceFor(SAM, "Sam").device();
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    const claim = () => claimKeyPackages.call({ conversationId: id, deviceId: rae.deviceId, devices: [sam.deviceId] }, RAE);
+    const first = await claim();
+    for (let i = 0; i < 5; i++) {
+      expect((await claim()).packages[0]!.keyPackageId).toBe(first.packages[0]!.keyPackageId);
+    }
+    const claimed = await db().select().from(memberKeyPackages).where(eq(memberKeyPackages.claimedBy, rae.deviceId));
+    expect(claimed).toHaveLength(1);
   });
 
   it("stays plaintext, and says so, until everyone has a device", async () => {

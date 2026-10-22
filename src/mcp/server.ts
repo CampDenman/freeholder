@@ -25,6 +25,8 @@
 // Each of those is additive under the protocol, so a client that wants them
 // negotiates and finds them absent rather than breaking.
 import { actorFromRequest } from "@/core/http/actor";
+import { requireCsrf } from "@/core/http/csrf";
+import { siteOrigin } from "@/core/seo/origin";
 import { CONTRACT, PLATFORM_VERSION } from "@/core/platform";
 import { ready } from "@/core/runtime";
 import {
@@ -222,11 +224,57 @@ async function dispatch(request: JsonRpcRequest, actor: Actor, info: McpServerIn
  * before any service call would, and an unbooted registry is an empty one — an
  * agent would be told this instance can do nothing at all.
  */
+function transportFailure(status: number, message: string): Response {
+  return Response.json(failure(null, INVALID_REQUEST, message), { status });
+}
+
+/**
+ * The checks a browser-reachable JSON-RPC endpoint owes before it reads a
+ * byte of the body (C11.10).
+ *
+ * - **JSON only.** A form or `text/plain` POST is what a page on another site
+ *   can send without a preflight; requiring `application/json` takes that
+ *   door away, and the protocol never sends anything else.
+ * - **Origin.** The Streamable HTTP transport requires servers to validate
+ *   `Origin` against DNS rebinding. A browser that sends one must be on this
+ *   site. A request carrying its own `Authorization` header is exempt: that
+ *   credential is never attached by a browser on its own, so a page holding it
+ *   is the key's holder, and browser-based MCP inspectors keep working.
+ * - **CSRF for cookies.** Without an `Authorization` header the actor comes
+ *   from the session cookie, and every other cookie-authenticated mutation on
+ *   the site must echo the CSRF token. This one does too. Agents use API keys
+ *   and are unaffected.
+ */
+function refuseUnsafeTransport(request: Request): Response | null {
+  const contentType = request.headers
+    .get("content-type")
+    ?.split(";", 1)[0]
+    ?.trim()
+    .toLowerCase();
+  if (contentType !== "application/json") {
+    return transportFailure(415, "Send JSON-RPC with Content-Type: application/json.");
+  }
+  if (request.headers.get("authorization") !== null) return null;
+  const origin = request.headers.get("origin");
+  if (origin !== null && origin !== new URL(siteOrigin()).origin) {
+    return transportFailure(403, "Cross-origin MCP requests must authenticate with an API key.");
+  }
+  try {
+    requireCsrf(request);
+  } catch (error) {
+    if (error instanceof ServiceError) return transportFailure(403, error.message);
+    throw error;
+  }
+  return null;
+}
+
 export async function handleMcp(
   request: Request,
   info: McpServerInfo,
 ): Promise<Response> {
   await ready();
+  const refused = refuseUnsafeTransport(request);
+  if (refused) return refused;
   const actor = await actorFromRequest(request);
 
   let body: unknown;

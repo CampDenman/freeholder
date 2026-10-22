@@ -12,7 +12,11 @@ export function parseLaunchArgs(argv: readonly string[], env: Record<string, str
     return found && !found.startsWith("--") ? found : undefined;
   };
   const flag = (name: string) => argv.includes(`--${name}`);
-  const domain = (value("domain") ?? "").toLowerCase().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  const raw = (value("domain") ?? "").toLowerCase();
+  const scheme = raw.startsWith("https://") ? 8 : raw.startsWith("http://") ? 7 : 0;
+  let end = raw.length;
+  while (end > scheme && raw[end - 1] === "/") end -= 1; // trailing slashes only; a loop, not `/\/+$/`
+  const domain = raw.slice(scheme, end);
   return {
     provider: value("provider") ?? "digitalocean",
     domain,
