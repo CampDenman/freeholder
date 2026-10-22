@@ -116,9 +116,51 @@ async function renderBlock(
       data-container={definition.container ? "true" : undefined}
     >
       {rendered}
+      <CanvasGrip label={ctx.t("cms.editor.dragBlock")} />
     </div>
   ) : (
     <BlockFrame key={node.id}>{rendered}</BlockFrame>
+  );
+}
+
+/**
+ * The canvas drag handle, rendered with the block rather than injected.
+ *
+ * The frame's drag script used to append this button to every block as the
+ * document parsed — before React hydrated — so hydration met elements it had
+ * not rendered and threw #418 on every editor load, then re-rendered the
+ * whole frame on the client. Server-rendering the same markup the script
+ * builds (`fhAddGrips` in app/(preview)/canvas-bridge.ts) means the script
+ * finds a grip already present and leaves the tree alone; it still adds one
+ * to blocks the draft broadcast creates later.
+ */
+function CanvasGrip({ label }: { label: string }) {
+  const dots = [];
+  for (let row = 0; row < 3; row += 1) {
+    for (let col = 0; col < 2; col += 1) {
+      dots.push(
+        <circle
+          key={`${row}-${col}`}
+          cx={String(2.5 + col * 5)}
+          cy={String(3 + row * 5)}
+          r="1.4"
+          fill="currentColor"
+        />,
+      );
+    }
+  }
+  return (
+    <button
+      type="button"
+      className="fh-grip"
+      draggable="true"
+      aria-label={label}
+      title={label}
+    >
+      <svg viewBox="0 0 10 16" width="10" height="14" aria-hidden="true" focusable="false">
+        {dots}
+      </svg>
+    </button>
   );
 }
 

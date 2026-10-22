@@ -32,6 +32,7 @@ export interface ContactFormLabels {
   timezone: string;
   timezoneHint: string;
   timezonePlaceholder: string;
+  notSet: string;
   country: string;
   countryHint: string;
   countryPlaceholder: string;
@@ -69,6 +70,7 @@ export function contactFormLabels(t: Translate): ContactFormLabels {
     timezone: t("contacts.field.timezone"),
     timezoneHint: t("contacts.field.timezoneHint"),
     timezonePlaceholder: t("contacts.field.timezonePlaceholder"),
+    notSet: t("contacts.field.notSet"),
     country: t("contacts.field.country"),
     countryHint: t("contacts.field.countryHint"),
     countryPlaceholder: t("contacts.field.countryPlaceholder"),

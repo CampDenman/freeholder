@@ -4479,6 +4479,21 @@ project without silent telemetry, and ready to carry money.
   picture refuses at the schema). **F09** N/A as C11.14 — crop/focal are
   block props on the CMS revision spine and asset columns already exported.
   **F12** tests/browser/editor-media-tools.spec.ts.)
+  Audit follow-up 2026-10-22 (editor on the public demo): React #418 fired on
+  every direct editor load. The cause was the preview frame, not the editor:
+  `fhAddGrips` appended a drag grip to every `[data-block-id]` while the
+  document parsed, before hydration. The canvas wrapper in
+  `src/modules/cms/render.tsx` now server-renders the identical grip, so the
+  script finds one and leaves the hydrated tree alone (it still adds grips to
+  blocks the draft broadcast builds later). The fixed 32rem editing frame is
+  viewport-tall, the text block's hint and refusal explain that HTML belongs
+  in a Custom HTML block, and comment mentions are teammate checkboxes with
+  names shown instead of `user:<uuid>`. Canvas drag-and-drop was re-checked
+  on demo.freeholder.ai: a real pointer drag reorders blocks; the audit's
+  failed drag dropped onto a target below the 900px viewport, a harness
+  defect rather than a product one. Evidence:
+  `tests/core/editor-canvas-drag.test.ts` ("grips and hydration");
+  changeset `admin-first-run-ux.md`.
 
 **C2 exit:** every public or message-facing surface is safely editable by a
 human, collaboratively, without code, lock-in markup or accidental publication.
@@ -9544,6 +9559,30 @@ schema they inherit reads as a designed thing rather than an excavation.
   checks passed. These same-host fixtures do not complete the normative
   cross-target final-candidate journey, so this item remains unchecked.)*
 
+  Audit follow-up 2026-10-22 (first-run owner experience): a hands-on audit of
+  the public demo found a non-technical owner lost within five minutes. The
+  admin nav (28 playground links, 85 for an owner, wrapping four rows and
+  pushing content ~750px down at 390px) is now seven named groups in a
+  sticky desktop sidebar and one disclosure button (`aria-expanded`,
+  Escape returns focus) below `lg`; which links show is unchanged. Each admin
+  screen gets its own title instead of "Admin sections — <business>". The
+  overview's first win was chosen as "role match, else first by key", which
+  showed a role-less playground visitor the bookkeeper's reporting routine;
+  `src/core/guidance/first-win.ts` now ranks unfinished flows, then role
+  match, then visible results first (publish a page, add a customer).
+  Business-type-specific flows (add a service, share a booking link) would
+  need new versioned guidance definitions and are not in this change.
+  "What changed" reads `events.recentActivity` with `include: "people"`
+  (system housekeeping and demo entry hidden; `?activity=all` shows them).
+  Owner copy loses "Chrome", "contact spine", "A cart is a token", "RMA",
+  "deterministic", ppm, adapter talk, raw module keys and actor ids; coupons
+  take a percent; currency, time-zone and language fields are pickers
+  (`src/ui/pickers.tsx`); Field labels are no longer monospace and fields no
+  longer stretch beside a hinted neighbour. Evidence:
+  `tests/core/admin-nav-layout.test.ts`, `tests/core/admin-first-run.test.ts`,
+  `tests/core/dashboard.test.ts`; changeset `admin-first-run-ux.md`. The
+  item stays unchecked for its own cross-target reasons above.
+
 #### Whole-product quality
 
 - [x] **C11.09** Run every F01–F12 criterion across every core/module/plugin/
@@ -9823,6 +9862,19 @@ schema they inherit reads as a designed thing rather than an excavation.
   policy + SMS consent vocabulary compose end to end: the same browser run
   drives an Arabic-preferring contact from storefront chooser through the
   portal to the RTL admin.)*
+  Audit follow-up 2026-10-22 (public demo): with `FREEHOLDER_PLAYGROUND=1`
+  the root layout wrote the demo banner before the page, so "Enter the
+  playground" came before the skip link; the banner is now written after the
+  page and painted first with `order-first`, says "View the public site"
+  inside the admin, and is not rendered in `/preview` frames. Notifications'
+  channel list nested a wrapper `<div>` in a `<dl>` group (axe
+  definition-list/dlitem); 404s from the public catch-all and
+  `/portal/login` had an empty `<title>` (the root layout now supplies a
+  fallback title too); the floating "Privacy choices" control sits in the
+  page flow below `sm` instead of over form fields. Evidence:
+  `tests/core/admin-nav-layout.test.ts`; changeset `admin-first-run-ux.md`.
+  `tests/browser/accessibility.spec.ts` was not re-run for this change (see
+  the PR).
 - [x] **C11.13** Complete failure drills for database/storage/mail/payment/SMS/
   OAuth/AI/provider outages, process death, duplicate webhook/job, clock skew,
   low disk, lost credential key and interrupted update.

@@ -5,7 +5,9 @@ import { notFound } from "next/navigation";
 import { getEvent } from "@/modules/events/service";
 import { ServiceError } from "@/core/service";
 import { Button, Card, CardBody, CardHeader, Field, Input } from "@/ui/primitives";
-import { getT } from "../../../../i18n";
+import { getLocale, getT } from "../../../../i18n";
+import { OptionSelect, currencyOptions } from "@/ui/pickers";
+import { currentBusiness } from "@/core/settings/read";
 import { eventAction } from "../../../event-actions";
 import { requireStaffActor } from "../../guard";
 
@@ -140,7 +142,7 @@ export default async function EventDetailPage({
               <Input id="priceMinor" name="priceMinor" type="number" min={0} defaultValue={0} required />
             </Field>
             <Field label={t("events.currency")} htmlFor="currency">
-              <Input id="currency" name="currency" defaultValue="CAD" maxLength={3} />
+              <OptionSelect id="currency" name="currency" defaultValue={(await currentBusiness())?.baseCurrency ?? "CAD"} options={currencyOptions(await getLocale(), (await currentBusiness())?.baseCurrency)} />
             </Field>
             <Button type="submit">{t("events.ticketAdd")}</Button>
           </form>

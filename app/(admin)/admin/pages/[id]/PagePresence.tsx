@@ -11,14 +11,18 @@ import {
 export function PagePresence({
   pageId,
   self,
+  names,
   labels,
 }: {
   pageId: string;
   self: string;
+  /** Actor id (`user:<uuid>`) → the name people know them by. */
+  names: Record<string, string>;
   labels: {
     alone: string;
     others: string;
     editing: string;
+    teammate: string;
   };
 }) {
   const [actors, setActors] = useState<{ actor: string; editing: boolean }[]>([]);
@@ -53,8 +57,8 @@ export function PagePresence({
     <p className="text-sm text-ink">
       {labels.others}{" "}
       {others.map((row) => (
-        <span key={row.actor} className="me-2 font-mono text-xs">
-          {row.actor}
+        <span key={row.actor} className="me-2 text-xs font-medium">
+          {names[row.actor] ?? labels.teammate}
           {row.editing ? ` (${labels.editing})` : ""}
         </span>
       ))}

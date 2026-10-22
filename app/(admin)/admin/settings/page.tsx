@@ -24,6 +24,11 @@ import { domainOrNull } from "../../read-helpers";
 
 export const dynamic = "force-dynamic";
 
+/** Modules with a readable name; a plugin's module shows its own key. */
+const MODULE_NAMES = new Set([
+  "core", "cms", "forms", "analytics", "invoicing", "catalog", "seed", "builder", "events", "newsletters", "proof", "contracts", "rentals", "quotes", "projects", "galleries", "reviews", "crm", "ads", "share", "popups", "documents", "automations", "reporting", "subscriptions", "assistant", "social", "loyalty", "referrals", "gift-registry", "print-on-demand", "assessments", "calculators", "community", "voice-video", "marketplace", "members",
+]);
+
 
 export default async function AdminSettingsPage({
   searchParams,
@@ -103,7 +108,9 @@ export default async function AdminSettingsPage({
             <ul className="mt-3 grid list-none gap-2 p-0">
               {moduleRows.map((row) => (
                 <li key={row.module} className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm">
-                  <span className="font-medium">{row.module}</span>
+                  <span className="font-medium">
+                    {MODULE_NAMES.has(row.module) ? t(`settings.modules.name.${row.module}`) : row.module}
+                  </span>
                   <Pill tone={row.enabled ? "success" : "neutral"}>
                     {row.enabled ? t("settings.modules.on") : t("settings.modules.off")}
                   </Pill>

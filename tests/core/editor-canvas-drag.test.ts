@@ -12,7 +12,11 @@
 // canvas DOM so a refused drop simply never lands.
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
+import { createElement, Fragment } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { CANVAS_BRIDGE, CANVAS_DRAG } from "../../app/(preview)/canvas-bridge";
+import { translator } from "@/core/i18n";
+import { renderBlocks } from "@/modules/cms/render";
 
 const ORIGIN = "http://localhost";
 
@@ -344,5 +348,36 @@ describe("the canvas drag script", () => {
     expect(movesOf(parentPost)).toEqual([
       { blockId: "y", targetId: "x", position: "before" },
     ]);
+  });
+});
+
+describe("grips and hydration", () => {
+  it("are server-rendered, so the script never edits the tree React hydrates", async () => {
+    // Injecting a grip into every block while the document parsed gave React
+    // elements it had not rendered: hydration error #418 on every editor
+    // load, then a full client re-render of the frame. The canvas now renders
+    // the grip itself; run over that markup, the script must change nothing.
+    const nodes = [
+      { id: "a", type: "heading", props: { text: "Alpha", level: 1 } },
+      { id: "b", type: "text", props: { body: "Bravo" } },
+    ];
+    const rendered = await renderBlocks(nodes, {
+      locale: "en",
+      t: translator("en"),
+      business: { name: "Aurora", tagline: null, defaultLocale: "en", enabledLocales: ["en"] },
+      path: "/",
+      identifyBlocks: true,
+    });
+    const html = renderToStaticMarkup(createElement(Fragment, null, ...rendered));
+    expect(html.match(/class="fh-grip"/g)).toHaveLength(2);
+
+    const before = new JSDOM(`<!DOCTYPE html><body><div class="fh-canvas">${html}</div></body>`)
+      .window.document.body.innerHTML;
+    const { document } = canvas(`<div class="fh-canvas">${html}</div>`);
+    expect(document.body.innerHTML).toBe(before);
+    expect(document.querySelectorAll('[data-block-id="a"] > .fh-grip')).toHaveLength(1);
+    expect(document.querySelector(".fh-grip")?.getAttribute("aria-label")).toBe(
+      translator("en")("cms.editor.dragBlock"),
+    );
   });
 });

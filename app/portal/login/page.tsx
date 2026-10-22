@@ -17,10 +17,14 @@ import { PortalPasskeySignIn } from "./PortalPasskeySignIn";
 import { PortalLocaleChooser } from "../PortalLocaleChooser";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = {
-  robots: { index: false, follow: false },
-  referrer: "no-referrer",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const [business, t] = await Promise.all([currentBusiness(), getT()]);
+  return {
+    title: `${t("portal.login.title")} — ${business?.name ?? t("common.appName")}`,
+    robots: { index: false, follow: false },
+    referrer: "no-referrer",
+  };
+}
 
 export default async function PortalLoginPage({ searchParams }: { searchParams: Promise<{ returnTo?: string }> }) {
   const query = await searchParams;

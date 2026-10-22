@@ -6,6 +6,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { contactStats, createContact, resolveContact } from "@/core/contacts/service";
 import { recentActivity } from "@/core/events/service";
+import { auditLog } from "@/core/events/schema";
+import { db } from "@/core/db";
 import { updateBusiness } from "@/core/settings/service";
 import {
   ANONYMOUS,
@@ -94,6 +96,26 @@ describe.runIf(hasDatabase)("the admin overview data", () => {
       );
       const [entry] = await recentActivity.call({ limit: 1 }, STAFF);
       expect(entry!.actor).toBe("agent:claude");
+    });
+
+    it("leaves platform housekeeping out of the owner's feed", async () => {
+      // The demo audit: "What changed" was a wall of "Delete presence rows
+      // whose heartbeat has gone quiet" by "The platform". The people view
+      // drops system work and demo entry; the full trail is still one
+      // `include: "all"` away for diagnostics.
+      await createContact.call({ name: "Ada" }, STAFF);
+      await db().insert(auditLog).values([
+        { actor: "system", action: "cms.sweepPresence" },
+        { actor: "user:00000000-0000-4000-8000-000000000000", action: "playground.enter" },
+      ]);
+
+      const people = await recentActivity.call({ limit: 10, include: "people" }, STAFF);
+      expect(people.map((row) => row.action)).toEqual(["contacts.create"]);
+
+      const all = await recentActivity.call({ limit: 10 }, STAFF);
+      expect(all.map((row) => row.action).sort()).toEqual(
+        ["cms.sweepPresence", "contacts.create", "playground.enter"],
+      );
     });
 
     it("is not readable by a customer or a stranger", async () => {
