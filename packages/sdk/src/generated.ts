@@ -1657,7 +1657,7 @@ export interface ServiceCatalog {
   };
   "agents.approveWrite": {
     input: { id: string; note?: string };
-    output: { approval: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }; result: unknown | null; [key: string]: unknown };
+    output: { approval: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "executing" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }; result: unknown | null; [key: string]: unknown };
   };
   "agents.assignTask": {
     input: { id: string; agentId: string | null };
@@ -1701,7 +1701,7 @@ export interface ServiceCatalog {
   };
   "agents.expireApprovals": {
     input: Record<string, never>;
-    output: { expired: number; [key: string]: unknown };
+    output: { expired: number; returned: number; [key: string]: unknown };
   };
   "agents.exportPlaybook": {
     input: { id: string };
@@ -1728,8 +1728,8 @@ export interface ServiceCatalog {
     output: { id: string; name: string; role: string; connectionId: string; toolScopes: string[]; autonomy: "suggest" | "approve" | "autonomous"; maxConcurrency: number; budgetCents: number; budgetPeriod: "day" | "week" | "month"; status: "active" | "paused"; [key: string]: unknown }[];
   };
   "agents.listApprovals": {
-    input: { taskId?: string; status?: "pending" | "approved" | "rejected" | "expired"; limit?: number };
-    output: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }[];
+    input: { taskId?: string; status?: "pending" | "executing" | "approved" | "rejected" | "expired"; limit?: number };
+    output: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "executing" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }[];
   };
   "agents.pause": {
     input: { id: string; paused?: boolean; reason?: string };
@@ -1749,11 +1749,11 @@ export interface ServiceCatalog {
   };
   "agents.proposeWrite": {
     input: { runId: string; serviceName: string; input?: { [key: string]: unknown }; summary?: string };
-    output: { outcome: "executed" | "proposed" | "awaiting_approval"; result: unknown | null; approval: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown } | null; [key: string]: unknown };
+    output: { outcome: "executed" | "proposed" | "awaiting_approval"; result: unknown | null; approval: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "executing" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown } | null; [key: string]: unknown };
   };
   "agents.rejectWrite": {
     input: { id: string; note: string };
-    output: { approval: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }; [key: string]: unknown };
+    output: { approval: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "executing" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }; [key: string]: unknown };
   };
   "agents.releaseTask": {
     input: { runId: string; reason?: string };
@@ -5268,7 +5268,7 @@ export interface ServiceCatalog {
     output: { sessionId: string; sequence: number; bytes: number };
   };
   "media.assembleCapture": {
-    input: { id?: string; token?: string; filename?: string; expectedChunks?: number };
+    input: { id?: string; token?: string; expectedChunks?: number; filename?: string };
     output: { session: { id: string; source: "camera" | "microphone" | "screen" | "share_sheet" | "camera_roll" | "upload_link" | "import" | "social"; status: "pending" | "live" | "preview" | "confirmed" | "discarded" | "expired"; targetType: string | null; targetId: string | null; uploadCount: number; displaySurface: string | null; permissionGrantedAt: string | null; trimStartMs: number; trimEndMs: number | null; caption: string | null; focalX: number; focalY: number; staged: boolean; stagedMime: string | null; stagedFilename: string | null; items: { id: string; filename: string; bytes: number; mime: string; assetId: string | null }[]; uploadId: string | null; assetId: string | null; expiresAt: string; completedAt: string | null; captureUrl: string | null; [key: string]: unknown }; asset: null };
   };
   "media.attachCaptureUpload": {

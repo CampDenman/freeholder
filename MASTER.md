@@ -9636,6 +9636,52 @@ schema they inherit reads as a designed thing rather than an excavation.
   `tests/core/owner-password-script.test.ts`. Refreshed review packet records
   the remaining API-token/ephemeral-Basic hashing findings for independent
   disposition. These repairs do not close C11.10.)*
+  Audit follow-up 2026-10-21 (service boundaries and gates): provider I/O
+  left inside `defineService` transactions now runs outside them. Capture
+  chunk/original writes and assembly reserve keys in the pending object
+  ledger, store bytes with no transaction open, and delete chunk objects only
+  through a post-commit job, so a failed write leaves the recording
+  recoverable. `messaging.sendSms` stages the message and enqueues
+  `core.deliverSms` (provider idempotency token = caller key; the job id is
+  the message id); number import/health, calendar sync, mailbox import,
+  gallery archive build, builder PR delivery, assistant answers, translation
+  drafts and builder proposals are orchestrators around short claim/apply
+  phases. `tests/core/long-running-service-boundary.test.ts` now scans every
+  `defineService` file in src/plugins/app, derives provider methods from the
+  adapter contracts, detects `storage()` I/O and follows named handlers
+  (temporary allowlist: invoicing payment-provider/POS, fixed separately);
+  `service-composition` covers plugins/app and named handlers;
+  `merge-completeness` checks per column and polymorphic `subject_id`, and a
+  conflicting second `registerContactReference` now throws — documents and
+  signup commissions filed against a contact are repointed. ESLint bans
+  contact creation from public app surfaces and SVG hex fills; packages are
+  scanned for colour literals; licence headers cover .py/.cjs/.nix/systemd/
+  Caddy; the plugin provider-boundary contract test is DB-free. Regression
+  evidence: `sms.test.ts`, `media-capture.test.ts`, `calendar-sync.test.ts`,
+  `mail-import.test.ts`, `assistant.test.ts`, `cms-translation-workflow.test.ts`,
+  `builder-content-lane.test.ts`, `documents.test.ts`,
+  `referrals-commission.test.ts`, `lint-gates.test.ts`,
+  `colour-literals.test.ts`. Changeset
+  `provider-calls-outside-transactions.md`. Not independent review evidence.
+  Review follow-up 2026-10-21: the agent write gate and approval inbox now
+  run orchestrated services after their own claim commits (an approval whose
+  deferred write fails returns to pending); a merge where both contacts hold
+  the same code's signup commission keeps the survivor's and reverses the
+  duplicate's unpaid one (undo restores it); deferred SMS delivery re-checks
+  number validity and marketing consent, records non-provider failures on the
+  last attempt, and serializes same-key sends; capture chunk/assembly applies
+  lock the session row and refuse a session closed meanwhile; builder PR
+  delivery uses one branch per proposal and resumes an existing PR. The merge
+  gate now covers subject_kind/target_type/entity_type/parent_type pointers
+  (attestation subjects are repointed). Known gate limits: the boundary gate
+  follows only same-file helpers, and the merge gate trusts each
+  registration's declared `columns` — per-module merge tests prove the moves.
+  A deferred approval is `executing` until its write reports back; the
+  approval sweep returns one stranded over an hour to pending with a note and
+  never re-runs it.
+  Evidence: `agents-approvals.test.ts`, `referrals-commission.test.ts`,
+  `sms.test.ts`, `media-capture.test.ts`, `builder-code-lane.test.ts`,
+  `attestations.test.ts`, `merge-completeness.test.ts`.
   Audit follow-up 2026-10-21 (web and auth): `/api/mcp` requires
   `application/json`, refuses a foreign `Origin` unless the request carries
   its own `Authorization` credential, and applies the CSRF check to

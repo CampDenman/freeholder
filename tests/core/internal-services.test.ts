@@ -16,6 +16,14 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  // C11.10: records a carrier's answer for a text staged by messaging.sendSms,
+  // from the post-commit delivery job.
+  "messaging.applySmsSendResult",
+  "messaging.checkSmsDelivery",
+  // C11.10: the phases around a gallery package's storage reads and write.
+  "galleries.buildArchiveApply",
+  "galleries.buildArchiveFail",
+  "galleries.buildArchiveSource",
   "notes.purgeExpired",
   "tasks.purgeExpired",
   // The record-trash sweeps (C11.14): a trash window expiring is not something
@@ -197,6 +205,46 @@ const CALLER_AUTHORIZED_PHASES = [
   // on an external protocol.
   "catalog.recomputeCollectionMembership",
   "documents.myDownload",
+  // C11.10: the short phases around model calls, so no transaction waits on
+  // a provider (MASTER.md §11).
+  "assistant.applyAnswer",
+  "assistant.prepareAnswer",
+  "assistant.settingsSnapshot",
+  "builder.recordCodeProposal",
+  "builder.recordProposal",
+  "builder.releaseCodeReservation",
+  "builder.releaseProposalReservation",
+  "builder.reserveCodeProposal",
+  "builder.reserveProposal",
+  "cms.applyPageTranslationDraft",
+  "cms.draftPageTranslationSource",
+  // C11.10: the phases around SMS, capture-storage and calendar/mail provider
+  // I/O, so no service transaction is held open across it.
+  "messaging.applySmsSendResult",
+  "messaging.checkNumbersApply",
+  "messaging.checkSmsDelivery",
+  "messaging.importNumbersApply",
+  "media.applyCaptureAssembly",
+  "media.applyCaptureChunk",
+  "media.applyCaptureOriginal",
+  "media.claimCaptureAssembly",
+  "media.claimCaptureChunk",
+  "media.claimCaptureOriginal",
+  "connections.importMailApply",
+  "connections.importMailSource",
+  "connections.syncCalendarsApply",
+  "connections.syncCalendarsDiscover",
+  "connections.syncCalendarsSource",
+  "agents.claimApproval",
+  "agents.completeApproval",
+  "agents.proposeWriteGate",
+  "agents.releaseApproval",
+  "builder.claimCodeDelivery",
+  "builder.recordCodeDelivery",
+  "builder.releaseCodeDelivery",
+  "galleries.buildArchiveApply",
+  "galleries.buildArchiveFail",
+  "galleries.buildArchiveSource",
   // Storage keys stay behind the gallery's controlled byte routes.
   "galleries.viewItem",
   "galleries.downloadItem",

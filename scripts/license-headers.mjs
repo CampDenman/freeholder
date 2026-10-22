@@ -47,6 +47,14 @@ const COMMENT = {
   sh: ["#", ""],
   yml: ["#", ""],
   yaml: ["#", ""],
+  cjs: ["//", ""],
+  py: ["#", ""],
+  nix: ["#", ""],
+  // systemd units and Caddy site snippets ship to hosts verbatim; both take
+  // `#` comments.
+  service: ["#", ""],
+  timer: ["#", ""],
+  caddy: ["#", ""],
 };
 
 function commentStyle(file) {
@@ -112,9 +120,11 @@ for (const file of files) {
   if (!hasCopyright) lines.push(`${prefix} ${COPYRIGHT}${suffix}`);
   if (!hasSpdx) lines.push(`${prefix} ${spdx}${suffix}`);
   // Insert above an existing SPDX line so the two stay adjacent, else at top.
+  // A shebang must stay the first line or the script stops being executable.
   const spdxLine = body.split("\n").findIndex((l) => l.includes("SPDX-License-Identifier"));
   const out = body.split("\n");
-  out.splice(spdxLine >= 0 ? spdxLine : 0, 0, ...lines);
+  const top = out[0]?.startsWith("#!") ? 1 : 0;
+  out.splice(spdxLine >= 0 ? spdxLine : top, 0, ...lines);
   writeFileSync(file, out.join("\n"));
   console.log(`fixed ${file}`);
 }

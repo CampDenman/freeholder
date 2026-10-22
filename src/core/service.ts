@@ -372,6 +372,12 @@ export interface ServiceDef<In extends z.ZodType, Out> {
    */
   external?: boolean;
   /**
+   * Set by `defineOrchestratedService` only. Such a service refuses to run
+   * under a caller's transaction, so generic dispatchers (the agent write
+   * gate) must call it top-level after committing their own state.
+   */
+  orchestrated?: true;
+  /**
    * C8.11: a signed-in customer may run this **query** about themselves.
    *
    * The portal is meant to be a second audience for the owner's queries
@@ -410,7 +416,7 @@ export interface Service<In extends z.ZodType = z.ZodType, Out = unknown> {
 
 type OrchestratedServiceDef<In extends z.ZodType, Out> = Omit<
   ServiceDef<In, Out>,
-  "handler" | "selfService"
+  "handler" | "selfService" | "orchestrated"
 > & {
   /**
    * Runs with no database transaction open. Database reads and writes must be
@@ -544,6 +550,7 @@ export function defineOrchestratedService<In extends z.ZodType, Out>(
   };
   const def = {
     ...orchestration,
+    orchestrated: true,
     handler: unavailableInsideTransaction,
   } as ServiceDef<In, Out>;
   return {

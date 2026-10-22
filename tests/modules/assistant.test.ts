@@ -33,6 +33,7 @@ import {
   updateSettings,
 } from "@/modules/assistant/service";
 import { ANONYMOUS, closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { openTransactions } from "../helpers/open-transactions";
 
 const BUSINESS = {
   name: "Harbour Studio",
@@ -528,6 +529,41 @@ describe.runIf(hasDatabase)("the front-site assistant", () => {
 
     const transcript = await getSiteChat.call({ token: chat.token }, ANONYMOUS);
     expect(transcript.messages).toHaveLength(1);
+  });
+
+  // §11: the model can take seconds, and no service transaction may wait on
+  // it. The claim is committed first, so a second click finds it.
+  it("calls the model with no transaction open, after the turn is claimed", async () => {
+    await configure();
+    const seen: { open: number; claimed: number }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls += 1;
+        seen.push({ open: await openTransactions(), claimed: (await recordedTurns()).length });
+        return new Response(
+          JSON.stringify({
+            model: "claude-haiku-4-5",
+            content: [{ type: "text", text: JSON.stringify({ reply: "We do." }) }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+    const chat = await startChat("boundary@example.com");
+
+    const result = await answer.call({ token: chat.token }, ANONYMOUS);
+
+    expect(result.status).toBe("answered");
+    expect(seen).toEqual([{ open: 0, claimed: 1 }]);
+    const [turn] = await recordedTurns();
+    expect(turn).toMatchObject({ outcome: "answered", inputTokens: 10, outputTokens: 5 });
+    // The reply is now the latest message, so asking again spends nothing.
+    expect((await answer.call({ token: chat.token }, ANONYMOUS)).status).toBe(
+      "nothing_to_answer",
+    );
+    expect(calls).toBe(1);
   });
 
   function stubRawText(text: string): void {
