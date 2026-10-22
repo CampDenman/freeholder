@@ -104,6 +104,8 @@ import {
   updateCollection,
 } from "@/modules/catalog/service";
 import type { EditorNode } from "./admin/BlockEditor";
+import { percentToPpm } from "./percent";
+import { getT } from "../i18n";
 
 function field(form: FormData, key: string): string {
   const value = form.get(key);
@@ -403,9 +405,11 @@ export async function productAction(form: FormData): Promise<void> {
               | "client_site",
             depositType: (field(form, "depositType") || "none") as "none" | "fixed" | "percent",
             ...(field(form, "depositAmount") ? { depositAmount: field(form, "depositAmount") } : {}),
-            ...(field(form, "depositPercentPpm")
-              ? { depositPercentPpm: Number(field(form, "depositPercentPpm")) }
-              : {}),
+            ...(field(form, "depositPercent")
+              ? { depositPercentPpm: percentToPpm(field(form, "depositPercent"), await getT()) }
+              : field(form, "depositPercentPpm")
+                ? { depositPercentPpm: Number(field(form, "depositPercentPpm")) }
+                : {}),
             ...(field(form, "currency") ? { currency: field(form, "currency") } : {}),
             cancellationPolicyId: field(form, "cancellationPolicyId") || null,
             intakeFormId: field(form, "intakeFormId") || null,
@@ -820,7 +824,11 @@ export async function productAction(form: FormData): Promise<void> {
           {
             code: field(form, "code"),
             kind: field(form, "kind") as "percent" | "fixed" | "free_shipping",
-            ...(field(form, "percentOffPpm") ? { percentOffPpm: Number(field(form, "percentOffPpm")) } : {}),
+            ...(field(form, "percentOff")
+              ? { percentOffPpm: percentToPpm(field(form, "percentOff"), await getT()) }
+              : field(form, "percentOffPpm")
+                ? { percentOffPpm: Number(field(form, "percentOffPpm")) }
+                : {}),
             ...(field(form, "amount") ? { amount: field(form, "amount") } : {}),
             ...(field(form, "currency") ? { currency: field(form, "currency") } : {}),
             ...(field(form, "minSubtotal") ? { minSubtotal: field(form, "minSubtotal") } : {}),

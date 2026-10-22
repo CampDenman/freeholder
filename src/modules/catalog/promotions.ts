@@ -251,7 +251,7 @@ export const createCoupon = defineService({
   output: couponRow,
   handler: async (input, ctx) => {
     if (input.kind === "percent" && !input.percentOffPpm) {
-      throw new ServiceError("validation", "A percent coupon needs a parts-per-million rate.");
+      throw new ServiceError("validation", "A percent coupon needs a percentage off.");
     }
     if (input.kind === "fixed" && (!input.amount || !input.currency)) {
       throw new ServiceError("validation", "A fixed coupon needs an amount and a currency.");
@@ -802,6 +802,7 @@ export const recoverAbandonedCarts = defineService({
   permission: "scoped",
   input: z.object({}),
   output: z.object({ sent: z.number().int() }),
+  auditWhen: (out: { sent: number }) => out.sent > 0,
   handler: async (_input, ctx) => {
     const abandoned = await ctx.tx
       .select()

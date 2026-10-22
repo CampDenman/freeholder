@@ -28,6 +28,7 @@ export function RichField({
     bullet: string;
     numbered: string;
     hint: string;
+    htmlRefused: string;
   };
 }) {
   const initial = useMemo(() => {
@@ -60,7 +61,9 @@ export function RichField({
       onChange(doc);
       setError(undefined);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : labels.hint);
+      // The service message is English and technical; the owner gets the
+      // localized explanation of where HTML belongs instead.
+      setError(/<\/?[a-zA-Z][^>]*>/.test(next) ? labels.htmlRefused : caught instanceof Error ? caught.message : labels.hint);
     }
   };
 
@@ -70,7 +73,7 @@ export function RichField({
 
   return (
     <div className="grid gap-1.5">
-      <label htmlFor={id} className="font-mono text-xs font-medium text-ink-muted">
+      <label htmlFor={id} className="text-sm font-medium text-ink">
         {label}
       </label>
       <div className="flex flex-wrap gap-1">

@@ -414,6 +414,16 @@ export interface ServiceDef<In extends z.ZodType, Out> {
    * table. Absent is refused, not ignored.
    */
   selfService?: { contactField: string };
+  /**
+   * For scheduled sweeps only: whether this run changed anything worth an
+   * audit row. A sweep that runs every minute and finds nothing due wrote a
+   * row each time, burying the runs that did publish a page or send a
+   * recovery email. Returning false skips the row for a no-op run; a run
+   * that acted is audited as usual. Omitted, every mutation is audited.
+   */
+  // Method syntax on purpose: bivariant, so a Service<In, Out> still fits
+  // the registry's Service<ZodType, unknown>.
+  auditWhen?(output: Out): boolean;
   handler: (input: z.output<In>, ctx: ServiceContext) => Promise<Out>;
 }
 
@@ -726,7 +736,7 @@ export function defineService<In extends z.ZodType, Out>(
           }
         }
 
-        if (def.kind === "mutation") {
+        if (def.kind === "mutation" && (def.auditWhen?.(out) ?? true)) {
           await tx.insert(auditLog).values({
             actor: actorString(actor),
             action: def.name,
