@@ -53,7 +53,7 @@ import {
 import { quoteItems, quoteMessages, quoteSequences, quotes } from "@/modules/quotes/schema";
 import { contractDocuments, contractTemplates } from "@/modules/contracts/schema";
 import { plans, subscriptionEvents, subscriptions } from "@/modules/subscriptions/schema";
-import { DAY, type AreaSeeder, type Person, type World } from "./world";
+import { DAY, studioTime, type AreaSeeder, type Person, type World } from "./world";
 
 const CURRENCY = "CAD";
 const GST = 50_000;
@@ -369,7 +369,7 @@ export const seedSales: AreaSeeder = async (tx, w) => {
     });
   });
   cardCodes.push(
-    { id: randomUUID(), code: "AURORA-GIFT-2001", issuedMinor: 25_000, contactId: contactOf(nextCustomer()), createdAt: w.daysAgo(95), note: "Raffle prize, Comox Valley Arts Collective (sample)." },
+    { id: randomUUID(), code: "AURORA-GIFT-2001", issuedMinor: 25_000, contactId: contactOf(nextCustomer()), createdAt: w.daysAgo(95), note: "Raffle prize, Tidepool Arts Collective (sample)." },
     { id: randomUUID(), code: "AURORA-GIFT-2002", issuedMinor: 10_000, contactId: contactOf(nextCustomer()), createdAt: w.daysAgo(40), note: "Make-good for a late album." },
   );
 
@@ -467,8 +467,10 @@ export const seedSales: AreaSeeder = async (tx, w) => {
     const sentAt = status === "draft" ? null : new Date(Math.min(createdAt.getTime() + DAY, now.getTime() - 3_600_000));
     // Season-weighted wedding date: three candidates, keep the summeriest.
     const candidates = [0, 1, 2].map(() => new Date(createdAt.getTime() + r.int(45, 320) * DAY));
-    const weddingDate = candidates.reduce((best, c) => (r.seasonal(c) > r.seasonal(best) ? c : best));
-    weddingDate.setUTCHours(21, 0, 0, 0);
+    const weddingDate = studioTime(
+      candidates.reduce((best, c) => (r.seasonal(c) > r.seasonal(best) ? c : best)),
+      14,
+    );
     const reference = `Q-${String(nextQuoteNumber++).padStart(4, "0")}`;
     const validUntil =
       status === "expired"

@@ -9,7 +9,8 @@
 // inside the 180-day default retention, so the purge job does not eat the
 // oldest week on its first sweep), inserted in chunks that stay well under
 // Postgres's 65,535 bind-parameter ceiling.
-import { eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { invoices } from "@/modules/invoicing/schema";
 import { users } from "@/core/auth/schema";
 import { auditLog } from "@/core/events/schema";
 import { conversations, messages } from "@/core/messaging/schema";
@@ -29,7 +30,7 @@ import {
   memberProfiles,
   memberReactions,
 } from "@/modules/members/schema";
-import { DAY, HOUR, type AreaSeeder, type Person, type World } from "./world";
+import { DAY, HOUR, studioParts, studioTime, type AreaSeeder, type Person, type World } from "./world";
 
 /** Insert in chunks so a wide table never crosses the bind-parameter limit. */
 async function bulk<T>(
@@ -115,7 +116,7 @@ async function seedAnalytics(tx: Tx, w: World) {
 
   for (let daysAgo = 178; daysAgo >= 0; daysAgo -= 1) {
     const day = w.daysAgo(daysAgo);
-    const weekday = day.getUTCDay();
+    const weekday = studioParts(day).weekday;
     const weekdayFactor = [0.75, 1.15, 1.05, 1, 1, 0.95, 0.8][weekday]!;
     // A studio that has been growing: the first month is about two thirds of
     // the latest, under the seasonal curve.
@@ -131,8 +132,7 @@ async function seedAnalytics(tx: Tx, w: World) {
       const contactId = !bot && w.r.chance(0.05) ? w.r.pick(identified) : null;
       // Visits cluster in the evening, when couples plan weddings.
       const hour = w.r.chance(0.6) ? w.r.int(18, 23) : w.r.int(7, 17);
-      let at = new Date(day.getTime());
-      at.setUTCHours((hour + 7) % 24, w.r.int(0, 59), w.r.int(0, 59), 0);
+      let at = new Date(studioTime(day, hour, w.r.int(0, 59)).getTime() + w.r.int(0, 59) * 1000);
       if (at.getTime() > w.now.getTime() - HOUR) at = new Date(w.now.getTime() - w.r.int(65, 600) * 60_000);
       const sessionStart = at;
       const views = bot ? w.r.int(4, 9) : 1 + Math.floor(Math.pow(w.r.next(), 2) * 5);
@@ -722,22 +722,42 @@ async function seedAutomations(tx: Tx, w: World) {
     .map((row, i) => ({ row, id: inserted[i]!.id }))
     .filter(({ row }) => row.subjectId === made[2]!.id)
     .slice(-2);
+  // The invoices they are about are real seeded overdue invoices, so the
+  // approval names a number and an amount the invoices screen agrees with.
+  const overdue = await tx
+    .select({
+      id: invoices.id,
+      number: invoices.number,
+      contactId: invoices.contactId,
+      totalMinor: invoices.totalMinor,
+      paidMinor: invoices.paidMinor,
+    })
+    .from(invoices)
+    .where(and(eq(invoices.status, "overdue"), isNotNull(invoices.number)))
+    .orderBy(asc(invoices.dueAt))
+    .limit(pending.length);
   await tx.insert(runApprovals).values(
-    pending.map(({ row, id }, n) => ({
+    pending.map(({ row, id }, n) => {
+      const invoice = overdue[n];
+      const due = invoice ? `$${((invoice.totalMinor - invoice.paidMinor) / 100).toFixed(2)}` : null;
+      return {
       runId: id,
       subjectKind: "automation" as const,
       subjectId: made[2]!.id,
       kind: "gate",
-      summary: n === 0 ? "Send a payment reminder for invoice ACP-0142 ($612.50 due)" : "Send a payment reminder for invoice ACP-0151 ($225.00 due)",
-      preview: { channel: "email", body: "Hello — a gentle reminder that this invoice is now a week past due. Thank you!" },
+      summary: invoice
+        ? `Send a payment reminder for invoice ${invoice.number} (${due} due)`
+        : "Send a payment reminder for an overdue invoice",
+      preview: { channel: "email", body: "Hello — a gentle reminder that this invoice is now past due. Thank you!" },
       serviceName: "invoicing.scheduleReminders",
-      input: { contactId: row.contactId },
+      input: invoice ? { contactId: invoice.contactId, invoiceId: invoice.id } : { contactId: row.contactId },
       proposedAutonomy: "approve" as const,
       status: "pending" as const,
       expiresAt: w.daysAhead(5),
       createdAt: w.daysAgo(n),
       updatedAt: w.daysAgo(n),
-    })),
+      };
+    }),
   );
   // Those two runs are waiting at the gate rather than finished.
   for (const { id } of pending) {

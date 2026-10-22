@@ -4215,6 +4215,20 @@ project without silent telemetry, and ready to carry money.
   still refuse anonymous cart/checkout/booking and hide sales, inbox and
   calendar screens from the visitor; checkout's email proof cannot complete
   while playground mail is blocked.
+  Review follow-up 2026-10-22: the nav merge keeps an owner-arranged order
+  and appends new links (header links lead only over platform-added index
+  links), de-duplicating on normalised hrefs; busy dates use the studio's
+  zone (`studioTime`, DST-correct) and history never lands after the seed
+  clock; a boot that stopped between the plain and busy installs finishes
+  the busy layer on restart (demo business only); invoices are numbered once
+  by issue date (`seed/demo/busy/ledger.ts`); the pending approvals quote
+  real seeded overdue invoices; title de-duplication matches the brand as a
+  whole word at the start or end; seeded future reminders stay unsent
+  outside the playground. Tests now run `contacts.merge` and
+  `invoicing.recordOfflinePayment` on seeded rows, seed under pinned Pacific
+  evening and winter clocks, and hold the busy layer to 30 s and the
+  database to 150 MB (`tests/core/seed-demo-busy.test.ts`, 20 tests;
+  `seed-demo.test.ts` 17; `cms-chrome.test.ts` 7; `seo-surface.test.ts` 12).
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable

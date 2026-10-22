@@ -24,7 +24,7 @@ import {
   seedDemoIfRequested,
 } from "@/modules/seed/boot";
 import { installDemo } from "@/modules/seed/service";
-import { resolvePage, getSection, publishedPaths } from "@/modules/cms/service";
+import { createPage, resolvePage, getSection, publishedPaths } from "@/modules/cms/service";
 import {
   getBusiness,
   setupState,
@@ -228,6 +228,40 @@ describe.runIf(hasDatabase)("installing the demo", { timeout: 120_000 }, () => {
     },
     30_000,
   );
+
+  it("finishes the busy layer on a restart that died between the two installs", async () => {
+    // First boot: the plain demo committed, then the process stopped before
+    // the busy layer (simulated by booting without asking for it).
+    const first = await withEnvironment(
+      { NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "1", FREEHOLDER_PLAYGROUND: undefined },
+      () => seedDemoIfRequested(),
+    );
+    expect(first.status).toBe("installed");
+
+    const retry = await withEnvironment(
+      { NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "busy", FREEHOLDER_PLAYGROUND: undefined },
+      () => seedDemoIfRequested(),
+    );
+    expect(retry.status).toBe("already-populated");
+    expect(retry.status === "already-populated" && retry.busy?.crm?.contacts).toBeGreaterThan(150);
+
+    // And only once.
+    const again = await withEnvironment(
+      { NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "busy", FREEHOLDER_PLAYGROUND: undefined },
+      () => seedDemoIfRequested(),
+    );
+    expect(again).toEqual({ status: "already-populated" });
+  });
+
+  it("never adds the busy layer to a site that is not the demo business", async () => {
+    await updateBusiness.call({ ...BUSINESS, name: "A real studio" }, OWNER);
+    await createPage.call({ slug: "", title: "Home" }, OWNER);
+    const outcome = await withEnvironment(
+      { NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "busy", FREEHOLDER_PLAYGROUND: undefined },
+      () => seedDemoIfRequested(),
+    );
+    expect(outcome).toEqual({ status: "already-populated" });
+  });
 
   it("lets development opt out without writing any content", async () => {
     const outcome = await withEnvironment(

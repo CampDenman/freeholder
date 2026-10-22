@@ -44,7 +44,7 @@ import {
   moneyStateEvents,
   payments,
 } from "@/modules/invoicing/schema";
-import { DAY, HOUR, type AreaSeeder, type Person, type World } from "./world";
+import { DAY, HOUR, studioParts, type AreaSeeder, type Person, type World } from "./world";
 
 const MINUTE = 60_000;
 const TZ = "America/Vancouver";
@@ -124,9 +124,7 @@ function hash(value: string): string {
 }
 
 function pacificWeekday(date: Date): number {
-  // Hours are set at UTC+7 by world.at, so the UTC date at noon Pacific is
-  // the Pacific date.
-  return new Date(date.getTime() - 7 * HOUR).getUTCDay();
+  return studioParts(date).weekday;
 }
 
 interface Interval {
@@ -465,7 +463,8 @@ export const seedCalendar: AreaSeeder = async (tx, w) => {
       const lo = earlier.getTime() - item.plan.offering.bufferBeforeMin * MINUTE;
       const hi = earlierEnd.getTime() + item.plan.offering.bufferAfterMin * MINUTE;
       const hoursThen = OPEN[pacificWeekday(earlier)];
-      const startHour = (earlier.getUTCHours() - 7 + 24) % 24 + earlier.getUTCMinutes() / 60;
+      const local = studioParts(earlier);
+      const startHour = local.hour + local.minute / 60;
       const endHour = startHour + (end - start) / HOUR;
       if (
         earlier.getTime() > createdAt.getTime() + DAY &&
@@ -549,7 +548,9 @@ export const seedCalendar: AreaSeeder = async (tx, w) => {
           offsetMin,
           sendAt,
           sentAt: sent ? sendAt : null,
-          status: sent ? "sent" : "scheduled",
+          // Outside the playground a future reminder is recorded but never
+          // sent: these are sample people (World.liveReminders).
+          status: sent ? "sent" : w.liveReminders ? "scheduled" : "skipped",
           createdAt: confirmedAt,
           updatedAt: sent ? sendAt : confirmedAt,
         });

@@ -57,9 +57,23 @@ export function composeDocumentTitle(
   // A title that already names the business ("About Aurora Coast
   // Photography") would otherwise come out doubled: "About Aurora Coast
   // Photography · Aurora Coast Photography".
-  if (isHome || !siteName || own.toLowerCase().includes(siteName.trim().toLowerCase())) return own;
+  if (isHome || !siteName || namesBrand(own, siteName)) return own;
   const combined = `${own} · ${siteName}`;
   return combined.length <= TITLE_LIMIT ? combined : own;
+}
+
+/**
+ * Whether a title already carries the brand as a whole phrase at its start or
+ * end ("About Aurora Coast Photography", "Aurora Coast Photography: FAQ").
+ * Whole words only, so a short brand ("Art") does not swallow "Artists" or a
+ * title that merely mentions it mid-sentence.
+ */
+function namesBrand(title: string, brand: string): boolean {
+  const name = brand.trim();
+  if (!name) return false;
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const edge = "[\\s·|:—–-]";
+  return new RegExp(`^(?:${escaped})(?:$|${edge})|(?:^|${edge})(?:${escaped})$`, "iu").test(title.trim());
 }
 
 export function composeDescription(description: string | undefined): string | undefined {

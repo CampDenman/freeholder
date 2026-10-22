@@ -104,7 +104,7 @@ export interface Person {
 export const ORGANISATIONS = [
   { name: "Tidewater Inn (sample)", domain: "tidewater-inn.example.com" },
   { name: "Glacier View Weddings (sample)", domain: "glacierview.example.com" },
-  { name: "Comox Valley Arts Collective (sample)", domain: "cvarts.example.com" },
+  { name: "Tidepool Arts Collective (sample)", domain: "tidepool-arts.example.com" },
   { name: "Saltwater Kitchen (sample)", domain: "saltwater-kitchen.example.com" },
   { name: "Northshore Realty (sample)", domain: "northshore-realty.example.com" },
 ] as const;
@@ -178,25 +178,78 @@ export interface World {
   /** The owner and the assistant every audit row is attributed to. */
   ownerUserId: string | null;
   staffUserId: string;
+  /**
+   * Whether seeded future reminders may stay scheduled. Only in the public
+   * playground, where external delivery is blocked at the service layer;
+   * a `busy` demo on a box with real mail must not email sample people.
+   */
+  liveReminders: boolean;
   daysAgo(days: number, hour?: number): Date;
   daysAhead(days: number, hour?: number): Date;
 }
 
-export function world(now: Date, seed = 20261022): Omit<World, "ownerUserId" | "staffUserId"> {
+/** The studio's wall clock. */
+export const STUDIO_TZ = "America/Vancouver";
+
+const parts = new Intl.DateTimeFormat("en-CA", {
+  timeZone: STUDIO_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  weekday: "short",
+});
+
+/** The studio's local calendar fields for an instant. */
+export function studioParts(date: Date): { year: number; month: number; day: number; hour: number; minute: number; weekday: number } {
+  const map = Object.fromEntries(parts.formatToParts(date).map((part) => [part.type, part.value]));
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour) % 24,
+    minute: Number(map.minute),
+    weekday: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(map.weekday!),
+  };
+}
+
+/**
+ * The instant a studio wall clock reads `hour:minute` on the studio-local
+ * date of `date`. Daylight saving is the zone's, not a fixed offset: a
+ * nine o'clock sitting is at nine in July and in January.
+ */
+export function studioTime(date: Date, hour: number, minute = 0): Date {
+  const local = studioParts(date);
+  const wanted = Date.UTC(local.year, local.month - 1, local.day, hour, minute);
+  let guess = wanted;
+  for (let i = 0; i < 2; i += 1) {
+    const seen = studioParts(new Date(guess));
+    const seenUtc = Date.UTC(seen.year, seen.month - 1, seen.day, seen.hour, seen.minute);
+    guess += wanted - seenUtc;
+  }
+  return new Date(guess);
+}
+
+export function world(now: Date, seed = 20261022): Omit<World, "ownerUserId" | "staffUserId" | "liveReminders"> {
   const r = random(seed);
   const at = (offsetDays: number, hour?: number) => {
     const date = new Date(now.getTime() + offsetDays * DAY);
-    // Hours are the studio's wall clock (Pacific); +7 is close enough all year
-    // for "a morning sitting" to land in the morning.
-    if (hour !== undefined) date.setUTCHours(hour + 7, 0, 0, 0);
-    return date;
+    return hour === undefined ? date : studioTime(date, hour);
   };
   return {
     now,
     r,
     people: people(random(seed + 1)),
     contactIds: new Map(),
-    daysAgo: (days, hour) => at(-days, hour),
+    // History never lands after the seed's own clock: "today at 5pm" asked
+    // for at 10am becomes a few minutes ago. A negative count is a date ahead
+    // and is left alone, as is daysAhead.
+    daysAgo: (days, hour) => {
+      const date = at(-days, hour);
+      return days < 0 || date.getTime() < now.getTime() ? date : new Date(now.getTime() - 5 * 60_000);
+    },
     daysAhead: (days, hour) => at(days, hour),
   };
 }

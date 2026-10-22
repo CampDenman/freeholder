@@ -23,13 +23,23 @@ import { bookableServices } from "@/modules/catalog/public-booking";
 import { availableSlots } from "@/core/scheduling/resolver-service";
 import { listPublicEvents } from "@/modules/events/service";
 import { targetFor } from "@/modules/share/service";
+import { mergeContacts } from "@/core/contacts/service";
+import { recordOfflinePayment } from "@/modules/invoicing/payment-provider-service";
 import { CATALOG, EVENTS, NAV_LINKS, SERVICES } from "../../seed/demo/content";
-import { people, random, world } from "../../seed/demo/busy/world";
+import { people, random, studioParts, studioTime, world } from "../../seed/demo/busy/world";
+import { AREAS } from "../../seed/demo/busy";
+import { users } from "@/core/auth/schema";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { ANONYMOUS, closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
-/** Wall-clock budget for demo + busy seed on a developer machine or CI runner. */
-const SEED_BUDGET_MS = 90_000;
+/**
+ * Budgets. The busy layer is bulk SQL and is held to the playground's reset
+ * target outright. The plain demo's time is dominated by image renditions
+ * and swings with host load (13–90 s measured on one shared machine), so it
+ * gets a ceiling that catches a regression without flaking on a busy runner.
+ */
+const BUSY_BUDGET_MS = 30_000;
+const PLAIN_BUDGET_MS = 180_000;
 
 async function rows<T>(query: ReturnType<typeof sql>): Promise<T[]> {
   return (await db().execute(query)) as unknown as T[];
@@ -60,6 +70,20 @@ describe("the busy world, before anything installs it", () => {
     expect(people(random(7))).toEqual(people(random(7)));
   });
 
+  it("puts studio hours on the studio's clock, summer and winter", () => {
+    // 9 am in Vancouver is 16:00 UTC under daylight time and 17:00 UTC after
+    // the November switch; a fixed offset gets one of them wrong.
+    expect(studioTime(new Date("2026-07-14T20:00:00Z"), 9).toISOString()).toBe("2026-07-14T16:00:00.000Z");
+    expect(studioTime(new Date("2026-11-10T20:00:00Z"), 9).toISOString()).toBe("2026-11-10T17:00:00.000Z");
+    // A Pacific evening is already tomorrow in UTC; the studio's date is not.
+    const evening = new Date("2026-07-15T04:30:00Z");
+    expect(studioParts(evening)).toMatchObject({ day: 14, hour: 21 });
+    expect(studioTime(evening, 9).toISOString()).toBe("2026-07-14T16:00:00.000Z");
+    // History asked for "today at five" before five lands in the past.
+    const morning = world(new Date("2026-07-14T17:00:00Z")); // 10 am Pacific
+    expect(morning.daysAgo(0, 17).getTime()).toBeLessThan(morning.now.getTime());
+  });
+
   it("is on for the playground and for an explicit request only", () => {
     expect(demoSeedBusy({ FREEHOLDER_SEED_DEMO: "1", FREEHOLDER_PLAYGROUND: "1" })).toBe(true);
     expect(demoSeedBusy({ FREEHOLDER_SEED_DEMO: "busy", FREEHOLDER_PLAYGROUND: undefined })).toBe(true);
@@ -70,10 +94,58 @@ describe("the busy world, before anything installs it", () => {
   });
 });
 
+/**
+ * The same seed under clocks that broke a fixed UTC−7 offset: a Pacific
+ * evening (already tomorrow in UTC) and a winter evening after the PST
+ * switch. Each runs every area in a transaction that is rolled back, against
+ * the installed plain demo, and is judged against its own pinned clock.
+ */
+const PINNED_CLOCKS: Array<[string, () => Date]> = [
+  ["a Pacific evening", () => studioTime(new Date(), 21, 30)],
+  ["a winter evening", () => studioTime(new Date(Date.now() + 20 * 86_400_000), 21, 30)],
+];
+
+async function seedAtPinnedClock(pinned: Date): Promise<Array<{ source: string; n: number }>> {
+  class Rollback extends Error {}
+  let findings: Array<{ source: string; n: number }> = [];
+  await db()
+    .transaction(async (tx) => {
+      const [staff] = await tx
+        .insert(users)
+        .values({ email: "pinned.clock@demo.freeholder.test", role: "staff" })
+        .returning({ id: users.id });
+      const w = { ...world(pinned), ownerUserId: null, staffUserId: staff!.id, liveReminders: false };
+      for (const [, seeder] of AREAS) await seeder(tx, w);
+      const at = pinned.toISOString();
+      findings = (await tx.execute(sql`
+        select 'timeline' as source, count(*)::int as n from timeline_events where occurred_at > ${at}::timestamptz
+        union all select 'analytics', count(*)::int from analytics_events where at > ${at}::timestamptz
+        union all select 'messages', count(*)::int from messages where created_at > ${at}::timestamptz
+        union all select 'payments', count(*)::int from payments where created_at > ${at}::timestamptz
+        union all select 'runs', count(*)::int from runs where started_at > ${at}::timestamptz
+        union all select 'contacts', count(*)::int from contacts where email like '%@example.com' and created_at > ${at}::timestamptz
+        union all select 'off-hours', count(*)::int from bookings
+          where extract(dow from starts_at at time zone 'America/Vancouver') = 0
+             or extract(hour from starts_at at time zone 'America/Vancouver') < 9
+             or (ends_at at time zone 'America/Vancouver')::time > time '17:00'`)) as unknown as Array<{
+        source: string;
+        n: number;
+      }>;
+      throw new Rollback();
+    })
+    .catch((error: unknown) => {
+      if (!(error instanceof Rollback)) throw error;
+    });
+  return findings;
+}
+
 describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () => {
   let now: Date;
   let elapsed = 0;
+  let plainMs = 0;
+  let busyMs = 0;
   let counts: Record<string, Record<string, number>> = {};
+  const pinnedFindings = new Map<string, Array<{ source: string; n: number }>>();
 
   beforeAll(async () => {
     // The boot the process runs before seeding: module blocks (the
@@ -85,22 +157,28 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
     const started = Date.now();
     await installDemo.call({ publish: true }, OWNER);
     const plain = Date.now() - started;
+    for (const [label, clock] of PINNED_CLOCKS) pinnedFindings.set(label, await seedAtPinnedClock(clock()));
     now = new Date();
+    const busyStarted = Date.now();
     counts = (await installBusyDemo.call({ now }, OWNER)).counts;
-    elapsed = Date.now() - started;
+    busyMs = Date.now() - busyStarted;
+    plainMs = plain;
+    elapsed = plain + busyMs;
     console.log(`[busy demo] plain demo ${plain} ms, total ${elapsed} ms`, JSON.stringify(counts));
   }, 600_000);
 
   afterAll(async () => {
     await truncateSpine();
     await closeDb();
-  });
+  }, 120_000);
 
   it("seeds within the reset budget and stays small", async () => {
-    expect(elapsed).toBeLessThan(SEED_BUDGET_MS);
+    expect(busyMs).toBeLessThan(BUSY_BUDGET_MS);
+    expect(plainMs).toBeLessThan(PLAIN_BUDGET_MS);
+    expect(elapsed).toBe(plainMs + busyMs);
     const [size] = await rows<{ bytes: string }>(sql`select pg_database_size(current_database()) as bytes`);
     console.log(`[busy demo] database size ${(Number(size!.bytes) / 1_048_576).toFixed(1)} MB`);
-    expect(Number(size!.bytes)).toBeLessThan(400 * 1_048_576);
+    expect(Number(size!.bytes)).toBeLessThan(150 * 1_048_576);
   });
 
   it("puts the site's menu in the navigation section, not just Locations", async () => {
@@ -222,7 +300,8 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
       union all select 'analytics', count(*)::int from analytics_events where at > ${now.toISOString()}::timestamptz
       union all select 'messages', count(*)::int from messages where created_at > ${now.toISOString()}::timestamptz
       union all select 'audit', count(*)::int from audit_log where at > ${now.toISOString()}::timestamptz and actor like 'user:%' and action not like 'demo.%'
-      union all select 'payments', count(*)::int from payments where created_at > ${now.toISOString()}::timestamptz`);
+      union all select 'payments', count(*)::int from payments where created_at > ${now.toISOString()}::timestamptz
+      union all select 'runs', count(*)::int from runs where started_at > ${now.toISOString()}::timestamptz`);
     for (const row of future) expect(row).toEqual({ source: row.source, n: 0 });
   });
 
@@ -241,6 +320,49 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
         select 1 from consent_records c
         where c.contact_id = r.contact_id and c.state = 'granted' and c.occurred_at <= r.sent_at)`);
     expect(unconsented).toEqual([]);
+  });
+
+  it.each(PINNED_CLOCKS.map(([label]) => label))(
+    "keeps history in the past and sittings in studio hours on %s",
+    (label) => {
+      const findings = pinnedFindings.get(label);
+      expect(findings).toBeDefined();
+      for (const row of findings!) expect(row).toEqual({ source: row.source, n: 0 });
+    },
+  );
+
+  // The seeded rows are only as good as what the real services make of them.
+  it("merges a seeded look-alike pair through the real merge service", async () => {
+    const [candidate] = await rows<{ id: string; a: string; b: string }>(sql`
+      select id, contact_a_id as a, contact_b_id as b from merge_candidates where status = 'open' order by score desc limit 1`);
+    expect(candidate).toBeDefined();
+    await mergeContacts.call({ survivingId: candidate!.a, duplicateId: candidate!.b, candidateId: candidate!.id }, OWNER);
+    const [left] = await rows<{ n: number }>(sql`select count(*)::int as n from contacts where id = ${candidate!.b}`);
+    expect(left!.n).toBe(0);
+    const [state] = await rows<{ status: string }>(sql`select status from merge_candidates where id = ${candidate!.id}`);
+    expect(state!.status).toBe("merged");
+  });
+
+  it("takes the balance of a seeded overdue invoice through the real payment service", async () => {
+    const [invoice] = await rows<{ id: string; due: number }>(sql`
+      select id, (total_minor - paid_minor)::int as due from invoices
+      where status = 'overdue' and total_minor > paid_minor order by due_at limit 1`);
+    expect(invoice).toBeDefined();
+    await recordOfflinePayment.call(
+      {
+        invoiceId: invoice!.id,
+        method: "bank_transfer",
+        amountMinor: invoice!.due,
+        evidence: "Sample transfer recorded by the busy demo test.",
+        idempotencyKey: `busy-demo-test-${invoice!.id}`,
+      },
+      OWNER,
+    );
+    const [after] = await rows<{ status: string; paid: number; total: number; ledger: number }>(sql`
+      select i.status, i.paid_minor::int as paid, i.total_minor::int as total,
+             coalesce((select sum(amount_minor) from payments p where p.invoice_id = i.id and p.status = 'succeeded'), 0)::int as ledger
+      from invoices i where i.id = ${invoice!.id}`);
+    expect(after).toMatchObject({ status: "paid", paid: after!.total, ledger: after!.total });
   });
 
   it("refuses to run twice", async () => {

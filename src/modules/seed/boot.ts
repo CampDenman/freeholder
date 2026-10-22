@@ -17,7 +17,7 @@ import { ServiceError } from "@/core/service";
 
 export type DemoSeedOutcome =
   | { status: "skipped"; reason: "disabled" | "development-not-pristine" }
-  | { status: "already-populated" }
+  | { status: "already-populated"; busy?: Record<string, Record<string, number>> }
   | {
       status: "installed";
       business: string;
@@ -85,13 +85,7 @@ export async function seedDemoIfRequested(): Promise<DemoSeedOutcome> {
     }
   }
 
-  try {
-    const { installDemo } = await import("./service");
-    const result = await installDemo.call({ publish: true }, { kind: "system" });
-    console.log(
-      `[freeholder] demo installed: ${result.business}, ${result.pages.length} pages, ${result.assets} images`,
-    );
-    if (!demoSeedBusy(environment)) return { status: "installed", ...result };
+  const installBusy = async () => {
     const started = Date.now();
     const { installBusyDemo } = await import("./busy");
     const busy = await installBusyDemo.call({}, { kind: "system" });
@@ -99,7 +93,17 @@ export async function seedDemoIfRequested(): Promise<DemoSeedOutcome> {
     console.log(
       `[freeholder] busy demo installed: ${contacts} contacts in ${Date.now() - started} ms`,
     );
-    return { status: "installed", ...result, busy: busy.counts };
+    return busy.counts;
+  };
+
+  try {
+    const { installDemo } = await import("./service");
+    const result = await installDemo.call({ publish: true }, { kind: "system" });
+    console.log(
+      `[freeholder] demo installed: ${result.business}, ${result.pages.length} pages, ${result.assets} images`,
+    );
+    if (!demoSeedBusy(environment)) return { status: "installed", ...result };
+    return { status: "installed", ...result, busy: await installBusy() };
   } catch (error) {
     // A restart of a seeded process is not a fault. Match both the typed code
     // and this installer's precise refusal so an unrelated conflict — for
@@ -110,6 +114,16 @@ export async function seedDemoIfRequested(): Promise<DemoSeedOutcome> {
       error.message.includes("already has pages")
     ) {
       console.log(`[freeholder] demo not installed: ${error.message}`);
+      // The busy layer is its own transaction after the plain demo. A boot
+      // that died between the two (a timeout, a restart) comes back here, so
+      // the missing half is finished now — but only on the demo business,
+      // never on somebody's real site that happens to ask for it.
+      if (demoSeedBusy(environment)) {
+        const { busyDemoPending } = await import("./busy");
+        if (await busyDemoPending()) {
+          return { status: "already-populated", busy: await installBusy() };
+        }
+      }
       return { status: "already-populated" };
     }
     const message = error instanceof Error ? error.message : String(error);

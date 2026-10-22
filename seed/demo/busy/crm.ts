@@ -180,13 +180,20 @@ export const seedCrm: AreaSeeder = async (tx, w) => {
     )
     .returning({ id: contacts.id, name: contacts.name, email: contacts.email, createdAt: contacts.createdAt });
   await tx.insert(mergeCandidates).values(
-    twins.map((person, index) => ({
-      contactAId: w.contactIds.get(person.key)!,
-      contactBId: twinRows[index]!.id,
-      contactAName: person.name,
-      contactAEmail: person.email,
-      contactBName: twinRows[index]!.name,
-      contactBEmail: twinRows[index]!.email,
+    twins.map((person, index) => {
+      // A pair is stored in id order, as the duplicate scanner stores it and
+      // contacts.merge looks it up; the other order is a candidate merge
+      // refuses as "no longer open".
+      const original = { id: w.contactIds.get(person.key)!, name: person.name, email: person.email };
+      const twin = twinRows[index]!;
+      const [a, b] = original.id < twin.id ? [original, twin] : [twin, original];
+      return {
+      contactAId: a.id,
+      contactBId: b.id,
+      contactAName: a.name,
+      contactAEmail: a.email,
+      contactBName: b.name,
+      contactBEmail: b.email,
       score: 110,
       reasons: [
         { code: "same_phone", points: 60, value: person.phone!.replace(/\D/g, "").slice(-4) },
@@ -194,7 +201,8 @@ export const seedCrm: AreaSeeder = async (tx, w) => {
         { code: "same_country", points: 5 },
       ],
       detectedAt: twinRows[index]!.createdAt,
-    })),
+      };
+    }),
   );
   for (const twin of twinRows) {
     timeline.push({

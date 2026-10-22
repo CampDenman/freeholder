@@ -160,7 +160,7 @@ import {
   HEADER_KEY,
   NAV_KEY,
 } from "./defaults";
-import { extractNavBlocks, mergeNavLinks, navHasLinks, navLinks } from "./chrome-nav";
+import { extractNavBlocks, mergeNavLinks, navHasLinks } from "./chrome-nav";
 import {
   demoHandlerInputSchema,
   demoLoadResultSchema,
@@ -1707,9 +1707,10 @@ export const ensureDefaults = defineService({
         } else {
           // The nav section already has links (the platform appends
           // /locations when a first location is created). The header's menu
-          // is still the owner's menu: merge it in rather than drop it.
+          // is still a menu somebody chose: merge it in rather than drop it,
+          // keeping an owner-arranged order (chrome-nav.ts).
           const merged = structuredClone(navRow.blocks) as BlockNode[];
-          if (mergeNavLinks(merged, navLinks(pulled.nav))) {
+          if (mergeNavLinks(merged, pulled.nav)) {
             await ctx.tx
               .update(sections)
               .set({ blocks: parseChrome(merged, NAV_KEY) })

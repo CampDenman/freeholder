@@ -19,6 +19,7 @@ import { seedCrm } from "./crm";
 import { seedSales } from "./sales";
 import { seedCalendar } from "./calendar";
 import { seedContent } from "./content";
+import { seedLedger } from "./ledger";
 import { seedActivity } from "./activity";
 
 /** In dependency order: everything after CRM refers to its contacts. */
@@ -26,6 +27,8 @@ export const AREAS: Array<[string, AreaSeeder]> = [
   ["crm", seedCrm],
   ["sales", seedSales],
   ["calendar", seedCalendar],
+  // After every area that issues invoices, before anything that quotes one.
+  ["ledger", seedLedger],
   ["content", seedContent],
   ["activity", seedActivity],
 ];
