@@ -15,7 +15,7 @@ import { AdapterError } from "@/adapters/types";
 import { contacts } from "@/core/contacts/schema";
 import { env } from "@/core/env";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { actorString, defineOrchestratedService, defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import { actorString, defineOrchestratedService, defineService, ServiceError, type Actor, type ServiceContext, type Tx } from "@/core/service";
 import {
   adapterStatus,
   checkoutSession,
@@ -554,14 +554,56 @@ const beginCheckoutInput = z.object({
 });
 
 /**
- * A provider that answered "this request is invalid" took no money and, under
- * the same idempotency key, will give the same answer again. Every other
- * failure (timeout, outage, rate limit, credentials) may hide an accepted
- * request, so the committed attempt is kept for a same-key retry.
+ * Provider codes that prove the request was refused outright: nothing was
+ * created, and the same idempotency key will replay the same refusal. Any
+ * other failure (a concurrent same-key request, a busy reader, a timeout, an
+ * outage, an unknown 4xx) may hide an accepted request, so the committed
+ * attempt is kept for a same-key retry or reconciliation instead.
  */
+const DEFINITE_REFUSALS = new Set([
+  "amount_too_large",
+  "amount_too_small",
+  "charge_already_refunded",
+  "email_invalid",
+  "parameter_invalid_empty",
+  "parameter_invalid_integer",
+  "parameter_missing",
+  "parameter_unknown",
+  "url_invalid",
+]);
+
 export function definitiveRefusal(error: unknown): boolean {
-  return error instanceof AdapterError && error.code === "invalid_request";
+  return error instanceof AdapterError && error.code === "invalid_request" &&
+    error.providerCode !== undefined && DEFINITE_REFUSALS.has(error.providerCode);
 }
+
+/** Provider idempotency keys expire after 24 hours (Stripe); stop an hour early. */
+const RETRY_WINDOW_MS = 23 * 60 * 60 * 1000;
+
+/**
+ * A same-key retry may contact the provider again only for an attempt that is
+ * still open and young enough that the provider will replay, not repeat, it.
+ */
+export function assertRetryableAttempt(attempt: { status: string; createdAt: Date }, noun: "payment" | "refund"): void {
+  if (attempt.status !== "created" && attempt.status !== "processing") {
+    throw new ServiceError("conflict", `That ${noun} attempt has already ${attempt.status === "succeeded" ? "succeeded" : `ended as ${attempt.status}`}. Use a new idempotency key for another attempt.`);
+  }
+  if (Date.now() - attempt.createdAt.getTime() > RETRY_WINDOW_MS) {
+    throw new ServiceError("conflict", `That ${noun} attempt is more than 23 hours old. Reconcile it with the provider before trying again.`);
+  }
+}
+
+/**
+ * The orchestrator has already authorized its caller for the public service.
+ * Its fixed internal steps run under that decision and stay attributed to the
+ * caller, so an API key scoped to the public service needs no grant for steps
+ * it could never name (internal phases are not grantable scopes).
+ */
+export function phaseActor(actor: Actor): Actor {
+  return actor.kind === "agent" ? { ...actor, scopes: [...actor.scopes, "invoicing.*"] } : actor;
+}
+
+const OPEN_INVOICE_STATUSES = ["sent", "viewed", "partially_paid", "overdue"];
 
 export const claimPaymentCheckout = defineService({
   name: "invoicing.claimPaymentCheckout",
@@ -594,15 +636,44 @@ export const claimPaymentCheckout = defineService({
       idempotencyKey: input.idempotencyKey,
       metadata: { saveMethodRequested: input.saveMethod, methodIds: input.methodIds },
     });
+    // A failed, cancelled or settled attempt is never sent to the provider
+    // again, and an old one could outlive the provider's idempotency window.
+    assertRetryableAttempt(payment, "payment");
     return { payment, invoice, email: contact.email, name: contact.name, providerCustomerRef: customer?.providerCustomerRef ?? null };
+  },
+});
+
+export const applyPaymentCheckout = defineService({
+  name: "invoicing.applyPaymentCheckout",
+  summary: "Attach a provider checkout to its owner payment attempt while the invoice is still open.",
+  kind: "mutation",
+  permission: "scoped",
+  external: false,
+  input: z.object({ paymentId: z.string().uuid(), checkout: checkoutSession }),
+  output: paymentRow,
+  handler: async (input, ctx) => {
+    const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
+    if (!payment) throw new ServiceError("not_found", "That payment is not here.");
+    // Recheck after provider I/O: the invoice can be paid or closed meanwhile.
+    const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
+    if (!invoice || !OPEN_INVOICE_STATUSES.includes(invoice.status) || invoice.totalMinor - invoice.paidMinor < payment.amountMinor) {
+      throw new ServiceError("conflict", "The invoice changed while checkout was opening, so the checkout was not attached. Open the invoice again.");
+    }
+    return ctx.call(startPayment, {
+      id: payment.id,
+      providerRef: input.checkout.paymentRef ?? input.checkout.providerRef,
+      providerCheckoutRef: input.checkout.providerRef,
+    });
   },
 });
 
 /**
  * C11.10: the attempt commits before provider I/O, the provider is called with
  * no transaction open, and its answer is applied in a fresh one. A crash in
- * between leaves a `created` attempt that a same-key retry, the provider
- * webhook (matched by invoice) and `reconcilePaymentProviders` all converge.
+ * between leaves a `created` attempt. For 23 hours a same-key retry replays
+ * the provider request and converges; the provider webhook (matched by
+ * invoice) also converges it, and `reconcilePaymentProviders` lists it. After
+ * that the attempt needs owner reconciliation and a retry is refused.
  */
 export const beginPaymentCheckout = defineOrchestratedService({
   name: "invoicing.beginPaymentCheckout",
@@ -614,7 +685,8 @@ export const beginPaymentCheckout = defineOrchestratedService({
     payment: paymentRow,
     checkout: checkoutSession,
   }),
-  handler: async (input, actor) => {
+  handler: async (input, caller) => {
+    const actor = phaseActor(caller);
     const successUrl = sameInstanceUrl(input.successUrl);
     const cancelUrl = sameInstanceUrl(input.cancelUrl);
     const source = await claimPaymentCheckout.call(input, actor);
@@ -642,11 +714,7 @@ export const beginPaymentCheckout = defineOrchestratedService({
       }
       return adapterFailure(error);
     }
-    const updated = await startPayment.call({
-      id: payment.id,
-      providerRef: checkout.paymentRef ?? checkout.providerRef,
-      providerCheckoutRef: checkout.providerRef,
-    }, actor);
+    const updated = await applyPaymentCheckout.call({ paymentId: payment.id, checkout }, actor);
     return { payment: updated, checkout };
   },
 });
@@ -658,7 +726,8 @@ export const completePaymentCheckout = defineOrchestratedService({
   permission: "scoped",
   input: z.object({ paymentId: z.string().uuid(), idempotencyKey }),
   output: paymentRow,
-  handler: async (input, actor) => {
+  handler: async (input, caller) => {
+    const actor = phaseActor(caller);
     const { payment } = await getPayment.call({ id: input.paymentId }, actor);
     if (payment.status === "succeeded") return payment;
     if (!payment.providerCheckoutRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment has no hosted checkout to complete.");
@@ -681,7 +750,8 @@ export const submitProviderRefund = defineOrchestratedService({
   stepUp: true,
   input: z.object({ paymentId: z.string().uuid(), amountMinor: positiveMinor, reason: z.string().trim().min(3).max(1_000), idempotencyKey }),
   output: refundRow,
-  handler: async (input, actor) => {
+  handler: async (input, caller) => {
+    const actor = phaseActor(caller);
     const { payment } = await getPayment.call({ id: input.paymentId }, actor);
     if (!payment.providerRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment does not have a refundable hosted-provider settlement.");
     if (!paymentAdapter(payment.provider).capabilities().refunds) throw new ServiceError("conflict", `${payment.provider} refunds are not implemented by this adapter.`);
@@ -690,6 +760,7 @@ export const submitProviderRefund = defineOrchestratedService({
     // same-key retry reuses it rather than reserving (or refunding) twice.
     const refund = await createRefund.call(input, actor);
     if (refund.status !== "created") return refund;
+    assertRetryableAttempt(refund, "refund");
     let result: Awaited<ReturnType<PaymentAdapter["refund"]>>;
     try {
       result = await paymentAdapter(payment.provider).refund({
@@ -894,7 +965,8 @@ export const revokeSavedPaymentMethod = defineOrchestratedService({
   stepUp: true,
   input: z.object({ id: z.string().uuid(), idempotencyKey }),
   output: paymentMethodRow,
-  handler: async (input, actor) => {
+  handler: async (input, caller) => {
+    const actor = phaseActor(caller);
     const method = await savedPaymentMethodSource.call({ id: input.id }, actor);
     if (method.status === "revoked") return method;
     try {
@@ -947,6 +1019,7 @@ export default [
   processPaymentProviderEvents,
   listPaymentProviders,
   claimPaymentCheckout,
+  applyPaymentCheckout,
   beginPaymentCheckout,
   completePaymentCheckout,
   submitProviderRefund,

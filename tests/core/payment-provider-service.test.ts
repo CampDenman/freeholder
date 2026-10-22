@@ -5,6 +5,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import * as adapters from "@/adapters/payments";
+import { providerJson } from "@/adapters/payments/http";
 import { AdapterError } from "@/adapters/types";
 import { db } from "@/core/db";
 import { env } from "@/core/env";
@@ -338,9 +339,99 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     it("records a definitive provider refusal and releases the refund reservation", async () => {
       const { refund } = hostedStripe();
       const payment = await settledStripePayment("owner-refused");
-      refund.mockRejectedValueOnce(new AdapterError("payments", "stripe", "invalid_request", "Refund amount is invalid."));
+      refund.mockRejectedValueOnce(new AdapterError("payments", "stripe", "invalid_request", "Refund amount is invalid.", false, "amount_too_large"));
       expect(await failure(submitProviderRefund.call({ paymentId: payment.id, amountMinor: 4_000, reason: "Refused by provider", idempotencyKey: "owner-refused-1" }, OWNER))).toMatchObject({ code: "validation" });
       expect(await db().select().from(refunds)).toMatchObject([{ status: "failed", failureCode: "provider_refused" }]);
+    });
+
+    const sameKeyInFlight = () => new AdapterError("payments", "stripe", "invalid_request", "The payment provider refused the request (idempotency_error).", false, "idempotency_error");
+    const ago = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    it("carries the provider's own error code, so a 409 same-key conflict is distinguishable from a refusal", async () => {
+      const response = new Response(JSON.stringify({ error: { type: "idempotency_error", message: "A request with this key is in flight." } }), { status: 409 });
+      const error = await providerJson("stripe", response).then(() => undefined, (caught: unknown) => caught);
+      expect(error).toBeInstanceOf(AdapterError);
+      expect(error).toMatchObject({ code: "invalid_request", providerCode: "idempotency_error" });
+    });
+
+    it("keeps the refund reservation and checkout attempt when the provider reports a same-key request in flight", async () => {
+      const { refund, createCheckout } = hostedStripe();
+      const payment = await settledStripePayment("owner-in-flight");
+      refund.mockRejectedValueOnce(sameKeyInFlight());
+      await expect(submitProviderRefund.call({ paymentId: payment.id, amountMinor: 4_000, reason: "Double-clicked refund", idempotencyKey: "owner-in-flight-refund" }, OWNER)).rejects.toThrow();
+      // The first request may still refund the money: the amount stays reserved.
+      expect(await db().select().from(refunds)).toMatchObject([{ status: "created" }]);
+
+      const { invoice } = await issuedInvoice("checkout-in-flight");
+      createCheckout.mockRejectedValueOnce(sameKeyInFlight());
+      await expect(beginPaymentCheckout.call({ invoiceId: invoice.id, provider: "stripe", successUrl: back(), cancelUrl: back(), idempotencyKey: "checkout-in-flight-1" }, OWNER)).rejects.toThrow();
+      expect(await db().select().from(payments).where(eq(payments.invoiceId, invoice.id))).toMatchObject([{ status: "created" }]);
+    });
+
+    it("never sends a failed checkout attempt to the provider again under its key", async () => {
+      const { createCheckout } = hostedStripe();
+      const { invoice } = await issuedInvoice("checkout-refused");
+      const input = { invoiceId: invoice.id, provider: "stripe" as const, successUrl: back(), cancelUrl: back(), idempotencyKey: "checkout-refused-1" };
+      createCheckout.mockRejectedValueOnce(new AdapterError("payments", "stripe", "invalid_request", "Amount too small.", false, "amount_too_small"));
+      await expect(beginPaymentCheckout.call(input, OWNER)).rejects.toThrow();
+      expect(await db().select().from(payments)).toMatchObject([{ status: "failed", failureCode: "provider_refused" }]);
+      createCheckout.mockResolvedValue({ providerRef: "cs_again", paymentRef: "pi_again", url: "https://checkout.example.test/pay" });
+      expect(await failure(beginPaymentCheckout.call(input, OWNER))).toMatchObject({ code: "conflict" });
+      expect(createCheckout).toHaveBeenCalledTimes(1);
+    });
+
+    it("refuses a same-key retry once an open attempt outlives the provider's idempotency window", async () => {
+      const { createCheckout, refund } = hostedStripe();
+      const { invoice } = await issuedInvoice("checkout-old");
+      const input = { invoiceId: invoice.id, provider: "stripe" as const, successUrl: back(), cancelUrl: back(), idempotencyKey: "checkout-old-1" };
+      createCheckout.mockRejectedValueOnce(new Error("timeout"));
+      await expect(beginPaymentCheckout.call(input, OWNER)).rejects.toThrow();
+      await db().update(payments).set({ createdAt: ago(24) }).where(eq(payments.invoiceId, invoice.id));
+      createCheckout.mockResolvedValue({ providerRef: "cs_late", paymentRef: "pi_late", url: "https://checkout.example.test/pay" });
+      expect(await failure(beginPaymentCheckout.call(input, OWNER))).toMatchObject({ code: "conflict" });
+      expect(createCheckout).toHaveBeenCalledTimes(1);
+
+      const paid = await settledStripePayment("refund-old");
+      const refundInput = { paymentId: paid.id, amountMinor: 1_000, reason: "Late retry of a lost refund", idempotencyKey: "refund-old-1" };
+      refund.mockRejectedValueOnce(new Error("timeout"));
+      await expect(submitProviderRefund.call(refundInput, OWNER)).rejects.toThrow();
+      await db().update(refunds).set({ createdAt: ago(24) }).where(eq(refunds.paymentId, paid.id));
+      refund.mockResolvedValue({ providerRef: "re_late", status: "succeeded" });
+      expect(await failure(submitProviderRefund.call(refundInput, OWNER))).toMatchObject({ code: "conflict" });
+      expect(refund).toHaveBeenCalledTimes(1);
+    });
+
+    it("lets an API key scoped only to the public checkout services run them end to end", async () => {
+      const { createCheckout, captureCheckout } = hostedStripe();
+      const { invoice } = await issuedInvoice("narrow-key");
+      createCheckout.mockResolvedValue({ providerRef: "cs_key", paymentRef: "pi_key", url: "https://checkout.example.test/pay" });
+      captureCheckout.mockResolvedValue({ providerRef: "pi_key", status: "succeeded", amountMinor: 10_000, currency: "CAD" });
+      const begun = await beginPaymentCheckout.call(
+        { invoiceId: invoice.id, provider: "stripe", successUrl: back(), cancelUrl: back(), idempotencyKey: "narrow-key-1" },
+        { kind: "agent", keyName: "checkout-only", scopes: ["invoicing.beginPaymentCheckout"] },
+      );
+      expect(begun.payment.status).toBe("processing");
+      const completed = await completePaymentCheckout.call(
+        { paymentId: begun.payment.id, idempotencyKey: "narrow-key-capture" },
+        { kind: "agent", keyName: "complete-only", scopes: ["invoicing.completePaymentCheckout"] },
+      );
+      expect(completed.status).toBe("succeeded");
+      // Still refused for a key that names neither.
+      expect(await failure(beginPaymentCheckout.call(
+        { invoiceId: invoice.id, provider: "stripe", successUrl: back(), cancelUrl: back(), idempotencyKey: "narrow-key-2" },
+        { kind: "agent", keyName: "other", scopes: ["invoicing.listPayments"] },
+      ))).toMatchObject({ code: "permission" });
+    });
+
+    it("does not attach a checkout to an invoice that was paid while the provider was answering", async () => {
+      const { createCheckout } = hostedStripe();
+      const { invoice } = await issuedInvoice("paid-meanwhile");
+      createCheckout.mockImplementation(async () => {
+        await recordOfflinePayment.call({ invoiceId: invoice.id, method: "bank_transfer", amountMinor: 10_000, reference: "PAID-ELSEWHERE", evidence: "Paid by transfer during checkout.", idempotencyKey: "paid-meanwhile-offline" }, OWNER);
+        return { providerRef: "cs_meanwhile", paymentRef: "pi_meanwhile", url: "https://checkout.example.test/pay" };
+      });
+      expect(await failure(beginPaymentCheckout.call({ invoiceId: invoice.id, provider: "stripe", successUrl: back(), cancelUrl: back(), idempotencyKey: "paid-meanwhile-1" }, OWNER))).toMatchObject({ code: "conflict" });
+      expect(await db().select().from(payments).where(eq(payments.provider, "stripe"))).toMatchObject([{ status: "created", providerCheckoutRef: null }]);
     });
 
     it("revokes a saved method with the provider outside a transaction", async () => {

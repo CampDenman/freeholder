@@ -3,7 +3,7 @@
 // In-person collection through the POS adapter family (C5.24).
 // Cash and Terminal takes become ordinary Payment rows on the invoice.
 
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { pointOfSaleAdapter, pointOfSaleAdapters, type PointOfSaleAdapter, type PointOfSalePayment } from "@/adapters/point-of-sale";
 import { AdapterError } from "@/adapters/types";
@@ -28,8 +28,8 @@ import {
   startPayment,
   startRefund,
 } from "./invoice-service";
-import { definitiveRefusal, getPayment } from "./payment-provider-service";
-import { invoices, payments } from "./schema";
+import { assertRetryableAttempt, definitiveRefusal, getPayment, phaseActor } from "./payment-provider-service";
+import { invoices, payments, refunds } from "./schema";
 
 const id = z.string().uuid();
 const IN_PERSON_METHODS = ["cash", "card_present", "tap_to_pay"] as const;
@@ -130,6 +130,9 @@ export const claimInPersonPayment = defineService({
         readerRef: input.readerRef ?? null,
       },
     });
+    // Never replay a closed or expired attempt to the reader: a failed take
+    // resubmitted under its key could charge again with nowhere to record it.
+    assertRetryableAttempt(payment, "payment");
     return { ...claimed, payment };
   },
 });
@@ -189,9 +192,10 @@ export const applyInPersonPayment = defineService({
 
 /**
  * C11.10: Terminal collection commits its attempt first, contacts the reader
- * with no transaction open, and records the answer in a fresh one. A crash in
- * between leaves a `created` in-person payment that
- * `reconcileInPersonPayments` lists and a same-key retry converges.
+ * with no transaction open, and records the answer in a fresh one. A crash or
+ * reader error in between leaves a `created` in-person payment that
+ * `reconcileInPersonPayments` lists; for 23 hours a same-key retry replays the
+ * PaymentIntent and converges, after which it needs owner reconciliation.
  */
 export const beginInPersonPayment = defineOrchestratedService({
   name: "invoicing.beginInPersonPayment",
@@ -205,7 +209,8 @@ export const beginInPersonPayment = defineOrchestratedService({
     collection: posCollection,
     receipt: paymentReceipt.nullable(),
   }),
-  handler: async (input, actor) => {
+  handler: async (input, caller) => {
+    const actor = phaseActor(caller);
     const claimed = await claimInPersonPayment.call(input, actor);
     const adapter = pointOfSaleAdapter(claimed.payment ? "stripe" : "manual");
     let collected: PointOfSalePayment;
@@ -219,9 +224,9 @@ export const beginInPersonPayment = defineOrchestratedService({
         ...(claimed.payment ? { readerRef: input.readerRef } : {}),
       });
     } catch (error) {
-      if (claimed.payment?.status === "created" && definitiveRefusal(error)) {
-        await failPayment.call({ id: claimed.payment.id, code: "provider_refused", message: "The card reader service refused this payment." }, actor);
-      }
+      // Terminal creates the PaymentIntent before it asks the reader, so even
+      // a clear refusal (a busy reader, say) can follow a live intent. The
+      // attempt stays open for a same-key retry or reconciliation.
       return posError(error);
     }
     return applyInPersonPayment.call({
@@ -262,6 +267,8 @@ export const reconcileInPersonPayments = defineService({
   output: z.object({
     balanced: z.boolean(),
     unsettled: listed(paymentRow),
+    /** Refunds the adapter accepted but has not finished (or whose answer was lost). */
+    unsettledRefunds: listed(refundRow),
     succeeded: z.number().int(),
     methods: listed(z.enum(["cash", "card_present", "tap_to_pay"])),
   }),
@@ -274,9 +281,17 @@ export const reconcileInPersonPayments = defineService({
       .limit(500);
     const unsettled = rows.filter((row) => row.status === "created" || row.status === "processing");
     const succeeded = rows.filter((row) => row.status === "succeeded");
+    const unsettledRefunds = (await ctx.tx
+      .select({ refund: refunds })
+      .from(refunds)
+      .innerJoin(payments, eq(payments.id, refunds.paymentId))
+      .where(and(inArray(payments.method, [...IN_PERSON_METHODS]), inArray(refunds.status, ["created", "processing"])))
+      .orderBy(desc(refunds.createdAt))
+      .limit(500)).map((row) => row.refund);
     return {
-      balanced: unsettled.length === 0,
+      balanced: unsettled.length === 0 && unsettledRefunds.length === 0,
       unsettled,
+      unsettledRefunds,
       succeeded: succeeded.length,
       methods: IN_PERSON_METHODS,
     };
@@ -301,7 +316,8 @@ export const refundInPersonPayment = defineOrchestratedService({
     idempotencyKey: z.string().trim().min(8).max(240),
   }),
   output: refundRow,
-  handler: async (input, actor) => {
+  handler: async (input, caller) => {
+    const actor = phaseActor(caller);
     const { payment } = await getPayment.call({ id: input.paymentId }, actor);
     if (!IN_PERSON_METHODS.includes(payment.method as (typeof IN_PERSON_METHODS)[number])) {
       throw new ServiceError("conflict", "That payment was not collected in person.");
@@ -314,6 +330,7 @@ export const refundInPersonPayment = defineOrchestratedService({
       idempotencyKey: input.idempotencyKey,
     }, actor);
     if (refund.status !== "created" && refund.status !== "processing") return refund;
+    assertRetryableAttempt(refund, "refund");
     let result: Awaited<ReturnType<PointOfSaleAdapter["refund"]>>;
     try {
       result = await adapter.refund({

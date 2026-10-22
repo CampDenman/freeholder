@@ -9643,13 +9643,24 @@ schema they inherit reads as a designed thing rather than an excavation.
   no ledger row. Each is now a `defineOrchestratedService`: the attempt or
   refund reservation commits under its idempotency key first, the provider
   runs with no transaction open, and its answer is applied in a fresh one.
-  A crash in between leaves a `created` attempt that a same-key retry,
-  webhooks and the reconciliation views converge; a definitive provider
-  refusal is recorded and releases any reservation. Public service names and
-  contracts are unchanged. Regressions in
+  A crash or uncertain provider error in between leaves a `created` attempt.
+  For 23 hours (inside the provider's 24-hour idempotency window) a same-key
+  retry replays the request and converges. After that the retry is refused
+  and the attempt needs owner reconciliation. Hosted payments are also matched
+  by the webhook and listed by `reconcilePaymentProviders`. Terminal takes and
+  pending Terminal refunds are listed by `reconcileInPersonPayments`
+  (`unsettledRefunds`, which is additive output). A failed, cancelled or
+  settled attempt is never sent to the provider again under its key. Only
+  allow-listed provider codes count as a definite refusal, which is recorded
+  as failed and releases any reservation. A 409 same-key conflict, a busy
+  reader or an unknown 4xx keeps the attempt open, and `AdapterError` now
+  carries the provider's code. Checkout is attached only while the invoice is
+  still open for that amount. Internal steps run under the caller's
+  authorization for the public service, so an API key scoped to that service
+  alone still works. Public service names and inputs are unchanged.
+  Regressions in
   `tests/core/payment-provider-service.test.ts` and
-  `tests/core/invoicing-pos.test.ts` failed before the repair (open
-  transaction observed during provider I/O; attempt lost on timeout).
+  `tests/core/invoicing-pos.test.ts` failed before each repair.
   Changeset `payment-provider-boundary.md`. This repair is not independent
   review evidence.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large

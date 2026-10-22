@@ -51,6 +51,9 @@ export async function providerJson(
             : "invalid_request",
       `The payment provider refused the request (${code}).`,
       retryable,
+      // Callers decide "definitely refused" from the provider's own code, not
+      // the coarse HTTP class: a 409 same-key conflict is also a 4xx.
+      code,
     );
   }
   return parsed as Record<string, unknown>;

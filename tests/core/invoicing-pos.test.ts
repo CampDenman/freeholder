@@ -3,8 +3,9 @@
 // C5.24 cash collection, receipts and in-person reconciliation.
 
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import * as posAdapters from "@/adapters/point-of-sale";
+import { AdapterError } from "@/adapters/types";
 import { createContact } from "@/core/contacts/service";
 import { db } from "@/core/db";
 import { createLocationService } from "@/core/locations/service";
@@ -191,6 +192,51 @@ describe.runIf(hasDatabase)("in-person payments", { timeout: 30_000 }, () => {
       expect(await db().select().from(payments)).toHaveLength(1);
       expect(collect.mock.calls.map(([request]) => request.idempotencyKey)).toEqual(["terminal-timeout-1", "terminal-timeout-1"]);
       expect((await reconcileInPersonPayments.call({}, OWNER)).balanced).toBe(true);
+    });
+
+    const ago = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    it("keeps the Terminal attempt open when the reader is busy after the intent exists, and a retry converges", async () => {
+      const { collect } = terminal();
+      const { invoiceId, locationId } = await cardInvoice("terminal-busy");
+      const input = { invoiceId, locationId, method: "card_present" as const, amountMinor: 1_000, readerRef: "tmr_1", idempotencyKey: "terminal-busy-1" };
+      collect.mockRejectedValueOnce(new AdapterError("payments", "stripe", "invalid_request", "The payment provider refused the request (terminal_reader_busy).", false, "terminal_reader_busy"));
+      await expect(beginInPersonPayment.call(input, OWNER)).rejects.toThrow();
+      expect(await db().select().from(payments)).toMatchObject([{ status: "created" }]);
+      collect.mockResolvedValueOnce({ providerRef: "pi_busy", status: "succeeded" });
+      expect((await beginInPersonPayment.call(input, OWNER)).payment).toMatchObject({ status: "succeeded", providerRef: "pi_busy" });
+    });
+
+    it("never resubmits a failed or expired Terminal attempt to the reader under its key", async () => {
+      const { collect } = terminal();
+      const failed = await cardInvoice("terminal-failed");
+      const failedInput = { ...failed, method: "card_present" as const, amountMinor: 1_000, idempotencyKey: "terminal-failed-1" };
+      collect.mockResolvedValueOnce({ providerRef: "pi_failed", status: "failed" });
+      expect((await beginInPersonPayment.call(failedInput, OWNER)).payment.status).toBe("failed");
+      collect.mockResolvedValue({ providerRef: "pi_failed", status: "succeeded" });
+      expect(await failure(beginInPersonPayment.call(failedInput, OWNER))).toMatchObject({ code: "conflict" });
+      expect(collect).toHaveBeenCalledTimes(1);
+
+      const old = await cardInvoice("terminal-old");
+      const oldInput = { ...old, method: "card_present" as const, amountMinor: 1_000, idempotencyKey: "terminal-old-1" };
+      collect.mockRejectedValueOnce(new Error("reader timeout"));
+      await expect(beginInPersonPayment.call(oldInput, OWNER)).rejects.toThrow();
+      await db().update(payments).set({ createdAt: ago(24) }).where(eq(payments.invoiceId, old.invoiceId));
+      expect(await failure(beginInPersonPayment.call(oldInput, OWNER))).toMatchObject({ code: "conflict" });
+      expect(collect).toHaveBeenCalledTimes(2);
+    });
+
+    it("lists a pending Terminal refund for reconciliation instead of holding it out of sight", async () => {
+      const { collect, refund } = terminal();
+      const { invoiceId, locationId } = await cardInvoice("terminal-pending-refund");
+      collect.mockResolvedValue({ providerRef: "pi_pending_refund", status: "succeeded" });
+      const taken = await beginInPersonPayment.call({ invoiceId, locationId, method: "card_present", amountMinor: 1_000, idempotencyKey: "terminal-pending-1" }, OWNER);
+      refund.mockResolvedValue({ providerRef: "re_pending", status: "pending" });
+      const pending = await refundInPersonPayment.call({ paymentId: taken.payment.id, amountMinor: 1_000, reason: "Card refund still settling.", idempotencyKey: "terminal-pending-refund-1" }, OWNER);
+      expect(pending).toMatchObject({ status: "processing", providerRef: "re_pending" });
+      const books = await reconcileInPersonPayments.call({}, OWNER);
+      expect(books.balanced).toBe(false);
+      expect(books.unsettledRefunds).toMatchObject([{ id: pending.id, status: "processing" }]);
     });
   });
 });
