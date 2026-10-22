@@ -83,6 +83,22 @@ CI runs all of the above plus the build, a dependency audit, and a Docker image
 that has to answer a real HTTP request. Run them before opening a PR and the
 review is about the code rather than the checks.
 
+### On an ordinary laptop
+
+The full suite is large (about 4,300 tests, most of them database-backed). CI
+spreads it across 26 parallel jobs, each with its own database. Run end to end
+on one machine it takes hours, so you do not need to. Before pushing:
+
+```bash
+pnpm gates                                   # typecheck, lint, licence, release-note, plan and contract checks (a few minutes)
+pnpm exec vitest run tests/core/<area>.test.ts  # the test files for what you changed
+```
+
+Pass a test file or directory to `vitest run` to limit the run, and let CI run
+everything else. Run one database-backed test command per `TEST_DATABASE_URL`
+at a time. Two runs that share a database truncate each other's tables and
+fail with timeouts and missing rows that have nothing to do with your change.
+
 ## Licensing of contributions
 
 Inbound = outbound: contributions are accepted under Apache-2.0, the same
