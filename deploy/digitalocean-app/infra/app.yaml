@@ -37,6 +37,12 @@ services:
       - key: FREEHOLDER_STORAGE
         value: s3
         scope: RUN_TIME
+      # App Platform's ingress puts the client address in do-connecting-ip;
+      # its X-Forwarded-For holds the ingress, not the visitor
+      # (deploy/client-readiness.md).
+      - key: TRUSTED_CLIENT_IP_HEADER
+        value: do-connecting-ip
+        scope: RUN_TIME
       - key: BOOTSTRAP_SECRET
         scope: RUN_TIME
         type: SECRET

@@ -25,7 +25,7 @@ import { auditLog } from "@/core/events/schema";
 import { writeTimelineEvent } from "@/core/events";
 import { dispatchNow, enqueue } from "@/core/events/outbox";
 import type { TimelineEventInput } from "@/core/events";
-import { consume, rateLimitKey, type RateLimitPolicy } from "@/core/security/rate-limit";
+import { consume, rateLimitKey, TRUSTED_BACKSTOP_FACTOR, type RateLimitPolicy } from "@/core/security/rate-limit";
 import {
   enqueueJob,
   type EnqueuedJob,
@@ -308,6 +308,13 @@ export interface ServiceRateLimit extends RateLimitPolicy {
    * reaches so it is never the limit an ordinary visitor meets.
    */
   untrustedBackstop?: RateLimitPolicy;
+  /**
+   * The site-wide ceiling for anonymous callers whose address *was*
+   * validated. Defaults to `untrustedBackstop` × `TRUSTED_BACKSTOP_FACTOR`.
+   * It exists because validation rests on a platform behaving as documented,
+   * and because one client can still hold many addresses.
+   */
+  trustedBackstop?: RateLimitPolicy;
 }
 
 /**
@@ -523,9 +530,22 @@ async function enforceRateLimit<In extends z.ZodType, Out>(
   }
   // Only after the caller's own bucket allowed it (C11.10): a caller already
   // over their own limit must not also spend the ceiling everybody shares.
+  // Validated callers get a looser ceiling in a bucket of their own, never
+  // none: a header that turns out to be client-writable, or a client cycling
+  // its addresses, is still bounded.
   const backstop = def.rateLimit.untrustedBackstop;
-  if (backstop && actor.kind === "anonymous" && !actor.request?.trustedIp) {
-    const total = await consume(rateLimitKey(def.name, "untrusted-backstop"), backstop);
+  if (backstop && actor.kind === "anonymous") {
+    const trusted = Boolean(actor.request?.trustedIp);
+    const policy = trusted
+      ? (def.rateLimit.trustedBackstop ?? {
+          limit: backstop.limit * TRUSTED_BACKSTOP_FACTOR,
+          windowSeconds: backstop.windowSeconds,
+        })
+      : backstop;
+    const total = await consume(
+      rateLimitKey(def.name, trusted ? "trusted-backstop" : "untrusted-backstop"),
+      policy,
+    );
     if (!total.allowed) {
       throw new ServiceError("rate_limited", def.rateLimit.message, total.retryAfterSeconds);
     }
