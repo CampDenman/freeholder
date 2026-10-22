@@ -9839,11 +9839,19 @@ schema they inherit reads as a designed thing rather than an excavation.
   malformed entry at that position yields no trusted address. The App Platform
   spec sets `do-connecting-ip` and the Railway config sets `x-real-ip`, each as
   documented by the platform, so coupon guessing and the other per-client
-  limits are bounded there too. Render and Replit document no client-address
+  limits are bounded there too. Neither platform documents overwriting a
+  client-supplied value, so the site-wide backstop now applies to validated
+  anonymous callers as well (default ten times the unvalidated ceiling, its own
+  bucket, still counted only after the caller's own limit passes), and rate
+  limits key IPv6 clients on their /64 and IPv4-mapped IPv6 as IPv4 on both
+  paths, which also closes per-address rotation inside a /64 for the Caddy
+  recipes. Railway's CDN case (X-Real-IP becomes the CDN address) coarsens
+  per-client limits for that traffic; the backstop prevents a global lockout. Render and Replit document no client-address
   header or proxy depth, so their recipes still set none and the residual
   above remains open for them (`deploy/client-readiness.md` cites the sources).
   Regressions: `tests/core/bootstrap-security.test.ts` (header parsing:
   spoofed leftmost entries, malformed values, IPv6, hop counts),
+  `tests/core/rate-limit.test.ts` (trusted backstop, /64 and mapped keys),
   `tests/core/deploy-recipe.test.ts` (per-platform recipe values). Changeset
   `managed-platform-client-address.md`. **Latent risk:** `catalog.checkoutCart` accepts `couponCode` with no
   rate limit and resolves promotions as system; it is safe today only because

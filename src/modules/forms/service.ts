@@ -13,7 +13,7 @@
 // is one greppable call rather than a service that quietly trusts its caller.
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { consumeAccepted } from "@/core/security/rate-limit";
+import { clientNetwork, consumeAccepted } from "@/core/security/rate-limit";
 import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, getService, ServiceError } from "@/core/service";
@@ -573,7 +573,7 @@ export const submitForm = defineService({
     // Without a trusted proxy, throttle the validated address (or identical
     // anonymous answers); perimeter flood control remains the host's concern.
     const identity = ctx.actor.kind === "user" ? `user:${ctx.actor.userId}`
-      : ctx.actor.request?.trustedIp ?? emailFrom(fields, data)?.trim().toLowerCase()
+      : (ctx.actor.request?.trustedIp ? clientNetwork(ctx.actor.request.trustedIp) : undefined) ?? emailFrom(fields, data)?.trim().toLowerCase()
         ?? JSON.stringify(Object.entries(data).sort(([a], [b]) => a.localeCompare(b)));
     if (ctx.actor.kind !== "system") {
       const verdict = await consumeAccepted(ctx.tx, `forms.submit:${form.id}:${createHash("sha256").update(identity).digest("hex")}`, {

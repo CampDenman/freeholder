@@ -8,7 +8,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { login, registerOwner } from "@/core/auth/service";
-import { anonymousClientKey, consume, rateLimitKey, reset } from "@/core/security/rate-limit";
+import { anonymousClientKey, clientNetwork, consume, rateLimitKey, reset } from "@/core/security/rate-limit";
 import { defineService, ServiceError } from "@/core/service";
 import { z } from "zod";
 import {
@@ -20,6 +20,35 @@ import {
 } from "../helpers/spine";
 
 const OWNER_PASSWORD = "a-sufficiently-long-owner-password";
+
+describe("the client a rate limit counts (C11.10)", () => {
+  it("is the /64 for IPv6, however the address is written", () => {
+    expect(clientNetwork("2001:db8:1:2::1")).toBe("2001:db8:1:2::/64");
+    expect(clientNetwork("2001:0DB8:0001:0002:ffff:0:0:9")).toBe("2001:db8:1:2::/64");
+    expect(clientNetwork("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(clientNetwork("::1")).toBe("0:0:0:0::/64");
+    expect(clientNetwork("fe80::1%eth0")).toBe("fe80:0:0:0::/64");
+  });
+
+  it("is the IPv4 address an IPv4-mapped IPv6 address carries", () => {
+    expect(clientNetwork("::ffff:203.0.113.5")).toBe("203.0.113.5");
+    expect(clientNetwork("::FFFF:cb00:7105")).toBe("203.0.113.5");
+    expect(anonymousClientKey({ kind: "anonymous", request: { ip: "::ffff:203.0.113.5" } })).toBe(
+      "untrusted-ip:203.0.113.5",
+    );
+    expect(
+      anonymousClientKey({
+        kind: "anonymous",
+        request: { ip: "203.0.113.1", trustedIp: "::ffff:192.0.2.7" },
+      }),
+    ).toBe("ip:192.0.2.7");
+  });
+
+  it("leaves IPv4 and anything unparseable as it is", () => {
+    expect(clientNetwork("192.0.2.1")).toBe("192.0.2.1");
+    expect(clientNetwork("unknown")).toBe("unknown");
+  });
+});
 
 describe.runIf(hasDatabase)("rate limiting", () => {
   beforeEach(async () => {
@@ -169,6 +198,61 @@ describe.runIf(hasDatabase)("rate limiting", () => {
     it("prefers the validated address when the deployment provides one", () => {
       expect(anonymousClientKey(from("203.0.113.1", "192.0.2.7"))).toBe("ip:192.0.2.7");
       expect(anonymousClientKey(from("203.0.113.1"))).toBe("untrusted-ip:203.0.113.1");
+    });
+
+    it("still bounds validated callers, with a higher ceiling of their own", async () => {
+      // Default: ten times the untrusted ceiling (5), counted separately.
+      for (let index = 0; index < 50; index += 1) {
+        await probe.call({}, from("203.0.113.200", `192.0.2.${index + 1}`));
+      }
+      expect(
+        (await failure(probe.call({}, from("203.0.113.200", "192.0.2.99")))).code,
+      ).toBe("rate_limited");
+      // The untrusted bucket was not spent by any of that.
+      await expect(probe.call({}, from("198.51.100.1"))).resolves.toEqual({ ok: true });
+    });
+
+    it("counts a validated caller against its own limit before the shared ceiling", async () => {
+      const tight = defineService({
+        name: "test.trustedCeiling",
+        summary: "Rate-limit probe.",
+        kind: "query",
+        permission: "public",
+        input: z.object({}),
+        output: z.object({ ok: z.literal(true) }),
+        rateLimit: {
+          limit: 2,
+          windowSeconds: 60,
+          subject: (_input, actor) => anonymousClientKey(actor),
+          untrustedBackstop: { limit: 1, windowSeconds: 60 },
+          trustedBackstop: { limit: 3, windowSeconds: 60 },
+          message: "Slow down.",
+        },
+        handler: async () => ({ ok: true as const }),
+      });
+      // One client over its own limit spends two of the three.
+      for (let index = 0; index < 6; index += 1) {
+        await tight.call({}, from("203.0.113.9", "192.0.2.50")).catch(() => undefined);
+      }
+      await expect(tight.call({}, from("203.0.113.9", "192.0.2.51"))).resolves.toEqual({ ok: true });
+      expect((await failure(tight.call({}, from("203.0.113.9", "192.0.2.52")))).code).toBe(
+        "rate_limited",
+      );
+    });
+
+    it("counts an IPv6 /64 as one client, trusted or not", async () => {
+      await probe.call({}, from("198.51.100.5", "2001:db8:1:2::1"));
+      await probe.call({}, from("198.51.100.5", "2001:db8:1:2:ffff:ffff:ffff:9"));
+      expect(
+        (await failure(probe.call({}, from("198.51.100.5", "2001:db8:1:2::abcd")))).code,
+      ).toBe("rate_limited");
+      await expect(probe.call({}, from("198.51.100.5", "2001:db8:1:3::1"))).resolves.toEqual({
+        ok: true,
+      });
+
+      await probe.call({}, from("2001:db8:9:9::1"));
+      await probe.call({}, from("2001:db8:9:9::2"));
+      expect((await failure(probe.call({}, from("2001:db8:9:9::3")))).code).toBe("rate_limited");
     });
   });
 
