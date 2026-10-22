@@ -53,7 +53,7 @@ export default async function PortalSubscriptionPage({
 
   const [rooms, offered] = await Promise.all([
     myRecords.call({ section: "subscriptions", limit: 100 }, actor),
-    listOfferedPlans.call({}, actor).catch(() => []),
+    listOfferedPlans.call({ subscriptionId: id }, actor).catch(() => []),
   ]);
   const record = rooms[0]?.records.find((each) => each.id === id);
   if (!record) notFound();

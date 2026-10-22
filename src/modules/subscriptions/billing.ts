@@ -22,9 +22,11 @@ import {
   cancelSubscription,
   keepAccess,
   periodEnd,
+  planSeller,
   priceFor,
   raiseInvoice,
   record,
+  selfServePlans,
   subscribe,
 } from "./service";
 
@@ -581,7 +583,14 @@ const applyPlanChange = defineService({
   summary: "Record a plan change locally, raising a proration invoice when the plan says to.",
   kind: "mutation",
   permission: "scoped",
-  input: planChangeInput,
+  input: planChangeInput.extend({
+    /**
+     * A customer's own change never grants a dearer plan ahead of payment:
+     * when the switch would cost money now, it waits for the period end and
+     * the renewal invoice bills it like any other period (C11.10).
+     */
+    holdUpgradeToPeriodEnd: z.boolean().default(false),
+  }),
   output: planChangeOutput,
   handler: async (input, ctx) => {
     const [subscription] = await ctx.tx
@@ -637,8 +646,24 @@ const applyPlanChange = defineService({
       .limit(1);
     const nextVariantId = nextVariant?.id ?? subscription.productVariantId;
     const newPrice = await priceFor(ctx, { ...subscription, productVariantId: nextVariantId });
-    const newMinor = "refused" in newPrice ? 0 : newPrice.amountMinor;
-    if (fromPlan.proration === "none") {
+    if ("refused" in newPrice) {
+      // Never schedule or prorate against a price of zero standing in for
+      // "not priced in this currency".
+      throw new ServiceError("conflict", "That plan is not priced in this subscription's currency.");
+    }
+    const newMinor = newPrice.amountMinor;
+    const oldPrice = await priceFor(ctx, subscription);
+    const deferUpgrade =
+      input.holdUpgradeToPeriodEnd &&
+      ("refused" in oldPrice ||
+        proratedDifference(
+          oldPrice.amountMinor,
+          newMinor,
+          subscription.currentPeriodStart,
+          subscription.currentPeriodEnd,
+          new Date(),
+        ) > 0);
+    if (fromPlan.proration === "none" || deferUpgrade) {
       await ctx.tx
         .update(subscriptions)
         .set({ pendingPlanId: toPlan.id })
@@ -655,10 +680,10 @@ const applyPlanChange = defineService({
         providerRef: subscription.providerRef,
         amountMinor: newMinor,
         ...schedule,
+        proration: "none" as const,
       };
     }
-    const oldPrice = await priceFor(ctx, subscription);
-    if ("refused" in oldPrice || "refused" in newPrice) {
+    if ("refused" in oldPrice) {
       throw new ServiceError("conflict", "Both plans must be priced in this currency to prorate.");
     }
     const net = proratedDifference(
@@ -782,7 +807,7 @@ const assertOwnSubscription = defineService({
       throw new ServiceError("permission", "Sign in to change your plan.");
     }
     const [subscription] = await ctx.tx
-      .select({ id: subscriptions.id, contactId: subscriptions.contactId })
+      .select({ id: subscriptions.id, contactId: subscriptions.contactId, planId: subscriptions.planId })
       .from(subscriptions)
       .where(eq(subscriptions.id, input.id))
       .limit(1);
@@ -795,6 +820,10 @@ const assertOwnSubscription = defineService({
       .limit(1);
     if (!owner || owner.id !== subscription.contactId) {
       throw new ServiceError("not_found", "There is no such subscription.");
+    }
+    const offered = await selfServePlans(ctx, await planSeller(ctx, subscription.planId));
+    if (!offered.some((plan) => plan.id === input.planId)) {
+      throw new ServiceError("conflict", "That plan is not available to choose.");
     }
     return input;
   },
@@ -810,7 +839,10 @@ export const changeMyPlan = defineOrchestratedService({
   output: planChangeOutput,
   handler: async (input, actor) => {
     const allowed = await assertOwnSubscription.call(input, actor);
-    const applied = await applyPlanChange.call(allowed, { kind: "system" });
+    const applied = await applyPlanChange.call(
+      { ...allowed, holdUpgradeToPeriodEnd: true },
+      { kind: "system" },
+    );
     await syncProviderAfterPlanChange(applied, actor);
     if (applied.billingMode === "platform" && applied.invoiceId) {
       await chargePlatformInvoice.call(

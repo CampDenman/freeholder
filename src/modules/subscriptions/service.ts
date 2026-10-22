@@ -21,7 +21,7 @@
 // never edited: `status` says where a subscription is and the events say how
 // it got there, which is the only one of the two that can answer "why did this
 // customer stop paying in March".
-import { and, asc, desc, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, row, timestamp, uuid as uuidSchema } from "@/core/contract";
@@ -476,20 +476,79 @@ export const listPlans = defineService({
   },
 });
 
+/**
+ * Plans a customer may choose for themselves: the same rule as public signup
+ * (§C9.38) — an active plan on an active, public product with a live default
+ * variant, sold by the same seller as the plan they are leaving. Hidden,
+ * staff-only and other sellers' plans are never offered or accepted (C11.10).
+ */
+export async function selfServePlans(
+  ctx: ServiceContext,
+  sellerUserId: string | null,
+): Promise<Array<typeof plans.$inferSelect>> {
+  const { sellerCanSell } = await import("@/modules/catalog/market");
+  if (!(await sellerCanSell(ctx, sellerUserId))) return [];
+  const rows = await ctx.tx
+    .select({ plan: plans })
+    .from(plans)
+    .innerJoin(products, eq(products.id, plans.productId))
+    .innerJoin(
+      productVariants,
+      and(
+        eq(productVariants.productId, products.id),
+        eq(productVariants.isDefault, true),
+        eq(productVariants.status, "active"),
+      ),
+    )
+    .where(
+      and(
+        eq(plans.status, "active"),
+        eq(products.status, "active"),
+        eq(products.visibility, "public"),
+        sellerUserId === null ? isNull(products.sellerUserId) : eq(products.sellerUserId, sellerUserId),
+      ),
+    )
+    .orderBy(desc(plans.createdAt))
+    .limit(200);
+  return rows.map((entry) => entry.plan);
+}
+
+/** The seller behind a plan: null for the site's own plans. */
+export async function planSeller(ctx: ServiceContext, planId: string): Promise<string | null> {
+  const [found] = await ctx.tx
+    .select({ sellerUserId: products.sellerUserId })
+    .from(plans)
+    .innerJoin(products, eq(products.id, plans.productId))
+    .where(eq(plans.id, planId))
+    .limit(1);
+  return found?.sellerUserId ?? null;
+}
+
 export const listOfferedPlans = defineService({
   name: "subscriptions.listOffered",
   summary: "Plans a customer may move to from the portal.",
   kind: "query",
   permission: "authenticated",
-  input: z.object({}),
+  input: z.object({
+    /** The customer's own subscription; its seller decides which plans are offered. */
+    subscriptionId: uuidSchema.optional(),
+  }),
   output: listed(planRow),
-  handler: async (_input, ctx) =>
-    ctx.tx
-      .select()
-      .from(plans)
-      .where(eq(plans.status, "active"))
-      .orderBy(desc(plans.createdAt))
-      .limit(200),
+  handler: async (input, ctx) => {
+    let sellerUserId: string | null = null;
+    if (input.subscriptionId) {
+      if (ctx.actor.kind !== "user") return [];
+      const [own] = await ctx.tx
+        .select({ planId: subscriptions.planId })
+        .from(subscriptions)
+        .innerJoin(contacts, eq(contacts.id, subscriptions.contactId))
+        .where(and(eq(subscriptions.id, input.subscriptionId), eq(contacts.userId, ctx.actor.userId)))
+        .limit(1);
+      if (!own) return [];
+      sellerUserId = await planSeller(ctx, own.planId);
+    }
+    return selfServePlans(ctx, sellerUserId);
+  },
 });
 
 /* -------------------------------------------------------- subscribing */

@@ -7404,7 +7404,7 @@ export interface ServiceCatalog {
     output: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }[];
   };
   "subscriptions.listOffered": {
-    input: Record<string, never>;
+    input: { subscriptionId?: string };
     output: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; [key: string]: unknown }[];
   };
   "subscriptions.listPlans": {
