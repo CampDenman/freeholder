@@ -16,6 +16,7 @@ import { contacts, customerMagicLinks, timelineEvents } from "@/core/contacts/sc
 import { mergeContacts } from "@/core/contacts/service";
 import { db } from "@/core/db";
 import { resetEnvForTests } from "@/core/env";
+import { ready } from "@/core/runtime";
 import { auditLog } from "@/core/events/schema";
 import { businessProfile } from "@/core/settings/schema";
 import { sweepCustomerMagicLinks } from "@/core/jobs/core-jobs";
@@ -113,6 +114,20 @@ describe.runIf(hasDatabase)("customer magic-link lifecycle", { timeout: 30_000 }
     expect(rows[0]?.tokenHash).not.toBe(token);
     expect(JSON.stringify(rows)).not.toContain(token);
     expect(JSON.stringify(await db().select().from(auditLog))).not.toContain(token);
+  });
+
+  it("limits mail per recipient even when another flow composes the request (C11.10)", async () => {
+    await ready();
+    await createContact();
+    // Composition (checkout's email proof) passes its transaction, which
+    // skips the declared per-call limit; the recipient limit must still hold.
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      await db().transaction((tx) =>
+        requestCustomerMagicLink.call({ email: EMAIL }, ANONYMOUS, { tx, queued: [] }),
+      );
+    }
+    const issued = await db().select().from(customerMagicLinks);
+    expect(issued).toHaveLength(5);
   });
 
   it("renders the magic-link template and URL from Contact.preferred_locale", async () => {

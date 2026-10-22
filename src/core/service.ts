@@ -301,6 +301,13 @@ export interface ServiceRateLimit extends RateLimitPolicy {
   subject: (input: never, actor: Actor) => string | undefined;
   /** Message shown when the limit is hit. Written for a person, not a log. */
   message: string;
+  /**
+   * C11.10: a site-wide ceiling for anonymous callers whose address the
+   * deployment has not validated. Their per-caller key can be forged, so this
+   * one bucket bounds the total; it is set well above what honest traffic
+   * reaches so it is never the limit an ordinary visitor meets.
+   */
+  untrustedBackstop?: RateLimitPolicy;
 }
 
 /**
@@ -513,6 +520,15 @@ async function enforceRateLimit<In extends z.ZodType, Out>(
       def.rateLimit.message,
       verdict.retryAfterSeconds,
     );
+  }
+  // Only after the caller's own bucket allowed it (C11.10): a caller already
+  // over their own limit must not also spend the ceiling everybody shares.
+  const backstop = def.rateLimit.untrustedBackstop;
+  if (backstop && actor.kind === "anonymous" && !actor.request?.trustedIp) {
+    const total = await consume(rateLimitKey(def.name, "untrusted-backstop"), backstop);
+    if (!total.allowed) {
+      throw new ServiceError("rate_limited", def.rateLimit.message, total.retryAfterSeconds);
+    }
   }
 }
 

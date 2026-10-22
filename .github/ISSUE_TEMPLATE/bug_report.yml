@@ -1,0 +1,56 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+name: Bug report
+description: Something in Freeholder does not work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Security problems go to the private
+        vulnerability report instead (see SECURITY.md). Please use fictional
+        data in anything you paste here.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to …
+        2. Click …
+        3. See …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Freeholder version or commit
+      placeholder: 0.2.0-beta.3, or a commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Where it runs
+      options:
+        - Docker self-host
+        - DigitalOcean droplet recipe
+        - Replit
+        - Render
+        - Local development
+        - The public demo
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Remove secrets, tokens and personal data first.
+      render: text

@@ -82,16 +82,7 @@ const STORAGE_METHODS = new Set(["put", "delete", "get", "head", "readRange", "s
  * Temporary, and only for work already in flight elsewhere. Every entry needs
  * the PR that removes it; nothing else may be added here to make the gate pass.
  */
-const ALLOWLIST = new Map<string, string>([
-  [
-    "src/modules/invoicing/payment-provider-service.ts",
-    "fixed in the payment-provider-boundary PR; remove when it merges",
-  ],
-  [
-    "src/modules/invoicing/pos-service.ts",
-    "fixed in the payment-provider-boundary PR; remove when it merges",
-  ],
-]);
+const ALLOWLIST = new Map<string, string>([]);
 
 function isFunction(node: ts.Node | undefined): node is FunctionNode {
   return Boolean(

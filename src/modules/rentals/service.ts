@@ -24,15 +24,17 @@ import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
-import { calendars } from "@/core/scheduling/schema";
+import { bookings, calendars } from "@/core/scheduling/schema";
 import { productVariants, products } from "@/modules/catalog/schema";
 import {
   defineService,
   getService,
+  permits,
   ServiceError,
   type Actor,
   type ServiceContext,
 } from "@/core/service";
+import { anonymousClientKey, consumeAccepted, rateLimitKey } from "@/core/security/rate-limit";
 import {
   DAMAGE_POLICIES,
   RENTAL_STATUSES,
@@ -313,6 +315,34 @@ export const quoteHire = defineService({
   },
 });
 
+/** Hire requests one email address may make per hour. */
+const HIRE_REQUEST_LIMIT = { limit: 5, windowSeconds: 60 * 60 } as const;
+/**
+ * Per client network address — validated when the deployment provides one,
+ * forwarded otherwise. Looser than the email limit because several honest
+ * people can share an address; it is what stops one caller cycling emails.
+ */
+const HIRE_CLIENT_LIMIT = { limit: 20, windowSeconds: 60 * 60 } as const;
+
+async function throttleRequests(ctx: ServiceContext, email: string): Promise<void> {
+  const keys: Array<[string, typeof HIRE_REQUEST_LIMIT | typeof HIRE_CLIENT_LIMIT]> = [
+    [`email:${email}`, HIRE_REQUEST_LIMIT],
+  ];
+  if (ctx.actor.request?.trustedIp || ctx.actor.request?.ip) {
+    keys.push([anonymousClientKey(ctx.actor), HIRE_CLIENT_LIMIT]);
+  }
+  for (const [key, policy] of keys) {
+    const verdict = await consumeAccepted(ctx.tx, rateLimitKey("rentals.reserve", key), policy);
+    if (!verdict.allowed) {
+      throw new ServiceError(
+        "rate_limited",
+        "That is a lot of hire requests at once. Try again later, or contact the business.",
+        verdict.retryAfterSeconds,
+      );
+    }
+  }
+}
+
 export const reserveHire = defineService({
   name: "rentals.reserve",
   summary: "Hold a thing for somebody, on its own calendar.",
@@ -340,6 +370,15 @@ export const reserveHire = defineService({
       throw new ServiceError("validation", "A hire ends after it starts.");
     }
     const terms = await termsForVariant(ctx, input.variantId);
+
+    // C11.10: a public door into a calendar. Whoever can hand the thing over
+    // reserves it outright; anybody else — a visitor, a customer — makes a
+    // *request*, which still holds the time (the exclusion constraint counts
+    // requested bookings) but is something the owner confirms rather than a
+    // commitment a stranger made on their behalf. Requests are bounded per
+    // address and per validated client, counted in this transaction.
+    const staff = permits(ctx.actor, "scoped", "rentals.handOver", "mutation");
+    if (!staff) await throttleRequests(ctx, input.contact.email);
 
     const quoted = (await ctx.callAsSystem(getService("rentals.quote"), {
       variantId: input.variantId,
@@ -369,7 +408,7 @@ export const reserveHire = defineService({
       ).toISOString(),
       endsAt: new Date(dueAt.getTime() + terms.bufferAfterHours * 3_600_000).toISOString(),
       source: "site",
-      status: "confirmed",
+      status: staff ? "confirmed" : "requested",
       notes: input.notes ?? null,
     })) as { id: string; contactId: string };
 
@@ -417,10 +456,34 @@ export const handOver = defineService({
   input: z.object({
     id,
     condition: z.string().trim().max(2_000).nullish(),
+    /**
+     * Passed to `bookings.setStatus` when hand-over confirms a visitor's
+     * request: the owner's statement that an outstanding intake or waiver was
+     * met another way (signed on paper at the counter). Never implied.
+     */
+    overrideRequirements: z.boolean().default(false),
   }),
   output: agreementRow,
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
+    // Waiving intake or a waiver is the owner's own statement, so it carries
+    // `bookings.setStatus`'s rule (not agent-callable, booking authority):
+    // only a person in a signed-in session who may set booking status. The
+    // confirmation below is elevated, so the check has to happen here.
+    if (
+      input.overrideRequirements &&
+      !(
+        ctx.actor.kind === "user" &&
+        !ctx.actor.keyScopes &&
+        ctx.actor.sessionId &&
+        permits(ctx.actor, "scoped", "bookings.setStatus", "mutation")
+      )
+    ) {
+      throw new ServiceError(
+        "permission",
+        "Only a signed-in person who manages bookings can confirm a hire with intake or a waiver outstanding.",
+      );
+    }
     const [agreement] = await ctx.tx
       .select()
       .from(rentalAgreements)
@@ -432,6 +495,26 @@ export const handOver = defineService({
         "conflict",
         `A hire that is ${agreement.status} cannot go out again.`,
       );
+    }
+    // A visitor's hire was booked as a request (C11.10). Handing the thing
+    // over is the owner accepting it, so the booking is confirmed here unless
+    // they already confirmed it from the calendar. Confirmation keeps the
+    // booking layer's rule (§4.4): outstanding intake or waiver refuses it
+    // unless the owner says it was met. Hire bookings carry no service
+    // offering today, so there is normally nothing outstanding.
+    if (agreement.bookingId) {
+      const [booking] = await ctx.tx
+        .select({ status: bookings.status })
+        .from(bookings)
+        .where(eq(bookings.id, agreement.bookingId))
+        .limit(1);
+      if (booking?.status === "requested") {
+        await ctx.callAsSystem(getService("bookings.setStatus"), {
+          id: agreement.bookingId,
+          status: "confirmed",
+          overrideRequirements: input.overrideRequirements,
+        });
+      }
     }
 
     const [out] = await ctx.tx

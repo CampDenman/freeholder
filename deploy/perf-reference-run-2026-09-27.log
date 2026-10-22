@@ -6,7 +6,7 @@ Repo commit:     204f4f7 (origin/main, branch test/c1111-reference-acceptance)
 Budget source:   MASTER.md §15.1 (13 surfaces)
 
 TARGET HOST (provisioned before this run; not recreated)
-  Droplet:       freeholder-ref, ID 604232042, DigitalOcean nyc3
+  Droplet:       freeholder-ref, ID <source-droplet-id>, DigitalOcean nyc3
   Size:          s-1vcpu-1gb (1 vCPU / 1 GB — the $6 §15.1 target)
   OS:            ubuntu-24-04
   Deploy recipe: deploy/digitalocean-droplet/ (app + db only; caddy not
@@ -25,7 +25,7 @@ MEASUREMENT PATH (method adaptation — remote target, stated per the brief)
     `docker compose -f /opt/freeholder/compose.yml exec`.
   - Tunnels in place before the run:
       ssh -i ~/.ssh/freeholder_do -N -L 55433:172.18.0.2:5432 \
-          -L 3001:172.18.0.3:3000 root@104.131.118.196 &
+          -L 3001:172.18.0.3:3000 root@<source-droplet-ip> &
   - Local psql client: /tmp/pg-bin/postgresql-16.6.0-x86_64-unknown-linux-gnu/bin/psql
 
 OWNER SESSION (throwaway box; no real secret reused)
@@ -114,7 +114,7 @@ the measurement host; each request a fresh TCP connection through the SSH
 tunnel. Session cookie = the real login session established above.
 
 Tunnel overhead documentation (measured, not estimated):
-  ping 104.131.118.196 x10: rtt min/avg/max/mdev = 118.073/164.335/250.890/40.815 ms
+  ping <source-droplet-ip> x10: rtt min/avg/max/mdev = 118.073/164.335/250.890/40.815 ms
   Tunnel floor = /api/health/live through the tunnel, identical curl discipline,
   11 samples after warm-up:
     raw-samples-seconds: 0.437215 0.457391 0.319581 0.364770 0.317084 0.373439

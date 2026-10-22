@@ -445,8 +445,10 @@ Customer access is a session tied to the invoice contact or an invoice-specific
 HMAC link (`SESSION_SECRET`, bound to the contact and issue date). Paid, void
 and refunded invoices retire the email link; the customer's session retains
 read-only history. `invoicing.send` queues that link in the encrypted mail
-outbox. Hosted checkout commits its payment attempt before provider I/O and
-attaches the provider response in a fresh authorized transaction. Repeated
+outbox. Hosted checkout (customer, owner and API alike), capture, provider refunds
+and in-person Terminal takes commit their payment or refund attempt before
+provider I/O and apply the provider response in a fresh authorized
+transaction. Repeated
 requests reuse the outstanding attempt; a timeout cannot create a new charge.
 The provider return has a separate seven-day capability exposing only payment
 status, currency and amount. A redirect never settles money: provider checks
@@ -9680,6 +9682,74 @@ schema they inherit reads as a designed thing rather than an excavation.
   Evidence: `agents-approvals.test.ts`, `referrals-commission.test.ts`,
   `sms.test.ts`, `media-capture.test.ts`, `builder-code-lane.test.ts`,
   `attestations.test.ts`, `merge-completeness.test.ts`.
+  Audit follow-up 2026-10-21 (web and auth): `/api/mcp` requires
+  `application/json`, refuses a foreign `Origin` unless the request carries
+  its own `Authorization` credential, and applies the CSRF check to
+  cookie-authenticated calls. Pasted `html_tag` ad creatives no longer render
+  in site pages or receive the CSP nonce; they run in an opaque-origin frame
+  (`/api/ads/creative/[id]`, iframe `sandbox` plus CSP `sandbox`, no
+  `allow-same-origin`), and a house-line tag waits for explicit review.
+  Step-up, security-action and theme redirects share `safeLocalPath`, which
+  refuses backslash, control-character, encoded and protocol-relative forms.
+  `auth.changePassword` limits per account and refuses personal API keys,
+  which carry no step-up state. Customer magic links and newsletter
+  confirmations are limited per recipient inside the transaction, so composed
+  calls (storefront checkout) are bounded too; a pending subscription is not
+  re-mailed within ten minutes, and visitor-submitted consent evidence is
+  marked `provenance: visitor-submitted`. Share, popup and handle-availability
+  limits key on the validated `trustedIp` when configured, else on the
+  forwarded address, never one shared bucket; a high site-wide
+  `untrustedBackstop` bounds forged addresses. The droplet, host-updater and
+  playground Caddy recipes overwrite `X-Freeholder-Client-Ip` and set
+  `TRUSTED_CLIENT_IP_HEADER` (app port unpublished); the plain compose recipe
+  and managed platforms set none (`deploy/client-readiness.md`).
+  `safeLocalPath` also refuses dot segments (raw or `%2e`) and any resolved
+  result beginning `//` or `/\`. `ads.creativeTag` is system-only.
+  `rentals.reserve` books a non-staff hire as a `requested` booking, which
+  hand-over confirms through `bookings.setStatus` (requirements still apply
+  unless the owner passes `overrideRequirements`), and limits requests per
+  email and per client address; `events.register` caps a public registration
+  at ten seats and limits registrations per email and per client address.
+  Regressions: `tests/core/mcp.test.ts`, `tests/core/rate-limit.test.ts`,
+  `tests/core/deploy-recipe.test.ts`, `tests/core/internal-services.test.ts`,
+  `tests/modules/ads-third-party.test.ts`, `tests/core/security-headers.test.ts`,
+  `tests/core/customer-return-path.test.ts`, `tests/core/change-password.test.ts`,
+  `tests/core/customer-magic-links.test.ts`, `tests/core/newsletters.test.ts`,
+  `tests/modules/share.test.ts`, `tests/modules/popups.test.ts`,
+  `tests/core/rentals.test.ts`, `tests/core/events.test.ts`. Changeset
+  `web-auth-hardening.md`. Without `TRUSTED_CLIENT_IP_HEADER`, per-client
+  limits can be evaded by forging the forwarded address, up to the site-wide
+  backstop; this repair is not independent review evidence.
+  Audit follow-up 2026-10-21 (payment provider boundary): owner/API hosted
+  checkout, checkout capture, provider refunds, saved-method revocation and
+  Stripe Terminal collection/refunds called their provider inside a service
+  transaction, so a rollback after the provider acted could move money with
+  no ledger row. Each is now a `defineOrchestratedService`: the attempt or
+  refund reservation commits under its idempotency key first, the provider
+  runs with no transaction open, and its answer is applied in a fresh one.
+  A crash or uncertain provider error in between leaves a `created` attempt.
+  For 23 hours (inside the provider's 24-hour idempotency window) a same-key
+  retry replays the request and converges. After that the retry is refused
+  and the attempt needs owner reconciliation. Hosted payments are also matched
+  by the webhook and listed by `reconcilePaymentProviders`. Terminal takes
+  are listed by `reconcileInPersonPayments`. Both views gain
+  `refundsNeedingReview`, which lists open refunds and refunds the provider
+  reports as already refunded (`provider_already_refunded`, not a plain
+  refusal). In-person `balanced` is false while any are listed. A failed,
+  cancelled or settled attempt is never sent to the provider again under its
+  key. Only allow-listed provider codes count as a definite refusal, which is
+  recorded as failed and releases any reservation. A 409 same-key conflict, a
+  busy reader or an unknown 4xx keeps the attempt open, and `AdapterError` now
+  carries the provider's code. Checkout is attached only while the invoice is
+  still open for that amount. Orchestrator phases are `permission: "system"`
+  services, called as the system after the public service has authorized the
+  caller. Each records the initiator in its audit input (`initiatedBy`), so an
+  API key scoped to the public service alone still works. Public service
+  names and inputs are unchanged. Regressions in
+  `tests/core/payment-provider-service.test.ts` and
+  `tests/core/invoicing-pos.test.ts` failed before each repair.
+  Changeset `payment-provider-boundary.md`. This repair is not independent
+  review evidence.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.

@@ -52,7 +52,7 @@ describe.runIf(hasDatabase)("changing your own password", () => {
     role: "owner",
     grants: [{ module: "*", access: "manage" }],
   } as const;
-  const actor = () => ({ ...asOwner, userId: ownerId });
+  const actor = () => ({ ...asOwner, userId: ownerId, sessionId: "browser-session" });
 
   it("replaces the password, and the old one stops working", async () => {
     const result = await changePassword.call(
@@ -135,6 +135,35 @@ describe.runIf(hasDatabase)("changing your own password", () => {
       ),
     );
     expect(error.code).toBe("permission");
+  });
+
+  it("refuses a personal API key, which has no session to step up (C11.10)", async () => {
+    const keyed = { ...asOwner, userId: ownerId, keyScopes: ["*"] };
+    const error = await failure(
+      changePassword.call({ currentPassword: OLD, newPassword: NEW }, keyed),
+    );
+    expect(error.code).toBe("permission");
+    await expect(
+      login.call({ email: "owner@example.test", password: OLD }, ANONYMOUS),
+    ).resolves.toBeDefined();
+  });
+
+  it("throttles each account on its own, not every account together (C11.10)", async () => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await failure(changePassword.call({ currentPassword: "wrong-guess", newPassword: NEW }, actor()));
+    }
+    const limited = await failure(
+      changePassword.call({ currentPassword: "wrong-guess", newPassword: NEW }, actor()),
+    );
+    expect(limited.code).toBe("rate_limited");
+    // Somebody else's attempts are not counted against this person.
+    const other = await failure(
+      changePassword.call(
+        { currentPassword: OLD, newPassword: NEW },
+        { ...asOwner, userId: "00000000-0000-4000-8000-0000000000aa", sessionId: "other-session" },
+      ),
+    );
+    expect(other.code).not.toBe("rate_limited");
   });
 
   it("never writes either password to the audit trail", async () => {

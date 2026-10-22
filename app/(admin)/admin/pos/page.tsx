@@ -123,9 +123,29 @@ export default async function PointOfSalePage({
       <Card>
         <CardHeader title={t("pos.reconcile")} />
         <CardBody>
-          <p className="mb-3 text-sm">
-            {reconciliation.balanced ? t("pos.reconcile.ok") : t("pos.reconcile.open", { count: reconciliation.unsettled.length })}
-          </p>
+          {reconciliation.balanced ? (
+            <p className="mb-3 text-sm">{t("pos.reconcile.ok")}</p>
+          ) : null}
+          {reconciliation.unsettled.length > 0 ? (
+            <p className="mb-3 text-sm">{t("pos.reconcile.open", { count: reconciliation.unsettled.length })}</p>
+          ) : null}
+          {reconciliation.refundsNeedingReview.length > 0 ? (
+            <>
+              <p className="mb-2 text-sm">{t("pos.reconcile.refunds", { count: reconciliation.refundsNeedingReview.length })}</p>
+              <ul className="mb-3 grid list-none gap-2 p-0 text-sm">
+                {reconciliation.refundsNeedingReview.map((refund) => (
+                  <li key={refund.id} className="flex flex-wrap items-center gap-2">
+                    <Pill>{t("pos.refund")}</Pill>
+                    <span className="font-mono">{money(refund.amountMinor, refund.currency)}</span>
+                    <span>{refund.failureCode === "provider_already_refunded" ? t("pos.reconcile.alreadyRefunded") : refund.status}</span>
+                    <a href={`/admin/invoices/${refund.invoiceId}`} className="ms-auto font-semibold text-accent">
+                      {t("pos.reconcile.review")}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
           {takes.length === 0 ? (
             <p className="text-sm text-ink-muted">{t("pos.empty")}</p>
           ) : (
