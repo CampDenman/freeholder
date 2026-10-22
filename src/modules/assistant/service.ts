@@ -48,10 +48,13 @@ import { businessProfile } from "@/core/settings/schema";
 import { messages } from "@/core/messaging/schema";
 import { sessionForToken } from "@/core/messaging/chat";
 import { turnCostCents } from "@/core/agents/pricing";
+import type { AiGenerationResult } from "@/adapters/ai/types";
 import {
+  defineOrchestratedService,
   defineService,
   getService,
   ServiceError,
+  type Actor,
   type ServiceContext,
   type Tx,
 } from "@/core/service";
@@ -525,32 +528,67 @@ const answerResult = row({
 
 const OFF = { status: "off" as const, reply: null, action: null };
 
-export const answer = defineService({
-  name: "assistant.answer",
-  summary: "Answer the newest visitor message in one site chat, if the assistant is on.",
+/**
+ * What a claimed turn says until the model's answer is applied.
+ *
+ * The claim is the turn row itself, written before the provider is called, so
+ * a second click on the same visitor message finds it and stops. If the
+ * process dies between the claim and the apply, this is the honest record that
+ * remains: an attempt that did not finish, with its estimate still counted
+ * against the budget rather than forgotten.
+ */
+const PENDING_DETAIL = "The model call did not finish.";
+
+const notePlan = z.object({
+  title: z.string(),
+  body: z.string(),
+  sourceType: z.string(),
+  score: z.number(),
+});
+
+const answerPlan = z.object({
+  turnId: uuid,
+  messageId: uuid,
+  question: z.string(),
+  locale: z.string(),
+  system: z.string(),
+  asked: z.string(),
+  maxOutputTokens: z.number().int(),
+  price: z.object({
+    inputCentsPerMillion: z.number(),
+    outputCentsPerMillion: z.number(),
+  }),
+  notes: z.array(notePlan),
+  lastQuestion: z.string(),
+});
+
+const answerPrepared = z.union([
+  z.object({ done: answerResult }),
+  z.object({ plan: answerPlan }),
+]);
+
+/**
+ * Everything `assistant.answer` decides before the model, in one short
+ * transaction: every refusal is recorded here, and an allowed turn is claimed
+ * so the provider call that follows runs with no transaction open.
+ */
+const prepareAnswer = defineService({
+  name: "assistant.prepareAnswer",
+  summary: "Decide whether the assistant may answer, and claim the turn before the model runs.",
   kind: "mutation",
   permission: "public",
   writeClass: "message",
+  external: false,
+  agentCallable: false,
   input: z.object({ token: z.string().trim().min(32).max(200) }),
-  rateLimit: {
-    // A coarse gate in front of everything, consumed before the transaction
-    // opens. The owner's own limits are finer and live in the handler; this
-    // one exists so a script cannot make ten thousand transactions open.
-    limit: 30,
-    windowSeconds: 5 * 60,
-    // Hashed, because a rate-limit subject is stored in a table and a chat
-    // bearer is a credential. `messaging.postSiteChat` does the same.
-    subject: (input) => createHash("sha256").update(input.token, "utf8").digest("hex"),
-    message: "Too many assistant requests from this chat. Wait a few minutes.",
-  },
-  output: answerResult,
+  output: answerPrepared,
   handler: async (input, ctx) => {
     const startedAt = Date.now();
     const current = await readSettings(ctx.tx);
     // The off fallback, first and cheapest: no provider, no session lookup, no
     // row. An instance that never switched this on is an instance where this
     // service does nothing at all.
-    if (!current.enabled) return OFF;
+    if (!current.enabled) return { done: OFF };
 
     const session = await sessionForToken(ctx.tx, input.token);
 
@@ -566,7 +604,7 @@ export const answer = defineService({
       .orderBy(desc(messages.occurredAt), desc(messages.createdAt))
       .limit(1);
     if (!last || last.direction !== "inbound") {
-      return { status: "nothing_to_answer" as const, reply: null, action: null };
+      return { done: { status: "nothing_to_answer" as const, reply: null, action: null } };
     }
 
     // One attempt per visitor message, refusals included. A visitor clicking
@@ -578,7 +616,7 @@ export const answer = defineService({
       .where(eq(assistantTurns.messageId, last.id))
       .limit(1);
     if (existing) {
-      return { status: "already_attempted" as const, reply: null, action: null };
+      return { done: { status: "already_attempted" as const, reply: null, action: null } };
     }
 
     const base = {
@@ -617,7 +655,7 @@ export const answer = defineService({
         conversationId: session.conversationId,
         reason: "topic",
       });
-      return { status: "answered" as const, reply, action: null };
+      return { done: { status: "answered" as const, reply, action: null } };
     }
 
     const [business] = await ctx.tx
@@ -716,7 +754,7 @@ export const answer = defineService({
       });
       // Returned, not thrown. A throw would roll back the row that is the
       // only evidence this happened.
-      return { status: "refused" as const, reply: null, action: null };
+      return { done: { status: "refused" as const, reply: null, action: null } };
     }
 
     const resolution = assistantAdapter(current);
@@ -730,36 +768,139 @@ export const answer = defineService({
       });
       await noteError(ctx.tx, resolution.unconfigured);
       ctx.setSubject("conversation", session.conversationId);
-      return { status: "unconfigured" as const, reply: null, action: null };
+      return { done: { status: "unconfigured" as const, reply: null, action: null } };
     }
 
-    let generated;
-    try {
-      generated = await resolution.adapter.generate({
-        purpose: "site-assistant",
-        system,
-        input: asked,
-        maxOutputTokens: current.maxOutputTokens,
-        responseSchema: ASSISTANT_RESPONSE_SCHEMA,
-        idempotencyKey: `assistant.answer:${last.id}`,
-      });
-    } catch (error) {
-      // An adapter failure is an HTTP failure, not a database one, so this
-      // transaction is still healthy and the record of what happened commits.
-      const detail = error instanceof Error ? error.message : "The model could not be reached.";
-      await recordTurn(ctx, {
-        ...base,
+    // The claim. The unique message index makes a concurrent request for the
+    // same visitor message lose here rather than after paying for a second
+    // model call, and the estimate is held against the budget while the
+    // provider runs, so two visitors cannot both spend the last of it.
+    const [claimed] = await ctx.tx
+      .insert(assistantTurns)
+      .values({
+        conversationId: session.conversationId,
+        chatSessionId: session.id,
+        messageId: last.id,
         outcome: "failed",
-        detail,
+        detail: PENDING_DETAIL,
         provider: current.provider,
         model: current.model,
-      });
+        costCents: estimateCents,
+      })
+      .onConflictDoNothing()
+      .returning({ id: assistantTurns.id });
+    if (!claimed) {
+      return { done: { status: "already_attempted" as const, reply: null, action: null } };
+    }
+    return {
+      plan: {
+        turnId: claimed.id,
+        messageId: last.id,
+        question: last.body,
+        locale: session.locale,
+        system,
+        asked,
+        maxOutputTokens: current.maxOutputTokens,
+        price: verdict.price,
+        notes,
+        lastQuestion: transcript.at(-1)?.body ?? "",
+      },
+    };
+  },
+});
+
+const generatedAnswer = z.object({
+  text: z.string().optional(),
+  structured: z.unknown().optional(),
+  provider: z.string(),
+  model: z.string(),
+  usage: z.object({
+    inputTokens: z.number(),
+    outputTokens: z.number(),
+    totalTokens: z.number(),
+  }),
+});
+
+/**
+ * Everything `assistant.answer` does after the model, in a second short
+ * transaction. It re-reads the session, settings and scope grants, so a chat
+ * that ended or a scope switched off while the provider ran is honoured.
+ */
+const applyAnswer = defineService({
+  name: "assistant.applyAnswer",
+  summary: "Record a model's answer to a claimed assistant turn and say it to the visitor.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "message",
+  external: false,
+  agentCallable: false,
+  input: z.object({
+    token: z.string().trim().min(32).max(200),
+    plan: answerPlan,
+    startedAt: z.number(),
+    generated: generatedAnswer.nullable(),
+    failure: z.string().max(2_000).nullable(),
+  }),
+  output: answerResult,
+  handler: async (input, ctx) => {
+    const { plan } = input;
+    const session = await sessionForToken(ctx.tx, input.token);
+    const [turn] = await ctx.tx
+      .select()
+      .from(assistantTurns)
+      .where(eq(assistantTurns.id, plan.turnId))
+      .limit(1)
+      .for("update");
+    if (
+      !turn ||
+      turn.messageId !== plan.messageId ||
+      turn.chatSessionId !== session.id ||
+      turn.outcome !== "failed" ||
+      turn.detail !== PENDING_DETAIL
+    ) {
+      return { status: "already_attempted" as const, reply: null, action: null };
+    }
+    const current = await readSettings(ctx.tx);
+    const finish = async (values: {
+      outcome: AssistantTurnOutcome;
+      detail?: string | null;
+      provider?: string | null;
+      model?: string | null;
+      inputTokens?: number;
+      outputTokens?: number;
+      costCents?: number;
+      action?: string | null;
+      actionAllowed?: boolean | null;
+    }): Promise<void> => {
+      await ctx.tx
+        .update(assistantTurns)
+        .set({
+          outcome: values.outcome,
+          detail: values.detail?.slice(0, 1_000) ?? null,
+          provider: values.provider ?? turn.provider,
+          model: values.model ?? turn.model,
+          inputTokens: values.inputTokens ?? 0,
+          outputTokens: values.outputTokens ?? 0,
+          costCents: values.costCents ?? 0,
+          action: values.action ?? null,
+          actionAllowed: values.actionAllowed ?? null,
+          latencyMs: Date.now() - input.startedAt,
+        })
+        .where(eq(assistantTurns.id, turn.id));
+    };
+
+    const generated = input.generated;
+    if (!generated) {
+      // An adapter failure is an HTTP failure that happened with no
+      // transaction open; this one records it.
+      const detail = input.failure ?? "The model could not be reached.";
+      await finish({ outcome: "failed", detail });
       await noteError(ctx.tx, detail);
       ctx.setSubject("conversation", session.conversationId);
       return { status: "failed" as const, reply: null, action: null };
     }
 
-    const costCents = turnCostCents(verdict.price, generated.usage);
+    const costCents = turnCostCents(plan.price, generated.usage);
     const usage = {
       provider: generated.provider,
       model: generated.model,
@@ -772,8 +913,7 @@ export const answer = defineService({
     if (!parsed) {
       // Paid for and unusable. The cost is still recorded: a budget that only
       // counts the answers an owner liked is not a budget.
-      await recordTurn(ctx, {
-        ...base,
+      await finish({
         ...usage,
         outcome: "failed",
         detail: "The model did not answer in a shape this assistant can use.",
@@ -786,19 +926,23 @@ export const answer = defineService({
     // that is not in the retrieved notes never reaches the visitor.
     const sanitised = sanitizeReply(
       parsed.reply,
-      notes,
-      session.locale,
+      plan.notes,
+      plan.locale,
       current.contactFormPath,
     );
     let reply = sanitised.reply;
     let actionId = parsed.actionId;
     let actionArguments = parsed.actionArguments;
 
+    // Scope grants are re-read here rather than carried from before the
+    // model ran: an owner who switches an action off mid-answer wins.
+    const offered = await grantedActions(ctx.tx);
+
     // Escalation is also a setting. If the visitor asked about a topic the
     // owner flagged, we hand over when that action is granted, and we offer
     // the contact form either way. We never claim a person was asked if one
     // was not.
-    const escalateTopic = matchingTopic(last.body, current.escalateTopics);
+    const escalateTopic = matchingTopic(plan.question, current.escalateTopics);
     const canHandOver = offered.some((entry) => entry.id === "hand_to_a_person");
     let handedOver = false;
     if (escalateTopic && canHandOver && actionId !== "hand_to_a_person") {
@@ -807,7 +951,7 @@ export const answer = defineService({
     }
     if (escalateTopic) {
       const suffix = escalateSuffix(
-        session.locale,
+        plan.locale,
         current.contactFormPath,
         canHandOver,
       );
@@ -842,7 +986,7 @@ export const answer = defineService({
           // stops a chat window from filing a quote request as somebody else.
           contactName: contact?.name ?? "Website visitor",
           contactEmail: contact?.email ?? "",
-          question: transcript.at(-1)?.body ?? "",
+          question: plan.lastQuestion,
         },
       );
       actionAllowed = decision.allowed;
@@ -870,8 +1014,7 @@ export const answer = defineService({
       : actionAllowed === false
         ? "refused_scope"
         : "answered";
-    await recordTurn(ctx, {
-      ...base,
+    await finish({
       ...usage,
       outcome,
       detail:
@@ -888,9 +1031,9 @@ export const answer = defineService({
       await queueGap(ctx, {
         contactId: session.contactId,
         conversationId: session.conversationId,
-        messageId: last.id,
-        question: last.body,
-        locale: session.locale,
+        messageId: plan.messageId,
+        question: plan.question,
+        locale: plan.locale,
         reason: sanitised.invented ? "invented" : "unknown",
       });
     }
@@ -905,7 +1048,7 @@ export const answer = defineService({
     });
     ctx.queueEvent("assistant.replied", {
       conversationId: session.conversationId,
-      contactId: last.contactId,
+      contactId: session.contactId,
       action: takenAction,
     });
     return {
@@ -915,6 +1058,97 @@ export const answer = defineService({
     };
   },
 });
+
+/**
+ * Answer the newest visitor message (C9.21).
+ *
+ * An orchestrator: the model call can take seconds and must never hold a
+ * database transaction open while it does (MASTER.md §11). Decide-and-claim
+ * and apply are each one short transaction; the provider runs between them.
+ */
+export const answer = defineOrchestratedService({
+  name: "assistant.answer",
+  summary: "Answer the newest visitor message in one site chat, if the assistant is on.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "message",
+  input: z.object({ token: z.string().trim().min(32).max(200) }),
+  rateLimit: {
+    // A coarse gate in front of everything, consumed before any transaction
+    // opens. The owner's own limits are finer and live in the prepare phase;
+    // this one exists so a script cannot make ten thousand transactions open.
+    limit: 30,
+    windowSeconds: 5 * 60,
+    // Hashed, because a rate-limit subject is stored in a table and a chat
+    // bearer is a credential. `messaging.postSiteChat` does the same.
+    subject: (input) => createHash("sha256").update(input.token, "utf8").digest("hex"),
+    message: "Too many assistant requests from this chat. Wait a few minutes.",
+  },
+  output: answerResult,
+  handler: async (input, actor): Promise<z.output<typeof answerResult>> => {
+    const startedAt = Date.now();
+    const prepared = (await prepareAnswer.call(input, actor)) as z.output<
+      typeof answerPrepared
+    >;
+    if (!("plan" in prepared)) return prepared.done;
+    const { plan } = prepared;
+    // Settings are read again for the adapter only; the claim has already
+    // fixed every refusal. A key removed in between fails like any outage.
+    const resolution = await assistantResolution(actor);
+    let generated: AiGenerationResult | null = null;
+    let failure: string | null = null;
+    if ("unconfigured" in resolution) {
+      failure = resolution.unconfigured;
+    } else {
+      try {
+        generated = await resolution.adapter.generate({
+          purpose: "site-assistant",
+          system: plan.system,
+          input: plan.asked,
+          maxOutputTokens: plan.maxOutputTokens,
+          responseSchema: ASSISTANT_RESPONSE_SCHEMA,
+          idempotencyKey: `assistant.answer:${plan.messageId}`,
+        });
+      } catch (error) {
+        failure = error instanceof Error ? error.message : "The model could not be reached.";
+      }
+    }
+    return applyAnswer.call(
+      {
+        token: input.token,
+        plan,
+        startedAt,
+        generated: generated
+          ? {
+              text: generated.text,
+              structured: generated.structured,
+              provider: generated.provider,
+              model: generated.model,
+              usage: generated.usage,
+            }
+          : null,
+        failure,
+      },
+      actor,
+    );
+  },
+});
+
+const assistantSettingsSnapshot = defineService({
+  name: "assistant.settingsSnapshot",
+  summary: "Read the assistant settings an answer's provider call needs.",
+  kind: "query",
+  permission: "public",
+  external: false,
+  agentCallable: false,
+  input: z.object({}),
+  output: z.custom<AssistantSettings>((value) => typeof value === "object" && value !== null),
+  handler: async (_input, ctx) => readSettings(ctx.tx),
+});
+
+async function assistantResolution(actor: Actor) {
+  return assistantAdapter(await assistantSettingsSnapshot.call({}, actor));
+}
 
 const knowledgeRow = row({
   id: uuid,
@@ -1266,6 +1500,9 @@ export default [
   setScope,
   turns,
   answer,
+  prepareAnswer,
+  applyAnswer,
+  assistantSettingsSnapshot,
   saveKnowledge,
   knowledgeList,
   deleteKnowledge,

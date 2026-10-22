@@ -8,7 +8,7 @@
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { requireCartAccess } from "./cart-access";
+import { requireCartAccess, shopperClientKey } from "./cart-access";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { createNotification } from "@/core/notifications/service";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
@@ -16,7 +16,7 @@ import { registerContactPrivacySource } from "@/core/privacy/service";
 import { sendMail } from "@/core/mail/service";
 import { businessProfile } from "@/core/settings/schema";
 import { env } from "@/core/env";
-import { defineService, ServiceError, type Tx } from "@/core/service";
+import { defineOrchestratedService, defineService, permits, ServiceError, type Actor, type Tx } from "@/core/service";
 import { decimalToMinor } from "@/adapters/payments/currency";
 import {
   adjustCustomerBalance,
@@ -190,12 +190,24 @@ registerContactPrivacySource({
   },
 });
 
+/**
+ * One answer for every code that cannot be used right now — unknown,
+ * switched off, not started, ended or used up — so trying codes cannot tell
+ * which ones exist (C11.10).
+ */
+const COUPON_UNUSABLE = "That coupon code cannot be used.";
+
 async function loadCoupon(tx: Tx, code: string) {
   const [row] = await tx.select().from(coupons).where(eq(coupons.code, code)).limit(1);
-  if (!row || !row.active) throw new ServiceError("not_found", "That coupon is not here.");
   const now = Date.now();
-  if (row.startsAt && row.startsAt.getTime() > now) throw new ServiceError("validation", "That coupon is not active yet.");
-  if (row.endsAt && row.endsAt.getTime() < now) throw new ServiceError("validation", "That coupon has ended.");
+  if (
+    !row ||
+    !row.active ||
+    (row.startsAt && row.startsAt.getTime() > now) ||
+    (row.endsAt && row.endsAt.getTime() < now)
+  ) {
+    throw new ServiceError("not_found", COUPON_UNUSABLE);
+  }
   return row;
 }
 
@@ -206,7 +218,7 @@ async function assertRedeemable(tx: Tx, coupon: typeof coupons.$inferSelect, con
       .from(couponRedemptions)
       .where(eq(couponRedemptions.couponId, coupon.id));
     if (used.length >= coupon.maxRedemptions) {
-      throw new ServiceError("validation", "That coupon has been used up.");
+      throw new ServiceError("not_found", COUPON_UNUSABLE);
     }
   }
   const mine = await tx
@@ -277,13 +289,51 @@ export const listCoupons = defineService({
   handler: (_input, ctx) => ctx.tx.select().from(coupons).orderBy(desc(coupons.createdAt)).limit(200),
 });
 
-export const applyCouponToCart = defineService({
+/**
+ * Coupon guessing is bounded twice (C11.10): per shopper, keyed on the client
+ * address (only as trustworthy as the deploy's trusted client-IP header — see
+ * deploy/client-readiness.md), and per cart, which no forged address resets.
+ * New carts are themselves limited per shopper by `catalog.getOrCreateCart`.
+ * Staff who manage catalogue promotions see every code and are not limited.
+ */
+const COUPON_MESSAGE = "Too many coupon codes tried. Wait a few minutes and try again.";
+const COUPON_PER_SHOPPER = { limit: 20, windowSeconds: 10 * 60, message: COUPON_MESSAGE };
+const COUPON_PER_CART = { limit: 10, windowSeconds: 10 * 60, message: COUPON_MESSAGE };
+function couponLimited(actor: Actor): boolean {
+  return !permits(actor, "scoped", "catalog.listCoupons", "query");
+}
+
+const applyCouponInput = z.object({ cartId: id, cartToken: z.string().uuid().optional(), code: couponCode });
+const applyCouponOutput = z.object({ cartId: uuid, coupon: couponRow });
+
+export const applyCouponToCart = defineOrchestratedService({
   name: "catalog.applyCouponToCart",
   summary: "Attach one valid coupon to an open cart.",
   kind: "mutation",
   permission: "public",
-  input: z.object({ cartId: id, cartToken: z.string().uuid().optional(), code: couponCode }),
-  output: z.object({ cartId: uuid, coupon: couponRow }),
+  writeClass: "write",
+  rateLimit: {
+    ...COUPON_PER_SHOPPER,
+    subject: (_input, actor) => (couponLimited(actor) ? `coupon-try:${shopperClientKey(actor).key}` : undefined),
+  },
+  input: applyCouponInput,
+  output: applyCouponOutput,
+  handler: (input, actor) => applyCouponToCartApply.call(input, actor),
+});
+
+const applyCouponToCartApply = defineService({
+  name: "catalog.applyCouponToCartApply",
+  summary: "Attach one valid coupon to an open cart, counted against the cart's own limit.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  writeClass: "write",
+  rateLimit: {
+    ...COUPON_PER_CART,
+    subject: (input, actor) => (couponLimited(actor) ? `coupon-cart:${input.cartId}` : undefined),
+  },
+  input: applyCouponInput,
+  output: applyCouponOutput,
   handler: async (input, ctx) => {
     await requireCartAccess(ctx, input, "catalog.applyCouponToCart", "mutation");
     const [cart] = await ctx.tx.select().from(carts).where(eq(carts.id, input.cartId)).limit(1);
@@ -298,25 +348,54 @@ export const applyCouponToCart = defineService({
   },
 });
 
-export const quoteCartPromotions = defineService({
+const quotePromotionsInput = z.object({
+  cartId: id, cartToken: z.string().uuid().optional(),
+  couponCode: couponCode.optional(),
+  subtotalMinor: z.number().int().min(0),
+  shippingMinor: z.number().int().min(0),
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/),
+});
+const quotePromotionsOutput = z.object({
+  discountMinor: z.number().int(),
+  shippingMinor: z.number().int(),
+  freeShipping: z.boolean(),
+  couponId: uuid.nullable(),
+  coupons: listed(couponRow),
+});
+
+/** The public quote: a supplied code counts against both coupon limits. */
+export const quoteCartPromotions = defineOrchestratedService({
   name: "catalog.quoteCartPromotions",
   summary: "Resolve attached coupons into a discount and a free-shipping flag.",
   kind: "query",
   permission: "public",
-  input: z.object({
-    cartId: id, cartToken: z.string().uuid().optional(),
-    couponCode: couponCode.optional(),
-    subtotalMinor: z.number().int().min(0),
-    shippingMinor: z.number().int().min(0),
-    currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/),
-  }),
-  output: z.object({
-    discountMinor: z.number().int(),
-    shippingMinor: z.number().int(),
-    freeShipping: z.boolean(),
-    couponId: uuid.nullable(),
-    coupons: listed(couponRow),
-  }),
+  rateLimit: {
+    ...COUPON_PER_SHOPPER,
+    subject: (input, actor) =>
+      input.couponCode && couponLimited(actor) ? `coupon-try:${shopperClientKey(actor).key}` : undefined,
+  },
+  input: quotePromotionsInput,
+  output: quotePromotionsOutput,
+  handler: (input, actor) => resolveCartPromotions.call(input, actor),
+});
+
+/**
+ * The composable quote. Checkout reaches it inside its own transaction; a
+ * top-level call with a code counts against the cart's coupon limit.
+ */
+export const resolveCartPromotions = defineService({
+  name: "catalog.resolveCartPromotions",
+  summary: "Resolve a cart's coupons into a discount and a free-shipping flag.",
+  kind: "query",
+  permission: "public",
+  external: false,
+  rateLimit: {
+    ...COUPON_PER_CART,
+    subject: (input, actor) =>
+      input.couponCode && couponLimited(actor) ? `coupon-cart:${input.cartId}` : undefined,
+  },
+  input: quotePromotionsInput,
+  output: quotePromotionsOutput,
   handler: async (input, ctx) => {
     await requireCartAccess(ctx, input, "catalog.quoteCartPromotions", "query");
     const attached = await ctx.tx
@@ -771,6 +850,7 @@ export default [
   listCoupons,
   applyCouponToCart,
   quoteCartPromotions,
+  resolveCartPromotions,
   recordCouponRedemption,
   issueGiftCard,
   sendGiftCard,

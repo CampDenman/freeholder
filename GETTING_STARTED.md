@@ -32,12 +32,21 @@ Keep the owner password, passkeys and recovery codes with the owner.
 
 ## Run your own instance
 
-The first beta uses the explicit npm `next` channel. Once its packages are
-published, run `npx create-freeholder@next my-business`; check the
-[release record](https://github.com/CampDenman/freeholder/releases) for public
-availability. There is no stable release yet. To install from source now,
-clone the [source repository](https://github.com/CampDenman/freeholder) and
-use one of the maintained [deployment recipes](deploy/README.md). The
+Beta packages are published to npm under the `next` tag:
+`npx create-freeholder@next my-business`. The
+[release record](https://github.com/CampDenman/freeholder/releases) lists each
+beta. There is no stable release yet. To install from source, clone the
+[source repository](https://github.com/CampDenman/freeholder) and use one of
+the maintained [deployment recipes](deploy/README.md).
+
+**What it needs.** Freeholder is one application plus one PostgreSQL database.
+Measured on the reference site, the application uses about 520 MB of memory
+and the database about 500 MB, so plan for a server with 2 vCPUs and 4 GB of
+memory (about US$24/month on DigitalOcean). A 2 GB server works while the
+database stays small. Below that, Postgres and the build have too little room.
+The container image is about 760 MB. Most owners run it on a server or a
+hosting platform rather than on their own computer, so the size of your laptop
+does not matter for running a site. The
 [DigitalOcean Droplet recipe](deploy/digitalocean-droplet/README.md) includes
 server setup, object storage, backups and a restore rehearsal. The
 [Docker Compose recipe](deploy/docker-selfhost/README.md) is a local or

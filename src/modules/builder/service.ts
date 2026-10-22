@@ -5,10 +5,11 @@
 import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { builderAgent, type AgentToolDefinition } from "@/adapters/agent";
-import { listed, row, timestamp, uuid } from "@/core/contract";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { env } from "@/core/env";
 import {
   actorString,
+  defineOrchestratedService,
   defineService,
   ServiceError,
   type Actor,
@@ -449,17 +450,37 @@ export const builderStatus = defineService({
   },
 });
 
-export const propose = defineService({
-  name: "builder.propose",
-  summary: "Turn an owner brief into a validated, unapplied site-content proposal.",
+/**
+ * What a reservation row says while its model call runs.
+ *
+ * The budget is reserved by a row rather than by a lock held through the
+ * provider call (MASTER.md §11): `usageThisMonth` counts it, so two tabs
+ * cannot both spend the final budget. It is `stale`, so it can never be
+ * applied; a call that fails releases it, and one interrupted by a crash
+ * leaves this honest record with its reservation still counted.
+ */
+const PENDING_PROPOSAL = "The model call for this brief did not finish.";
+
+const proposalReservation = z.object({
+  id: uuid,
+  site: z.custom<SiteSnapshot>((value) => typeof value === "object" && value !== null),
+  prompt: z.string(),
+  maxOutput: z.number().int(),
+  estimatedInput: z.number().int(),
+});
+
+const reserveProposal = defineService({
+  name: "builder.reserveProposal",
+  summary: "Snapshot the site and reserve builder budget before the model runs.",
   kind: "mutation",
   permission: "scoped",
+  external: false,
   input: z.object({ brief: z.string().trim().min(3).max(5_000) }),
-  output: builderProposalRow,
+  output: proposalReservation,
   handler: async (input, ctx) => {
     assertBuilderReader(ctx.actor);
-    // Serialize proposal calls for this one instance. The lock is held through
-    // the external call so two tabs cannot both spend the final budget.
+    // Serialize reservations for this one instance, for this short
+    // transaction only: the check and the reserving insert are one step.
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(637, 419)`);
     const current = await snapshot(ctx);
     const prompt = systemPrompt(current);
@@ -475,43 +496,143 @@ export const propose = defineService({
         ).toLocaleString()}-token reservation.`,
       );
     }
-
-    const adapter = builderAgent();
-    if (!adapter.configured) {
+    if (!builderAgent().configured) {
       throw new ServiceError("conflict", "The selected builder adapter is not configured for this instance.");
     }
-    const requestId = crypto.randomUUID();
-    const result = await adapter.propose({
-      system: prompt,
-      ownerBrief: input.brief,
-      tool: tool(),
-      requestId,
-      maxOutputTokens: maxOutput,
-    });
-    const normalized = normalize(result.arguments, current);
-    // Missing provider usage fails closed against the budget instead of making
-    // an unmetered loop appear free.
-    const inputTokens = result.usage.inputTokens || estimatedInput;
-    const outputTokens = result.usage.outputTokens || maxOutput;
-    const totalTokens = result.usage.totalTokens || inputTokens + outputTokens;
-    const [row] = await ctx.tx.insert(builderProposals).values({
+    const [reserved] = await ctx.tx.insert(builderProposals).values({
       brief: input.brief,
-      lane: normalized.proposal.lane,
-      summary: normalized.proposal.summary,
-      rationale: normalized.proposal.rationale,
+      lane: "refused",
+      status: "stale",
+      summary: PENDING_PROPOSAL,
+      rationale: PENDING_PROPOSAL,
       baseSnapshot: current,
-      changes: normalized.changes,
-      diff: normalized.diff,
-      model: result.model,
-      provider: result.provider,
-      inputTokens,
-      outputTokens,
-      totalTokens,
+      model: "pending",
+      inputTokens: estimatedInput,
+      outputTokens: maxOutput,
+      totalTokens: estimatedInput + maxOutput,
       createdByActor: actorString(ctx.actor),
-    }).returning();
-    ctx.setSubject("builder_proposal", row!.id);
-    ctx.queueEvent("builder.proposalCreated", { id: row!.id, lane: row!.lane });
-    return row!;
+    }).returning({ id: builderProposals.id });
+    return { id: reserved!.id, site: current, prompt, maxOutput, estimatedInput };
+  },
+});
+
+const pendingReservation = (id: string) =>
+  and(
+    eq(builderProposals.id, id),
+    eq(builderProposals.status, "stale"),
+    eq(builderProposals.summary, PENDING_PROPOSAL),
+  );
+
+const releaseProposalReservation = defineService({
+  name: "builder.releaseProposalReservation",
+  summary: "Release the budget reserved for a builder proposal whose model call failed.",
+  kind: "mutation",
+  permission: "scoped",
+  external: false,
+  input: z.object({ id: uuid }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    assertBuilderReader(ctx.actor);
+    await ctx.tx.delete(builderProposals).where(pendingReservation(input.id));
+    return { ok: true as const };
+  },
+});
+
+const recordProposal = defineService({
+  name: "builder.recordProposal",
+  summary: "Store a validated builder proposal against its budget reservation.",
+  kind: "mutation",
+  permission: "scoped",
+  external: false,
+  input: z.object({
+    id: uuid,
+    lane: z.enum(["structure", "vocabulary", "refused"]),
+    summary: z.string(),
+    rationale: z.string(),
+    changes: z.array(z.unknown()),
+    diff: z.array(z.unknown()),
+    model: z.string(),
+    provider: z.string().nullable(),
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    totalTokens: z.number().int().nonnegative(),
+  }),
+  output: builderProposalRow,
+  handler: async (input, ctx) => {
+    assertBuilderReader(ctx.actor);
+    const [row] = await ctx.tx.update(builderProposals).set({
+      lane: input.lane,
+      status: "ready",
+      summary: input.summary,
+      rationale: input.rationale,
+      changes: input.changes,
+      diff: input.diff,
+      model: input.model,
+      provider: input.provider,
+      inputTokens: input.inputTokens,
+      outputTokens: input.outputTokens,
+      totalTokens: input.totalTokens,
+      updatedAt: sql`now()`,
+    }).where(pendingReservation(input.id)).returning();
+    if (!row) {
+      throw new ServiceError("conflict", "That builder proposal's reservation is no longer open. Ask again.");
+    }
+    ctx.setSubject("builder_proposal", row.id);
+    ctx.queueEvent("builder.proposalCreated", { id: row.id, lane: row.lane });
+    return row;
+  },
+});
+
+/**
+ * An orchestrator (MASTER.md §11): reserve in one short transaction, ask the
+ * model with none open, then record the validated proposal in another.
+ */
+export const propose = defineOrchestratedService({
+  name: "builder.propose",
+  summary: "Turn an owner brief into a validated, unapplied site-content proposal.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ brief: z.string().trim().min(3).max(5_000) }),
+  output: builderProposalRow,
+  handler: async (input, actor) => {
+    assertBuilderReader(actor);
+    const reserved = await reserveProposal.call(input, actor);
+    let recorded;
+    try {
+      const result = await builderAgent().propose({
+        system: reserved.prompt,
+        ownerBrief: input.brief,
+        tool: tool(),
+        requestId: crypto.randomUUID(),
+        maxOutputTokens: reserved.maxOutput,
+      });
+      const normalized = normalize(result.arguments, reserved.site);
+      // Missing provider usage fails closed against the budget instead of making
+      // an unmetered loop appear free.
+      const inputTokens = result.usage.inputTokens || reserved.estimatedInput;
+      const outputTokens = result.usage.outputTokens || reserved.maxOutput;
+      const totalTokens = result.usage.totalTokens || inputTokens + outputTokens;
+      recorded = await recordProposal.call(
+        {
+          id: reserved.id,
+          lane: normalized.proposal.lane,
+          summary: normalized.proposal.summary,
+          rationale: normalized.proposal.rationale,
+          changes: normalized.changes,
+          diff: normalized.diff,
+          model: result.model,
+          provider: result.provider,
+          inputTokens,
+          outputTokens,
+          totalTokens,
+        },
+        actor,
+      );
+    } catch (error) {
+      await releaseProposalReservation.call({ id: reserved.id }, actor);
+      throw error;
+    }
+    return recorded;
   },
 });
 
@@ -750,6 +871,9 @@ export default [
   ...codeLaneServices,
   builderStatus,
   propose,
+  reserveProposal,
+  recordProposal,
+  releaseProposalReservation,
   listProposals,
   getProposal,
   applyProposal,

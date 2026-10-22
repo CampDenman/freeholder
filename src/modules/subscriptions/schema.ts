@@ -72,6 +72,8 @@ export const SUBSCRIPTION_EVENT_KINDS = [
   "expired",
   /** A card-setup session was opened. Detail is the provider customer reference, not a card number. */
   "card_setup",
+  /** A customer's plan change waiting for its proration invoice. Detail is the target variant id. */
+  "plan_change_pending",
 ] as const;
 
 export const plans = pgTable(

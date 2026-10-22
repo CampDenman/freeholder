@@ -534,6 +534,7 @@ registerContactReference({
 
 registerContactReference({
   table: "referral_invitations",
+  columns: ["referrer_contact_id"],
   repoint: (tx, duplicateId, survivingId) =>
     tx
       .update(referralInvitations)

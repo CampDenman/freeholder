@@ -19,7 +19,7 @@ import {
   externalEvents,
 } from "@/core/connections/schema";
 import {
-  accessTokenForAccount,
+  accessTokenForAccountOutsideTransaction,
   type OAuthProvider,
 } from "@/core/connections/oauth-core";
 import {
@@ -29,6 +29,7 @@ import {
 } from "@/core/connections/calendar-providers";
 import { MailAdapterError } from "@/adapters/mail/types";
 import {
+  defineOrchestratedService,
   defineService,
   getService,
   hasModuleAccess,
@@ -157,197 +158,139 @@ function shadowOf(
   };
 }
 
-/**
- * Pull one account's calendars up to date.
- *
- * Returns rather than throws for a provider problem: one unreachable account
- * must not stop the others, and the account row already carries the evidence
- * an owner needs to act on.
- */
-export async function syncAccountCalendars(
-  tx: Tx,
-  account: SyncableAccount,
-  now: Date,
-): Promise<CalendarSyncOutcome> {
-  const outcome: CalendarSyncOutcome = {
-    accountId: account.id,
-    calendars: 0,
-    events: 0,
-    removed: 0,
-  };
-  const details = account.detailVisibility === "full";
-  const window = syncWindow(now);
-  const client = calendarSyncClient(account.provider);
+const accountInput = z.object({ id: z.uuid() });
 
-  const accessToken = await accessTokenForAccount(tx, account);
-  const discovered = await client.listCalendars(accessToken);
-  for (const calendar of discovered) {
-    await tx
-      .insert(externalCalendars)
-      .values({
-        connectedAccountId: account.id,
-        externalId: calendar.externalId,
-        name: calendar.name,
-        colour: calendar.colour ?? null,
-        timezone: calendar.timezone ?? null,
-      })
-      .onConflictDoUpdate({
-        target: [externalCalendars.connectedAccountId, externalCalendars.externalId],
-        // Never the role: that is the owner's decision, and rediscovering a
-        // calendar must not quietly re-enable one they told Freeholder to
-        // ignore.
-        set: {
+const syncableAccount = z.object({
+  id: uuid,
+  provider: z.enum(["google", "microsoft"]),
+  detailVisibility: z.enum(["busy_only", "full"]),
+});
+
+/** The account a sync may read, with calendar reading switched on. */
+async function syncableAccountFor(tx: Tx, actor: Actor, id: string): Promise<SyncableAccount> {
+  const account = await readableAccount(tx, actor, id);
+  if (!(await mayReadCalendars(tx, account.id))) {
+    throw new ServiceError(
+      "conflict",
+      "Calendar reading is switched off for that connection.",
+    );
+  }
+  return account;
+}
+
+const syncCalendarsSource = defineService({
+  name: "connections.syncCalendarsSource",
+  summary: "Authorize a calendar sync before any provider is contacted.",
+  kind: "query",
+  permission: "scoped",
+  external: false,
+  agentCallable: false,
+  input: accountInput,
+  output: syncableAccount,
+  handler: async (input, ctx) => syncableAccountFor(ctx.tx, ctx.actor, input.id),
+});
+
+const discoveredCalendar = z.object({
+  externalId: z.string().min(1).max(1_000),
+  name: z.string().max(1_000),
+  colour: z.string().max(100).optional(),
+  timezone: z.string().max(100).optional(),
+});
+
+const syncCalendarsDiscover = defineService({
+  name: "connections.syncCalendarsDiscover",
+  summary: "Record the calendars a provider listed and return the ones to read.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  external: false,
+  agentCallable: false,
+  input: accountInput.extend({ calendars: z.array(discoveredCalendar).max(1_000) }),
+  output: listed(
+    z.object({
+      id: uuid,
+      externalId: z.string(),
+      syncToken: z.string().nullable(),
+      lastSyncAt: z.date().nullable(),
+    }),
+  ),
+  handler: async (input, ctx) => {
+    const account = await syncableAccountFor(ctx.tx, ctx.actor, input.id);
+    for (const calendar of input.calendars) {
+      await ctx.tx
+        .insert(externalCalendars)
+        .values({
+          connectedAccountId: account.id,
+          externalId: calendar.externalId,
           name: calendar.name,
           colour: calendar.colour ?? null,
           timezone: calendar.timezone ?? null,
-          updatedAt: sql`now()`,
-        },
-      });
-  }
-  outcome.calendars = discovered.length;
-
-  const rows = await tx
-    .select({
-      id: externalCalendars.id,
-      externalId: externalCalendars.externalId,
-      syncToken: externalCalendars.syncToken,
-      lastSyncAt: externalCalendars.lastSyncAt,
-    })
-    .from(externalCalendars)
-    .where(
-      and(
-        eq(externalCalendars.connectedAccountId, account.id),
-        // An ignored calendar is not fetched at all. Not fetching is the only
-        // form of "we do not look at that" a person can actually verify.
-        sql`${externalCalendars.role} <> 'ignored'`,
-      ),
-    );
-
-  for (const calendar of rows) {
-    const stale =
-      !calendar.lastSyncAt ||
-      now.getTime() - calendar.lastSyncAt.getTime() >
-        FULL_RESYNC_AFTER_HOURS * 3_600_000;
-    let page = await client.listEvents(accessToken, {
-      externalId: calendar.externalId,
-      syncToken: stale ? null : calendar.syncToken,
-      window,
-    });
-    const refused = page.resyncRequired;
-    if (refused) {
-      page = await client.listEvents(accessToken, {
-        externalId: calendar.externalId,
-        syncToken: null,
-        window,
-      });
-    }
-    /**
-     * A pass that saw the whole window, and can therefore be trusted to say
-     * what is *not* there any more. An incremental pass reports only changes,
-     * and a pass that ran out of pages saw a prefix — treating either as the
-     * complete truth would delete time somebody is genuinely busy.
-     */
-    const fullPass = (stale || !calendar.syncToken || refused) && page.complete;
-
-    const gone = page.events.filter((event) => event.cancelled).map((e) => e.externalId);
-    const live = page.events.filter(
-      (event) =>
-        !event.cancelled &&
-        event.endsAt > window.startsAt &&
-        event.startsAt < window.endsAt,
-    );
-
-    if (gone.length > 0) {
-      const deleted = await tx
-        .delete(externalEvents)
-        .where(
-          and(
-            eq(externalEvents.externalCalendarId, calendar.id),
-            inArray(externalEvents.externalId, gone),
-          ),
-        )
-        .returning({ id: externalEvents.id });
-      outcome.removed += deleted.length;
-    }
-
-    for (const event of live) {
-      await tx
-        .insert(externalEvents)
-        .values(shadowOf(event, calendar.id, details))
+        })
         .onConflictDoUpdate({
-          target: [externalEvents.externalCalendarId, externalEvents.externalId],
+          target: [externalCalendars.connectedAccountId, externalCalendars.externalId],
+          // Never the role: that is the owner's decision, and rediscovering a
+          // calendar must not quietly re-enable one they told Freeholder to
+          // ignore.
           set: {
-            startsAt: event.startsAt,
-            endsAt: event.endsAt,
-            allDay: event.allDay,
-            busy: event.busy,
-            title: details ? (event.title ?? null) : null,
-            raw: details ? { title: event.title ?? null } : null,
+            name: calendar.name,
+            colour: calendar.colour ?? null,
+            timezone: calendar.timezone ?? null,
             updatedAt: sql`now()`,
           },
         });
     }
-    outcome.events += live.length;
-
-    // Everything the window has left behind, and — on a full pass — everything
-    // inside it the provider no longer lists. Freeholder created events keep
-    // their row: a booking is ours to forget, not the provider's.
-    const expired = await tx
-      .delete(externalEvents)
+    return ctx.tx
+      .select({
+        id: externalCalendars.id,
+        externalId: externalCalendars.externalId,
+        syncToken: externalCalendars.syncToken,
+        lastSyncAt: externalCalendars.lastSyncAt,
+      })
+      .from(externalCalendars)
       .where(
         and(
-          eq(externalEvents.externalCalendarId, calendar.id),
-          isNull(externalEvents.bookingId),
-          fullPass && live.length > 0
-            ? or(
-                lt(externalEvents.endsAt, window.startsAt),
-                gt(externalEvents.startsAt, window.endsAt),
-                notInArray(
-                  externalEvents.externalId,
-                  live.map((event) => event.externalId),
-                ),
-              )
-            : or(
-                lt(externalEvents.endsAt, window.startsAt),
-                gt(externalEvents.startsAt, window.endsAt),
-              ),
+          eq(externalCalendars.connectedAccountId, account.id),
+          // An ignored calendar is not fetched at all. Not fetching is the only
+          // form of "we do not look at that" a person can actually verify.
+          sql`${externalCalendars.role} <> 'ignored'`,
         ),
-      )
-      .returning({ id: externalEvents.id });
-    outcome.removed += expired.length;
+      );
+  },
+});
 
-    await tx
-      .update(externalCalendars)
-      .set({
-        syncToken: page.nextSyncToken ?? calendar.syncToken,
-        lastSyncAt: now,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(externalCalendars.id, calendar.id));
-  }
+const fetchedEvent = z.object({
+  externalId: z.string().min(1).max(1_000),
+  startsAt: z.date(),
+  endsAt: z.date(),
+  allDay: z.boolean(),
+  busy: z.boolean(),
+  title: z.string().max(10_000).optional(),
+  cancelled: z.boolean(),
+});
 
-  // Claim the events that are Freeholder's own bookings looking back at it
-  // (C6.06). Without this an appointment blocks its hour twice and cannot be
-  // moved, because the exclusion constraint is quite right that something
-  // already occupies it.
-  const { reconcileMirroredBookings } = await import("@/core/scheduling/writeback");
-  await reconcileMirroredBookings(tx);
-
-  await tx
-    .update(connectedAccounts)
-    .set({ lastSyncAt: now, lastError: null })
-    .where(eq(connectedAccounts.id, account.id));
-  return outcome;
-}
-
-export const syncCalendars = defineService({
-  name: "connections.syncCalendars",
-  summary: "Fetch what an account's calendars say about when somebody is busy.",
+const syncCalendarsApply = defineService({
+  name: "connections.syncCalendarsApply",
+  summary: "Apply calendar pages that were fetched with no transaction open.",
   kind: "mutation",
   permission: "scoped",
   writeClass: "write",
+  external: false,
   agentCallable: false,
-  input: z.object({ id: z.uuid() }),
+  input: accountInput.extend({
+    now: z.date(),
+    calendars: z.number().int().nonnegative(),
+    pages: z
+      .array(
+        z.object({
+          calendarId: uuid,
+          /** Whether this pass saw the whole window (see `fullPass` below). */
+          fullPass: z.boolean(),
+          nextSyncToken: z.string().max(10_000).nullable(),
+          events: z.array(fetchedEvent).max(100_000),
+        }),
+      )
+      .max(1_000),
+  }),
   output: z.object({
     accountId: uuid,
     calendars: z.number().int(),
@@ -356,15 +299,210 @@ export const syncCalendars = defineService({
     failed: z.string().optional(),
   }),
   handler: async (input, ctx) => {
-    const account = await readableAccount(ctx.tx, ctx.actor, input.id);
-    if (!(await mayReadCalendars(ctx.tx, account.id))) {
-      throw new ServiceError(
-        "conflict",
-        "Calendar reading is switched off for that connection.",
-      );
-    }
+    // Re-read inside this transaction: privacy and the capability switch are
+    // decided by what is true now, not by what was true before the fetch.
+    const account = await syncableAccountFor(ctx.tx, ctx.actor, input.id);
     ctx.setSubject("connected_account", account.id);
-    return syncAccountCalendars(ctx.tx, account, new Date());
+    const tx = ctx.tx;
+    const now = input.now;
+    const outcome: CalendarSyncOutcome = {
+      accountId: account.id,
+      calendars: input.calendars,
+      events: 0,
+      removed: 0,
+    };
+    const details = account.detailVisibility === "full";
+    const window = syncWindow(now);
+
+    for (const page of input.pages) {
+      const [calendar] = await tx
+        .select({
+          id: externalCalendars.id,
+          syncToken: externalCalendars.syncToken,
+          role: externalCalendars.role,
+        })
+        .from(externalCalendars)
+        .where(
+          and(
+            eq(externalCalendars.id, page.calendarId),
+            eq(externalCalendars.connectedAccountId, account.id),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      // Ignored (or removed) while the provider was being asked: nothing that
+      // was fetched for it is kept.
+      if (!calendar || calendar.role === "ignored") continue;
+
+      const fullPass = page.fullPass;
+      const gone = page.events.filter((event) => event.cancelled).map((e) => e.externalId);
+      const live = page.events.filter(
+        (event) =>
+          !event.cancelled &&
+          event.endsAt > window.startsAt &&
+          event.startsAt < window.endsAt,
+      );
+
+      if (gone.length > 0) {
+        const deleted = await tx
+          .delete(externalEvents)
+          .where(
+            and(
+              eq(externalEvents.externalCalendarId, calendar.id),
+              inArray(externalEvents.externalId, gone),
+            ),
+          )
+          .returning({ id: externalEvents.id });
+        outcome.removed += deleted.length;
+      }
+
+      for (const event of live) {
+        await tx
+          .insert(externalEvents)
+          .values(shadowOf(event, calendar.id, details))
+          .onConflictDoUpdate({
+            target: [externalEvents.externalCalendarId, externalEvents.externalId],
+            set: {
+              startsAt: event.startsAt,
+              endsAt: event.endsAt,
+              allDay: event.allDay,
+              busy: event.busy,
+              title: details ? (event.title ?? null) : null,
+              raw: details ? { title: event.title ?? null } : null,
+              updatedAt: sql`now()`,
+            },
+          });
+      }
+      outcome.events += live.length;
+
+      // Everything the window has left behind, and — on a full pass — everything
+      // inside it the provider no longer lists. Freeholder created events keep
+      // their row: a booking is ours to forget, not the provider's.
+      const expired = await tx
+        .delete(externalEvents)
+        .where(
+          and(
+            eq(externalEvents.externalCalendarId, calendar.id),
+            isNull(externalEvents.bookingId),
+            fullPass && live.length > 0
+              ? or(
+                  lt(externalEvents.endsAt, window.startsAt),
+                  gt(externalEvents.startsAt, window.endsAt),
+                  notInArray(
+                    externalEvents.externalId,
+                    live.map((event) => event.externalId),
+                  ),
+                )
+              : or(
+                  lt(externalEvents.endsAt, window.startsAt),
+                  gt(externalEvents.startsAt, window.endsAt),
+                ),
+          ),
+        )
+        .returning({ id: externalEvents.id });
+      outcome.removed += expired.length;
+
+      await tx
+        .update(externalCalendars)
+        .set({
+          syncToken: page.nextSyncToken ?? calendar.syncToken,
+          lastSyncAt: now,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(externalCalendars.id, calendar.id));
+    }
+
+    // Claim the events that are Freeholder's own bookings looking back at it
+    // (C6.06). Without this an appointment blocks its hour twice and cannot be
+    // moved, because the exclusion constraint is quite right that something
+    // already occupies it.
+    const { reconcileMirroredBookings } = await import("@/core/scheduling/writeback");
+    await reconcileMirroredBookings(tx);
+
+    await tx
+      .update(connectedAccounts)
+      .set({ lastSyncAt: now, lastError: null })
+      .where(eq(connectedAccounts.id, account.id));
+    return outcome;
+  },
+});
+
+/**
+ * Pull one account's calendars up to date.
+ *
+ * The token refresh and every provider page are fetched with no database
+ * transaction open (§11); authorization, discovery and the shadow-row writes
+ * are short services on either side of that I/O.
+ */
+export const syncCalendars = defineOrchestratedService({
+  name: "connections.syncCalendars",
+  summary: "Fetch what an account's calendars say about when somebody is busy.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  agentCallable: false,
+  input: accountInput,
+  output: z.object({
+    accountId: uuid,
+    calendars: z.number().int(),
+    events: z.number().int(),
+    removed: z.number().int(),
+    failed: z.string().optional(),
+  }),
+  handler: async (input, actor) => {
+    const account = await syncCalendarsSource.call(input, actor);
+    const now = new Date();
+    const window = syncWindow(now);
+    const client = calendarSyncClient(account.provider);
+
+    const accessToken = await accessTokenForAccountOutsideTransaction(account);
+    const discovered = await client.listCalendars(accessToken);
+    const calendars = await syncCalendarsDiscover.call(
+      { id: account.id, calendars: discovered.map((calendar) => ({ ...calendar })) },
+      actor,
+    );
+
+    const pages: Array<{
+      calendarId: string;
+      fullPass: boolean;
+      nextSyncToken: string | null;
+      events: ProviderEvent[];
+    }> = [];
+    for (const calendar of calendars) {
+      const stale =
+        !calendar.lastSyncAt ||
+        now.getTime() - calendar.lastSyncAt.getTime() >
+          FULL_RESYNC_AFTER_HOURS * 3_600_000;
+      let page = await client.listEvents(accessToken, {
+        externalId: calendar.externalId,
+        syncToken: stale ? null : calendar.syncToken,
+        window,
+      });
+      const refused = page.resyncRequired;
+      if (refused) {
+        page = await client.listEvents(accessToken, {
+          externalId: calendar.externalId,
+          syncToken: null,
+          window,
+        });
+      }
+      pages.push({
+        calendarId: calendar.id,
+        /**
+         * A pass that saw the whole window, and can therefore be trusted to say
+         * what is *not* there any more. An incremental pass reports only changes,
+         * and a pass that ran out of pages saw a prefix — treating either as the
+         * complete truth would delete time somebody is genuinely busy.
+         */
+        fullPass: (stale || !calendar.syncToken || refused) && page.complete,
+        nextSyncToken: page.nextSyncToken ?? null,
+        events: page.events.map((event) => ({ ...event })),
+      });
+    }
+    return syncCalendarsApply.call(
+      { id: account.id, now, calendars: discovered.length, pages },
+      actor,
+    );
   },
 });
 
@@ -555,4 +693,11 @@ export async function syncDueCalendarAccounts(): Promise<{
   return { synced: outcomes.length - failed, failed, outcomes };
 }
 
-export default [syncCalendars, listExternalCalendars, setCalendarRole];
+export default [
+  syncCalendars,
+  syncCalendarsSource,
+  syncCalendarsDiscover,
+  syncCalendarsApply,
+  listExternalCalendars,
+  setCalendarRole,
+];

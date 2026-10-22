@@ -1932,6 +1932,7 @@ registerContactReference({
 
 registerContactReference({
   table: "ad_campaigns",
+  columns: ["advertiser_contact_id"],
   repoint: (tx, duplicateId, survivingId) =>
     tx
       .update(adCampaigns)
