@@ -434,6 +434,15 @@ async function entityJsonLd(input: {
     const { resolveVisibleProduct } = await import("@/modules/catalog/service");
     const product = await resolveVisibleProduct.call({ slug: leaf }, ANONYMOUS);
     if (!product) return [];
+    // The offer comes from the same purchase projection the buy panel
+    // quotes, so the structured price can never disagree with the page.
+    // A product with no published price still gets no offer.
+    const { purchaseOptions } = await import("@/modules/catalog/service");
+    const { minorToDecimal } = await import("@/adapters/payments/currency");
+    const [purchase] = await purchaseOptions
+      .call({ slugs: [leaf] }, ANONYMOUS)
+      .catch(() => [] as Awaited<ReturnType<typeof purchaseOptions.call>>);
+    const priced = purchase?.priceFromMinor != null && purchase.currency ? purchase : null;
     return [
       productJsonLd({
         name: product.name,
@@ -441,6 +450,13 @@ async function entityJsonLd(input: {
         description: product.seo.description ?? product.subtitle ?? input.description,
         sku: product.slug,
         brand: product.brand,
+        ...(priced
+          ? {
+              price: minorToDecimal(priced.priceFromMinor!, priced.currency!),
+              priceCurrency: priced.currency!,
+              availability: priced.variants.some((variant) => variant.available) ? "InStock" : "OutOfStock",
+            }
+          : {}),
       }),
     ];
   }

@@ -105,9 +105,9 @@ const PINNED_CLOCKS: Array<[string, () => Date]> = [
   ["a winter evening", () => studioTime(new Date(Date.now() + 20 * 86_400_000), 21, 30)],
 ];
 
-async function seedAtPinnedClock(pinned: Date): Promise<Array<{ source: string; n: number }>> {
+async function seedAtPinnedClock(pinned: Date): Promise<Array<{ source: string; n: number; detail?: string | null }>> {
   class Rollback extends Error {}
-  let findings: Array<{ source: string; n: number }> = [];
+  let findings: Array<{ source: string; n: number; detail?: string | null }> = [];
   await db()
     .transaction(async (tx) => {
       const [staff] = await tx
@@ -135,7 +135,25 @@ async function seedAtPinnedClock(pinned: Date): Promise<Array<{ source: string; 
              or (ends_at at time zone 'America/Vancouver')::time > time '17:00')`)) as unknown as Array<{
         source: string;
         n: number;
+        detail?: string | null;
       }>;
+      // Name the offending sittings, so a failure explains itself.
+      const [offHours] = (await tx.execute(sql`
+        select string_agg(
+          status || ' ' || (starts_at at time zone 'America/Vancouver')::text || ' to '
+            || (ends_at at time zone 'America/Vancouver')::text
+            || case when rescheduled_from_id is not null then ' (moved)' else '' end,
+          '; ') as detail
+        from bookings
+        where ${mine} and (
+              extract(dow from starts_at at time zone 'America/Vancouver') = 0
+           or extract(hour from starts_at at time zone 'America/Vancouver') < 9
+           or (ends_at at time zone 'America/Vancouver')::time > time '17:00')`)) as unknown as Array<{
+        detail: string | null;
+      }>;
+      findings = findings.map((row) =>
+        row.source === "off-hours" ? { ...row, detail: `${pinned.toISOString()}: ${offHours?.detail ?? ""}` } : row,
+      );
       throw new Rollback();
     })
     .catch((error: unknown) => {
@@ -150,7 +168,7 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
   let plainMs = 0;
   let busyMs = 0;
   let counts: Record<string, Record<string, number>> = {};
-  const pinnedFindings = new Map<string, Array<{ source: string; n: number }>>();
+  const pinnedFindings = new Map<string, Array<{ source: string; n: number; detail?: string | null }>>();
 
   beforeAll(async () => {
     // The boot the process runs before seeding: module blocks (the
@@ -339,7 +357,7 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
     (label) => {
       const findings = pinnedFindings.get(label);
       expect(findings).toBeDefined();
-      for (const row of findings!) expect(row).toEqual({ source: row.source, n: 0 });
+      for (const row of findings!) expect(row.n, `${row.source} ${row.detail ?? ""}`).toBe(0);
     },
   );
 

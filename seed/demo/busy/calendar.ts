@@ -369,6 +369,19 @@ export const seedCalendar: AreaSeeder = async (tx, w) => {
       const minute = steps[(start + i) % steps.length]!;
       const startsAt = new Date(w.daysAgo(-offsetDays, 0).getTime() + minute * MINUTE);
       const endsAt = new Date(startsAt.getTime() + duration * MINUTE);
+      // Judge the sitting on the studio's own clock, not on the arithmetic
+      // that produced it: midnight-plus-minutes is only wall-clock time on a
+      // day without a daylight-saving change.
+      const localStart = studioParts(startsAt);
+      const localEnd = studioParts(endsAt);
+      if (
+        localStart.weekday !== pacificWeekday(probe) ||
+        localEnd.day !== localStart.day ||
+        localStart.hour * 60 + localStart.minute < hours[0] * 60 ||
+        localEnd.hour * 60 + localEnd.minute > hours[1] * 60
+      ) {
+        continue;
+      }
       // Nothing straddles the present: it would have to be in progress.
       if (startsAt.getTime() < now && endsAt.getTime() > now - HOUR) continue;
       const lo = startsAt.getTime() - before * MINUTE;
