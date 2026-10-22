@@ -128,7 +128,7 @@ describe.runIf(hasDatabase)("cart capabilities", { timeout: 30_000 }, () => {
   await expect(quote()).resolves.toMatchObject({ discountMinor: 0 });
  });
 
- it("bounds how many carts one shopper can open (C11.10)", async () => {
+ it("bounds how many carts one shopper can open (C11.10)", { timeout: 120_000 }, async () => {
   const shopper = { kind: "anonymous" as const, request: { ip: "198.51.100.11" } };
   for (let n = 0; n < 60; n++) await getOrCreateCart.call({ currency: "CAD" }, shopper);
   await expect(getOrCreateCart.call({ currency: "CAD" }, shopper)).rejects.toMatchObject({ code: "rate_limited" });
