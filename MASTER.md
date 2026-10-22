@@ -9844,6 +9844,10 @@ schema they inherit reads as a designed thing rather than an excavation.
   `tests/core/cart-access.test.ts` and
   `tests/browser/c11-01-visitor-to-paid.spec.ts`. Changeset
   `c11-10-access-control-20261021.md`. Independent review remains open.
+  Audit record 2026-10-21: `security/pre-launch-audit-2026-10-21.md` maps each
+  finding from that day's four reviews to its repair PR (#559–#565) and lists
+  the open residuals. The review packet points to it. It is agent evidence,
+  not independent review.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.
