@@ -523,8 +523,12 @@ export const verifyDemoForms = defineService({
 
 /* ---------------------------------------------------------------- submitting */
 
-/** The most one public submission may carry, all answers together. */
-export const SUBMISSION_BYTES = 64 * 1024;
+/**
+ * The most one public submission may carry, all answers together, as UTF-8
+ * JSON. Generous on purpose: a few long answers in Arabic or CJK script run
+ * to several bytes a character, and an honest enquiry must never hit this.
+ */
+export const SUBMISSION_BYTES = 256 * 1024;
 
 export const submitForm = defineService({
   name: "forms.submit",

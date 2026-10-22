@@ -13,7 +13,7 @@ import { closeDb, db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { validateSession } from "@/core/auth/sessions";
 import { resetEnvForTests } from "@/core/env";
-import { enterPlayground, initializePlayground } from "@/core/demo/playground";
+import { enterPlayground, initializePlayground, markPlaygroundBaseline } from "@/core/demo/playground";
 import {
   PLAYGROUND_MANAGE,
   PLAYGROUND_CLIENT_LIMITS,
@@ -488,6 +488,37 @@ describe.runIf(hasDatabase)("disposable playground", () => {
     await expect(
       submitForm.call({ slug: "contact", values: { message: "hello" } }, ANONYMOUS),
     ).rejects.toMatchObject({ code: "rate_limited" });
+  });
+
+  it("counts caps from the seeded sample, so a large seed never closes the public site", async () => {
+    await initializePlayground();
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "0"); resetEnvForTests();
+    const form = await createForm.call({
+      slug: "contact",
+      name: "Enquiry",
+      destination: "none",
+      fields: [{ key: "message", label: "Message", kind: "multiline", required: true }],
+    }, OWNER);
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1"); resetEnvForTests();
+    // A seed bigger than either cap: contacts and form submissions alike.
+    const seededContacts = PLAYGROUND_PUBLIC_CONTACT_CAP.limit + 50;
+    const seededSubmissions = PLAYGROUND_ROW_CAPS["forms.submit"]!.limit + 50;
+    await db().insert(contacts).values(
+      Array.from({ length: seededContacts }, (_, index) => ({ name: `Seed ${index}`, email: `seed-${index}@example.test` })),
+    );
+    await db().insert(formSubmissions).values(
+      Array.from({ length: seededSubmissions }, (_, index) => ({ formId: form.id, data: { message: `seed ${index}` }, status: "received" as const })),
+    );
+    // Without a baseline the seed alone would fill both caps…
+    await expect(submitForm.call({ slug: "contact", values: { message: "hello" } }, ANONYMOUS)).rejects.toMatchObject({ code: "rate_limited" });
+    // …with the boot-time baseline, visitors keep their whole allowance.
+    await markPlaygroundBaseline();
+    expect((await submitForm.call({ slug: "contact", values: { message: "hello" } }, ANONYMOUS)).ok).toBe(true);
+    // And the cap still bites on what visitors add past the seed.
+    await db().insert(formSubmissions).values(
+      Array.from({ length: PLAYGROUND_ROW_CAPS["forms.submit"]!.limit }, (_, index) => ({ formId: form.id, data: { message: `visitor ${index}` }, status: "received" as const })),
+    );
+    await expect(submitForm.call({ slug: "contact", values: { message: "one too many" } }, ANONYMOUS)).rejects.toMatchObject({ code: "rate_limited" });
   });
 
   it("spends one client's budget before the ceiling every visitor shares", async () => {

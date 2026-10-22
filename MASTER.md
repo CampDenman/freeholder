@@ -4173,10 +4173,12 @@ project without silent telemetry, and ready to carry money.
   chat, share, popups, reviews) failed with the playground refusal, and
   `POST /api/analytics/vitals` answered 401 on every page. `PLAYGROUND_PUBLIC`
   now admits the public site's verbs under new `PLAYGROUND_ROW_CAPS`
-  entries, a shared `contacts` cap (public verbs resolve contacts as the
+  entries counted as growth past the post-seed baseline
+  (`markPlaygroundBaseline`, so the seed never uses visitor headroom), a
+  shared `contacts` cap (public verbs resolve contacts as the
   system), a per-client minute/hour budget spent before the shared ceiling
   (`anonymousClientKey`, only when a client address is known) and an 8 KB
-  per-submission ceiling (64 KB on every install); `PLAYGROUND_PUBLIC_REFUSED` keeps credential flows (magic links,
+  per-submission ceiling (256 KB on every install); `PLAYGROUND_PUBLIC_REFUSED` keeps credential flows (magic links,
   portal sign-in), payment-provider checkout, uploads, the model-backed
   assistant and visitor analytics refused with a stated reason, and a test
   fails on any public mutation in neither list. Transactional mail queues to

@@ -9,7 +9,13 @@ import { roles, roleGrants, sessions, users } from "@/core/auth/schema";
 import { createSession } from "@/core/auth/sessions";
 import { seedDefaultRoles } from "@/core/roles/defaults";
 import { defineService, ServiceError } from "@/core/service";
-import { PLAYGROUND_MANAGE, PLAYGROUND_VIEW } from "./playground-policy";
+import { moduleSettings } from "@/core/settings/schema";
+import {
+  PLAYGROUND_BASELINE_MODULE,
+  PLAYGROUND_MANAGE,
+  PLAYGROUND_VIEW,
+  playgroundCappedTables,
+} from "./playground-policy";
 
 const OWNER = "operator@playground.invalid";
 const VISITOR = "visitor@playground.invalid";
@@ -33,6 +39,26 @@ export async function initializePlayground(): Promise<void> {
     // No password and no public path to issue a session for the sentinel owner.
     await tx.insert(users).values([{ email: OWNER, role: "owner" }, { email: VISITOR, role: "playground" }]).onConflictDoNothing();
   });
+}
+
+/**
+ * Record how many rows each capped table holds now that the sample site is
+ * installed. Boot calls this after the demo seed (instrumentation.node.ts),
+ * so every hourly reset starts the caps from the freshly seeded sample.
+ */
+export async function markPlaygroundBaseline(): Promise<void> {
+  if (env().FREEHOLDER_PLAYGROUND !== "1") return;
+  const baseline: Record<string, number> = {};
+  for (const table of playgroundCappedTables()) {
+    const [row] = await db().execute<{ count: number }>(
+      sql`select count(*)::int as count from ${sql.identifier(table)}`,
+    );
+    baseline[table] = Number(row?.count ?? 0);
+  }
+  await db()
+    .insert(moduleSettings)
+    .values({ module: PLAYGROUND_BASELINE_MODULE, config: { baseline } })
+    .onConflictDoUpdate({ target: moduleSettings.module, set: { config: { baseline } } });
 }
 
 export const enterPlayground = defineService({

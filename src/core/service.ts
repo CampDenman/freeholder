@@ -18,6 +18,7 @@ import { sql } from "drizzle-orm";
 import { env } from "@/core/env";
 import {
   isPlaygroundPublicVerb,
+  PLAYGROUND_BASELINE_MODULE,
   PLAYGROUND_CLIENT_LIMITS,
   PLAYGROUND_PUBLIC_CONTACT_CAP,
   PLAYGROUND_REFUSAL,
@@ -490,12 +491,19 @@ async function enforcePlaygroundRowCap<In extends z.ZodType, Out>(
     PLAYGROUND_ROW_CAPS[def.name],
     isPlaygroundPublicVerb(def.name) ? PLAYGROUND_PUBLIC_CONTACT_CAP : undefined,
   ];
+  // Growth since the sample site was installed, not the table's size: the
+  // seed's own rows must never use up what visitors may add.
+  const [stored] = await db().execute<{ baseline: Record<string, number> | null }>(sql`
+    select config->'baseline' as baseline from module_settings
+    where module = ${PLAYGROUND_BASELINE_MODULE}
+  `);
+  const baseline = stored?.baseline ?? {};
   for (const cap of caps) {
     if (!cap) continue;
     const [row] = await db().execute<{ count: number }>(sql`
       select count(*)::int as count from ${sql.identifier(cap.table)}
     `);
-    if (Number(row?.count ?? 0) >= cap.limit) {
+    if (Number(row?.count ?? 0) - Number(baseline[cap.table] ?? 0) >= cap.limit) {
       throw new ServiceError(
         "rate_limited",
         "This playground surface is full. The shared demo holds a bounded sample — try again after the hourly reset.",

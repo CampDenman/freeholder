@@ -264,6 +264,20 @@ export const PLAYGROUND_ROW_CAPS: Readonly<Record<string, PlaygroundRowCap>> = {
  */
 export const PLAYGROUND_PUBLIC_CONTACT_CAP: PlaygroundRowCap = { table: "contacts", limit: 1_000 };
 
+/**
+ * Where the playground records how many rows each capped table held once the
+ * sample site was installed (`markPlaygroundBaseline`). Caps count growth
+ * past that point, so a larger demo seed never eats a visitor's headroom and
+ * a full cap means visitors filled it, not the seed. A module_settings row
+ * rather than a table of its own: it is one small document per reset.
+ */
+export const PLAYGROUND_BASELINE_MODULE = "playground";
+
+/** Every table a playground cap counts. */
+export function playgroundCappedTables(): string[] {
+  return [...new Set([...Object.values(PLAYGROUND_ROW_CAPS), PLAYGROUND_PUBLIC_CONTACT_CAP].map((cap) => cap.table))];
+}
+
 /** Whether a mutation is one of the public site's verbs (PLAYGROUND_PUBLIC). */
 export function isPlaygroundPublicVerb(name: string): boolean {
   return PUBLIC.has(name);
