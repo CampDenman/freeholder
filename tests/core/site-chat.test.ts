@@ -166,6 +166,19 @@ describe.runIf(hasDatabase)("site live chat", { timeout: 90_000 }, () => {
     expect(await chat(false)).not.toBe(first);
   });
 
+  it("joins a visitor's chat to the conversation their form enquiry opened (C11.10)", async () => {
+    const enquiry = await recordMessage.call(
+      { email: "ada@example.test", name: "Ada", direction: "inbound", channel: "form", subject: "Enquiry", body: "A sitting, please." },
+      { kind: "system" },
+    );
+    const started = await begin();
+    expect(started.contactId).toBe(enquiry.conversation.contactId);
+    expect(started.conversationId).toBe(enquiry.conversation.id);
+    // The owner's reply on that one conversation reaches this browser.
+    await replyToConversation.call({ id: started.conversationId, body: "Next month works.", close: false }, OWNER);
+    expect((await getSiteChat.call({ token: started.token }, ANONYMOUS)).messages.map((m) => m.body)).toContain("Next month works.");
+  });
+
   it("never exposes another channel from the shared Contact conversation", async () => {
     const started = await begin();
     const [session] = await db()

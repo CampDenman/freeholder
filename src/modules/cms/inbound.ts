@@ -38,7 +38,7 @@ export const submitQuoteRequest = defineService({
 
 export const submitSiteChat = defineService({
   name: "cms.submitSiteChat",
-  summary: "A visitor starts a live chat: a signed-in customer on their own Contact conversation, anyone else on a new one.",
+  summary: "A visitor starts a live chat on their Contact conversation; an unverified start never takes over a chat already live.",
   kind: "mutation",
   permission: "public",
   writeClass: "message",

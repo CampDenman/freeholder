@@ -153,7 +153,7 @@ async function transcriptFor(ctx: ServiceContext, session: ActiveSession) {
 
 export const startSiteChat = defineService({
   name: "messaging.startSiteChat",
-  summary: "Start a bearer-scoped site chat: on the Contact's thread only for its signed-in owner, otherwise on a new thread.",
+  summary: "Start a bearer-scoped site chat on the Contact's thread, never taking over a chat already live for that Contact unless its signed-in owner asks.",
   kind: "mutation",
   permission: "public",
   writeClass: "message",
@@ -192,18 +192,35 @@ export const startSiteChat = defineService({
         source: "chat",
       })) as { contact: { id: string } };
       contactId = resolved.contact.id;
-      // A thread key of its own keeps other channels from threading onto it.
-      const [opened] = await ctx.tx
-        .insert(conversations)
-        .values({
-          contactId,
-          subject: "Website chat",
-          replyChannel: "chat",
-          threadKey: `site-chat:${randomBytes(16).toString("hex")}`,
-        })
-        .returning({ id: conversations.id });
-      conversationId = opened!.id;
-      ctx.queueEvent("conversation.opened", { id: conversationId, contactId, channel: "chat" });
+      // With no chat live for this Contact, the message joins their canonical
+      // thread like any other inbound channel (§4.14: one conversation per
+      // person). While somebody is already chatting as them, an unverified
+      // start never replaces that browser: it gets a thread of its own, with
+      // a key that keeps other channels from threading onto it.
+      const [live] = await ctx.tx
+        .select({ id: siteChatSessions.id })
+        .from(siteChatSessions)
+        .where(
+          and(
+            eq(siteChatSessions.contactId, contactId),
+            isNull(siteChatSessions.closedAt),
+            gt(siteChatSessions.expiresAt, new Date()),
+          ),
+        )
+        .limit(1);
+      if (live) {
+        const [opened] = await ctx.tx
+          .insert(conversations)
+          .values({
+            contactId,
+            subject: "Website chat",
+            replyChannel: "chat",
+            threadKey: `site-chat:${randomBytes(16).toString("hex")}`,
+          })
+          .returning({ id: conversations.id });
+        conversationId = opened!.id;
+        ctx.queueEvent("conversation.opened", { id: conversationId, contactId, channel: "chat" });
+      }
     }
     const recorded = (await ctx.callAsSystem(getService("conversations.record"), {
       name: input.name,

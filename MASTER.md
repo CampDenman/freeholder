@@ -9733,9 +9733,13 @@ schema they inherit reads as a designed thing rather than an excavation.
   subscription currency is refused rather than billed at zero. `subscriptions.join` refuses a staff-entered or foreign
   card and never lets a saved card skip a card trial's setup-fee invoice.
   `quotes.message` speaks for the business only with a quotes grant.
-  `messaging.startSiteChat` continues a Contact's thread only for its signed-in
-  owner (the public chat block now passes the session actor) and gives anyone
-  else a new thread. Contact-import undo restores a field only while it still
+  `messaging.startSiteChat` never replaces a chat already live for a Contact
+  unless its signed-in owner asks (the public chat block now passes the
+  session actor): an unverified start while one is live gets a thread of its
+  own; otherwise it joins the Contact's canonical thread, so a form enquiry
+  and the chat that follows stay one conversation (§4.14). Residual: an
+  unverified chat on a thread with no live chat receives the owner's chat
+  replies on that thread, as any unverified chat does. Contact-import undo restores a field only while it still
   holds what the import wrote. `contracts.sign` takes IP and user agent from
   request metadata. `members.callConfig` needs an active member on a live call;
   `members.claimKeyPackages` returns an outstanding claim instead of draining
