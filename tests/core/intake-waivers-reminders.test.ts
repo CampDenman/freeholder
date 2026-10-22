@@ -255,14 +255,16 @@ describe.runIf(hasDatabase)("intake, waivers and reminders", { timeout: 90_000 }
       .from(contractDocuments)
       .where(eq(contractDocuments.id, issued.id));
 
+    // The evidence comes from the request the boundary saw; anything the
+    // caller puts in the body is not accepted as evidence (C11.10).
     const signed = await signContract.call(
       {
         token: row!.token!,
         signerName: "Rae Lane",
-        ip: "203.0.113.7",
-        userAgent: "Mozilla/5.0 (iPhone)",
-      },
-      ANON,
+        ip: "198.51.100.66",
+        userAgent: "typed by the caller",
+      } as Parameters<typeof signContract.call>[0],
+      { ...ANON, request: { ip: "203.0.113.7", userAgent: "Mozilla/5.0 (iPhone)" } },
     );
     expect(signed.signatureHash).toMatch(/^[0-9a-f]{64}$/);
 
