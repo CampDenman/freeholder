@@ -13,10 +13,15 @@ import {
   parseAnalyticsConsentState,
 } from "@/modules/analytics/visitor";
 import { readBoundedText, RequestBodyError } from "@/core/http/body";
+import { env } from "@/core/env";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
 export async function POST(request: NextRequest): Promise<Response> {
+  // C1.38: the shared demo collects no visitor analytics. Accept and discard,
+  // as for a visitor whose consent refused collection — a 401 on every public
+  // page made the demo look broken in every browser console.
+  if (env().FREEHOLDER_PLAYGROUND === "1") return new Response(null, { status: 204 });
   let rawBody: string;
   try {
     rawBody = await readBoundedText(request, 8_192);

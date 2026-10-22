@@ -17,6 +17,11 @@ import type { z } from "zod";
 import { sql } from "drizzle-orm";
 import { env } from "@/core/env";
 import {
+  isPlaygroundPublicVerb,
+  PLAYGROUND_BASELINE_MODULE,
+  PLAYGROUND_CLIENT_LIMITS,
+  PLAYGROUND_PUBLIC_CONTACT_CAP,
+  PLAYGROUND_REFUSAL,
   PLAYGROUND_ROW_CAPS,
   playgroundAllows,
 } from "@/core/demo/playground-policy";
@@ -25,7 +30,7 @@ import { auditLog } from "@/core/events/schema";
 import { writeTimelineEvent } from "@/core/events";
 import { dispatchNow, enqueue } from "@/core/events/outbox";
 import type { TimelineEventInput } from "@/core/events";
-import { consume, rateLimitKey, TRUSTED_BACKSTOP_FACTOR, type RateLimitPolicy } from "@/core/security/rate-limit";
+import { anonymousClientKey, consume, rateLimitKey, TRUSTED_BACKSTOP_FACTOR, type RateLimitPolicy } from "@/core/security/rate-limit";
 import {
   enqueueJob,
   type EnqueuedJob,
@@ -439,7 +444,7 @@ function authorizeInput<In extends z.ZodType, Out>(
   actor: Actor,
 ): { input: z.output<In>; viaSelfService: boolean } {
   if (env().FREEHOLDER_PLAYGROUND === "1" && actor.kind !== "system" && !playgroundAllows(def.name, def.kind)) {
-    throw new ServiceError("permission", "This action is unavailable in the public playground.");
+    throw new ServiceError("permission", PLAYGROUND_REFUSAL);
   }
   const viaSelfService =
     def.selfService !== undefined &&
@@ -495,16 +500,28 @@ async function enforcePlaygroundRowCap<In extends z.ZodType, Out>(
   actor: Actor,
 ): Promise<void> {
   if (env().FREEHOLDER_PLAYGROUND !== "1" || actor.kind === "system") return;
-  const cap = PLAYGROUND_ROW_CAPS[def.name];
-  if (!cap) return;
-  const [row] = await db().execute<{ count: number }>(sql`
-    select count(*)::int as count from ${sql.identifier(cap.table)}
+  const caps = [
+    PLAYGROUND_ROW_CAPS[def.name],
+    isPlaygroundPublicVerb(def.name) ? PLAYGROUND_PUBLIC_CONTACT_CAP : undefined,
+  ];
+  // Growth since the sample site was installed, not the table's size: the
+  // seed's own rows must never use up what visitors may add.
+  const [stored] = await db().execute<{ baseline: Record<string, number> | null }>(sql`
+    select config->'baseline' as baseline from module_settings
+    where module = ${PLAYGROUND_BASELINE_MODULE}
   `);
-  if (Number(row?.count ?? 0) >= cap.limit) {
-    throw new ServiceError(
-      "rate_limited",
-      "This playground surface is full. The shared demo holds a bounded sample — try again after the hourly reset.",
-    );
+  const baseline = stored?.baseline ?? {};
+  for (const cap of caps) {
+    if (!cap) continue;
+    const [row] = await db().execute<{ count: number }>(sql`
+      select count(*)::int as count from ${sql.identifier(cap.table)}
+    `);
+    if (Number(row?.count ?? 0) - Number(baseline[cap.table] ?? 0) >= cap.limit) {
+      throw new ServiceError(
+        "rate_limited",
+        "This playground surface is full. The shared demo holds a bounded sample — try again after the hourly reset.",
+      );
+    }
   }
 }
 
@@ -514,6 +531,20 @@ async function enforceRateLimit<In extends z.ZodType, Out>(
   actor: Actor,
 ): Promise<void> {
   if (env().FREEHOLDER_PLAYGROUND === "1" && actor.kind !== "system" && def.kind === "mutation") {
+    // One client's own budget first, so a single script spends itself out
+    // before it can spend the ceiling and row caps every visitor shares. A
+    // caller with no client address (an in-process call, or a host that
+    // reports none) has no client to key on and meets the shared ceiling
+    // alone — keying them all on "unknown" would make one bucket for everyone.
+    if (actor.request?.trustedIp || actor.request?.ip) {
+      const client = anonymousClientKey(actor);
+      const minute = await consume(`playground:client:${client}`, PLAYGROUND_CLIENT_LIMITS.perMinute);
+      if (!minute.allowed) throw new ServiceError("rate_limited", "Too many changes from this connection. Please wait a moment.", minute.retryAfterSeconds);
+      if (isPlaygroundPublicVerb(def.name)) {
+        const hour = await consume(`playground:client-public:${client}`, PLAYGROUND_CLIENT_LIMITS.publicPerHour);
+        if (!hour.allowed) throw new ServiceError("rate_limited", "Too many submissions from this connection. Please try again later.", hour.retryAfterSeconds);
+      }
+    }
     const verdict = await consume("playground:all-mutations", { limit: 300, windowSeconds: 60 });
     if (!verdict.allowed) throw new ServiceError("rate_limited", "The shared playground is busy. Please try again shortly.", verdict.retryAfterSeconds);
   }

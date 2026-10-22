@@ -4215,6 +4215,65 @@ project without silent telemetry, and ready to carry money.
   against the stand-in `docker` only, and Caddy behaviour with Caddy 2.10.2 against a
   local app. Isolation from production's kernel, disk, Caddy and TLS still
   needs a CDN or a separate host.
+  Audit follow-up 2026-10-22 (public demo): a hands-on audit of
+  demo.freeholder.ai found the playground refusing its own public site. The
+  allow-list covered only the visitor's editing verbs, so every anonymous
+  public mutation (`forms.submit` on `/contact`, newsletter, event, cart,
+  chat, share, popups, reviews) failed with the playground refusal, and
+  `POST /api/analytics/vitals` answered 401 on every page. `PLAYGROUND_PUBLIC`
+  now admits the public site's verbs under new `PLAYGROUND_ROW_CAPS`
+  entries counted as growth past the post-seed baseline
+  (`markPlaygroundBaseline`, once per reset database, so the seed never
+  uses visitor headroom and a mid-hour restart never refunds it), a
+  shared `contacts` cap (public verbs resolve contacts as the
+  system), a per-client minute/hour budget spent before the shared ceiling
+  (`anonymousClientKey`, only when a client address is known) and an 8 KB
+  per-submission ceiling (256 KB on every install); `PLAYGROUND_PUBLIC_REFUSED` keeps credential flows (magic links,
+  portal sign-in), payment-provider checkout, uploads, the model-backed
+  assistant and visitor analytics refused with a stated reason, and a test
+  fails on any public mutation in neither list. Transactional mail queues to
+  a sink in the playground (`assertMailReady`/`sendMail`) and still fails
+  closed in `deliverQueuedMail`; the vitals route answers 204 there, keeping
+  "no visitor analytics". Public form actions no longer answer every
+  refusal with "check the fields below" and an empty form: a coarse reason
+  code (`src/core/http/public-form-return.ts`) separates answers to fix
+  (marked per field from the form's own schema), wait, unavailable here and
+  server fault, and the visitor's answers return in a two-minute httpOnly
+  cookie read by the routing layer (forms, quote and chat blocks; reason
+  codes also on newsletter, event and checkout). `PLAYGROUND_VIEW` now
+  grants read access to the business modules (inbox, invoices/payments,
+  scheduling, calendar, newsletters, galleries, quotes, assistant and the
+  rest) while writes stay governed by the allow-list; in playground mode
+  `requireStaffActor` opens a manage-only screen to a viewer and sends
+  operator machinery to `/admin/unavailable`, which explains the area,
+  instead of silently redirecting to the overview. The admin shell shows a
+  read-only notice on every non-content screen and a fallback for refusals
+  a screen did not render (adding an event), whose text comes from an
+  httpOnly flash cookie the refusing action set, never from the URL; catalog refusals
+  return to the posting screen (Promotions, not New product); collections
+  treats a refused segment read as none (was a 500); settings explains
+  modules a role cannot open; `/portal/login` has a title and explains the
+  playground. Regressions: `tests/core/playground.test.ts` (public verbs
+  pass signed out and as the visitor, mail fails closed, credential and
+  checkout verbs refused, every public mutation classified, contact-form,
+  contacts and submission-size caps, per-client budget, transactional sink
+  versus an ordinary install's refusal, no secret-shaped field in any query
+  the visitor may read, read-only screens),
+  `tests/core/playground-feedback.test.ts` (reason codes, answer-cookie keys
+  and size limit, read-once admin flash, posting-screen redirect,
+  manage-to-view guard), `tests/browser/playground.spec.ts` (signed-out
+  contact form, refusal keeps answers, vitals 204, portal title, admin tour
+  without bounces or 500s). Changeset
+  `playground-public-site-and-honest-refusals.md`. A local production
+  build with `FREEHOLDER_PLAYGROUND=1` was checked by hand: every static
+  admin route as the visitor answers without a 500 (translations 404s on a
+  one-language site by design), and the contact form, newsletter, vitals,
+  portal, Promotions and Events behaviours above were observed. The browser
+  suite ran against `fh_playground_test` but the shared database was too
+  slow for it to finish (entry step passed; the editor autosave and the
+  reset hook timed out with every request answering 200), and the
+  "separation and reset recovery" cases were blocked by a shared cluster
+  stuck on `DROP DATABASE`; both need a clean run.
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable
