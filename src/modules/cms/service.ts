@@ -164,7 +164,7 @@ import {
   HEADER_KEY,
   NAV_KEY,
 } from "./defaults";
-import { extractNavBlocks, navHasLinks } from "./chrome-nav";
+import { extractNavBlocks, mergeNavLinks, navHasLinks } from "./chrome-nav";
 import {
   demoHandlerInputSchema,
   demoLoadResultSchema,
@@ -565,6 +565,75 @@ export const publishedPaths = defineService({
           page,
         ),
       );
+  },
+});
+
+/**
+ * Published pages whose title or summary match a visitor's search (C1.38).
+ *
+ * The public /search page searched only products, so a wedding photographer's
+ * site answered "wedding" with nothing. This is the pages half: title, SEO
+ * title and SEO description only — never the body — so a search can never
+ * surface text from behind a paywall or a members-only block, and the same
+ * vetoes that keep a page out of the sitemap keep it out of results.
+ * Product pages are left to the product results beside these.
+ */
+export const searchPublishedPages = defineService({
+  name: "cms.searchPublishedPages",
+  summary: "Published pages matching a search term, by title and summary.",
+  kind: "query",
+  permission: "public",
+  input: z.object({
+    term: z.string().trim().min(1).max(120),
+    limit: z.number().int().min(1).max(50).default(10),
+  }),
+  output: listed(
+    row({
+      slug: z.string(),
+      title: z.string(),
+      description: z.string().nullable(),
+      kind: z.string(),
+    }),
+  ),
+  handler: async (input, ctx) => {
+    const [business] = await ctx.tx
+      .select({ defaultLocale: businessProfile.defaultLocale })
+      .from(businessProfile)
+      .limit(1);
+    const pattern = `%${input.term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const candidates = await ctx.tx
+      .select({ id: pages.id, slug: pages.slug, title: pages.title, seo: pages.seo })
+      .from(pages)
+      .where(
+        and(
+          eq(pages.status, "published"),
+          isNull(pages.trashedAt),
+          eq(pages.locale, business?.defaultLocale ?? "en"),
+          visibleLocationPage,
+          // The product results beside these already cover the shop.
+          sql`${pages.slug} <> 'products' and ${pages.slug} not like 'products/%'`,
+          or(
+            sql`${pages.title} ilike ${pattern}`,
+            sql`${pages.seo}->>'title' ilike ${pattern}`,
+            sql`${pages.seo}->>'description' ilike ${pattern}`,
+          ),
+        ),
+      )
+      .orderBy(asc(pages.slug))
+      .limit(input.limit * 2);
+    const found = [];
+    for (const page of candidates) {
+      if (found.length >= input.limit) break;
+      if ((await blockingVetoes(ctx.tx, { id: page.id, slug: page.slug })).length > 0) continue;
+      const seo = (page.seo ?? {}) as { title?: string; description?: string };
+      found.push({
+        slug: page.slug,
+        title: seo.title ?? page.title,
+        description: seo.description ?? null,
+        kind: kindFromSlug(page.slug),
+      });
+    }
+    return found;
   },
 });
 
@@ -1640,6 +1709,18 @@ export const ensureDefaults = defineService({
             .update(sections)
             .set({ blocks: parseChrome(pulled.nav, NAV_KEY) })
             .where(eq(sections.id, navRow.id));
+        } else {
+          // The nav section already has links (the platform appends
+          // /locations when a first location is created). The header's menu
+          // is still a menu somebody chose: merge it in rather than drop it,
+          // keeping an owner-arranged order (chrome-nav.ts).
+          const merged = structuredClone(navRow.blocks) as BlockNode[];
+          if (mergeNavLinks(merged, pulled.nav)) {
+            await ctx.tx
+              .update(sections)
+              .set({ blocks: parseChrome(merged, NAV_KEY) })
+              .where(eq(sections.id, navRow.id));
+          }
         }
         created.push("section:nav-migrated");
       }
@@ -1735,6 +1816,7 @@ export default [
   getPage,
   listPages,
   publishedPaths,
+  searchPublishedPages,
   createPage,
   deleteDraftPage,
   removePage,

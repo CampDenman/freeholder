@@ -41,6 +41,15 @@ describe("titles and filter URLs", () => {
       .toBe("Aurora Coast Photography");
     expect(composeDocumentTitle("About", "Aurora Coast Photography", false))
       .toBe("About · Aurora Coast Photography");
+    // A title that already names the business is not doubled.
+    expect(composeDocumentTitle("About Aurora Coast Photography", "Aurora Coast Photography", false))
+      .toBe("About Aurora Coast Photography");
+    expect(composeDocumentTitle("Contact aurora coast photography", "Aurora Coast Photography", false))
+      .toBe("Contact aurora coast photography");
+    // A short brand is matched as a whole word at the start or end only.
+    expect(composeDocumentTitle("Artists we work with", "Art", false)).toBe("Artists we work with · Art");
+    expect(composeDocumentTitle("Why start a class here", "Art", false)).toBe("Why start a class here · Art");
+    expect(composeDocumentTitle("Art: opening hours", "Art", false)).toBe("Art: opening hours");
     expect(
       composeDocumentTitle(
         "Wedding photography, Vancouver Island",
