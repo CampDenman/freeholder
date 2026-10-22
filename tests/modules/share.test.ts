@@ -301,9 +301,21 @@ describe.runIf(hasDatabase)("sharing", () => {
       input: { path: string },
       actor: Actor,
     ) => string | undefined;
-    const actor: Actor = { kind: "anonymous", request: { ip: "203.0.113.9" } };
-    expect(subject({ path: "one" }, actor)).toBe("ip:203.0.113.9");
-    expect(subject({ path: "two" }, actor)).toBe("ip:203.0.113.9");
+    const actor: Actor = { kind: "anonymous", request: { ip: "203.0.113.9", trustedIp: "198.51.100.4" } };
+    expect(subject({ path: "one" }, actor)).toBe("ip:198.51.100.4");
+    expect(subject({ path: "two" }, actor)).toBe("ip:198.51.100.4");
+  });
+
+  it("never keys a limit on a client-written forwarding address (C11.10)", () => {
+    const subject = shareVia.def.rateLimit!.subject as (
+      input: { path: string },
+      actor: Actor,
+    ) => string | undefined;
+    // Two spoofed X-Forwarded-For values, no trusted proxy header: one bucket.
+    const first: Actor = { kind: "anonymous", request: { ip: "203.0.113.9" } };
+    const second: Actor = { kind: "anonymous", request: { ip: "203.0.113.10" } };
+    expect(subject({ path: "one" }, first)).toBe(subject({ path: "one" }, second));
+    expect(subject({ path: "one" }, first)).not.toContain("203.0.113.9");
   });
 
   it("offers no channels when an owner unticks every one", async () => {

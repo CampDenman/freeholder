@@ -304,6 +304,43 @@ describe.runIf(hasDatabase)("hiring things out", { timeout: 90_000 }, () => {
     expect(held).toHaveLength(1);
   });
 
+  it("lands a visitor's hire as a request the owner confirms (C11.10)", async () => {
+    const { variantId } = await tripod();
+    const visitor = await reserve(variantId);
+    const [requested] = await db()
+      .select({ status: bookings.status })
+      .from(bookings)
+      .where(eq(bookings.id, visitor.bookingId!));
+    expect(requested?.status).toBe("requested");
+
+    const staff = await reserveHire.call(
+      {
+        variantId,
+        contact: { email: "walk-in@example.test" },
+        startsAt: "2026-10-14T09:00:00.000Z",
+        endsAt: "2026-10-15T09:00:00.000Z",
+        currency: "GBP",
+      },
+      OWNER,
+    );
+    const [confirmed] = await db()
+      .select({ status: bookings.status })
+      .from(bookings)
+      .where(eq(bookings.id, staff.bookingId!));
+    expect(confirmed?.status).toBe("confirmed");
+  });
+
+  it("bounds how many hires one address can request (C11.10)", async () => {
+    const { variantId } = await tripod();
+    const codes: string[] = [];
+    for (let week = 0; week < 6; week++) {
+      const from = new Date(Date.UTC(2026, 10, 2 + week * 7, 9)).toISOString();
+      const to = new Date(Date.UTC(2026, 10, 3 + week * 7, 9)).toISOString();
+      codes.push(await reserve(variantId, "flood@example.test", from, to).then(() => "ok", (error: { code?: string }) => error.code ?? "error"));
+    }
+    expect(codes).toEqual(["ok", "ok", "ok", "ok", "ok", "rate_limited"]);
+  });
+
   it("holds the turnaround time as well as the hire", async () => {
     const { variantId } = await tripod({ bufferAfterHours: 24 });
     const hire = await reserve(variantId);

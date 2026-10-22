@@ -37,6 +37,7 @@ import {
   type ServiceContext,
   type Tx,
 } from "@/core/service";
+import { anonymousClientKey } from "@/core/security/rate-limit";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { withoutHoldCascade } from "@/core/retention/holds";
@@ -664,7 +665,7 @@ export const recordPopupEvent = defineService({
       `popup:${input.popupId}:${
         actor.kind === "user" || actor.kind === "agent"
           ? actorString(actor)
-          : `ip:${actor.request?.ip ?? "unknown"}`
+          : anonymousClientKey(actor)
       }`,
     message: "This popup has been reported a lot just now. Try again shortly.",
   },
@@ -740,7 +741,9 @@ export const capturePopup = defineService({
       `popup-capture:${input.popupId}:${
         actor.kind === "user" || actor.kind === "agent"
           ? actorString(actor)
-          : `ip:${actor.request?.ip ?? "unknown"}`
+          : actor.request?.trustedIp
+            ? anonymousClientKey(actor)
+            : `email:${input.email}`
       }`,
     message: "This popup has taken a lot of sign-ups just now. Try again shortly.",
   },

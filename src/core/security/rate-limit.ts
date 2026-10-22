@@ -26,7 +26,21 @@
 // matter for password guessing at these limits.
 import { sql } from "drizzle-orm";
 import { db } from "@/core/db";
-import type { Tx } from "@/core/service";
+import type { Actor, Tx } from "@/core/service";
+
+/**
+ * The bucket an anonymous caller is counted in (C11.10).
+ *
+ * Only the deployment-validated address (`TRUSTED_CLIENT_IP_HEADER`) can
+ * separate one visitor from another. The first `X-Forwarded-For` entry is
+ * whatever the client wrote, so keying on it gives every request a fresh
+ * allowance. Without a trusted header, anonymous callers share one bucket:
+ * a ceiling that holds, rather than one that is only decorative.
+ */
+export function anonymousClientKey(actor: Actor): string {
+  const trusted = actor.request?.trustedIp;
+  return trusted ? `ip:${trusted}` : "ip:untrusted";
+}
 
 export interface RateLimitPolicy {
   /** Attempts allowed per window, per key. */

@@ -40,6 +40,7 @@ import {
   ServiceError,
   type ServiceContext,
 } from "@/core/service";
+import { anonymousClientKey } from "@/core/security/rate-limit";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -239,7 +240,7 @@ export const shareVia = defineService({
     subject: (_input, actor) =>
       actor.kind === "user" || actor.kind === "agent"
         ? actorString(actor)
-        : `ip:${actor.request?.ip ?? "unknown"}`,
+        : anonymousClientKey(actor),
     message: "That is a lot of sharing at once. Wait a few minutes and try again.",
   },
   handler: async (input, ctx) => {

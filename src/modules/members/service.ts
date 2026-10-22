@@ -15,6 +15,7 @@ import { contacts } from "@/core/contacts/schema";
 import { resolveContact } from "@/core/contacts/service";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Actor, type ServiceContext } from "@/core/service";
+import { anonymousClientKey } from "@/core/security/rate-limit";
 import {
   HANDLE_PATTERN,
   JOIN_POLICIES,
@@ -213,7 +214,7 @@ export const handleAvailability = defineService({
   summary: "Whether a handle can be claimed.",
   kind: "query",
   permission: "public",
-  rateLimit: { limit: 60, windowSeconds: 60, message: "Please slow down.", subject: (_input, actor) => (actor.kind === "user" ? actor.userId : actor.request?.ip) },
+  rateLimit: { limit: 60, windowSeconds: 60, message: "Please slow down.", subject: (_input, actor) => (actor.kind === "user" ? actor.userId : anonymousClientKey(actor)) },
   input: z.object({ handle: z.string().trim().toLowerCase().max(60) }),
   output: z.object({ available: z.boolean(), reason: z.string().nullable() }),
   handler: async (input, ctx) => {

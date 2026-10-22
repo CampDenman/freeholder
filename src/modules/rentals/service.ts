@@ -24,15 +24,17 @@ import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
-import { calendars } from "@/core/scheduling/schema";
+import { bookings, calendars } from "@/core/scheduling/schema";
 import { productVariants, products } from "@/modules/catalog/schema";
 import {
   defineService,
   getService,
+  permits,
   ServiceError,
   type Actor,
   type ServiceContext,
 } from "@/core/service";
+import { anonymousClientKey, consumeAccepted, rateLimitKey } from "@/core/security/rate-limit";
 import {
   DAMAGE_POLICIES,
   RENTAL_STATUSES,
@@ -313,6 +315,24 @@ export const quoteHire = defineService({
   },
 });
 
+/** Hire requests one address, or one validated client, may make per hour. */
+const HIRE_REQUEST_LIMIT = { limit: 5, windowSeconds: 60 * 60 } as const;
+
+async function throttleRequests(ctx: ServiceContext, email: string): Promise<void> {
+  const keys = [`email:${email}`];
+  if (ctx.actor.request?.trustedIp) keys.push(anonymousClientKey(ctx.actor));
+  for (const key of keys) {
+    const verdict = await consumeAccepted(ctx.tx, rateLimitKey("rentals.reserve", key), HIRE_REQUEST_LIMIT);
+    if (!verdict.allowed) {
+      throw new ServiceError(
+        "rate_limited",
+        "That is a lot of hire requests at once. Try again later, or contact the business.",
+        verdict.retryAfterSeconds,
+      );
+    }
+  }
+}
+
 export const reserveHire = defineService({
   name: "rentals.reserve",
   summary: "Hold a thing for somebody, on its own calendar.",
@@ -340,6 +360,15 @@ export const reserveHire = defineService({
       throw new ServiceError("validation", "A hire ends after it starts.");
     }
     const terms = await termsForVariant(ctx, input.variantId);
+
+    // C11.10: a public door into a calendar. Whoever can hand the thing over
+    // reserves it outright; anybody else — a visitor, a customer — makes a
+    // *request*, which still holds the time (the exclusion constraint counts
+    // requested bookings) but is something the owner confirms rather than a
+    // commitment a stranger made on their behalf. Requests are bounded per
+    // address and per validated client, counted in this transaction.
+    const staff = permits(ctx.actor, "scoped", "rentals.handOver", "mutation");
+    if (!staff) await throttleRequests(ctx, input.contact.email);
 
     const quoted = (await ctx.callAsSystem(getService("rentals.quote"), {
       variantId: input.variantId,
@@ -369,7 +398,7 @@ export const reserveHire = defineService({
       ).toISOString(),
       endsAt: new Date(dueAt.getTime() + terms.bufferAfterHours * 3_600_000).toISOString(),
       source: "site",
-      status: "confirmed",
+      status: staff ? "confirmed" : "requested",
       notes: input.notes ?? null,
     })) as { id: string; contactId: string };
 
@@ -432,6 +461,22 @@ export const handOver = defineService({
         "conflict",
         `A hire that is ${agreement.status} cannot go out again.`,
       );
+    }
+    // A visitor's hire was booked as a request (C11.10). Handing the thing
+    // over is the owner accepting it, so the booking is confirmed here unless
+    // they already confirmed it from the calendar.
+    if (agreement.bookingId) {
+      const [booking] = await ctx.tx
+        .select({ status: bookings.status })
+        .from(bookings)
+        .where(eq(bookings.id, agreement.bookingId))
+        .limit(1);
+      if (booking?.status === "requested") {
+        await ctx.callAsSystem(getService("bookings.setStatus"), {
+          id: agreement.bookingId,
+          status: "confirmed",
+        });
+      }
     }
 
     const [out] = await ctx.tx
