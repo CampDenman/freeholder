@@ -54,7 +54,10 @@ export function composeDocumentTitle(
   isHome: boolean,
 ): string {
   const own = clipSeoText(title, TITLE_LIMIT);
-  if (isHome || !siteName || own === siteName) return own;
+  // A title that already names the business ("About Aurora Coast
+  // Photography") would otherwise come out doubled: "About Aurora Coast
+  // Photography · Aurora Coast Photography".
+  if (isHome || !siteName || own.toLowerCase().includes(siteName.trim().toLowerCase())) return own;
   const combined = `${own} · ${siteName}`;
   return combined.length <= TITLE_LIMIT ? combined : own;
 }

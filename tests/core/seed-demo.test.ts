@@ -31,7 +31,17 @@ import {
   updateBusiness,
 } from "@/core/settings/service";
 import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
-import { PAGES, IMAGES, BUSINESS, LOCATION, NEWSLETTER } from "../../seed/demo/content";
+import {
+  PAGES,
+  IMAGES,
+  BUSINESS,
+  LOCATION,
+  NEWSLETTER,
+  CATALOG,
+  COLLECTIONS,
+  EVENTS,
+  SERVICES,
+} from "../../seed/demo/content";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { compute } from "@/modules/calculators/service";
 import { listNewsletters, listPublicIssues, listTemplates } from "@/modules/newsletters/service";
@@ -154,7 +164,14 @@ describe("the demo content, before anything installs it", () => {
   });
 
   it("links only to pages that exist", () => {
-    const known = new Set(PAGES.map((p) => `/${p.slug}`.replace(/\/$/, "") || "/"));
+    // Pages, plus the routes the demo's shop, booking and events own.
+    const known = new Set([
+      ...PAGES.map((p) => `/${p.slug}`.replace(/\/$/, "") || "/"),
+      "/book",
+      "/products",
+      "/events",
+      ...COLLECTIONS.map((collection) => `/c/${collection.slug}`),
+    ]);
     const ids = Object.fromEntries(
       Object.keys(IMAGES).map((k) => [k, "00000000-0000-4000-8000-000000000000"]),
     ) as Record<keyof typeof IMAGES, string>;
@@ -174,7 +191,7 @@ describe("the demo content, before anything installs it", () => {
   });
 });
 
-describe.runIf(hasDatabase)("installing the demo", () => {
+describe.runIf(hasDatabase)("installing the demo", { timeout: 120_000 }, () => {
   beforeEach(async () => {
     await truncateSpine();
   });
@@ -265,12 +282,19 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     // rather than through the seed writing them — so this assertion is also
     // the proof that path is wired up end to end.
     const paths = await publishedPaths.call({ locale: "en" }, STAFF);
+    // The shop's products and services and the events earn theirs the
+    // same way, through catalog's and events' own publishing paths.
     expect(paths.map((p: { slug: string }) => p.slug).sort()).toEqual(
       [
         ...PAGES.map((p) => p.slug),
         "locations",
         `locations/${LOCATION.slug}`,
         `newsletters/${NEWSLETTER.issue.slug}`,
+        "products",
+        ...CATALOG.map((product) => `products/${product.slug}`),
+        ...SERVICES.map((service) => `products/${service.slug}`),
+        "events",
+        ...EVENTS.map((event) => `events/${event.slug}`),
       ].sort(),
     );
 
@@ -297,7 +321,7 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     const rows = await db().select().from(assets);
     expect(rows).toHaveLength(Object.keys(IMAGES).length);
     for (const asset of rows) {
-      expect(asset.width).toBe(1600);
+      expect(asset.width).toBe(1200);
       expect(asset.altText ?? "").not.toBe("");
       // AVIF and WebP at several widths — the §36 performance promise.
       expect(Object.keys(asset.variants as object).length).toBeGreaterThan(0);
@@ -357,7 +381,11 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     // And it refused *before* writing anything: no duplicate pages, no second
     // set of images.
     const rows = await db().select().from(pages);
-    expect(rows).toHaveLength(PAGES.length + 3); // + the location, its index, and the demo issue
+    // + the location, its index, the demo issue, and the shop's and events'
+    // own pages and indexes.
+    expect(rows).toHaveLength(
+      PAGES.length + 3 + 1 + CATALOG.length + SERVICES.length + 1 + EVENTS.length,
+    );
     expect(await db().select().from(assets)).toHaveLength(
       Object.keys(IMAGES).length,
     );

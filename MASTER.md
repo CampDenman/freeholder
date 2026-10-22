@@ -4004,6 +4004,11 @@ reading chat logs.
   default, opt-out, explicit production request, pristine guard and restart
   idempotence; 88-file/1,085-test Vitest suite; production build; changeset
   `seeded-development-home.md` **F04** setup wizard demo install, not a new admin screen. **F05** `demo.install` and `seed.installPreset` at `/api/v1/demo.install` and `/api/v1/seed.installPreset`, MCP `demo_install`/`seed_installPreset`. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `seeded-development-home.md` landed with the rest of the spine.)
+  Audit follow-up 2026-10-22: the fresh demo now also installs a sellable
+  shop, bookable services and upcoming events through the owner's services,
+  and `FREEHOLDER_SEED_DEMO=busy` adds the six-month sample business (see
+  C1.38); `tests/core/seed-demo.test.ts` covers the larger published set;
+  changeset `busy-demo-business.md`.
 - [x] **C1.25** Build resumable, role/capability-derived onboarding for owner,
   administrator, editor, bookkeeper, service provider and customer, with
   first-win tasks, contextual relaunch, skip/reset, progress and forbidden-
@@ -4166,6 +4171,50 @@ project without silent telemetry, and ready to carry money.
 
 - [x] **C1.38** Provide a public, disposable shared playground on a separate database and network: restricted visitor sessions, prominent reset/privacy notice, blocked privileged operations and external delivery, hourly reset, bounded resources, and a live demo entry link. Prove content edits, denied sensitive actions, reset recovery, and separation from the production instance.
   (Checked 2026-09-27. The isolated playground base (own compose project, database container and internal-only networks; synthetic visitor entry; mutation allow-list policy) is hardened to the full contract. **Restricted visitor sessions:** `src/core/demo/playground.ts` issues sessions only for the synthetic, passwordless `visitor@playground.invalid` principal in the grant-less `playground` role with a one-hour expiry; `tests/core/playground.test.ts` proves the resolved session's grants stay inside `PLAYGROUND_MANAGE`/`PLAYGROUND_VIEW` with manage only on content modules, that no credential flow (`auth.login`) can start from it, and that role creation, staff invitations, host updates, mail test sends, uploads, SMS, payment and settings mutations are refused *server-side* with `permission` — the refusal lives in `authorizeInput` (`src/core/service.ts`), so the admin UI, REST API and MCP hit the same wall, and the test calls the services directly as the playground principal. **Reset/privacy notice:** the root-layout banner (`app/layout.tsx`, key `playground.banner`) rides every playground surface and the `/playground` entry page (`app/playground/page.tsx`, key `playground.limits`) states the hourly reset and the no-personal-information rule, in all four locale catalogs; the demo also serves `Disallow: /` robots. **Blocked external delivery:** `playgroundBlocksExternalDelivery` (`src/core/demo/playground-policy.ts`) fails closed at the three live choke points — `deliverQueuedMail` (`src/core/mail/service.ts`), `messaging.sendSms` (`src/core/messaging/sms.ts`) and the webhook sweep (`src/core/webhooks/deliver.ts`) — so background jobs running as `system` (reminders, compliance replies, queued webhooks) cannot send mail/SMS/webhooks even though the mutation allow-list never covered them; the same test proves each refusal carries the playground reason while a playground-off control takes the ordinary path, and the container gate proves blocked egress on the built image. **Hourly reset:** `deploy/docker-selfhost/playground/reset.sh` recreates the disposable project and is driven hourly by `freeholder-playground-reset.timer`; `tests/core/playground.test.ts` ("playground separation and reset recovery") simulates that cycle (fresh database + migrate + the same boot phases `instrumentation.node.ts` runs) and proves reset recovery: the old visitor session no longer validates, visitor pages are gone, the sample site is reinstalled to the same page count, and a new visitor can edit again. **Bounded resources:** uploads are refused outright (allow-list), all visitor mutations share a 300-per-minute ceiling (`enforceRateLimit`, `src/core/service.ts`), and per-surface row caps (`PLAYGROUND_ROW_CAPS` + `enforcePlaygroundRowCap`) bound pages, sections, forms, contacts, products, notes and tasks; the exact bound (299 further mutations after entry, then refusal; contacts capped at the declared limit while pages still accept edits) is asserted in `tests/core/playground.test.ts`. **Separation:** the playground is its own compose project with its own database container, tmpfs volumes and internal-only networks (`deploy/docker-selfhost/playground/compose.yml`), and the same file proves it on a live cluster: a production-shaped database and a playground database on distinct `DATABASE_URL`s, the playground flag failing closed ("disposable database") against real accounts, the synthetic pair the only users the playground database ever holds, and visitor sessions/content never appearing in the production database. **Live demo entry link:** `FREEHOLDER_PLAYGROUND_URL` renders the "Try the live demo" banner link on a main site (`app/layout.tsx`). **Browser proof:** `tests/browser/playground.spec.ts` (config `playwright.playground.config.ts`, `pnpm test:playground`) drives Chromium through entry, the notice, a real editor edit + publish, three privileged API denials as the visitor (staff invitation, mail test send, upload staging — each 403 with the playground message), the reset (session dead → `/playground` redirect, visitor page 404, reseeded sample back, re-entry and editing restored); CI's `scripts/playground-gate.sh` proves boot, sign-in, editor render and blocked egress on the built container. **F04** entry page + root banner: `app/playground/page.tsx`, `app/layout.tsx`. **F05** one refusal across every projection via the service choke point `src/core/service.ts`; container entry exercised over HTTP by `scripts/playground-gate.sh`. **F07** threat model and bounds: `src/core/demo/playground-policy.ts`, `tests/core/playground.test.ts`. **F09** hourly reset job `deploy/docker-selfhost/playground/reset.sh` + `freeholder-playground-reset.timer`, recovery proof in the same file. **F12** the browser journey composes entry → edit → publish → denial → reset → re-entry: `tests/browser/playground.spec.ts`.)
+  Audit follow-up 2026-10-22 (hands-on audit of demo.freeholder.ai): the
+  playground was empty where evaluators look and its menu read "Locations".
+  **Menu:** `cms.ensureDefaults` moved a header menu into a nav section that
+  already held the platform's `/locations` link and discarded the header's
+  links — on any site, not only the demo; it now merges them
+  (`mergeNavLinks`, `src/modules/cms/chrome-nav.ts`), and the demo seeds its
+  menu into the Navigation section. **Shop/booking/events:** the plain demo
+  now walks the owner path end to end through services
+  (`src/modules/seed/business.ts`): BC tax starter with collection active,
+  standard category, print-size variants, CAD retail price list, stock,
+  hero images, two collections, three service products with offerings, a
+  studio calendar with weekly hours and a public booking audience, and
+  three upcoming events (one free, two paid); product pages now render the
+  product's picture and description (`productDetail`, public
+  `catalog.productHeroImage`). **Busy business:** `demo.installBusy`
+  (`src/modules/seed/busy.ts`, `seed/demo/busy/*`) adds six months of
+  deterministic, clock-relative sample business in one bulk transaction —
+  220 @example.com contacts (fr-CA included) with notes, tasks, look-alike
+  duplicates and timelines; ~85 invoices across statuses with balanced
+  payments, refunds and plans; quotes, signed agreements, gift cards,
+  coupons, subscriptions; ~130 bookings and past/upcoming event
+  registrations; journal posts, galleries, reviews, sent newsletter issues
+  with consented recipients, enquiries; inbox threads; ~20k first-party
+  analytics events with seasonality; members, automations with runs and
+  pending approvals; attributed audit history. On in the playground and
+  with `FREEHOLDER_SEED_DEMO=busy`; plain development stays site-only.
+  Measured locally: plain demo 13–41 s (image renditions dominate, now
+  1200 px), busy layer ~2 s, database 55 MB. **Polish:** generated coastal
+  illustrations replace the gradient placeholders (`seed/demo/illustrations.ts`,
+  original, described alt text); titles no longer double the brand
+  (`composeDocumentTitle`); `/book` and `/memberships` carry description,
+  canonical and branded title (`app/(public)/utility-metadata.ts`); `/search`
+  searches page titles/summaries via public `cms.searchPublishedPages`
+  (never bodies); the share bar is off on the demo's non-content pages
+  through owner share settings. Evidence: `tests/core/seed-demo-busy.test.ts`
+  (determinism, unique lowercase emails, ledger balances, no double-booked
+  calendars, seats within capacity, no future-dated history, consent before
+  send, timing and size budget), `tests/core/seed-demo.test.ts`,
+  `tests/core/cms-chrome.test.ts`, `tests/core/seo-surface.test.ts`,
+  `tests/core/playground.test.ts`; changeset `busy-demo-business.md`. Open:
+  the playground mutation allow-list and admin visibility (separate work)
+  still refuse anonymous cart/checkout/booking and hide sales, inbox and
+  calendar screens from the visitor; checkout's email proof cannot complete
+  while playground mail is blocked.
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable

@@ -41,6 +41,11 @@ describe("titles and filter URLs", () => {
       .toBe("Aurora Coast Photography");
     expect(composeDocumentTitle("About", "Aurora Coast Photography", false))
       .toBe("About · Aurora Coast Photography");
+    // A title that already names the business is not doubled.
+    expect(composeDocumentTitle("About Aurora Coast Photography", "Aurora Coast Photography", false))
+      .toBe("About Aurora Coast Photography");
+    expect(composeDocumentTitle("Contact aurora coast photography", "Aurora Coast Photography", false))
+      .toBe("Contact aurora coast photography");
     expect(
       composeDocumentTitle(
         "Wedding photography, Vancouver Island",

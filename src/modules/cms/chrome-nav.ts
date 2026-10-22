@@ -19,6 +19,45 @@ export function addNavLink(blocks: BlockNode[], label: string, href: string): bo
   return false;
 }
 
+/**
+ * Fold menu links into the first nav block of a tree, header links first.
+ *
+ * Used when the header's own nav moves into the nav section and that section
+ * already has links of its own — typically a `/locations` link the platform
+ * appended when the first location was created. Discarding the header's
+ * menu there is what left a whole site with "Locations" as its only header
+ * link; merging keeps every link the owner chose and every one the platform
+ * added, once each.
+ */
+export function mergeNavLinks(
+  target: BlockNode[],
+  links: Array<{ label: string; href: string }>,
+): boolean {
+  for (const node of target) {
+    if (node.type === "nav") {
+      const existing = (node.props.links ?? []) as Array<{ label: string; href: string }>;
+      const seen = new Set<string>();
+      node.props.links = [...links, ...existing].filter((link) => {
+        if (seen.has(link.href)) return false;
+        seen.add(link.href);
+        return true;
+      });
+      return true;
+    }
+    if (node.children && mergeNavLinks(node.children, links)) return true;
+  }
+  return false;
+}
+
+export function navLinks(blocks: BlockNode[]): Array<{ label: string; href: string }> {
+  const out: Array<{ label: string; href: string }> = [];
+  for (const node of blocks) {
+    if (node.type === "nav") out.push(...((node.props.links ?? []) as Array<{ label: string; href: string }>));
+    if (node.children) out.push(...navLinks(node.children));
+  }
+  return out;
+}
+
 export function extractNavBlocks(blocks: BlockNode[]): {
   nav: BlockNode[];
   rest: BlockNode[];

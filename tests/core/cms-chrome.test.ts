@@ -111,4 +111,55 @@ describe.runIf(hasDatabase)("cms chrome sections", { timeout: 30_000 }, () => {
     expect(JSON.stringify(navigation?.blocks)).toContain("/studio");
     expect(announcement?.kind).toBe("chrome");
   });
+
+  it("merges a header menu into a nav section that already has a platform link", async () => {
+    // The demo's exact shape: the first location appended /locations to the
+    // nav section, then a later ensureDefaults moved the header menu out.
+    // Before the fix the header menu was discarded and the whole site's
+    // menu was "Locations".
+    await updateBusiness.call(BUSINESS, OWNER);
+    await ensureDefaults.call({}, OWNER);
+    await updateSection.call(
+      {
+        key: NAV_KEY,
+        blocks: [{ id: "chrome-nav", type: "nav", props: { links: [{ label: "Locations", href: "/locations" }] } }],
+      },
+      OWNER,
+    );
+    await updateSection.call(
+      {
+        key: "header",
+        blocks: [
+          {
+            id: "row",
+            type: "columns",
+            props: { count: 2 },
+            children: [
+              { id: "brand", type: "brand", props: { href: "/" } },
+              {
+                id: "old-nav",
+                type: "nav",
+                props: {
+                  links: [
+                    { label: "Services", href: "/services" },
+                    { label: "About", href: "/about" },
+                    { label: "Locations", href: "/locations" },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      OWNER,
+    );
+
+    await ensureDefaults.call({}, OWNER);
+
+    const header = await getSection.call({ key: "header" }, ANONYMOUS);
+    const navigation = await getSection.call({ key: NAV_KEY }, ANONYMOUS);
+    expect(JSON.stringify(header?.blocks)).not.toContain("old-nav");
+    const links = ((navigation!.blocks as Array<{ props: { links: Array<{ href: string }> } }>)[0]!.props).links;
+    expect(links.map((link) => link.href)).toEqual(["/services", "/about", "/locations"]);
+  });
 });

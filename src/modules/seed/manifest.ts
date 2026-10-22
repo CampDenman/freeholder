@@ -20,5 +20,5 @@ export default defineModule({
   requires: ["core", "cms", "catalog", "forms"],
   services: () => import("./service"),
   onboarding: () => import("./onboarding"),
-  events: { emits: ["demo.installed"] },
+  events: { emits: ["demo.installed", "demo.busyInstalled"] },
 });

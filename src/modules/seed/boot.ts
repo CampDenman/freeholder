@@ -23,6 +23,7 @@ export type DemoSeedOutcome =
       business: string;
       pages: string[];
       assets: number;
+      busy?: Record<string, Record<string, number>>;
     };
 
 /**
@@ -34,8 +35,24 @@ export function demoSeedMode(
   environment: Pick<ReturnType<typeof env>, "NODE_ENV" | "FREEHOLDER_SEED_DEMO">,
 ): "disabled" | "development" | "requested" {
   if (environment.FREEHOLDER_SEED_DEMO === "0") return "disabled";
-  if (environment.FREEHOLDER_SEED_DEMO === "1") return "requested";
+  if (environment.FREEHOLDER_SEED_DEMO === "1" || environment.FREEHOLDER_SEED_DEMO === "busy") {
+    return "requested";
+  }
   return environment.NODE_ENV === "development" ? "development" : "disabled";
+}
+
+/**
+ * Whether the installed demo also gets six months of sample business.
+ *
+ * The public playground always does — an evaluator opening an empty CRM
+ * learns nothing — and anyone else asks with `FREEHOLDER_SEED_DEMO=busy`.
+ * Plain development stays on the quick site-only demo.
+ */
+export function demoSeedBusy(
+  environment: Pick<ReturnType<typeof env>, "FREEHOLDER_SEED_DEMO" | "FREEHOLDER_PLAYGROUND">,
+): boolean {
+  if (environment.FREEHOLDER_SEED_DEMO === "0") return false;
+  return environment.FREEHOLDER_SEED_DEMO === "busy" || environment.FREEHOLDER_PLAYGROUND === "1";
 }
 
 /**
@@ -74,7 +91,15 @@ export async function seedDemoIfRequested(): Promise<DemoSeedOutcome> {
     console.log(
       `[freeholder] demo installed: ${result.business}, ${result.pages.length} pages, ${result.assets} images`,
     );
-    return { status: "installed", ...result };
+    if (!demoSeedBusy(environment)) return { status: "installed", ...result };
+    const started = Date.now();
+    const { installBusyDemo } = await import("./busy");
+    const busy = await installBusyDemo.call({}, { kind: "system" });
+    const contacts = busy.counts.crm?.contacts ?? 0;
+    console.log(
+      `[freeholder] busy demo installed: ${contacts} contacts in ${Date.now() - started} ms`,
+    );
+    return { status: "installed", ...result, busy: busy.counts };
   } catch (error) {
     // A restart of a seeded process is not a fault. Match both the typed code
     // and this installer's precise refusal so an unrelated conflict — for

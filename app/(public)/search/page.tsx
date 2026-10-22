@@ -18,6 +18,7 @@
 
 import type { Metadata } from "next";
 import { browseProducts, purchaseOptions } from "@/modules/catalog/service";
+import { searchPublishedPages } from "@/modules/cms/service";
 import { composeDocumentTitle, ogImagePath } from "@/core/seo/meta";
 import { siteOrigin } from "@/core/seo/origin";
 import { localePath, localizeCustomerHref } from "@/core/i18n/customer";
@@ -54,6 +55,12 @@ function termOf(query: Query): string | undefined {
 async function search(query: Query) {
   const parsed = parseBrowseQuery(query);
   const term = termOf(query);
+  // Pages and journal posts, by title and summary (C1.38): a photographer's
+  // site that answered "wedding" with an empty product grid was telling the
+  // visitor the site had nothing about weddings.
+  const pageHits = term && parsed.page === 1
+    ? await searchPublishedPages.call({ term, limit: 10 }, ANONYMOUS)
+    : [];
   const result = await browseProducts.call(
     {
       term,
@@ -64,7 +71,7 @@ async function search(query: Query) {
     },
     ANONYMOUS,
   );
-  return { parsed, term, result };
+  return { parsed, term, result, pageHits };
 }
 
 export async function generateMetadata({
@@ -110,7 +117,7 @@ export default async function StorefrontSearchPage({
 }) {
   const query = await searchParams;
   const [locale, t] = await Promise.all([getLocale(), getT()]);
-  const [{ parsed, term, result }, business] = await Promise.all([
+  const [{ parsed, term, result, pageHits }, business] = await Promise.all([
     search(query),
     currentBusiness(),
   ]);
@@ -166,12 +173,39 @@ export default async function StorefrontSearchPage({
         />
         {term ? (
           <p className="text-ink-muted">
-            {t("store.search.resultsFor", { count: total, query: term })}
+            {t("store.search.resultsFor", { count: total + pageHits.length, query: term })}
           </p>
         ) : (
           <p className="text-ink-muted">{t("store.search.prompt")}</p>
         )}
       </header>
+      {pageHits.length > 0 ? (
+        <section aria-labelledby="search-pages" className="grid gap-3">
+          <h2 id="search-pages" className="text-lg font-semibold text-ink">
+            {t("store.search.pagesHeading")}
+          </h2>
+          <ul className="grid list-none gap-3 p-0">
+            {pageHits.map((hit) => {
+              const href = business
+                ? localizeCustomerHref(`/${hit.slug}`, locale, business)
+                : `/${hit.slug}`;
+              return (
+                <li key={hit.slug} className="rounded-lg border border-rule bg-surface p-4">
+                  <a href={href} className="font-semibold text-ink underline-offset-2 hover:underline">
+                    {hit.title}
+                  </a>
+                  {hit.description ? (
+                    <p className="mt-1 text-sm text-ink-muted">{hit.description}</p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+      {pageHits.length > 0 && total > 0 ? (
+        <h2 className="text-lg font-semibold text-ink">{t("store.search.productsHeading")}</h2>
+      ) : null}
       <div className="grid items-start gap-6 lg:grid-cols-[16rem_1fr]">
         <FacetPanel
           facets={facetData}
@@ -210,7 +244,11 @@ export default async function StorefrontSearchPage({
             page={parsed.page}
             pageCount={pageCount}
             labels={{
-              empty: term ? t("store.search.empty") : t("store.search.prompt"),
+              empty: term
+                ? pageHits.length > 0
+                  ? t("store.search.noProducts")
+                  : t("store.search.empty")
+                : t("store.search.prompt"),
               previous: t("store.collection.previous"),
               next: t("store.collection.next"),
               page: t("store.collection.page", { page: parsed.page, pages: pageCount }),

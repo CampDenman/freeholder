@@ -376,11 +376,14 @@ const envSchema = z.object({
    * Unset means on in development and off everywhere else. `1` asks for it
    * explicitly (demo deploys, the plugin harness and CI); `0` gives a
    * contributor a deliberately blank development instance for setup work.
+   * `busy` installs the demo plus six months of sample customers, sales,
+   * bookings and traffic — what the public playground (which implies it)
+   * shows evaluators; plain `1` stays quick for local development.
    * Read once at startup and never in response to a request — a route that
    * installs a demo business is a route somebody eventually hits on a real
    * instance.
    */
-  FREEHOLDER_SEED_DEMO: z.enum(["0", "1"]).optional(),
+  FREEHOLDER_SEED_DEMO: z.enum(["0", "1", "busy"]).optional(),
 
   /**
    * Whether this process runs background jobs.
