@@ -50,8 +50,15 @@ side, set the correspondingly prefixed `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`,
 `S3_ADDRESSING_STYLE=virtual`. For a Replit side, set the prefixed
 `REPLIT_BUCKET_ID`. For example, an S3-to-Replit move uses
 `SOURCE_STORAGE=s3`, `SOURCE_S3_*`, `TARGET_STORAGE=replit` and
-`TARGET_REPLIT_BUCKET_ID`. The command refuses an incomplete inventory and
+`TARGET_REPLIT_BUCKET_ID`. The command refuses an incomplete inventory, checks
+each original against the SHA-256 recorded in the export before copying, and
 reads back every target object to compare size and SHA-256 before succeeding.
+It never overwrites: a target object with identical bytes is skipped and
+counted, and a different object at the same key stops the run with that key
+named. `--dry-run` reads the source and target and reports what would be copied,
+skipped or refused without writing. S3 endpoints must use HTTPS; plain HTTP to a
+non-loopback endpoint requires `--allow-insecure-http` (or
+`MEDIA_TRANSFER_ALLOW_INSECURE_HTTP=true`) and prints a warning.
 
 ## 3. Restore the target
 
