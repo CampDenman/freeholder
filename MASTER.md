@@ -9634,6 +9634,32 @@ schema they inherit reads as a designed thing rather than an excavation.
   `tests/core/owner-password-script.test.ts`. Refreshed review packet records
   the remaining API-token/ephemeral-Basic hashing findings for independent
   disposition. These repairs do not close C11.10.)*
+  Audit follow-up 2026-10-21 (access control): a security review of main found
+  and this change repaired eleven reproducible access-control defects. Anonymous
+  media uploads (`media.beginUpload`/`media.upload`) now require a capture token
+  naming an open, unexpired capture session. `subscriptions.changeMine` and
+  `subscriptions.listOffered` accept and offer only public, active plans from
+  the subscription's own seller; a customer's change that would cost money now
+  waits for the period end instead of granting before settlement, and a target
+  plan unpriced in the subscription currency is refused rather than billed at
+  zero. `subscriptions.join` refuses a staff-entered or foreign card and never
+  lets a saved card skip a card trial's setup-fee invoice. `quotes.message`
+  speaks for the business only with a quotes grant. `messaging.startSiteChat`
+  gives an unverified email its own thread. Contact-import undo restores a
+  field only while it still holds what the import wrote. `contracts.sign` takes
+  IP and user agent from request metadata. `members.callConfig` needs an active
+  member on a live call; `members.claimKeyPackages` returns an outstanding claim
+  instead of draining another device. `briefing.*` reads and shared
+  `views.list` rows require a staff grant. Coupon attempts through
+  `catalog.applyCouponToCart` and `catalog.quoteCartPromotions` are rate limited.
+  Each regression failed before its repair: `tests/core/media-capture.test.ts`,
+  `tests/modules/subscription-billing.test.ts`, `tests/core/quotes.test.ts`,
+  `tests/core/site-chat.test.ts`, `tests/core/contact-import.test.ts`,
+  `tests/core/intake-waivers-reminders.test.ts`,
+  `tests/modules/member-calls.test.ts`, `tests/modules/member-e2ee.test.ts`,
+  `tests/core/briefing.test.ts`, `tests/core/saved-views.test.ts` and
+  `tests/core/cart-access.test.ts`. Changeset
+  `c11-10-access-control-20261021.md`. Independent review remains open.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.

@@ -4016,7 +4016,7 @@ export interface ServiceCatalog {
     output: { id: string; name: string; kind: "waiver" | "agreement"; version: number; title: string; body: string; variables: unknown; requiresCountersignature: boolean; archivedAt: string | null; undeclared: string[]; [key: string]: unknown };
   };
   "contracts.sign": {
-    input: { token: string; signerName: string; ip?: string | null; userAgent?: string | null };
+    input: { token: string; signerName: string };
     output: { id: string; signedAt: string; signatureHash: string };
   };
   "contracts.signedFor": {
