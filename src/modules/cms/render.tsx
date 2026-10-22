@@ -115,8 +115,10 @@ async function renderBlock(
       // schema says children can live; this flag is how the wrapper says so.
       data-container={definition.container ? "true" : undefined}
     >
-      {rendered}
+      {/* First, so the parser has placed it before any script could ask
+          whether this block already has one. */}
       <CanvasGrip label={ctx.t("cms.editor.dragBlock")} />
+      {rendered}
     </div>
   ) : (
     <BlockFrame key={node.id}>{rendered}</BlockFrame>

@@ -38,12 +38,15 @@ describe("admin navigation grouping", () => {
     expect(isActiveAdminHref("/admin", "/admin/products")).toBe(false);
   });
 
-  it("collapses behind a real disclosure button below the desktop breakpoint", () => {
+  it("collapses behind a native disclosure below the desktop breakpoint", () => {
+    // <details>, not a script-driven button: the phone menu must open even
+    // before (or without) JavaScript.
     const nav = read("app/(admin)/admin/AdminNav.tsx");
-    expect(nav).toContain("aria-expanded={open}");
-    expect(nav).toContain('aria-controls="admin-nav-groups"');
-    expect(nav).toMatch(/className=\{cx\(open \? "block" : "hidden", "[^"]*lg:block/);
-    expect(nav).toContain('event.key === "Escape"');
+    expect(nav).toMatch(/<details\s+className="group lg:hidden"/);
+    expect(nav).toContain("<summary");
+    expect(nav).toContain('<div className="hidden lg:block">{groups("admin-nav-sidebar")}</div>');
+    expect(nav).not.toContain("useState");
+    expect(nav).toContain('event.key !== "Escape"');
     const layout = read("app/(admin)/admin/layout.tsx");
     expect(layout).toContain("lg:grid-cols-[14rem_minmax(0,1fr)]");
   });

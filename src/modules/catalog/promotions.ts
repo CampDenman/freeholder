@@ -239,7 +239,7 @@ export const createCoupon = defineService({
   output: couponRow,
   handler: async (input, ctx) => {
     if (input.kind === "percent" && !input.percentOffPpm) {
-      throw new ServiceError("validation", "A percent coupon needs a parts-per-million rate.");
+      throw new ServiceError("validation", "A percent coupon needs a percentage off.");
     }
     if (input.kind === "fixed" && (!input.amount || !input.currency)) {
       throw new ServiceError("validation", "A fixed coupon needs an amount and a currency.");

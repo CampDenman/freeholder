@@ -4483,9 +4483,10 @@ project without silent telemetry, and ready to carry money.
   every direct editor load. The cause was the preview frame, not the editor:
   `fhAddGrips` appended a drag grip to every `[data-block-id]` while the
   document parsed, before hydration. The canvas wrapper in
-  `src/modules/cms/render.tsx` now server-renders the identical grip, so the
-  script finds one and leaves the hydrated tree alone (it still adds grips to
-  blocks the draft broadcast builds later). The fixed 32rem editing frame is
+  `src/modules/cms/render.tsx` now server-renders the identical grip as each
+  block's first child, and the script adds grips only after DOMContentLoaded
+  (so it cannot race a streaming block whose grip has not arrived); after
+  that it still adds grips to blocks the draft broadcast builds. The fixed 32rem editing frame is
   viewport-tall, the text block's hint and refusal explain that HTML belongs
   in a Custom HTML block, and comment mentions are teammate checkboxes with
   names shown instead of `user:<uuid>`. Canvas drag-and-drop was re-checked
@@ -9573,7 +9574,9 @@ schema they inherit reads as a designed thing rather than an excavation.
   Business-type-specific flows (add a service, share a booking link) would
   need new versioned guidance definitions and are not in this change.
   "What changed" reads `events.recentActivity` with `include: "people"`
-  (system housekeeping and demo entry hidden; `?activity=all` shows them).
+  (a named denylist of scheduled sweeps and demo entry is hidden — by action,
+  not by the `system` actor, because webhook-applied payments, refunds and
+  disputes are recorded as `system` too; `?activity=all` shows everything).
   Owner copy loses "Chrome", "contact spine", "A cart is a token", "RMA",
   "deterministic", ppm, adapter talk, raw module keys and actor ids; coupons
   take a percent; currency, time-zone and language fields are pickers

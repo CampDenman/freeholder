@@ -730,14 +730,27 @@ function fhAddGrips() {
       }
     }
     grip.appendChild(svg);
-    block.appendChild(grip);
+    // First child, matching the server-rendered grip in cms/render.tsx.
+    block.insertBefore(grip, block.firstChild);
   });
 }
-fhAddGrips();
-new MutationObserver(fhAddGrips).observe(document.body, {
-  childList: true,
-  subtree: true
-});
+// The server renders a grip as each block's first child. Touching the tree
+// while the document still streams would race it (a block whose grip has not
+// arrived yet would get a second one) and hand React a tree it did not render
+// (hydration error #418), so grips are only added once parsing is done — and
+// from then on only to blocks the draft broadcast builds.
+function fhStartGrips() {
+  fhAddGrips();
+  new MutationObserver(fhAddGrips).observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", fhStartGrips, { once: true });
+} else {
+  fhStartGrips();
+}
 
 // The sibling block at the same nesting level, skipping any non-block
 // element a container renders between its children (a variant's caption, say).

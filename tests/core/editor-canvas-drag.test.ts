@@ -54,6 +54,9 @@ function canvas(body: string = CANVAS_HTML) {
   });
   window.HTMLElement.prototype.scrollIntoView = () => undefined;
   window.eval(LABELS + CANVAS_BRIDGE + CANVAS_DRAG);
+  // The script defers grips to DOMContentLoaded, which jsdom dispatches
+  // asynchronously; these tests start from a fully parsed document.
+  window.document.dispatchEvent(new window.Event("DOMContentLoaded"));
   return { window, parentPost, document: window.document };
 }
 
@@ -352,6 +355,27 @@ describe("the canvas drag script", () => {
 });
 
 describe("grips and hydration", () => {
+  it("waits for the document to finish parsing before adding any grip", async () => {
+    // Run while the document is still streaming, the script must not touch
+    // blocks yet: a block whose server grip has not arrived would get a
+    // second one, and React would hydrate a tree it did not render.
+    const dom = new JSDOM(
+      `<!DOCTYPE html><html><body><div class="fh-canvas"><div data-block-id="z"><h2>Z</h2></div></div>` +
+        `<script>${LABELS}${CANVAS_BRIDGE}${CANVAS_DRAG};window.__gripsAtParse = document.querySelectorAll(".fh-grip").length;</script>` +
+        `<div data-block-id="late"><h2>Late</h2></div></body></html>`,
+      { runScripts: "dangerously", url: `${ORIGIN}/preview/page/p1`, pretendToBeVisual: true },
+    );
+    const window = dom.window as unknown as Window & { __gripsAtParse: number };
+    expect(window.__gripsAtParse).toBe(0);
+    if (dom.window.document.readyState === "loading") {
+      await new Promise((resolve) =>
+        dom.window.document.addEventListener("DOMContentLoaded", resolve, { once: true }),
+      );
+    }
+    // After DOMContentLoaded, blocks without a server grip still get one.
+    expect(dom.window.document.querySelectorAll('[data-block-id="late"] > .fh-grip')).toHaveLength(1);
+  });
+
   it("are server-rendered, so the script never edits the tree React hydrates", async () => {
     // Injecting a grip into every block while the document parsed gave React
     // elements it had not rendered: hydration error #418 on every editor
@@ -376,6 +400,9 @@ describe("grips and hydration", () => {
     const { document } = canvas(`<div class="fh-canvas">${html}</div>`);
     expect(document.body.innerHTML).toBe(before);
     expect(document.querySelectorAll('[data-block-id="a"] > .fh-grip')).toHaveLength(1);
+    // First child: the parser places it before anything could ask whether the
+    // block already has one.
+    expect(document.querySelector('[data-block-id="a"]')?.firstElementChild?.className).toBe("fh-grip");
     expect(document.querySelector(".fh-grip")?.getAttribute("aria-label")).toBe(
       translator("en")("cms.editor.dragBlock"),
     );

@@ -7,8 +7,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { chooseFirstWin } from "@/core/guidance/first-win";
 import type { GuidanceFlowView } from "@/core/guidance/service";
-import { t } from "@/core/i18n";
-import { percentToPpm } from "../../app/(admin)/percent";
+import { t, translator } from "@/core/i18n";
+import { percentToPpm, ppmToPercent } from "../../app/(admin)/percent";
 import { currencyOptions, localeOptions, timezoneOptions } from "@/ui/pickers";
 
 function flow(
@@ -82,24 +82,38 @@ describe("choosing the first win", () => {
 });
 
 describe("percent fields", () => {
+  const en = translator("en");
+  const fr = translator("fr");
+
   it("turns what an owner types into parts per million", () => {
-    expect(percentToPpm("10")).toBe(100_000);
-    expect(percentToPpm("12.5")).toBe(125_000);
-    expect(percentToPpm("12,5")).toBe(125_000);
-    expect(percentToPpm("15%")).toBe(150_000);
-    expect(percentToPpm("100")).toBe(1_000_000);
+    expect(percentToPpm("10", en)).toBe(100_000);
+    expect(percentToPpm("12.5", en)).toBe(125_000);
+    expect(percentToPpm("12,5", en)).toBe(125_000);
+    expect(percentToPpm("15%", en)).toBe(150_000);
+    expect(percentToPpm("100", en)).toBe(1_000_000);
+    expect(ppmToPercent(125_000)).toBe("12.5");
   });
 
-  it("refuses nonsense and more than 100%", () => {
-    expect(() => percentToPpm("abc")).toThrow();
-    expect(() => percentToPpm("101")).toThrow();
-    expect(() => percentToPpm("")).toThrow();
+  it("reads Arabic-Indic digits as typed on an Arabic keyboard", () => {
+    expect(percentToPpm("١٢٫٥", en)).toBe(125_000);
+    expect(percentToPpm("۱۰٪", en)).toBe(100_000);
   });
 
-  it("is how the coupon form asks", () => {
+  it("refuses nonsense and more than 100%, in the owner's language", () => {
+    expect(() => percentToPpm("abc", en)).toThrow(en("admin.percent.invalid"));
+    expect(() => percentToPpm("101", en)).toThrow(en("admin.percent.tooHigh"));
+    expect(() => percentToPpm("", fr)).toThrow(fr("admin.percent.invalid"));
+    expect(fr("admin.percent.invalid")).not.toBe(en("admin.percent.invalid"));
+  });
+
+  it("is how the coupon and deposit forms ask", () => {
     const page = readFileSync("app/(admin)/admin/promotions/page.tsx", "utf8");
     expect(page).toContain('name="percentOff"');
     expect(page).not.toContain('defaultValue="100000"');
+    const product = readFileSync("app/(admin)/admin/products/[id]/page.tsx", "utf8");
+    expect(product).toContain('name="depositPercent"');
+    expect(product).not.toContain('name="depositPercentPpm"');
+    expect(t("en", "catalog.offering.depositPercent")).not.toMatch(/ppm/i);
   });
 });
 
@@ -173,6 +187,14 @@ describe("owner-facing copy", () => {
   it.each(keys)("%s speaks plainly in English", (key) => {
     const text = t("en", key);
     for (const pattern of JARGON) expect(text).not.toMatch(pattern);
+  });
+
+  it("relabels the header and footer in every language, not only English", () => {
+    for (const key of ["cms.block.chromeBar", "cms.sectionKind.chrome", "cms.sections.back", "translations.chrome"]) {
+      expect(t("fr", key), key).toMatch(/en-tête/i);
+      expect(t("es", key), key).toMatch(/encabezado/i);
+      expect(t("ar", key), key).toMatch(/الترويس/);
+    }
   });
 
   it("calls a URL slug a page link, not an address", () => {

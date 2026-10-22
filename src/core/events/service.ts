@@ -5,13 +5,38 @@
 // log nobody can read does not keep it. This is the read side of the rows the
 // service wrapper has been writing since the spine landed.
 import { z } from "zod";
-import { and, desc, ne, notInArray } from "drizzle-orm";
+import { desc, notInArray } from "drizzle-orm";
 import { auditLog } from "@/core/events/schema";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService } from "@/core/service";
 
-/** Actions a person can trigger that are still not news to the owner. */
-export const HOUSEKEEPING_ACTIONS = ["playground.enter"] as const;
+/**
+ * Scheduled sweeps that record a row on every tick whether or not anything
+ * happened, plus demo entry. Named one by one rather than "everything the
+ * system actor did": payment and payout webhooks, refunds, disputes and
+ * every nested `ctx.callAsSystem` are recorded as `system` too, and an owner
+ * must still see "invoice paid" in what changed. A new sweep joins this list
+ * when it starts cluttering the feed; forgetting it costs a noisy row, not a
+ * hidden payment.
+ */
+export const HOUSEKEEPING_ACTIONS = [
+  "playground.enter",
+  "cms.expireStalePresence",
+  "cms.applyDueSchedules",
+  "broadcasts.tick",
+  "subscriptions.finishSignups",
+  "subscriptions.pendingCustomerSchedules",
+  "catalog.abandonStaleCarts",
+  "catalog.recoverAbandonedCarts",
+  "catalog.expireReservations",
+  "media.expireCaptureSessions",
+  "galleries.expireSessions",
+  "events.expireHeldRegistrations",
+  "ads.rollUpStats",
+  "assistant.reindex",
+  "seo.submitIndexNow",
+  "projects.sweepLapsedConsent",
+] as const;
 
 export const recentActivity = defineService({
   name: "events.recentActivity",
@@ -21,10 +46,11 @@ export const recentActivity = defineService({
   input: z.object({
     limit: z.number().int().min(1).max(100).default(20),
     /**
-     * `people` leaves out the platform's own housekeeping (scheduled sweeps,
-     * presence clean-up, job recovery — all written as `system`) and demo
-     * entry: true, but meaningless in an owner's "what changed". `all` is the
-     * full trail for diagnostics and stays the default for API callers.
+     * `people` leaves out HOUSEKEEPING_ACTIONS (scheduled sweeps, presence
+     * clean-up, signup recovery, demo entry): true, but meaningless in an
+     * owner's "what changed". System-recorded business events such as a
+     * webhook-applied payment stay. `all` is the full trail for diagnostics
+     * and stays the default for API callers.
      */
     include: z.enum(["all", "people"]).default("all"),
   }),
@@ -42,10 +68,7 @@ export const recentActivity = defineService({
       .from(auditLog)
       .where(
         input.include === "people"
-          ? and(
-              ne(auditLog.actor, "system"),
-              notInArray(auditLog.action, [...HOUSEKEEPING_ACTIONS]),
-            )
+          ? notInArray(auditLog.action, [...HOUSEKEEPING_ACTIONS])
           : undefined,
       )
       .orderBy(desc(auditLog.at))

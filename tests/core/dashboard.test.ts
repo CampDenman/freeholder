@@ -105,17 +105,27 @@ describe.runIf(hasDatabase)("the admin overview data", () => {
       // `include: "all"` away for diagnostics.
       await createContact.call({ name: "Ada" }, STAFF);
       await db().insert(auditLog).values([
-        { actor: "system", action: "cms.sweepPresence" },
+        { actor: "system", action: "cms.expireStalePresence" },
+        { actor: "system", action: "subscriptions.finishSignups" },
         { actor: "user:00000000-0000-4000-8000-000000000000", action: "playground.enter" },
+        // A payment webhook applies its event as `system`; the owner must
+        // still see it, so the filter is by action, never by actor.
+        { actor: "system", action: "invoicing.applyProviderEvent" },
       ]);
 
       const people = await recentActivity.call({ limit: 10, include: "people" }, STAFF);
-      expect(people.map((row) => row.action)).toEqual(["contacts.create"]);
+      expect(people.map((row) => row.action).sort()).toEqual(
+        ["contacts.create", "invoicing.applyProviderEvent"],
+      );
 
       const all = await recentActivity.call({ limit: 10 }, STAFF);
-      expect(all.map((row) => row.action).sort()).toEqual(
-        ["cms.sweepPresence", "contacts.create", "playground.enter"],
-      );
+      expect(all.map((row) => row.action).sort()).toEqual([
+        "cms.expireStalePresence",
+        "contacts.create",
+        "invoicing.applyProviderEvent",
+        "playground.enter",
+        "subscriptions.finishSignups",
+      ]);
     });
 
     it("is not readable by a customer or a stranger", async () => {

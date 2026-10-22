@@ -52,6 +52,7 @@ import {
 import { getLocale, getT } from "../../../../i18n";
 import { OptionSelect, currencyOptions } from "@/ui/pickers";
 import { actorLabel } from "../../actorLabel";
+import { ppmToPercent } from "../../../percent";
 import { collectionAction, productAction } from "../../../catalog-actions";
 import { requireStaffActor } from "../../guard";
 import { editorBlockTypes, editorLabels } from "../../editorLabels";
@@ -560,7 +561,7 @@ export default async function ProductPage({
                 <Input id="offering-deposit-amount" name="depositAmount" inputMode="decimal" />
               </Field>
               <Field label={t("catalog.offering.depositPercent")} htmlFor="offering-deposit-ppm">
-                <Input id="offering-deposit-ppm" name="depositPercentPpm" inputMode="numeric" defaultValue={offering?.depositType === "percent" ? offering.depositValue : ""} />
+                <Input id="offering-deposit-ppm" name="depositPercent" inputMode="decimal" defaultValue={offering?.depositType === "percent" && offering.depositValue != null ? ppmToPercent(Number(offering.depositValue)) : ""} />
               </Field>
               <Field label={t("catalog.offering.policy")} htmlFor="offering-policy">
                 <Select id="offering-policy" name="cancellationPolicyId" defaultValue={offering?.cancellationPolicyId ?? ""}>
