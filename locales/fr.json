@@ -7929,5 +7929,7 @@
   "portal.login.playground": "C’est ici que les clients se connectent pour voir leurs réservations, factures, devis et fichiers. Le bac à sable public n’envoie aucun e-mail : les liens de connexion y sont donc désactivés — explorez le côté client depuis Contacts, Factures et Devis dans l’administration.",
   "newsletters.playgroundPending": "Vous êtes inscrit en attente. Sur un vrai site, un e-mail de confirmation partirait maintenant ; le bac à sable public n’envoie aucun e-mail, donc tout s’arrête ici.",
   "public.failure.kept": "Vos réponses sont toujours dans le formulaire ci-dessous.",
-  "playground.fictionalHint": "Démo publique : utilisez des informations fictives, pas les vôtres."
+  "playground.fictionalHint": "Démo publique : utilisez des informations fictives, pas les vôtres.",
+  "store.checkout.error.playgroundEmail": "Dans la démo publique, passez commande avec une adresse fictive comme vous@example.com. La démo n’envoie aucun e-mail : cette adresse remplace le lien de connexion habituel.",
+  "store.checkout.playgroundEmailHint": "Démo publique : utilisez une adresse fictive se terminant par @example.com — la commande est passée sans vérification par e-mail."
 }

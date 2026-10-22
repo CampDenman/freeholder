@@ -7929,5 +7929,7 @@
   "portal.login.playground": "Aquí es donde los clientes inician sesión para ver sus reservas, facturas, presupuestos y archivos. El entorno de demostración público no envía correos, así que los enlaces de acceso están desactivados aquí; explora la parte del cliente desde Contactos, Facturas y Presupuestos en el panel.",
   "newsletters.playgroundPending": "Estás en la lista como pendiente. En un sitio real ahora se enviaría un correo de confirmación; el entorno de demostración público no envía correos, así que aquí termina.",
   "public.failure.kept": "Tus respuestas siguen en el formulario de abajo.",
-  "playground.fictionalHint": "Demostración pública: usa datos inventados, no los tuyos."
+  "playground.fictionalHint": "Demostración pública: usa datos inventados, no los tuyos.",
+  "store.checkout.error.playgroundEmail": "En la demostración pública, finaliza la compra con una dirección inventada como tu@example.com. La demostración no envía correos, así que esa dirección sustituye al enlace de acceso habitual.",
+  "store.checkout.playgroundEmailHint": "Demostración pública: usa una dirección inventada que termine en @example.com; el pedido se realiza sin comprobación por correo."
 }
