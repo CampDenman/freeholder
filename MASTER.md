@@ -1117,6 +1117,11 @@ up gated by a boolean somebody forgot to check.
   help doc.
 - **Trials, upgrades and downgrades are proration decisions, and they are
   stated per plan** rather than discovered at the first mid-cycle change.
+  A customer's own change in the portal follows the same rule, with one
+  guard: when it raises a proration invoice, the new plan is granted only once
+  that invoice is paid in full (a `provider` schedule prorates at the provider).
+  A change deferred to period end bills the new plan's own variant from the
+  first renewal after it.
 - **Dunning is a policy with a schedule**, not a single failed charge: retries
   at stated offsets, a grace period during which access continues, notices on
   the channels the contact consented to (§4.14), and a final action the owner
@@ -9780,6 +9785,65 @@ schema they inherit reads as a designed thing rather than an excavation.
   `tests/core/invoicing-pos.test.ts` failed before each repair.
   Changeset `payment-provider-boundary.md`. This repair is not independent
   review evidence.
+  Audit follow-up 2026-10-21 (access control): a security review of main found
+  and this change repaired eleven reproducible access-control defects, then an
+  independent review of the repair found six more problems, also fixed here.
+  Anonymous media uploads (`media.beginUpload`/`media.upload`) need a capture
+  token naming an open, unexpired capture session, checked before storage I/O,
+  inside the apply transaction and again when a resumable upload completes; a
+  bare `captureSessionId` needs media authority. `subscriptions.changeMine` and
+  `subscriptions.listOffered` accept and offer only public, active plans from
+  the subscription's own seller. A customer's change follows the plan's stated
+  proration (§4.15): a `none` plan defers to period end, and a prorating change
+  raises its invoice but is granted by `subscriptions.completePaidPlanChange`
+  only once that invoice is paid in full. While such a change waits, another
+  is refused until that invoice is paid or voided, so a stale invoice cannot
+  grant a superseded plan. A refund after the grant does not reverse the
+  switch (owner decision: refunds stay a money action). A subscription billed
+  by a provider schedule is not held, including a move onto a platform-billed
+  plan; holding that move needs an orchestrated schedule cancellation at grant
+  time and remains open. A deferred change now moves the subscription to the
+  new plan's default variant when it is on sale, else its first active
+  variant (a plan with none is refused, or left pending at renewal), so
+  renewals bill the new price; a target plan with no price in the
+  subscription currency is refused rather than billed at zero. `subscriptions.join` refuses a staff-entered or foreign
+  card and never lets a saved card skip a card trial's setup-fee invoice.
+  `quotes.message` speaks for the business only with a quotes grant.
+  `messaging.startSiteChat` continues a Contact's canonical thread only for
+  the signed-in owner of that address (the public chat block now passes the
+  session actor). Every unverified start opens a separate conversation keyed
+  `site-chat:…`, so it never changes the canonical thread's reply channel,
+  never closes a live chat, and never receives replies meant for the
+  customer. The inbox list and thread show it as "Unverified — says they are
+  <email>", linked to the Contact's record for context without merging
+  threads. Contact-import undo restores a field only while it still
+  holds what the import wrote. `contracts.sign` takes IP and user agent from
+  request metadata. `members.callConfig` needs an active member on a live call;
+  `members.claimKeyPackages` returns an outstanding claim instead of draining
+  another device. `briefing.*` and shared `views.list` rows use
+  `hasModuleAccess`, two-factor state included, with the shared-view filter in
+  SQL before the page limit. Unusable coupon codes (unknown, inactive, not
+  started, ended, used up) share one answer; a working code is still
+  distinguishable from them. Coupon attempts through
+  `catalog.applyCouponToCart` and `catalog.quoteCartPromotions` are limited per
+  shopper and per cart, and `catalog.getOrCreateCart` is limited per shopper.
+  **Open residual risk, not fixed:** without `TRUSTED_CLIENT_IP_HEADER`, every
+  per-shopper key can be forged, so coupon guessing remains effectively
+  unbounded (forge an address, open a new cart, take its 10 guesses). With the
+  header (the Caddy recipes after #563; `deploy/client-readiness.md`) it is
+  bounded. **Latent risk:** `catalog.checkoutCart` accepts `couponCode` with no
+  rate limit and resolves promotions as system; it is safe today only because
+  `requireContactAuthority` refuses anonymous callers, and it must gain the
+  same limits before a public storefront checkout ships. Each regression failed before
+  its repair: `tests/core/media-capture.test.ts`, `tests/core/media.test.ts`,
+  `tests/modules/subscription-billing.test.ts`, `tests/core/quotes.test.ts`,
+  `tests/core/site-chat.test.ts`, `tests/core/contact-import.test.ts`,
+  `tests/core/intake-waivers-reminders.test.ts`,
+  `tests/modules/member-calls.test.ts`, `tests/modules/member-e2ee.test.ts`,
+  `tests/core/briefing.test.ts`, `tests/core/saved-views.test.ts`,
+  `tests/core/cart-access.test.ts` and
+  `tests/browser/c11-01-visitor-to-paid.spec.ts`. Changeset
+  `c11-10-access-control-20261021.md`. Independent review remains open.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.

@@ -175,6 +175,9 @@ const INTERNAL = [
   // not something anybody did; a job raises the invoice and charges on
   // nobody's behalf.
   "subscriptions.chargePlatformDue",
+  // A customer's plan change is granted when its proration invoice is paid
+  // (C11.10); the payment event, not a person, triggers it.
+  "subscriptions.completePaidPlanChange",
   // Provider schedules are the truth (C9.33). A verified webhook applies the
   // period on nobody's behalf.
   "subscriptions.reconcileProviderPeriod",
@@ -206,6 +209,9 @@ const CALLER_AUTHORIZED_PHASES = [
   // catalog.recomputeSegmentCollections on nobody's behalf and claims nothing
   // on an external protocol.
   "catalog.recomputeCollectionMembership",
+  // Checkout composes this inside its transaction; the public door is the
+  // rate-limited catalog.quoteCartPromotions (C11.10).
+  "catalog.resolveCartPromotions",
   "documents.myDownload",
   // C11.10: the short phases around model calls, so no transaction waits on
   // a provider (MASTER.md §11).

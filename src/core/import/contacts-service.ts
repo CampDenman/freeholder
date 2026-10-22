@@ -170,6 +170,33 @@ const beforeShape = z.object({
   customFields: z.record(z.string(), z.unknown()),
 });
 
+function restorableState(contact: typeof contacts.$inferSelect): z.output<typeof beforeShape> {
+  return {
+    name: contact.name,
+    phone: contact.phone,
+    country: contact.country,
+    preferredLocale: contact.preferredLocale,
+    timezone: contact.timezone,
+    tags: contact.tags,
+    customFields: contact.customFields as Record<string, unknown>,
+  };
+}
+
+/** Structural equality for the jsonb-shaped values a contact field can hold. */
+function sameValue(left: unknown, right: unknown): boolean {
+  const canonical = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.map(canonical)
+      : value && typeof value === "object"
+        ? Object.fromEntries(
+            Object.entries(value as Record<string, unknown>)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, entry]) => [key, canonical(entry)]),
+          )
+        : value ?? null;
+  return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
+}
+
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
@@ -524,22 +551,21 @@ export const commitContactImport = defineService({
         }
       }
 
+      const [after] = before
+        ? await ctx.tx.select().from(contacts).where(eq(contacts.id, resolved.contact.id)).limit(1)
+        : [];
       await ctx.tx
         .update(contactImportRows)
         .set({
           contactId: resolved.contact.id,
           created: !before,
           // What it looked like before, so undoing is restoring rather than
-          // guessing. Null for a creation: there was nothing to keep.
+          // guessing, and what this row left behind, so undoing never
+          // overwrites a later edit. Null for a creation: nothing to keep.
           beforeState: before
             ? {
-                name: before.name,
-                phone: before.phone,
-                country: before.country,
-                preferredLocale: before.preferredLocale,
-                timezone: before.timezone,
-                tags: before.tags,
-                customFields: before.customFields,
+                ...restorableState(before),
+                applied: after ? restorableState(after) : undefined,
             }
             : null,
           relationshipId,
@@ -641,9 +667,31 @@ export const revertContactImport = defineService({
       // reverses.
       const before = beforeShape.safeParse(line.beforeState);
       if (!before.success) continue;
+      const applied = beforeShape.safeParse(
+        (line.beforeState as { applied?: unknown } | null)?.applied,
+      );
+      let restore: Partial<z.output<typeof beforeShape>> = before.data;
+      if (applied.success) {
+        // Only a field still holding what this import wrote goes back. A
+        // field somebody has edited since is theirs now (C11.10).
+        const [current] = await ctx.tx
+          .select()
+          .from(contacts)
+          .where(eq(contacts.id, line.contactId))
+          .limit(1);
+        if (!current) continue;
+        const now = restorableState(current);
+        restore = {};
+        for (const field of Object.keys(before.data) as Array<keyof typeof before.data>) {
+          if (sameValue(now[field], applied.data[field])) {
+            Object.assign(restore, { [field]: before.data[field] });
+          }
+        }
+      }
+      if (Object.keys(restore).length === 0) continue;
       await ctx.tx
         .update(contacts)
-        .set({ ...before.data, updatedAt: sql`now()` })
+        .set({ ...restore, updatedAt: sql`now()` })
         .where(eq(contacts.id, line.contactId));
       restored += 1;
     }

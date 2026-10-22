@@ -36,7 +36,7 @@ import {
   sendQuote,
   setQuoteItems,
 } from "@/modules/quotes/service";
-import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const ANON = { kind: "anonymous" } as const;
 
@@ -206,6 +206,20 @@ describe.runIf(hasDatabase)("quotes", { timeout: 90_000 }, () => {
     await postQuoteMessage.call({ quoteId: quote.id, body: "I can revise it." }, OWNER);
     const [after] = await db().select().from(quotes).where(eq(quotes.id, quote.id));
     expect(after!.status).toBe("negotiating");
+  });
+
+  it("never lets a signed-in customer speak as the business (C11.10)", async () => {
+    const { quote, token } = await sent();
+    await db()
+      .insert(users)
+      .values({ id: CUSTOMER.userId, email: "quote-customer@example.test", role: "customer" })
+      .onConflictDoNothing();
+    const byId = await failure(
+      postQuoteMessage.call({ quoteId: quote.id, body: "Approved at half price." }, CUSTOMER),
+    );
+    expect(byId.code).toBe("permission");
+    const posted = await postQuoteMessage.call({ token, body: "A question." }, CUSTOMER);
+    expect(posted.author).toBe("contact");
   });
 
   // A counter-offer is a message. Only the owner turns one into a revision,

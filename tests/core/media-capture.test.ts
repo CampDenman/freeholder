@@ -376,6 +376,32 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
     expect(bound.status).toBe("preview");
   });
 
+  it("admits anonymous uploads only through a live capture link (C11.10)", async () => {
+    const { beginUpload, uploadAsset } = await import("@/core/media/service");
+    const link = await createUploadLink.call({ source: "upload_link" }, OWNER);
+    const forged = "f".repeat(64);
+    const bytes = await png();
+    const proxied = (provenance: Record<string, string>) =>
+      uploadAsset.call(
+        { filename: "x.png", contentType: "image/png", bytes, source: "capture", provenance },
+        ANONYMOUS,
+      );
+    expect((await failure(proxied({ captureToken: forged }))).code).toBe("permission");
+    expect((await failure(proxied({ captureSessionId: link.id }))).code).toBe("permission");
+    const customer = { kind: "user" as const, userId: OWNER.userId, role: "customer" as const, grants: [] };
+    expect((await failure(uploadAsset.call(
+      { filename: "x.png", contentType: "image/png", bytes, source: "capture", provenance: { captureSessionId: link.id } },
+      customer,
+    ))).code).toBe("permission");
+    expect((await failure(beginUpload.call(
+      { filename: "x.png", contentType: "image/png", bytes: 100, provenance: { captureToken: forged } },
+      ANONYMOUS,
+    ))).code).toBe("permission");
+    await discardCapture.call({ id: link.id }, OWNER);
+    expect((await failure(proxied({ captureToken: link.token }))).code).toBe("permission");
+    expect((await listAssets.call({}, OWNER)).total).toBe(0);
+  });
+
   it("does not let an anonymous caller attach by id alone", async () => {
     const session = await createCaptureSession.call({ source: "camera" }, OWNER);
     const blocked = await failure(

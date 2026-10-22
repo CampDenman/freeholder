@@ -14,6 +14,7 @@ import { db, type Database } from "@/core/db";
 import {
   assets,
   mediaAltTextSuggestions,
+  mediaCaptureSessions,
   mediaObjects,
   mediaUploads,
 } from "@/core/media/schema";
@@ -21,6 +22,7 @@ import {
   actorString,
   defineOrchestratedService,
   defineService,
+  permits,
   ServiceError,
   type Actor,
   type ServiceContext,
@@ -173,6 +175,62 @@ function requireUploadAccess(actor: Actor, uploadedBy: string | null): void {
     throw new ServiceError("not_found", "That upload is not here.");
   }
 }
+
+/**
+ * A capture token is a capability only while its session is open: a token
+ * that names no session, or a confirmed, discarded or expired one, admits
+ * nothing. Anonymous uploads must present a live token (C11.10).
+ */
+async function requireLiveCaptureToken(tx: Tx, token: string): Promise<void> {
+  const [session] = await tx
+    .select({
+      status: mediaCaptureSessions.status,
+      expiresAt: mediaCaptureSessions.expiresAt,
+    })
+    .from(mediaCaptureSessions)
+    .where(eq(mediaCaptureSessions.token, token))
+    .limit(1);
+  if (
+    !session ||
+    ["confirmed", "discarded", "expired"].includes(session.status) ||
+    session.expiresAt.getTime() <= Date.now()
+  ) {
+    throw new ServiceError("permission", "That upload link is no longer open.");
+  }
+}
+
+async function checkCaptureUpload(
+  tx: Tx,
+  actor: Actor,
+  provenance: { captureToken?: string; captureSessionId?: string },
+): Promise<void> {
+  if (provenance.captureToken) {
+    await requireLiveCaptureToken(tx, provenance.captureToken);
+  } else if (actor.kind === "anonymous") {
+    throw new ServiceError("permission", "Sign in or use an upload link.");
+  } else if (
+    provenance.captureSessionId &&
+    !permits(actor, "scoped", "media.stageCompletedUpload", "mutation")
+  ) {
+    // A session id names a capture; it is not the capability to add to one.
+    // Without the link's token only media staff may stage into it.
+    throw new ServiceError("permission", "Use an upload link or an authorized media account.");
+  }
+}
+
+const verifyCaptureUpload = defineService({
+  name: "media.verifyCaptureUpload",
+  summary: "Refuse an upload whose capture link is unknown or closed before storage work.",
+  kind: "query",
+  permission: "public",
+  external: false,
+  input: z.object({ captureToken: z.string().optional(), captureSessionId: z.string().uuid().optional() }),
+  output: z.object({ ok: z.literal(true) }),
+  handler: async (input, ctx) => {
+    await checkCaptureUpload(ctx.tx, ctx.actor, input);
+    return { ok: true as const };
+  },
+});
 
 async function trackPendingObject(input: {
   key: string;
@@ -660,6 +718,13 @@ const applyStoredOriginal = defineService({
   }),
   output: assetRow,
   handler: async (input, ctx) => {
+    if (
+      input.provenance.captureToken ||
+      input.provenance.captureSessionId ||
+      (!input.uploadId && ctx.actor.kind === "anonymous")
+    ) {
+      await checkCaptureUpload(ctx.tx, ctx.actor, input.provenance);
+    }
     if (input.uploadId) {
       const session = await lockedUploadSession(ctx.tx, input.uploadId);
       if (!session) throw new ServiceError("not_found", "That upload is not here.");
@@ -671,6 +736,9 @@ const applyStoredOriginal = defineService({
           .where(eq(assets.id, session.assetId))
           .limit(1);
         if (asset) return asset;
+      }
+      if (ctx.actor.kind === "anonymous" && session.uploadedBy?.startsWith("capture:")) {
+        await requireLiveCaptureToken(ctx.tx, session.uploadedBy.slice("capture:".length));
       }
       if (["aborted", "expired", "failed"].includes(session.state)) {
         throw new ServiceError(
@@ -716,13 +784,14 @@ export const uploadAsset = defineOrchestratedService({
   input: proxyUploadInput,
   output: assetRow,
   handler: async (input, actor) => {
-    if (
-      actor.kind === "anonymous" &&
-      !input.uploadId &&
-      !input.provenance.captureToken &&
-      !input.provenance.captureSessionId
-    ) {
+    if (actor.kind === "anonymous" && !input.uploadId && !input.provenance.captureToken) {
       throw new ServiceError("permission", "Sign in or use an upload link.");
+    }
+    if (input.provenance.captureToken || input.provenance.captureSessionId) {
+      await verifyCaptureUpload.call(
+        { captureToken: input.provenance.captureToken, captureSessionId: input.provenance.captureSessionId },
+        actor,
+      );
     }
     const body = input.bytes;
     if (body.byteLength > PROXY_UPLOAD_LIMIT) {
@@ -845,6 +914,7 @@ const beginUploadApply = defineService({
   }),
   output: beginUploadOutput,
   handler: async (input, ctx) => {
+    await checkCaptureUpload(ctx.tx, ctx.actor, input.provenance);
     const [session] = await ctx.tx
       .insert(mediaUploads)
       .values({
@@ -894,9 +964,10 @@ export const beginUpload = defineOrchestratedService({
   input: uploadIntent,
   output: beginUploadOutput,
   handler: async (input, actor) => {
-    if (actor.kind === "anonymous" && !input.provenance.captureToken) {
-      throw new ServiceError("permission", "Sign in or use an upload link.");
-    }
+    await verifyCaptureUpload.call(
+      { captureToken: input.provenance.captureToken, captureSessionId: input.provenance.captureSessionId },
+      actor,
+    );
     let kind: MediaKind;
     try {
       kind = expectedKind(input.filename, input.contentType);
@@ -1237,6 +1308,13 @@ const applyCaptureComplete = defineService({
   }),
   output: completeUploadResult,
   handler: async (input, ctx) => {
+    // Staging runs as the platform, so the caller's capability is proved
+    // here: a live token, or media authority for a session id (C11.10).
+    if (input.token) {
+      await requireLiveCaptureToken(ctx.tx, input.token);
+    } else if (!permits(ctx.actor, "scoped", "media.stageCompletedUpload", "mutation")) {
+      throw new ServiceError("permission", "Use an upload link or an authorized media account.");
+    }
     const { stageCompletedUpload } = await import("./capture");
     await ctx.callAsSystem(stageCompletedUpload, {
       uploadId: input.uploadId,

@@ -16,6 +16,7 @@ import { befriendMember, followMember, setMemberRelation } from "@/modules/membe
 import { answerMessageRequest, startConversation } from "@/modules/members/messages";
 import {
   answerCall,
+  callSettings,
   callStatus,
   endCall,
   incomingCalls,
@@ -106,6 +107,21 @@ describe.runIf(hasDatabase)("member calls (C12.07)", () => {
     expect((await callStatus.call({ id: call.id }, SAM)).state).toBe("ended");
     expect(await db().select().from(memberCallSignals)).toEqual([]);
     expect((await failure(sendSignal.call({ callId: call.id, kind: "candidate", payload: { candidate: "late" } }, SAM))).code).toBe("conflict");
+  });
+
+  it("issues relay credentials only to a member on a live call (C11.10)", async () => {
+    const outsider = { ...CUSTOMER, userId: "00000000-0000-4000-8000-0000000000c9" };
+    await db().insert(users).values({ id: outsider.userId, email: "outsider@example.test", role: "customer" });
+    expect((await failure(callSettings.call({}, outsider))).code).toBe("permission");
+    expect((await failure(callSettings.call({}, SAM))).code).toBe("conflict");
+    await befriendMember.call({ handle: "rae" }, SAM);
+    await befriendMember.call({ handle: "sam" }, RAE);
+    const call = await startCall.call({ handle: "rae", media: "voice" }, SAM);
+    expect((await callSettings.call({}, SAM)).iceServers).toBeDefined();
+    expect((await callSettings.call({}, RAE)).iceServers).toBeDefined();
+    expect((await failure(callSettings.call({}, KIM))).code).toBe("conflict");
+    await endCall.call({ id: call.id }, SAM);
+    expect((await failure(callSettings.call({}, SAM))).code).toBe("conflict");
   });
 
   it("turns unanswered ringing into a missed call and refuses across a block", async () => {
