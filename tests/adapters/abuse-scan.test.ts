@@ -9,7 +9,7 @@ import { createPhotoDna } from "@/adapters/abuse-scan/photodna";
 import { saferScanner } from "@/adapters/abuse-scan/safer";
 import { createCompositeScanner } from "@/adapters/malware";
 import { noMalwareScanner } from "@/adapters/malware/none";
-import { onAbuseMatch, type AbuseMatchRecord, type AbuseScanner } from "@/adapters/abuse-scan";
+import { setAbuseRecorder, type AbuseMatchRecord, type AbuseScanner } from "@/adapters/abuse-scan";
 import type { MalwareScanner } from "@/adapters/malware/types";
 
 const body = (bytes: Uint8Array) => (async function* () { yield bytes as Uint8Array<ArrayBuffer>; })();
@@ -70,7 +70,9 @@ describe("abuse matching in front of the malware scan (C12.30)", () => {
 
   it("holds a match, holds when the check cannot run, and passes everything else on", async () => {
     const matches: AbuseMatchRecord[] = [];
-    onAbuseMatch(async (record) => { matches.push(record); });
+    setAbuseRecorder(async (record) => { matches.push(record); });
+    // Installing again replaces the recorder: a reload never records a match twice.
+    setAbuseRecorder(async (record) => { matches.push(record); });
     expect(await createCompositeScanner(inner, abuse("match")).scan(input("image/jpeg"))).toMatchObject({ status: "infected", engine: "abuse-hash:photodna" });
     expect(matches).toHaveLength(1);
     // Unchecked is not a match: its own tag, so it is never taken for evidence.

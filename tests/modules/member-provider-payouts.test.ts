@@ -14,7 +14,7 @@ import { ready } from "@/core/runtime";
 import { updateBusiness } from "@/core/settings/service";
 import { joinSite, updateMembershipRules } from "@/modules/members/service";
 import { createListing } from "@/modules/members/listings";
-import { myPayoutAccount, onOrderPaid, reversePayouts, sitePayouts } from "@/modules/members/payouts";
+import { myPayoutAccount, onOrderPaid, reversePayouts, settlePayouts, sitePayouts } from "@/modules/members/payouts";
 import { applyPayoutWebhook, applyProviderTransfer, payoutSetup, sendProviderPayouts, startPayoutSetup } from "@/modules/members/provider-payouts";
 import { memberPayouts, memberPayoutTransfers } from "@/modules/members/schema";
 import { setPayoutProviderForTests } from "@/adapters/payouts";
@@ -243,5 +243,82 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
     expect((await sitePayouts.call({}, OWNER)).payouts.map((p) => p.state)).toEqual(["paid"]);
     const unknown = await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: "tr_other", payoutId: crypto.randomUUID(), state: "settled" }] }, { kind: "system" });
     expect(unknown).toEqual({ applied: 0, unmatched: 1 });
+  });
+  it("sends a payout again when the owner decides, after a review, that the seller is owed", { timeout: 90_000 }, async () => {
+    await readySeller();
+    const invoice = await sell("30");
+    refuseTransfers = true;
+    expect((await sendProviderPayouts()).failed).toBe(1);
+    // A partial refund sends the payout to review; its queued transfer is not sent.
+    await reversePayouts.call({ invoiceId: invoice.id, amountMinor: 500 }, { kind: "system" });
+    refuseTransfers = false;
+    await retryNow();
+    expect(await sendProviderPayouts()).toEqual({ sent: 0, failed: 0 });
+    const [payout] = (await sitePayouts.call({}, OWNER)).payouts;
+    await settlePayouts.call({ ids: [payout!.id], action: "owe", note: "Seller keeps the rest." }, OWNER);
+    expect(await sendProviderPayouts()).toEqual({ sent: 1, failed: 0 });
+    const keys = transferCalls().map((c) => c.idempotencyKey);
+    // The first attempt was refused outright, so the new one has a new key.
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toBe(keys[1]);
+    expect((await sitePayouts.call({}, OWNER)).payouts.map((p) => p.state)).toEqual(["paid"]);
+  });
+
+  it("sends an owed payout again under the same key when an earlier attempt's outcome is unknown", { timeout: 90_000 }, async () => {
+    await readySeller();
+    const invoice = await sell("30");
+    timeoutTransfers = true;
+    expect((await sendProviderPayouts()).failed).toBe(1);
+    await reversePayouts.call({ invoiceId: invoice.id, amountMinor: 500 }, { kind: "system" });
+    timeoutTransfers = false;
+    await retryNow();
+    await sendProviderPayouts();
+    const [payout] = (await sitePayouts.call({}, OWNER)).payouts;
+    expect(payout?.state).toBe("review");
+    await settlePayouts.call({ ids: [payout!.id], action: "owe", note: "Checked with Stripe: not paid." }, OWNER);
+    expect(await sendProviderPayouts()).toEqual({ sent: 1, failed: 0 });
+    const keys = transferCalls().map((c) => c.idempotencyKey);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(keys[1]);
+    expect((await sitePayouts.call({}, OWNER)).payouts.map((p) => p.state)).toEqual(["paid"]);
+  });
+
+  it("keeps an unknown outcome unknown when a later retry is refused", { timeout: 60_000 }, async () => {
+    await readySeller();
+    await sell("30");
+    timeoutTransfers = true;
+    expect((await sendProviderPayouts()).failed).toBe(1);
+    timeoutTransfers = false;
+    refuseTransfers = true;
+    await retryNow();
+    expect((await sendProviderPayouts()).failed).toBe(1);
+    const [t] = await db().select().from(memberPayoutTransfers);
+    expect(t?.lastError).toMatch(/^Outcome unknown: .*refused/);
+  });
+
+  it("records a provider paying after all, once the owner was told its outcome was unknown", { timeout: 120_000 }, async () => {
+    await readySeller();
+    await sell("30");
+    timeoutTransfers = true;
+    for (let i = 0; i < 5; i++) {
+      await retryNow();
+      await sendProviderPayouts();
+    }
+    const [given] = await db().select().from(memberPayoutTransfers);
+    expect(given?.state).toBe("failed");
+    const result = await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: "tr_late", payoutId: given!.payoutId, state: "settled" }] }, { kind: "system" });
+    expect(result.applied).toBe(1);
+    const [t] = await db().select().from(memberPayoutTransfers);
+    expect(t).toMatchObject({ state: "settled", reference: "tr_late" });
+    const [payout] = (await sitePayouts.call({}, OWNER)).payouts;
+    expect(payout?.state).toBe("review");
+    expect(payout?.note).toMatch(/after all.*Do not pay it by hand/);
+  });
+
+  it("acknowledges transfer events that are not this site's, so the provider keeps the endpoint", { timeout: 60_000 }, async () => {
+    const stripe = createStripeConnect({ secretKey: "sk_test_x", webhookSecrets: [SECRET], fetch: fakeStripe });
+    setPayoutProviderForTests("stripe_connect", { ...stripe, webhook: async () => [{ kind: "transfer", reference: "tr_elsewhere", payoutId: crypto.randomUUID(), state: "settled" }, { kind: "transfer", reference: "tr_other", payoutId: "not-a-uuid", state: "failed" }] });
+    const response = await webhook(new Request("http://localhost/api/payouts/stripe_connect/webhook", { method: "POST", body: "{}" }), { params: Promise.resolve({ provider: "stripe_connect" }) });
+    expect(response.status).toBe(200);
   });
 });

@@ -11,6 +11,7 @@ import { env } from "@/core/env";
 import { AdapterError } from "../types";
 import { minorToDecimal } from "../payments/currency";
 import { object, paymentFetch, providerJson } from "../payments/http";
+import { payoutJson } from "./http";
 import type { PayoutProvider, PayoutWebhookEvent } from "./types";
 
 export interface PayPalPayoutOptions {
@@ -67,7 +68,7 @@ export function createPayPalPayouts(options: PayPalPayoutOptions = {}): PayoutPr
   }
 
   async function api(path: string, body: unknown): Promise<Record<string, unknown>> {
-    return providerJson("paypal_payouts", await post(path, body));
+    return payoutJson("paypal_payouts", await post(path, body));
   }
 
   return {
@@ -92,7 +93,7 @@ export function createPayPalPayouts(options: PayPalPayoutOptions = {}): PayoutPr
             amount: { value: minorToDecimal(request.amountMinor, request.currency), currency: request.currency.toUpperCase() },
             receiver: request.externalAccountId,
             note: request.description.slice(0, 4000),
-            sender_item_id: request.idempotencyKey,
+            sender_item_id: request.payoutId,
           },
         ],
       }, `freeholder-payout-${request.idempotencyKey}`);
@@ -101,7 +102,7 @@ export function createPayPalPayouts(options: PayPalPayoutOptions = {}): PayoutPr
         const original = await response.clone().json().then(duplicateOf, () => undefined);
         if (original) return { reference: original, settled: false };
       }
-      const value = await providerJson("paypal_payouts", response);
+      const value = await payoutJson("paypal_payouts", response);
       const reference = text(object(value.batch_header)?.payout_batch_id);
       if (!reference) throw new AdapterError("payments", "paypal_payouts", "provider_failure", "PayPal did not accept the payout.");
       return { reference, settled: false };

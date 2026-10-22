@@ -4,12 +4,12 @@
 
 Seller payouts through Stripe Connect, PayPal Payouts or Razorpay Route are
 safer around refunds and retries. A payout refunded, disputed or paid by hand
-before its transfer went out is no longer sent. If the provider pays a seller
-after the buyer was refunded, the payout goes to review and a reversal is
-requested where the provider supports one. A retry after a timeout reuses the
-same provider idempotency key, so it returns the original transfer instead of
-paying twice. If a refund arrives while an earlier attempt's outcome is still
-unknown, the payout goes to review so the owner can check with the provider.
+before its transfer went out is no longer sent, and one the site owner later
+marks as owed is sent again. If the provider pays a seller after the buyer was
+refunded, or after the owner was told an attempt's outcome was unknown, the
+payout goes to review with a clear note, and a reversal is requested where
+the provider supports one. A retry after a timeout reuses the same provider
+idempotency key, so it returns the original transfer instead of paying twice.
 Provider confirmations that arrive before the transfer is recorded are now
-matched by payout id. A confirmation for one of the site's payouts that cannot
-be matched is answered with a retryable error instead of being acknowledged.
+matched, and events for payouts from other services on a shared provider
+account are acknowledged and ignored.

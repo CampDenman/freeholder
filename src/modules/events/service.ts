@@ -8,7 +8,6 @@ import { isUniqueViolation } from "@/core/db";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineOrchestratedService, defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
-import { listLocations } from "@/core/locations/service";
 import { resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { recordRedirect } from "@/core/seo/service";
@@ -246,24 +245,6 @@ async function issueAdmissionInvoice(
     holdExpiresAt: Date;
   },
 ) {
-  // Admission is supplied where the event happens: from the business's
-  // primary location to the venue (the business itself when the event names
-  // no venue location). The attendee's own address plays no part, so none is
-  // asked for; the invoice takes the same calculate path as every other sale.
-  const locations = await ctx.callAsSystem(listLocations, {});
-  const origin = locations.find((each) => each.isPrimary) ?? locations[0];
-  const [event] = await ctx.tx
-    .select({ venueLocationId: events.venueLocationId })
-    .from(events)
-    .where(eq(events.id, args.ticket.eventId))
-    .limit(1);
-  const venue = locations.find((each) => each.id === event?.venueLocationId) ?? origin;
-  const place = (at: NonNullable<typeof origin>) => ({
-    country: at.country,
-    region: at.region ?? undefined,
-    postalCode: at.postalCode ?? undefined,
-    city: at.city ?? undefined,
-  });
   const draft = await ctx.callAsSystem(createDraftInvoice, {
     contactId: args.contactId,
     currency: args.ticket.currency,
@@ -279,12 +260,12 @@ async function issueAdmissionInvoice(
         unitAmountMinor: args.ticket.priceMinor,
       },
     ],
-    tax: origin && venue
-      ? { mode: "calculate" as const, origin: place(origin), destination: place(venue) }
-      : {
-          mode: "not_applicable" as const,
-          reason: "This business has no location to tax event admission from.",
-        },
+    // No tax is added to admission: the invoice says so rather than
+    // implying tax is worked out later.
+    tax: {
+      mode: "not_applicable" as const,
+      reason: "Event admission; no tax added.",
+    },
     dueAt: args.holdExpiresAt,
   });
   return ctx.callAsSystem(issueInvoice, { id: draft.invoice.id });
@@ -1010,12 +991,31 @@ export const confirmPaidRegistration = defineService({
   },
 });
 
+/**
+ * Holds the sweep could not release recently. They go to the back of the
+ * next batch rather than out of it: a hold that keeps failing, or stays
+ * blocked by a payment attempt, cannot fill every batch and starve holds
+ * that lapsed after it, yet is still retried whenever there is room. Kept
+ * per process: a restart simply treats them all alike once more.
+ */
+const SWEEP_BACKOFF_MAX = 500;
+const sweepBackoff = new Map<string, number>();
+const BLOCKED_BACKOFF_MS = 15 * 60_000;
+const FAILED_BACKOFF_MS = 60 * 60_000;
+
+function setAside(id: string, ms: number): void {
+  sweepBackoff.delete(id);
+  sweepBackoff.set(id, Date.now() + ms);
+  // Oldest first out: a Map iterates in insertion order.
+  while (sweepBackoff.size > SWEEP_BACKOFF_MAX) sweepBackoff.delete(sweepBackoff.keys().next().value!);
+}
+
 const lapsedHolds = defineService({
   name: "events.lapsedHolds",
   summary: "Held registrations whose payment deadline passed, oldest first.",
   kind: "query",
   permission: "system",
-  input: z.object({ limit: z.number().int().min(1).max(500) }),
+  input: z.object({ limit: z.number().int().min(1).max(500), last: z.array(uuid).max(SWEEP_BACKOFF_MAX).default([]) }),
   output: listed(row({ id: uuid })),
   handler: async (input, ctx) =>
     ctx.tx
@@ -1028,7 +1028,10 @@ const lapsedHolds = defineService({
           lt(eventRegistrations.holdExpiresAt, sql`now()`),
         ),
       )
-      .orderBy(asc(eventRegistrations.holdExpiresAt))
+      .orderBy(
+        ...(input.last.length ? [sql`case when ${inArray(eventRegistrations.id, input.last)} then 1 else 0 end`] : []),
+        asc(eventRegistrations.holdExpiresAt),
+      )
       .limit(input.limit),
 });
 
@@ -1083,21 +1086,26 @@ export const expireHeldRegistrations = defineOrchestratedService({
   input: z.object({ limit: z.number().int().min(1).max(500).default(100) }),
   output: row({ expired: z.number().int(), blocked: z.number().int(), failed: z.number().int() }),
   handler: async (input, actor) => {
-    const candidates = await lapsedHolds.call({ limit: input.limit }, actor);
+    const now = Date.now();
+    for (const [id, until] of sweepBackoff) if (until <= now) sweepBackoff.delete(id);
+    const candidates = await lapsedHolds.call({ limit: input.limit, last: [...sweepBackoff.keys()] }, actor);
     let expired = 0;
     let blocked = 0;
     let failed = 0;
     for (const candidate of candidates) {
       try {
         if ((await expireHeldRegistration.call({ id: candidate.id }, actor)).expired) expired += 1;
+        sweepBackoff.delete(candidate.id);
       } catch (error) {
         // A payment attempt that began before the hold lapsed blocks the
         // release; the attempt's own lifecycle unblocks a later sweep.
         if (error instanceof ServiceError && error.code === "conflict") {
           blocked += 1;
+          setAside(candidate.id, BLOCKED_BACKOFF_MS);
           continue;
         }
         failed += 1;
+        setAside(candidate.id, FAILED_BACKOFF_MS);
         console.error(`[events] could not release lapsed hold ${candidate.id}`, error);
       }
     }

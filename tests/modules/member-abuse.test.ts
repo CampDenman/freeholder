@@ -16,7 +16,8 @@ import { createCompositeScanner, resetMalwareScannerForTests, setMalwareScannerF
 import type { MalwareScanner } from "@/adapters/malware/types";
 import { joinSite } from "@/modules/members/service";
 import { abuseReportQueue, linkAbuseReports, markAbuseReported } from "@/modules/members/abuse";
-import { abuseReports, memberProfiles } from "@/modules/members/schema";
+import { memberProfiles } from "@/modules/members/schema";
+import { abuseReports } from "@/core/media/abuse-schema";
 import { assets } from "@/core/media/schema";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, STAFF, truncateSpine } from "../helpers/spine";
 

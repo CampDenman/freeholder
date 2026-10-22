@@ -34,8 +34,6 @@ import {
 } from "@/modules/invoicing/payment-provider-service";
 import { beginCustomerCheckout } from "@/modules/invoicing/customer-service";
 import { invoices } from "@/modules/invoicing/schema";
-import { addTaxRate, createTaxZone, setTaxRegistration } from "@/modules/invoicing/tax-service";
-import { createLocationService } from "@/core/locations/service";
 import { contacts } from "@/core/contacts/schema";
 import { ANONYMOUS, closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
@@ -267,23 +265,6 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     expect(still?.status).toBe("reserved");
   });
 
-  it("taxes admission where the event happens, the way every other sale is taxed", async () => {
-    await createLocationService.call({ name: "Studio", slug: "studio", city: "Courtenay", region: "BC", country: "CA" }, OWNER);
-    const zone = await createTaxZone.call(
-      { name: "Canada", country: "CA", regions: [], postalPatterns: [], basis: "destination", pricesIncludeTax: false, roundingScope: "invoice", roundingMode: "half_up" },
-      OWNER,
-    );
-    await setTaxRegistration.call({ zoneId: zone.id, number: "123456789RT0001", status: "active" }, OWNER);
-    await addTaxRate.call({ zoneId: zone.id, name: "GST", jurisdiction: "Canada", ratePpm: 50_000, appliesToShipping: false }, OWNER);
-    const { event, session, ticket } = await paidClass(2);
-    const held = await registerForEvent.call(
-      { eventId: event.id, sessionId: session.id, ticketId: ticket.id, email: "taxed@example.test" },
-      ANONYMOUS,
-    );
-    const [invoice] = await db().select().from(invoices).where(eq(invoices.id, held.registration.invoiceId!));
-    expect(invoice).toMatchObject({ subtotalMinor: 6_500, taxMinor: 325, totalMinor: 6_825 });
-  });
-
   it("releases every other lapsed hold when one cannot be released", async () => {
     const first = await paidClass(1);
     const stuck = await registerForEvent.call(
@@ -306,8 +287,10 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     await db().update(eventRegistrations).set({ holdExpiresAt: new Date(Date.now() - 60_000) }).where(eq(eventRegistrations.id, lapsed.registration.id));
 
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    const swept = await expireHeldRegistrations.call({}, { kind: "system" });
-    expect(swept).toEqual({ expired: 1, blocked: 0, failed: 1 });
+    // One at a time: the failing hold is the oldest, so it comes first.
+    expect(await expireHeldRegistrations.call({ limit: 1 }, { kind: "system" })).toEqual({ expired: 0, blocked: 0, failed: 1 });
+    // It goes to the back of the next batch, so that batch reaches the hold behind it.
+    expect(await expireHeldRegistrations.call({ limit: 1 }, { kind: "system" })).toEqual({ expired: 1, blocked: 0, failed: 0 });
     expect(errors).toHaveBeenCalledTimes(1);
     errors.mockRestore();
     const [released] = await db().select().from(eventRegistrations).where(eq(eventRegistrations.id, lapsed.registration.id));

@@ -17,7 +17,8 @@ import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError } from "@/core/service";
 import { assets } from "@/core/media/schema";
 import { ABUSE_MATCH_ENGINE } from "@/adapters/abuse-scan";
-import { abuseReports, memberProfiles } from "./schema";
+import { abuseReports } from "@/core/media/abuse-schema";
+import { memberProfiles } from "./schema";
 
 /** Where a site reports, by its country. Others should take legal advice. */
 export const REPORT_CHANNELS = {

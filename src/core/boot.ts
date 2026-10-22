@@ -12,6 +12,7 @@ import { sortModules, type ModuleManifest } from "@/core/module";
 import { isolatePlugins, bootableManifests, isolatePluginLoad } from "@/core/plugins/isolate";
 import { isPluginManifest } from "@/core/plugin";
 import { registerService, type Service } from "@/core/service";
+import { installAbuseRecorder } from "@/core/media/abuse-evidence";
 import { registerDeclaredEvents } from "@/core/events/catalogue";
 import {
   registerOnboardingModule,
@@ -170,6 +171,8 @@ export async function boot(
   manifests: ModuleManifest[],
 ): Promise<BootReport> {
   requireProductionEnv();
+  // C12.30: matches are recorded whichever modules are installed.
+  installAbuseRecorder();
 
   const report: BootReport = {
     modules: [],

@@ -35,15 +35,19 @@ export const ABUSE_MATCH_ENGINE = "abuse-hash:";
 /** Scan engine prefix on an image the matcher could not check: held, but rescannable. */
 export const ABUSE_UNCHECKED_ENGINE = "abuse-hash-error:";
 
-type Handler = (record: AbuseMatchRecord) => Promise<void>;
-const handlers: Handler[] = [];
-/** Core media records matches for the legal report (src/core/media/abuse-evidence.ts). */
-export function onAbuseMatch(handler: Handler): void {
-  handlers.push(handler);
+type Recorder = (record: AbuseMatchRecord) => Promise<void>;
+let recorder: Recorder | undefined;
+/**
+ * Core media installs the one recorder at boot (src/core/media/abuse-evidence.ts).
+ * One slot, not a list: booting again, or a dev-server reload, replaces it
+ * rather than recording every match twice.
+ */
+export function setAbuseRecorder(next: Recorder | undefined): void {
+  recorder = next;
 }
 
 export async function recordAbuseMatch(record: AbuseMatchRecord): Promise<void> {
   // Fails closed: a match nobody records must not be accepted quietly.
-  if (handlers.length === 0) throw new Error("No recorder is registered for abuse matches.");
-  for (const handler of handlers) await handler(record);
+  if (!recorder) throw new Error("No recorder is registered for abuse matches.");
+  await recorder(record);
 }

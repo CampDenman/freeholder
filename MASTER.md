@@ -6250,14 +6250,14 @@ payment, tax, inventory and reporting path, with no floating-point money.
   erased) rolled every release back on every run. It is now an orchestrated
   service: each hold is released by `events.expireHeldRegistration` in its
   own transaction, failures are counted (`failed`) and logged, and a
-  payment in flight is counted `blocked`. Admission invoices said tax was
-  applied at issue but were created `not_applicable`. Decision: admission is
-  taxed like every other sale, with place of supply where the event
-  happens, from the primary business location to the event's venue location
-  (or the business location when none is set); `not_applicable` remains
-  only when the business has no location. Regression:
-  `tests/core/events.test.ts`; changeset
-  `event-hold-sweep-and-admission-tax.md`.
+  payment in flight is counted `blocked`. A hold the sweep could not
+  release goes to the back of the next batches for a while (15 minutes
+  when blocked, an hour when failing; remembered per process), so stuck
+  holds cannot fill every batch and starve holds that lapsed after them.
+  Admission invoices said tax was applied at issue but were created
+  `not_applicable`; the reason text now says plainly that no tax is
+  added. Regression: `tests/core/events.test.ts`; changeset
+  `event-hold-sweep.md`.
 
 #### Quotes, contracts, projects, and time
 - [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/
@@ -10945,6 +10945,20 @@ whatever is best for the people using the site.
   `tests/modules/member-provider-payouts.test.ts`. Still open: a run against
   a Stripe test account (waits for test keys, Tony 2026-10-15) and direct
   and destination charges with application fees, now C12.38.)*
+  Audit follow-up 2026-10-21 (second review): a payout the owner sends
+  back to "due" after a review (`members.settlePayouts` "owe") reuses its
+  one transfer row — under the same idempotency key when an earlier
+  attempt's outcome is unknown (the provider returns that transfer or makes
+  it now, never both), under a fresh key (the row gets a new id) when
+  nothing reached the seller, and straight to paid when the provider had
+  already settled it. Each transfer row's id is now the provider
+  idempotency key; the payout id still rides on the transfer for webhook
+  matching. A settlement for a row given up as unknown still applies and
+  moves the payout to review with "paid after all — do not pay by hand".
+  The "Outcome unknown" marker stays until a result is recorded, and 409
+  (same key still processing) counts as unknown, not refused. Regression:
+  `tests/modules/member-provider-payouts.test.ts`,
+  `tests/adapters/payout-providers.test.ts`.
   Audit follow-up 2026-10-21: the payout job could pay a seller after the
   buyer's refund had cancelled the payout, because a queued transfer was
   claimed whatever the payout's state, and settlement only ever moved a
@@ -10976,8 +10990,12 @@ whatever is best for the people using the site.
   its link to the original batch instead of counting as a failure. Webhook
   transfer events carry the payout id the transfer was sent with (PayPal
   `sender_item_id`, Razorpay `notes.freeholder_payout_id`), so a
-  confirmation that beats the "sent" row is still applied; one for this
-  site's payout that cannot be matched gets a 503 so the provider retries.
+  confirmation that beats the "sent" row is still applied. Events that
+  match no transfer here are acknowledged (200) and ignored: a shared
+  provider account carries other integrations' payouts, and every transfer
+  row is committed before its provider call, so one of ours always matches.
+  Razorpay offers idempotency only on direct transfers, not reversals; a
+  retried full reversal is refused once the first went through.
   Regression: `tests/adapters/payout-providers.test.ts`,
   `tests/modules/member-provider-payouts.test.ts`; changeset
   `payout-refund-retry-safety.md`. Not yet proven against live sandboxes.
@@ -11239,7 +11257,10 @@ whatever is best for the people using the site.
   rows held under the old tagging without a migration. Reports link to
   distinct matched assets, oldest first, so a second uploader of the same
   image is linked and suspended too. Matches are recorded by core media
-  rather than the members module, and an unrecorded match refuses the
+  rather than the members module: `abuse_reports` is defined in
+  `src/core/media/abuse-schema.ts` (same table, no SQL change), boot
+  installs the one recorder (`installAbuseRecorder`, a single slot, so a
+  reload never records twice), and an unrecorded match refuses the
   upload. Regression: `tests/adapters/abuse-scan.test.ts`,
   `tests/modules/member-abuse.test.ts`; changeset
   `abuse-scan-unchecked-images.md`.

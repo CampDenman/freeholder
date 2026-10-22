@@ -41,10 +41,10 @@ describe("Stripe Connect payouts (C12.26)", () => {
     await stripe.onboard(seller, {}, urls, "acct_1");
     expect(calls.map((c) => c.url.replace("https://api.stripe.com", ""))).toEqual(["/v1/account_links"]);
 
-    expect(await stripe.transfer({ externalAccountId: "acct_1", amountMinor: 3600, currency: "CAD", idempotencyKey: "p1", description: "Payout p1" })).toEqual({ reference: "tr_1", settled: true });
+    expect(await stripe.transfer({ externalAccountId: "acct_1", amountMinor: 3600, currency: "CAD", idempotencyKey: "t1", payoutId: "p1", description: "Payout p1" })).toEqual({ reference: "tr_1", settled: true });
     const transfer = calls.at(-1)!;
-    expect([new URLSearchParams(transfer.body).get("amount"), new URLSearchParams(transfer.body).get("currency"), new URLSearchParams(transfer.body).get("destination"), transfer.headers["idempotency-key"]]).toEqual(["3600", "cad", "acct_1", "freeholder-payout-p1"]);
-    expect(await stripe.reverse({ reference: "tr_1", amountMinor: 3600, currency: "CAD", idempotencyKey: "p1" })).toEqual({ reference: "trr_1" });
+    expect([new URLSearchParams(transfer.body).get("amount"), new URLSearchParams(transfer.body).get("currency"), new URLSearchParams(transfer.body).get("destination"), transfer.headers["idempotency-key"]]).toEqual(["3600", "cad", "acct_1", "freeholder-payout-t1"]);
+    expect(await stripe.reverse({ reference: "tr_1", amountMinor: 3600, currency: "CAD", idempotencyKey: "t1", payoutId: "p1" })).toEqual({ reference: "trr_1" });
     expect(calls.at(-1)!.url).toBe("https://api.stripe.com/v1/transfers/tr_1/reversals");
   });
 
@@ -74,13 +74,13 @@ describe("PayPal Payouts (C12.27)", () => {
     const paypal = createPayPalPayouts({ clientId: "id", clientSecret: "secret", webhookId: "WH1", environment: "sandbox", fetch: fetcher });
     await expect(paypal.onboard(seller, { paypalEmail: "not-an-email" }, urls)).rejects.toThrow(/PayPal account/);
     expect(await paypal.onboard(seller, { paypalEmail: "Sam@Example.test" }, urls)).toEqual({ externalAccountId: "sam@example.test", status: "ready" });
-    expect(await paypal.transfer({ externalAccountId: "sam@example.test", amountMinor: 1234, currency: "CAD", idempotencyKey: "p1", description: "Payout p1" })).toEqual({ reference: "BATCH1", settled: false });
+    expect(await paypal.transfer({ externalAccountId: "sam@example.test", amountMinor: 1234, currency: "CAD", idempotencyKey: "t1", payoutId: "p1", description: "Payout p1" })).toEqual({ reference: "BATCH1", settled: false });
     const payout = JSON.parse(calls.at(-1)!.body) as { sender_batch_header: { sender_batch_id: string }; items: { amount: { value: string; currency: string }; receiver: string; sender_item_id: string }[] };
-    expect(payout.sender_batch_header.sender_batch_id).toBe("p1");
-    expect(calls.at(-1)!.headers["paypal-request-id"]).toBe("freeholder-payout-p1");
+    expect(payout.sender_batch_header.sender_batch_id).toBe("t1");
+    expect(calls.at(-1)!.headers["paypal-request-id"]).toBe("freeholder-payout-t1");
     expect(payout.items[0]).toMatchObject({ amount: { value: "12.34", currency: "CAD" }, receiver: "sam@example.test", sender_item_id: "p1" });
     expect(calls.at(-1)!.url).toBe("https://api-m.sandbox.paypal.com/v1/payments/payouts");
-    expect("unsupported" in (await paypal.reverse({ reference: "BATCH1", amountMinor: 1234, currency: "CAD", idempotencyKey: "p1" }))).toBe(true);
+    expect("unsupported" in (await paypal.reverse({ reference: "BATCH1", amountMinor: 1234, currency: "CAD", idempotencyKey: "t1", payoutId: "p1" }))).toBe(true);
 
     const event = JSON.stringify({ event_type: "PAYMENT.PAYOUTS-ITEM.SUCCEEDED", resource: { payout_batch_id: "BATCH1", payout_item: { sender_item_id: "p1" } } });
     expect(await paypal.webhook({ headers: { "paypal-transmission-sig": "good" }, body: body(event), receivedAt: new Date().toISOString() })).toEqual([{ kind: "transfer", reference: "BATCH1", payoutId: "p1", state: "settled" }]);
@@ -96,9 +96,9 @@ describe("PayPal Payouts (C12.27)", () => {
       : { __status: 400, name: "USER_BUSINESS_ERROR", message: "Batch with given sender_batch_id already exists", links: [{ href: "https://api-m.sandbox.paypal.com/v1/payments/payouts/BATCH9", rel: "self", method: "GET" }] },
     );
     const paypal = createPayPalPayouts({ clientId: "id", clientSecret: "secret", webhookId: "WH1", environment: "sandbox", fetch: fetcher });
-    expect(await paypal.transfer({ externalAccountId: "sam@example.test", amountMinor: 1234, currency: "CAD", idempotencyKey: "p1", description: "Payout p1" })).toEqual({ reference: "BATCH9", settled: false });
+    expect(await paypal.transfer({ externalAccountId: "sam@example.test", amountMinor: 1234, currency: "CAD", idempotencyKey: "t1", payoutId: "p1", description: "Payout p1" })).toEqual({ reference: "BATCH9", settled: false });
     const refused = createPayPalPayouts({ clientId: "id", clientSecret: "secret", webhookId: "WH1", environment: "sandbox", fetch: recorder((c) => (c.url.endsWith("/v1/oauth2/token") ? { access_token: "tok" } : { __status: 422, name: "INSUFFICIENT_FUNDS" })).fetcher });
-    await expect(refused.transfer({ externalAccountId: "sam@example.test", amountMinor: 1234, currency: "CAD", idempotencyKey: "p1", description: "Payout p1" })).rejects.toThrow(/INSUFFICIENT_FUNDS/);
+    await expect(refused.transfer({ externalAccountId: "sam@example.test", amountMinor: 1234, currency: "CAD", idempotencyKey: "t1", payoutId: "p1", description: "Payout p1" })).rejects.toThrow(/INSUFFICIENT_FUNDS/);
   });
 });
 
@@ -123,11 +123,14 @@ describe("Razorpay Route (C12.27)", () => {
     expect(JSON.parse(calls[2]!.body)).toMatchObject({ settlements: { account_number: "1234567890", ifsc_code: "HDFC0001234", beneficiary_name: "Sam Rao" } });
     expect(calls[0]!.headers.authorization).toBe(`Basic ${Buffer.from("rzp_test_x:secret").toString("base64")}`);
     expect(await razorpay.accountStatus("acc_1:acc_prd_1")).toBe("ready");
-    expect(await razorpay.transfer({ externalAccountId: "acc_1:acc_prd_1", amountMinor: 50000, currency: "INR", idempotencyKey: "p1", description: "Payout p1" })).toEqual({ reference: "trf_1", settled: true });
+    expect(await razorpay.transfer({ externalAccountId: "acc_1:acc_prd_1", amountMinor: 50000, currency: "INR", idempotencyKey: "t1", payoutId: "p1", description: "Payout p1" })).toEqual({ reference: "trf_1", settled: true });
     expect(JSON.parse(calls.at(-1)!.body)).toMatchObject({ account: "acc_1", amount: 50000, currency: "INR", notes: { freeholder_payout_id: "p1" } });
     // Razorpay's documented idempotency header: a retry returns the first transfer.
-    expect(calls.at(-1)!.headers["x-transfer-idempotency"]).toBe("p1");
-    expect(await razorpay.reverse({ reference: "trf_1", amountMinor: 50000, currency: "INR", idempotencyKey: "p1" })).toEqual({ reference: "rvrsl_1" });
+    expect(calls.at(-1)!.headers["x-transfer-idempotency"]).toBe("t1");
+    // 409: the same key is still being processed — the outcome is unknown, not refused.
+    const busy = createRazorpayRoute({ keyId: "k", keySecret: "s", webhookSecrets: ["whs"], fetch: recorder(() => ({ __status: 409, error: { code: "BAD_REQUEST_ERROR" } })).fetcher });
+    await expect(busy.transfer({ externalAccountId: "acc_1:acc_prd_1", amountMinor: 50000, currency: "INR", idempotencyKey: "t1", payoutId: "p1", description: "Payout p1" })).rejects.toMatchObject({ code: "provider_failure", retryable: true });
+    expect(await razorpay.reverse({ reference: "trf_1", amountMinor: 50000, currency: "INR", idempotencyKey: "t1", payoutId: "p1" })).toEqual({ reference: "rvrsl_1" });
   });
 
   it("verifies webhooks and reads activation and transfer events", async () => {

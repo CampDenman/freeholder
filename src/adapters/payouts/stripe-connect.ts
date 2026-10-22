@@ -8,7 +8,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/core/env";
 import { AdapterError } from "../types";
-import { object, paymentFetch, providerJson } from "../payments/http";
+import { object, paymentFetch } from "../payments/http";
+import { payoutJson } from "./http";
 import type { PayoutAccountStatus, PayoutProvider } from "./types";
 
 export interface StripeConnectOptions {
@@ -51,7 +52,7 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
         ...rest.headers,
       },
     });
-    return providerJson("stripe_connect", response);
+    return payoutJson("stripe_connect", response);
   }
 
   return {
@@ -96,7 +97,7 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
           destination: request.externalAccountId,
           description: request.description.slice(0, 250),
           transfer_group: `freeholder-payout-${request.idempotencyKey}`,
-          "metadata[freeholder_payout_id]": request.idempotencyKey,
+          "metadata[freeholder_payout_id]": request.payoutId,
         }),
       });
       const reference = text(value.id);
@@ -108,7 +109,7 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
       const value = await api(`/v1/transfers/${encodeURIComponent(request.reference)}/reversals`, {
         method: "POST",
         idempotencyKey: `freeholder-reversal-${request.idempotencyKey}`,
-        body: new URLSearchParams({ amount: String(request.amountMinor), "metadata[freeholder_payout_id]": request.idempotencyKey }),
+        body: new URLSearchParams({ amount: String(request.amountMinor), "metadata[freeholder_payout_id]": request.payoutId }),
       });
       const reference = text(value.id);
       if (!reference) throw new AdapterError("payments", "stripe_connect", "provider_failure", "Stripe did not return a reversal.");

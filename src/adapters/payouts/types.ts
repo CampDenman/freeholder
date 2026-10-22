@@ -33,8 +33,10 @@ export interface TransferRequest {
   externalAccountId: string;
   amountMinor: number;
   currency: string;
-  /** The ledger's payout id: the same key on a retry never pays twice. */
+  /** The transfer attempt's id: the same key on a retry never pays twice. */
   idempotencyKey: string;
+  /** The ledger's payout id, carried on the transfer so webhooks can find it. */
+  payoutId: string;
   description: string;
 }
 
@@ -65,6 +67,6 @@ export interface PayoutProvider {
   onboard(seller: SellerIdentity, input: Partial<Record<OnboardingField, string>>, urls: { returnUrl: string; refreshUrl: string }, existing?: string | null): Promise<OnboardingResult>;
   accountStatus(externalAccountId: string): Promise<PayoutAccountStatus>;
   transfer(request: TransferRequest): Promise<TransferResult>;
-  reverse(request: { reference: string; amountMinor: number; currency: string; idempotencyKey: string }): Promise<ReverseResult>;
+  reverse(request: { reference: string; amountMinor: number; currency: string; idempotencyKey: string; payoutId: string }): Promise<ReverseResult>;
   webhook(request: PayoutWebhookRequest): Promise<PayoutWebhookEvent[]>;
 }

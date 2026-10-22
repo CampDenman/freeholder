@@ -18,6 +18,7 @@
 // paying twice; if the payout stops being due meanwhile, the owner checks
 // with the provider. Money that reaches a seller after a refund queues a
 // reversal or goes to review — never silently.
+import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { okResult, row, uuid, listed } from "@/core/contract";
@@ -33,6 +34,10 @@ import { memberPayoutAccounts, memberPayouts, memberPayoutTransfers, memberProfi
 const MAX_ATTEMPTS = 5;
 /** Marks a transfer whose last attempt may have reached the provider. */
 const UNKNOWN = "Outcome unknown: ";
+/** Written while a claimed call is in flight; replaced by the result. */
+const CLAIMED = `${UNKNOWN}sent to the provider; no result recorded yet.`;
+/** The marker sticks until a result is recorded: a later refusal does not prove an earlier timeout paid nothing. */
+const uncertain = (lastError: string | null) => Boolean(lastError?.startsWith(UNKNOWN));
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ONBOARDING_FIELDS = ["paypalEmail", "legalName", "phone", "street", "city", "state", "postalCode", "beneficiaryName", "accountNumber", "ifsc"] as const satisfies readonly OnboardingField[];
 
@@ -172,11 +177,41 @@ export const claimProviderTransfers = defineService({
   handler: async (input, ctx) => {
     const rules = await marketRules(ctx);
     if (payoutProvider(rules.adapter)) {
+      const payable = and(eq(memberPayoutAccounts.userId, memberPayouts.sellerId), eq(memberPayoutAccounts.adapter, rules.adapter), eq(memberPayoutAccounts.status, "ready"), isNotNull(memberPayoutAccounts.externalAccountId));
+      // A payout back in "due" — the owner decided after a review that the
+      // seller is owed — reuses its one transfer row (one per payout).
+      const returned = await ctx.tx
+        .select({ t: memberPayoutTransfers, payout: memberPayouts })
+        .from(memberPayoutTransfers)
+        .innerJoin(memberPayouts, eq(memberPayouts.id, memberPayoutTransfers.payoutId))
+        .innerJoin(memberPayoutAccounts, payable)
+        .where(and(eq(memberPayouts.state, "due"), eq(memberPayoutTransfers.kind, "transfer"), inArray(memberPayoutTransfers.state, ["failed", "settled"])))
+        .limit(input.limit)
+        .for("update", { of: memberPayoutTransfers, skipLocked: true });
+      for (const { t, payout } of returned) {
+        const now = new Date();
+        if (t.state === "settled") {
+          // The provider already paid this seller: nothing more to send.
+          await ctx.tx.update(memberPayouts).set({ state: "paid", paidAt: now, reference: t.reference }).where(eq(memberPayouts.id, payout.id));
+        } else if (uncertain(t.lastError)) {
+          // An earlier attempt may have gone through. Same row, same
+          // idempotency key: the provider returns that transfer, or makes it
+          // now if it never happened — never both.
+          await ctx.tx.update(memberPayoutTransfers).set({ state: "pending", attempts: 0, nextAttemptAt: now, updatedAt: now }).where(eq(memberPayoutTransfers.id, t.id));
+        } else {
+          // Nothing reached the seller (refused, returned, or never sent): a
+          // fresh attempt needs a fresh idempotency key, so the row gets a new id.
+          await ctx.tx
+            .update(memberPayoutTransfers)
+            .set({ id: randomUUID(), state: "pending", provider: rules.adapter, amountMinor: payout.netMinor, currency: payout.currency, reference: null, attempts: 0, nextAttemptAt: now, lastError: `Sending again after: ${t.lastError ?? "an earlier failure"}`.slice(0, 500), updatedAt: now })
+            .where(eq(memberPayoutTransfers.id, t.id));
+        }
+      }
       // Each due payout to a ready provider account gets its one transfer row.
       const due = await ctx.tx
         .select({ payout: memberPayouts })
         .from(memberPayouts)
-        .innerJoin(memberPayoutAccounts, and(eq(memberPayoutAccounts.userId, memberPayouts.sellerId), eq(memberPayoutAccounts.adapter, rules.adapter), eq(memberPayoutAccounts.status, "ready"), isNotNull(memberPayoutAccounts.externalAccountId)))
+        .innerJoin(memberPayoutAccounts, payable)
         .where(and(eq(memberPayouts.state, "due"), sql`not exists (select 1 from ${memberPayoutTransfers} t where t.payout_id = ${memberPayouts.id} and t.kind = 'transfer')`))
         .limit(input.limit);
       if (due.length) {
@@ -202,7 +237,7 @@ export const claimProviderTransfers = defineService({
     for (const r of found) {
       if (r.t.kind !== "transfer" || r.payoutState === "due") {
         ready.push(r);
-      } else if (r.t.lastError?.startsWith(UNKNOWN)) {
+      } else if (uncertain(r.t.lastError)) {
         await ctx.tx.update(memberPayoutTransfers).set({ state: "failed", lastError: `${r.t.lastError} Not retried: the payout was ${r.payoutState} meanwhile.`.slice(0, 500), updatedAt: now }).where(eq(memberPayoutTransfers.id, r.t.id));
         await ctx.tx
           .update(memberPayouts)
@@ -214,12 +249,13 @@ export const claimProviderTransfers = defineService({
     }
     // Claimed rows are pushed back while in flight, so an overlapping run
     // skips them, and are marked as possibly seen by the provider until the
-    // result is recorded.
-    if (ready.length) {
+    // result is recorded. An earlier unknown outcome keeps its own words.
+    for (const { t } of ready) {
+      const lastError = !uncertain(t.lastError) ? CLAIMED : t.lastError === CLAIMED ? `${UNKNOWN}an earlier run's result was not recorded.` : t.lastError;
       await ctx.tx
         .update(memberPayoutTransfers)
-        .set({ attempts: sql`${memberPayoutTransfers.attempts} + 1`, lastError: `${UNKNOWN}sent to the provider; no result recorded yet.`, nextAttemptAt: new Date(now.getTime() + 10 * 60_000), updatedAt: now })
-        .where(inArray(memberPayoutTransfers.id, ready.map((r) => r.t.id)));
+        .set({ attempts: sql`${memberPayoutTransfers.attempts} + 1`, lastError, nextAttemptAt: new Date(now.getTime() + 10 * 60_000), updatedAt: now })
+        .where(eq(memberPayoutTransfers.id, t.id));
     }
     return {
       transfers: ready.map(({ t, externalAccountId }) => ({ id: t.id, payoutId: t.payoutId, kind: t.kind, provider: t.provider, amountMinor: t.amountMinor, currency: t.currency, externalAccountId, reference: t.reference, attempts: t.attempts + 1 })),
@@ -248,15 +284,18 @@ export const applyProviderTransfer = defineService({
     if (!t || t.state !== "pending") return { ok: true as const };
     const now = new Date();
     if (input.outcome === "failed") {
-      // Claiming counted the attempt.
+      // Claiming counted the attempt. A refusal now does not clear an
+      // earlier unknown outcome: only a recorded result does.
       const giveUp = t.attempts >= MAX_ATTEMPTS;
       const error = input.error ?? "unknown error";
+      const unknown = input.uncertain || (uncertain(t.lastError) && t.lastError !== CLAIMED);
+      const lastError = input.uncertain ? `${UNKNOWN}${error}` : unknown ? `${UNKNOWN}an earlier attempt is unconfirmed; then refused: ${error}` : error;
       await ctx.tx
         .update(memberPayoutTransfers)
-        .set({ state: giveUp ? "failed" : "pending", lastError: `${input.uncertain ? UNKNOWN : ""}${error}`.slice(0, 500), nextAttemptAt: new Date(now.getTime() + Math.min(2 ** t.attempts, 360) * 60_000), updatedAt: now })
+        .set({ state: giveUp ? "failed" : "pending", lastError: lastError.slice(0, 500), nextAttemptAt: new Date(now.getTime() + Math.min(2 ** t.attempts, 360) * 60_000), updatedAt: now })
         .where(eq(memberPayoutTransfers.id, t.id));
       if (giveUp) {
-        const note = input.uncertain
+        const note = unknown
           ? `The payout provider never confirmed this ${t.kind} (${error}). Check with ${t.provider} whether it went through before settling it.`
           : `The payout provider kept refusing this ${t.kind}: ${error}.`;
         await ctx.tx.update(memberPayouts).set({ state: "review", note }).where(and(eq(memberPayouts.id, t.payoutId), inArray(memberPayouts.state, t.kind === "transfer" ? ["due"] : ["review", "paid", "cancelled"])));
@@ -295,8 +334,10 @@ async function settle(ctx: ServiceContext, t: typeof memberPayoutTransfers.$infe
     await ctx.tx.insert(memberPayoutTransfers).values({ payoutId: payout.id, kind: "reversal", provider: t.provider, amountMinor: t.amountMinor, currency: t.currency, reference }).onConflictDoNothing();
     return;
   }
-  const was = payout.state === "paid" ? "already recorded as paid" : `${payout.state}`;
-  await ctx.tx.update(memberPayouts).set({ state: "review", note: `The payout provider paid the seller${ref} while this payout was ${was}; recover or absorb the difference.` }).where(eq(memberPayouts.id, payout.id));
+  const note = payout.state === "paid"
+    ? `The payout provider paid the seller${ref} although this payout was already recorded as paid: the seller may have been paid twice; recover or absorb the difference.`
+    : `The payout provider paid the seller${ref} after all, while this payout was under review. Do not pay it by hand; if you already did, recover the difference.`;
+  await ctx.tx.update(memberPayouts).set({ state: "review", note }).where(eq(memberPayouts.id, payout.id));
 }
 
 /** C12.26: a refund after a provider paid the seller asks the provider for the money back. */
@@ -350,12 +391,16 @@ export const applyPayoutWebhook = defineService({
         [t] = await ctx.tx.select().from(memberPayoutTransfers).where(and(ours, eq(memberPayoutTransfers.payoutId, event.payoutId))).for("update");
       }
       if (!t) {
-        // A payout of this site's that cannot be matched is not acknowledged
-        // as handled; the provider is asked to deliver it again.
-        if (event.payoutId) unmatched++;
+        // Not one of this site's transfers: a shared provider account also
+        // carries other integrations' payouts. Every transfer row is
+        // committed before its provider call, so one of ours always matches.
+        unmatched++;
         continue;
       }
-      if (t.state === "settled" || t.state === "failed") continue;
+      if (t.state === "settled") continue;
+      // A failed row whose outcome was unknown can still turn out paid; one
+      // the provider refused or returned cannot, and stays as it is.
+      if (t.state === "failed" && !(event.state === "settled" && uncertain(t.lastError))) continue;
       const reference = t.reference ?? event.reference;
       if (event.state === "settled") {
         await ctx.tx.update(memberPayoutTransfers).set({ state: "settled", reference, lastError: null, updatedAt: new Date() }).where(eq(memberPayoutTransfers.id, t.id));
@@ -382,11 +427,13 @@ export async function sendProviderPayouts(): Promise<{ sent: number; failed: num
       if (!provider) throw new AdapterError("payments", t.provider, "unavailable", `The payout provider ${t.provider} is not installed.`);
       if (t.kind === "transfer") {
         if (!t.externalAccountId) throw new AdapterError("payments", t.provider, "invalid_request", "The seller has no account with the payout provider.");
-        const result = await provider.transfer({ externalAccountId: t.externalAccountId, amountMinor: t.amountMinor, currency: t.currency, idempotencyKey: t.payoutId, description: `Payout ${t.payoutId}` });
+        // The row id is the idempotency key: a retry of this row is the same
+        // transfer, and a row sent again after a definite failure gets a new id.
+        const result = await provider.transfer({ externalAccountId: t.externalAccountId, amountMinor: t.amountMinor, currency: t.currency, idempotencyKey: t.id, payoutId: t.payoutId, description: `Payout ${t.payoutId}` });
         outcome = { id: t.id, outcome: result.settled ? "settled" : "sent", reference: result.reference };
       } else {
         if (!t.reference) throw new AdapterError("payments", t.provider, "invalid_request", "There is no transfer to reverse.");
-        const result = await provider.reverse({ reference: t.reference, amountMinor: t.amountMinor, currency: t.currency, idempotencyKey: t.payoutId });
+        const result = await provider.reverse({ reference: t.reference, amountMinor: t.amountMinor, currency: t.currency, idempotencyKey: t.id, payoutId: t.payoutId });
         outcome = "unsupported" in result ? { id: t.id, outcome: "unsupported", error: result.unsupported } : { id: t.id, outcome: "settled", reference: result.reference };
       }
     } catch (error) {
