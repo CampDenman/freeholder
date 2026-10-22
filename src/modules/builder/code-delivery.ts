@@ -17,7 +17,7 @@
 //     hand has the same review the PR would have given them.
 //
 // Both paths hand over the same bytes. Neither writes to this filesystem.
-import { githubJson, repositoryTarget } from "@/adapters/git/github";
+import { github as rawGithub, githubJson, repositoryTarget } from "@/adapters/git/github";
 import { ServiceError } from "@/core/service";
 import type { ProposedFile } from "./code-gates";
 
@@ -70,12 +70,20 @@ export interface OpenedPullRequest {
  * working copy — there is no working copy. Files are written through the
  * contents API one at a time, which is slower than a tree commit and much
  * easier to read in the resulting PR.
+ *
+ * Retry-safe for one delivery: the caller names the branch (one per
+ * proposal), an existing pull request from it is returned rather than opened
+ * again, an existing branch is reused and an existing file is updated in
+ * place. A delivery whose result could not be recorded therefore resumes
+ * instead of opening a second pull request.
  */
 export async function openPullRequest(input: {
   files: readonly ProposedFile[];
   pluginName: string;
   title: string;
   body: string;
+  /** Deterministic per delivery; defaults to a fresh timestamped name. */
+  branch?: string;
 }): Promise<OpenedPullRequest> {
   const target = deliveryTarget();
   if (!target) {
@@ -84,31 +92,41 @@ export async function openPullRequest(input: {
       "No repository is connected. Export the proposal as a patch instead.",
     );
   }
+  const branch = input.branch ?? `builder/${input.pluginName}-${Date.now().toString(36)}`;
+  const owner = target.repository.split("/")[0]!;
+
+  const opened = await github<Array<{ html_url: string; number: number }>>(
+    `/repos/${target.repository}/pulls?state=all&head=${encodeURIComponent(`${owner}:${branch}`)}`,
+    { method: "GET" },
+  );
+  if (opened[0]) return { url: opened[0].html_url, branch, number: opened[0].number };
 
   const base = await github<{ object: { sha: string } }>(
     `/repos/${target.repository}/git/ref/heads/${target.baseBranch}`,
     { method: "GET" },
   );
-  // Named for the plugin and the moment, so two proposals for one plugin do
-  // not collide and a stale branch is obvious.
-  const branch = `builder/${input.pluginName}-${Date.now().toString(36)}`;
-  await github(`/repos/${target.repository}/git/refs`, {
+  // 422: the branch is already there from an attempt that stopped short.
+  await rawGithub(`/repos/${target.repository}/git/refs`, {
     method: "POST",
     body: { ref: `refs/heads/${branch}`, sha: base.object.sha },
+    allow: [422],
   });
 
   for (const file of input.files) {
-    await github(
-      `/repos/${target.repository}/contents/${encodeURI(file.path)}`,
-      {
-        method: "PUT",
-        body: {
-          message: `builder: add ${file.path}`,
-          content: Buffer.from(file.contents, "utf8").toString("base64"),
-          branch,
-        },
-      },
+    const path = `/repos/${target.repository}/contents/${encodeURI(file.path)}`;
+    const existing = await rawGithub<{ sha?: string }>(
+      `${path}?ref=${encodeURIComponent(branch)}`,
+      { method: "GET", allow: [404] },
     );
+    await github(path, {
+      method: "PUT",
+      body: {
+        message: `builder: add ${file.path}`,
+        content: Buffer.from(file.contents, "utf8").toString("base64"),
+        branch,
+        ...(existing.body?.sha ? { sha: existing.body.sha } : {}),
+      },
+    });
   }
 
   const pull = await github<{ html_url: string; number: number }>(

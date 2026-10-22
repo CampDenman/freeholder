@@ -17,7 +17,7 @@ const FILE_STARTUP_MS = 1_500;
 // 206.3s), so seven times estimated work is the explicit resilience budget.
 // The integrity test binds these values to the workflow topology. Twenty-four
 // shards keep C11.13 and the stacked C11 journeys inside the 25-minute timeout.
-export const CI_TEST_SHARD_COUNT = 24;
+export const CI_TEST_SHARD_COUNT = 26;
 export const CI_TEST_JOB_TIMEOUT_MS = 25 * 60 * 1_000;
 export const CI_DEGRADED_RUNNER_MULTIPLIER = 7;
 export const CI_FIXED_JOB_OVERHEAD_MS = 2 * 60 * 1_000;

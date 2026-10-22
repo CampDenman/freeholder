@@ -173,6 +173,29 @@ describe.runIf(hasDatabase)("attestations", () => {
     expect(ledger[0]!.withdrawnAt).not.toBeNull();
   });
 
+  it("moves a fact about a contact when that contact is merged, and back on undo", async () => {
+    const { createContact, mergeContacts, undoContactMerge } = await import("@/core/contacts/service");
+    const survivor = await createContact.call({ name: "Ava", email: "ava@example.test" }, OWNER);
+    const dupe = await createContact.call({ name: "Ava", email: "ava.second@example.test" }, OWNER);
+    await recordFact.call(
+      {
+        key: "licence.number",
+        subject: { kind: "contact", id: dupe.id },
+        value: "L-123",
+        source: "Licence register",
+        asOf: SEPTEMBER,
+      },
+      OWNER,
+    );
+    const about = (id: string) =>
+      factHistory.call({ key: "licence.number", subject: { kind: "contact", id } }, OWNER);
+    const merged = await mergeContacts.call({ duplicateId: dupe.id, survivingId: survivor.id }, OWNER);
+    expect(await about(survivor.id)).toHaveLength(1);
+    expect(await about(dupe.id)).toHaveLength(0);
+    await undoContactMerge.call({ operationId: merged.mergeOperationId }, OWNER);
+    expect(await about(dupe.id)).toHaveLength(1);
+  });
+
   it("keeps facts about different subjects apart", async () => {
     await recordFact.call(
       {

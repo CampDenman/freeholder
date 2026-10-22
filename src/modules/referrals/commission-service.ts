@@ -888,9 +888,13 @@ export const taxPrompts = defineService({
 
 registerContactReference({
   table: "commission_events",
-  // Two contact columns on one table, so two updates. Repointing only the
+  columns: ["affiliate_contact_id", "referred_contact_id", "subject_id"],
+  // Three contact columns on one table, so three updates. Repointing only the
   // affiliate would leave the duplicate id sitting in `referred_contact_id`,
-  // where it would quietly survive the merge and reappear in a report.
+  // where it would quietly survive the merge and reappear in a report. A
+  // signup commission's subject is the contact who signed up
+  // (subject_type = 'contact'); left alone, reversing that signup after a
+  // merge would look for the survivor and find no commission to claw back.
   repoint: async (tx, duplicateId, survivingId) => {
     await tx
       .update(commissionEvents)
@@ -900,6 +904,52 @@ registerContactReference({
       .update(commissionEvents)
       .set({ referredContactId: survivingId })
       .where(eq(commissionEvents.referredContactId, duplicateId));
+    // One commission per code per conversion (commission_events_once_idx).
+    // When both people already earned the same code's signup commission, the
+    // merge has found a double payment: the survivor's row stands, the
+    // duplicate's keeps naming the duplicate id (so the index holds) and, if
+    // not yet paid, is reversed. Undo restores both the subject and status.
+    const subjectRows = await tx
+      .select({
+        id: commissionEvents.id,
+        codeId: commissionEvents.codeId,
+        status: commissionEvents.status,
+        reversesId: commissionEvents.reversesId,
+      })
+      .from(commissionEvents)
+      .where(
+        and(eq(commissionEvents.subjectType, "contact"), eq(commissionEvents.subjectId, duplicateId)),
+      );
+    if (subjectRows.length === 0) return;
+    const survivorCodes = new Set(
+      (
+        await tx
+          .select({ codeId: commissionEvents.codeId })
+          .from(commissionEvents)
+          .where(
+            and(
+              eq(commissionEvents.subjectType, "contact"),
+              eq(commissionEvents.subjectId, survivingId),
+              isNull(commissionEvents.reversesId),
+            ),
+          )
+      ).map((row) => row.codeId),
+    );
+    const colliding = subjectRows.filter((row) => !row.reversesId && survivorCodes.has(row.codeId));
+    const movable = subjectRows.filter((row) => !colliding.includes(row));
+    if (movable.length > 0) {
+      await tx
+        .update(commissionEvents)
+        .set({ subjectId: survivingId })
+        .where(inArray(commissionEvents.id, movable.map((row) => row.id)));
+    }
+    const unpaid = colliding.filter((row) => row.status === "pending" || row.status === "approved");
+    if (unpaid.length > 0) {
+      await tx
+        .update(commissionEvents)
+        .set({ status: "reversed" })
+        .where(inArray(commissionEvents.id, unpaid.map((row) => row.id)));
+    }
   },
   captureForUndo: async (tx, duplicateId) => ({
     state: {
@@ -911,6 +961,12 @@ registerContactReference({
         .select({ id: commissionEvents.id })
         .from(commissionEvents)
         .where(eq(commissionEvents.referredContactId, duplicateId)),
+      subject: await tx
+        .select({ id: commissionEvents.id, status: commissionEvents.status })
+        .from(commissionEvents)
+        .where(
+          and(eq(commissionEvents.subjectType, "contact"), eq(commissionEvents.subjectId, duplicateId)),
+        ),
     },
     undoable: true,
   }),
@@ -918,6 +974,15 @@ registerContactReference({
     const shape = z.object({
       affiliate: z.array(z.object({ id: z.string().uuid() })),
       referred: z.array(z.object({ id: z.string().uuid() })),
+      // Absent from merges recorded before subjects were repointed.
+      subject: z
+        .array(
+          z.object({
+            id: z.string().uuid(),
+            status: z.enum(["pending", "approved", "paid", "reversed"]).optional(),
+          }),
+        )
+        .default([]),
     });
     const before = shape.parse(beforeState);
     for (const each of before.affiliate) {
@@ -932,11 +997,26 @@ registerContactReference({
         .set({ referredContactId: duplicateId })
         .where(eq(commissionEvents.id, each.id));
     }
+    for (const each of before.subject) {
+      await tx
+        .update(commissionEvents)
+        .set({ subjectId: duplicateId })
+        .where(eq(commissionEvents.id, each.id));
+      // Un-reverse only what the merge reversed: an unpaid row that is
+      // reversed now but was not before.
+      if (each.status === "pending" || each.status === "approved") {
+        await tx
+          .update(commissionEvents)
+          .set({ status: each.status })
+          .where(and(eq(commissionEvents.id, each.id), eq(commissionEvents.status, "reversed")));
+      }
+    }
   },
 });
 
 registerContactReference({
   table: "payout_lines",
+  columns: ["affiliate_contact_id"],
   // A merge can put two lines for the same person on one batch, which the
   // unique index refuses. They are the same person's money, so they add up:
   // the survivor's line absorbs the duplicate's and the duplicate goes.

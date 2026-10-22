@@ -6484,6 +6484,7 @@
   "work.approval.kind.message": "الرسالة",
   "work.approvals": "بانتظارك",
   "work.approvals.reject": "رفض",
+  "work.approvals.status.executing": "قيد التنفيذ",
   "work.approvals.status.approved": "معتمد",
   "work.approvals.status.expired": "منتهية الصلاحية",
   "work.approvals.status.rejected": "مرفوض",
