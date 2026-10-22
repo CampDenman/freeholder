@@ -283,7 +283,17 @@ jobs:
           for i in $(seq 1 30); do curl -fs http://127.0.0.1:7880/ > /dev/null && exit 0; sleep 1; done
           cat "$RUNNER_TEMP/livekit.log"; exit 1
       - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium firefox
+      # The apt half of --with-deps has stalled for 22-26 minutes on hosted
+      # runners (normally ~30 s) and cancelled whole jobs. Bound each try and
+      # retry, so a stuck mirror costs minutes, not the job.
+      - name: Install Playwright browsers and system dependencies
+        timeout-minutes: 15
+        run: |
+          for attempt in 1 2 3; do
+            timeout 240 pnpm exec playwright install --with-deps chromium firefox && exit 0
+            echo "Playwright install attempt $attempt timed out or failed; retrying."
+          done
+          exit 1
       - run: pnpm test:browser --shard=${{ matrix.shard }}
 
   deployment:
