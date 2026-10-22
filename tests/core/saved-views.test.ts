@@ -167,6 +167,22 @@ describe.runIf(hasDatabase)("saved views", { timeout: 90_000 }, () => {
     expect(await listViews.call({ entity: "contacts" }, unverified)).toEqual([]);
   });
 
+  it("keeps a customer's own view in the page however many shared views exist (C11.10)", async () => {
+    await db().insert(users).values({ id: CUSTOMER.userId, email: "customer@example.test", role: "customer" }).onConflictDoNothing();
+    await db().insert(savedViews).values(
+      Array.from({ length: 100 }, (_, n) => ({
+        entity: "contacts",
+        name: `A shared ${String(n).padStart(3, "0")}`,
+        filters: {},
+        columns: ["name"],
+        ownerUserId: OWNER.userId,
+        shared: true,
+      })),
+    );
+    await db().insert(savedViews).values({ entity: "contacts", name: "Z mine", filters: {}, columns: ["name"], ownerUserId: CUSTOMER.userId, shared: false });
+    expect((await listViews.call({}, CUSTOMER)).map((one) => one.name)).toEqual(["Z mine"]);
+  });
+
   // Shared makes a view visible; it never makes it theirs.
   it("refuses to let a colleague redefine a shared view", async () => {
     const shared = await view({ name: "For everybody", shared: true });

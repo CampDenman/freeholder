@@ -6,10 +6,10 @@ import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
-import { carts } from "@/modules/catalog/schema";
+import { carts, coupons } from "@/modules/catalog/schema";
 import { ready } from "@/core/runtime";
 import { createContact } from "@/core/contacts/service";
-import { addCartItem, addWishlistItem, applyCouponToCart, listCartOffers, quoteCartPromotions, applyVariantMatrix, createPriceList, createProduct, getCart,
+import { addCartItem, addWishlistItem, applyCouponToCart, createCoupon, listCartOffers, quoteCartPromotions, applyVariantMatrix, createPriceList, createProduct, getCart,
  getOrCreateCart, getProductVariants, listCarts, listSavedCarts, listWishlist, removeCartItem,
  removeWishlistItem, saveCart, setCartItemQuantity, setPriceListEntry } from "@/modules/catalog/service";
 import { ANONYMOUS, CUSTOMER, closeDb, hasDatabase, OWNER, STAFF, truncateSpine } from "../helpers/spine";
@@ -122,10 +122,43 @@ describe.runIf(hasDatabase)("cart capabilities", { timeout: 30_000 }, () => {
 
   const guest = await getOrCreateCart.call({ currency: "CAD" }, other);
   const quote = (couponCode?: string) => quoteCartPromotions.call({ cartId: guest.cart.id, cartToken: guest.cart.token, couponCode, subtotalMinor: 1000, shippingMinor: 0, currency: "CAD" }, other);
-  for (let n = 0; n < 20; n++) await expect(quote(`PEEK${n}`)).rejects.not.toMatchObject({ code: "rate_limited" });
-  await expect(quote("PEEK20")).rejects.toMatchObject({ code: "rate_limited" });
+  // One cart allows ten codes, whatever address each guess claims to come from.
+  for (let n = 0; n < 10; n++) await expect(quote(`PEEK${n}`)).rejects.not.toMatchObject({ code: "rate_limited" });
+  await expect(quote("PEEK10")).rejects.toMatchObject({ code: "rate_limited" });
   // Without a code to test, the cart's own promotions still quote.
   await expect(quote()).resolves.toMatchObject({ discountMinor: 0 });
+ });
+
+ it("caps coupon guesses per cart even when every guess forges a new address (C11.10)", async () => {
+  const opener = { kind: "anonymous" as const, request: { ip: "203.0.113.50" } };
+  const cart = await getOrCreateCart.call({ currency: "CAD" }, opener);
+  const guess = (n: number) => applyCouponToCart.call(
+   { cartId: cart.cart.id, cartToken: cart.cart.token, code: `FORGE${n}` },
+   { kind: "anonymous" as const, request: { ip: `203.0.113.${100 + n}` } },
+  );
+  for (let n = 0; n < 10; n++) await expect(guess(n)).rejects.not.toMatchObject({ code: "rate_limited" });
+  await expect(guess(10)).rejects.toMatchObject({ code: "rate_limited" });
+ });
+
+ it("answers the same for unknown, switched-off, not-started and ended codes (C11.10)", async () => {
+  const day = 86_400_000;
+  for (const [code, set] of [
+   ["OFFCODE", { active: false }],
+   ["SOONCODE", { startsAt: new Date(Date.now() + day) }],
+   ["PASTCODE", { endsAt: new Date(Date.now() - day) }],
+  ] as const) {
+   await createCoupon.call({ code, kind: "percent", percentOffPpm: 100_000 }, OWNER);
+   await db().update(coupons).set(set).where(eq(coupons.code, code));
+  }
+  const answers: string[] = [];
+  for (const code of ["NOSUCHCODE", "OFFCODE", "SOONCODE", "PASTCODE"]) {
+   const shopper = { kind: "anonymous" as const, request: { ip: `192.0.2.${answers.length + 1}` } };
+   const cart = await getOrCreateCart.call({ currency: "CAD" }, shopper);
+   const applied = await applyCouponToCart.call({ cartId: cart.cart.id, cartToken: cart.cart.token, code }, shopper).catch((error: { code: string; message: string }) => error);
+   const quoted = await quoteCartPromotions.call({ cartId: cart.cart.id, cartToken: cart.cart.token, couponCode: code, subtotalMinor: 1000, shippingMinor: 0, currency: "CAD" }, shopper).catch((error: { code: string; message: string }) => error);
+   answers.push([(applied as { code: string }).code, (applied as { message: string }).message, (quoted as { code: string }).code, (quoted as { message: string }).message].join("|"));
+  }
+  expect(new Set(answers).size).toBe(1);
  });
 
  it("bounds how many carts one shopper can open (C11.10)", { timeout: 120_000 }, async () => {

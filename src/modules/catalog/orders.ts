@@ -265,9 +265,9 @@ export const checkoutCart = defineService({
       shippingMethodId = chosen?.methodId ?? null;
     }
 
-    const { quoteCartPromotions } = await import("./promotions");
+    const { resolveCartPromotions } = await import("./promotions");
     const { allocateDiscount } = await import("./promo-quote");
-    const promo = await ctx.callAsSystem(quoteCartPromotions, {
+    const promo = await ctx.callAsSystem(resolveCartPromotions, {
       cartId: basket.cart.id,
       couponCode: input.couponCode,
       subtotalMinor: basket.subtotalMinor,

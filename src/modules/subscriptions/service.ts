@@ -289,6 +289,21 @@ async function notifyDunning(
 }
 
 /** Apply a period-end plan change that proration `none` deferred. */
+/**
+ * The variant a plan is bought through: its default when that is on sale,
+ * else its first active variant; null when nothing on the product can be
+ * sold (C11.10).
+ */
+export async function planVariant(ctx: ServiceContext, productId: string): Promise<string | null> {
+  const [found] = await ctx.tx
+    .select({ id: productVariants.id })
+    .from(productVariants)
+    .where(and(eq(productVariants.productId, productId), eq(productVariants.status, "active")))
+    .orderBy(desc(productVariants.isDefault), asc(productVariants.createdAt))
+    .limit(1);
+  return found?.id ?? null;
+}
+
 export async function applyPendingPlan(
   ctx: ServiceContext,
   subscription: typeof subscriptions.$inferSelect,
@@ -297,13 +312,10 @@ export async function applyPendingPlan(
   const [nextPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.pendingPlanId));
   if (!nextPlan) return subscription;
   // The new plan is priced by its own product's variant. Keeping the old
-  // variant would bill the old price at every renewal after the switch.
-  const [nextVariant] = await ctx.tx
-    .select({ id: productVariants.id })
-    .from(productVariants)
-    .where(and(eq(productVariants.productId, nextPlan.productId), eq(productVariants.isDefault, true)))
-    .limit(1);
-  const productVariantId = nextVariant?.id ?? subscription.productVariantId;
+  // variant would bill the old price at every renewal after the switch. A
+  // plan with nothing on sale is not switched to; the change stays pending.
+  const productVariantId = await planVariant(ctx, nextPlan.productId);
+  if (!productVariantId) return subscription;
   await ctx.tx
     .update(subscriptions)
     .set({ planId: nextPlan.id, pendingPlanId: null, billingMode: nextPlan.billingMode, productVariantId })

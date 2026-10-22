@@ -24,6 +24,7 @@ import {
   keepAccess,
   periodEnd,
   planSeller,
+  planVariant,
   priceFor,
   raiseInvoice,
   record,
@@ -609,6 +610,25 @@ const applyPlanChange = defineService({
     const [toPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, input.planId));
     if (!fromPlan || !toPlan) throw new ServiceError("not_found", "There is no such plan.");
     if (toPlan.status !== "active") throw new ServiceError("conflict", "That plan is not on sale.");
+    // One change at a time: a change waiting on its proration invoice must be
+    // paid or that invoice voided before another is asked for, so a stale
+    // invoice can never grant a plan nobody still wants (C11.10).
+    const [waiting] = await ctx.tx
+      .select({ id: subscriptionEvents.id })
+      .from(subscriptionEvents)
+      .innerJoin(invoices, eq(invoices.id, subscriptionEvents.invoiceId))
+      .where(
+        and(
+          eq(subscriptionEvents.subscriptionId, subscription.id),
+          eq(subscriptionEvents.kind, "plan_change_pending"),
+          eq(subscriptionEvents.fromPlanId, subscription.planId),
+          inArray(invoices.status, ["draft", "sent", "viewed", "partially_paid", "overdue"]),
+        ),
+      )
+      .limit(1);
+    if (waiting) {
+      throw new ServiceError("conflict", "A plan change is waiting for its invoice. Pay it, or ask us to cancel it, first.");
+    }
     const [method] = subscription.paymentMethodId
       ? await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, subscription.paymentMethodId)).limit(1)
       : [];
@@ -637,18 +657,8 @@ const applyPlanChange = defineService({
         ...schedule,
       };
     }
-    const { productVariants } = await import("@/modules/catalog/schema");
-    const [nextVariant] = await ctx.tx
-      .select({ id: productVariants.id })
-      .from(productVariants)
-      .where(
-        and(
-          eq(productVariants.productId, toPlan.productId),
-          eq(productVariants.isDefault, true),
-        ),
-      )
-      .limit(1);
-    const nextVariantId = nextVariant?.id ?? subscription.productVariantId;
+    const nextVariantId = await planVariant(ctx, toPlan.productId);
+    if (!nextVariantId) throw new ServiceError("conflict", "That plan has nothing on sale right now.");
     const newPrice = await priceFor(ctx, { ...subscription, productVariantId: nextVariantId });
     if ("refused" in newPrice) {
       // Never schedule or prorate against a price of zero standing in for

@@ -9650,10 +9650,17 @@ schema they inherit reads as a designed thing rather than an excavation.
   the subscription's own seller. A customer's change follows the plan's stated
   proration (§4.15): a `none` plan defers to period end, and a prorating change
   raises its invoice but is granted by `subscriptions.completePaidPlanChange`
-  only once that invoice is paid in full. A deferred change now moves the
-  subscription to the new plan's variant, so renewals bill the new price; a
-  target plan with no price in the subscription currency is refused rather
-  than billed at zero. `subscriptions.join` refuses a staff-entered or foreign
+  only once that invoice is paid in full. While such a change waits, another
+  is refused until that invoice is paid or voided, so a stale invoice cannot
+  grant a superseded plan. A refund after the grant does not reverse the
+  switch (owner decision: refunds stay a money action). A subscription billed
+  by a provider schedule is not held, including a move onto a platform-billed
+  plan; holding that move needs an orchestrated schedule cancellation at grant
+  time and remains open. A deferred change now moves the subscription to the
+  new plan's default variant when it is on sale, else its first active
+  variant (a plan with none is refused, or left pending at renewal), so
+  renewals bill the new price; a target plan with no price in the
+  subscription currency is refused rather than billed at zero. `subscriptions.join` refuses a staff-entered or foreign
   card and never lets a saved card skip a card trial's setup-fee invoice.
   `quotes.message` speaks for the business only with a quotes grant.
   `messaging.startSiteChat` continues a Contact's thread only for its signed-in
@@ -9663,10 +9670,14 @@ schema they inherit reads as a designed thing rather than an excavation.
   request metadata. `members.callConfig` needs an active member on a live call;
   `members.claimKeyPackages` returns an outstanding claim instead of draining
   another device. `briefing.*` and shared `views.list` rows use
-  `hasModuleAccess`, two-factor state included. Coupon attempts are limited per
-  shopper (trusted client address, else the reported one, with a site-wide
-  ceiling for untrusted traffic), and `catalog.getOrCreateCart` is limited per
-  shopper so new carts do not reset the count. Each regression failed before
+  `hasModuleAccess`, two-factor state included, with the shared-view filter in
+  SQL before the page limit. Every unusable coupon code (unknown, inactive,
+  not started, ended, used up) gets one identical answer, so codes cannot be
+  told apart. Coupon attempts through `catalog.applyCouponToCart` and
+  `catalog.quoteCartPromotions` are limited per shopper and per cart, and
+  `catalog.getOrCreateCart` is limited per shopper. Per-shopper keys are only
+  as strong as the deploy's trusted client-IP header
+  (`deploy/client-readiness.md`); the per-cart cap holds regardless. Each regression failed before
   its repair: `tests/core/media-capture.test.ts`, `tests/core/media.test.ts`,
   `tests/modules/subscription-billing.test.ts`, `tests/core/quotes.test.ts`,
   `tests/core/site-chat.test.ts`, `tests/core/contact-import.test.ts`,

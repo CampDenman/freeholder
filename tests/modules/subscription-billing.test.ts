@@ -679,12 +679,57 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     const [held] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
     expect(held).toMatchObject({ planId: from.id, productVariantId: started.subscription.productVariantId, pendingPlanId: null });
 
+    // A second change cannot overtake the one waiting on its invoice.
+    const other = await plan({ name: "Plus annual" }, 12_000);
+    expect((await failure(changeMyPlan.call({ id: started.subscription.id, planId: other.id }, CUSTOMER))).code).toBe("conflict");
+
     const [owed] = await db().select().from(invoices).where(eq(invoices.id, changed.invoiceId!));
     const payment = await createPayment.call({ invoiceId: owed!.id, provider: "manual", method: "card", amountMinor: owed!.totalMinor - owed!.paidMinor, idempotencyKey: "upgrade-proration" }, OWNER);
     await settlePayment.call({ id: payment.id, providerRef: "upgrade-proration" }, OWNER);
     const [upgradeVariant] = await db().select().from(productVariants).where(eq(productVariants.productId, upgrade.productId));
     const [granted] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
     expect(granted).toMatchObject({ planId: upgrade.id, productVariantId: upgradeVariant!.id });
+  });
+
+  it("lets a new change through once the waiting invoice is voided, and never grants the voided one (C11.10)", async () => {
+    const member = await person("superseded");
+    await db().insert(users).values({ id: CUSTOMER.userId, email: "superseded@billing.test", role: "customer" }).onConflictDoNothing();
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, member.id));
+    const from = await plan({ proration: "create_prorations" }, 1_000);
+    const first = await plan({ name: "First choice" }, 10_000);
+    const second = await plan({ name: "Second choice" }, 8_000);
+    const started = await subscribe.call({ contactId: member.id, planId: from.id }, OWNER);
+    const waiting = await changeMyPlan.call({ id: started.subscription.id, planId: first.id }, CUSTOMER);
+    expect(waiting.awaitingPayment).toBe(true);
+    const { voidInvoice } = await import("@/modules/invoicing/invoice-service");
+    await voidInvoice.call({ id: waiting.invoiceId!, reason: "Customer chose another plan." }, OWNER);
+    const next = await changeMyPlan.call({ id: started.subscription.id, planId: second.id }, CUSTOMER);
+    expect(next.awaitingPayment).toBe(true);
+    const [row] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
+    expect(row?.planId).toBe(from.id);
+  });
+
+  it("moves a deferred change onto the plan's active variant when its default is retired (C11.10)", async () => {
+    const member = await person("variant-fallback");
+    const from = await plan({ proration: "none" }, 2_500);
+    const to = await plan({ name: "Retired default", proration: "none" }, 20_000);
+    const [retired] = await db().select().from(productVariants).where(eq(productVariants.productId, to.productId));
+    const [live] = await db()
+      .insert(productVariants)
+      .values({ productId: to.productId, combinationKey: `live-${retired!.id}`, sku: `live-${retired!.id}`, isDefault: false })
+      .returning();
+    const [list] = await db().insert(priceLists).values({ name: "Live variant", currency: "CAD", active: true }).returning();
+    await db().insert(priceListEntries).values({ priceListId: list!.id, variantId: live!.id, amountMinor: 15_000 });
+    const started = await subscribe.call({ contactId: member.id, planId: from.id }, OWNER);
+    expect((await changePlan.call({ id: started.subscription.id, planId: to.id }, OWNER)).deferred).toBe(true);
+    await db().update(productVariants).set({ status: "archived" }).where(eq(productVariants.id, retired!.id));
+    await db()
+      .update(subscriptions)
+      .set({ currentPeriodStart: new Date(Date.now() - 40 * 86_400_000), currentPeriodEnd: new Date(Date.now() - 60_000) })
+      .where(eq(subscriptions.id, started.subscription.id));
+    await renewDue.call({}, { kind: "system" });
+    const [renewed] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
+    expect(renewed).toMatchObject({ planId: to.id, productVariantId: live!.id });
   });
 
   it("bills the new plan's price at the renewal after a deferred change (C11.10)", async () => {
