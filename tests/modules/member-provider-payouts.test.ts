@@ -173,7 +173,9 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
     expect(transferCalls()).toHaveLength(1);
     const [payout] = (await sitePayouts.call({}, OWNER)).payouts;
     expect(payout?.state).toBe("review");
-    expect(payout?.note).toMatch(/unknown outcome/);
+    expect(payout?.note).toMatch(/^Check with stripe_connect whether the seller was paid/);
+    const [t] = await db().select().from(memberPayoutTransfers);
+    expect(t?.state).toBe("unknown");
   });
 
   it("retries a timed-out transfer with the same idempotency key, and a refusal after a timeout stays uncertain to the owner", { timeout: 60_000 }, async () => {
@@ -234,14 +236,14 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
     const [due] = await db().select().from(memberPayouts);
     onTransfer = async () => {
       onTransfer = undefined;
-      const result = await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: "tr_early", payoutId: due!.id, state: "settled" }] }, { kind: "system" });
+      const result = await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: "tr_early", key: due!.id, state: "settled" }] }, { kind: "system" });
       expect(result).toEqual({ applied: 1, unmatched: 0 });
     };
     expect(await sendProviderPayouts()).toEqual({ sent: 1, failed: 0 });
     const [t] = await db().select().from(memberPayoutTransfers);
     expect(t).toMatchObject({ state: "settled", reference: "tr_early" });
     expect((await sitePayouts.call({}, OWNER)).payouts.map((p) => p.state)).toEqual(["paid"]);
-    const unknown = await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: "tr_other", payoutId: crypto.randomUUID(), state: "settled" }] }, { kind: "system" });
+    const unknown = await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: "tr_other", key: crypto.randomUUID(), state: "settled" }] }, { kind: "system" });
     expect(unknown).toEqual({ applied: 0, unmatched: 1 });
   });
   it("sends a payout again when the owner decides, after a review, that the seller is owed", { timeout: 90_000 }, async () => {
@@ -258,13 +260,15 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
     await settlePayouts.call({ ids: [payout!.id], action: "owe", note: "Seller keeps the rest." }, OWNER);
     expect(await sendProviderPayouts()).toEqual({ sent: 1, failed: 0 });
     const keys = transferCalls().map((c) => c.idempotencyKey);
-    // The first attempt was refused outright, so the new one has a new key.
-    expect(keys).toHaveLength(2);
-    expect(keys[0]).not.toBe(keys[1]);
+    // The first attempt was refused outright — dead — so the new one has the next key.
+    expect(keys).toEqual([`freeholder-payout-${payout!.id}`, `freeholder-payout-${payout!.id}:2`]);
     expect((await sitePayouts.call({}, OWNER)).payouts.map((p) => p.state)).toEqual(["paid"]);
+    const [t] = await db().select().from(memberPayoutTransfers);
+    expect(t).toMatchObject({ attempt: 2, state: "settled" });
+    expect(t?.previousAttempts).toMatchObject([{ attempt: 1, key: payout!.id, state: "failed" }]);
   });
 
-  it("sends an owed payout again under the same key when an earlier attempt's outcome is unknown", { timeout: 90_000 }, async () => {
+  it("never resends a payout whose earlier attempt may have paid until the owner has checked the provider", { timeout: 90_000 }, async () => {
     await readySeller();
     const invoice = await sell("30");
     timeoutTransfers = true;
@@ -275,12 +279,91 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
     await sendProviderPayouts();
     const [payout] = (await sitePayouts.call({}, OWNER)).payouts;
     expect(payout?.state).toBe("review");
-    await settlePayouts.call({ ids: [payout!.id], action: "owe", note: "Checked with Stripe: not paid." }, OWNER);
+    // "Still owed" does not resend: the payout goes back to review, asking for a check.
+    await settlePayouts.call({ ids: [payout!.id], action: "owe", note: "Seller keeps the rest." }, OWNER);
+    expect(await sendProviderPayouts()).toEqual({ sent: 0, failed: 0 });
+    expect(transferCalls()).toHaveLength(1);
+    const [checking] = (await sitePayouts.call({}, OWNER)).payouts;
+    expect(checking?.state).toBe("review");
+    expect(checking?.note).toMatch(/^Check with stripe_connect/);
+    // The owner confirms the provider did not pay: the next attempt has a new key.
+    expect(await settlePayouts.call({ ids: [payout!.id], action: "sendAgain" }, OWNER)).toEqual({ changed: 1 });
     expect(await sendProviderPayouts()).toEqual({ sent: 1, failed: 0 });
-    const keys = transferCalls().map((c) => c.idempotencyKey);
-    expect(keys).toHaveLength(2);
-    expect(keys[0]).toBe(keys[1]);
+    expect(transferCalls().map((c) => c.idempotencyKey)).toEqual([`freeholder-payout-${payout!.id}`, `freeholder-payout-${payout!.id}:2`]);
     expect((await sitePayouts.call({}, OWNER)).payouts.map((p) => p.state)).toEqual(["paid"]);
+  });
+
+  it("records a payout paid when the owner finds the provider did pay", { timeout: 90_000 }, async () => {
+    await readySeller();
+    const invoice = await sell("30");
+    timeoutTransfers = true;
+    expect((await sendProviderPayouts()).failed).toBe(1);
+    await reversePayouts.call({ invoiceId: invoice.id, amountMinor: 500 }, { kind: "system" });
+    timeoutTransfers = false;
+    await retryNow();
+    await sendProviderPayouts();
+    const [payout] = (await sitePayouts.call({}, OWNER)).payouts;
+    expect(await settlePayouts.call({ ids: [payout!.id], action: "providerPaid", reference: "tr_found" }, OWNER)).toEqual({ changed: 1 });
+    expect((await sitePayouts.call({}, OWNER)).payouts[0]).toMatchObject({ state: "paid" });
+    expect(await sendProviderPayouts()).toEqual({ sent: 0, failed: 0 });
+    expect(transferCalls()).toHaveLength(1);
+  });
+
+  it("stops same-key retries before the provider forgets the key", { timeout: 60_000 }, async () => {
+    await readySeller();
+    await sell("30");
+    timeoutTransfers = true;
+    expect((await sendProviderPayouts()).failed).toBe(1);
+    timeoutTransfers = false;
+    await db().update(memberPayoutTransfers).set({ attemptStartedAt: new Date(Date.now() - 24 * 3_600_000), nextAttemptAt: new Date(Date.now() - 1000) });
+    expect(await sendProviderPayouts()).toEqual({ sent: 0, failed: 0 });
+    expect(transferCalls()).toHaveLength(1);
+    const [t] = await db().select().from(memberPayoutTransfers);
+    expect(t?.state).toBe("unknown");
+    expect((await sitePayouts.call({}, OWNER)).payouts[0]?.note).toMatch(/too long to retry safely/);
+  });
+
+  it("applies a late event to the attempt it belongs to, never to the next one", { timeout: 90_000 }, async () => {
+    const stripe = createStripeConnect({ secretKey: "sk_test_x", webhookSecrets: [SECRET], fetch: fakeStripe });
+    // A provider that confirms later by webhook, as PayPal does.
+    setPayoutProviderForTests("stripe_connect", { ...stripe, transfer: async (r) => ({ ...(await stripe.transfer(r)), settled: false }) });
+    await readySeller();
+    await sell("30");
+    expect(await sendProviderPayouts()).toEqual({ sent: 1, failed: 0 });
+    const [first] = await db().select().from(memberPayoutTransfers);
+    // The provider returns attempt 1: dead. The owner marks the seller still owed.
+    await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: first!.reference!, key: first!.payoutId, state: "failed", error: "returned" }] }, { kind: "system" });
+    await settlePayouts.call({ ids: [first!.payoutId], action: "owe", note: "Send it again." }, OWNER);
+    expect(await sendProviderPayouts()).toEqual({ sent: 1, failed: 0 });
+    const [second] = await db().select().from(memberPayoutTransfers);
+    expect(second).toMatchObject({ attempt: 2, state: "sent" });
+    expect(second!.reference).not.toBe(first!.reference);
+    // A late success for attempt 1 updates attempt 1's record only.
+    expect((await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: first!.reference!, key: first!.payoutId, state: "settled" }] }, { kind: "system" })).applied).toBe(1);
+    const [after] = await db().select().from(memberPayoutTransfers);
+    expect(after).toMatchObject({ attempt: 2, state: "sent", reference: second!.reference });
+    expect(after?.previousAttempts).toMatchObject([{ attempt: 1, state: "settled", reference: first!.reference }]);
+    const [payout] = (await sitePayouts.call({}, OWNER)).payouts;
+    expect(payout?.state).toBe("review");
+    expect(payout?.note).toMatch(/after all.*Do not pay it by hand/);
+    // An event naming attempt 1 by key alone matches attempt 1, not attempt 2.
+    await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: "tr_unrecorded", key: first!.payoutId, state: "failed" }] }, { kind: "system" });
+    expect((await db().select().from(memberPayoutTransfers))[0]).toMatchObject({ attempt: 2, state: "sent" });
+  });
+
+  it("holds an unclaimed PayPal payment without failing or resending it", { timeout: 60_000 }, async () => {
+    const stripe = createStripeConnect({ secretKey: "sk_test_x", webhookSecrets: [SECRET], fetch: fakeStripe });
+    setPayoutProviderForTests("stripe_connect", { ...stripe, transfer: async (r) => ({ ...(await stripe.transfer(r)), settled: false }) });
+    await readySeller();
+    await sell("30");
+    expect(await sendProviderPayouts()).toEqual({ sent: 1, failed: 0 });
+    const [sent] = await db().select().from(memberPayoutTransfers);
+    await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: sent!.reference!, key: sent!.payoutId, state: "unclaimed" }] }, { kind: "system" });
+    await retryNow();
+    expect(await sendProviderPayouts()).toEqual({ sent: 0, failed: 0 });
+    expect(transferCalls()).toHaveLength(1);
+    expect((await db().select().from(memberPayoutTransfers))[0]?.state).toBe("unclaimed");
+    expect((await sitePayouts.call({}, OWNER)).payouts[0]).toMatchObject({ state: "due" });
   });
 
   it("keeps an unknown outcome unknown when a later retry is refused", { timeout: 60_000 }, async () => {
@@ -305,8 +388,8 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
       await sendProviderPayouts();
     }
     const [given] = await db().select().from(memberPayoutTransfers);
-    expect(given?.state).toBe("failed");
-    const result = await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: "tr_late", payoutId: given!.payoutId, state: "settled" }] }, { kind: "system" });
+    expect(given?.state).toBe("unknown");
+    const result = await applyPayoutWebhook.call({ provider: "stripe_connect", events: [{ kind: "transfer", reference: "tr_late", key: given!.payoutId, state: "settled" }] }, { kind: "system" });
     expect(result.applied).toBe(1);
     const [t] = await db().select().from(memberPayoutTransfers);
     expect(t).toMatchObject({ state: "settled", reference: "tr_late" });
@@ -317,7 +400,7 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
 
   it("acknowledges transfer events that are not this site's, so the provider keeps the endpoint", { timeout: 60_000 }, async () => {
     const stripe = createStripeConnect({ secretKey: "sk_test_x", webhookSecrets: [SECRET], fetch: fakeStripe });
-    setPayoutProviderForTests("stripe_connect", { ...stripe, webhook: async () => [{ kind: "transfer", reference: "tr_elsewhere", payoutId: crypto.randomUUID(), state: "settled" }, { kind: "transfer", reference: "tr_other", payoutId: "not-a-uuid", state: "failed" }] });
+    setPayoutProviderForTests("stripe_connect", { ...stripe, webhook: async () => [{ kind: "transfer", reference: "tr_elsewhere", key: crypto.randomUUID(), state: "settled" }, { kind: "transfer", reference: "tr_other", key: "not-a-uuid", state: "failed" }] });
     const response = await webhook(new Request("http://localhost/api/payouts/stripe_connect/webhook", { method: "POST", body: "{}" }), { params: Promise.resolve({ provider: "stripe_connect" }) });
     expect(response.status).toBe(200);
   });

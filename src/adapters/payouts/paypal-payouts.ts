@@ -93,7 +93,7 @@ export function createPayPalPayouts(options: PayPalPayoutOptions = {}): PayoutPr
             amount: { value: minorToDecimal(request.amountMinor, request.currency), currency: request.currency.toUpperCase() },
             receiver: request.externalAccountId,
             note: request.description.slice(0, 4000),
-            sender_item_id: request.payoutId,
+            sender_item_id: request.idempotencyKey,
           },
         ],
       }, `freeholder-payout-${request.idempotencyKey}`);
@@ -132,13 +132,16 @@ export function createPayPalPayouts(options: PayPalPayoutOptions = {}): PayoutPr
       if (verified.verification_status !== "SUCCESS") throw new AdapterError("payments", "paypal_payouts", "authentication", "PayPal could not verify that event.");
       const resource = object(event.resource);
       const batch = text(resource?.payout_batch_id);
-      const ours = text(object(resource?.payout_item)?.sender_item_id);
-      const payoutId = ours ? { payoutId: ours } : {};
+      const sent = text(object(resource?.payout_item)?.sender_item_id);
+      const key = sent ? { key: sent } : {};
       const type = text(event.event_type) ?? "";
       const events: PayoutWebhookEvent[] = [];
-      if (batch && type === "PAYMENT.PAYOUTS-ITEM.SUCCEEDED") events.push({ kind: "transfer", reference: batch, ...payoutId, state: "settled" });
-      if (batch && /^PAYMENT\.PAYOUTS-ITEM\.(FAILED|RETURNED|BLOCKED|DENIED|CANCELED|UNCLAIMED)$/.test(type)) {
-        events.push({ kind: "transfer", reference: batch, ...payoutId, state: "failed", error: type.split(".").at(-1)!.toLowerCase() });
+      if (batch && type === "PAYMENT.PAYOUTS-ITEM.SUCCEEDED") events.push({ kind: "transfer", reference: batch, ...key, state: "settled" });
+      // Unclaimed money can still be claimed for 30 days: not dead, never resent.
+      if (batch && type === "PAYMENT.PAYOUTS-ITEM.UNCLAIMED") events.push({ kind: "transfer", reference: batch, ...key, state: "unclaimed" });
+      // Dead: refused before money moved, or the money came back.
+      if (batch && /^PAYMENT\.PAYOUTS-ITEM\.(FAILED|RETURNED|BLOCKED|DENIED|CANCELED|REFUNDED)$/.test(type)) {
+        events.push({ kind: "transfer", reference: batch, ...key, state: "failed", error: type.split(".").at(-1)!.toLowerCase() });
       }
       return events;
     },

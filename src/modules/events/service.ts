@@ -1024,31 +1024,12 @@ export const confirmPaidRegistration = defineService({
   },
 });
 
-/**
- * Holds the sweep could not release recently. They go to the back of the
- * next batch rather than out of it: a hold that keeps failing, or stays
- * blocked by a payment attempt, cannot fill every batch and starve holds
- * that lapsed after it, yet is still retried whenever there is room. Kept
- * per process: a restart simply treats them all alike once more.
- */
-const SWEEP_BACKOFF_MAX = 500;
-const sweepBackoff = new Map<string, number>();
-const BLOCKED_BACKOFF_MS = 15 * 60_000;
-const FAILED_BACKOFF_MS = 60 * 60_000;
-
-function setAside(id: string, ms: number): void {
-  sweepBackoff.delete(id);
-  sweepBackoff.set(id, Date.now() + ms);
-  // Oldest first out: a Map iterates in insertion order.
-  while (sweepBackoff.size > SWEEP_BACKOFF_MAX) sweepBackoff.delete(sweepBackoff.keys().next().value!);
-}
-
 const lapsedHolds = defineService({
   name: "events.lapsedHolds",
   summary: "Held registrations whose payment deadline passed, oldest first.",
   kind: "query",
   permission: "system",
-  input: z.object({ limit: z.number().int().min(1).max(500), last: z.array(uuid).max(SWEEP_BACKOFF_MAX).default([]) }),
+  input: z.object({ limit: z.number().int().min(1).max(500) }),
   output: listed(row({ id: uuid })),
   handler: async (input, ctx) =>
     ctx.tx
@@ -1059,10 +1040,16 @@ const lapsedHolds = defineService({
           eq(eventRegistrations.status, "reserved"),
           isNotNull(eventRegistrations.holdExpiresAt),
           lt(eventRegistrations.holdExpiresAt, sql`now()`),
+          // Money arrived (fully or in part): the owner reconciles it, so the
+          // sweep never takes it and it can never fill a batch.
+          sql`not exists (select 1 from ${invoices} i where i.id = ${eventRegistrations.invoiceId} and (i.paid_minor > 0 or i.status in ('paid', 'refunded')))`,
         ),
       )
+      // A hold with a payment attempt in flight cannot be released until the
+      // attempt resolves: it goes after every hold that can, so a pile of
+      // them never starves holds that lapsed later.
       .orderBy(
-        ...(input.last.length ? [sql`case when ${inArray(eventRegistrations.id, input.last)} then 1 else 0 end`] : []),
+        sql`exists (select 1 from ${payments} p where p.invoice_id = ${eventRegistrations.invoiceId} and p.status in ('created', 'processing'))`,
         asc(eventRegistrations.holdExpiresAt),
       )
       .limit(input.limit),
@@ -1119,26 +1106,21 @@ export const expireHeldRegistrations = defineOrchestratedService({
   input: z.object({ limit: z.number().int().min(1).max(500).default(100) }),
   output: row({ expired: z.number().int(), blocked: z.number().int(), failed: z.number().int() }),
   handler: async (input, actor) => {
-    const now = Date.now();
-    for (const [id, until] of sweepBackoff) if (until <= now) sweepBackoff.delete(id);
-    const candidates = await lapsedHolds.call({ limit: input.limit, last: [...sweepBackoff.keys()] }, actor);
+    const candidates = await lapsedHolds.call({ limit: input.limit }, actor);
     let expired = 0;
     let blocked = 0;
     let failed = 0;
     for (const candidate of candidates) {
       try {
         if ((await expireHeldRegistration.call({ id: candidate.id }, actor)).expired) expired += 1;
-        sweepBackoff.delete(candidate.id);
       } catch (error) {
         // A payment attempt that began before the hold lapsed blocks the
         // release; the attempt's own lifecycle unblocks a later sweep.
         if (error instanceof ServiceError && error.code === "conflict") {
           blocked += 1;
-          setAside(candidate.id, BLOCKED_BACKOFF_MS);
           continue;
         }
         failed += 1;
-        setAside(candidate.id, FAILED_BACKOFF_MS);
         console.error(`[events] could not release lapsed hold ${candidate.id}`, error);
       }
     }

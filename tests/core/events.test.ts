@@ -299,6 +299,29 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     expect(elsewhere.requiredTaxLegend).toMatch(/not one of this business's saved locations/);
   });
 
+  it("reaches newer lapsed holds before ones a payment attempt is still holding", async () => {
+    const first = await paidClass(1);
+    const inflight = await registerForEvent.call(
+      { eventId: first.event.id, sessionId: first.session.id, ticketId: first.ticket.id, email: "inflight2@example.test" },
+      ANONYMOUS,
+    );
+    await createPayment.call(
+      { invoiceId: inflight.registration.invoiceId!, provider: "manual", method: "bank_transfer", amountMinor: first.ticket.priceMinor, idempotencyKey: `inflight2-${inflight.registration.id}` },
+      OWNER,
+    );
+    const second = await paidClass(1);
+    const lapsed = await registerForEvent.call(
+      { eventId: second.event.id, sessionId: second.session.id, ticketId: second.ticket.id, email: "lapsed4@example.test" },
+      ANONYMOUS,
+    );
+    // The held one lapsed first, so oldest-first alone would pick it every time.
+    await db().update(eventRegistrations).set({ holdExpiresAt: new Date(Date.now() - 120_000) }).where(eq(eventRegistrations.id, inflight.registration.id));
+    await db().update(eventRegistrations).set({ holdExpiresAt: new Date(Date.now() - 60_000) }).where(eq(eventRegistrations.id, lapsed.registration.id));
+    expect(await expireHeldRegistrations.call({ limit: 1 }, { kind: "system" })).toEqual({ expired: 1, blocked: 0, failed: 0 });
+    const [released] = await db().select().from(eventRegistrations).where(eq(eventRegistrations.id, lapsed.registration.id));
+    expect(released?.status).toBe("cancelled");
+  });
+
   it("releases every other lapsed hold when one cannot be released", async () => {
     const first = await paidClass(1);
     const stuck = await registerForEvent.call(
@@ -321,10 +344,8 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     await db().update(eventRegistrations).set({ holdExpiresAt: new Date(Date.now() - 60_000) }).where(eq(eventRegistrations.id, lapsed.registration.id));
 
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    // One at a time: the failing hold is the oldest, so it comes first.
-    expect(await expireHeldRegistrations.call({ limit: 1 }, { kind: "system" })).toEqual({ expired: 0, blocked: 0, failed: 1 });
-    // It goes to the back of the next batch, so that batch reaches the hold behind it.
-    expect(await expireHeldRegistrations.call({ limit: 1 }, { kind: "system" })).toEqual({ expired: 1, blocked: 0, failed: 0 });
+    const swept = await expireHeldRegistrations.call({}, { kind: "system" });
+    expect(swept).toEqual({ expired: 1, blocked: 0, failed: 1 });
     expect(errors).toHaveBeenCalledTimes(1);
     errors.mockRestore();
     const [released] = await db().select().from(eventRegistrations).where(eq(eventRegistrations.id, lapsed.registration.id));

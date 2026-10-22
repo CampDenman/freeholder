@@ -24,6 +24,16 @@ export interface RazorpayRouteOptions {
 
 const text = (v: unknown): string | undefined => (typeof v === "string" && v ? v : undefined);
 
+/**
+ * Razorpay idempotency keys are 4–36 letters, digits, hyphens, underscores
+ * or spaces. A first attempt's key (the payout id) already fits; a later
+ * `<payout id>:<n>` drops the id's hyphens and joins with an underscore.
+ */
+export function razorpayKey(key: string): string {
+  const [id, n] = key.split(":");
+  return n ? `${id!.replaceAll("-", "")}_${n}` : key;
+}
+
 export function razorpayActivation(status: string | undefined): PayoutAccountStatus {
   if (status === "activated") return "ready";
   if (status === "suspended") return "disabled";
@@ -98,8 +108,8 @@ export function createRazorpayRoute(options: RazorpayRouteOptions = {}): PayoutP
         account,
         amount: request.amountMinor,
         currency: request.currency.toUpperCase(),
-        notes: { freeholder_payout_id: request.payoutId, description: request.description.slice(0, 250) },
-      }, { "x-transfer-idempotency": request.idempotencyKey });
+        notes: { freeholder_payout_id: request.idempotencyKey, description: request.description.slice(0, 250) },
+      }, { "x-transfer-idempotency": razorpayKey(request.idempotencyKey) });
       const reference = text(value.id);
       if (!reference) throw new AdapterError("payments", "razorpay_route", "provider_failure", "Razorpay did not return a transfer.");
       return { reference, settled: text(value.status) === "processed" };
@@ -108,7 +118,7 @@ export function createRazorpayRoute(options: RazorpayRouteOptions = {}): PayoutP
       // Razorpay offers idempotency only on direct transfers, not reversals.
       // A retried full reversal cannot take more than was transferred: once
       // the first has gone through, Razorpay refuses the second.
-      const value = await api("POST", `/v1/transfers/${encodeURIComponent(request.reference)}/reversals`, { amount: request.amountMinor, notes: { freeholder_payout_id: request.payoutId } });
+      const value = await api("POST", `/v1/transfers/${encodeURIComponent(request.reference)}/reversals`, { amount: request.amountMinor, notes: { freeholder_payout_id: request.idempotencyKey } });
       const reference = text(value.id);
       if (!reference) throw new AdapterError("payments", "razorpay_route", "provider_failure", "Razorpay did not return a reversal.");
       return { reference };
@@ -128,10 +138,10 @@ export function createRazorpayRoute(options: RazorpayRouteOptions = {}): PayoutP
       const events: PayoutWebhookEvent[] = [];
       const transfer = object(object(payload?.transfer)?.entity);
       if (transfer && text(transfer.id)) {
-        const ours = text(object(transfer.notes)?.freeholder_payout_id);
-        const payoutId = ours ? { payoutId: ours } : {};
-        if (type === "transfer.processed") events.push({ kind: "transfer", reference: text(transfer.id)!, ...payoutId, state: "settled" });
-        if (type === "transfer.failed") events.push({ kind: "transfer", reference: text(transfer.id)!, ...payoutId, state: "failed", error: "failed" });
+        const sent = text(object(transfer.notes)?.freeholder_payout_id);
+        const key = sent ? { key: sent } : {};
+        if (type === "transfer.processed") events.push({ kind: "transfer", reference: text(transfer.id)!, ...key, state: "settled" });
+        if (type === "transfer.failed") events.push({ kind: "transfer", reference: text(transfer.id)!, ...key, state: "failed", error: "failed" });
       }
       const product = object(object(payload?.merchant_product)?.entity);
       const accountId = text(object(object(payload?.account)?.entity)?.id) ?? text(product?.merchant_id);

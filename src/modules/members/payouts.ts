@@ -374,18 +374,26 @@ export const setPayoutAccountStatus = defineService({
 
 export const settlePayouts = defineService({
   name: "members.settlePayouts",
-  summary: "Release held payouts now, record due payouts as paid with a reference, or resolve ones under review.",
+  summary: "Release held payouts now, record due payouts as paid with a reference, or resolve ones under review — including, after checking the payout provider, whether it paid.",
   kind: "mutation",
   permission: "scoped",
   writeClass: "money",
   input: z.object({
     ids: z.array(uuid).min(1).max(200),
-    action: z.enum(["release", "paid", "cancel", "owe"]),
+    // providerPaid / sendAgain: the owner's answer, after checking the payout
+    // provider, for a payout whose provider transfer outcome is unknown.
+    action: z.enum(["release", "paid", "cancel", "owe", "providerPaid", "sendAgain"]),
     reference: z.string().trim().max(200).optional(),
     note: z.string().trim().max(500).optional(),
   }),
   output: z.object({ changed: z.number().int() }),
   handler: async (input, ctx) => {
+    if (input.action === "providerPaid" || input.action === "sendAgain") {
+      const { resolveProviderCheck } = await import("./provider-payouts");
+      const resolved = await resolveProviderCheck(ctx, input.ids, input.action === "providerPaid" ? "paid" : "not_paid", input.reference);
+      for (const id of resolved) ctx.setSubject("member_payout", id);
+      return { changed: resolved.length };
+    }
     const from = { release: ["held"], paid: ["due"], cancel: ["held", "due", "review"], owe: ["review"] }[input.action] as (typeof PAYOUT_STATES)[number][];
     if (input.action === "paid" && !input.reference) throw new ServiceError("validation", "Record how each payout was paid.");
     if ((input.action === "cancel" || input.action === "owe") && !input.note) throw new ServiceError("validation", "Say why.");

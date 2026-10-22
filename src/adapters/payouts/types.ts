@@ -33,10 +33,12 @@ export interface TransferRequest {
   externalAccountId: string;
   amountMinor: number;
   currency: string;
-  /** The transfer attempt's id: the same key on a retry never pays twice. */
+  /**
+   * The attempt's key: the ledger's payout id, then `<payout id>:<n>` for a
+   * later attempt. The same key on a retry never pays twice, and it rides
+   * on the transfer so a webhook names the attempt it belongs to.
+   */
   idempotencyKey: string;
-  /** The ledger's payout id, carried on the transfer so webhooks can find it. */
-  payoutId: string;
   description: string;
 }
 
@@ -50,8 +52,11 @@ export type ReverseResult = { reference: string } | { unsupported: string };
 
 export type PayoutWebhookEvent =
   | { kind: "account"; externalAccountId: string; status: PayoutAccountStatus }
-  /** payoutId is the ledger id the transfer carried, when the provider echoes it back. */
-  | { kind: "transfer"; reference: string; payoutId?: string; state: "settled" | "failed"; error?: string };
+  /**
+   * key is the attempt key the transfer carried, when the provider echoes it
+   * back. "unclaimed": PayPal holds the money for the receiver to claim.
+   */
+  | { kind: "transfer"; reference: string; key?: string; state: "settled" | "failed" | "unclaimed"; error?: string };
 
 export interface PayoutWebhookRequest {
   headers: Record<string, string | undefined>;
@@ -67,6 +72,6 @@ export interface PayoutProvider {
   onboard(seller: SellerIdentity, input: Partial<Record<OnboardingField, string>>, urls: { returnUrl: string; refreshUrl: string }, existing?: string | null): Promise<OnboardingResult>;
   accountStatus(externalAccountId: string): Promise<PayoutAccountStatus>;
   transfer(request: TransferRequest): Promise<TransferResult>;
-  reverse(request: { reference: string; amountMinor: number; currency: string; idempotencyKey: string; payoutId: string }): Promise<ReverseResult>;
+  reverse(request: { reference: string; amountMinor: number; currency: string; idempotencyKey: string }): Promise<ReverseResult>;
   webhook(request: PayoutWebhookRequest): Promise<PayoutWebhookEvent[]>;
 }

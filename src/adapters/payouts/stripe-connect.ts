@@ -97,7 +97,7 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
           destination: request.externalAccountId,
           description: request.description.slice(0, 250),
           transfer_group: `freeholder-payout-${request.idempotencyKey}`,
-          "metadata[freeholder_payout_id]": request.payoutId,
+          "metadata[freeholder_payout_id]": request.idempotencyKey,
         }),
       });
       const reference = text(value.id);
@@ -109,7 +109,7 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
       const value = await api(`/v1/transfers/${encodeURIComponent(request.reference)}/reversals`, {
         method: "POST",
         idempotencyKey: `freeholder-reversal-${request.idempotencyKey}`,
-        body: new URLSearchParams({ amount: String(request.amountMinor), "metadata[freeholder_payout_id]": request.payoutId }),
+        body: new URLSearchParams({ amount: String(request.amountMinor), "metadata[freeholder_payout_id]": request.idempotencyKey }),
       });
       const reference = text(value.id);
       if (!reference) throw new AdapterError("payments", "stripe_connect", "provider_failure", "Stripe did not return a reversal.");

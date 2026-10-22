@@ -279,6 +279,8 @@ export default async function MembersPage({
                 <Button type="submit" name="action" value="release" variant="quiet">{t("members.admin.releasePayouts")}</Button>
                 <Button type="submit" name="action" value="paid">{t("members.admin.markPaid")}</Button>
                 <Button type="submit" name="action" value="owe" variant="quiet">{t("members.admin.stillOwed")}</Button>
+                <Button type="submit" name="action" value="providerPaid" variant="quiet">{t("members.admin.providerPaid")}</Button>
+                <Button type="submit" name="action" value="sendAgain" variant="quiet">{t("members.admin.providerNotPaid")}</Button>
                 <Button type="submit" name="action" value="cancel" variant="danger">{t("members.admin.cancelPayouts")}</Button>
               </div>
             </form>

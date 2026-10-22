@@ -7552,6 +7552,8 @@
   "members.admin.releasePayouts": "الإفراج الآن",
   "members.admin.markPaid": "تعليم كمدفوع",
   "members.admin.stillOwed": "لا يزال مستحقًا للبائع",
+  "members.admin.providerPaid": "دفع مزوّد الخدمة",
+  "members.admin.providerNotPaid": "لم يدفع مزوّد الخدمة — أعد الإرسال",
   "members.admin.cancelPayouts": "إلغاء",
   "members.notify.sale.title": "لقد أتممت عملية بيع",
   "members.notify.sale.body": "دفع مشترٍ ثمن أحد إعلاناتك. اطّلع على مدفوعاتك.",

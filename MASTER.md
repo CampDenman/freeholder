@@ -6250,10 +6250,12 @@ payment, tax, inventory and reporting path, with no floating-point money.
   erased) rolled every release back on every run. It is now an orchestrated
   service: each hold is released by `events.expireHeldRegistration` in its
   own transaction, failures are counted (`failed`) and logged, and a
-  payment in flight is counted `blocked`. A hold the sweep could not
-  release goes to the back of the next batches for a while (15 minutes
-  when blocked, an hour when failing; remembered per process), so stuck
-  holds cannot fill every batch and starve holds that lapsed after them.
+  payment in flight is counted `blocked`. The lapsed-hold query itself
+  leaves out holds whose invoice has money on it (the owner reconciles
+  those) and orders holds with a payment attempt in flight after every
+  other, so neither can fill a batch and starve holds that lapsed later.
+  (A hold whose release keeps failing is still retried oldest-first; that
+  residual is logged on every run.)
   Admission invoices said tax was applied at issue but were created
   `not_applicable`; the reason text now says plainly that no tax is
   added. Regression: `tests/core/events.test.ts`; changeset
@@ -10960,19 +10962,27 @@ whatever is best for the people using the site.
   `tests/modules/member-provider-payouts.test.ts`. Still open: a run against
   a Stripe test account (waits for test keys, Tony 2026-10-15) and direct
   and destination charges with application fees, now C12.38.)*
-  Audit follow-up 2026-10-21 (second review): a payout the owner sends
-  back to "due" after a review (`members.settlePayouts` "owe") reuses its
-  one transfer row — under the same idempotency key when an earlier
-  attempt's outcome is unknown (the provider returns that transfer or makes
-  it now, never both), under a fresh key (the row gets a new id) when
-  nothing reached the seller, and straight to paid when the provider had
-  already settled it. Each transfer row's id is now the provider
-  idempotency key; the payout id still rides on the transfer for webhook
-  matching. A settlement for a row given up as unknown still applies and
-  moves the payout to review with "paid after all — do not pay by hand".
-  The "Outcome unknown" marker stays until a result is recorded, and 409
-  (same key still processing) counts as unknown, not refused. Regression:
-  `tests/modules/member-provider-payouts.test.ts`,
+  Audit follow-up 2026-10-21 (final design after two further reviews):
+  each provider attempt has one idempotency key — the payout id for the
+  first attempt (as before), then `<payout id>:<n>` — and every retry of an
+  attempt reuses its key (Razorpay's 36-character alphabet gets the id
+  without hyphens and `_<n>`). A new attempt is made only once the last is
+  dead at the provider: refused before money moved, or returned, blocked or
+  refunded (PayPal). An attempt whose outcome is unknown (timeout, outage,
+  409, unrecorded result) or that PayPal holds unclaimed is never resent
+  automatically; same-key retries also stop after 23 hours (Stripe keeps
+  keys 24). Such a payout goes to review telling the owner to check the
+  provider, and the owner records "Provider paid" (→ paid) or "Provider did
+  not pay — send again" (`members.settlePayouts` `providerPaid` /
+  `sendAgain`, buttons under Admin → Members); "still owed" alone does not
+  resend it. Earlier attempts are kept on the transfer
+  (`previous_attempts`, migration `0053_member_payout_attempts.sql`, which
+  also adds the `unknown` and `unclaimed` states), and a webhook applies
+  only to the attempt with its reference or key: a late success for a dead
+  attempt updates that attempt and moves the payout to review with "paid
+  after all — do not pay by hand"; it never touches the current attempt.
+  Events matching no attempt here are acknowledged (200) and ignored.
+  Regression: `tests/modules/member-provider-payouts.test.ts`,
   `tests/adapters/payout-providers.test.ts`.
   Audit follow-up 2026-10-21: the payout job could pay a seller after the
   buyer's refund had cancelled the payout, because a queued transfer was
@@ -10999,16 +11009,17 @@ whatever is best for the people using the site.
   reversals, signed webhooks), selectable under Admin → Members, proven
   against recorded HTTP. Still open: sandbox runs with test credentials.)*
   Audit follow-up 2026-10-21: retries after an uncertain outcome were unsafe.
-  Razorpay transfers now carry the payout id in Razorpay's documented
+  Razorpay transfers now carry the attempt key in Razorpay's documented
   `X-Transfer-Idempotency` header. PayPal batches carry `PayPal-Request-Id`
   (kept 30 days), and a refused duplicate `sender_batch_id` is read through
   its link to the original batch instead of counting as a failure. Webhook
-  transfer events carry the payout id the transfer was sent with (PayPal
+  transfer events carry the attempt key the transfer was sent with (PayPal
   `sender_item_id`, Razorpay `notes.freeholder_payout_id`), so a
-  confirmation that beats the "sent" row is still applied. Events that
-  match no transfer here are acknowledged (200) and ignored: a shared
-  provider account carries other integrations' payouts, and every transfer
-  row is committed before its provider call, so one of ours always matches.
+  confirmation that beats the "sent" row is still applied to that attempt.
+  PayPal UNCLAIMED is its own state (claimable for 30 days, never resent);
+  RETURNED, BLOCKED, REFUNDED, FAILED, DENIED and CANCELED mean the attempt
+  is dead. Events that match no attempt here are acknowledged (200) and
+  ignored: a shared provider account carries other integrations' payouts.
   Razorpay offers idempotency only on direct transfers, not reversals; a
   retried full reversal is refused once the first went through.
   Regression: `tests/adapters/payout-providers.test.ts`,

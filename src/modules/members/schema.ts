@@ -912,10 +912,26 @@ export const memberRemotePosts = pgTable(
   (t) => [uniqueIndex("member_remote_posts_object_idx").on(t.objectId), index("member_remote_posts_actor_idx").on(t.actorUri, t.publishedAt)],
 );
 
+/** An earlier attempt at a transfer, kept so a late provider event finds it. */
+export interface PayoutTransferAttempt {
+  attempt: number;
+  key: string;
+  reference: string | null;
+  state: "failed" | "settled" | "unclaimed";
+  lastError: string | null;
+  endedAt: string;
+}
+
 /**
  * C12.26–C12.27: a payout carried out (or a refunded one reversed) by the
  * site's payout provider. One of each kind per payout, so a retry never pays
  * twice; the provider's reference settles it when its webhook confirms.
+ * `attempt` numbers the current provider attempt (its idempotency key is the
+ * payout id, then `<payout id>:<n>`); a new attempt is only ever made once
+ * the previous one is dead at the provider, and the previous ones stay in
+ * `previous_attempts`. `unknown` means the provider may or may not have paid
+ * and the owner must check; `unclaimed` means PayPal is holding the money
+ * for the seller to claim.
  */
 export const memberPayoutTransfers = pgTable(
   "member_payout_transfers",
@@ -924,13 +940,16 @@ export const memberPayoutTransfers = pgTable(
     payoutId: uuid("payout_id").notNull().references(() => memberPayouts.id, { onDelete: "cascade" }),
     kind: text("kind", { enum: ["transfer", "reversal"] }).notNull(),
     provider: text("provider").notNull(),
-    state: text("state", { enum: ["pending", "sent", "settled", "failed"] }).notNull().default("pending"),
+    state: text("state", { enum: ["pending", "sent", "settled", "failed", "unknown", "unclaimed"] }).notNull().default("pending"),
     amountMinor: integer("amount_minor").notNull(),
     currency: text("currency").notNull(),
     reference: text("reference"),
     attempts: integer("attempts").notNull().default(0),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
     lastError: text("last_error"),
+    attempt: integer("attempt").notNull().default(1),
+    attemptStartedAt: timestamp("attempt_started_at", { withTimezone: true }),
+    previousAttempts: jsonb("previous_attempts").$type<PayoutTransferAttempt[]>().notNull().default([]),
     createdAt: createdAtColumn(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -939,7 +958,7 @@ export const memberPayoutTransfers = pgTable(
     index("member_payout_transfers_due_idx").on(t.state, t.nextAttemptAt),
     index("member_payout_transfers_reference_idx").on(t.provider, t.reference),
     check("member_payout_transfers_kind_valid", sql`${t.kind} in ('transfer','reversal')`),
-    check("member_payout_transfers_state_valid", sql`${t.state} in ('pending','sent','settled','failed')`),
+    check("member_payout_transfers_state_valid", sql`${t.state} in ('pending','sent','settled','failed','unknown','unclaimed')`),
   ],
 );
 
