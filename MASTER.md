@@ -445,8 +445,10 @@ Customer access is a session tied to the invoice contact or an invoice-specific
 HMAC link (`SESSION_SECRET`, bound to the contact and issue date). Paid, void
 and refunded invoices retire the email link; the customer's session retains
 read-only history. `invoicing.send` queues that link in the encrypted mail
-outbox. Hosted checkout commits its payment attempt before provider I/O and
-attaches the provider response in a fresh authorized transaction. Repeated
+outbox. Hosted checkout (customer, owner and API alike), capture, provider refunds
+and in-person Terminal takes commit their payment or refund attempt before
+provider I/O and apply the provider response in a fresh authorized
+transaction. Repeated
 requests reuse the outstanding attempt; a timeout cannot create a new charge.
 The provider return has a separate seven-day capability exposing only payment
 status, currency and amount. A redirect never settles money: provider checks
@@ -9702,6 +9704,36 @@ schema they inherit reads as a designed thing rather than an excavation.
   `web-auth-hardening.md`. Without `TRUSTED_CLIENT_IP_HEADER`, per-client
   limits can be evaded by forging the forwarded address, up to the site-wide
   backstop; this repair is not independent review evidence.
+  Audit follow-up 2026-10-21 (payment provider boundary): owner/API hosted
+  checkout, checkout capture, provider refunds, saved-method revocation and
+  Stripe Terminal collection/refunds called their provider inside a service
+  transaction, so a rollback after the provider acted could move money with
+  no ledger row. Each is now a `defineOrchestratedService`: the attempt or
+  refund reservation commits under its idempotency key first, the provider
+  runs with no transaction open, and its answer is applied in a fresh one.
+  A crash or uncertain provider error in between leaves a `created` attempt.
+  For 23 hours (inside the provider's 24-hour idempotency window) a same-key
+  retry replays the request and converges. After that the retry is refused
+  and the attempt needs owner reconciliation. Hosted payments are also matched
+  by the webhook and listed by `reconcilePaymentProviders`. Terminal takes
+  are listed by `reconcileInPersonPayments`. Both views gain
+  `refundsNeedingReview`, which lists open refunds and refunds the provider
+  reports as already refunded (`provider_already_refunded`, not a plain
+  refusal). In-person `balanced` is false while any are listed. A failed,
+  cancelled or settled attempt is never sent to the provider again under its
+  key. Only allow-listed provider codes count as a definite refusal, which is
+  recorded as failed and releases any reservation. A 409 same-key conflict, a
+  busy reader or an unknown 4xx keeps the attempt open, and `AdapterError` now
+  carries the provider's code. Checkout is attached only while the invoice is
+  still open for that amount. Orchestrator phases are `permission: "system"`
+  services, called as the system after the public service has authorized the
+  caller. Each records the initiator in its audit input (`initiatedBy`), so an
+  API key scoped to the public service alone still works. Public service
+  names and inputs are unchanged. Regressions in
+  `tests/core/payment-provider-service.test.ts` and
+  `tests/core/invoicing-pos.test.ts` failed before each repair.
+  Changeset `payment-provider-boundary.md`. This repair is not independent
+  review evidence.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.
