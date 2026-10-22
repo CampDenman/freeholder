@@ -57,6 +57,10 @@ async function textMark(
   text: string,
 ): Promise<Buffer | undefined> {
   const size = Math.max(16, Math.round(width * 0.075));
+  // The mark is burned into the photo's pixels, not drawn on a themed page:
+  // translucent white with a faint dark outline reads on any image, and no
+  // light/dark token applies to bytes a visitor downloads.
+  /* eslint-disable no-restricted-syntax */
   const svg = Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
       `<text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" ` +
@@ -65,6 +69,7 @@ async function textMark(
       `stroke="#000000" stroke-opacity="0.18" stroke-width="${Math.max(1, Math.round(size / 40))}"` +
       `>${escapeXml(text)}</text></svg>`,
   );
+  /* eslint-enable no-restricted-syntax */
   try {
     // sharp composites from a Buffer, so the raster stays one.
     return await sharp(svg).png().toBuffer();
