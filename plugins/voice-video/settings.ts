@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { moduleSettings } from "@/core/settings/schema";
 import { decryptSecret, encryptSecret } from "@/core/connections/crypto";
+import { ServiceError } from "@/core/service";
 
 /**
  * The settingsSchema registered on the plugin manifest (§11). Secret fields
@@ -35,6 +36,21 @@ export const voiceVideoSettingsSchema = z.object({
 });
 
 export type VoiceVideoSettings = z.infer<typeof voiceVideoSettingsSchema>;
+
+export type VoiceVideoProviderId = VoiceVideoSettings["provider"];
+
+/**
+ * A provider choice from a form. Nothing is preselected (2026-10-22), so an
+ * empty or unknown value is an owner-facing validation refusal, never a
+ * silent default and never a server error.
+ */
+export function parseVoiceVideoProviderChoice(value: unknown): VoiceVideoProviderId {
+  const parsed = voiceVideoSettingsSchema.shape.provider.unwrap().safeParse(value);
+  if (!parsed.success) {
+    throw new ServiceError("validation", "Choose a call provider: Daily or Paradise Comms.");
+  }
+  return parsed.data;
+}
 
 /**
  * The stored settings row (or null when the owner never saved any). Reads

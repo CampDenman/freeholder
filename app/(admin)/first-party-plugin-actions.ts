@@ -36,6 +36,7 @@ import {
   controlVoiceVideoRecording,
   verifyVoiceVideoConnection,
 } from "../../plugins/voice-video/service";
+import { parseVoiceVideoProviderChoice } from "../../plugins/voice-video/settings";
 import {
   connectMarketplaceChannel,
   syncMarketplaceChannel,
@@ -418,9 +419,9 @@ export async function voiceVideoConfigureAction(form: FormData): Promise<void> {
   try {
     const retention = text(form, "retentionDays");
     await configureVoiceVideo.call({
-      // No default provider: anything but a listed choice is refused by the
-      // service's own validation.
-      provider: text(form, "provider") as "paradise" | "daily",
+      // No default provider: an empty or unknown choice is a validation
+      // refusal shown on the screen, not a 500.
+      provider: parseVoiceVideoProviderChoice(text(form, "provider")),
       paradise: {
         baseUrl: text(form, "baseUrl") || undefined,
         authScheme: text(form, "authScheme") === "portfolio_token" ? "portfolio_token" : "site_key",

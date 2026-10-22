@@ -14,6 +14,7 @@
 // is a step in a bounded loop under a worker's own scopes. Sharing an
 // interface would invite sharing authority.
 
+import { normalizeAgentProviderId } from "./aliases";
 import type { AgentToolDefinition } from "./types";
 
 export interface WorkforceToolCall {
@@ -67,21 +68,13 @@ export const WORKFORCE_ADAPTER_IDS = [
 export type WorkforceAdapterId = (typeof WORKFORCE_ADAPTER_IDS)[number];
 
 /**
- * Deprecated adapter names still accepted on input and on stored rows.
- * Migration 0055 rewrites stored ones; reading stays tolerant so a restore
- * from an older export keeps working.
+ * Maps a deprecated adapter name (see ./aliases) to its current id; anything
+ * else passes through. Stored rows are aliased on read, never rewritten.
  */
-export const LEGACY_WORKFORCE_ADAPTER_ALIASES: Readonly<Record<string, WorkforceAdapterId>> = {
-  pm_brain: "paradise",
-};
-
-/** Maps a deprecated adapter name to its current id; anything else passes through. */
 export function normalizeWorkforceAdapterId(value: string): string;
 export function normalizeWorkforceAdapterId(value: string | null): string | null;
 export function normalizeWorkforceAdapterId(value: string | null): string | null {
-  return value !== null && Object.hasOwn(LEGACY_WORKFORCE_ADAPTER_ALIASES, value)
-    ? (LEGACY_WORKFORCE_ADAPTER_ALIASES[value] ?? value)
-    : value;
+  return value === null ? null : normalizeAgentProviderId(value);
 }
 
 export interface WorkforceAgentAdapter {
@@ -92,6 +85,8 @@ export interface WorkforceAgentAdapter {
   readonly credentialRef: string | null;
   /** The model a turn will use when the connection does not name one. */
   readonly defaultModel: string | null;
+  /** Every setting an unconfigured adapter still needs; doctor names them all. */
+  readonly missing?: readonly string[];
   turn(request: WorkforceTurnRequest): Promise<WorkforceTurnResult>;
 }
 

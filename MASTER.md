@@ -5056,11 +5056,15 @@ deployments are portable, testable and incapable of silently forking the truth.
   unchanged `x-api-key`, default host and model and `PARADISEMODERN_API_KEY`.
   The §37 builder takes the same two choices. `pm_brain` stays an accepted
   alias everywhere it was accepted (`FREEHOLDER_AGENT`, `adapters.agent`,
-  `agents.connect`, stored rows); migration
-  `0055_neutral_agent_adapter_ids.sql` rewrites stored `pm_brain`
-  connections to `paradise`. Evidence:
+  `agents.connect`, stored rows), through one map in
+  `src/adapters/agent/aliases.ts`. Stored rows are aliased on read and never
+  rewritten, so rolling back finds them; new writes store `paradise`, which
+  older builds do not know (the changeset says so). The instance-wide
+  `AGENT_GATEWAY_API_KEY` is sent only to `AGENT_GATEWAY_URL`: a gateway
+  connection on another host must name its own `credential_ref`, and
+  doctor names every missing gateway setting. Evidence:
   `tests/core/agents-workforce-adapter.test.ts` (gateway wire shape, no
-  guessed host, legacy env and stored-row aliases, the migration),
+  guessed host, key scoping, legacy env and stored-row aliases, doctor),
   `src/core/config.test.ts`, changeset `neutral-provider-names.md`.
 - [x] **C4.06** Enforce per-run/task/agent/period budgets before every step;
   build spend ledger, estimates, alerts and owner-readable reporting.

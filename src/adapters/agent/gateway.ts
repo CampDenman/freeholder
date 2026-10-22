@@ -13,7 +13,8 @@
 //   PARADISEMODERN_API_KEY / PARADISEMODERN_URL settings.
 //
 // `pm_brain`, the old name for the Paradise choice, is accepted as an alias
-// (see `normalizeBuilderAgentId`) so existing configurations keep working.
+// (see ./aliases, applied where `FREEHOLDER_AGENT` and `adapters.agent` are
+// parsed) so existing configurations keep working.
 import { env } from "@/core/env";
 import type {
   AgentProposalRequest,
@@ -36,14 +37,6 @@ export const PARADISE_GATEWAY_DEFAULTS = {
 } as const;
 
 export type GatewayProvider = "gateway" | "paradise";
-
-/**
- * Old adapter ids still accepted from config, env and stored rows. Reading
- * them keeps working forever; docs call them deprecated.
- */
-export const LEGACY_AGENT_ALIASES: Readonly<Record<string, GatewayProvider>> = {
-  pm_brain: "paradise",
-};
 
 interface GatewayTarget {
   apiKey: string | undefined;

@@ -5,6 +5,7 @@
 // Validation is lazy so `next build` succeeds without a database attached;
 // anything that *uses* env at runtime gets a plain-English failure instead.
 import { z } from "zod";
+import { normalizeAgentProviderId } from "../adapters/agent/aliases";
 
 const envSchema = z.object({
   NODE_ENV: z
@@ -271,7 +272,7 @@ const envSchema = z.object({
   // `pm_brain` is the deprecated name of the `paradise` choice; still read.
   FREEHOLDER_AGENT: z
     .enum(["gateway", "paradise", "pm_brain", "anthropic", "openai", "local", "none"])
-    .transform((value) => (value === "pm_brain" ? "paradise" : value))
+    .transform(normalizeAgentProviderId)
     .optional(),
   /**
    * `gateway`: any OpenAI-compatible chat-completions endpoint. The URL is

@@ -59,11 +59,41 @@ function unavailable(adapter: string | null): WorkforceAgentAdapter {
   };
 }
 
+export const GATEWAY_OWN_CREDENTIAL =
+  "a credential of its own (its base URL differs from AGENT_GATEWAY_URL, so AGENT_GATEWAY_API_KEY is not sent there)";
+
+function comparableUrl(value: string): string {
+  return value.trim().replace(/\/+$/, "").toLowerCase();
+}
+
+/**
+ * Whether a gateway connection's base URL is the instance-wide one (or is
+ * absent, which means the instance-wide one).
+ */
+export function sharesInstanceGateway(baseUrl: string | null | undefined): boolean {
+  if (!baseUrl) return true;
+  const instance = env().AGENT_GATEWAY_URL;
+  return Boolean(instance) && comparableUrl(baseUrl) === comparableUrl(instance ?? "");
+}
+
 export function workforceAdapter(
   connection: WorkforceConnectionConfig,
 ): WorkforceAgentAdapter {
   const id = normalizeWorkforceAdapterId(connection.adapter);
   if (!id || !isWorkforceAdapterId(id)) return unavailable(id);
+  // The instance-wide gateway key belongs to the instance-wide gateway URL.
+  // A connection pointing somewhere else must name its own credential, or
+  // that key would be sent to a host it was never issued for.
+  if (id === "gateway" && !connection.credentialRef && !sharesInstanceGateway(connection.baseUrl)) {
+    return openAiCompatibleWorkforceAdapter({
+      id,
+      apiKey: undefined,
+      credentialRef: null,
+      baseUrl: connection.baseUrl,
+      model: connection.model,
+      missingCredential: GATEWAY_OWN_CREDENTIAL,
+    });
+  }
   const ref = connection.credentialRef ?? DEFAULT_CREDENTIAL_REF[id];
   const apiKey = credential(ref);
   if (id === "anthropic") {

@@ -19,6 +19,7 @@ import { runSpend, runSteps, runs } from "@/core/runs/schema";
 import { createApiKey } from "@/core/apikeys/service";
 import { violates } from "@/core/db/errors";
 import { WORKFORCE_ADAPTER_IDS, normalizeWorkforceAdapterId } from "@/adapters/agent/workforce-types";
+import { sharesInstanceGateway } from "@/adapters/agent/workforce";
 import { modelPrice } from "@/core/agents/pricing";
 import {
   actorString,
@@ -323,6 +324,19 @@ export const connectAgentRuntime = defineService({
         message:
           "name the model this connection should run — the platform does not guess one",
         path: ["model"],
+      },
+    )
+    // The instance-wide gateway key is only ever sent to AGENT_GATEWAY_URL.
+    .refine(
+      (v) =>
+        v.kind !== "managed" ||
+        v.adapter !== "gateway" ||
+        Boolean(v.credentialRef) ||
+        sharesInstanceGateway(v.baseUrl),
+      {
+        message:
+          "this gateway's base URL differs from AGENT_GATEWAY_URL — name the environment variable holding its own key",
+        path: ["credentialRef"],
       },
     ),
   output: connectionRow,

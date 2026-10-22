@@ -12,8 +12,7 @@ import {
   openAiCompatibleWorkforceAdapter,
   setWorkforceOpenAiFetchForTests,
 } from "@/adapters/agent/workforce-openai";
-import { readFileSync } from "node:fs";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { builderAgent } from "@/adapters/agent";
 import { setBuilderAgentFetchForTests } from "@/adapters/agent/gateway";
 import { WORKFORCE_ADAPTER_IDS, workforceAdapter } from "@/adapters/agent/workforce";
@@ -442,6 +441,42 @@ describe("workforce adapter selection", () => {
     }
   });
 
+  it("sends the instance-wide gateway key only to the instance-wide gateway URL", async () => {
+    process.env.AGENT_GATEWAY_URL = "https://llm.example.test";
+    process.env.AGENT_GATEWAY_API_KEY = "instance-key";
+    resetEnvForTests();
+    let calls = 0;
+    setWorkforceOpenAiFetchForTests(async () => {
+      calls += 1;
+      return jsonResponse({ choices: [{ finish_reason: "stop", message: { content: "Done." } }] });
+    });
+    try {
+      const elsewhere = workforceAdapter({
+        adapter: "gateway",
+        model: "open-model-7b",
+        credentialRef: null,
+        baseUrl: "https://other.example.test",
+      });
+      expect(elsewhere.configured).toBe(false);
+      expect(elsewhere.credentialRef).toBeNull();
+      await expect(elsewhere.turn(turnRequest())).rejects.toThrow(/credential of its own/);
+      expect(calls).toBe(0);
+
+      const same = workforceAdapter({
+        adapter: "gateway",
+        model: "open-model-7b",
+        credentialRef: null,
+        baseUrl: "https://llm.example.test/",
+      });
+      expect(same.configured).toBe(true);
+      expect(same.credentialRef).toBe("AGENT_GATEWAY_API_KEY");
+    } finally {
+      delete process.env.AGENT_GATEWAY_URL;
+      delete process.env.AGENT_GATEWAY_API_KEY;
+      resetEnvForTests();
+    }
+  });
+
   it("names the missing variable when unconfigured", async () => {
     delete process.env.TEST_WORKFORCE_MISSING;
     const adapter = workforceAdapter({
@@ -506,20 +541,79 @@ describe.runIf(hasDatabase)("managed connections end to end", { timeout: 30_000 
     expect(legacy.adapter).toBe("paradise");
   });
 
-  it("migration 0055 renames stored pm_brain connections to paradise", async () => {
+  it("runs a stored pm_brain row as paradise without rewriting it", async () => {
+    // Stored rows are aliased on read, never migrated, so a rollback to a
+    // build that only knows `pm_brain` still finds them.
     await db().insert(agentConnections).values({
       name: "Stored legacy runtime",
       kind: "managed",
       adapter: "pm_brain",
     });
-    await db().execute(
-      sql.raw(readFileSync("db/migrations/0055_neutral_agent_adapter_ids.sql", "utf8")),
-    );
+    process.env.PARADISEMODERN_API_KEY = "legacy-key";
+    try {
+      const report = await runDoctor();
+      const check = report.checks.find(
+        (candidate) =>
+          candidate.id === "agents.managedConnections" &&
+          candidate.title.includes("Stored legacy runtime"),
+      );
+      expect(check?.verdict).toBe("ok");
+      expect(check?.detail).toContain("paradise is configured");
+    } finally {
+      delete process.env.PARADISEMODERN_API_KEY;
+    }
     const [row] = await db()
       .select({ adapter: agentConnections.adapter })
       .from(agentConnections)
       .where(eq(agentConnections.name, "Stored legacy runtime"));
-    expect(row?.adapter).toBe("paradise");
+    expect(row?.adapter).toBe("pm_brain");
+  });
+
+  it("refuses a gateway on another host that would borrow the instance-wide key", async () => {
+    const refused = await failure(
+      connectAgentRuntime.call(
+        {
+          name: "Elsewhere runtime",
+          kind: "managed",
+          adapter: "gateway",
+          model: "open-model-7b",
+          baseUrl: "https://other.example.test",
+        },
+        OWNER,
+      ),
+    );
+    expect(refused.code).toBe("validation");
+    expect(refused.message).toContain("AGENT_GATEWAY_URL");
+    const own = await connectAgentRuntime.call(
+      {
+        name: "Elsewhere runtime",
+        kind: "managed",
+        adapter: "gateway",
+        model: "open-model-7b",
+        baseUrl: "https://other.example.test",
+        credentialRef: "OTHER_GATEWAY_KEY",
+      },
+      OWNER,
+    );
+    expect(own.credentialRef).toBe("OTHER_GATEWAY_KEY");
+  });
+
+  it("doctor names both a gateway's missing URL and missing key", async () => {
+    delete process.env.AGENT_GATEWAY_URL;
+    delete process.env.AGENT_GATEWAY_API_KEY;
+    resetEnvForTests();
+    await connectAgentRuntime.call(
+      { name: "Bare gateway", kind: "managed", adapter: "gateway", model: "open-model-7b" },
+      OWNER,
+    );
+    const report = await runDoctor();
+    const check = report.checks.find(
+      (candidate) =>
+        candidate.id === "agents.managedConnections" && candidate.title.includes("Bare gateway"),
+    );
+    expect(check?.verdict).toBe("fail");
+    expect(check?.detail).toContain("AGENT_GATEWAY_API_KEY");
+    expect(check?.detail).toContain("AGENT_GATEWAY_URL");
   });
 
   it("doctor names the missing credential without spending a cent", async () => {

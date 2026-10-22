@@ -4,6 +4,7 @@
 // adapter profile × business preset. Checked in; secrets live in env only.
 import { z } from "zod";
 import { CONFIGURABLE_PAYMENT_PROVIDER_IDS } from "@/adapters/payments/providers";
+import { normalizeAgentProviderId } from "@/adapters/agent/aliases";
 
 export const configSchema = z.object({
   target: z
@@ -42,7 +43,7 @@ export const configSchema = z.object({
        */
       agent: z
         .enum(["gateway", "paradise", "pm_brain", "anthropic", "openai", "local", "none"])
-        .transform((value) => (value === "pm_brain" ? "paradise" : value))
+        .transform(normalizeAgentProviderId)
         .default("none"),
       fx: z.enum(["manual", "ecb"]).default("manual"),
     })

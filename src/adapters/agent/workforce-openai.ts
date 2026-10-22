@@ -76,6 +76,8 @@ export function openAiCompatibleWorkforceAdapter(options: {
   credentialRef: string | null;
   baseUrl: string | null;
   model: string | null;
+  /** How to name the key when there is no credentialRef to name. */
+  missingCredential?: string;
 }): WorkforceAgentAdapter {
   const paradise = options.id === "paradise";
   const model = options.model ?? (paradise ? PARADISE_DEFAULT_MODEL : null);
@@ -86,20 +88,22 @@ export function openAiCompatibleWorkforceAdapter(options: {
       : options.id === "openai"
         ? "https://api.openai.com"
         : null);
+  const missing = [
+    ...(options.apiKey
+      ? []
+      : [options.credentialRef ?? options.missingCredential ?? "its API key"]),
+    ...(baseUrl ? [] : ["AGENT_GATEWAY_URL (or a base URL on the connection)"]),
+  ];
   return {
     id: options.id,
-    configured: Boolean(options.apiKey) && Boolean(baseUrl),
+    configured: missing.length === 0,
     credentialRef: options.credentialRef,
     defaultModel: model,
+    missing,
     async turn(request: WorkforceTurnRequest): Promise<WorkforceTurnResult> {
-      if (!options.apiKey) {
+      if (missing.length || !options.apiKey || !baseUrl) {
         throw new Error(
-          `The ${options.id} workforce adapter is selected but ${options.credentialRef ?? "its API key"} is not set.`,
-        );
-      }
-      if (!baseUrl) {
-        throw new Error(
-          "The gateway workforce adapter needs a base URL: set one on the connection or AGENT_GATEWAY_URL.",
+          `The ${options.id} workforce adapter is selected but ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} not set.`,
         );
       }
       const controller = new AbortController();
