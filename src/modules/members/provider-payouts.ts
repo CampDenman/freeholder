@@ -30,7 +30,7 @@ import { users } from "@/core/auth/schema";
 import { payoutProvider } from "@/adapters/payouts";
 import { AdapterError } from "@/adapters/types";
 import type { OnboardingField, PayoutWebhookEvent } from "@/adapters/payouts/types";
-import { marketRules } from "./payouts";
+import { marketRules, PROVIDER_CHECK } from "./payouts";
 import { memberPayoutAccounts, memberPayouts, memberPayoutTransfers, memberProfiles, type PayoutTransferAttempt } from "./schema";
 
 const MAX_ATTEMPTS = 5;
@@ -189,7 +189,7 @@ function nextAttempt(t: Transfer, ended: PayoutTransferAttempt["state"], note: s
 }
 
 const NEEDS_CHECK = (provider: string, why: string) =>
-  `Check with ${provider} whether the seller was paid: ${why} Then record "provider paid" or "provider did not pay — send again"; nothing is sent until you do.`;
+  `${PROVIDER_CHECK}${provider} whether the seller was paid: ${why} Then record "provider paid" or "provider did not pay — send again"; nothing is sent until you do.`;
 
 /** Due payouts, and reversals, ready to send through their provider. */
 export const claimProviderTransfers = defineService({
@@ -393,7 +393,18 @@ export async function resolveProviderCheck(ctx: ServiceContext, payoutIds: strin
     .select({ t: memberPayoutTransfers })
     .from(memberPayoutTransfers)
     .innerJoin(memberPayouts, eq(memberPayouts.id, memberPayoutTransfers.payoutId))
-    .where(and(inArray(memberPayoutTransfers.payoutId, payoutIds), eq(memberPayoutTransfers.kind, "transfer"), inArray(memberPayoutTransfers.state, AWAITING_CHECK), eq(memberPayouts.state, "review")))
+    .where(and(
+      inArray(memberPayoutTransfers.payoutId, payoutIds),
+      eq(memberPayoutTransfers.kind, "transfer"),
+      eq(memberPayouts.state, "review"),
+      // "Send again" only answers the provider check: an attempt whose outcome
+      // is unknown, under a review the check raised. Not a payment still in
+      // flight or held unclaimed (it may yet pay), and not a review raised for
+      // another reason, such as a partial refund ("still owed" covers that).
+      outcome === "not_paid"
+        ? and(eq(memberPayoutTransfers.state, "unknown"), sql`starts_with(${memberPayouts.note}, ${PROVIDER_CHECK})`)
+        : inArray(memberPayoutTransfers.state, AWAITING_CHECK),
+    ))
     .for("update", { of: memberPayoutTransfers });
   const now = new Date();
   for (const { t } of rows) {

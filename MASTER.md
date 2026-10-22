@@ -10982,6 +10982,15 @@ whatever is best for the people using the site.
   attempt updates that attempt and moves the payout to review with "paid
   after all — do not pay by hand"; it never touches the current attempt.
   Events matching no attempt here are acknowledged (200) and ignored.
+  "Send again" answers only that check: one payout at a time (its own
+  form under Admin → Members, not the bulk list), an attempt in `unknown`
+  (never `sent` or `unclaimed`), under a review the check raised (a
+  partial-refund review goes through "still owed"). Migration
+  `0054_member_payout_attempts_backfill.sql` marks transfers the earlier
+  code tried (attempts > 0, left pending or failed) as `unknown`, dated
+  for the 23-hour guard, because it never recorded unknown outcomes and
+  its Razorpay calls had no idempotency key; it also adds a GIN index for
+  the `previous_attempts` lookup.
   Regression: `tests/modules/member-provider-payouts.test.ts`,
   `tests/adapters/payout-providers.test.ts`.
   Audit follow-up 2026-10-21: the payout job could pay a seller after the

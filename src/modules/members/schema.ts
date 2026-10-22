@@ -957,6 +957,7 @@ export const memberPayoutTransfers = pgTable(
     uniqueIndex("member_payout_transfers_once_idx").on(t.payoutId, t.kind),
     index("member_payout_transfers_due_idx").on(t.state, t.nextAttemptAt),
     index("member_payout_transfers_reference_idx").on(t.provider, t.reference),
+    index("member_payout_transfers_previous_attempts_idx").using("gin", t.previousAttempts.op("jsonb_path_ops")),
     check("member_payout_transfers_kind_valid", sql`${t.kind} in ('transfer','reversal')`),
     check("member_payout_transfers_state_valid", sql`${t.state} in ('pending','sent','settled','failed','unknown','unclaimed')`),
   ],

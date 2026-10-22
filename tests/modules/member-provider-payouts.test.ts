@@ -5,8 +5,9 @@
 // sale's payout is transferred exactly once, a refund reverses it, and a
 // provider that keeps refusing hands the payout to the owner to review.
 import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { resolveContact } from "@/core/contacts/service";
@@ -25,7 +26,7 @@ import { getProductVariants } from "@/modules/catalog/variants";
 import { createPayment, settlePayment } from "@/modules/invoicing/invoice-service";
 import { invoices } from "@/modules/invoicing/schema";
 import { POST as webhook } from "../../app/api/payouts/[provider]/webhook/route";
-import { ANONYMOUS, closeDb, CUSTOMER, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { ANONYMOUS, closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const RAE = CUSTOMER;
 const SECRET = "whsec_test_connect";
@@ -58,7 +59,7 @@ async function sell(priceMajor: string) {
   const order = await checkoutCart.call({ cartId: cart.cart.id, contactId: buyer.id, idempotencyKey: `market-${crypto.randomUUID()}`, acceptedTerms: true as const }, OWNER);
   const [invoice] = await db().select().from(invoices).where(eq(invoices.id, order.order.invoiceId!));
   const payment = await createPayment.call({ invoiceId: invoice!.id, provider: "manual", method: "bank_transfer", amountMinor: invoice!.totalMinor, idempotencyKey: `pay-${crypto.randomUUID()}` }, OWNER);
-  await settlePayment.call({ id: payment.id, providerRef: "offline" }, OWNER);
+  await settlePayment.call({ id: payment.id, providerRef: `offline-${crypto.randomUUID()}` }, OWNER);
   await onOrderPaid({ orderId: order.order.id });
   return invoice!;
 }
@@ -403,5 +404,50 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
     setPayoutProviderForTests("stripe_connect", { ...stripe, webhook: async () => [{ kind: "transfer", reference: "tr_elsewhere", key: crypto.randomUUID(), state: "settled" }, { kind: "transfer", reference: "tr_other", key: "not-a-uuid", state: "failed" }] });
     const response = await webhook(new Request("http://localhost/api/payouts/stripe_connect/webhook", { method: "POST", body: "{}" }), { params: Promise.resolve({ provider: "stripe_connect" }) });
     expect(response.status).toBe(200);
+  });
+  it("treats a transfer tried before numbered attempts as possibly paid, never resending it under a new key", { timeout: 90_000 }, async () => {
+    await readySeller();
+    await sell("30");
+    const [payout] = await db().select().from(memberPayouts);
+    // As the earlier code left it: tried five times, given up as refused,
+    // the payout under review — though a timeout among them may have paid.
+    await db().insert(memberPayoutTransfers).values({ payoutId: payout!.id, kind: "transfer", provider: "stripe_connect", state: "failed", amountMinor: payout!.netMinor, currency: payout!.currency, attempts: 5, lastError: "The payment provider could not be reached." });
+    await db().update(memberPayouts).set({ state: "review", note: "The payout provider kept refusing this transfer: The payment provider could not be reached." }).where(eq(memberPayouts.id, payout!.id));
+    // The backfill in migration 0054 (its index already exists here).
+    const backfill = readFileSync("db/migrations/0054_member_payout_attempts_backfill.sql", "utf8").split("--> statement-breakpoint").filter((part) => /^\s*(--[^\n]*\n\s*)*UPDATE/.test(part));
+    expect(backfill).toHaveLength(2);
+    for (const statement of backfill) await db().execute(sql.raw(statement));
+    const [marked] = await db().select().from(memberPayoutTransfers);
+    expect(marked?.state).toBe("unknown");
+    expect(marked?.attemptStartedAt).toBeInstanceOf(Date);
+    const [review] = (await sitePayouts.call({}, OWNER)).payouts;
+    expect(review).toMatchObject({ state: "review", providerCheck: true });
+    // "Still owed" sends nothing: the owner must check the provider first.
+    await settlePayouts.call({ ids: [payout!.id], action: "owe", note: "Still owed." }, OWNER);
+    expect(await sendProviderPayouts()).toEqual({ sent: 0, failed: 0 });
+    expect(transferCalls()).toHaveLength(0);
+    expect((await sitePayouts.call({}, OWNER)).payouts[0]).toMatchObject({ state: "review", providerCheck: true });
+  });
+
+  it("only sends again for one payout the provider check put under review, with an unknown outcome", { timeout: 90_000 }, async () => {
+    const stripe = createStripeConnect({ secretKey: "sk_test_x", webhookSecrets: [SECRET], fetch: fakeStripe });
+    setPayoutProviderForTests("stripe_connect", { ...stripe, transfer: async (r) => ({ ...(await stripe.transfer(r)), settled: false }) });
+    await readySeller();
+    await sell("30");
+    await sell("40");
+    expect(await sendProviderPayouts()).toEqual({ sent: 2, failed: 0 });
+    const [a, b] = await db().select().from(memberPayouts);
+    // A payment still in flight ("sent") may yet pay: never sent again.
+    await db().update(memberPayouts).set({ state: "review", note: "Check with stripe_connect whether the seller was paid: test." }).where(eq(memberPayouts.id, a!.id));
+    expect(await settlePayouts.call({ ids: [a!.id], action: "sendAgain" }, OWNER)).toEqual({ changed: 0 });
+    // An unknown outcome under a review raised for something else (a partial refund) is not answered here.
+    await db().update(memberPayoutTransfers).set({ state: "unknown" }).where(eq(memberPayoutTransfers.payoutId, b!.id));
+    await db().update(memberPayouts).set({ state: "review", note: "Buyer partly refunded; decide what the seller is owed." }).where(eq(memberPayouts.id, b!.id));
+    expect(await settlePayouts.call({ ids: [b!.id], action: "sendAgain" }, OWNER)).toEqual({ changed: 0 });
+    // Never in bulk.
+    await db().update(memberPayoutTransfers).set({ state: "unknown" });
+    await db().update(memberPayouts).set({ note: "Check with stripe_connect whether the seller was paid: test." });
+    expect((await failure(settlePayouts.call({ ids: [a!.id, b!.id], action: "sendAgain" }, OWNER))).code).toBe("validation");
+    expect(await settlePayouts.call({ ids: [a!.id], action: "sendAgain" }, OWNER)).toEqual({ changed: 1 });
   });
 });

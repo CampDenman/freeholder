@@ -258,6 +258,25 @@ export default async function MembersPage({
               </li>
             ))}
           </ul>
+          {open.some((p) => p.providerCheck) ? (
+            <>
+              <h3 className="mb-2 font-semibold">{t("members.admin.providerCheck")}</h3>
+              <ul className="mb-6 grid gap-2">
+                {open.filter((p) => p.providerCheck).map((p) => (
+                  <li key={p.id} className="grid gap-2 rounded-md border border-rule p-3 text-sm">
+                    <span>@{p.sellerHandle} · {formatMoney(p.netMinor, p.currency, locale)}</span>
+                    {p.note ? <span className="text-ink-muted">{p.note}</span> : null}
+                    <form action={settlePayoutsAction} className="flex flex-wrap items-end gap-2">
+                      <input type="hidden" name="ids" value={p.id} />
+                      <Field label={t("members.admin.payoutReference")} htmlFor={`check-reference-${p.id}`}><Input id={`check-reference-${p.id}`} name="reference" maxLength={200} /></Field>
+                      <Button type="submit" name="action" value="providerPaid" variant="quiet">{t("members.admin.providerPaid")}</Button>
+                      <Button type="submit" name="action" value="sendAgain" variant="quiet">{t("members.admin.providerNotPaid")}</Button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
           <h3 className="mb-2 font-semibold">{t("members.admin.openPayouts")}</h3>
           {open.length === 0 ? <p className="text-sm text-ink-muted">{t("members.admin.noOpenPayouts")}</p> : (
             <form action={settlePayoutsAction} className="grid gap-3">
@@ -279,8 +298,6 @@ export default async function MembersPage({
                 <Button type="submit" name="action" value="release" variant="quiet">{t("members.admin.releasePayouts")}</Button>
                 <Button type="submit" name="action" value="paid">{t("members.admin.markPaid")}</Button>
                 <Button type="submit" name="action" value="owe" variant="quiet">{t("members.admin.stillOwed")}</Button>
-                <Button type="submit" name="action" value="providerPaid" variant="quiet">{t("members.admin.providerPaid")}</Button>
-                <Button type="submit" name="action" value="sendAgain" variant="quiet">{t("members.admin.providerNotPaid")}</Button>
                 <Button type="submit" name="action" value="cancel" variant="danger">{t("members.admin.cancelPayouts")}</Button>
               </div>
             </form>

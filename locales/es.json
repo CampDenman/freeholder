@@ -7552,6 +7552,7 @@
   "members.admin.releasePayouts": "Liberar ahora",
   "members.admin.markPaid": "Marcar como pagado",
   "members.admin.stillOwed": "Aún se le debe al vendedor",
+  "members.admin.providerCheck": "Comprobar con el proveedor de pagos",
   "members.admin.providerPaid": "El proveedor pagó",
   "members.admin.providerNotPaid": "El proveedor no pagó: enviar de nuevo",
   "members.admin.cancelPayouts": "Cancelar",

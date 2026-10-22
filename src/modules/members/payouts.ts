@@ -28,6 +28,14 @@ import {
 
 export type PayoutModel = (typeof PAYOUT_MODELS)[number];
 
+/**
+ * C12.26: how a review raised by the payout provider check begins. Only such
+ * a review — the provider may have paid, and the owner must check — can be
+ * answered "provider did not pay — send again"; any other review (a partial
+ * refund, a dispute) goes through "still owed" with its note.
+ */
+export const PROVIDER_CHECK = "Check with ";
+
 /** A provider that moves money to sellers. Each declares the models it can run. */
 export interface MarketplacePayoutAdapter {
   id: string;
@@ -107,18 +115,24 @@ const payoutRow = row({
   paidAt: timestamp.nullable(),
   reference: z.string().nullable(),
   note: z.string().nullable(),
+  /** Under review because the payout provider may have paid: the owner checks the provider. */
+  providerCheck: z.boolean(),
   createdAt: timestamp,
 });
 
 async function payoutsWhere(ctx: ServiceContext, where: ReturnType<typeof and>, limit = 200) {
   const rows = await ctx.tx
-    .select({ payout: memberPayouts, handle: memberProfiles.handle })
+    .select({
+      payout: memberPayouts,
+      handle: memberProfiles.handle,
+      unknownTransfer: sql<boolean>`exists (select 1 from member_payout_transfers t where t.payout_id = ${memberPayouts.id} and t.kind = 'transfer' and t.state = 'unknown')`,
+    })
     .from(memberPayouts)
     .innerJoin(memberProfiles, eq(memberProfiles.userId, memberPayouts.sellerId))
     .where(where)
     .orderBy(desc(memberPayouts.createdAt))
     .limit(limit);
-  return rows.map(({ payout: p, handle }) => ({
+  return rows.map(({ payout: p, handle, unknownTransfer }) => ({
     id: p.id,
     orderId: p.orderId,
     invoiceId: p.invoiceId,
@@ -134,6 +148,7 @@ async function payoutsWhere(ctx: ServiceContext, where: ReturnType<typeof and>, 
     paidAt: p.paidAt,
     reference: p.reference,
     note: p.note,
+    providerCheck: p.state === "review" && Boolean(unknownTransfer) && Boolean(p.note?.startsWith(PROVIDER_CHECK)),
     createdAt: p.createdAt,
   }));
 }
@@ -389,6 +404,8 @@ export const settlePayouts = defineService({
   output: z.object({ changed: z.number().int() }),
   handler: async (input, ctx) => {
     if (input.action === "providerPaid" || input.action === "sendAgain") {
+      // Sending money again is answered for one payout at a time, never in bulk.
+      if (input.action === "sendAgain" && input.ids.length !== 1) throw new ServiceError("validation", "Check and send one payout at a time.");
       const { resolveProviderCheck } = await import("./provider-payouts");
       const resolved = await resolveProviderCheck(ctx, input.ids, input.action === "providerPaid" ? "paid" : "not_paid", input.reference);
       for (const id of resolved) ctx.setSubject("member_payout", id);

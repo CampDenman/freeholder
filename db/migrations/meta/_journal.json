@@ -379,6 +379,13 @@
       "when": 1793310000033,
       "tag": "0053_member_payout_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1793310000034,
+      "tag": "0054_member_payout_attempts_backfill",
+      "breakpoints": true
     }
   ]
 }
