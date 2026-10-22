@@ -33,6 +33,8 @@ const INTERNAL = [
   // so work already public is taken down on nobody's behalf.
   "projects.sweepLapsedConsent",
   "ads.rollUpStats",
+  // C11.10: the sandboxed creative document reads its markup through this.
+  "ads.creativeTag",
   "agents.runDuePlaybooks",
   "agents.startEventPlaybooks",
   // The wake sweep (C9.02). System rather than scoped because a sleeping run

@@ -1,0 +1,6 @@
+^deploy/[a-z-]+/\.env\.example$
+^tests/core/agent-launch\.test\.ts$
+^tests/core/csp\.test\.ts$
+^tests/core/http\.test\.ts$
+^tests/core/importers\.test\.ts$
+^tests/core/ownership-export\.test\.ts$

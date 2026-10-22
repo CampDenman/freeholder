@@ -767,3 +767,33 @@ async function customerActor(email: string, country: string) {
     grants: [] as { module: string; access: "view" | "manage" }[],
   };
 }
+
+describe("popup limits key on a validated address (C11.10)", () => {
+  const popupId = "00000000-0000-4000-8000-000000000001";
+  const spoofed = (ip: string) => ({ kind: "anonymous" as const, request: { ip } });
+  type Subject = (input: Record<string, unknown>, actor: unknown) => string | undefined;
+
+  it("never collapses unvalidated visitors into one popup-wide bucket", () => {
+    // One shared bucket would let one caller switch the popup off for everyone.
+    const record = recordPopupEvent.def.rateLimit!.subject as Subject;
+    expect(record({ popupId }, spoofed("203.0.113.9"))).not.toBe(record({ popupId }, spoofed("203.0.113.10")));
+    expect(record({ popupId }, spoofed("203.0.113.9"))).toContain("untrusted-ip:");
+    // Forged addresses are bounded by a site-wide ceiling instead.
+    expect(recordPopupEvent.def.rateLimit!.untrustedBackstop).toBeDefined();
+    // Capture keys on the submitted address when no proxy validates the
+    // client, and shares no ceiling one visitor could drain for everyone.
+    const capture = capturePopup.def.rateLimit!.subject as Subject;
+    const input = { popupId, email: "reader@example.test" };
+    expect(capture(input, spoofed("203.0.113.9"))).toBe(capture(input, spoofed("203.0.113.10")));
+    expect(capture(input, spoofed("203.0.113.9"))).toContain("email:reader@example.test");
+    expect(capture({ ...input, email: "other@example.test" }, spoofed("203.0.113.9")))
+      .not.toBe(capture(input, spoofed("203.0.113.9")));
+    expect(capturePopup.def.rateLimit!.untrustedBackstop).toBeUndefined();
+  });
+
+  it("separates visitors by the deployment-validated address", () => {
+    const record = recordPopupEvent.def.rateLimit!.subject as Subject;
+    const trusted = (trustedIp: string) => ({ kind: "anonymous" as const, request: { ip: "203.0.113.9", trustedIp } });
+    expect(record({ popupId }, trusted("198.51.100.1"))).not.toBe(record({ popupId }, trusted("198.51.100.2")));
+  });
+});

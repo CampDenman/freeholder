@@ -45,7 +45,8 @@ the license texts shipped with packages.
 
 Third-party dependencies and bundled assets remain under their own licenses.
 For example, the bundled font files retain their SIL Open Font License notices
-under `public/fonts/`. Apache-2.0 does not replace or remove those notices.
+under `public/fonts/`, and [`NOTICE`](NOTICE) lists the bundled material.
+Apache-2.0 does not replace or remove those notices.
 
 ## Contributions
 

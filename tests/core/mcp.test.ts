@@ -22,6 +22,9 @@ import { createApiKey } from "@/core/apikeys/service";
 import { users } from "@/core/auth/schema";
 import { db } from "@/core/db";
 import { contacts } from "@/core/contacts/schema";
+import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { CSRF_COOKIE, CSRF_HEADER } from "@/core/http/csrf";
+import { siteOrigin } from "@/core/seo/origin";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const INFO = { name: "Aurora Coast", version: "0.1.0" };
@@ -148,6 +151,51 @@ describe.runIf(hasDatabase)("the handshake", { timeout: 30_000 }, () => {
     expect(
       (got.body.result as { messages: { content: { text: string } }[] }).messages[0]!.content.text,
     ).toContain("approve");
+  });
+
+  describe("browser-reachable transport (C11.10)", () => {
+    const post = (headers: Record<string, string>) =>
+      handleMcp(
+        new Request("http://localhost/api/mcp", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+        }),
+        INFO,
+      );
+    const site = new URL(siteOrigin()).origin;
+
+    it("refuses anything but application/json before reading the body", async () => {
+      expect((await post({ "content-type": "text/plain" })).status).toBe(415);
+      expect((await post({})).status).toBe(415);
+      expect((await post({ "content-type": "application/json; charset=utf-8" })).status).toBe(200);
+    });
+
+    it("refuses a cookie-authenticated request without the CSRF token", async () => {
+      const cookie = `${SESSION_COOKIE}=forged-session`;
+      const refused = await post({ "content-type": "application/json", cookie });
+      expect(refused.status).toBe(403);
+      const allowed = await post({
+        "content-type": "application/json",
+        cookie: `${cookie}; ${CSRF_COOKIE}=token-value`,
+        [CSRF_HEADER]: "token-value",
+        origin: site,
+      });
+      expect(allowed.status).toBe(200);
+    });
+
+    it("refuses a foreign Origin unless the request carries its own credential", async () => {
+      expect(
+        (await post({ "content-type": "application/json", origin: "https://rebound.example" })).status,
+      ).toBe(403);
+      expect((await post({ "content-type": "application/json", origin: site })).status).toBe(200);
+      const keyed = await post({
+        "content-type": "application/json",
+        origin: "https://inspector.example",
+        authorization: "Bearer not-a-real-key",
+      });
+      expect(keyed.status).toBe(200);
+    });
   });
 
   it("refuses a body that is not JSON", async () => {

@@ -6824,7 +6824,7 @@ export interface ServiceCatalog {
     output: { id: string; contactId: string; variantId: string; bookingId: string | null; calendarId: string; startsAt: string; dueAt: string; unit: "hour" | "day" | "week"; units: number; status: "reserved" | "out" | "overdue" | "returned" | "closed" | "cancelled"; quotedMinor: number; depositMinor: number; currency: string | null; invoiceId: string | null; pickedUpAt: string | null; returnedAt: string | null; conditionOut: string | null; conditionIn: string | null; returnCondition: ("fine" | "damaged" | "lost") | null; lateFeeMinor: number; damageFeeMinor: number; depositRefundMinor: number; notes: string | null; [key: string]: unknown };
   };
   "rentals.handOver": {
-    input: { id: string; condition?: string | null };
+    input: { id: string; condition?: string | null; overrideRequirements?: boolean };
     output: { id: string; contactId: string; variantId: string; bookingId: string | null; calendarId: string; startsAt: string; dueAt: string; unit: "hour" | "day" | "week"; units: number; status: "reserved" | "out" | "overdue" | "returned" | "closed" | "cancelled"; quotedMinor: number; depositMinor: number; currency: string | null; invoiceId: string | null; pickedUpAt: string | null; returnedAt: string | null; conditionOut: string | null; conditionIn: string | null; returnCondition: ("fine" | "damaged" | "lost") | null; lateFeeMinor: number; damageFeeMinor: number; depositRefundMinor: number; notes: string | null; [key: string]: unknown };
   };
   "rentals.list": {

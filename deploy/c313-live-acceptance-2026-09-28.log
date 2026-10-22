@@ -3,7 +3,7 @@
 # Operator: acceptance run executed against the real production API.
 #
 # SANITIZATION RULES APPLIED TO THIS LOG:
-#   - PM site apiKey: NEVER printed (read from /home/tony/.config/pm-c3-acceptance-key,
+#   - PM site apiKey: NEVER printed (read from <operator-key-file>,
 #     0600, used only via shell vars / file reads).
 #   - Freeholder session/API tokens: never printed (held in local 0600 files).
 #   - LiveKit JWTs: logged prefix + length + claims subset only (never full JWT).
@@ -14,7 +14,7 @@
 #     contract version 2026-09-28.comms-recording-lifecycle (confirmed via
 #     GET /api/integration/contract + /api/integration/capabilities?ring=comms)
 #   - PM site: freeholder-c3-acceptance ($1.00/100-min grant)
-#   - Freeholder droplet: 104.131.118.196, /opt/freeholder, ghcr.io/campdenman/freeholder:edge
+#   - Freeholder droplet: <source-droplet-ip>, /opt/freeholder, ghcr.io/campdenman/freeholder:edge
 #     RE-PULLED at start of this run (previous image predated #430 merge 3c0d18a).
 #   - Local tunnels: 127.0.0.1:3001 -> app:3000, 127.0.0.1:55433 -> db:5432 (pre-existing, verified)
 #
