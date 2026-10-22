@@ -127,33 +127,43 @@ async function seedAtPinnedClock(pinned: Date): Promise<Array<{ source: string; 
         union all select 'payments', count(*)::int from payments where ${mine} and created_at > ${at}::timestamptz
         union all select 'runs', count(*)::int from runs where ${mine} and started_at > ${at}::timestamptz
         union all select 'contacts', count(*)::int from contacts where ${mine} and created_at > ${at}::timestamptz
-        union all select 'seeded-bookings', least(count(*), 1)::int - 1 from bookings where ${mine}
-        union all select 'off-hours', count(*)::int from bookings
-          where ${mine} and (
-                extract(dow from starts_at at time zone 'America/Vancouver') = 0
-             or extract(hour from starts_at at time zone 'America/Vancouver') < 9
-             or (ends_at at time zone 'America/Vancouver')::time > time '17:00')`)) as unknown as Array<{
+        union all select 'seeded-bookings', least(count(*), 1)::int - 1 from bookings where ${mine}`)) as unknown as Array<{
         source: string;
         n: number;
         detail?: string | null;
       }>;
-      // Name the offending sittings, so a failure explains itself.
-      const [offHours] = (await tx.execute(sql`
-        select string_agg(
-          status || ' ' || (starts_at at time zone 'America/Vancouver')::text || ' to '
-            || (ends_at at time zone 'America/Vancouver')::text
-            || case when rescheduled_from_id is not null then ' (moved)' else '' end,
-          '; ') as detail
-        from bookings
-        where ${mine} and (
-              extract(dow from starts_at at time zone 'America/Vancouver') = 0
-           or extract(hour from starts_at at time zone 'America/Vancouver') < 9
-           or (ends_at at time zone 'America/Vancouver')::time > time '17:00')`)) as unknown as Array<{
-        detail: string | null;
+      // Studio hours are judged on the application's clock (Node's time-zone
+      // data, which the seed and every rendered page use), not Postgres's:
+      // the two can ship different tzdata releases. CI's database once read a
+      // December sitting an hour later than Node did (16:30 against 15:30),
+      // because their releases disagreed about Vancouver's winter offset.
+      const sittings = (await tx.execute(sql`
+        select status, starts_at, ends_at from bookings where ${mine}`)) as unknown as Array<{
+        status: string;
+        starts_at: string | Date;
+        ends_at: string | Date;
       }>;
-      findings = findings.map((row) =>
-        row.source === "off-hours" ? { ...row, detail: `${pinned.toISOString()}: ${offHours?.detail ?? ""}` } : row,
-      );
+      const open: Record<number, [number, number] | null> = {
+        0: null, 1: [9, 17], 2: [9, 17], 3: [9, 17], 4: [9, 17], 5: [9, 16], 6: [10, 14],
+      };
+      const offHours = sittings.filter((sitting) => {
+        const start = studioParts(new Date(sitting.starts_at));
+        const end = studioParts(new Date(sitting.ends_at));
+        const hours = open[start.weekday];
+        return (
+          !hours ||
+          end.day !== start.day ||
+          start.hour * 60 + start.minute < hours[0] * 60 ||
+          end.hour * 60 + end.minute > hours[1] * 60
+        );
+      });
+      findings.push({
+        source: "off-hours",
+        n: offHours.length,
+        detail: `${pinned.toISOString()}: ${offHours
+          .map((sitting) => `${sitting.status} ${new Date(sitting.starts_at).toISOString()} to ${new Date(sitting.ends_at).toISOString()}`)
+          .join("; ")}`,
+      });
       throw new Rollback();
     })
     .catch((error: unknown) => {
