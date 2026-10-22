@@ -24,6 +24,7 @@
 // briefly reach 2× the limit. That is an accepted trade for a counter that is
 // one upsert with no history table, and it is nowhere near loose enough to
 // matter for password guessing at these limits.
+import { isIP } from "node:net";
 import { sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import type { Actor, Tx } from "@/core/service";
@@ -41,9 +42,62 @@ import type { Actor, Tx } from "@/core/service";
  */
 export function anonymousClientKey(actor: Actor): string {
   const trusted = actor.request?.trustedIp;
-  if (trusted) return `ip:${trusted}`;
-  return `untrusted-ip:${actor.request?.ip ?? "unknown"}`;
+  if (trusted) return `ip:${clientNetwork(trusted)}`;
+  const forwarded = actor.request?.ip;
+  return `untrusted-ip:${forwarded ? clientNetwork(forwarded) : "unknown"}`;
 }
+
+/**
+ * The part of an address that names one client, for counting (C11.10).
+ *
+ * An IPv6 subscriber is routinely handed a whole /64 and can pick a fresh
+ * address from it for every request, so a limit keyed on the full address is
+ * no limit at all; the /64 is what one household or one server holds. An
+ * IPv4-mapped IPv6 address (`::ffff:192.0.2.1`) is the IPv4 address it
+ * carries, so the same visitor is not two subjects depending on the socket
+ * family. Anything that is not an address is returned unchanged.
+ */
+export function clientNetwork(ip: string): string {
+  const family = isIP(ip);
+  if (family !== 6) return ip;
+  const groups = expandIpv6(ip.toLowerCase());
+  if (groups.slice(0, 5).every((g) => g === 0) && groups[5] === 0xffff) {
+    const [hi = 0, lo = 0] = [groups[6], groups[7]];
+    return [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff].join(".");
+  }
+  return `${groups.slice(0, 4).map((g) => g.toString(16)).join(":")}::/64`;
+}
+
+/** Eight 16-bit groups from a valid IPv6 literal (zone id dropped). */
+function expandIpv6(ip: string): number[] {
+  const bare = ip.split("%", 1)[0]!;
+  const [head = "", tail] = bare.split("::", 2);
+  const parse = (part: string): number[] => {
+    if (!part) return [];
+    const out: number[] = [];
+    for (const piece of part.split(":")) {
+      if (piece.includes(".")) {
+        const [a = 0, b = 0, c = 0, d = 0] = piece.split(".").map(Number);
+        out.push((a << 8) | b, (c << 8) | d);
+      } else {
+        out.push(parseInt(piece, 16));
+      }
+    }
+    return out;
+  };
+  const left = parse(head);
+  const right = tail === undefined ? [] : parse(tail);
+  const fill = new Array<number>(Math.max(0, 8 - left.length - right.length)).fill(0);
+  return [...left, ...fill, ...right];
+}
+
+/**
+ * How much higher the site-wide ceiling sits for callers whose address the
+ * deployment validated. Their per-client key is the stronger one, so their
+ * ceiling is looser; it still exists, because "validated" rests on a platform
+ * behaving as documented and one client can hold many addresses.
+ */
+export const TRUSTED_BACKSTOP_FACTOR = 10;
 
 export interface RateLimitPolicy {
   /** Attempts allowed per window, per key. */

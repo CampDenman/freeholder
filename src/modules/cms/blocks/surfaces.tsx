@@ -8,6 +8,9 @@ import { submitInboundAction } from "../../../../app/(public)/inbound-actions";
 import { addToCartLabels, AddToCart } from "../../../../app/(public)/buy/AddToCart";
 import { SiteChatClient } from "./SiteChatClient";
 import { defineBlock, firstQueryValue } from "./types";
+import { failureFromQuery, failureMessageKey, returnedValues } from "@/core/http/public-form-return";
+import type { FormReturn } from "@/core/http/public-form-return";
+import { env } from "@/core/env";
 import { socialEmbed } from "./social";
 import { buyableOf } from "./merchandising";
 import {
@@ -765,8 +768,9 @@ export const quoteRequest = defineBlock({
     }
     return (
       <form action={submitInboundAction} className="grid max-w-prose gap-3">
+        <InboundFailure ctx={ctx} invalidKey="cms.inbound.failed" kind="quote" />
         <input type="hidden" name="kind" value="quote" />
-        <InboundFields t={ctx.t} />
+        <InboundFields t={ctx.t} values={inboundValues(ctx, "quote")} />
         <button type="submit" className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent">
           {ctx.t("cms.inbound.sendQuote")}
         </button>
@@ -797,6 +801,7 @@ export const tip = defineBlock({
     }
     return (
       <form action={submitInboundAction} className="grid max-w-md gap-3">
+        <InboundFailure ctx={ctx} invalidKey="cms.inbound.failed" />
         <input type="hidden" name="kind" value="tip" />
         <input type="hidden" name="currency" value={props.currency} />
         <label className="grid gap-1 text-sm">
@@ -886,18 +891,14 @@ export const siteChat = defineBlock({
     }
     return (
       <div className="grid gap-4">
-        {ctx.query?.inboundError === "1" ? (
-          <p role="alert" className="max-w-prose rounded-md border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
-            {ctx.t("cms.chat.failed")}
-          </p>
-        ) : null}
+        <InboundFailure ctx={ctx} invalidKey="cms.chat.failed" kind="chat" />
         <form action={submitInboundAction} className="grid max-w-prose gap-3">
           <input type="hidden" name="kind" value="chat" />
           <label aria-hidden="true" className="absolute -start-[10000px] h-px w-px overflow-hidden">
             <span>{ctx.t("cms.chat.leaveBlank")}</span>
             <input type="text" name="entry_ref" tabIndex={-1} autoComplete="off" />
           </label>
-          <InboundFields t={ctx.t} />
+          <InboundFields t={ctx.t} values={inboundValues(ctx, "chat")} />
           <button type="submit" className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent">
             {ctx.t("cms.inbound.sendChat")}
           </button>
@@ -919,23 +920,56 @@ export function messengerDeepLink(username: string): string {
   return `https://m.me/${encodeURIComponent(username)}`;
 }
 
-function InboundFields({ t }: { t: (key: string) => string }) {
+function InboundFields({ t, values }: { t: (key: string) => string; values?: Record<string, string> }) {
   return (
     <>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.name")}</span>
-        <input type="text" name="name" autoComplete="name" required className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
+        <input type="text" name="name" autoComplete="name" required defaultValue={values?.name} className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
       </label>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.email")}</span>
-        <input type="email" name="email" autoComplete="email" required className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
+        <input type="email" name="email" autoComplete="email" required defaultValue={values?.email} className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
+        {env().FREEHOLDER_PLAYGROUND === "1" ? (
+          <span className="text-xs text-ink-muted">{t("playground.fictionalHint")}</span>
+        ) : null}
       </label>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.message")}</span>
-        <textarea name="message" required rows={4} className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
+        <textarea name="message" required rows={4} defaultValue={values?.message} className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
       </label>
     </>
   );
+}
+
+/**
+ * The refusal line above an inbound form. The URL carries a reason code
+ * only; the visitor's answers come back through `ctx.formReturn`.
+ */
+function InboundFailure({ ctx, invalidKey, kind }: { ctx: InboundCtx; invalidKey: string; kind?: "quote" | "chat" }) {
+  if (ctx.query?.inboundError !== "1") return null;
+  return (
+    <p role="alert" className="max-w-prose rounded-md border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
+      {ctx.t(failureMessageKey(failureFromQuery(ctx.query?.failure), invalidKey))}
+      {kind && inboundValues(ctx, kind) ? ` ${ctx.t("public.failure.kept")}` : null}
+    </p>
+  );
+}
+
+type InboundCtx = {
+  query?: Record<string, string | string[] | undefined>;
+  t: (key: string) => string;
+  formReturn?: FormReturn | null;
+};
+
+/**
+ * A refused attempt's answers, only while the page is showing that refusal:
+ * a cookie left over from an earlier failure must never pre-fill the form
+ * the visitor sees after a later success.
+ */
+function inboundValues(ctx: InboundCtx, kind: "quote" | "chat"): Record<string, string> | undefined {
+  if (ctx.query?.inboundError !== "1") return undefined;
+  return returnedValues(ctx.formReturn, `inbound:${kind}`);
 }
 
 /* ---------------------------------------------------------------- C2.10 */

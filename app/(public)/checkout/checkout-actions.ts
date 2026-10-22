@@ -17,6 +17,7 @@ import { getCart, quoteShipping, shopperCheckout } from "@/modules/catalog/servi
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
+import { PLAYGROUND_REFUSAL } from "@/core/demo/playground-policy";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale } from "../../i18n";
@@ -35,6 +36,10 @@ async function localize(path: string): Promise<string> {
 }
 
 function serviceCode(error: unknown): string {
+  // C1.38: a playground refusal is not "this cart belongs to someone else".
+  if (error instanceof ServiceError && error.code === "permission" && error.message === PLAYGROUND_REFUSAL) {
+    return "playground";
+  }
   return error instanceof ServiceError ? error.code : "failed";
 }
 

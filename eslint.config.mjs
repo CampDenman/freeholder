@@ -80,6 +80,29 @@ const COLOR_GATE = [
     message:
       "Inline style colour literals bypass the design tokens (CLAUDE.md). Use a semantic token from src/core/design/tokens.ts.",
   },
+  {
+    // SVG paints a colour through attributes, not classes or style, so an
+    // inline icon with `fill="#16181d"` slipped past both rules above and
+    // renders dark-on-dark in the dark scheme. `currentColor` with a token
+    // utility on the element keeps it on the palette.
+    selector:
+      'JSXAttribute[name.name=/^(fill|stroke|stopColor|floodColor|lightingColor|color)$/] Literal[value=/(#[0-9a-fA-F]{3,8}\\b|rgba?\\(|hsla?\\(|oklch\\()/]',
+    message:
+      "SVG fill/stroke colour literals bypass the design tokens (CLAUDE.md). Use currentColor with a semantic text-* utility, or a token from src/core/design/tokens.ts.",
+  },
+  {
+    // The same attributes written into SVG markup assembled as a string.
+    selector:
+      'Literal[value=/(fill|stroke|stop-color|flood-color)\\s*[=:]\\s*[\'"]?\\s*(#[0-9a-fA-F]{3,8}\\b|rgba?\\(|hsla?\\(|oklch\\()/]',
+    message:
+      "SVG fill/stroke colour literals bypass the design tokens (CLAUDE.md). Use currentColor or a token from src/core/design/tokens.ts.",
+  },
+  {
+    selector:
+      'TemplateElement[value.raw=/(fill|stroke|stop-color|flood-color)\\s*[=:]\\s*[\'"]?\\s*(#[0-9a-fA-F]{3,8}\\b|rgba?\\(|hsla?\\(|oklch\\()/]',
+    message:
+      "SVG fill/stroke colour literals bypass the design tokens (CLAUDE.md). Use currentColor or a token from src/core/design/tokens.ts.",
+  },
 ];
 
 const CONTACT_CREATE_IMPORT = {
@@ -94,6 +117,29 @@ const CONTACT_CREATE_CALL = {
     "CallExpression[callee.property.name='callAsSystem'][arguments.0.name='createContact']",
   message:
     "ctx.callAsSystem(createContact) is forbidden outside app/(admin). Use contacts.resolve.",
+};
+
+// The registry lookup is the other way to reach contacts.create without
+// importing it by name.
+const CONTACT_CREATE_LOOKUP = {
+  selector: "CallExpression[callee.name='getService'][arguments.0.value='contacts.create']",
+  message:
+    "contacts.create is deliberate human entry (CLAUDE.md). Automated and public paths call contacts.resolve.",
+};
+
+// Route handlers never reach the database directly (MASTER.md §15.5).
+const APP_DATABASE_IMPORTS = {
+  group: [
+    "@/core/db",
+    "@/core/db/*",
+    "@/core/*/schema",
+    "@/modules/*/schema",
+    "drizzle-orm",
+    "drizzle-orm/*",
+    "postgres",
+  ],
+  message:
+    "Route handlers never reach the database directly (MASTER.md §15.5) — call the service layer.",
 };
 
 const I18N_GATE = [
@@ -178,31 +224,32 @@ export default tseslint.config(
       // The server actions in app/**/*.ts are exactly the files that parse
       // money out of FormData — the money gate must reach them, not just the
       // rendered .tsx surfaces.
-      "no-restricted-syntax": ["error", ...MONEY_GATE, ...COLOR_GATE],
+      "no-restricted-syntax": [
+        "error",
+        ...MONEY_GATE,
+        ...COLOR_GATE,
+        CONTACT_CREATE_CALL,
+        CONTACT_CREATE_LOOKUP,
+      ],
       // Service-layer gate (MASTER.md §15.5): routes call services, never the
       // database. Blocking only the schema modules left the front door open —
       // a handler could take the Drizzle client itself and issue raw SQL,
       // skipping permissions, validation, the audit trail and the timeline.
+      // Public surfaces (forms, checkout, portal, API routes) are automated
+      // paths, so they may not import contacts.create either.
       "no-restricted-imports": [
         "error",
-        {
-          patterns: [
-            {
-              group: [
-                "@/core/db",
-                "@/core/db/*",
-                "@/core/*/schema",
-                "@/modules/*/schema",
-                "drizzle-orm",
-                "drizzle-orm/*",
-                "postgres",
-              ],
-              message:
-                "Route handlers never reach the database directly (MASTER.md §15.5) — call the service layer.",
-            },
-          ],
-        },
+        { paths: [CONTACT_CREATE_IMPORT], patterns: [APP_DATABASE_IMPORTS] },
       ],
+    },
+  },
+  {
+    // The owner's "add a contact" form is the one deliberate human entry
+    // point (CLAUDE.md). Only the contact rules are lifted here.
+    files: ["app/(admin)/actions.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [APP_DATABASE_IMPORTS] }],
+      "no-restricted-syntax": ["error", ...MONEY_GATE, ...COLOR_GATE],
     },
   },
   {
@@ -220,6 +267,7 @@ export default tseslint.config(
         ...COLOR_GATE,
         ...I18N_GATE,
         CONTACT_CREATE_CALL,
+        CONTACT_CREATE_LOOKUP,
       ],
     },
   },

@@ -16,6 +16,9 @@
 // failure names the page, rather than in a crawler where it names a URL.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/core/db";
+import { eq, sql } from "drizzle-orm";
+import { moduleSettings } from "@/core/settings/schema";
+import { PLAYGROUND_BASELINE_MODULE } from "@/core/demo/playground-policy";
 import { resetEnvForTests } from "@/core/env";
 import { assets } from "@/core/media/schema";
 import { pages } from "@/modules/cms/schema";
@@ -251,6 +254,36 @@ describe.runIf(hasDatabase)("installing the demo", { timeout: 120_000 }, () => {
       () => seedDemoIfRequested(),
     );
     expect(again).toEqual({ status: "already-populated" });
+  });
+
+  it("counts a late busy layer as playground seed, not visitor rows", async () => {
+    await withEnvironment(
+      { NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "1", FREEHOLDER_PLAYGROUND: undefined },
+      () => seedDemoIfRequested(),
+    );
+    // A baseline recorded before the busy layer finished (a restart between
+    // the two installs, after the baseline was taken).
+    const [{ contacts: before } = { contacts: 0 }] = (await db().execute(
+      sql`select count(*)::int as contacts from contacts`,
+    )) as unknown as Array<{ contacts: number }>;
+    await db()
+      .insert(moduleSettings)
+      .values({ module: PLAYGROUND_BASELINE_MODULE, config: { baseline: { contacts: before } } });
+
+    const retry = await withEnvironment(
+      { NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "busy", FREEHOLDER_PLAYGROUND: "1" },
+      () => seedDemoIfRequested(),
+    );
+    expect(retry.status).toBe("already-populated");
+    const [stored] = await db()
+      .select({ config: moduleSettings.config })
+      .from(moduleSettings)
+      .where(eq(moduleSettings.module, PLAYGROUND_BASELINE_MODULE));
+    const [{ contacts: after } = { contacts: 0 }] = (await db().execute(
+      sql`select count(*)::int as contacts from contacts`,
+    )) as unknown as Array<{ contacts: number }>;
+    expect(after).toBeGreaterThan(before + 150);
+    expect((stored!.config as { baseline: Record<string, number> }).baseline.contacts).toBe(after);
   });
 
   it("never adds the busy layer to a site that is not the demo business", async () => {

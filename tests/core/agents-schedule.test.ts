@@ -3,7 +3,7 @@
 // Scheduled playbooks (C4.14, MASTER.md §40). The interesting cases are all
 // failure modes of schedulers: the stampede after an outage, the pile-up when
 // a run is slow, and the hour that moves twice a year.
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { agentPlaybooks, agentTasks } from "@/core/agents/schema";
@@ -18,6 +18,27 @@ import {
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const SYSTEM = { kind: "system" } as const;
+const WINDOW = 5 * 60_000;
+
+/**
+ * Pin the JavaScript clock (and only the clock: the database driver's timers
+ * stay real). The instant is near the real time, because rows the database
+ * stamps with its own `now()` sit beside the ones the scheduler stamps.
+ *
+ * Without this, "the next run is after now" races the five-minute boundary:
+ * a tick at hh:m4:59.996 rightly schedules hh:m5:00.000, and an assertion that
+ * reads the real clock four milliseconds later sees a next run that is already
+ * due — a correct schedule reported as a failure.
+ */
+function pinClock(at: number): number {
+  vi.useFakeTimers({ toFake: ["Date"], now: at });
+  return at;
+}
+
+/** A moment safely inside the current five-minute window. */
+function midWindow(): number {
+  return Math.floor(Date.now() / WINDOW) * WINDOW + WINDOW / 2;
+}
 
 describe("cron in a named zone", () => {
   it("keeps a morning schedule in the morning across a clock change", () => {
@@ -43,7 +64,12 @@ describe.runIf(hasDatabase)("scheduled playbooks", { timeout: 60_000 }, () => {
       .insert(users)
       .values({ id: OWNER.userId, email: "owner@example.test", role: "owner" })
       .onConflictDoNothing();
+    pinClock(midWindow());
   }, 60_000);
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   afterAll(closeDb);
 
@@ -90,6 +116,57 @@ describe.runIf(hasDatabase)("scheduled playbooks", { timeout: 60_000 }, () => {
     expect(tasks[0]).toMatchObject({ source: "schedule", inputTrust: "owner" });
     // Nothing is due any more, so a second tick this minute does nothing.
     expect(await runDuePlaybooks.call({}, SYSTEM)).toMatchObject({ started: 0 });
+  });
+
+  it("schedules the boundary a tick lands just before, and runs it once", async () => {
+    // The instant the merge queue caught: four milliseconds before a five-
+    // minute boundary. The next run is that boundary — the genuine next
+    // occurrence, not a repeat of the window just spent.
+    const boundary = Math.ceil(Date.now() / WINDOW) * WINDOW;
+    const id = await scheduled();
+    pinClock(boundary - 4);
+    await due(id);
+    expect(await runDuePlaybooks.call({}, SYSTEM)).toMatchObject({ started: 1 });
+
+    const [playbook] = await db()
+      .select()
+      .from(agentPlaybooks)
+      .where(eq(agentPlaybooks.id, id));
+    expect(playbook!.nextRunAt!.getTime()).toBe(boundary);
+
+    // Before the boundary nothing is due, however many ticks arrive.
+    pinClock(boundary - 1);
+    expect(await runDuePlaybooks.call({}, SYSTEM)).toMatchObject({
+      started: 0,
+      skipped: 0,
+      missed: 0,
+    });
+
+    // At the boundary it is a new occurrence, claimed exactly once, and the
+    // schedule moves strictly past it even though "now" equals the window.
+    await db().update(agentTasks).set({ status: "done" });
+    pinClock(boundary);
+    expect(await runDuePlaybooks.call({}, SYSTEM)).toMatchObject({ started: 1 });
+    expect(await runDuePlaybooks.call({}, SYSTEM)).toMatchObject({ started: 0 });
+    const [after] = await db()
+      .select()
+      .from(agentPlaybooks)
+      .where(eq(agentPlaybooks.id, id));
+    expect(after!.nextRunAt!.getTime()).toBe(boundary + WINDOW);
+    expect(await tasksFor(id)).toHaveLength(2);
+  });
+
+  it("starts one run when two schedulers tick at the same moment", async () => {
+    // Two replicas, one due window. The row lock means the second claimer
+    // either skips the row or finds it already advanced; neither starts work.
+    const id = await scheduled();
+    await due(id);
+    const [a, b] = await Promise.all([
+      runDuePlaybooks.call({}, SYSTEM),
+      runDuePlaybooks.call({}, SYSTEM),
+    ]);
+    expect(a.started + b.started).toBe(1);
+    expect(await tasksFor(id)).toHaveLength(1);
   });
 
   it("comes back from an outage with one overdue run, not hundreds", async () => {

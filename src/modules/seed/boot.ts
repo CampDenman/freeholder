@@ -121,7 +121,13 @@ export async function seedDemoIfRequested(): Promise<DemoSeedOutcome> {
       if (demoSeedBusy(environment)) {
         const { busyDemoPending } = await import("./busy");
         if (await busyDemoPending()) {
-          return { status: "already-populated", busy: await installBusy() };
+          // Normally the baseline is recorded after this whole function, so
+          // it already includes the busy rows. If a baseline exists anyway,
+          // the busy rows are seed too: add them to it, so they are not
+          // charged to visitors' caps.
+          const { extendPlaygroundBaseline } = await import("@/core/demo/playground");
+          const busy = await extendPlaygroundBaseline(installBusy);
+          return { status: "already-populated", busy };
         }
       }
       return { status: "already-populated" };

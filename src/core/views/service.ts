@@ -27,7 +27,7 @@
 // was renamed still opens; it simply filters by less. Refusing to load it would
 // punish somebody for a change they did not make.
 import { z } from "zod";
-import { and, asc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Actor, type Tx } from "@/core/service";
 import { makeTrashServices } from "@/core/trash";
@@ -201,6 +201,17 @@ export const listViews = defineService({
   output: listed(viewRow.extend({ mine: z.boolean() })),
   handler: async (input, ctx) => {
     const userId = ctx.actor.kind === "user" ? ctx.actor.userId : null;
+    // A colleague's shared view is a working list of a module; it shows only
+    // to somebody who may open that list, by the same grant decision services
+    // use (two-factor included). A customer sees at most their own (C11.10).
+    // Decided in the query, so the page limit counts only visible rows.
+    const openable = viewEntities()
+      .filter((entity) => mayUseEntity(ctx.actor, entity))
+      .map((entity) => entity.key);
+    const sharedVisible =
+      openable.length > 0
+        ? and(eq(savedViews.shared, true), inArray(savedViews.entity, openable))
+        : sql`false`;
     const rows = await ctx.tx
       .select()
       .from(savedViews)
@@ -215,8 +226,8 @@ export const listViews = defineService({
               ? eq(savedViews.ownerUserId, userId)
               : undefined
             : userId
-              ? or(eq(savedViews.ownerUserId, userId), eq(savedViews.shared, true))
-              : eq(savedViews.shared, true),
+              ? or(eq(savedViews.ownerUserId, userId), sharedVisible)
+              : sharedVisible,
           input.trashedOnly ? isNotNull(savedViews.trashedAt) : isNull(savedViews.trashedAt),
         ),
       )

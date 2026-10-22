@@ -9,7 +9,13 @@ import { roles, roleGrants, sessions, users } from "@/core/auth/schema";
 import { createSession } from "@/core/auth/sessions";
 import { seedDefaultRoles } from "@/core/roles/defaults";
 import { defineService, ServiceError } from "@/core/service";
-import { PLAYGROUND_MANAGE, PLAYGROUND_VIEW } from "./playground-policy";
+import { moduleSettings } from "@/core/settings/schema";
+import {
+  PLAYGROUND_BASELINE_MODULE,
+  PLAYGROUND_MANAGE,
+  PLAYGROUND_VIEW,
+  playgroundCappedTables,
+} from "./playground-policy";
 
 const OWNER = "operator@playground.invalid";
 const VISITOR = "visitor@playground.invalid";
@@ -33,6 +39,72 @@ export async function initializePlayground(): Promise<void> {
     // No password and no public path to issue a session for the sentinel owner.
     await tx.insert(users).values([{ email: OWNER, role: "owner" }, { email: VISITOR, role: "playground" }]).onConflictDoNothing();
   });
+}
+
+/**
+ * Record how many rows each capped table holds now that the sample site is
+ * installed. Boot calls this after the demo seed (instrumentation.node.ts),
+ * so every hourly reset starts the caps from the freshly seeded sample.
+ *
+ * Once per database, never again: the hourly reset recreates the database,
+ * so the first boot after it is the one that follows the seed. A restart
+ * mid-hour (a crash, a heal, a deploy) must not count visitors' rows as
+ * seed and hand the caps back their headroom.
+ */
+export async function markPlaygroundBaseline(): Promise<void> {
+  if (env().FREEHOLDER_PLAYGROUND !== "1") return;
+  const baseline: Record<string, number> = {};
+  for (const table of playgroundCappedTables()) {
+    const [row] = await db().execute<{ count: number }>(
+      sql`select count(*)::int as count from ${sql.identifier(table)}`,
+    );
+    baseline[table] = Number(row?.count ?? 0);
+  }
+  await db()
+    .insert(moduleSettings)
+    .values({ module: PLAYGROUND_BASELINE_MODULE, config: { baseline } })
+    .onConflictDoNothing({ target: moduleSettings.module });
+}
+
+/**
+ * Run late seed work and count its rows as baseline (C1.38).
+ *
+ * The busy demo layer can finish on a restart after the plain demo (see
+ * seedDemoIfRequested). When the baseline was already recorded, the rows it
+ * adds are still seed, so they are added to the stored baseline rather than
+ * eating the visitors' headroom. Without a stored baseline this is just the
+ * work: the boot records the baseline afterwards.
+ */
+export async function extendPlaygroundBaseline<T>(work: () => Promise<T>): Promise<T> {
+  if (env().FREEHOLDER_PLAYGROUND !== "1") return work();
+  const [stored] = await db()
+    .select({ config: moduleSettings.config })
+    .from(moduleSettings)
+    .where(eq(moduleSettings.module, PLAYGROUND_BASELINE_MODULE))
+    .limit(1);
+  if (!stored) return work();
+  const countAll = async () => {
+    const counts: Record<string, number> = {};
+    for (const table of playgroundCappedTables()) {
+      const [row] = await db().execute<{ count: number }>(
+        sql`select count(*)::int as count from ${sql.identifier(table)}`,
+      );
+      counts[table] = Number(row?.count ?? 0);
+    }
+    return counts;
+  };
+  const before = await countAll();
+  const result = await work();
+  const after = await countAll();
+  const baseline = { ...((stored.config as { baseline?: Record<string, number> }).baseline ?? {}) };
+  for (const table of Object.keys(after)) {
+    baseline[table] = (baseline[table] ?? 0) + Math.max(0, after[table]! - (before[table] ?? 0));
+  }
+  await db()
+    .update(moduleSettings)
+    .set({ config: { baseline } })
+    .where(eq(moduleSettings.module, PLAYGROUND_BASELINE_MODULE));
+  return result;
 }
 
 export const enterPlayground = defineService({

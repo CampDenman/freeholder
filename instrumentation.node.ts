@@ -60,6 +60,9 @@ async function initializeRuntime(): Promise<void> {
       await initializePlayground();
       const { seedDemoIfRequested } = await import("@/modules/seed/boot");
       await seedDemoIfRequested();
+      // C1.38: caps count what visitors add, not what the seed installed.
+      const { markPlaygroundBaseline } = await import("@/core/demo/playground");
+      await markPlaygroundBaseline();
 
       // Every definition exists before the worker mounts a queue.
       phase = "job runtime";

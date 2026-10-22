@@ -254,15 +254,18 @@ describe.runIf(hasDatabase)("templates, countersigning and export", { timeout: 9
       .select({ token: contractDocuments.signToken, body: contractDocuments.bodySnapshot })
       .from(contractDocuments)
       .where(eq(contractDocuments.id, issued.id));
+    // The address is the one the request arrived from; a value in the body
+    // is not evidence and is ignored (C11.10).
     await signContract.call(
-      { token: row!.token!, signerName: "Rae Lane", ip: "203.0.113.7" },
-      ANON,
+      { token: row!.token!, signerName: "Rae Lane", ip: "198.51.100.66" },
+      { ...ANON, request: { ip: "203.0.113.7", userAgent: "Mozilla/5.0 (iPhone)" } },
     );
 
     const file = await exportContract.call({ id: issued.id }, OWNER);
     expect(file.filename).toMatch(/\.txt$/);
     expect(file.body).toContain("Rae Lane");
     expect(file.body).toContain("203.0.113.7");
+    expect(file.body).not.toContain("198.51.100.66");
     // The words in the file hash to the fingerprint printed in the file.
     const hash = createHash("sha256").update(row!.body, "utf8").digest("hex");
     expect(file.body).toContain(hash);

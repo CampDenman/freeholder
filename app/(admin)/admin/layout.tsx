@@ -19,6 +19,10 @@ import { SkipLink } from "@/ui/SkipLink";
 import { listGuidanceContexts } from "@/core/guidance/service";
 import { AdminGuidanceHelp } from "./AdminGuidanceHelp";
 import { PLATFORM_VERSION } from "@/core/platform";
+import { Suspense } from "react";
+import { env } from "@/core/env";
+import { ActionErrorFallback } from "./ActionErrorFallback";
+import { PlaygroundReadOnlyNotice } from "./PlaygroundReadOnlyNotice";
 
 export const dynamic = "force-dynamic";
 
@@ -188,6 +192,12 @@ export default async function AdminLayout({
         </div>
       </header>
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-5xl px-6 py-8">
+        {env().FREEHOLDER_PLAYGROUND === "1" ? (
+          <PlaygroundReadOnlyNotice text={t("playground.readOnly")} />
+        ) : null}
+        <Suspense fallback={null}>
+          <ActionErrorFallback />
+        </Suspense>
         {children}
       </main>
     </div>

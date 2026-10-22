@@ -1068,12 +1068,14 @@ monolith that has to boot on a $6 droplet. What core owns is the seam: a
 plugin registering a voice or video adapter attaches its artifacts — a
 recording asset, a transcript, a duration, a missed-call event — to the
 same `Conversation` and the same timeline, so a call is part of a person's
-history without core learning what a SIP trunk is. The de-facto provider
-behind that seam is paradisemodern's Paradise Comms — the owner's own
-platform (rooms, credentials and recordings per
-`/api/integration/capabilities`), so the compliance posture and pricing are
-the owner's; the Daily adapter remains in-tree as optional non-first-party
-code (owner decision 2026-09-27, §36).
+history without core learning what a SIP trunk is. Behind that seam sit
+interchangeable provider adapters, and no provider is chosen on a site
+owner's behalf: today Daily (hosted rooms) and Paradise Comms (Paradise
+Modern's hosted, LiveKit-based relay: rooms, credentials and recordings per
+`/api/integration/capabilities`). Each carries its own compliance posture
+and pricing, which the site owner accepts by choosing it. Member-to-member
+group calls can instead run on the owner's own LiveKit server (C12.24).
+(Owner decisions 2026-09-27 and 2026-10-22, §36.)
 
 ### 4.15 Subscriptions, entitlements and paywalls
 
@@ -1117,6 +1119,11 @@ up gated by a boolean somebody forgot to check.
   help doc.
 - **Trials, upgrades and downgrades are proration decisions, and they are
   stated per plan** rather than discovered at the first mid-cycle change.
+  A customer's own change in the portal follows the same rule, with one
+  guard: when it raises a proration invoice, the new plan is granted only once
+  that invoice is paid in full (a `provider` schedule prorates at the provider).
+  A change deferred to period end bills the new plan's own variant from the
+  first renewal after it.
 - **Dunning is a policy with a schedule**, not a single failed charge: retries
   at stated offsets, a grace period during which access continues, notices on
   the channels the contact consented to (§4.14), and a final action the owner
@@ -1513,7 +1520,7 @@ freeholder/                          # Apache-2.0
 │   │   ├── calendar/  (none/ — Google/Microsoft live in core/connections)
 │   │   ├── sms/       (twilio/, none/)
 │   │   ├── ai/        (anthropic/, openai/, none/)   # BYO key — grounding, drafting
-│   │   └── agent/     (pm_brain/, anthropic/, openai/, local/, none/)  # the builder (§37)
+│   │   └── agent/     (gateway/, paradise/, anthropic/, openai/, local/, none/)  # the builder (§37)
 │   │
 │   └── mcp/                         # bundled MCP server — tools generated from service registry
 │
@@ -1845,7 +1852,7 @@ export default defineConfig({
     calendar: "google",
     sms: "none",
     ai: "anthropic",
-    agent: "pm_brain",      // who builds this site (§37); "none" disables it
+    agent: "gateway",       // who builds this site (§37); "none" disables it
     fx: "manual",
   },
   preset: "service-business",
@@ -2538,11 +2545,11 @@ the native store — not an ongoing dependency.
   (§43.18, owner decision 2026-09-27); its adapter code remains in-tree as
   working optional code.
 - **Voice and video** (calls, video rooms, recordings, transcripts) through
-  provider adapters — de-facto first-party via paradisemodern's Paradise
-  Comms (owner decision 2026-09-27): rooms, credentials and recordings per
-  `/api/integration/capabilities`; transcripts unavailable until PM ships
-  them; provider erasure lands with PM's recording-delete API. The Daily
-  adapter remains in-tree as optional non-first-party code. Core owns the
+  interchangeable provider adapters, none preselected (owner decision
+  2026-10-22): Daily (hosted rooms, recordings, transcripts) and Paradise
+  Comms, Paradise Modern's hosted relay (rooms, credentials and recordings
+  per `/api/integration/capabilities`; transcripts unavailable until that
+  provider ships them; provider erasure via its recording-delete API). Core owns the
   conversation and the timeline; a provider's SDK, its compliance posture
   and its pricing stay behind a plugin boundary (§4.14).
 
@@ -2616,7 +2623,7 @@ Every accepted change is already audited with `actor = agent:<name>` (§4.8), an
 
 `adapters/agent/` — a family distinct from `adapters/ai` (§12), because these are different jobs with different risk: `ai` grounds answers and drafts translations; `agent` writes changes.
 
-**Default: `pm_brain` (Kimi K3).** That is *our* default and nothing more. Whoever clones this repository sets `adapters.agent` in `freeholder.config.ts` to whatever they run — a hosted provider, a local model, or `none`, which removes the builder entirely. A platform that hardcodes its owner's choice of intelligence has not understood §1.
+**Default: `none`.** The builder is off until a site owner chooses who runs it. Whoever deploys this repository sets `adapters.agent` in `freeholder.config.ts` (or `FREEHOLDER_AGENT`) to whatever they run: `gateway` — any OpenAI-compatible endpoint, hosted or self-hosted, named by `AGENT_GATEWAY_URL`, `AGENT_GATEWAY_API_KEY` and `AGENT_GATEWAY_MODEL`; `paradise` — Paradise Modern's hosted gateway, one optional provider (`PARADISEMODERN_API_KEY`; the older name `pm_brain` remains an accepted alias); or `none`, which removes the builder entirely. A platform that hardcodes its owner's choice of intelligence has not understood §1. (Owner decision 2026-10-22: provider choices carry neutral names.)
 
 ### The envelope
 
@@ -4229,6 +4236,107 @@ project without silent telemetry, and ready to carry money.
   evening and winter clocks, and hold the busy layer to 30 s and the
   database to 150 MB (`tests/core/seed-demo-busy.test.ts`, 20 tests;
   `seed-demo.test.ts` 17; `cms-chrome.test.ts` 7; `seo-surface.test.ts` 12).
+  Capacity follow-up 2026-10-21 (demo.freeholder.ai shares production's
+  4 GB / 2 vCPU droplet): the recipe had no restart policy, so an
+  out-of-memory kill left the demo down until the next reset. It also had
+  equal CPU priority with production, and Node sized the heap from the 768 MB
+  cgroup, so a measured 48-connection burst peaked at 736 MB. Both
+  playground containers now restart, carry `cpu_shares: 256`,
+  `oom_score_adj: 1000` and no swap. The app has 896 MB with a fixed 384 MB
+  old space; the live heap measured ~315 MB. The tmpfs-tuned database keeps
+  512 MB. The same burst peaked at 649 MB. A database restart comes back empty
+  from tmpfs. The app's health check is therefore a narrow schema probe,
+  `/api/health/db` (`src/core/runtime/schema-probe.ts`: one `to_regclass`
+  query, 3 s timeout). Readiness is not used because it also fails when a busy
+  demo's job heartbeats are late. `freeholder-playground-heal.timer` runs
+  `reset.sh --heal` every two minutes. It rebuilds when nothing serves, or
+  after two consecutive failed probes. Without overlap room it never stops a
+  playground that still answers HTTP unless its schema is missing. `FREEHOLDER_JOBS_POLL_SECONDS`
+  (default unchanged) is 15 in the playground, cutting measured idle database
+  transactions from ~70 to ~17 a second. `reset.sh` alternates two fixed
+  projects, picking the old one by which app holds the proxy network: the
+  fresh one boots privately and joins the proxy alias only once ready, then
+  the old one stops. Until that hand-over any failure removes the fresh stack
+  (an `EXIT` trap) and leaves the serving one alone. With less than
+  `PLAYGROUND_OVERLAP_MIN_MB` available (default 2200: the second stack's
+  1,408 MB of caps plus ~800 MB for production) it stops the old one first.
+  The demo Caddy site compresses (45 KB home page to 8.5 KB), queues at 16
+  upstream connections, allows 120 s for a response, retries for 20 s, and
+  otherwise answers a plain 503 with `Retry-After`. In playground mode the proxy mints no
+  analytics cookies, and only cookie-less, query-less GETs of CMS-rendered
+  pages carry `public, s-maxage=10, stale-while-revalidate=30` for a CDN
+  (`src/core/demo/playground-cache.ts`; every `app/` route root is listed and
+  never shared). Behind a CDN, viewers of one cached copy share its CSP
+  nonce for up to 40 s; query strings are never cached, so reflected markup
+  cannot reach it. Per-request render cost is unchanged: ~27 anonymous and ~30
+  admin renders a second per CPU, measured locally. Regressions:
+  `tests/core/playground-cache.test.ts`, `tests/core/playground-reset.test.ts`
+  (hand-over, failure clean-up and heal decisions against a stand-in
+  `docker`), `tests/core/deploy-recipe.test.ts`,
+  `tests/core/transactional-jobs.test.ts`. Changeset `playground-capacity.md`.
+  Not verified on a Docker host: overlap, alias hand-over and heal ran
+  against the stand-in `docker` only, and Caddy behaviour with Caddy 2.10.2 against a
+  local app. Isolation from production's kernel, disk, Caddy and TLS still
+  needs a CDN or a separate host.
+  Audit follow-up 2026-10-22 (public demo): a hands-on audit of
+  demo.freeholder.ai found the playground refusing its own public site. The
+  allow-list covered only the visitor's editing verbs, so every anonymous
+  public mutation (`forms.submit` on `/contact`, newsletter, event, cart,
+  chat, share, popups, reviews) failed with the playground refusal, and
+  `POST /api/analytics/vitals` answered 401 on every page. `PLAYGROUND_PUBLIC`
+  now admits the public site's verbs under new `PLAYGROUND_ROW_CAPS`
+  entries counted as growth past the post-seed baseline
+  (`markPlaygroundBaseline`, once per reset database, so the seed never
+  uses visitor headroom and a mid-hour restart never refunds it), a
+  shared `contacts` cap (public verbs resolve contacts as the
+  system), a per-client minute/hour budget spent before the shared ceiling
+  (`anonymousClientKey`, only when a client address is known) and an 8 KB
+  per-submission ceiling (256 KB on every install); `PLAYGROUND_PUBLIC_REFUSED` keeps credential flows (magic links,
+  portal sign-in), payment-provider checkout, uploads, the model-backed
+  assistant and visitor analytics refused with a stated reason, and a test
+  fails on any public mutation in neither list. Transactional mail queues to
+  a sink in the playground (`assertMailReady`/`sendMail`) and still fails
+  closed in `deliverQueuedMail`; the vitals route answers 204 there, keeping
+  "no visitor analytics". Public form actions no longer answer every
+  refusal with "check the fields below" and an empty form: a coarse reason
+  code (`src/core/http/public-form-return.ts`) separates answers to fix
+  (marked per field from the form's own schema), wait, unavailable here and
+  server fault, and the visitor's answers return in a two-minute httpOnly
+  cookie read by the routing layer (forms, quote and chat blocks; reason
+  codes also on newsletter, event and checkout). `PLAYGROUND_VIEW` now
+  grants read access to the business modules (inbox, invoices/payments,
+  scheduling, calendar, newsletters, galleries, quotes, assistant and the
+  rest) while writes stay governed by the allow-list; in playground mode
+  `requireStaffActor` opens a manage-only screen to a viewer and sends
+  operator machinery to `/admin/unavailable`, which explains the area,
+  instead of silently redirecting to the overview. The admin shell shows a
+  read-only notice on every non-content screen and a fallback for refusals
+  a screen did not render (adding an event), whose text comes from an
+  httpOnly flash cookie the refusing action set, never from the URL; catalog refusals
+  return to the posting screen (Promotions, not New product); collections
+  treats a refused segment read as none (was a 500); settings explains
+  modules a role cannot open; `/portal/login` has a title and explains the
+  playground. Regressions: `tests/core/playground.test.ts` (public verbs
+  pass signed out and as the visitor, mail fails closed, credential and
+  checkout verbs refused, every public mutation classified, contact-form,
+  contacts and submission-size caps, per-client budget, transactional sink
+  versus an ordinary install's refusal, no secret-shaped field in any query
+  the visitor may read, read-only screens),
+  `tests/core/playground-feedback.test.ts` (reason codes, answer-cookie keys
+  and size limit, read-once admin flash, posting-screen redirect,
+  manage-to-view guard), `tests/browser/playground.spec.ts` (signed-out
+  contact form, refusal keeps answers, vitals 204, portal title, admin tour
+  without bounces or 500s). Changeset
+  `playground-public-site-and-honest-refusals.md`. A local production
+  build with `FREEHOLDER_PLAYGROUND=1` was checked by hand: every static
+  admin route as the visitor answers without a 500 (translations 404s on a
+  one-language site by design), and the contact form, newsletter, vitals,
+  portal, Promotions and Events behaviours above were observed. The browser
+  suite ran against `fh_playground_test` but the shared database was too
+  slow for it to finish (entry step passed; the editor autosave and the
+  reset hook timed out with every request answering 200), and the
+  "separation and reset recovery" cases were blocked by a shared cluster
+  stuck on `DROP DATABASE`; both need a clean run.
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable
@@ -4623,11 +4731,12 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   (`scaffoldPlugin` + `inspectPluginFolder`; `tests/fixtures/sample-plugin`.
   Coverage in `tests/core/plugin-scaffold.test.ts`. **F04** `/admin/imports` start/preview/commit. **F05** N/A — `packages/plugin-kit` scaffold/dev harness and `tests/fixtures/sample-plugin`, not an HTTP/MCP route. **F07** `tests/core/plugin-scaffold.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugin-scaffold.test.ts` is the composition proof.)
 - [x] **C3.13** Ship first-party plugins for gift options/registries,
-  advanced communities, and voice and video artifacts — voice/video via
-  paradisemodern's Paradise Comms as the de-facto provider (rooms,
-  credentials, provider-confirmed end, recordings; transcripts unavailable
-  until PM ships them; provider erasure lands with PM's recording-delete
-  API) — and marketplace channel sync seams, as assigned by §§4.14 and 36.
+  advanced communities, and voice and video artifacts — voice/video through
+  interchangeable provider adapters with none preselected, Daily and
+  Paradise Comms today (rooms, credentials, provider-confirmed end,
+  recordings; transcripts where the provider ships them; provider erasure
+  through the provider's recording-delete API) — and marketplace channel
+  sync seams, as assigned by §§4.14 and 36.
   The marketplace plugin's Shopify import is a MIGRATION BRIDGE (import
   your Shopify history into the native store), not an ongoing dependency;
   the native store is the product (owner decision 2026-09-27, C3.24).
@@ -4716,6 +4825,22 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   droplet `CREDENTIAL_KEY`/owner-storage config) — each logged with
   before/after evidence; the adapter failed visibly and honestly at each
   one exactly as the #430 contract tests specify.)
+  **Provider naming, 2026-10-22 (owner decision, Tony Aly):** Paradise
+  Comms is presented as one optional provider, not the first-party one. The
+  normative text above, §4.14 and §36 now say "interchangeable provider
+  adapters, none preselected"; the dated pivot and live-acceptance records
+  are unchanged history. `/admin/voice-video` preselects no provider until
+  one is saved (an instance configured only through the Daily environment
+  variables still shows and runs Daily), the provider labels drop
+  "first-party"/"optional", and `voiceVideoProvider` refuses with a neutral
+  message instead of falling back to Paradise when nothing is configured.
+  The `paradise` provider id, its stored settings, webhook path and secrets
+  are unchanged, so existing sites keep working with no migration. Member
+  group calls on the owner's own LiveKit server (C12.24) are the self-hosted
+  alternative; no self-hosted LiveKit adapter exists for this plugin.
+  Evidence: `tests/browser/first-party-plugins.spec.ts` (no preselection,
+  neutral refusal), `tests/core/paradise-*.test.ts` unchanged and passing,
+  changeset `neutral-provider-names.md`.
 
 #### Packages, installation, export, and target parity
 
@@ -5086,6 +5211,25 @@ deployments are portable, testable and incapable of silently forking the truth.
   no longer overwrites a task the gate parked as `waiting_approval`.
   Provider pricing into `cost_cents` is C4.06's ledger. Coverage in
   `tests/core/agents-managed-loop.test.ts` with a scripted provider. **F04** `/admin/work` pause/kill. **F05** `agents.connect`/`claimTask`/`reportStep`/`completeTask` at `/api/v1/agents.*`; the managed loop's tool surface is `mcp/tools.toolsFor` (same catalogue). **F07** `tests/core/agents-workforce-adapter.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-workforce-adapter.test.ts` is the composition proof.)
+  **Provider naming, 2026-10-22 (owner decision, Tony Aly):** the
+  OpenAI-compatible family is neutral. `gateway` reaches any
+  OpenAI-compatible endpoint (bearer key, base URL and model named on the
+  connection or by `AGENT_GATEWAY_URL`/`AGENT_GATEWAY_API_KEY`/
+  `AGENT_GATEWAY_MODEL`; no host or model is guessed); `paradise` is
+  Paradise Modern's hosted gateway, one optional provider, with its
+  unchanged `x-api-key`, default host and model and `PARADISEMODERN_API_KEY`.
+  The §37 builder takes the same two choices. `pm_brain` stays an accepted
+  alias everywhere it was accepted (`FREEHOLDER_AGENT`, `adapters.agent`,
+  `agents.connect`, stored rows), through one map in
+  `src/adapters/agent/aliases.ts`. Stored rows are aliased on read and never
+  rewritten, so rolling back finds them; new writes store `paradise`, which
+  older builds do not know (the changeset says so). The instance-wide
+  `AGENT_GATEWAY_API_KEY` is sent only to `AGENT_GATEWAY_URL`: a gateway
+  connection on another host must name its own `credential_ref`, and
+  doctor names every missing gateway setting. Evidence:
+  `tests/core/agents-workforce-adapter.test.ts` (gateway wire shape, no
+  guessed host, key scoping, legacy env and stored-row aliases, doctor),
+  `src/core/config.test.ts`, changeset `neutral-provider-names.md`.
 - [x] **C4.06** Enforce per-run/task/agent/period budgets before every step;
   build spend ledger, estimates, alerts and owner-readable reporting.
   (`src/core/agents/pricing.ts` prices a turn in integer cents with bigint
@@ -5275,6 +5419,20 @@ deployments are portable, testable and incapable of silently forking the truth.
   `timezone`, `next_run_at`, `last_run_at`, `catch_up` and `last_outcome` with
   a partial index on the due predicate. Coverage in
   `tests/core/agents-schedule.test.ts`. **F04** `/admin/briefing` daily briefing. **F05** `agents.setPlaybookSchedule` at `/api/v1/agents.setPlaybookSchedule`, MCP `agents_setPlaybookSchedule`; `agents.runDuePlaybooks` is the system tick (hidden). **F07** `tests/core/agents-schedule.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-schedule.test.ts` is the composition proof.)
+  Audit follow-up 2026-10-21: a merge-queue failure (`expected 1792641000000 to
+  be greater than 1792641000004`) was investigated as a possible double run and
+  is a test-harness defect, not a product one. A tick at hh:m4:59.996 correctly
+  schedules the boundary four milliseconds away; the assertion read the real
+  clock after the call and saw that genuine next occurrence as already due.
+  `next_run_at` is computed strictly after the tick's `now`, and a tick is only
+  claimed when `next_run_at <= now`, so it is already strictly after
+  max(now, scheduled); claims are row-locked `skip locked`, so a second
+  scheduler skips or re-reads the advanced row. The suite now pins the
+  JavaScript clock (Date only), and adds a boundary regression (tick 4 ms
+  before the boundary schedules exactly the boundary, nothing runs before it,
+  the boundary occurrence runs once and advances one window) and a concurrent
+  two-scheduler tick that starts exactly one run, in
+  `tests/core/agents-schedule.test.ts`. No product or release-note change.
 - [x] **C4.15** Build briefing entities, contributor registry, preassembly,
   needs-me-first ordering, read state and per-section preferences.
   (`src/core/briefing/` holds the three tables §42 names and the mechanism
@@ -6310,6 +6468,36 @@ payment, tax, inventory and reporting path, with no floating-point money.
   this item uses the shared audit/outbox; product-wide
   export/restore/retention/erasure proof is still open. **F12**
   `tests/core/events.test.ts` is the composition proof.)
+  Audit follow-up 2026-10-21: the hold sweep ran up to 100 cancellations in
+  one transaction, so one failing promotion (the next person's email
+  erased) rolled every release back on every run. It is now an orchestrated
+  service: each hold is released by `events.expireHeldRegistration` in its
+  own transaction, failures are counted (`failed`) and logged, and a
+  payment in flight is counted `blocked`. The lapsed-hold query itself
+  leaves out holds whose invoice has money on it (the owner reconciles
+  those) and orders holds with a payment attempt in flight after every
+  other, so neither can fill a batch and starve holds that lapsed later.
+  (A hold whose release keeps failing is still retried oldest-first; that
+  residual is logged on every run.)
+  Admission invoices said tax was applied at issue but were created
+  `not_applicable`; the reason text now says plainly that no tax is
+  added. Regression: `tests/core/events.test.ts`; changeset
+  `event-hold-sweep.md`.
+  Admission tax 2026-10-21 (proposed; awaiting the site owner's
+  confirmation, kept in its own commit so it can be reverted alone):
+  admission is taxed through the same calculate path as every other sale,
+  with the place of supply where the event happens — from the primary
+  business location to the event's saved venue location, or to the
+  business location when the event names no venue. A venue typed only as
+  free text (`venueName`/`venueAddress` without a saved `venueLocationId`)
+  cannot be placed in a tax jurisdiction, so it is taxed as if held at the
+  business and the invoice memo says so (follow-up commit, droppable with
+  the first); choosing a saved location as the venue taxes it there. A
+  business with no location at all gets `not_applicable`, as catalog
+  orders do. Ticket prices are shown as entered, as store prices are; in a
+  tax-exclusive zone the tax is its own line on the invoice the attendee
+  lands on before paying. Regression: `tests/core/events.test.ts` ("taxes
+  admission where the event happens…"); changeset `event-admission-tax.md`.
 
 #### Quotes, contracts, projects, and time
 - [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/
@@ -9699,6 +9887,52 @@ schema they inherit reads as a designed thing rather than an excavation.
   `tests/core/owner-password-script.test.ts`. Refreshed review packet records
   the remaining API-token/ephemeral-Basic hashing findings for independent
   disposition. These repairs do not close C11.10.)*
+  Audit follow-up 2026-10-21 (service boundaries and gates): provider I/O
+  left inside `defineService` transactions now runs outside them. Capture
+  chunk/original writes and assembly reserve keys in the pending object
+  ledger, store bytes with no transaction open, and delete chunk objects only
+  through a post-commit job, so a failed write leaves the recording
+  recoverable. `messaging.sendSms` stages the message and enqueues
+  `core.deliverSms` (provider idempotency token = caller key; the job id is
+  the message id); number import/health, calendar sync, mailbox import,
+  gallery archive build, builder PR delivery, assistant answers, translation
+  drafts and builder proposals are orchestrators around short claim/apply
+  phases. `tests/core/long-running-service-boundary.test.ts` now scans every
+  `defineService` file in src/plugins/app, derives provider methods from the
+  adapter contracts, detects `storage()` I/O and follows named handlers
+  (temporary allowlist: invoicing payment-provider/POS, fixed separately);
+  `service-composition` covers plugins/app and named handlers;
+  `merge-completeness` checks per column and polymorphic `subject_id`, and a
+  conflicting second `registerContactReference` now throws — documents and
+  signup commissions filed against a contact are repointed. ESLint bans
+  contact creation from public app surfaces and SVG hex fills; packages are
+  scanned for colour literals; licence headers cover .py/.cjs/.nix/systemd/
+  Caddy; the plugin provider-boundary contract test is DB-free. Regression
+  evidence: `sms.test.ts`, `media-capture.test.ts`, `calendar-sync.test.ts`,
+  `mail-import.test.ts`, `assistant.test.ts`, `cms-translation-workflow.test.ts`,
+  `builder-content-lane.test.ts`, `documents.test.ts`,
+  `referrals-commission.test.ts`, `lint-gates.test.ts`,
+  `colour-literals.test.ts`. Changeset
+  `provider-calls-outside-transactions.md`. Not independent review evidence.
+  Review follow-up 2026-10-21: the agent write gate and approval inbox now
+  run orchestrated services after their own claim commits (an approval whose
+  deferred write fails returns to pending); a merge where both contacts hold
+  the same code's signup commission keeps the survivor's and reverses the
+  duplicate's unpaid one (undo restores it); deferred SMS delivery re-checks
+  number validity and marketing consent, records non-provider failures on the
+  last attempt, and serializes same-key sends; capture chunk/assembly applies
+  lock the session row and refuse a session closed meanwhile; builder PR
+  delivery uses one branch per proposal and resumes an existing PR. The merge
+  gate now covers subject_kind/target_type/entity_type/parent_type pointers
+  (attestation subjects are repointed). Known gate limits: the boundary gate
+  follows only same-file helpers, and the merge gate trusts each
+  registration's declared `columns` — per-module merge tests prove the moves.
+  A deferred approval is `executing` until its write reports back; the
+  approval sweep returns one stranded over an hour to pending with a note and
+  never re-runs it.
+  Evidence: `agents-approvals.test.ts`, `referrals-commission.test.ts`,
+  `sms.test.ts`, `media-capture.test.ts`, `builder-code-lane.test.ts`,
+  `attestations.test.ts`, `merge-completeness.test.ts`.
   Audit follow-up 2026-10-21 (web and auth): `/api/mcp` requires
   `application/json`, refuses a foreign `Origin` unless the request carries
   its own `Authorization` credential, and applies the CSRF check to
@@ -9719,7 +9953,8 @@ schema they inherit reads as a designed thing rather than an excavation.
   `untrustedBackstop` bounds forged addresses. The droplet, host-updater and
   playground Caddy recipes overwrite `X-Freeholder-Client-Ip` and set
   `TRUSTED_CLIENT_IP_HEADER` (app port unpublished); the plain compose recipe
-  and managed platforms set none (`deploy/client-readiness.md`).
+  sets none, App Platform and Railway set their documented headers from
+  2026-10-21, and Render and Replit set none (`deploy/client-readiness.md`).
   `safeLocalPath` also refuses dot segments (raw or `%2e`) and any resolved
   result beginning `//` or `/\`. `ads.creativeTag` is system-only.
   `rentals.reserve` books a non-staff hire as a `requested` booking, which
@@ -9767,6 +10002,90 @@ schema they inherit reads as a designed thing rather than an excavation.
   `tests/core/invoicing-pos.test.ts` failed before each repair.
   Changeset `payment-provider-boundary.md`. This repair is not independent
   review evidence.
+  Audit follow-up 2026-10-21 (access control): a security review of main found
+  and this change repaired eleven reproducible access-control defects, then an
+  independent review of the repair found six more problems, also fixed here.
+  Anonymous media uploads (`media.beginUpload`/`media.upload`) need a capture
+  token naming an open, unexpired capture session, checked before storage I/O,
+  inside the apply transaction and again when a resumable upload completes; a
+  bare `captureSessionId` needs media authority. `subscriptions.changeMine` and
+  `subscriptions.listOffered` accept and offer only public, active plans from
+  the subscription's own seller. A customer's change follows the plan's stated
+  proration (§4.15): a `none` plan defers to period end, and a prorating change
+  raises its invoice but is granted by `subscriptions.completePaidPlanChange`
+  only once that invoice is paid in full. While such a change waits, another
+  is refused until that invoice is paid or voided, so a stale invoice cannot
+  grant a superseded plan. A refund after the grant does not reverse the
+  switch (owner decision: refunds stay a money action). A subscription billed
+  by a provider schedule is not held, including a move onto a platform-billed
+  plan; holding that move needs an orchestrated schedule cancellation at grant
+  time and remains open. A deferred change now moves the subscription to the
+  new plan's default variant when it is on sale, else its first active
+  variant (a plan with none is refused, or left pending at renewal), so
+  renewals bill the new price; a target plan with no price in the
+  subscription currency is refused rather than billed at zero. `subscriptions.join` refuses a staff-entered or foreign
+  card and never lets a saved card skip a card trial's setup-fee invoice.
+  `quotes.message` speaks for the business only with a quotes grant.
+  `messaging.startSiteChat` continues a Contact's canonical thread only for
+  the signed-in owner of that address (the public chat block now passes the
+  session actor). Every unverified start opens a separate conversation keyed
+  `site-chat:…`, so it never changes the canonical thread's reply channel,
+  never closes a live chat, and never receives replies meant for the
+  customer. The inbox list and thread show it as "Unverified — says they are
+  <email>", linked to the Contact's record for context without merging
+  threads. Contact-import undo restores a field only while it still
+  holds what the import wrote. `contracts.sign` takes IP and user agent from
+  request metadata. `members.callConfig` needs an active member on a live call;
+  `members.claimKeyPackages` returns an outstanding claim instead of draining
+  another device. `briefing.*` and shared `views.list` rows use
+  `hasModuleAccess`, two-factor state included, with the shared-view filter in
+  SQL before the page limit. Unusable coupon codes (unknown, inactive, not
+  started, ended, used up) share one answer; a working code is still
+  distinguishable from them. Coupon attempts through
+  `catalog.applyCouponToCart` and `catalog.quoteCartPromotions` are limited per
+  shopper and per cart, and `catalog.getOrCreateCart` is limited per shopper.
+  **Open residual risk, not fixed:** without `TRUSTED_CLIENT_IP_HEADER`, every
+  per-shopper key can be forged, so coupon guessing remains effectively
+  unbounded (forge an address, open a new cart, take its 10 guesses). With the
+  header (the Caddy recipes after #563; `deploy/client-readiness.md`) it is
+  bounded. Audit follow-up 2026-10-21 (managed-platform client address):
+  `TRUSTED_CLIENT_IP_HEADER` also accepts `do-connecting-ip` and
+  `x-forwarded-for`, the latter read `TRUSTED_PROXY_HOPS` entries from the
+  right so visitor-written entries on the left are ignored and a short list or
+  malformed entry at that position yields no trusted address. The App Platform
+  spec sets `do-connecting-ip` and the Railway config sets `x-real-ip`, each as
+  documented by the platform, so coupon guessing and the other per-client
+  limits are bounded there too. Neither platform documents overwriting a
+  client-supplied value, so the site-wide backstop now applies to validated
+  anonymous callers as well (default ten times the unvalidated ceiling, its own
+  bucket, still counted only after the caller's own limit passes), and rate
+  limits key IPv6 clients on their /64 and IPv4-mapped IPv6 as IPv4 on both
+  paths, which also closes per-address rotation inside a /64 for the Caddy
+  recipes. Railway's CDN case (X-Real-IP becomes the CDN address) coarsens
+  per-client limits for that traffic; the backstop prevents a global lockout. Render and Replit document no client-address
+  header or proxy depth, so their recipes still set none and the residual
+  above remains open for them (`deploy/client-readiness.md` cites the sources).
+  Regressions: `tests/core/bootstrap-security.test.ts` (header parsing:
+  spoofed leftmost entries, malformed values, IPv6, hop counts),
+  `tests/core/rate-limit.test.ts` (trusted backstop, /64 and mapped keys),
+  `tests/core/deploy-recipe.test.ts` (per-platform recipe values). Changeset
+  `managed-platform-client-address.md`. **Latent risk:** `catalog.checkoutCart` accepts `couponCode` with no
+  rate limit and resolves promotions as system; it is safe today only because
+  `requireContactAuthority` refuses anonymous callers, and it must gain the
+  same limits before a public storefront checkout ships. Each regression failed before
+  its repair: `tests/core/media-capture.test.ts`, `tests/core/media.test.ts`,
+  `tests/modules/subscription-billing.test.ts`, `tests/core/quotes.test.ts`,
+  `tests/core/site-chat.test.ts`, `tests/core/contact-import.test.ts`,
+  `tests/core/intake-waivers-reminders.test.ts`,
+  `tests/modules/member-calls.test.ts`, `tests/modules/member-e2ee.test.ts`,
+  `tests/core/briefing.test.ts`, `tests/core/saved-views.test.ts`,
+  `tests/core/cart-access.test.ts` and
+  `tests/browser/c11-01-visitor-to-paid.spec.ts`. Changeset
+  `c11-10-access-control-20261021.md`. Independent review remains open.
+  Audit record 2026-10-21: `security/pre-launch-audit-2026-10-21.md` maps each
+  finding from that day's four reviews to its repair PR (#559–#565) and lists
+  the open residuals. The review packet points to it. It is agent evidence,
+  not independent review.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.
@@ -11065,6 +11384,51 @@ whatever is best for the people using the site.
   `tests/modules/member-provider-payouts.test.ts`. Still open: a run against
   a Stripe test account (waits for test keys, Tony 2026-10-15) and direct
   and destination charges with application fees, now C12.38.)*
+  Audit follow-up 2026-10-21 (final design after two further reviews):
+  each provider attempt has one idempotency key — the payout id for the
+  first attempt (as before), then `<payout id>:<n>` — and every retry of an
+  attempt reuses its key (Razorpay's 36-character alphabet gets the id
+  without hyphens and `_<n>`). A new attempt is made only once the last is
+  dead at the provider: refused before money moved, or returned, blocked or
+  refunded (PayPal). An attempt whose outcome is unknown (timeout, outage,
+  409, unrecorded result) or that PayPal holds unclaimed is never resent
+  automatically; same-key retries also stop after 23 hours (Stripe keeps
+  keys 24). Such a payout goes to review telling the owner to check the
+  provider, and the owner records "Provider paid" (→ paid) or "Provider did
+  not pay — send again" (`members.settlePayouts` `providerPaid` /
+  `sendAgain`, buttons under Admin → Members); "still owed" alone does not
+  resend it. Earlier attempts are kept on the transfer
+  (`previous_attempts`, migration `0053_member_payout_attempts.sql`, which
+  also adds the `unknown` and `unclaimed` states), and a webhook applies
+  only to the attempt with its reference or key: a late success for a dead
+  attempt updates that attempt and moves the payout to review with "paid
+  after all — do not pay by hand"; it never touches the current attempt.
+  Events matching no attempt here are acknowledged (200) and ignored.
+  "Send again" answers only that check: one payout at a time (its own
+  form under Admin → Members, not the bulk list), an attempt in `unknown`
+  (never `sent` or `unclaimed`), under a review the check raised (a
+  partial-refund review goes through "still owed"). Migration
+  `0054_member_payout_attempts_backfill.sql` marks every transfer the earlier
+  code left pending or failed (even with no attempt counted: it counted
+  only after the call returned) as `unknown`, dated
+  for the 23-hour guard, because it never recorded unknown outcomes and
+  its Razorpay calls had no idempotency key; it also adds a GIN index for
+  the `previous_attempts` lookup.
+  Regression: `tests/modules/member-provider-payouts.test.ts`,
+  `tests/adapters/payout-providers.test.ts`.
+  Audit follow-up 2026-10-21: the payout job could pay a seller after the
+  buyer's refund had cancelled the payout, because a queued transfer was
+  claimed whatever the payout's state, and settlement only ever moved a
+  "due" payout. Now only a still-due payout is sent; a queued transfer for a
+  refunded, disputed or hand-paid payout is dropped, or goes to review when
+  an earlier attempt's outcome is unknown; money that reaches a seller after
+  the payout left "due" moves it to review and queues a reversal. A failure
+  after the provider call (the result not recorded) is no longer counted as
+  a provider refusal: the row stays claimed and marked "Outcome unknown", and
+  the next run's idempotent call returns the same transfer. Settlement and
+  failure webhooks no longer reopen a cancelled payout. Regression:
+  `tests/modules/member-provider-payouts.test.ts`; changeset
+  `payout-refund-retry-safety.md`.
 - [ ] **C12.27** Add marketplace payout adapters for providers other than
   Stripe (for example PayPal, Adyen for Platforms, Mollie), selectable by the
   site owner without code changes.
@@ -11076,6 +11440,23 @@ whatever is best for the people using the site.
   a linked account with Route and bank settlement, direct transfers and
   reversals, signed webhooks), selectable under Admin → Members, proven
   against recorded HTTP. Still open: sandbox runs with test credentials.)*
+  Audit follow-up 2026-10-21: retries after an uncertain outcome were unsafe.
+  Razorpay transfers now carry the attempt key in Razorpay's documented
+  `X-Transfer-Idempotency` header. PayPal batches carry `PayPal-Request-Id`
+  (kept 30 days), and a refused duplicate `sender_batch_id` is read through
+  its link to the original batch instead of counting as a failure. Webhook
+  transfer events carry the attempt key the transfer was sent with (PayPal
+  `sender_item_id`, Razorpay `notes.freeholder_payout_id`), so a
+  confirmation that beats the "sent" row is still applied to that attempt.
+  PayPal UNCLAIMED is its own state (claimable for 30 days, never resent);
+  RETURNED, BLOCKED, REFUNDED, FAILED, DENIED and CANCELED mean the attempt
+  is dead. Events that match no attempt here are acknowledged (200) and
+  ignored: a shared provider account carries other integrations' payouts.
+  Razorpay offers idempotency only on direct transfers, not reversals; a
+  retried full reversal is refused once the first went through.
+  Regression: `tests/adapters/payout-providers.test.ts`,
+  `tests/modules/member-provider-payouts.test.ts`; changeset
+  `payout-refund-retry-safety.md`. Not yet proven against live sandboxes.
 - [x] **C12.28** Publish a prohibited-items policy: the site owner edits it
   under Admin → Members, it is public at `/market/policy`, sellers accept it
   before listing, and the report queue offers it as a reason.
@@ -11325,6 +11706,22 @@ whatever is best for the people using the site.
   Still open: a provider agreement (Tony, not now), a live run, and
   submitting reports through a provider API rather than by hand. End-to-end
   encrypted files (C12.36) cannot be scanned.)*
+  Audit follow-up 2026-10-21: an image the matcher could not check (an
+  outage, or one over 64 MB) was tagged like a match, so an ordinary photo
+  became permanently undeletable and unrescannable. Unchecked images now
+  carry `abuse-hash-error:<provider>` and stay rescannable and deletable;
+  legal hold (`underLegalHold` in `src/core/media/abuse-evidence.ts`)
+  requires an actual match (`scanStatus "infected"`), which also releases
+  rows held under the old tagging without a migration. Reports link to
+  distinct matched assets, oldest first, so a second uploader of the same
+  image is linked and suspended too. Matches are recorded by core media
+  rather than the members module: `abuse_reports` is defined in
+  `src/core/media/abuse-schema.ts` (same table, no SQL change), boot
+  installs the one recorder (`installAbuseRecorder`, a single slot, so a
+  reload never records twice), and an unrecorded match refuses the
+  upload. Regression: `tests/adapters/abuse-scan.test.ts`,
+  `tests/modules/member-abuse.test.ts`; changeset
+  `abuse-scan-unchecked-images.md`.
 
 ---
 

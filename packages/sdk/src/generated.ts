@@ -1657,7 +1657,7 @@ export interface ServiceCatalog {
   };
   "agents.approveWrite": {
     input: { id: string; note?: string };
-    output: { approval: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }; result: unknown | null; [key: string]: unknown };
+    output: { approval: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "executing" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }; result: unknown | null; [key: string]: unknown };
   };
   "agents.assignTask": {
     input: { id: string; agentId: string | null };
@@ -1701,7 +1701,7 @@ export interface ServiceCatalog {
   };
   "agents.expireApprovals": {
     input: Record<string, never>;
-    output: { expired: number; [key: string]: unknown };
+    output: { expired: number; returned: number; [key: string]: unknown };
   };
   "agents.exportPlaybook": {
     input: { id: string };
@@ -1728,8 +1728,8 @@ export interface ServiceCatalog {
     output: { id: string; name: string; role: string; connectionId: string; toolScopes: string[]; autonomy: "suggest" | "approve" | "autonomous"; maxConcurrency: number; budgetCents: number; budgetPeriod: "day" | "week" | "month"; status: "active" | "paused"; [key: string]: unknown }[];
   };
   "agents.listApprovals": {
-    input: { taskId?: string; status?: "pending" | "approved" | "rejected" | "expired"; limit?: number };
-    output: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }[];
+    input: { taskId?: string; status?: "pending" | "executing" | "approved" | "rejected" | "expired"; limit?: number };
+    output: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "executing" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }[];
   };
   "agents.pause": {
     input: { id: string; paused?: boolean; reason?: string };
@@ -1749,11 +1749,11 @@ export interface ServiceCatalog {
   };
   "agents.proposeWrite": {
     input: { runId: string; serviceName: string; input?: { [key: string]: unknown }; summary?: string };
-    output: { outcome: "executed" | "proposed" | "awaiting_approval"; result: unknown | null; approval: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown } | null; [key: string]: unknown };
+    output: { outcome: "executed" | "proposed" | "awaiting_approval"; result: unknown | null; approval: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "executing" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown } | null; [key: string]: unknown };
   };
   "agents.rejectWrite": {
     input: { id: string; note: string };
-    output: { approval: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }; [key: string]: unknown };
+    output: { approval: { id: string; runId: string | null; taskId: string; kind: "blocks" | "message" | "money" | "destructive" | "write"; summary: string; preview: unknown; serviceName: string; input: unknown; proposedAutonomy: "suggest" | "approve" | "autonomous"; status: "pending" | "executing" | "approved" | "rejected" | "expired"; decidedBy: string | null; decidedAt: string | null; decisionNote: string | null; expiresAt: string | null; createdAt: string; [key: string]: unknown }; [key: string]: unknown };
   };
   "agents.releaseTask": {
     input: { runId: string; reason?: string };
@@ -4016,7 +4016,7 @@ export interface ServiceCatalog {
     output: { id: string; name: string; kind: "waiver" | "agreement"; version: number; title: string; body: string; variables: unknown; requiresCountersignature: boolean; archivedAt: string | null; undeclared: string[]; [key: string]: unknown };
   };
   "contracts.sign": {
-    input: { token: string; signerName: string; ip?: string | null; userAgent?: string | null };
+    input: { token: string; signerName: string };
     output: { id: string; signedAt: string; signatureHash: string };
   };
   "contracts.signedFor": {
@@ -4097,7 +4097,7 @@ export interface ServiceCatalog {
   };
   "conversations.get": {
     input: { id: string; contactId?: string; limit?: number };
-    output: { id: string; contactId: string; subject: string | null; replyChannel: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; numberId: string | null; status: "open" | "snoozed" | "closed"; snoozedUntil: string | null; assigneeUserId: string | null; threadKey: string | null; lastInboundAt: string | null; lastOutboundAt: string | null; unread: boolean; assistantEscalatedAt: string | null; assistantEscalationReason: string | null; assistantEscalationResolvedAt: string | null; messageCount: number; updatedAt: string; contactName: string | null; messages: { id: string; conversationId: string; contactId: string; direction: "inbound" | "outbound"; channel: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; purpose: ("transactional" | "marketing" | "support") | null; policyException: ("security_code" | "booking_update" | "order_update" | "customer_requested_reply") | null; policyExceptionRef: string | null; body: string; mediaAssetIds: string[]; chatSessionId: string | null; templateId: string | null; sentBy: "contact" | "user" | "system" | "automation" | "agent"; sentByUserId: string | null; providerRef: string | null; recipientAddress: string | null; segments: number | null; costMinor: number | null; costCurrency: string | null; occurredAt: string; deliveries: { status: "queued" | "sent" | "delivered" | "failed" | "undelivered" | "read"; errorCode: string | null; errorText: string | null; occurredAt: string; [key: string]: unknown }[]; [key: string]: unknown }[]; [key: string]: unknown } | null;
+    output: { id: string; contactId: string; subject: string | null; replyChannel: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; numberId: string | null; status: "open" | "snoozed" | "closed"; snoozedUntil: string | null; assigneeUserId: string | null; threadKey: string | null; lastInboundAt: string | null; lastOutboundAt: string | null; unread: boolean; assistantEscalatedAt: string | null; assistantEscalationReason: string | null; assistantEscalationResolvedAt: string | null; messageCount: number; updatedAt: string; contactName: string | null; contactEmail: string | null; unverified: boolean; messages: { id: string; conversationId: string; contactId: string; direction: "inbound" | "outbound"; channel: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; purpose: ("transactional" | "marketing" | "support") | null; policyException: ("security_code" | "booking_update" | "order_update" | "customer_requested_reply") | null; policyExceptionRef: string | null; body: string; mediaAssetIds: string[]; chatSessionId: string | null; templateId: string | null; sentBy: "contact" | "user" | "system" | "automation" | "agent"; sentByUserId: string | null; providerRef: string | null; recipientAddress: string | null; segments: number | null; costMinor: number | null; costCurrency: string | null; occurredAt: string; deliveries: { status: "queued" | "sent" | "delivered" | "failed" | "undelivered" | "read"; errorCode: string | null; errorText: string | null; occurredAt: string; [key: string]: unknown }[]; [key: string]: unknown }[]; [key: string]: unknown } | null;
   };
   "conversations.list": {
     input: { status?: "open" | "snoozed" | "closed"; contactId?: string; channel?: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; unreadOnly?: boolean; limit?: number };
@@ -4125,7 +4125,7 @@ export interface ServiceCatalog {
   };
   "conversations.search": {
     input: { status?: "open" | "snoozed" | "closed"; openOnly?: boolean; assigneeUserId?: string; unassigned?: boolean; channel?: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; unreadOnly?: boolean; q?: string; limit?: number };
-    output: { id: string; contactId: string; subject: string | null; replyChannel: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; status: "open" | "snoozed" | "closed"; snoozedUntil: string | null; assigneeUserId: string | null; unread: boolean; assistantEscalatedAt: string | null; assistantEscalationReason: string | null; assistantEscalationResolvedAt: string | null; messageCount: number; lastInboundAt: string | null; lastOutboundAt: string | null; updatedAt: string; contactName: string | null; contactEmail: string | null; assigneeEmail: string | null; preview: string | null; [key: string]: unknown }[];
+    output: { id: string; contactId: string; subject: string | null; replyChannel: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; status: "open" | "snoozed" | "closed"; snoozedUntil: string | null; assigneeUserId: string | null; unread: boolean; assistantEscalatedAt: string | null; assistantEscalationReason: string | null; assistantEscalationResolvedAt: string | null; messageCount: number; lastInboundAt: string | null; lastOutboundAt: string | null; updatedAt: string; contactName: string | null; contactEmail: string | null; assigneeEmail: string | null; preview: string | null; unverified: boolean; [key: string]: unknown }[];
   };
   "conversations.setStatus": {
     input: { id: string; status: "open" | "closed" };
@@ -5268,7 +5268,7 @@ export interface ServiceCatalog {
     output: { sessionId: string; sequence: number; bytes: number };
   };
   "media.assembleCapture": {
-    input: { id?: string; token?: string; filename?: string; expectedChunks?: number };
+    input: { id?: string; token?: string; expectedChunks?: number; filename?: string };
     output: { session: { id: string; source: "camera" | "microphone" | "screen" | "share_sheet" | "camera_roll" | "upload_link" | "import" | "social"; status: "pending" | "live" | "preview" | "confirmed" | "discarded" | "expired"; targetType: string | null; targetId: string | null; uploadCount: number; displaySurface: string | null; permissionGrantedAt: string | null; trimStartMs: number; trimEndMs: number | null; caption: string | null; focalX: number; focalY: number; staged: boolean; stagedMime: string | null; stagedFilename: string | null; items: { id: string; filename: string; bytes: number; mime: string; assetId: string | null }[]; uploadId: string | null; assetId: string | null; expiresAt: string; completedAt: string | null; captureUrl: string | null; [key: string]: unknown }; asset: null };
   };
   "media.attachCaptureUpload": {
@@ -5637,7 +5637,7 @@ export interface ServiceCatalog {
   };
   "members.myPayouts": {
     input: Record<string, never>;
-    output: { totals: { currency: string; state: "held" | "due" | "paid" | "cancelled" | "review"; netMinor: number; [key: string]: unknown }[]; payouts: { id: string; orderId: string | null; invoiceId: string | null; sellerId: string; sellerHandle: string; currency: string; grossMinor: number; feeMinor: number; netMinor: number; state: "held" | "due" | "paid" | "cancelled" | "review"; model: "hold" | "seller_merchant" | "instant"; releaseAt: string | null; paidAt: string | null; reference: string | null; note: string | null; createdAt: string; [key: string]: unknown }[] };
+    output: { totals: { currency: string; state: "held" | "due" | "paid" | "cancelled" | "review"; netMinor: number; [key: string]: unknown }[]; payouts: { id: string; orderId: string | null; invoiceId: string | null; sellerId: string; sellerHandle: string; currency: string; grossMinor: number; feeMinor: number; netMinor: number; state: "held" | "due" | "paid" | "cancelled" | "review"; model: "hold" | "seller_merchant" | "instant"; releaseAt: string | null; paidAt: string | null; reference: string | null; note: string | null; providerCheck: boolean; createdAt: string; [key: string]: unknown }[] };
   };
   "members.myPurchases": {
     input: Record<string, never>;
@@ -5681,7 +5681,7 @@ export interface ServiceCatalog {
   };
   "members.payouts": {
     input: { state?: "held" | "due" | "paid" | "cancelled" | "review" };
-    output: { payouts: { id: string; orderId: string | null; invoiceId: string | null; sellerId: string; sellerHandle: string; currency: string; grossMinor: number; feeMinor: number; netMinor: number; state: "held" | "due" | "paid" | "cancelled" | "review"; model: "hold" | "seller_merchant" | "instant"; releaseAt: string | null; paidAt: string | null; reference: string | null; note: string | null; createdAt: string; [key: string]: unknown }[]; accounts: { userId: string; handle: string; status: "pending" | "ready" | "disabled"; instructions: string | null; [key: string]: unknown }[] };
+    output: { payouts: { id: string; orderId: string | null; invoiceId: string | null; sellerId: string; sellerHandle: string; currency: string; grossMinor: number; feeMinor: number; netMinor: number; state: "held" | "due" | "paid" | "cancelled" | "review"; model: "hold" | "seller_merchant" | "instant"; releaseAt: string | null; paidAt: string | null; reference: string | null; note: string | null; providerCheck: boolean; createdAt: string; [key: string]: unknown }[]; accounts: { userId: string; handle: string; status: "pending" | "ready" | "disabled"; instructions: string | null; [key: string]: unknown }[] };
   };
   "members.pendingListings": {
     input: Record<string, never>;
@@ -5860,7 +5860,7 @@ export interface ServiceCatalog {
     output: { joinPolicy: "open" | "approval" | "invite"; minimumAge: number; marketplaceEnabled: boolean; listingReview: boolean; payoutModel: "hold" | "seller_merchant" | "instant"; holdDays: number; siteFeeBps: number; payoutAdapter: string; adultContent: boolean; federation: boolean; [key: string]: unknown };
   };
   "members.settlePayouts": {
-    input: { ids: string[]; action: "release" | "paid" | "cancel" | "owe"; reference?: string; note?: string };
+    input: { ids: string[]; action: "release" | "paid" | "cancel" | "owe" | "providerPaid" | "sendAgain"; reference?: string; note?: string };
     output: { changed: number };
   };
   "members.signal": {
@@ -7377,11 +7377,11 @@ export interface ServiceCatalog {
   };
   "subscriptions.changeMine": {
     input: { id: string; planId: string };
-    output: { subscriptionId: string; invoiceId: string | null; proratedMinor: number; deferred: boolean; billingMode: "provider" | "platform" | "manual"; provider: string | null; providerRef: string | null; previousProvider: string | null; previousProviderRef: string | null; interval: "day" | "week" | "month" | "year"; intervalCount: number; amountMinor: number; currency: string; description: string; proration: "create_prorations" | "none"; methodRef: string | null; customerRef: string | null };
+    output: { subscriptionId: string; invoiceId: string | null; proratedMinor: number; deferred: boolean; billingMode: "provider" | "platform" | "manual"; provider: string | null; providerRef: string | null; previousProvider: string | null; previousProviderRef: string | null; interval: "day" | "week" | "month" | "year"; intervalCount: number; amountMinor: number; currency: string; description: string; proration: "create_prorations" | "none"; awaitingPayment: boolean; methodRef: string | null; customerRef: string | null };
   };
   "subscriptions.changePlan": {
     input: { id: string; planId: string };
-    output: { subscriptionId: string; invoiceId: string | null; proratedMinor: number; deferred: boolean; billingMode: "provider" | "platform" | "manual"; provider: string | null; providerRef: string | null; previousProvider: string | null; previousProviderRef: string | null; interval: "day" | "week" | "month" | "year"; intervalCount: number; amountMinor: number; currency: string; description: string; proration: "create_prorations" | "none"; methodRef: string | null; customerRef: string | null };
+    output: { subscriptionId: string; invoiceId: string | null; proratedMinor: number; deferred: boolean; billingMode: "provider" | "platform" | "manual"; provider: string | null; providerRef: string | null; previousProvider: string | null; previousProviderRef: string | null; interval: "day" | "week" | "month" | "year"; intervalCount: number; amountMinor: number; currency: string; description: string; proration: "create_prorations" | "none"; awaitingPayment: boolean; methodRef: string | null; customerRef: string | null };
   };
   "subscriptions.chargePlatformInvoice": {
     input: { subscriptionId: string; invoiceId?: string };
@@ -7393,7 +7393,7 @@ export interface ServiceCatalog {
   };
   "subscriptions.get": {
     input: { id: string };
-    output: { subscription: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }; plan: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; [key: string]: unknown } | null; history: { kind: "created" | "trialing" | "activated" | "renewed" | "payment_failed" | "dunning" | "paused" | "resumed" | "plan_changed" | "cancelled" | "expired" | "card_setup"; invoiceId: string | null; detail: string | null; at: string; [key: string]: unknown }[]; [key: string]: unknown };
+    output: { subscription: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }; plan: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; [key: string]: unknown } | null; history: { kind: "created" | "trialing" | "activated" | "renewed" | "payment_failed" | "dunning" | "paused" | "resumed" | "plan_changed" | "cancelled" | "expired" | "card_setup" | "plan_change_pending"; invoiceId: string | null; detail: string | null; at: string; [key: string]: unknown }[]; [key: string]: unknown };
   };
   "subscriptions.join": {
     input: { planId: string; termsHash: string; requestKey: string; acceptedTerms: true; paymentMethodId?: string };
@@ -7404,7 +7404,7 @@ export interface ServiceCatalog {
     output: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }[];
   };
   "subscriptions.listOffered": {
-    input: Record<string, never>;
+    input: { subscriptionId?: string };
     output: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; [key: string]: unknown }[];
   };
   "subscriptions.listPlans": {

@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
+import { flashAdminError, postedFromPath } from "./action-helpers";
 import {
   addEventSession,
   addEventTicket,
@@ -31,9 +32,13 @@ async function actor() {
   return resolved;
 }
 
-function fail(path: string, error: unknown): never {
+async function fail(fallback: string, error: unknown): Promise<never> {
   const message = error instanceof ServiceError ? error.message : "Something went wrong.";
-  redirect(`${path}?error=${encodeURIComponent(message)}`);
+  // Back to the screen that posted, with the sentence in the admin flash so
+  // the shell can show it even where the screen itself does not.
+  const path = await postedFromPath(fallback);
+  await flashAdminError(message);
+  redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(message)}`);
 }
 
 export async function eventAction(form: FormData): Promise<void> {
@@ -104,6 +109,6 @@ export async function eventAction(form: FormData): Promise<void> {
     revalidatePath("/admin/events");
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error) throw error;
-    fail("/admin/events", error);
+    await fail("/admin/events", error);
   }
 }
