@@ -18,7 +18,8 @@ import { agentConnections, agents, agentTasks } from "@/core/agents/schema";
 import { runSpend, runSteps, runs } from "@/core/runs/schema";
 import { createApiKey } from "@/core/apikeys/service";
 import { violates } from "@/core/db/errors";
-import { WORKFORCE_ADAPTER_IDS } from "@/adapters/agent/workforce-types";
+import { WORKFORCE_ADAPTER_IDS, normalizeWorkforceAdapterId } from "@/adapters/agent/workforce-types";
+import { sharesInstanceGateway } from "@/adapters/agent/workforce";
 import { modelPrice } from "@/core/agents/pricing";
 import {
   actorString,
@@ -306,17 +307,38 @@ export const connectAgentRuntime = defineService({
       (v) =>
         v.kind !== "managed" ||
         !v.adapter ||
-        WORKFORCE_ADAPTER_IDS.includes(v.adapter as (typeof WORKFORCE_ADAPTER_IDS)[number]),
+        WORKFORCE_ADAPTER_IDS.includes(
+          normalizeWorkforceAdapterId(v.adapter) as (typeof WORKFORCE_ADAPTER_IDS)[number],
+        ),
       {
         message: `the workforce adapters installed in this build are: ${WORKFORCE_ADAPTER_IDS.join(", ")}`,
         path: ["adapter"],
       },
     )
-    .refine((v) => v.kind !== "managed" || v.adapter !== "openai" || Boolean(v.model), {
-      message:
-        "name the OpenAI model this connection should run — the platform does not guess one",
-      path: ["model"],
-    }),
+    .refine(
+      (v) =>
+        v.kind !== "managed" ||
+        (v.adapter !== "openai" && v.adapter !== "gateway") ||
+        Boolean(v.model),
+      {
+        message:
+          "name the model this connection should run — the platform does not guess one",
+        path: ["model"],
+      },
+    )
+    // The instance-wide gateway key is only ever sent to AGENT_GATEWAY_URL.
+    .refine(
+      (v) =>
+        v.kind !== "managed" ||
+        v.adapter !== "gateway" ||
+        Boolean(v.credentialRef) ||
+        sharesInstanceGateway(v.baseUrl),
+      {
+        message:
+          "this gateway's base URL differs from AGENT_GATEWAY_URL — name the environment variable holding its own key",
+        path: ["credentialRef"],
+      },
+    ),
   output: connectionRow,
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "add a runtime");
@@ -324,6 +346,8 @@ export const connectAgentRuntime = defineService({
       .insert(agentConnections)
       .values({
         ...input,
+        // The deprecated `pm_brain` name is stored as `paradise`.
+        adapter: input.adapter ? normalizeWorkforceAdapterId(input.adapter) : input.adapter,
         createdBy: ctx.actor.kind === "user" ? ctx.actor.userId : null,
       })
       .returning()
