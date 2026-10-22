@@ -10986,8 +10986,9 @@ whatever is best for the people using the site.
   form under Admin → Members, not the bulk list), an attempt in `unknown`
   (never `sent` or `unclaimed`), under a review the check raised (a
   partial-refund review goes through "still owed"). Migration
-  `0054_member_payout_attempts_backfill.sql` marks transfers the earlier
-  code tried (attempts > 0, left pending or failed) as `unknown`, dated
+  `0054_member_payout_attempts_backfill.sql` marks every transfer the earlier
+  code left pending or failed (even with no attempt counted: it counted
+  only after the call returned) as `unknown`, dated
   for the 23-hour guard, because it never recorded unknown outcomes and
   its Razorpay calls had no idempotency key; it also adds a GIN index for
   the `previous_attempts` lookup.

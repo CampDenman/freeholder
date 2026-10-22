@@ -15,7 +15,7 @@ import { ready } from "@/core/runtime";
 import { updateBusiness } from "@/core/settings/service";
 import { joinSite, updateMembershipRules } from "@/modules/members/service";
 import { createListing } from "@/modules/members/listings";
-import { myPayoutAccount, onOrderPaid, reversePayouts, settlePayouts, sitePayouts } from "@/modules/members/payouts";
+import { myPayoutAccount, onOrderPaid, PROVIDER_CHECK, reversePayouts, settlePayouts, sitePayouts } from "@/modules/members/payouts";
 import { applyPayoutWebhook, applyProviderTransfer, payoutSetup, sendProviderPayouts, startPayoutSetup } from "@/modules/members/provider-payouts";
 import { memberPayouts, memberPayoutTransfers } from "@/modules/members/schema";
 import { setPayoutProviderForTests } from "@/adapters/payouts";
@@ -408,25 +408,35 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
   it("treats a transfer tried before numbered attempts as possibly paid, never resending it under a new key", { timeout: 90_000 }, async () => {
     await readySeller();
     await sell("30");
-    const [payout] = await db().select().from(memberPayouts);
+    await sell("40");
+    const [payout, crashed] = await db().select().from(memberPayouts);
+    // The earlier code counted an attempt only once the call came back: a
+    // crash after a successful call left it pending with no attempts.
+    await db().insert(memberPayoutTransfers).values({ payoutId: crashed!.id, kind: "transfer", provider: "stripe_connect", state: "pending", amountMinor: crashed!.netMinor, currency: crashed!.currency, attempts: 0 });
     // As the earlier code left it: tried five times, given up as refused,
     // the payout under review — though a timeout among them may have paid.
     await db().insert(memberPayoutTransfers).values({ payoutId: payout!.id, kind: "transfer", provider: "stripe_connect", state: "failed", amountMinor: payout!.netMinor, currency: payout!.currency, attempts: 5, lastError: "The payment provider could not be reached." });
     await db().update(memberPayouts).set({ state: "review", note: "The payout provider kept refusing this transfer: The payment provider could not be reached." }).where(eq(memberPayouts.id, payout!.id));
     // The backfill in migration 0054 (its index already exists here).
-    const backfill = readFileSync("db/migrations/0054_member_payout_attempts_backfill.sql", "utf8").split("--> statement-breakpoint").filter((part) => /^\s*(--[^\n]*\n\s*)*UPDATE/.test(part));
+    const migration = readFileSync("db/migrations/0054_member_payout_attempts_backfill.sql", "utf8");
+    // The migration's note starts exactly as the provider check's does, so "send again" recognises it.
+    expect(migration).toContain(`SET "note" = '${PROVIDER_CHECK}' || t."provider"`);
+    const backfill = migration.split("--> statement-breakpoint").filter((part) => /^\s*(--[^\n]*\n\s*)*UPDATE/.test(part));
     expect(backfill).toHaveLength(2);
     for (const statement of backfill) await db().execute(sql.raw(statement));
-    const [marked] = await db().select().from(memberPayoutTransfers);
-    expect(marked?.state).toBe("unknown");
-    expect(marked?.attemptStartedAt).toBeInstanceOf(Date);
-    const [review] = (await sitePayouts.call({}, OWNER)).payouts;
+    const marked = await db().select().from(memberPayoutTransfers);
+    expect(marked.map((t) => t.state)).toEqual(["unknown", "unknown"]);
+    expect(marked.every((t) => t.attemptStartedAt instanceof Date)).toBe(true);
+    const review = (await sitePayouts.call({}, OWNER)).payouts.find((p) => p.id === payout!.id);
     expect(review).toMatchObject({ state: "review", providerCheck: true });
+    // The crashed one, still due, goes to the provider check instead of being sent again.
+    expect(await sendProviderPayouts()).toEqual({ sent: 0, failed: 0 });
+    expect((await sitePayouts.call({}, OWNER)).payouts.find((p) => p.id === crashed!.id)).toMatchObject({ state: "review", providerCheck: true });
     // "Still owed" sends nothing: the owner must check the provider first.
     await settlePayouts.call({ ids: [payout!.id], action: "owe", note: "Still owed." }, OWNER);
     expect(await sendProviderPayouts()).toEqual({ sent: 0, failed: 0 });
     expect(transferCalls()).toHaveLength(0);
-    expect((await sitePayouts.call({}, OWNER)).payouts[0]).toMatchObject({ state: "review", providerCheck: true });
+    expect((await sitePayouts.call({}, OWNER)).payouts.find((p) => p.id === payout!.id)).toMatchObject({ state: "review", providerCheck: true });
   });
 
   it("only sends again for one payout the provider check put under review, with an unknown outcome", { timeout: 90_000 }, async () => {
