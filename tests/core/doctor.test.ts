@@ -10,6 +10,9 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { formatReport, runDoctor } from "@/core/doctor";
 import { doctor } from "@/core/doctor/service";
+import { checkTimezoneData, probeInstants, type ZoneProbe } from "@/core/doctor/timezone";
+import { db } from "@/core/db";
+import { businessProfile } from "@/core/settings/schema";
 import { resetEnvForTests } from "@/core/env";
 import {
   ANONYMOUS,
@@ -162,6 +165,112 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
         ? "warn"
         : "ok";
     expect(report.verdict).toBe(worst);
+  });
+
+  it("warns, without failing, when Postgres reads the business's zone differently", async () => {
+    // "+05:00" is five hours ahead to Node and five behind to Postgres (POSIX
+    // sign convention) — a real disagreement between the two zone sources.
+    await db().insert(businessProfile).values({
+      name: "Zone Studio",
+      country: "CA",
+      baseCurrency: "CAD",
+      timezone: "+05:00",
+    });
+    const check = (await runDoctor()).checks.find((each) => each.id === "time.zoneData");
+    expect(check).toMatchObject({
+      verdict: "warn",
+      message: {
+        key: "doctor.timeZone.disagree",
+        params: { zone: "+05:00", nodeOffset: "UTC+05:00", postgresOffset: "UTC-05:00" },
+      },
+    });
+    expect(check!.detail).toContain(String(process.versions.tz));
+    expect(check!.remedy).toBeTruthy();
+  });
+
+  it("agrees with Postgres on a named zone both copies know", async () => {
+    // Tokyo has kept one offset since 1951, so any two tz data versions agree.
+    await db().insert(businessProfile).values({
+      name: "Zone Studio",
+      country: "JP",
+      baseCurrency: "JPY",
+      timezone: "Asia/Tokyo",
+    });
+    const check = (await runDoctor()).checks.find((each) => each.id === "time.zoneData");
+    expect(check).toMatchObject({ verdict: "ok", message: { key: "doctor.timeZone.agree" } });
+  });
+});
+
+describe("comparing the two copies of the tz database", () => {
+  const NOW = new Date("2026-01-15T12:00:00Z");
+  const probe = (offsets: (instants: Date[]) => number[]): ZoneProbe => ({
+    offsets: async (instants) => offsets(instants),
+    version: async () => "16.4",
+  });
+
+  it("asks about now, six months either side, and either side of the next change", () => {
+    const instants = probeInstants(NOW, "Europe/London").map((each) => each.toISOString());
+    expect(instants).toEqual([
+      "2026-01-15T12:00:00.000Z",
+      "2025-07-17T12:00:00.000Z",
+      "2026-07-16T12:00:00.000Z",
+      "2026-03-29T00:00:00.000Z",
+      "2026-03-29T02:00:00.000Z",
+    ]);
+    // A zone that never changes has no change to straddle.
+    expect(probeInstants(NOW, "Asia/Tokyo")).toHaveLength(3);
+  });
+
+  it("is ok when every probe agrees", async () => {
+    const check = await checkTimezoneData(
+      "Europe/London",
+      // GMT in winter, BST from 01:00 UTC on 29 March: what Node says too.
+      probe((instants) =>
+        instants.map((each) => {
+          const summer2025 = each >= new Date("2025-03-30T01:00:00Z") && each < new Date("2025-10-26T01:00:00Z");
+          const summer2026 = each >= new Date("2026-03-29T01:00:00Z") && each < new Date("2026-10-25T01:00:00Z");
+          return summer2025 || summer2026 ? 60 : 0;
+        }),
+      ),
+      NOW,
+      "2026a",
+    );
+    expect(check.verdict).toBe("ok");
+  });
+
+  it("names both versions and the first instant they disagree on", async () => {
+    // The CI finding: Postgres had America/Vancouver on UTC-07:00 in December
+    // while Node's 2026a said UTC-08:00.
+    const check = await checkTimezoneData(
+      "America/Vancouver",
+      probe((instants) => instants.map(() => -420)),
+      new Date("2026-12-09T23:30:00Z"),
+      "2026a",
+    );
+    expect(check.verdict).toBe("warn");
+    expect(check.detail).toContain("2026a");
+    expect(check.detail).toContain("Postgres 16.4");
+    expect(check.message).toEqual({
+      key: "doctor.timeZone.disagree",
+      params: {
+        zone: "America/Vancouver",
+        at: "2026-12-09T23:30:00.000Z",
+        nodeOffset: "UTC-08:00",
+        postgresOffset: "UTC-07:00",
+        node: "2026a",
+        postgres: "16.4",
+      },
+    });
+  });
+
+  it("warns, rather than failing, when Postgres does not know the zone", async () => {
+    const check = await checkTimezoneData(
+      "America/Vancouver",
+      { offsets: async () => { throw new Error("time zone not recognized"); }, version: async () => "16.4" },
+      NOW,
+    );
+    expect(check).toMatchObject({ verdict: "warn", message: { key: "doctor.timeZone.unreadable" } });
+    expect(check.remedy).toBeTruthy();
   });
 });
 

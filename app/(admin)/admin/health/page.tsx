@@ -23,6 +23,39 @@ import { listCspViolations } from "@/core/security/csp-reports";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
+type DoctorCheck = Awaited<ReturnType<typeof doctor.call>>["checks"][number];
+
+/**
+ * A check that carries a catalog message, shown in the owner's language.
+ * Literal keys, one per message, so the i18n gate can see every one of them.
+ */
+function localized(
+  check: DoctorCheck,
+  t: Awaited<ReturnType<typeof getT>>,
+): DoctorCheck {
+  const params = check.message?.params ?? {};
+  switch (check.message?.key) {
+    case "doctor.timeZone.agree":
+      return { ...check, title: t("doctor.timeZone.title"), detail: t("doctor.timeZone.agree", params) };
+    case "doctor.timeZone.disagree":
+      return {
+        ...check,
+        title: t("doctor.timeZone.title"),
+        detail: t("doctor.timeZone.disagree", params),
+        remedy: t("doctor.timeZone.disagreeRemedy", params),
+      };
+    case "doctor.timeZone.unreadable":
+      return {
+        ...check,
+        title: t("doctor.timeZone.title"),
+        detail: t("doctor.timeZone.unreadable", params),
+        remedy: t("doctor.timeZone.unreadableRemedy", params),
+      };
+    default:
+      return check;
+  }
+}
+
 export default async function HealthPage() {
   const actor = await requireStaffActor("platform");
   const [report, business, violations, t, version] = await Promise.all([
@@ -71,7 +104,7 @@ export default async function HealthPage() {
         />
         <CardBody>
           <ul className="grid list-none gap-4 p-0">
-            {report.checks.map((check) => (
+            {report.checks.map((each) => localized(each, t)).map((check) => (
               <li key={check.id} className="grid gap-1">
                 <span className="flex items-center gap-2 text-sm font-semibold text-ink">
                   {icon[check.verdict]}

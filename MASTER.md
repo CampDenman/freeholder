@@ -772,6 +772,7 @@ changes an instance silently.
 - **Money is never auto-converted at charge time.** A variant is either priced in a currency (PriceListEntry) or unavailable in it. There is no FX-rate table and no `adapters/fx` family: display conversion stays off (§8). Invoices, payments, and refunds stay in their original currency forever.
 - **Customer-facing everything follows `Contact.preferred_locale`:** portal, quotes, invoices, contracts, booking reminders, marketing emails. A quote sent to a French client renders in French with EUR prices if priced; the admin sees it in the owner's locale.
 - **Timezone discipline:** store UTC; bookings render in *both* business and contact timezone on every customer surface (the #1 no-show cause is timezone confusion).
+- **Local-time math lives in Node; SQL sees UTC instants** (2026-10-22). Postgres and Node each ship their own tz database and they are updated on different schedules, so a query that buckets with `AT TIME ZONE` and a page that renders with `Intl` can disagree by an hour. Every "which local day, week or month" question — availability, opening hours, report and analytics buckets, export periods, reminders, "today" — is answered by `src/core/i18n/zoned.ts` (`zonedInstant`, `localBuckets`, `localPeriodOf`; skipped local times resolve after the gap, repeated ones to the earlier instant unless a caller asks for the later) and handed to SQL as UTC boundaries (`src/core/db/buckets.ts`). Every database session is pinned to `TimeZone=UTC`, so any `date_trunc`/`::date` left in SQL is a UTC question by construction. `tests/core/local-time-sql.test.ts` fails the build on `AT TIME ZONE`, `current_date` or `localtimestamp` in shipped code; doctor's `time.zoneData` check warns when Postgres's tz data disagrees with Node's for the business's zone.
 - **Tax follows location, not locale:** tax zones key off business location + customer country (see §4.10).
 - **AI-assisted translation** (BYO key) can machine-draft `EntityTranslation` rows flagged `status=machine` for owner review — never silently published.
 
@@ -3906,6 +3907,13 @@ reading chat logs.
   `tests/core/analytics-governance-migration.test.ts`; 1,040-test full suite;
   changeset `analytics-governance.md`; operator guide
   `deploy/analytics-governance.md` **F04** `/admin/traffic` consent and retention. **F05** `analytics.track`/`identify`/`overview`/`exportAnonymized`/`webVitals` at `/api/v1/analytics.*`, MCP `analytics_*`; public beacons are `/api/analytics/consent` and `/api/analytics/vitals`. **F07** `tests/core/analytics.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/analytics-governance.md`. **F12** `tests/core/analytics.test.ts` is the composition proof.)
+  Audit follow-up 2026-10-22: the traffic chart (`analytics.daily`) and the
+  anonymized export bucketed days with `at time zone` in SQL. They now group
+  by day boundaries computed in Node (§4.9: local-time math lives in Node; SQL
+  sees UTC instants), and refuse a zone `Intl` does not know. Regression:
+  "days are the business's days" in `tests/core/analytics.test.ts` (a 22:00Z
+  view in a `+05:00` zone counts on the next local day in both); changeset
+  `single-source-local-time.md`.
 - [x] **C1.19** Add a Content Security Policy compatible with editor preview,
   uploads and explicitly consented third-party creatives; report violations.
   (per-request nonce and strict-dynamic document policy; same-origin preview
@@ -8096,6 +8104,24 @@ customer has one secure, comprehensible home for the relationship.
   cannot rot into a question the report will not answer.
   Admin at `/admin/reports`, with the definitions printed under the figures.
   Migration `0138_report_views.sql`; `tests/modules/reporting.test.ts`. **F04** `/admin/reports`. **F05** `reports.revenue`/`revenueBy`/`funnel`/`cohort`/`saveView`/`listViews` at `/api/v1/reports.*`, MCP `reports_*`. **F07** `tests/modules/reporting.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/reporting.test.ts` is the composition proof.)
+  Audit follow-up 2026-10-22: CI showed a seeded booking at 15:30–16:15
+  America/Vancouver per Node reading as 16:30–17:15 per Postgres 16 — the two
+  tz databases disagreed about the zone's December offset. Revenue months and
+  cohort months were bucketed with `date_trunc(... at time zone ...)`, so a
+  payment near midnight could land in a different month from the one the page
+  printed. Both now join paid instants to month boundaries computed in Node
+  (`localBuckets`, `bucketTable`) and the query names no zone; the rule is
+  normative in §4.9 ("local-time math lives in Node; SQL sees UTC instants").
+  An unknown zone is now refused as a validation error. Regression:
+  `tests/modules/reporting.test.ts` (a `+05:00` zone, which Node reads as
+  five hours ahead and Postgres as five behind, files a 22:00Z payment in the
+  next local month for revenue and cohorts), `tests/core/local-time-sql.test.ts`,
+  `tests/core/zoned.test.ts` and `tests/core/doctor.test.ts`; changeset
+  `single-source-local-time.md`. Writing the DST tests (Vancouver, London,
+  Sydney, Tokyo) found that `zonedInstant` resolved a skipped local time to
+  the instant *before* the gap in zones east of UTC; it now takes the later
+  instant everywhere, and a repeated hour resolves to the earlier instant
+  unless the caller asks for the later.
 
 #### Referral, loyalty, subscriptions, and paywalls
 - [x] **C9.09** Build first-party attribution touches, codes, invitations,
@@ -8949,6 +8975,17 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   delivery's outcome on every row and an overdue export said out loud at the
   top. Migration `0158_scheduled_exports.sql`;
   `tests/modules/reporting-exports.test.ts`. **F04** `/admin/reports/exports`. **F05** `reports.saveExport`/`runExport`/`listExports`/`downloadExport`/`deliverScheduledExports` at `/api/v1/reports.*`, MCP `reports_*`. **F07** `tests/modules/reporting-exports.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/reporting-exports.test.ts` is the composition proof.)
+  Audit follow-up 2026-10-22: the last completed week, month or quarter was
+  computed by Postgres (`date_trunc` in the named zone), so a database whose
+  tz data lagged Node's would send the accountant a file starting an hour off
+  the dates printed in it. `periodsFor` now computes the boundaries in Node
+  from the same zone data the pages render with (§4.9); weeks still start
+  Monday and quarters on January, April, July and October, as `date_trunc`
+  did. Regression: "the period an export covers" in
+  `tests/modules/reporting-exports.test.ts` (pinned clocks across the spring
+  change in Vancouver, a Sydney quarter, and the `+05:00` disagreement that
+  the old query answered with October instead of November); changeset
+  `single-source-local-time.md`.
 - [x] **C9.33** Build the automatic subscription billing modes — `provider`
   (Stripe/PayPal schedules and their webhook reconciliation) and `platform`
   (off-session charges against a stored payment method) — and plan changes with

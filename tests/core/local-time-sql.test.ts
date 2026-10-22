@@ -1,0 +1,133 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// Local-time math lives in Node; SQL sees UTC instants (MASTER.md §4.9).
+//
+// Found in CI on 2026-10-22: a booking seeded at 15:30 Vancouver time by Node
+// read back as 16:30 through Postgres, because the two carry separate copies
+// of the tz database and those copies disagreed. Every query that bucketed by
+// the business's day or month with `AT TIME ZONE` was moved to boundaries
+// computed in Node. These tests keep it that way.
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { sql } from "drizzle-orm";
+import { afterAll, describe, expect, it } from "vitest";
+import { bucketTable } from "@/core/db/buckets";
+import { db, SESSION_SETTINGS } from "@/core/db";
+import { localBuckets } from "@/core/i18n/zoned";
+import { closeDb, hasDatabase } from "../helpers/spine";
+
+const root = fileURLToPath(new URL("../..", import.meta.url));
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    if (name === "node_modules" || name.startsWith(".")) return [];
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) return sourceFiles(path);
+    return /\.(ts|tsx|mjs)$/.test(name) && !/\.test\./.test(name) ? [path] : [];
+  });
+}
+
+/** SQL that asks Postgres what time it is somewhere. Comments are skipped. */
+const LOCAL_TIME_SQL = [
+  /\bat\s+time\s+zone\b/i,
+  /\bcurrent_date\b/i,
+  /\blocaltimestamp\b/i,
+  /\bset\s+(local\s+)?time\s*zone\b/i,
+];
+
+/**
+ * The one place that must ask Postgres for a local time: doctor's comparison
+ * of Postgres's tz data with Node's, which exists to report the answer.
+ */
+const ALLOWED = new Set(["src/core/doctor/index.ts"]);
+
+describe("no query asks Postgres for a local time", () => {
+  it("has no AT TIME ZONE, current_date or localtimestamp in shipped code", () => {
+    const offenders: string[] = [];
+    for (const dir of ["src", "app", "plugins"]) {
+      for (const file of sourceFiles(join(root, dir))) {
+        if (ALLOWED.has(file.slice(root.length).replaceAll("\\", "/"))) continue;
+        readFileSync(file, "utf8")
+          .split("\n")
+          .forEach((line, index) => {
+            const code = line.trim();
+            if (code.startsWith("//") || code.startsWith("*") || code.startsWith("/*")) return;
+            if (LOCAL_TIME_SQL.some((pattern) => pattern.test(code))) {
+              offenders.push(`${file.slice(root.length)}:${index + 1}: ${code}`);
+            }
+          });
+      }
+    }
+    expect(
+      offenders,
+      "Compute local-time boundaries in Node (localBuckets / zonedInstant in " +
+        "src/core/i18n/zoned.ts) and pass UTC instants to the query.",
+    ).toEqual([]);
+  });
+
+  it("hands buckets to SQL as instants, with no zone in the query text", () => {
+    const query = db()
+      .select({ one: sql`1` })
+      .from(
+        bucketTable(
+          localBuckets(
+            "America/Vancouver",
+            new Date("2026-12-09T08:00:00Z"),
+            new Date("2026-12-10T08:00:00Z"),
+            "day",
+          ),
+        ),
+      )
+      .toSQL();
+    expect(query.sql).not.toMatch(/time zone|Vancouver/i);
+    expect(query.params).toEqual([
+      "2026-12-09",
+      "2026-12-09T08:00:00.000Z",
+      "2026-12-10T08:00:00.000Z",
+    ]);
+  });
+});
+
+describe.runIf(hasDatabase)("every database session runs in UTC", () => {
+  afterAll(async () => {
+    await closeDb();
+  });
+
+  it("pins TimeZone on the connection rather than trusting the server default", async () => {
+    expect(SESSION_SETTINGS).toEqual({ TimeZone: "UTC" });
+    const [row] = await db().execute<{ zone: string; day: string; month: string }>(sql`
+      select current_setting('TimeZone') as zone,
+             ('2026-12-09T23:30:00Z'::timestamptz)::date::text as day,
+             date_trunc('month', '2026-11-30T23:30:00Z'::timestamptz)::text as month
+    `);
+    // A `::date` or `date_trunc` that remains in SQL is a UTC question. On a
+    // server whose default zone is, say, America/Vancouver these would read
+    // 2026-12-09 and 2026-11-01 00:00-07 — a different answer to the same row.
+    expect(row).toEqual({
+      zone: "UTC",
+      day: "2026-12-09",
+      month: "2026-11-01 00:00:00+00",
+    });
+  });
+
+  it("buckets an instant by Node's boundaries whatever zone the session names", async () => {
+    // Even a session deliberately set elsewhere cannot move a bucket: the join
+    // compares instants with instants.
+    const buckets = localBuckets(
+      "America/Vancouver",
+      new Date("2026-12-09T08:00:00Z"),
+      new Date("2026-12-11T08:00:00Z"),
+      "day",
+    );
+    const rows = await db().transaction(async (tx) => {
+      await tx.execute(sql`set local TimeZone = 'Pacific/Kiritimati'`);
+      return tx.execute<{ key: string }>(sql`
+        select bucket.key from ${bucketTable(buckets)}
+        where '2026-12-09T23:30:00Z'::timestamptz >= bucket.starts
+          and '2026-12-09T23:30:00Z'::timestamptz < bucket.ends
+      `);
+    });
+    expect(rows.map((each) => each.key)).toEqual(["2026-12-09"]);
+  });
+});
