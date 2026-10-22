@@ -185,6 +185,9 @@ const CALLER_AUTHORIZED_PHASES = [
   // catalog.recomputeSegmentCollections on nobody's behalf and claims nothing
   // on an external protocol.
   "catalog.recomputeCollectionMembership",
+  // Checkout composes this inside its transaction; the public door is the
+  // rate-limited catalog.quoteCartPromotions (C11.10).
+  "catalog.resolveCartPromotions",
   "documents.myDownload",
   // Storage keys stay behind the gallery's controlled byte routes.
   "galleries.viewItem",
