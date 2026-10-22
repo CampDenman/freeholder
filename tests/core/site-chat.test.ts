@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Site live chat, assistant handoff, and click-to-chat boundaries (MASTER C7.15).
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { desc, eq } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { db } from "@/core/db";
 import { SITE_CHAT_COOKIE } from "@/core/messaging/chat-cookie";
@@ -24,13 +24,33 @@ import {
   messengerDeepLink,
   whatsappDeepLink,
 } from "@/modules/cms/blocks/surfaces";
+import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
+import { contacts } from "@/core/contacts/schema";
+import { createContact } from "@/core/contacts/service";
 import {
   closeDb,
+  CUSTOMER,
   failure,
   hasDatabase,
   OWNER,
   truncateSpine,
 } from "../helpers/spine";
+
+// The public chat block posts through a Server Action that reads the session
+// cookie and request headers; these stand in for Next's request scope.
+const jar = vi.hoisted((): { cookies: Record<string, string> } => ({ cookies: {} }));
+vi.mock("next/headers", () => ({
+  headers: async () => ({ get: () => null }),
+  cookies: async () => ({
+    get: (name: string) => (jar.cookies[name] === undefined ? undefined : { value: jar.cookies[name] }),
+    set: (name: string, value: string) => {
+      jar.cookies[name] = value;
+    },
+    delete: (name: string) => {
+      delete jar.cookies[name];
+    },
+  }),
+}));
 
 const ASSISTANT = {
   kind: "agent" as const,
@@ -117,6 +137,33 @@ describe.runIf(hasDatabase)("site live chat", { timeout: 90_000 }, () => {
       .toContain("Your booking is confirmed.");
     expect((await getSiteChat.call({ token: impostor.token }, ANONYMOUS)).messages.map((m) => m.body))
       .not.toContain("Your booking is confirmed.");
+  });
+
+  it("continues a signed-in customer's own thread through the chat block, and nobody else's (C11.10)", async () => {
+    const { submitInboundAction } = await import("../../app/(public)/inbound-actions");
+    await db().insert(users).values({ id: CUSTOMER.userId, email: "ada@example.test", role: "customer" });
+    const contact = await createContact.call({ name: "Ada", email: "ada@example.test" }, OWNER);
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, contact.id));
+    const session = await db().transaction((tx) => createSession(tx, CUSTOMER.userId));
+    const chat = async (signedIn: boolean) => {
+      jar.cookies = signedIn ? { [SESSION_COOKIE]: session.token } : {};
+      const form = new FormData();
+      form.set("kind", "chat");
+      form.set("name", "Ada");
+      form.set("email", "ada@example.test");
+      form.set("message", "Hello again");
+      await expect(submitInboundAction(form)).rejects.toThrow(/NEXT_REDIRECT/);
+      const [own] = await db()
+        .select()
+        .from(siteChatSessions)
+        .where(eq(siteChatSessions.contactId, contact.id))
+        .orderBy(desc(siteChatSessions.createdAt))
+        .limit(1);
+      return own!.conversationId;
+    };
+    const first = await chat(true);
+    expect(await chat(true)).toBe(first);
+    expect(await chat(false)).not.toBe(first);
   });
 
   it("never exposes another channel from the shared Contact conversation", async () => {

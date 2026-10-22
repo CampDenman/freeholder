@@ -153,7 +153,7 @@ async function transcriptFor(ctx: ServiceContext, session: ActiveSession) {
 
 export const startSiteChat = defineService({
   name: "messaging.startSiteChat",
-  summary: "Start a bearer-scoped site chat on the Contact's canonical thread.",
+  summary: "Start a bearer-scoped site chat: on the Contact's thread only for its signed-in owner, otherwise on a new thread.",
   kind: "mutation",
   permission: "public",
   writeClass: "message",
