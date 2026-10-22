@@ -99,7 +99,7 @@ const nextConfig: NextConfig = {
         // `DENY` blocks framing even by the site itself — so the preview group
         // is carved out here and given `SAMEORIGIN` below rather than having
         // the whole site weakened to allow one screen.
-        source: "/((?!preview|embed).*)",
+        source: "/((?!preview|embed|api/ads/creative/).*)",
         headers: [
           // Stops a browser second-guessing a declared content type, which is
           // how an uploaded file gets treated as a script (§18 media lives in
@@ -139,6 +139,21 @@ const nextConfig: NextConfig = {
         // the page being edited. Proxy supplies the nonce-based CSP and its
         // `frame-ancestors 'self'`; SAMEORIGIN remains the legacy fallback.
         source: "/preview/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains",
+          },
+        ],
+      },
+      {
+        // A pasted ad tag's sandboxed document (C11.10), framed by this site's
+        // own ad slots. Its CSP carries `frame-ancestors 'self'` and `sandbox`.
+        source: "/api/ads/creative/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },

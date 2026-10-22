@@ -8,7 +8,7 @@ import nextConfig from "../../next.config";
 describe("security headers", () => {
   it("allows only same-origin capture while keeping unused sensors disabled", async () => {
     const groups = await nextConfig.headers!();
-    const application = groups.find((group) => group.source === "/((?!preview|embed).*)");
+    const application = groups.find((group) => group.source === "/((?!preview|embed|api/ads/creative/).*)");
     const policy = application?.headers.find(
       (header) => header.key === "Permissions-Policy",
     )?.value;

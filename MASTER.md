@@ -9634,6 +9634,44 @@ schema they inherit reads as a designed thing rather than an excavation.
   `tests/core/owner-password-script.test.ts`. Refreshed review packet records
   the remaining API-token/ephemeral-Basic hashing findings for independent
   disposition. These repairs do not close C11.10.)*
+  Audit follow-up 2026-10-21 (web and auth): `/api/mcp` requires
+  `application/json`, refuses a foreign `Origin` unless the request carries
+  its own `Authorization` credential, and applies the CSRF check to
+  cookie-authenticated calls. Pasted `html_tag` ad creatives no longer render
+  in site pages or receive the CSP nonce; they run in an opaque-origin frame
+  (`/api/ads/creative/[id]`, iframe `sandbox` plus CSP `sandbox`, no
+  `allow-same-origin`), and a house-line tag waits for explicit review.
+  Step-up, security-action and theme redirects share `safeLocalPath`, which
+  refuses backslash, control-character, encoded and protocol-relative forms.
+  `auth.changePassword` limits per account and refuses personal API keys,
+  which carry no step-up state. Customer magic links and newsletter
+  confirmations are limited per recipient inside the transaction, so composed
+  calls (storefront checkout) are bounded too; a pending subscription is not
+  re-mailed within ten minutes, and visitor-submitted consent evidence is
+  marked `provenance: visitor-submitted`. Share, popup and handle-availability
+  limits key on the validated `trustedIp` when configured, else on the
+  forwarded address, never one shared bucket; a high site-wide
+  `untrustedBackstop` bounds forged addresses. The droplet, host-updater and
+  playground Caddy recipes overwrite `X-Freeholder-Client-Ip` and set
+  `TRUSTED_CLIENT_IP_HEADER` (app port unpublished); the plain compose recipe
+  and managed platforms set none (`deploy/client-readiness.md`).
+  `safeLocalPath` also refuses dot segments (raw or `%2e`) and any resolved
+  result beginning `//` or `/\`. `ads.creativeTag` is system-only.
+  `rentals.reserve` books a non-staff hire as a `requested` booking, which
+  hand-over confirms through `bookings.setStatus` (requirements still apply
+  unless the owner passes `overrideRequirements`), and limits requests per
+  email and per client address; `events.register` caps a public registration
+  at ten seats and limits registrations per email and per client address.
+  Regressions: `tests/core/mcp.test.ts`, `tests/core/rate-limit.test.ts`,
+  `tests/core/deploy-recipe.test.ts`, `tests/core/internal-services.test.ts`,
+  `tests/modules/ads-third-party.test.ts`, `tests/core/security-headers.test.ts`,
+  `tests/core/customer-return-path.test.ts`, `tests/core/change-password.test.ts`,
+  `tests/core/customer-magic-links.test.ts`, `tests/core/newsletters.test.ts`,
+  `tests/modules/share.test.ts`, `tests/modules/popups.test.ts`,
+  `tests/core/rentals.test.ts`, `tests/core/events.test.ts`. Changeset
+  `web-auth-hardening.md`. Without `TRUSTED_CLIENT_IP_HEADER`, per-client
+  limits can be evaded by forging the forwarded address, up to the site-wide
+  backstop; this repair is not independent review evidence.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.

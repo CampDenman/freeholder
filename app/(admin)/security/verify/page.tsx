@@ -7,6 +7,7 @@ import { ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { twoFactorStatus } from "@/core/auth/two-factor";
 import { actorFromToken } from "@/core/http/actor";
+import { safeLocalPath } from "@/core/http/local-path";
 import { getT } from "../../../i18n";
 import { StepUpForm } from "./StepUpForm";
 
@@ -22,8 +23,7 @@ export default async function VerifySecurityPage({
   if (actor.kind !== "user") redirect("/login");
   const status = await twoFactorStatus.call({}, actor);
   if (!status.totp && status.webauthn.length === 0) redirect("/security?required=1");
-  const requested = (await searchParams).returnTo ?? "/admin";
-  const returnTo = requested.startsWith("/") && !requested.startsWith("//") ? requested : "/admin";
+  const returnTo = safeLocalPath((await searchParams).returnTo, "/admin");
   if (status.stepUpValid && actor.security?.twoFactorVerified) redirect(returnTo);
   const t = await getT();
   return (
