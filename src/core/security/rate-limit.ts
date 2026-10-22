@@ -26,7 +26,24 @@
 // matter for password guessing at these limits.
 import { sql } from "drizzle-orm";
 import { db } from "@/core/db";
-import type { Tx } from "@/core/service";
+import type { Actor, Tx } from "@/core/service";
+
+/**
+ * The bucket an anonymous caller is counted in (C11.10).
+ *
+ * The deployment-validated address (`TRUSTED_CLIENT_IP_HEADER`) is the one a
+ * client cannot choose, and is used whenever it is configured. Without it,
+ * the forwarded address is still the best per-visitor key there is: a caller
+ * who forges it escapes their own limit, but nobody can spend everybody
+ * else's. One shared bucket would be the opposite trade — unforgeable, and a
+ * site-wide off switch. Services pair this with `untrustedBackstop`, the
+ * high site-wide ceiling that bounds the forgers.
+ */
+export function anonymousClientKey(actor: Actor): string {
+  const trusted = actor.request?.trustedIp;
+  if (trusted) return `ip:${trusted}`;
+  return `untrusted-ip:${actor.request?.ip ?? "unknown"}`;
+}
 
 export interface RateLimitPolicy {
   /** Attempts allowed per window, per key. */

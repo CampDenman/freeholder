@@ -23,10 +23,10 @@ history all hang off one CRM timeline.
 - [Explore the live demo](https://demo.freeholder.ai/) and its shared, hourly
   resetting playground. Use fictional data.
 - [Get started from the source](GETTING_STARTED.md) with a maintained Docker or
-  cloud deployment recipe. Beta npm availability is recorded in
-  [GitHub releases](https://github.com/CampDenman/freeholder/releases); use
-  `npx create-freeholder@next my-business` after publication. No stable release
-  is available yet.
+  cloud deployment recipe. Beta packages are published to npm under the `next`
+  tag (`npx create-freeholder@next my-business`) and recorded in
+  [GitHub releases](https://github.com/CampDenman/freeholder/releases). No
+  stable release is available yet.
 - [Read the contributor guide](CONTRIBUTING.md) to help improve the project.
 - [Build a member site with an AI builder](deploy/members-vibe-coding.md):
   demo community, the member services, and prompts for Replit, Lovable and

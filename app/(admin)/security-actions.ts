@@ -26,6 +26,7 @@ import {
 import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
+import { safeLocalPath } from "@/core/http/local-path";
 import { ServiceError } from "@/core/service";
 import {
   revokeOtherSessions,
@@ -260,7 +261,7 @@ export async function revokeOtherSessionsAction(): Promise<SecurityActionState> 
 }
 
 function safeReturnTo(value: string): string {
-  return value.startsWith("/") && !value.startsWith("//") ? value : "/admin";
+  return safeLocalPath(value, "/admin");
 }
 
 const PASSKEY_COOKIE = "freeholder_passkey_challenge";

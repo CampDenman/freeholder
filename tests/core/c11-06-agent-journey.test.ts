@@ -173,8 +173,8 @@ describe.runIf(hasDatabase)("C11.06 agent proposal and code gates", { timeout: 6
                                 props: {
                                   eyebrow: "Launch line",
                                   label: "Call the studio",
-                                  phone: "+16393834662",
-                                  displayPhone: "(639) 383-4662",
+                                  phone: "+16395550123",
+                                  displayPhone: "(639) 555-0123",
                                   supportText: "Talk about the sitting.",
                                 },
                               },

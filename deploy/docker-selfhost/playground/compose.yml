@@ -33,6 +33,9 @@ services:
       FREEHOLDER_JOBS: 'on'
       FREEHOLDER_UPDATE_CHECK: 'off'
       MAIL_ADAPTER: console
+      # Set per request by the production Caddy (demo.freeholder.ai.caddy);
+      # the app is reachable only on the proxy network (C11.10).
+      TRUSTED_CLIENT_IP_HEADER: x-freeholder-client-ip
     tmpfs: [/tmp:size=134217728, /app/.next/cache:size=33554432]
     read_only: true
     mem_limit: 768m

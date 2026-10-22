@@ -28,9 +28,17 @@ demo.example.com {
   request_body {
     max_size 64KB
   }
-  reverse_proxy playground-app:3000
+  reverse_proxy playground-app:3000 {
+    header_up X-Freeholder-Client-Ip {client_ip}
+  }
 }
 ```
+
+The `header_up` line is required: the playground app trusts
+`X-Freeholder-Client-Ip` (`TRUSTED_CLIENT_IP_HEADER` in `compose.yml`) for its
+rate limits, and Caddy must overwrite it on every request so a visitor cannot
+supply their own. If your proxy cannot overwrite it, remove
+`TRUSTED_CLIENT_IP_HEADER` from the playground compose file.
 
 For the project's own `demo.freeholder.ai` on the DigitalOcean production
 droplet, the checked-in `demo.freeholder.ai.caddy` is that Caddy site. The host

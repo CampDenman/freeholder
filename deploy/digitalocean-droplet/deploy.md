@@ -37,7 +37,7 @@ and they must not be copied into `.github/workflows`.
 The forge does not yet have a `freeholder` repository. Push-to-create is
 disabled for the organization, and creating it needs a token this repository
 does not have. Create `freeholder` in the same Forgejo organization as
-paradisemodern, on the forge named in `HANDOFF.md`, and push this
+paradisemodern, on the operator's private forge, and push this
 repository's `main` there. Register the release runner with the label
 `freeholder-release` (the machine that already runs paradisemodern's
 `pm-release` label can carry both).

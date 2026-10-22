@@ -125,8 +125,8 @@ describe("parseBlockTree()", () => {
           props: {
             eyebrow: "Direct line",
             label: "Call us",
-            phone: "639 383 4662",
-            displayPhone: "(639) 383-4662",
+            phone: "639 555 0123",
+            displayPhone: "(639) 555-0123",
             supportText: "Tap to speak with us.",
           },
         }],

@@ -79,3 +79,10 @@ overrides:
   # the fix is a patch version. 8.10.2 is the first release in the patched
   # range for the 8.x line the tree uses.
   undici: ">=8.10.2 <9"
+  # GHSA-587h-7wmj-h5pm (high), GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw:
+  # launch-editor argument escaping and Windows path checks, reached through
+  # vite's development server (test tooling only). Bounded at the next major.
+  # vite itself (same advisories plus GHSA-9jrq-w75r-8gcw) is a direct
+  # devDependency at the patched floor: as vitest's auto-installed peer it was
+  # not re-resolved by an override.
+  launch-editor: ">=2.14.2 <3"

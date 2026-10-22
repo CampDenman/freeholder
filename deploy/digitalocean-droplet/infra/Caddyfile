@@ -4,7 +4,14 @@
 # to this droplet before it can be issued a certificate.
 {$FREEHOLDER_DOMAIN} {
 	encode zstd gzip
-	reverse_proxy app:3000
+	# C11.10: the connecting address, overwritten on every request so a
+	# client cannot supply its own. The app trusts it only because
+	# TRUSTED_CLIENT_IP_HEADER names it and the app port is not published.
+	# {client_ip} is the connecting address unless a global trusted_proxies
+	# option names a fronting proxy, so it is correct for a direct droplet.
+	reverse_proxy app:3000 {
+		header_up X-Freeholder-Client-Ip {client_ip}
+	}
 }
 
 www.{$FREEHOLDER_PRIMARY_DOMAIN} {

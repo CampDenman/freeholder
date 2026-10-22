@@ -875,7 +875,10 @@ export const saveCreative = defineService({
     // Anything sold goes back to pending on every edit: §4.16's rule is that
     // "a creative cannot be swapped for a different target after approval",
     // and an edit is exactly that swap.
-    const house = line.pricing === "house";
+    // A pasted `html_tag` is somebody else's code even on a house line, so it
+    // always waits for an explicit review (C11.10) rather than being approved
+    // by the act of saving it.
+    const selfApproved = line.pricing === "house" && input.kind !== "html_tag";
     const values: typeof adCreatives.$inferInsert = {
       lineItemId: input.lineItemId,
       kind: input.kind,
@@ -890,10 +893,10 @@ export const saveCreative = defineService({
       tagHtml,
       provider,
       status: input.status,
-      reviewState: house ? "approved" : "pending",
+      reviewState: selfApproved ? "approved" : "pending",
       reviewNote: null,
-      reviewedBy: house ? actorString(ctx.actor) : null,
-      reviewedAt: house ? new Date() : null,
+      reviewedBy: selfApproved ? actorString(ctx.actor) : null,
+      reviewedAt: selfApproved ? new Date() : null,
     };
 
     if (input.id) {
@@ -942,6 +945,52 @@ export const reviewCreative = defineService({
       decision: input.decision,
     });
     return updated;
+  },
+});
+
+/**
+ * The pasted markup of one servable `html_tag` creative, for the sandboxed
+ * document `/api/ads/creative/[id]` serves (C11.10).
+ *
+ * A pasted tag is never written into a page of this site: it runs inside a
+ * frame with an opaque origin, so whatever it does, it does without this
+ * site's cookies, storage or DOM. This is the one read that hands the markup
+ * out, and it applies the same gates `ads.serve` does — approved, active
+ * artwork on an active line in a live campaign — so the address of a paused
+ * or rejected creative serves nothing.
+ */
+export const creativeTag = defineService({
+  name: "ads.creativeTag",
+  summary: "The markup of a live third-party tag, for its sandboxed frame.",
+  kind: "query",
+  // Internal: only the creative route reads it, on the visitor's behalf after
+  // its own consent check. Not an API, MCP or SDK verb.
+  permission: "system",
+  input: z.object({ id: uuidSchema }),
+  output: row({ html: z.string(), width: z.number().int(), height: z.number().int() }).nullable(),
+  handler: async (input, ctx) => {
+    const [found] = await ctx.tx
+      .select({
+        html: adCreatives.tagHtml,
+        width: adCreatives.width,
+        height: adCreatives.height,
+      })
+      .from(adCreatives)
+      .innerJoin(adLineItems, eq(adCreatives.lineItemId, adLineItems.id))
+      .innerJoin(adCampaigns, eq(adLineItems.campaignId, adCampaigns.id))
+      .where(
+        and(
+          eq(adCreatives.id, input.id),
+          eq(adCreatives.kind, "html_tag"),
+          eq(adCreatives.status, "active"),
+          eq(adCreatives.reviewState, "approved"),
+          eq(adLineItems.status, "active"),
+          eq(adCampaigns.status, "live"),
+        ),
+      )
+      .limit(1);
+    const html = found?.html ? reviewedTagHtml(found.html) : null;
+    return found && html ? { html, width: found.width, height: found.height } : null;
   },
 });
 
@@ -2067,6 +2116,7 @@ export default [
   lineItems,
   saveCreative,
   reviewCreative,
+  creativeTag,
   creatives,
   serve,
   recordClick,
