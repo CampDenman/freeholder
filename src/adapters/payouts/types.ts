@@ -33,7 +33,11 @@ export interface TransferRequest {
   externalAccountId: string;
   amountMinor: number;
   currency: string;
-  /** The ledger's payout id: the same key on a retry never pays twice. */
+  /**
+   * The attempt's key: the ledger's payout id, then `<payout id>:<n>` for a
+   * later attempt. The same key on a retry never pays twice, and it rides
+   * on the transfer so a webhook names the attempt it belongs to.
+   */
   idempotencyKey: string;
   description: string;
 }
@@ -48,7 +52,11 @@ export type ReverseResult = { reference: string } | { unsupported: string };
 
 export type PayoutWebhookEvent =
   | { kind: "account"; externalAccountId: string; status: PayoutAccountStatus }
-  | { kind: "transfer"; reference: string; state: "settled" | "failed"; error?: string };
+  /**
+   * key is the attempt key the transfer carried, when the provider echoes it
+   * back. "unclaimed": PayPal holds the money for the receiver to claim.
+   */
+  | { kind: "transfer"; reference: string; key?: string; state: "settled" | "failed" | "unclaimed"; error?: string };
 
 export interface PayoutWebhookRequest {
   headers: Record<string, string | undefined>;

@@ -6,9 +6,10 @@ import { and, asc, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isUniqueViolation } from "@/core/db";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineService, permits, ServiceError, type ServiceContext } from "@/core/service";
+import { defineOrchestratedService, defineService, permits, ServiceError, type ServiceContext } from "@/core/service";
 import { anonymousClientKey, consumeAccepted, rateLimitKey } from "@/core/security/rate-limit";
 import { registerContactReference } from "@/core/contacts/service";
+import { listLocations } from "@/core/locations/service";
 import { resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { recordRedirect } from "@/core/seo/service";
@@ -230,6 +231,42 @@ async function loadEvent(ctx: ServiceContext, eventId: string) {
 type AdmissionTicket = typeof eventTickets.$inferSelect;
 
 /**
+ * How admission is taxed. Admission is supplied where the event happens, so
+ * tax runs from the business's primary location to the venue, through the
+ * same calculate path as every other sale; the attendee's own address plays
+ * no part, so none is asked for. An event with no venue of its own is held
+ * at the business. A venue typed in as free text (not one of the business's
+ * saved locations) cannot be placed in a tax jurisdiction, so it is taxed
+ * as if held at the business, and the invoice says so. A business with no
+ * location at all adds no tax, as catalog orders do, and the invoice says why.
+ */
+async function admissionTax(ctx: ServiceContext, eventId: string) {
+  const locations = await ctx.callAsSystem(listLocations, {});
+  const origin = locations.find((each) => each.isPrimary) ?? locations[0];
+  if (!origin) {
+    return { tax: { mode: "not_applicable" as const, reason: "This business has no location to tax event admission from, so no tax was added." } };
+  }
+  const [event] = await ctx.tx
+    .select({ venueLocationId: events.venueLocationId, venueName: events.venueName, venueAddress: events.venueAddress })
+    .from(events)
+    .where(eq(events.id, eventId))
+    .limit(1);
+  const saved = event?.venueLocationId ? locations.find((each) => each.id === event.venueLocationId) : undefined;
+  const elsewhere = !saved && Boolean(event?.venueLocationId || event?.venueName?.trim() || event?.venueAddress?.trim());
+  const venue = saved ?? origin;
+  const place = (at: typeof origin) => ({
+    country: at.country,
+    region: at.region ?? undefined,
+    postalCode: at.postalCode ?? undefined,
+    city: at.city ?? undefined,
+  });
+  return {
+    tax: { mode: "calculate" as const, origin: place(origin), destination: place(venue) },
+    memo: elsewhere ? "Tax on this admission was worked out at the business's location: the venue is not one of its saved locations." : undefined,
+  };
+}
+
+/**
  * Create and issue the invoice that holds a paid seat, in the caller's
  * transaction. One registration ever has one invoice: `invoices_source_idx`
  * makes (sourceType, sourceId) unique, and the idempotency key is the
@@ -246,6 +283,7 @@ async function issueAdmissionInvoice(
     holdExpiresAt: Date;
   },
 ) {
+  const { tax, memo } = await admissionTax(ctx, args.ticket.eventId);
   const draft = await ctx.callAsSystem(createDraftInvoice, {
     contactId: args.contactId,
     currency: args.ticket.currency,
@@ -261,12 +299,8 @@ async function issueAdmissionInvoice(
         unitAmountMinor: args.ticket.priceMinor,
       },
     ],
-    // No address is collected at registration; guessing a tax treatment on the
-    // attendee's behalf is the one thing an accounting system must not do.
-    tax: {
-      mode: "not_applicable" as const,
-      reason: "Event admission; tax applied when the invoice is issued.",
-    },
+    tax,
+    ...(memo ? { memo } : {}),
     dueAt: args.holdExpiresAt,
   });
   return ctx.callAsSystem(issueInvoice, { id: draft.invoice.id });
@@ -1036,16 +1070,15 @@ export const confirmPaidRegistration = defineService({
   },
 });
 
-export const expireHeldRegistrations = defineService({
-  name: "events.expireHeldRegistrations",
-  summary: "Cancel held registrations whose payment deadline passed without settlement.",
-  kind: "mutation",
+const lapsedHolds = defineService({
+  name: "events.lapsedHolds",
+  summary: "Held registrations whose payment deadline passed, oldest first.",
+  kind: "query",
   permission: "system",
-  input: z.object({ limit: z.number().int().min(1).max(500).default(100) }),
-  output: row({ expired: z.number().int() }),
-  auditWhen: (out: { expired: number }) => out.expired > 0,
-  handler: async (input, ctx) => {
-    const candidates = await ctx.tx
+  input: z.object({ limit: z.number().int().min(1).max(500) }),
+  output: listed(row({ id: uuid })),
+  handler: async (input, ctx) =>
+    ctx.tx
       .select({ id: eventRegistrations.id })
       .from(eventRegistrations)
       .where(
@@ -1053,42 +1086,91 @@ export const expireHeldRegistrations = defineService({
           eq(eventRegistrations.status, "reserved"),
           isNotNull(eventRegistrations.holdExpiresAt),
           lt(eventRegistrations.holdExpiresAt, sql`now()`),
+          // Money arrived (fully or in part): the owner reconciles it, so the
+          // sweep never takes it and it can never fill a batch.
+          sql`not exists (select 1 from ${invoices} i where i.id = ${eventRegistrations.invoiceId} and (i.paid_minor > 0 or i.status in ('paid', 'refunded')))`,
         ),
       )
-      .orderBy(asc(eventRegistrations.holdExpiresAt))
-      .limit(input.limit);
+      // A hold with a payment attempt in flight cannot be released until the
+      // attempt resolves: it goes after every hold that can, so a pile of
+      // them never starves holds that lapsed later.
+      .orderBy(
+        sql`exists (select 1 from ${payments} p where p.invoice_id = ${eventRegistrations.invoiceId} and p.status in ('created', 'processing'))`,
+        asc(eventRegistrations.holdExpiresAt),
+      )
+      .limit(input.limit),
+});
+
+/** One lapsed hold, in its own transaction: released, or left for a reason. */
+const expireHeldRegistration = defineService({
+  name: "events.expireHeldRegistration",
+  summary: "Cancel one held registration whose payment deadline passed without settlement.",
+  kind: "mutation",
+  permission: "system",
+  input: z.object({ id: uuid }),
+  output: row({ expired: z.boolean() }),
+  handler: async (input, ctx) => {
+    const [registration] = await ctx.tx
+      .select({ status: eventRegistrations.status, invoiceId: eventRegistrations.invoiceId, holdExpiresAt: eventRegistrations.holdExpiresAt })
+      .from(eventRegistrations)
+      .where(eq(eventRegistrations.id, input.id))
+      .limit(1);
+    // Settled or cancelled since it was listed.
+    if (registration?.status !== "reserved" || !registration.holdExpiresAt || registration.holdExpiresAt.getTime() >= Date.now()) {
+      return { expired: false };
+    }
+    const [invoice] = registration.invoiceId
+      ? await ctx.tx
+          .select({ status: invoices.status, paidMinor: invoices.paidMinor })
+          .from(invoices)
+          .where(eq(invoices.id, registration.invoiceId))
+          .limit(1)
+      : [];
+    // Money arrived (fully or in part): the seat is no longer the sweeper's
+    // to release — the owner reconciles a partial payment by hand.
+    if (invoice && (invoice.paidMinor > 0 || invoice.status === "paid" || invoice.status === "refunded")) {
+      return { expired: false };
+    }
+    // Cancelling releases the seat, voids the unpaid invoice and runs the
+    // waitlist promotion cascade, all inside the cancellation's own locks.
+    await ctx.callAsSystem(cancelRegistration, { id: input.id });
+    return { expired: true };
+  },
+});
+
+/**
+ * The five-minute sweep. Each hold is released in its own transaction, so
+ * one that cannot be (a payment attempt in flight, or a promotion that
+ * fails — say the next person's email was erased) stays as it is without
+ * holding back every other lapsed seat. Failures are counted and logged.
+ */
+export const expireHeldRegistrations = defineOrchestratedService({
+  name: "events.expireHeldRegistrations",
+  summary: "Cancel held registrations whose payment deadline passed without settlement.",
+  kind: "mutation",
+  permission: "system",
+  input: z.object({ limit: z.number().int().min(1).max(500).default(100) }),
+  output: row({ expired: z.number().int(), blocked: z.number().int(), failed: z.number().int() }),
+  handler: async (input, actor) => {
+    const candidates = await lapsedHolds.call({ limit: input.limit }, actor);
     let expired = 0;
+    let blocked = 0;
+    let failed = 0;
     for (const candidate of candidates) {
-      const [registration] = await ctx.tx
-        .select({ invoiceId: eventRegistrations.invoiceId })
-        .from(eventRegistrations)
-        .where(eq(eventRegistrations.id, candidate.id))
-        .limit(1);
-      const [invoice] = registration?.invoiceId
-        ? await ctx.tx
-            .select({ status: invoices.status, paidMinor: invoices.paidMinor })
-            .from(invoices)
-            .where(eq(invoices.id, registration.invoiceId))
-            .limit(1)
-        : [];
-      // Money arrived (fully or in part): the seat is no longer the sweeper's
-      // to release — the owner reconciles a partial payment by hand.
-      if (invoice && (invoice.paidMinor > 0 || invoice.status === "paid" || invoice.status === "refunded")) {
-        continue;
-      }
-      // Cancelling releases the seat, voids the unpaid invoice and runs the
-      // waitlist promotion cascade, all inside the cancellation's own locks.
       try {
-        await ctx.callAsSystem(cancelRegistration, { id: candidate.id });
+        if ((await expireHeldRegistration.call({ id: candidate.id }, actor)).expired) expired += 1;
       } catch (error) {
         // A payment attempt that began before the hold lapsed blocks the
         // release; the attempt's own lifecycle unblocks a later sweep.
-        if (error instanceof ServiceError && error.code === "conflict") continue;
-        throw error;
+        if (error instanceof ServiceError && error.code === "conflict") {
+          blocked += 1;
+          continue;
+        }
+        failed += 1;
+        console.error(`[events] could not release lapsed hold ${candidate.id}`, error);
       }
-      expired += 1;
     }
-    return { expired };
+    return { expired, blocked, failed };
   },
 });
 
@@ -1358,6 +1440,8 @@ export default [
   cancelRegistration,
   checkInRegistration,
   confirmPaidRegistration,
+  lapsedHolds,
+  expireHeldRegistration,
   expireHeldRegistrations,
   cancelRegistrationForInvoice,
   eventCalendar,

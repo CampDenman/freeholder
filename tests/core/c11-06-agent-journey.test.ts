@@ -5,7 +5,7 @@
 // needs a connected repository and is remaining honesty, not a claimed hop.
 // Content-lane rollback is walked via builder.propose / rollbackProposal.
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
-import { setBuilderAgentFetchForTests } from "@/adapters/agent/pm-brain";
+import { setBuilderAgentFetchForTests } from "@/adapters/agent/gateway";
 import { resetEnvForTests } from "@/core/env";
 import { users } from "@/core/auth/schema";
 import { db } from "@/core/db";
@@ -125,6 +125,7 @@ describe.runIf(hasDatabase)("C11.06 agent proposal and code gates", { timeout: 6
   });
 
   it("prompts the builder, applies a visual review, and rolls the section back", async () => {
+    // The deprecated name of the Paradise provider; it must keep working.
     process.env.FREEHOLDER_AGENT = "pm_brain";
     process.env.PARADISEMODERN_API_KEY = "test-purpose-bound-site-key";
     process.env.BUILDER_MONTHLY_TOKEN_BUDGET = "250000";

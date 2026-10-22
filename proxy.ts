@@ -47,6 +47,10 @@ import {
   analyticsIdentifiersAllowed,
   parseAnalyticsConsentState,
 } from "@/modules/analytics/visitor";
+import {
+  PLAYGROUND_SHARED_CACHE_CONTROL,
+  playgroundSharedCacheable,
+} from "@/core/demo/playground-cache";
 
 /** `/sitemap-fr-CA.xml` or `/sitemap-en-2.xml` when a locale map is split. */
 const LOCALE_SITEMAP =
@@ -120,6 +124,7 @@ function sfuOrigins(url: string | undefined): string[] {
 export function proxy(request: NextRequest): NextResponse {
   const headers = new Headers(request.headers);
   const path = request.nextUrl.pathname;
+  const playground = env().FREEHOLDER_PLAYGROUND === "1";
   headers.set(PATH_HEADER, path);
   headers.set(REQUEST_TARGET_HEADER, `${path}${request.nextUrl.search}`);
   const policy = requestPolicy(request, path);
@@ -176,6 +181,9 @@ export function proxy(request: NextRequest): NextResponse {
     headers.set(PATH_HEADER, rest);
     const url = request.nextUrl.clone();
     url.pathname = rest;
+    if (playground) {
+      return finalize(playgroundPage(request, rest, NextResponse.rewrite(url, { request: { headers } })));
+    }
     // A localized portal request is still account traffic, not analytics.
     return finalize(UNCOUNTED.test(rest)
       ? NextResponse.rewrite(url, { request: { headers } })
@@ -188,6 +196,10 @@ export function proxy(request: NextRequest): NextResponse {
 
   if (UNCOUNTED.test(path)) {
     return finalize(NextResponse.next({ request: { headers } }));
+  }
+
+  if (playground) {
+    return finalize(playgroundPage(request, path, NextResponse.next({ request: { headers } })));
   }
 
   return finalize(withAnalyticsIdentity(
@@ -234,6 +246,31 @@ function requestPolicy(
       ),
     }),
   };
+}
+
+/**
+ * C1.38: the public playground records no analytics (`pageview.ts`), so it
+ * mints no identity cookies either. With no Set-Cookie on an anonymous page,
+ * a CDN in front of the demo may keep the pages `playgroundSharedCacheable`
+ * allows for a few seconds — a launch-day spike then costs one render per
+ * page rather than one per visitor.
+ */
+function playgroundPage(
+  request: NextRequest,
+  path: string,
+  response: NextResponse,
+): NextResponse {
+  if (
+    playgroundSharedCacheable({
+      method: request.method,
+      path,
+      search: request.nextUrl.search,
+      headers: request.headers,
+    })
+  ) {
+    response.headers.set("Cache-Control", PLAYGROUND_SHARED_CACHE_CONTROL);
+  }
+  return response;
 }
 
 /**

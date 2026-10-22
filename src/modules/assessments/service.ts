@@ -22,7 +22,7 @@ import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
 import { violates } from "@/core/db/errors";
-import { consumeAccepted } from "@/core/security/rate-limit";
+import { clientNetwork, consumeAccepted } from "@/core/security/rate-limit";
 import {
   registerContactReference,
   resolveContact,
@@ -732,7 +732,7 @@ export const respond = defineService({
       const identity =
         ctx.actor.kind === "user"
           ? `user:${ctx.actor.userId}`
-          : (ctx.actor.request?.trustedIp ??
+          : ((ctx.actor.request?.trustedIp ? clientNetwork(ctx.actor.request.trustedIp) : undefined) ??
             input.respondent?.email?.trim().toLowerCase() ??
             JSON.stringify(Object.entries(answers).sort(([a], [b]) => a.localeCompare(b))));
       const verdict = await consumeAccepted(

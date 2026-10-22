@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { parse } from "yaml";
 
 const DEPLOY = "deploy";
 
@@ -153,6 +154,22 @@ describe("a trusted client address only where a proxy overwrites it (C11.10)", (
     const compose = readFileSync(join(DEPLOY, "docker-selfhost/infra/compose.yml"), "utf8");
     expect(compose).not.toMatch(/TRUSTED_CLIENT_IP_HEADER/);
   });
+
+  it("managed platforms trust the header their documentation names, and only those", () => {
+    // DigitalOcean App Platform documents do-connecting-ip; its X-Forwarded-For
+    // carries the ingress address, so trusting that would group every visitor.
+    const appSpec = readFileSync(join(DEPLOY, "digitalocean-app/infra/app.yaml"), "utf8");
+    expect(appSpec).toMatch(/key: TRUSTED_CLIENT_IP_HEADER\n\s+value: do-connecting-ip\n/);
+    // Railway documents X-Real-IP as the client's address at its edge.
+    expect(readFileSync(".railway/railway.ts", "utf8")).toMatch(
+      /TRUSTED_CLIENT_IP_HEADER: "x-real-ip"/,
+    );
+    // Render and Replit document no client-address header or proxy depth, so
+    // naming one would be a guess an attacker could exploit.
+    for (const file of ["render.yaml", ".replit"]) {
+      expect(readFileSync(file, "utf8")).not.toMatch(/TRUSTED_CLIENT_IP_HEADER|TRUSTED_PROXY_HOPS/);
+    }
+  });
 });
 
 describe("the droplet backup is a verifiable restore artifact", () => {
@@ -166,5 +183,75 @@ describe("the droplet backup is a verifiable restore artifact", () => {
     expect(backup).toContain("sha256sum");
     expect(backup).toContain(".sha256");
     expect(backup).not.toMatch(/^\s*[^#\r\n]*--clean/m);
+  });
+});
+
+describe("the playground cannot take production down with it (C1.38 capacity)", () => {
+  // The demo shares a 4 GB / 2 vCPU droplet with production. Before these
+  // limits it had no restart policy (an OOM kill left it down until the next
+  // hourly reset), equal CPU priority, and a heap Node sized so close to its
+  // cgroup that a measured burst peaked 32 MB short of the kill.
+  const dir = join(DEPLOY, "docker-selfhost", "playground");
+  const compose = parse(readFileSync(join(dir, "compose.yml"), "utf8")) as {
+    services: Record<string, Record<string, unknown> & { environment?: Record<string, string> }>;
+  };
+  const megabytes = (value: unknown) => Number(String(value).replace(/m$/, ""));
+
+  for (const name of ["app", "db"]) {
+    it(`${name} yields CPU and memory to production and comes back after a kill`, () => {
+      const service = compose.services[name]!;
+      expect(service.restart).toBe("unless-stopped");
+      expect(service.oom_score_adj).toBe(1000);
+      expect(Number(service.cpu_shares)).toBeLessThan(1024);
+      expect(service.memswap_limit).toBe(service.mem_limit);
+    });
+  }
+
+  it("bounds the whole demo well inside the droplet, and the heap inside its container", () => {
+    const { app, db } = compose.services;
+    expect(megabytes(app!.mem_limit) + megabytes(db!.mem_limit)).toBeLessThanOrEqual(1408);
+    // Its tmpfs data counts against this limit, and a killed database comes
+    // back empty, so it keeps room to spare.
+    expect(megabytes(db!.mem_limit)).toBeGreaterThanOrEqual(512);
+    const heap = Number(/--max-old-space-size=(\d+)/.exec(app!.environment!.NODE_OPTIONS ?? "")?.[1]);
+    // Measured: the live heap is ~315 MB, and ~300 MB of code and native
+    // memory sits outside it.
+    expect(heap).toBeGreaterThanOrEqual(384);
+    expect(heap + 300).toBeLessThan(megabytes(app!.mem_limit));
+    expect(Number(app!.environment!.FREEHOLDER_JOBS_POLL_SECONDS)).toBeGreaterThanOrEqual(10);
+  });
+
+  it("reports an emptied database as unhealthy, and a timer acts on it", () => {
+    // Liveness would stay green while every page errors against an empty
+    // database; readiness would turn red on a merely busy demo. The schema
+    // probe answers only the question heal acts on.
+    const check = JSON.stringify(compose.services.app!.healthcheck);
+    expect(check).toContain("localhost:3000/api/health/db");
+    expect(readFileSync(join(dir, "reset.sh"), "utf8")).toContain("/api/health/db");
+    expect(readFileSync(join(dir, "freeholder-playground-heal.service"), "utf8")).toMatch(/reset\.sh --heal/);
+    expect(readFileSync(join(dir, "freeholder-playground-heal.timer"), "utf8")).toMatch(/OnUnitActiveSec=/);
+  });
+
+  it("joins the proxy network only through reset.sh, after readiness", () => {
+    expect(compose.services.app!.networks).toEqual(["private"]);
+    const reset = readFileSync(join(dir, "reset.sh"), "utf8");
+    const ready = reset.indexOf("until docker exec");
+    const connect = reset.indexOf("docker network connect --alias");
+    expect(ready).toBeGreaterThan(0);
+    expect(connect).toBeGreaterThan(ready);
+    // Running two playgrounds at once is conditional on the host having room.
+    expect(reset).toMatch(/MemAvailable/);
+    expect(reset).toMatch(/PLAYGROUND_OVERLAP_MIN_MB/);
+  });
+
+  it("Caddy compresses, queues a spike and holds requests through a reset", () => {
+    const caddy = readFileSync(join(dir, "demo.freeholder.ai.caddy"), "utf8");
+    expect(caddy).toMatch(/encode zstd gzip/);
+    expect(caddy).toMatch(/lb_try_duration \d+s/);
+    expect(caddy).toMatch(/max_conns_per_host \d+/);
+    // Long admin actions (imports, exports) must not become a 503.
+    expect(Number(/response_header_timeout (\d+)s/.exec(caddy)?.[1])).toBeGreaterThanOrEqual(120);
+    expect(caddy).toMatch(/handle_errors 502 503 504/);
+    expect(caddy).toMatch(/Retry-After/);
   });
 });

@@ -35,12 +35,21 @@ describe("the builder adapter (§37)", () => {
     expect(defineConfig({}).adapters.agent).toBe("none");
   });
 
-  it("accepts our default without making it everyone's", () => {
-    expect(defineConfig({ adapters: { agent: "pm_brain" } }).adapters.agent).toBe(
-      "pm_brain",
+  it("offers neutral provider choices, with Paradise as one optional provider", () => {
+    expect(defineConfig({ adapters: { agent: "gateway" } }).adapters.agent).toBe(
+      "gateway",
+    );
+    expect(defineConfig({ adapters: { agent: "paradise" } }).adapters.agent).toBe(
+      "paradise",
     );
     expect(defineConfig({ adapters: { agent: "local" } }).adapters.agent).toBe(
       "local",
+    );
+  });
+
+  it("still reads the deprecated pm_brain name as the Paradise provider", () => {
+    expect(defineConfig({ adapters: { agent: "pm_brain" } }).adapters.agent).toBe(
+      "paradise",
     );
   });
 

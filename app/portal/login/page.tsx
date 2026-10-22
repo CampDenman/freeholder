@@ -10,6 +10,7 @@ import { currentBusiness } from "@/core/settings/read";
 import { getLocale, getT } from "../../i18n";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { redirect } from "next/navigation";
+import { env } from "@/core/env";
 import { customerSignInStatus } from "@/core/portal/sign-in";
 import { safeCustomerReturnPath } from "@/core/portal/return-path";
 import { MagicLinkForm } from "./MagicLinkForm";
@@ -20,6 +21,8 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
   const [business, t] = await Promise.all([currentBusiness(), getT()]);
   return {
+    // A tab, a bookmark and a screen reader all start from the title; an
+    // empty one made this page anonymous in every one of them.
     title: `${t("portal.login.title")} — ${business?.name ?? t("common.appName")}`,
     robots: { index: false, follow: false },
     referrer: "no-referrer",
@@ -59,7 +62,9 @@ export default async function PortalLoginPage({ searchParams }: { searchParams: 
         </div>
       </div>
       <h1 className="text-2xl font-bold tracking-tight">{t("portal.login.title")}</h1>
-      <p className="mt-2 mb-8 text-ink-muted">{t("portal.login.intro")}</p>
+      {env().FREEHOLDER_PLAYGROUND === "1" ? <div className="mb-8" /> : (
+        <p className="mt-2 mb-8 text-ink-muted">{t("portal.login.intro")}</p>
+      )}
       {signedIn ? (
         <Callout tone="success">
           {t("portal.login.signedIn")} {" "}
@@ -67,6 +72,12 @@ export default async function PortalLoginPage({ searchParams }: { searchParams: 
             {t("privacy.portal.open")}
           </a>
         </Callout>
+      ) : env().FREEHOLDER_PLAYGROUND === "1" ? (
+        // C1.38: the playground sends no mail and issues no customer
+        // credentials, so neither sign-in below could finish. Say that, and
+        // what the portal is, rather than "not available yet", which reads
+        // as an unfinished product.
+        <Callout>{t("portal.login.playground")}</Callout>
       ) : (
         <>
         <PortalPasskeySignIn returnTo={returnTo} labels={{

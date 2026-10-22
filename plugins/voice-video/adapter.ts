@@ -119,18 +119,22 @@ export const fixtureVoiceVideoProvider: VoiceVideoProvider = {
  * The live provider for this instance. Settings in module_settings decide
  * which adapter serves new work; an instance that only ever set the Daily
  * environment variables (no stored settings row) keeps its Daily provider,
- * so the pivot forces no migration.
+ * so the pivot forces no migration. An instance with neither has no
+ * provider: none is chosen on the owner's behalf (owner decision
+ * 2026-10-22). Paradise Comms credentials only ever live in stored
+ * settings, so no working Paradise instance lacks a row.
  */
 export async function voiceVideoProvider(): Promise<VoiceVideoProvider> {
   if (process.env.NODE_ENV === "test") return fixtureVoiceVideoProvider;
   const { settings, stored } = await readVoiceVideoSettings();
+  const unconfigured =
+    "No live voice/video provider is configured. Choose a provider in the voice/video settings: Daily (set DAILY_API_KEY and DAILY_DOMAIN) or Paradise Comms (save its site key).";
   if (settings.provider === "daily" || (!stored && env().DAILY_API_KEY && env().DAILY_DOMAIN)) {
     const daily = env();
-    if (!daily.DAILY_API_KEY || !daily.DAILY_DOMAIN) {
-      throw new Error("No live voice/video provider is configured. Set the Daily API key and domain or configure Paradise Comms in settings.");
-    }
+    if (!daily.DAILY_API_KEY || !daily.DAILY_DOMAIN) throw new Error(unconfigured);
     return createDailyVoiceVideoProvider({ apiKey: daily.DAILY_API_KEY, domain: daily.DAILY_DOMAIN });
   }
+  if (!stored) throw new Error(unconfigured);
   return createParadiseVoiceVideoProvider(resolveParadiseConfig(settings));
 }
 

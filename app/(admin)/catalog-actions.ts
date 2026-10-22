@@ -14,6 +14,8 @@ import {
 } from "@/modules/catalog/cookies";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
+import { safeLocalPath } from "@/core/http/local-path";
+import { flashAdminError, postedFromPath } from "./action-helpers";
 import {
   addCartItem,
   addWishlistItem,
@@ -913,8 +915,15 @@ export async function productAction(form: FormData): Promise<void> {
     }
   } catch (error) {
     const id = field(form, "id");
-    destination = field(form, "returnTo") || (id ? `/admin/products/${id}` : "/admin/products/new");
+    // Back to the screen that posted: promotions, shipping, carts and orders
+    // share this action, and a refusal shown on "New product" reads as if
+    // the coupon had been a product all along.
+    const fallback = id ? `/admin/products/${id}` : "/admin/products/new";
+    destination = field(form, "returnTo")
+      ? safeLocalPath(field(form, "returnTo"), fallback)
+      : await postedFromPath(fallback);
     destination += `${destination.includes("?") ? "&" : "?"}error=${encodeURIComponent(errorMessage(error))}`;
+    await flashAdminError(errorMessage(error));
   }
   revalidatePath("/admin/products");
   revalidatePath("/admin/inventory");
@@ -1055,6 +1064,7 @@ export async function collectionAction(form: FormData): Promise<void> {
     }
   } catch (error) {
     destination += `${destination.includes("?") ? "&" : "?"}error=${encodeURIComponent(errorMessage(error))}`;
+    await flashAdminError(errorMessage(error));
   }
   revalidatePath("/admin/collections");
   revalidatePath("/admin/products");

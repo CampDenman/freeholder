@@ -23,6 +23,10 @@ import { PLATFORM_VERSION } from "@/core/platform";
 import { PATH_HEADER } from "@/core/http/headers";
 import type { Translate } from "@/core/i18n";
 import { adminScreenLabel } from "./adminTitle";
+import { Suspense } from "react";
+import { env } from "@/core/env";
+import { ActionErrorFallback } from "./ActionErrorFallback";
+import { PlaygroundReadOnlyNotice } from "./PlaygroundReadOnlyNotice";
 
 export const dynamic = "force-dynamic";
 
@@ -235,6 +239,12 @@ export default async function AdminLayout({
           />
         </div>
         <main id="main-content" tabIndex={-1} className="min-w-0 max-w-5xl py-6 lg:py-8">
+          {env().FREEHOLDER_PLAYGROUND === "1" ? (
+            <PlaygroundReadOnlyNotice text={t("playground.readOnly")} />
+          ) : null}
+          <Suspense fallback={null}>
+            <ActionErrorFallback />
+          </Suspense>
           {children}
         </main>
       </div>

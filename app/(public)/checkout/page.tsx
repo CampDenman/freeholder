@@ -356,7 +356,9 @@ function CheckoutError({ code, t }: { code: string; t: Awaited<ReturnType<typeof
   return (
     <div role="alert">
       <Callout tone="danger">
-        {t(known ? `store.checkout.error.${code}` : "store.checkout.error.failed")}
+        {t(code === "playground"
+          ? "public.failure.playground"
+          : known ? `store.checkout.error.${code}` : "store.checkout.error.failed")}
       </Callout>
     </div>
   );

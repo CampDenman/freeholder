@@ -16,6 +16,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { setupState } from "@/core/settings/service";
+import { env } from "@/core/env";
 import { hasModuleAccess, type Actor, type GrantAccess } from "@/core/service";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
@@ -44,6 +45,16 @@ export async function requireStaffActor(
     redirect("/login");
   }
   if (module && !hasModuleAccess(actor, module, access)) {
+    if (env().FREEHOLDER_PLAYGROUND === "1") {
+      // The public playground is a read-only tour outside its content
+      // modules: a screen that needs `manage` still opens for a visitor who
+      // may view it, and every write it offers is refused by the playground
+      // policy in the service layer — the form says so up front
+      // (PlaygroundFormNotice). An area the visitor cannot even view gets an
+      // explanation rather than a silent bounce to the overview.
+      if (access === "manage" && hasModuleAccess(actor, module, "view")) return actor;
+      redirect(`/admin/unavailable?module=${encodeURIComponent(module)}`);
+    }
     redirect(`/admin?denied=${encodeURIComponent(module)}`);
   }
   return actor;
@@ -53,6 +64,9 @@ export async function requireStaffActor(
 export async function requireOwnerActor(module?: string): Promise<Extract<Actor, { kind: "user" }>> {
   const actor = await requireStaffActor(module);
   if (actor.kind !== "user" || actor.role !== "owner") {
+    if (env().FREEHOLDER_PLAYGROUND === "1") {
+      redirect(`/admin/unavailable?module=${encodeURIComponent(module ?? "owner")}`);
+    }
     redirect(`/admin?denied=${encodeURIComponent(module ?? "owner")}`);
   }
   return actor;

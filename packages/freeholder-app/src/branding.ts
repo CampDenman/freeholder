@@ -24,10 +24,15 @@ export interface Branding {
 
 export type Rgb = readonly [number, number, number];
 
-const NEUTRAL = {
+/**
+ * The unbranded fallback. This package ships standalone and cannot import
+ * `src/core/design/tokens.ts`, so the values are copied from its light scheme
+ * and `tests/core/colour-literals.test.ts` fails the build if they drift.
+ */
+export const NEUTRAL = {
   surface: "#ffffff",
-  ink: "#16181d",
-  accent: "#2f5fd0",
+  ink: "#23262a",
+  accent: "#2551e0",
   onAccent: "#ffffff",
 } as const;
 
