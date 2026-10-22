@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
   // (MASTER.md §32: no build step between an owner and their site).
   reactStrictMode: true,
   poweredByHeader: false,
+  // Media renditions come from core/media (sharp), never next/image. With
+  // the optimizer unused, Next answers /_next/image with a 404 instead of
+  // exposing it (GHSA-2464-fhr4-w9xw was an unauthenticated RCE there).
+  images: { unoptimized: true },
   transpilePackages: ["@freeholder/templates"],
   // Ships a self-contained server with only the files it actually imports, so
   // the production image carries neither node_modules nor the build toolchain
