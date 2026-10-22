@@ -9,6 +9,8 @@ import { addToCartLabels, AddToCart } from "../../../../app/(public)/buy/AddToCa
 import { SiteChatClient } from "./SiteChatClient";
 import { defineBlock, firstQueryValue } from "./types";
 import { failureFromQuery, failureMessageKey, returnedValues } from "@/core/http/public-form-return";
+import type { FormReturn } from "@/core/http/public-form-return";
+import { env } from "@/core/env";
 import { socialEmbed } from "./social";
 import { buyableOf } from "./merchandising";
 import {
@@ -766,9 +768,9 @@ export const quoteRequest = defineBlock({
     }
     return (
       <form action={submitInboundAction} className="grid max-w-prose gap-3">
-        <InboundFailure ctx={ctx} invalidKey="cms.inbound.failed" />
+        <InboundFailure ctx={ctx} invalidKey="cms.inbound.failed" kind="quote" />
         <input type="hidden" name="kind" value="quote" />
-        <InboundFields t={ctx.t} values={returnedValues(ctx.formReturn, "inbound:quote")} />
+        <InboundFields t={ctx.t} values={inboundValues(ctx, "quote")} />
         <button type="submit" className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent">
           {ctx.t("cms.inbound.sendQuote")}
         </button>
@@ -889,14 +891,14 @@ export const siteChat = defineBlock({
     }
     return (
       <div className="grid gap-4">
-        <InboundFailure ctx={ctx} invalidKey="cms.chat.failed" />
+        <InboundFailure ctx={ctx} invalidKey="cms.chat.failed" kind="chat" />
         <form action={submitInboundAction} className="grid max-w-prose gap-3">
           <input type="hidden" name="kind" value="chat" />
           <label aria-hidden="true" className="absolute -start-[10000px] h-px w-px overflow-hidden">
             <span>{ctx.t("cms.chat.leaveBlank")}</span>
             <input type="text" name="entry_ref" tabIndex={-1} autoComplete="off" />
           </label>
-          <InboundFields t={ctx.t} values={returnedValues(ctx.formReturn, "inbound:chat")} />
+          <InboundFields t={ctx.t} values={inboundValues(ctx, "chat")} />
           <button type="submit" className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent">
             {ctx.t("cms.inbound.sendChat")}
           </button>
@@ -928,6 +930,9 @@ function InboundFields({ t, values }: { t: (key: string) => string; values?: Rec
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.email")}</span>
         <input type="email" name="email" autoComplete="email" required defaultValue={values?.email} className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
+        {env().FREEHOLDER_PLAYGROUND === "1" ? (
+          <span className="text-xs text-ink-muted">{t("playground.fictionalHint")}</span>
+        ) : null}
       </label>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.message")}</span>
@@ -941,13 +946,30 @@ function InboundFields({ t, values }: { t: (key: string) => string; values?: Rec
  * The refusal line above an inbound form. The URL carries a reason code
  * only; the visitor's answers come back through `ctx.formReturn`.
  */
-function InboundFailure({ ctx, invalidKey }: { ctx: { query?: Record<string, string | string[] | undefined>; t: (key: string) => string }; invalidKey: string }) {
+function InboundFailure({ ctx, invalidKey, kind }: { ctx: InboundCtx; invalidKey: string; kind?: "quote" | "chat" }) {
   if (ctx.query?.inboundError !== "1") return null;
   return (
     <p role="alert" className="max-w-prose rounded-md border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
       {ctx.t(failureMessageKey(failureFromQuery(ctx.query?.failure), invalidKey))}
+      {kind && inboundValues(ctx, kind) ? ` ${ctx.t("public.failure.kept")}` : null}
     </p>
   );
+}
+
+type InboundCtx = {
+  query?: Record<string, string | string[] | undefined>;
+  t: (key: string) => string;
+  formReturn?: FormReturn | null;
+};
+
+/**
+ * A refused attempt's answers, only while the page is showing that refusal:
+ * a cookie left over from an earlier failure must never pre-fill the form
+ * the visitor sees after a later success.
+ */
+function inboundValues(ctx: InboundCtx, kind: "quote" | "chat"): Record<string, string> | undefined {
+  if (ctx.query?.inboundError !== "1") return undefined;
+  return returnedValues(ctx.formReturn, `inbound:${kind}`);
 }
 
 /* ---------------------------------------------------------------- C2.10 */

@@ -169,6 +169,9 @@ test.describe("hardened public playground (C1.38)", () => {
         await expect(visitor.getByRole("alert")).toContainText(/wait a moment/i);
         await expect(visitor.getByRole("alert")).not.toContainText(/check the fields/i);
         await expect(visitor.getByLabel("Message")).toHaveValue("A second, carefully written message.");
+        await expect(visitor.getByRole("alert")).toContainText(/still in the form below/i);
+        // Where people type contact details, the demo asks for made-up ones.
+        await expect(visitor.getByText(/use made-up details/i).first()).toBeVisible();
 
         // Web vitals are accepted and discarded, not a 401 on every page.
         const vitals = await visitor.request.post("/api/analytics/vitals", {

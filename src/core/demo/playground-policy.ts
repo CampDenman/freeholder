@@ -251,5 +251,40 @@ export const PLAYGROUND_ROW_CAPS: Readonly<Record<string, PlaygroundRowCap>> = {
   "quotes.message": { table: "quote_messages", limit: 500 },
   "documents.open": { table: "document_access_logs", limit: 2000 },
   "rentals.reserve": { table: "bookings", limit: 300 },
+  "community.joinBySlug": { table: "community_members", limit: 200 },
   "community.requestJoinBySlug": { table: "community_join_requests", limit: 200 },
 };
+
+/**
+ * The shared table most public actions grow behind the per-action caps:
+ * forms, subscriptions, registrations, chats and checkouts resolve their
+ * visitor into a Contact as the system, which no per-action cap counts. Every
+ * PLAYGROUND_PUBLIC verb checks this one too, so the spine cannot be filled
+ * through whichever public surface has the most headroom left.
+ */
+export const PLAYGROUND_PUBLIC_CONTACT_CAP: PlaygroundRowCap = { table: "contacts", limit: 1_000 };
+
+/** Whether a mutation is one of the public site's verbs (PLAYGROUND_PUBLIC). */
+export function isPlaygroundPublicVerb(name: string): boolean {
+  return PUBLIC.has(name);
+}
+
+/**
+ * Per-client budgets, spent before the shared ceiling so one script cannot
+ * exhaust the playground for everybody else. The minute bucket covers every
+ * visitor mutation (an editor's autosave and presence beat stay well inside
+ * it); the hour bucket covers only the public verbs, whose row caps are what
+ * a stranger could otherwise use up for the next visitor.
+ */
+export const PLAYGROUND_CLIENT_LIMITS = {
+  perMinute: { limit: 60, windowSeconds: 60 },
+  publicPerHour: { limit: 120, windowSeconds: 60 * 60 },
+} as const;
+
+/**
+ * Bytes of answers one public submission may carry in the playground. A form
+ * can ask for many long fields, and each submission is copied into the
+ * conversation thread as well; on a shared tmpfs that copy is what fills the
+ * disk long before any row cap is reached.
+ */
+export const PLAYGROUND_SUBMISSION_BYTES = 8_192;

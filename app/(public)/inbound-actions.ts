@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { cookies } from "next/headers";
 import { PATH_HEADER } from "@/core/http/headers";
+import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale } from "../i18n";
@@ -24,7 +25,14 @@ import {
   publicFailure,
 } from "@/core/http/public-form-return";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
+/**
+ * A signed-out visitor, carrying the request's client address so per-client
+ * limits (the playground's among them) key on this visitor rather than on
+ * one bucket every visitor shares.
+ */
+async function visitor() {
+  return { kind: "anonymous" as const, request: requestMetadataFromHeaders(await headers()) };
+}
 
 function text(form: FormData, key: string): string {
   const value = form.get(key);
@@ -42,8 +50,9 @@ export async function submitInboundAction(form: FormData): Promise<void> {
     if (kind === "quote") {
       await submitQuoteRequest.call(
         { name: text(form, "name"), email: text(form, "email"), message: text(form, "message") },
-        ANONYMOUS,
+        await visitor(),
       );
+      (await cookies()).delete(FORM_RETURN_COOKIE);
       redirect(`${path}?quoted=1`);
     }
     if (kind === "chat") {
@@ -57,7 +66,7 @@ export async function submitInboundAction(form: FormData): Promise<void> {
           message: text(form, "message"),
           locale,
         },
-        ANONYMOUS,
+        await visitor(),
       );
       (await cookies()).set(SITE_CHAT_COOKIE, started.token, {
         httpOnly: true,
@@ -66,6 +75,8 @@ export async function submitInboundAction(form: FormData): Promise<void> {
         path: "/",
         maxAge: SITE_CHAT_MAX_AGE,
       });
+      // A refused attempt's answers must not pre-fill the next form.
+      (await cookies()).delete(FORM_RETURN_COOKIE);
       redirect(`${path}?chatted=1`);
     }
     if (kind === "tip") {
@@ -77,7 +88,7 @@ export async function submitInboundAction(form: FormData): Promise<void> {
           currency: text(form, "currency") || "USD",
           message: text(form, "message") || undefined,
         },
-        ANONYMOUS,
+        await visitor(),
       );
       redirect(`${path}?tipped=1`);
     }
@@ -88,7 +99,7 @@ export async function submitInboundAction(form: FormData): Promise<void> {
       const helpful = text(form, "helpful") === "yes";
       await rateHelpArticle.call(
         { articleId: text(form, "articleId"), helpful },
-        ANONYMOUS,
+        await visitor(),
       );
       redirect(`${path}?helped=${helpful ? "1" : "0"}`);
     }
@@ -130,7 +141,7 @@ export async function postSiteChatAction(form: FormData): Promise<void> {
         token: jar.get(SITE_CHAT_COOKIE)?.value ?? "",
         message: text(form, "message"),
       },
-      ANONYMOUS,
+      await visitor(),
     );
   } catch (error) {
     redirect(`${path}?inboundError=1&failure=${publicFailure(error)}`);

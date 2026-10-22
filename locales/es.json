@@ -7898,10 +7898,10 @@
   "portal.keys.none": "No tienes claves de agente.",
   "portal.keys.expires": "válida hasta",
   "portal.keys.failed": "No se pudo crear la clave. Inténtalo de nuevo.",
-  "public.failure.busy": "Demasiados intentos en este momento. Espera un poco y vuelve a intentarlo; tus respuestas siguen aquí.",
-  "public.failure.unavailable": "Esto no se puede enviar desde aquí ahora mismo. Tus respuestas siguen aquí; contacta con el negocio por otra vía.",
+  "public.failure.busy": "Demasiados intentos en este momento. Espera un poco y vuelve a intentarlo.",
+  "public.failure.unavailable": "Esto no se puede enviar desde aquí ahora mismo. Contacta con el negocio por otra vía.",
   "public.failure.playground": "Este es el entorno de demostración público, así que esta acción está desactivada aquí. Tus respuestas no tienen ningún problema. Instala tu propio Freeholder para probarlo de verdad.",
-  "public.failure.server": "Algo falló por nuestra parte y no se envió nada. Tus respuestas siguen aquí; inténtalo de nuevo.",
+  "public.failure.server": "Algo falló por nuestra parte y no se envió nada. Inténtalo de nuevo.",
   "cms.inbound.failed": "No se ha podido enviar. Revisa tu nombre, tu correo y tu mensaje, y vuelve a intentarlo.",
   "playground.readOnly": "Puedes explorar esta pantalla, pero guardar cambios aquí está desactivado en el entorno de demostración público. Las páginas, secciones, plantillas, entradas del blog, formularios, contactos, productos y tareas sí admiten cambios.",
   "playground.unavailable.title": "No disponible en el entorno de demostración público",
@@ -7920,5 +7920,7 @@
   "settings.modules.noAccess": "Tu rol no puede abrir este módulo.",
   "settings.modules.playgroundHidden": "Activado, pero no forma parte del recorrido de demostración público.",
   "portal.login.playground": "Aquí es donde los clientes inician sesión para ver sus reservas, facturas, presupuestos y archivos. El entorno de demostración público no envía correos, así que los enlaces de acceso están desactivados aquí; explora la parte del cliente desde Contactos, Facturas y Presupuestos en el panel.",
-  "newsletters.playgroundPending": "Estás en la lista como pendiente. En un sitio real ahora se enviaría un correo de confirmación; el entorno de demostración público no envía correos, así que aquí termina."
+  "newsletters.playgroundPending": "Estás en la lista como pendiente. En un sitio real ahora se enviaría un correo de confirmación; el entorno de demostración público no envía correos, así que aquí termina.",
+  "public.failure.kept": "Tus respuestas siguen en el formulario de abajo.",
+  "playground.fictionalHint": "Demostración pública: usa datos inventados, no los tuyos."
 }

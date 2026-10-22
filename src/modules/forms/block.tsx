@@ -12,6 +12,7 @@
 // SEO gate both rest on — so the submission result travels back in the URL and
 // is rendered, rather than being held in client state.
 import { z } from "zod";
+import { env } from "@/core/env";
 import { defineBlock } from "@/modules/cms/blocks/types";
 import { submitPublicForm } from "../../../app/(public)/form-actions";
 import { HONEYPOT_FIELD, issueStamp, STAMP_FIELD } from "./antispam";
@@ -139,6 +140,8 @@ export function RenderedForm({
           className="rounded-md border border-rule bg-danger-soft px-4 py-3 text-sm text-danger"
         >
           {t(failureMessageKey(failure, "forms.public.error"))}
+          {/* Only claimed when the answers really did come back. */}
+          {values ? ` ${t("public.failure.kept")}` : null}
         </p>
       ) : null}
 
@@ -294,6 +297,10 @@ function Field({
         />
       )}
 
+      {(field.kind === "email" || field.kind === "tel") && env().FREEHOLDER_PLAYGROUND === "1" ? (
+        // C1.38: the shared demo is public; say so where people type contact details.
+        <p className="text-xs text-ink-muted">{t("playground.fictionalHint")}</p>
+      ) : null}
       {field.help ? (
         <p id={`${id}-help`} className="text-xs text-ink-muted">
           {field.help}

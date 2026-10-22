@@ -129,6 +129,9 @@ export const newsletterSubscribe = defineBlock({
             required
             className="rounded-md border border-rule-strong bg-surface px-3 py-2"
           />
+          {env().FREEHOLDER_PLAYGROUND === "1" ? (
+            <span className="text-xs text-ink-muted">{ctx.t("playground.fictionalHint")}</span>
+          ) : null}
         </label>
         {statement ? (
           <label className="flex items-start gap-2 text-sm text-ink">

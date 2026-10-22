@@ -15,7 +15,7 @@ import {
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { safeLocalPath } from "@/core/http/local-path";
-import { postedFromPath } from "./action-helpers";
+import { flashAdminError, postedFromPath } from "./action-helpers";
 import {
   addCartItem,
   addWishlistItem,
@@ -915,6 +915,7 @@ export async function productAction(form: FormData): Promise<void> {
       ? safeLocalPath(field(form, "returnTo"), fallback)
       : await postedFromPath(fallback);
     destination += `${destination.includes("?") ? "&" : "?"}error=${encodeURIComponent(errorMessage(error))}`;
+    await flashAdminError(errorMessage(error));
   }
   revalidatePath("/admin/products");
   revalidatePath("/admin/inventory");
@@ -1055,6 +1056,7 @@ export async function collectionAction(form: FormData): Promise<void> {
     }
   } catch (error) {
     destination += `${destination.includes("?") ? "&" : "?"}error=${encodeURIComponent(errorMessage(error))}`;
+    await flashAdminError(errorMessage(error));
   }
   revalidatePath("/admin/collections");
   revalidatePath("/admin/products");

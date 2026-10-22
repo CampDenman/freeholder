@@ -5,13 +5,21 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { PATH_HEADER } from "@/core/http/headers";
+import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale } from "../i18n";
 import { subscribeToNewsletter } from "@/modules/newsletters/service";
 import { publicFailure } from "@/core/http/public-form-return";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
+/**
+ * A signed-out visitor, carrying the request's client address so per-client
+ * limits (the playground's among them) key on this visitor rather than on
+ * one bucket every visitor shares.
+ */
+async function visitor() {
+  return { kind: "anonymous" as const, request: requestMetadataFromHeaders(await headers()) };
+}
 
 export async function subscribePublicNewsletter(form: FormData): Promise<void> {
   const newsletterRaw = form.get("newsletterId");
@@ -46,7 +54,7 @@ export async function subscribePublicNewsletter(form: FormData): Promise<void> {
             }
           : {}),
       },
-      ANONYMOUS,
+      await visitor(),
     );
     redirect(`${path}${join}subscribed=1`);
   } catch (error) {

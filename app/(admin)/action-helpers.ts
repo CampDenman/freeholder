@@ -1,8 +1,42 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Shared plumbing for admin server actions.
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { safeLocalPath } from "@/core/http/local-path";
+
+/**
+ * The admin shell's refusal flash (see admin/ActionErrorFallback.tsx). The
+ * sentence travels in an httpOnly cookie the server action sets, never in the
+ * URL: a page that rendered `?error=` text from a link would let anybody put
+ * words inside the trusted admin.
+ */
+export const ADMIN_ERROR_COOKIE = "fh_admin_error";
+const ADMIN_ERROR_MAX = 500;
+
+export function encodeAdminError(message: string): string {
+  return Buffer.from(message.slice(0, ADMIN_ERROR_MAX), "utf8").toString("base64url");
+}
+
+export function decodeAdminError(raw: string | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const message = Buffer.from(raw, "base64url").toString("utf8").trim();
+    return message ? message.slice(0, ADMIN_ERROR_MAX) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Record a refusal for the admin shell to show on the next screen. */
+export async function flashAdminError(message: string): Promise<void> {
+  (await cookies()).set(ADMIN_ERROR_COOKIE, encodeAdminError(message), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/admin",
+    maxAge: 60,
+  });
+}
 
 /**
  * A service message with its machine addressing removed.

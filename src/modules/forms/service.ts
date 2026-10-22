@@ -17,6 +17,8 @@ import { consumeAccepted } from "@/core/security/rate-limit";
 import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, getService, ServiceError } from "@/core/service";
+import { env } from "@/core/env";
+import { PLAYGROUND_SUBMISSION_BYTES } from "@/core/demo/playground-policy";
 import { isUniqueViolation } from "@/core/db";
 import {
   registerContactReference,
@@ -521,6 +523,9 @@ export const verifyDemoForms = defineService({
 
 /* ---------------------------------------------------------------- submitting */
 
+/** The most one public submission may carry, all answers together. */
+export const SUBMISSION_BYTES = 64 * 1024;
+
 export const submitForm = defineService({
   name: "forms.submit",
   summary: "Record what somebody filled in, and put them on the spine.",
@@ -569,6 +574,17 @@ export const submitForm = defineService({
       );
     }
     const data = parsed.data as Record<string, unknown>;
+    // A ceiling on the whole submission, not just each field: a form may ask
+    // for many long answers, and every submission is copied into the
+    // conversation thread as well. The playground's shared disk gets a
+    // tighter one (PLAYGROUND_SUBMISSION_BYTES).
+    const bytes = Buffer.byteLength(JSON.stringify(data), "utf8");
+    const ceiling = env().FREEHOLDER_PLAYGROUND === "1" && ctx.actor.kind !== "system"
+      ? PLAYGROUND_SUBMISSION_BYTES
+      : SUBMISSION_BYTES;
+    if (bytes > ceiling) {
+      throw new ServiceError("validation", "These answers are too long to send. Please shorten them and try again.");
+    }
     // C11.10: malformed posts and other visitors cannot exhaust the whole form.
     // Without a trusted proxy, throttle the validated address (or identical
     // anonymous answers); perimeter flood control remains the host's concern.

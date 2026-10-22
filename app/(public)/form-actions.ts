@@ -24,11 +24,19 @@ import {
   publicFailure,
 } from "@/core/http/public-form-return";
 import { PATH_HEADER } from "@/core/http/headers";
+import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale } from "../i18n";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
+/**
+ * A signed-out visitor, carrying the request's client address so per-client
+ * limits (the playground's among them) key on this visitor rather than on
+ * one bucket every visitor shares.
+ */
+async function visitor() {
+  return { kind: "anonymous" as const, request: requestMetadataFromHeaders(await headers()) };
+}
 
 /**
  * Only a code travels in the URL, never a message.
@@ -63,7 +71,7 @@ export async function submitPublicForm(form: FormData): Promise<void> {
   try {
     await submitForm.call(
       { slug, values, sourceUrl: path },
-      ANONYMOUS,
+      await visitor(),
     );
   } catch (error) {
     // A coarse reason, never the service's text: "check your answers", "wait

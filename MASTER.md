@@ -4173,7 +4173,10 @@ project without silent telemetry, and ready to carry money.
   chat, share, popups, reviews) failed with the playground refusal, and
   `POST /api/analytics/vitals` answered 401 on every page. `PLAYGROUND_PUBLIC`
   now admits the public site's verbs under new `PLAYGROUND_ROW_CAPS`
-  entries; `PLAYGROUND_PUBLIC_REFUSED` keeps credential flows (magic links,
+  entries, a shared `contacts` cap (public verbs resolve contacts as the
+  system), a per-client minute/hour budget spent before the shared ceiling
+  (`anonymousClientKey`, only when a client address is known) and an 8 KB
+  per-submission ceiling (64 KB on every install); `PLAYGROUND_PUBLIC_REFUSED` keeps credential flows (magic links,
   portal sign-in), payment-provider checkout, uploads, the model-backed
   assistant and visitor analytics refused with a stated reason, and a test
   fails on any public mutation in neither list. Transactional mail queues to
@@ -4192,15 +4195,21 @@ project without silent telemetry, and ready to carry money.
   `requireStaffActor` opens a manage-only screen to a viewer and sends
   operator machinery to `/admin/unavailable`, which explains the area,
   instead of silently redirecting to the overview. The admin shell shows a
-  read-only notice on every non-content screen and a fallback for `?error=`
-  messages a screen did not render (adding an event); catalog refusals
+  read-only notice on every non-content screen and a fallback for refusals
+  a screen did not render (adding an event), whose text comes from an
+  httpOnly flash cookie the refusing action set, never from the URL; catalog refusals
   return to the posting screen (Promotions, not New product); collections
   treats a refused segment read as none (was a 500); settings explains
   modules a role cannot open; `/portal/login` has a title and explains the
   playground. Regressions: `tests/core/playground.test.ts` (public verbs
   pass signed out and as the visitor, mail fails closed, credential and
-  checkout verbs refused, every public mutation classified, contact-form
-  cap, read-only screens), `tests/browser/playground.spec.ts` (signed-out
+  checkout verbs refused, every public mutation classified, contact-form,
+  contacts and submission-size caps, per-client budget, transactional sink
+  versus an ordinary install's refusal, no secret-shaped field in any query
+  the visitor may read, read-only screens),
+  `tests/core/playground-feedback.test.ts` (reason codes, answer-cookie keys
+  and size limit, read-once admin flash, posting-screen redirect,
+  manage-to-view guard), `tests/browser/playground.spec.ts` (signed-out
   contact form, refusal keeps answers, vitals 204, portal title, admin tour
   without bounces or 500s). Changeset
   `playground-public-site-and-honest-refusals.md`. A local production
@@ -4208,9 +4217,11 @@ project without silent telemetry, and ready to carry money.
   admin route as the visitor answers without a 500 (translations 404s on a
   one-language site by design), and the contact form, newsletter, vitals,
   portal, Promotions and Events behaviours above were observed. The browser
-  suite was not run here (its database-name guard refused the assigned
-  database), and the "separation and reset recovery" cases were blocked by
-  a shared cluster stuck on `DROP DATABASE`; both need a clean run.
+  suite ran against `fh_playground_test` but the shared database was too
+  slow for it to finish (entry step passed; the editor autosave and the
+  reset hook timed out with every request answering 200), and the
+  "separation and reset recovery" cases were blocked by a shared cluster
+  stuck on `DROP DATABASE`; both need a clean run.
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable

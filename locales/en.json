@@ -7898,10 +7898,10 @@
   "portal.keys.none": "You have no agent keys.",
   "portal.keys.expires": "works until",
   "portal.keys.failed": "That key could not be made. Try again.",
-  "public.failure.busy": "Too many attempts just now. Wait a moment and try again — your answers are still here.",
-  "public.failure.unavailable": "This cannot be sent from here right now. Your answers are still here; please contact the business another way.",
+  "public.failure.busy": "Too many attempts just now. Wait a moment and try again.",
+  "public.failure.unavailable": "This cannot be sent from here right now. Please contact the business another way.",
   "public.failure.playground": "This is the public playground, so this action is switched off here. Nothing is wrong with your answers. Run your own Freeholder to try it for real.",
-  "public.failure.server": "Something went wrong on our side and nothing was sent. Your answers are still here — please try again.",
+  "public.failure.server": "Something went wrong on our side and nothing was sent. Please try again.",
   "cms.inbound.failed": "That did not go through. Check your name, email and message, then try again.",
   "playground.readOnly": "You can look around this screen, but saving changes here is switched off in the public playground. Pages, sections, templates, blog posts, forms, contacts, products and tasks accept edits.",
   "playground.unavailable.title": "Not available in the public playground",
@@ -7920,5 +7920,7 @@
   "settings.modules.noAccess": "Your role cannot open this module.",
   "settings.modules.playgroundHidden": "On, but not part of the public playground tour.",
   "portal.login.playground": "This is where customers sign in to see their bookings, invoices, quotes and files. The public playground sends no email, so sign-in links are switched off here — explore the customer side through the admin's Contacts, Invoices and Quotes instead.",
-  "newsletters.playgroundPending": "You are on the list as pending. On a real site a confirmation email goes out now; the public playground sends no email, so it stops here."
+  "newsletters.playgroundPending": "You are on the list as pending. On a real site a confirmation email goes out now; the public playground sends no email, so it stops here.",
+  "public.failure.kept": "Your answers are still in the form below.",
+  "playground.fictionalHint": "Public demo: use made-up details, not your own."
 }
