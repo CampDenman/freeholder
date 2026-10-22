@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Capture and phone ingest (MASTER.md §4.5, C1.28, C1.29).
 
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import {
   attachCaptureUpload,
@@ -18,6 +18,7 @@ import {
   stopCapture,
 } from "@/core/media/capture";
 import { getAsset, listAssets } from "@/core/media/service";
+import { storage } from "@/adapters/storage";
 import {
   ANONYMOUS,
   closeDb,
@@ -169,6 +170,72 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
     expect(assembled.session.status).toBe("preview");
     expect(assembled.session.staged).toBe(true);
     expect(assembled.asset).toBeNull();
+    const confirmed = await confirmCapture.call({ id: session.id }, OWNER);
+    const asset = await getAsset.call({ id: confirmed.assetId! }, OWNER);
+    expect(asset.bytes).toBe(original.byteLength);
+  });
+
+  // §11: assembling used to delete the chunk objects before the assembled
+  // original was stored or committed, so one failed write lost the recording.
+  it("keeps a recording recoverable when storing the assembled original fails", async () => {
+    const session = await createCaptureSession.call({ source: "screen" }, OWNER);
+    await grantCapturePermission.call({ id: session.id }, OWNER);
+    const original = await png();
+    const split = Math.max(1, Math.floor(original.byteLength / 2));
+    const { appendCaptureChunk, assembleCapture, deleteCaptureObjects } = await import(
+      "@/core/media/capture"
+    );
+    const { mediaCaptureChunks, mediaObjects } = await import("@/core/media/schema");
+    const { db } = await import("@/core/db");
+    const { eq } = await import("drizzle-orm");
+    await appendCaptureChunk.call(
+      { id: session.id, sequence: 0, contentType: "image/png", bytes: original.subarray(0, split) },
+      OWNER,
+    );
+    await appendCaptureChunk.call(
+      { id: session.id, sequence: 1, contentType: "image/png", bytes: original.subarray(split) },
+      OWNER,
+    );
+    const chunkKeys = (
+      await db()
+        .select()
+        .from(mediaCaptureChunks)
+        .where(eq(mediaCaptureChunks.sessionId, session.id))
+    ).map((chunk) => chunk.storageKey);
+    expect(chunkKeys).toHaveLength(2);
+    // Chunk rows own their keys; none is left for the orphan sweep to take.
+    for (const key of chunkKeys) {
+      expect(await db().select().from(mediaObjects).where(eq(mediaObjects.key, key))).toEqual([]);
+    }
+
+    const store = storage();
+    const put = store.put.bind(store);
+    const failing = vi.spyOn(store, "put").mockImplementation(async (key, ...rest) => {
+      if (key.includes("/item/")) throw new Error("object store unavailable");
+      return put(key, ...rest);
+    });
+    try {
+      await expect(
+        assembleCapture.call({ id: session.id, filename: "assembled.png" }, OWNER),
+      ).rejects.toThrow(/unavailable/);
+    } finally {
+      failing.mockRestore();
+    }
+    for (const key of chunkKeys) expect(await store.get(key)).toBeDefined();
+    expect(
+      await db().select().from(mediaCaptureChunks).where(eq(mediaCaptureChunks.sessionId, session.id)),
+    ).toHaveLength(2);
+
+    // The retry still has every byte, and the chunk objects outlive the
+    // commit until the post-commit delete job runs.
+    const assembled = await assembleCapture.call(
+      { id: session.id, filename: "assembled.png" },
+      OWNER,
+    );
+    expect(assembled.session.staged).toBe(true);
+    for (const key of chunkKeys) expect(await store.get(key)).toBeDefined();
+    await deleteCaptureObjects(chunkKeys);
+    for (const key of chunkKeys) expect(await store.get(key)).toBeUndefined();
     const confirmed = await confirmCapture.call({ id: session.id }, OWNER);
     const asset = await getAsset.call({ id: confirmed.assetId! }, OWNER);
     expect(asset.bytes).toBe(original.byteLength);

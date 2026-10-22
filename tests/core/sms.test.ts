@@ -31,14 +31,76 @@ import { ready } from "@/core/runtime";
 import {
   applySmsEvents,
   checkNumberHealth,
+  deliverQueuedSms,
   importMessagingNumbers,
   listMessagingNumbers,
   sendSms,
   updateMessagingNumber,
 } from "@/core/messaging/sms";
+import { smsAdapters, type OutboundSms, type SmsAdapter, type SmsSendResult } from "@/adapters/sms";
+import { jobIdempotencyKeys } from "@/core/jobs/schema";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const TOKEN = "test-auth-token";
+
+const accepted = async (): Promise<SmsSendResult> => ({
+  providerRef: `SM-${carrier.sent.length - 1}`,
+  delivers: true,
+  segments: 1,
+  costMinor: 1,
+  costCurrency: "USD",
+});
+
+/**
+ * A carrier double that is only "configured" while a test switches it on, so
+ * the provider-less tests below keep their meaning (§11: the carrier is asked
+ * only after the transaction that staged the message has committed).
+ */
+const carrier = {
+  on: false,
+  sent: [] as OutboundSms[],
+  listed: 0,
+  reply: accepted as (sms: OutboundSms) => Promise<SmsSendResult>,
+};
+smsAdapters.register({
+  channel: "sms",
+  id: "aaa-carrier-double",
+  get available() {
+    return carrier.on;
+  },
+  get status() {
+    return {
+      family: "sms" as const,
+      channel: "sms" as const,
+      provider: "aaa-carrier-double",
+      id: "aaa-carrier-double",
+      available: carrier.on,
+      message: carrier.on ? "Configured." : "SMS delivery is not configured.",
+    };
+  },
+  async send(sms: OutboundSms) {
+    carrier.sent.push(sms);
+    return carrier.reply(sms);
+  },
+  async verifyWebhook() {
+    return [];
+  },
+  async listNumbers() {
+    carrier.listed += 1;
+    return [
+      {
+        providerRef: "PN-listed",
+        e164: "+15005550077",
+        country: "GB",
+        kind: "long_code" as const,
+        capabilities: { sms: true, mms: false, inbound: true },
+      },
+    ];
+  },
+  async checkNumber(providerRef: string) {
+    return { providerRef, usable: false, unknown: false, problem: "Closed.", providerStatus: "closed" };
+  },
+} as unknown as SmsAdapter);
 const URL = "https://example.test/api/sms/webhooks/twilio";
 
 /** An IANA fixed-offset zone whose current local hour is always noon. */
@@ -321,6 +383,121 @@ describe.runIf(hasDatabase)("text messaging", { timeout: 90_000 }, () => {
     );
     // Refused, not queued: a message nobody can send is not a message waiting.
     expect(refused.message).toContain("not configured");
+  });
+
+  describe("with a configured carrier", () => {
+    beforeEach(() => {
+      carrier.on = true;
+      carrier.sent = [];
+      carrier.listed = 0;
+      carrier.reply = accepted;
+    });
+    afterAll(() => {
+      carrier.on = false;
+    });
+
+    async function recipient(phone = "+447700900123") {
+      await number({ country: "GB", provider: "aaa-carrier-double" });
+      const [contact] = await db()
+        .insert(contacts)
+        .values({
+          name: "Carrier Test",
+          email: `carrier-${phone.slice(-4)}@example.test`,
+          phone,
+          timezone: daytimeTimezone(),
+        })
+        .returning();
+      return contact!;
+    }
+
+    function delivery(messageId: string, idempotencyKey: string) {
+      return { messageId, provider: "aaa-carrier-double", from: "+15005550006", idempotencyKey };
+    }
+
+    // §11: the carrier is asked only after the staging transaction commits.
+    it("stages the text and asks the carrier only after commit", async () => {
+      const contact = await recipient();
+      const result = await sendSms.call(
+        { contactId: contact.id, to: contact.phone!, body: "Hello", idempotencyKey: "after-commit" },
+        OWNER,
+      );
+      expect(carrier.sent).toHaveLength(0);
+      expect(result).toMatchObject({ sent: true, providerRef: null });
+      const [claim] = await db()
+        .select()
+        .from(jobIdempotencyKeys)
+        .where(eq(jobIdempotencyKeys.idempotencyKey, "after-commit"));
+      expect(claim!.jobId).toBe(result.messageId);
+
+      await expect(deliverQueuedSms(delivery(result.messageId, "after-commit"))).resolves.toEqual({
+        status: "submitted",
+      });
+      expect(carrier.sent).toHaveLength(1);
+      expect(carrier.sent[0]).toMatchObject({ to: contact.phone, deliveryId: "after-commit" });
+      const [message] = await db().select().from(messages).where(eq(messages.id, result.messageId));
+      expect(message).toMatchObject({ providerRef: "SM-0", segments: 1, costMinor: 1 });
+
+      // A redelivered job does not send twice.
+      await deliverQueuedSms(delivery(result.messageId, "after-commit"));
+      expect(carrier.sent).toHaveLength(1);
+    });
+
+    it("returns the same staged message for a retried key", async () => {
+      const contact = await recipient();
+      const input = { contactId: contact.id, to: contact.phone!, body: "Once", idempotencyKey: "same-key" };
+      const first = await sendSms.call(input, OWNER);
+      const second = await sendSms.call(input, OWNER);
+      expect(second.messageId).toBe(first.messageId);
+      expect(await db().select().from(messages)).toHaveLength(1);
+    });
+
+    it("records a carrier refusal after commit and marks a hard-invalid number", async () => {
+      const contact = await recipient("+15005550199");
+      carrier.reply = async () => {
+        throw new AdapterError("sms", "aaa-carrier-double", "invalid_request", "Not a valid mobile number", false, "21614");
+      };
+      const result = await sendSms.call(
+        { contactId: contact.id, to: contact.phone!, body: "Hi", idempotencyKey: "invalid" },
+        OWNER,
+      );
+      await expect(deliverQueuedSms(delivery(result.messageId, "invalid"))).resolves.toEqual({
+        status: "failed",
+      });
+      const reports = await db()
+        .select()
+        .from(messageDeliveries)
+        .where(eq(messageDeliveries.messageId, result.messageId));
+      expect(reports.map((report) => report.status).sort()).toEqual(["failed", "queued"]);
+      const [marked] = await db().select().from(contacts).where(eq(contacts.id, contact.id));
+      expect(marked).toMatchObject({ phoneStatus: "invalid", phoneInvalidProviderCode: "21614" });
+    });
+
+    it("keeps a transient failure retryable until the last attempt", async () => {
+      const contact = await recipient();
+      carrier.reply = async () => {
+        throw new AdapterError("sms", "aaa-carrier-double", "unavailable", "Carrier timed out", true);
+      };
+      const result = await sendSms.call(
+        { contactId: contact.id, to: contact.phone!, body: "Hi", idempotencyKey: "transient" },
+        OWNER,
+      );
+      await expect(deliverQueuedSms(delivery(result.messageId, "transient"), 1)).rejects.toThrow(/timed out/);
+      await expect(deliverQueuedSms(delivery(result.messageId, "transient"), 9)).resolves.toEqual({
+        status: "failed",
+      });
+    });
+
+    it("lists and checks numbers with no transaction held across the carrier", async () => {
+      await expect(importMessagingNumbers.call({}, OWNER)).resolves.toEqual({ found: 1, added: 1 });
+      expect(carrier.listed).toBe(1);
+      await expect(checkNumberHealth.call({}, OWNER)).resolves.toEqual({ checked: 1, problems: 1 });
+      const [checked] = await db().select().from(messagingNumbers);
+      expect(checked).toMatchObject({ healthy: false, healthProblem: "Closed." });
+      // An orchestrator refuses to run under another service's transaction.
+      await expect(
+        db().transaction((tx) => importMessagingNumbers.call({}, OWNER, { tx: tx })),
+      ).rejects.toThrow(/outside a service transaction/);
+    });
   });
 
   it("refuses to import numbers with no provider configured", async () => {

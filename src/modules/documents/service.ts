@@ -716,24 +716,51 @@ export const exportDocument = defineService({
 
 registerContactReference({
   table: "documents",
-  repoint: (tx, duplicateId, survivingId) =>
-    tx
+  // Two ways a document names a person: who it is *for* (contact_id) and,
+  // for a document filed against a contact, what it is *about*
+  // (subject_type = 'contact'). Repointing only the first would leave the
+  // duplicate's id as the subject, so the document vanished from the
+  // survivor's "about this person" list after a merge.
+  columns: ["contact_id", "subject_id"],
+  repoint: async (tx, duplicateId, survivingId) => {
+    await tx
       .update(documents)
       .set({ contactId: survivingId })
-      .where(eq(documents.contactId, duplicateId)),
+      .where(eq(documents.contactId, duplicateId));
+    await tx
+      .update(documents)
+      .set({ subjectId: survivingId })
+      .where(and(eq(documents.subjectType, "contact"), eq(documents.subjectId, duplicateId)));
+  },
   captureForUndo: async (tx, duplicateId) => ({
-    state: await tx
-      .select({ id: documents.id })
-      .from(documents)
-      .where(eq(documents.contactId, duplicateId)),
+    state: {
+      owned: await tx
+        .select({ id: documents.id })
+        .from(documents)
+        .where(eq(documents.contactId, duplicateId)),
+      subject: await tx
+        .select({ id: documents.id })
+        .from(documents)
+        .where(and(eq(documents.subjectType, "contact"), eq(documents.subjectId, duplicateId))),
+    },
     undoable: true,
   }),
   restoreAfterUndo: async (tx, beforeState, _afterState, duplicateId) => {
-    const rows = z.array(z.object({ id: z.string().uuid() })).parse(beforeState);
-    for (const each of rows) {
+    const ids = z.array(z.object({ id: z.string().uuid() }));
+    // Merges recorded before subject repointing stored the owned list alone.
+    const before = z
+      .union([ids.transform((owned) => ({ owned, subject: [] })), z.object({ owned: ids, subject: ids })])
+      .parse(beforeState);
+    for (const each of before.owned) {
       await tx
         .update(documents)
         .set({ contactId: duplicateId })
+        .where(eq(documents.id, each.id));
+    }
+    for (const each of before.subject) {
+      await tx
+        .update(documents)
+        .set({ subjectId: duplicateId })
         .where(eq(documents.id, each.id));
     }
   },

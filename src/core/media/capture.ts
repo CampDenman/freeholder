@@ -149,35 +149,125 @@ async function load(ctx: ServiceContext, sessionId: string) {
   return row;
 }
 
-async function clearChunks(ctx: ServiceContext, sessionId: string) {
+/**
+ * Storage objects are deleted only after the transaction that forgot them
+ * commits (§11). A rollback therefore leaves every recording byte in place, and
+ * a failed delete is retried by the queue instead of being lost.
+ */
+export const CAPTURE_OBJECT_DELETE_JOB = "core.deleteCaptureObjects";
+
+async function deleteAfterCommit(ctx: ServiceContext, keys: string[]): Promise<void> {
+  const unique = [...new Set(keys)];
+  if (unique.length === 0) return;
+  await ctx.queueJob(CAPTURE_OBJECT_DELETE_JOB, { keys: unique });
+}
+
+/** The job body: delete each storage object, with no transaction open. */
+export async function deleteCaptureObjects(keys: readonly string[]): Promise<{ deleted: number }> {
+  for (const key of keys) await storage().delete(key);
+  return { deleted: keys.length };
+}
+
+async function clearChunks(ctx: ServiceContext, sessionId: string): Promise<string[]> {
   const chunks = await ctx.tx
     .select()
     .from(mediaCaptureChunks)
     .where(eq(mediaCaptureChunks.sessionId, sessionId));
-  for (const chunk of chunks) {
-    await storage().delete(chunk.storageKey).catch(() => undefined);
-  }
   if (chunks.length > 0) {
     await ctx.tx.delete(mediaCaptureChunks).where(eq(mediaCaptureChunks.sessionId, sessionId));
   }
+  return chunks.map((chunk) => chunk.storageKey);
 }
 
-async function clearItems(ctx: ServiceContext, sessionId: string, onlyUnconfirmed = false) {
+async function clearItems(
+  ctx: ServiceContext,
+  sessionId: string,
+  onlyUnconfirmed = false,
+): Promise<string[]> {
   const items = await ctx.tx
     .select()
     .from(mediaCaptureItems)
     .where(eq(mediaCaptureItems.sessionId, sessionId));
+  const keys: string[] = [];
   for (const item of items) {
     if (onlyUnconfirmed && item.assetId) continue;
-    if (!item.assetId) {
-      await storage().delete(item.stagedKey).catch(() => undefined);
-    }
+    if (!item.assetId) keys.push(item.stagedKey);
   }
   await ctx.tx.delete(mediaCaptureItems).where(
     onlyUnconfirmed
       ? and(eq(mediaCaptureItems.sessionId, sessionId), sql`${mediaCaptureItems.assetId} is null`)
       : eq(mediaCaptureItems.sessionId, sessionId),
   );
+  return keys;
+}
+
+/**
+ * The session a capture call names, authorized the same way for every phase:
+ * a phone holds the upload link's token; anyone else needs media authority.
+ */
+async function authorizedSession(
+  ctx: ServiceContext,
+  input: { id?: string; token?: string },
+  serviceName: string,
+) {
+  if (!input.token && !permits(ctx.actor, "scoped", serviceName, "mutation")) {
+    throw new ServiceError("permission", "Use an upload link or an authorized media account.");
+  }
+  const [row] = input.token
+    ? await ctx.tx
+        .select()
+        .from(mediaCaptureSessions)
+        .where(eq(mediaCaptureSessions.token, input.token))
+        .limit(1)
+    : await ctx.tx
+        .select()
+        .from(mediaCaptureSessions)
+        .where(eq(mediaCaptureSessions.id, input.id!))
+        .limit(1);
+  if (!row) throw new ServiceError("not_found", "That capture session is not here.");
+  return load(ctx, row.id);
+}
+
+function assertOpen(existing: typeof mediaCaptureSessions.$inferSelect): void {
+  if (["confirmed", "discarded", "expired"].includes(existing.status)) {
+    throw new ServiceError("conflict", "That capture session is closed.");
+  }
+}
+
+function assertSameSession(
+  existing: typeof mediaCaptureSessions.$inferSelect,
+  sessionId: string,
+): void {
+  if (existing.id !== sessionId) {
+    throw new ServiceError("conflict", "That capture session changed. Try again.");
+  }
+}
+
+/**
+ * Record a key in the pending object ledger before its bytes are written. If
+ * the write or the apply phase fails, the orphan sweep removes the object; if
+ * it succeeds, the apply phase takes ownership of the key.
+ */
+async function reserveObject(
+  ctx: ServiceContext,
+  input: { key: string; role: "original" | "staged"; contentType: string; bytes: number },
+): Promise<void> {
+  await ctx.tx
+    .insert(mediaObjects)
+    .values({
+      key: input.key,
+      role: input.role,
+      state: "pending",
+      bytes: input.bytes,
+      contentType: input.contentType,
+    })
+    .onConflictDoNothing();
+}
+
+async function storeBytes(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
+  const body = new Uint8Array(bytes.byteLength);
+  body.set(bytes);
+  await storage().put(key, body, contentType);
 }
 
 async function appendItem(
@@ -325,26 +415,6 @@ export const stageCompletedUpload = defineService({
     return present(ctx, updated);
   },
 });
-
-async function stageOriginal(
-  ctx: ServiceContext,
-  existing: typeof mediaCaptureSessions.$inferSelect,
-  input: { filename: string; contentType: string; bytes: Uint8Array },
-) {
-  if (input.bytes.byteLength === 0) {
-    throw new ServiceError("validation", "An empty recording cannot be stored.");
-  }
-  const key = `capture/${existing.id}/item/${randomBytes(8).toString("hex")}`;
-  const body = new Uint8Array(input.bytes.byteLength);
-  body.set(input.bytes);
-  await storage().put(key, body, input.contentType);
-  return appendItem(ctx, existing, {
-    filename: input.filename,
-    contentType: input.contentType,
-    key,
-    bytes: input.bytes.byteLength,
-  });
-}
 
 export const createCaptureSession = defineService({
   name: "media.createCaptureSession",
@@ -565,15 +635,86 @@ export const reviewCapture = defineService({
   },
 });
 
-export const attachCaptureUpload = defineService({
+const captureAccess = {
+  id: id.optional(),
+  token: token.optional(),
+};
+
+const claimCaptureOriginal = defineService({
+  name: "media.claimCaptureOriginal",
+  summary: "Authorize a capture session and reserve a key for new recording bytes.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  input: z
+    .object({
+      ...captureAccess,
+      contentType: z.string().min(1).max(255),
+      bytes: z.number().int().positive(),
+    })
+    .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  output: z.object({ sessionId: uuid, key: z.string() }),
+  handler: async (input, ctx) => {
+    const existing = await authorizedSession(ctx, input, "media.attachCaptureUpload");
+    assertOpen(existing);
+    const key = `capture/${existing.id}/item/${randomBytes(8).toString("hex")}`;
+    await reserveObject(ctx, {
+      key,
+      role: "original",
+      contentType: input.contentType,
+      bytes: input.bytes,
+    });
+    return { sessionId: existing.id, key };
+  },
+});
+
+const applyCaptureOriginal = defineService({
+  name: "media.applyCaptureOriginal",
+  summary: "Hold stored recording bytes on their capture session for review.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  input: z
+    .object({
+      ...captureAccess,
+      sessionId: uuid,
+      key: z.string().min(1).max(500),
+      filename: z.string().min(1).max(255),
+      contentType: z.string().min(1).max(255),
+      bytes: z.number().int().positive(),
+    })
+    .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  output: z.object({ session: captureSessionView, asset: z.null() }),
+  handler: async (input, ctx) => {
+    const existing = await authorizedSession(ctx, input, "media.attachCaptureUpload");
+    assertSameSession(existing, input.sessionId);
+    assertOpen(existing);
+    const updated = await appendItem(ctx, existing, {
+      filename: input.filename,
+      contentType: input.contentType,
+      key: input.key,
+      bytes: input.bytes,
+    });
+    ctx.setSubject("mediaCaptureSession", existing.id);
+    ctx.queueEvent("media.captureAttached", { sessionId: existing.id });
+    return { session: await present(ctx, updated), asset: null };
+  },
+});
+
+/**
+ * Store captured or phone-ingested bytes. The session is authorized and a key
+ * reserved first, the bytes are written with no transaction open, and only
+ * then is the item recorded — so a slow object store never holds a database
+ * transaction, and a failed write leaves nothing but a swept orphan.
+ */
+export const attachCaptureUpload = defineOrchestratedService({
   name: "media.attachCaptureUpload",
   summary: "Store captured or phone-ingested bytes through the normal media pipeline.",
   kind: "mutation",
   permission: "public",
   input: z
     .object({
-      id: id.optional(),
-      token: token.optional(),
+      ...captureAccess,
       filename: z.string().min(1).max(255),
       contentType: z.string().min(1).max(255),
       bytes: z.instanceof(Uint8Array),
@@ -586,34 +727,27 @@ export const attachCaptureUpload = defineService({
     session: captureSessionView,
     asset: z.null(),
   }),
-  handler: async (input, ctx) => {
-    if (!input.token && !permits(ctx.actor, "scoped", "media.attachCaptureUpload", "mutation")) {
-      throw new ServiceError("permission", "Use an upload link or an authorized media account.");
+  handler: async (input, actor) => {
+    const access = { id: input.id, token: input.token };
+    if (input.bytes.byteLength === 0) {
+      throw new ServiceError("validation", "An empty recording cannot be stored.");
     }
-    const [row] = input.token
-      ? await ctx.tx
-          .select()
-          .from(mediaCaptureSessions)
-          .where(eq(mediaCaptureSessions.token, input.token))
-          .limit(1)
-      : await ctx.tx
-          .select()
-          .from(mediaCaptureSessions)
-          .where(eq(mediaCaptureSessions.id, input.id!))
-          .limit(1);
-    if (!row) throw new ServiceError("not_found", "That capture session is not here.");
-    const existing = await load(ctx, row.id);
-    if (["confirmed", "discarded", "expired"].includes(existing.status)) {
-      throw new ServiceError("conflict", "That capture session is closed.");
-    }
-    const updated = await stageOriginal(ctx, existing, {
-      filename: input.filename,
-      contentType: input.contentType,
-      bytes: input.bytes,
-    });
-    ctx.setSubject("mediaCaptureSession", existing.id);
-    ctx.queueEvent("media.captureAttached", { sessionId: existing.id });
-    return { session: await present(ctx, updated), asset: null };
+    const claimed = await claimCaptureOriginal.call(
+      { ...access, contentType: input.contentType, bytes: input.bytes.byteLength },
+      actor,
+    );
+    await storeBytes(claimed.key, input.bytes, input.contentType);
+    return applyCaptureOriginal.call(
+      {
+        ...access,
+        sessionId: claimed.sessionId,
+        key: claimed.key,
+        filename: input.filename,
+        contentType: input.contentType,
+        bytes: input.bytes.byteLength,
+      },
+      actor,
+    );
   },
 });
 
@@ -854,15 +988,16 @@ export const discardCapture = defineService({
     if (existing.status === "confirmed") {
       throw new ServiceError("conflict", "A confirmed capture cannot be discarded.");
     }
-    await clearChunks(ctx, existing.id);
-    await clearItems(ctx, existing.id);
-    if (existing.stagedKey) {
-      await storage().delete(existing.stagedKey).catch(() => undefined);
-    }
+    const forgotten = [
+      ...(await clearChunks(ctx, existing.id)),
+      ...(await clearItems(ctx, existing.id)),
+      ...(existing.stagedKey ? [existing.stagedKey] : []),
+    ];
     if (existing.assetId) {
       const { trashAsset } = await import("./service");
       await ctx.call(trashAsset, { id: existing.assetId }).catch(() => undefined);
     }
+    await deleteAfterCommit(ctx, forgotten);
     const [updated] = await ctx.tx
       .update(mediaCaptureSessions)
       .set({
@@ -959,15 +1094,111 @@ export const bindCaptureAsset = defineService({
   },
 });
 
-export const appendCaptureChunk = defineService({
+const claimCaptureChunk = defineService({
+  name: "media.claimCaptureChunk",
+  summary: "Authorize a capture session and reserve a key for one recording timeslice.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  input: z
+    .object({
+      ...captureAccess,
+      sequence: z.number().int().min(0).max(100_000),
+      contentType: z.string().min(1).max(255),
+      bytes: z.number().int().positive(),
+    })
+    .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  output: z.object({ sessionId: uuid, key: z.string() }),
+  handler: async (input, ctx) => {
+    const existing = await authorizedSession(ctx, input, "media.appendCaptureChunk");
+    assertOpen(existing);
+    // A fresh key per write: a retried timeslice never overwrites bytes an
+    // earlier, committed chunk row still points at.
+    const key = `capture/${existing.id}/${String(input.sequence).padStart(6, "0")}-${randomBytes(6).toString("hex")}`;
+    await reserveObject(ctx, {
+      key,
+      role: "staged",
+      contentType: input.contentType,
+      bytes: input.bytes,
+    });
+    return { sessionId: existing.id, key };
+  },
+});
+
+const applyCaptureChunk = defineService({
+  name: "media.applyCaptureChunk",
+  summary: "Record one stored recording timeslice on its capture session.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  input: z
+    .object({
+      ...captureAccess,
+      sessionId: uuid,
+      sequence: z.number().int().min(0).max(100_000),
+      key: z.string().min(1).max(500),
+      contentType: z.string().min(1).max(255),
+      bytes: z.number().int().positive(),
+    })
+    .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  output: z.object({
+    sessionId: uuid,
+    sequence: z.number().int(),
+    bytes: z.number().int(),
+  }),
+  handler: async (input, ctx) => {
+    const existing = await authorizedSession(ctx, input, "media.appendCaptureChunk");
+    assertSameSession(existing, input.sessionId);
+    assertOpen(existing);
+    const [previous] = await ctx.tx
+      .select({ storageKey: mediaCaptureChunks.storageKey })
+      .from(mediaCaptureChunks)
+      .where(
+        and(
+          eq(mediaCaptureChunks.sessionId, existing.id),
+          eq(mediaCaptureChunks.sequence, input.sequence),
+        ),
+      )
+      .for("update")
+      .limit(1);
+    await ctx.tx
+      .insert(mediaCaptureChunks)
+      .values({
+        sessionId: existing.id,
+        sequence: input.sequence,
+        storageKey: input.key,
+        bytes: input.bytes,
+        contentType: input.contentType,
+      })
+      .onConflictDoUpdate({
+        target: [mediaCaptureChunks.sessionId, mediaCaptureChunks.sequence],
+        set: { storageKey: input.key, bytes: input.bytes, contentType: input.contentType },
+      });
+    // The chunk row owns the key now; the pending ledger entry is released so
+    // the orphan sweep never deletes a live timeslice.
+    await ctx.tx.delete(mediaObjects).where(eq(mediaObjects.key, input.key));
+    if (previous && previous.storageKey !== input.key) {
+      await deleteAfterCommit(ctx, [previous.storageKey]);
+    }
+    if (existing.status !== "live") {
+      await ctx.tx
+        .update(mediaCaptureSessions)
+        .set({ status: "live" })
+        .where(eq(mediaCaptureSessions.id, existing.id));
+    }
+    ctx.setSubject("mediaCaptureSession", existing.id);
+    return { sessionId: existing.id, sequence: input.sequence, bytes: input.bytes };
+  },
+});
+
+export const appendCaptureChunk = defineOrchestratedService({
   name: "media.appendCaptureChunk",
   summary: "Persist one recording timeslice so a dropped tab can resume.",
   kind: "mutation",
   permission: "public",
   input: z
     .object({
-      id: id.optional(),
-      token: token.optional(),
+      ...captureAccess,
       sequence: z.number().int().min(0).max(100_000),
       contentType: z.string().min(1).max(255).default("video/webm"),
       bytes: z.instanceof(Uint8Array),
@@ -978,95 +1209,64 @@ export const appendCaptureChunk = defineService({
     sequence: z.number().int(),
     bytes: z.number().int(),
   }),
-  handler: async (input, ctx) => {
-    if (!input.token && !permits(ctx.actor, "scoped", "media.appendCaptureChunk", "mutation")) {
-      throw new ServiceError("permission", "Use an upload link or an authorized media account.");
-    }
-    const [row] = input.token
-      ? await ctx.tx
-          .select()
-          .from(mediaCaptureSessions)
-          .where(eq(mediaCaptureSessions.token, input.token))
-          .limit(1)
-      : await ctx.tx
-          .select()
-          .from(mediaCaptureSessions)
-          .where(eq(mediaCaptureSessions.id, input.id!))
-          .limit(1);
-    if (!row) throw new ServiceError("not_found", "That capture session is not here.");
-    const existing = await load(ctx, row.id);
-    if (["confirmed", "discarded", "expired"].includes(existing.status)) {
-      throw new ServiceError("conflict", "That capture session is closed.");
-    }
-    const body = input.bytes;
-    if (body.byteLength === 0) {
+  handler: async (input, actor) => {
+    const access = { id: input.id, token: input.token };
+    if (input.bytes.byteLength === 0) {
       throw new ServiceError("validation", "An empty recording chunk cannot be stored.");
     }
-    const key = `capture/${existing.id}/${String(input.sequence).padStart(6, "0")}`;
-    await storage().put(key, body, input.contentType);
-    await ctx.tx
-      .insert(mediaCaptureChunks)
-      .values({
-        sessionId: existing.id,
+    const claimed = await claimCaptureChunk.call(
+      {
+        ...access,
         sequence: input.sequence,
-        storageKey: key,
-        bytes: body.byteLength,
         contentType: input.contentType,
-      })
-      .onConflictDoUpdate({
-        target: [mediaCaptureChunks.sessionId, mediaCaptureChunks.sequence],
-        set: { storageKey: key, bytes: body.byteLength, contentType: input.contentType },
-      });
-    if (existing.status !== "live") {
-      await ctx.tx
-        .update(mediaCaptureSessions)
-        .set({ status: "live" })
-        .where(eq(mediaCaptureSessions.id, existing.id));
-    }
-    ctx.setSubject("mediaCaptureSession", existing.id);
-    return { sessionId: existing.id, sequence: input.sequence, bytes: body.byteLength };
+        bytes: input.bytes.byteLength,
+      },
+      actor,
+    );
+    await storage().put(claimed.key, input.bytes, input.contentType);
+    return applyCaptureChunk.call(
+      {
+        ...access,
+        sessionId: claimed.sessionId,
+        sequence: input.sequence,
+        key: claimed.key,
+        contentType: input.contentType,
+        bytes: input.bytes.byteLength,
+      },
+      actor,
+    );
   },
 });
 
-export const assembleCapture = defineService({
-  name: "media.assembleCapture",
-  summary: "Concatenate persisted recording chunks into one Asset.",
+const assembleAccess = z
+  .object({
+    ...captureAccess,
+    /**
+     * How many chunks the recorder produced. The client knows; storage can
+     * only prove contiguity, and a recording whose *last* chunks never
+     * arrived is contiguous. With the count, a tail loss is refused too.
+     */
+    expectedChunks: z.number().int().min(1).max(100_000).optional(),
+  });
+
+const claimCaptureAssembly = defineService({
+  name: "media.claimCaptureAssembly",
+  summary: "Check a recording's chunks are complete and reserve its assembled key.",
   kind: "mutation",
   permission: "public",
-  input: z
-    .object({
-      id: id.optional(),
-      token: token.optional(),
-      filename: z.string().min(1).max(255).default("capture.webm"),
-      /**
-       * How many chunks the recorder produced. The client knows; storage can
-       * only prove contiguity, and a recording whose *last* chunks never
-       * arrived is contiguous. With the count, a tail loss is refused too.
-       */
-      expectedChunks: z.number().int().min(1).max(100_000).optional(),
-    })
-    .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  external: false,
+  input: assembleAccess.refine(
+    (value) => Boolean(value.id || value.token),
+    "Identify the capture session.",
+  ),
   output: z.object({
-    session: captureSessionView,
-    asset: z.null(),
+    sessionId: uuid,
+    key: z.string(),
+    contentType: z.string(),
+    chunkKeys: listed(z.string()),
   }),
   handler: async (input, ctx) => {
-    if (!input.token && !permits(ctx.actor, "scoped", "media.assembleCapture", "mutation")) {
-      throw new ServiceError("permission", "Use an upload link or an authorized media account.");
-    }
-    const [row] = input.token
-      ? await ctx.tx
-          .select()
-          .from(mediaCaptureSessions)
-          .where(eq(mediaCaptureSessions.token, input.token))
-          .limit(1)
-      : await ctx.tx
-          .select()
-          .from(mediaCaptureSessions)
-          .where(eq(mediaCaptureSessions.id, input.id!))
-          .limit(1);
-    if (!row) throw new ServiceError("not_found", "That capture session is not here.");
-    const existing = await load(ctx, row.id);
+    const existing = await authorizedSession(ctx, input, "media.assembleCapture");
     const chunks = await ctx.tx
       .select()
       .from(mediaCaptureChunks)
@@ -1093,13 +1293,113 @@ export const assembleCapture = defineService({
         `This recording has ${chunks.length} of ${input.expectedChunks} uploaded chunks. Retry the upload before assembling.`,
       );
     }
+    const key = `capture/${existing.id}/item/${randomBytes(8).toString("hex")}`;
+    const contentType = chunks[0]!.contentType;
+    await reserveObject(ctx, {
+      key,
+      role: "original",
+      contentType,
+      bytes: chunks.reduce((sum, chunk) => sum + chunk.bytes, 0),
+    });
+    return {
+      sessionId: existing.id,
+      key,
+      contentType,
+      chunkKeys: chunks.map((chunk) => chunk.storageKey),
+    };
+  },
+});
+
+const applyCaptureAssembly = defineService({
+  name: "media.applyCaptureAssembly",
+  summary: "Replace a recording's chunks with its stored, assembled original.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  input: z
+    .object({
+      ...captureAccess,
+      sessionId: uuid,
+      key: z.string().min(1).max(500),
+      filename: z.string().min(1).max(255),
+      contentType: z.string().min(1).max(255),
+      bytes: z.number().int().positive(),
+      chunkKeys: listed(z.string()),
+    })
+    .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  output: z.object({ session: captureSessionView, asset: z.null() }),
+  handler: async (input, ctx) => {
+    const existing = await authorizedSession(ctx, input, "media.assembleCapture");
+    assertSameSession(existing, input.sessionId);
+    const chunks = await ctx.tx
+      .select({ storageKey: mediaCaptureChunks.storageKey })
+      .from(mediaCaptureChunks)
+      .where(eq(mediaCaptureChunks.sessionId, existing.id))
+      .orderBy(asc(mediaCaptureChunks.sequence))
+      .for("update");
+    const current = chunks.map((chunk) => chunk.storageKey);
+    if (
+      current.length !== input.chunkKeys.length ||
+      current.some((key, index) => key !== input.chunkKeys[index])
+    ) {
+      // The assembled object stays pending in the ledger and is swept; the
+      // chunks themselves are untouched, so assembling again still works.
+      throw new ServiceError(
+        "conflict",
+        "The recording changed while it was being assembled. Assemble it again.",
+      );
+    }
+    await ctx.tx.delete(mediaCaptureChunks).where(eq(mediaCaptureChunks.sessionId, existing.id));
+    const updated = await appendItem(ctx, existing, {
+      filename: input.filename,
+      contentType: input.contentType,
+      key: input.key,
+      bytes: input.bytes,
+    });
+    // Chunk bytes go only once the assembled original is committed beside
+    // them; until then a failure anywhere leaves the recording recoverable.
+    await deleteAfterCommit(ctx, input.chunkKeys);
+    ctx.setSubject("mediaCaptureSession", existing.id);
+    ctx.queueEvent("media.captureAttached", { sessionId: existing.id });
+    return { session: await present(ctx, updated), asset: null };
+  },
+});
+
+/**
+ * Concatenate persisted recording chunks into one staged original.
+ *
+ * Read, concatenate and write happen with no transaction open. The chunk rows
+ * and their bytes are released only after the assembled original is
+ * committed, so a failure at any step can simply be retried (§11).
+ */
+export const assembleCapture = defineOrchestratedService({
+  name: "media.assembleCapture",
+  summary: "Concatenate persisted recording chunks into one Asset.",
+  kind: "mutation",
+  permission: "public",
+  input: assembleAccess
+    .extend({ filename: z.string().min(1).max(255).default("capture.webm") })
+    .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  output: z.object({
+    session: captureSessionView,
+    asset: z.null(),
+  }),
+  handler: async (input, actor) => {
+    const access = { id: input.id, token: input.token };
+    const claimed = await claimCaptureAssembly.call(
+      { ...access, expectedChunks: input.expectedChunks },
+      actor,
+    );
     const parts: Uint8Array<ArrayBuffer>[] = [];
     let total = 0;
-    for (const chunk of chunks) {
-      const body = await storage().get(chunk.storageKey);
+    for (const key of claimed.chunkKeys) {
+      const body = await storage().get(key);
       if (!body) throw new ServiceError("conflict", "A recorded chunk disappeared from storage.");
       parts.push(body);
       total += body.byteLength;
+    }
+    if (total === 0) {
+      throw new ServiceError("validation", "An empty recording cannot be stored.");
     }
     const assembled = new Uint8Array(total);
     let offset = 0;
@@ -1107,18 +1407,19 @@ export const assembleCapture = defineService({
       assembled.set(part, offset);
       offset += part.byteLength;
     }
-    for (const chunk of chunks) {
-      await storage().delete(chunk.storageKey);
-    }
-    await ctx.tx.delete(mediaCaptureChunks).where(eq(mediaCaptureChunks.sessionId, existing.id));
-    const updated = await stageOriginal(ctx, existing, {
-      filename: input.filename,
-      contentType: chunks[0]!.contentType,
-      bytes: assembled,
-    });
-    ctx.setSubject("mediaCaptureSession", existing.id);
-    ctx.queueEvent("media.captureAttached", { sessionId: existing.id });
-    return { session: await present(ctx, updated), asset: null };
+    await storage().put(claimed.key, assembled, claimed.contentType);
+    return applyCaptureAssembly.call(
+      {
+        ...access,
+        sessionId: claimed.sessionId,
+        key: claimed.key,
+        filename: input.filename,
+        contentType: claimed.contentType,
+        bytes: total,
+        chunkKeys: claimed.chunkKeys,
+      },
+      actor,
+    );
   },
 });
 
@@ -1140,12 +1441,11 @@ export const expireCaptureSessions = defineService({
         ),
       );
     const expired: string[] = [];
+    const forgotten: string[] = [];
     for (const row of due) {
-      await clearChunks(ctx, row.id);
-      await clearItems(ctx, row.id);
-      if (row.stagedKey) {
-        await storage().delete(row.stagedKey).catch(() => undefined);
-      }
+      forgotten.push(...(await clearChunks(ctx, row.id)));
+      forgotten.push(...(await clearItems(ctx, row.id)));
+      if (row.stagedKey) forgotten.push(row.stagedKey);
       if (row.assetId) {
         const { trashAsset } = await import("./service");
         await ctx.callAsSystem(trashAsset, { id: row.assetId }).catch(() => undefined);
@@ -1163,6 +1463,7 @@ export const expireCaptureSessions = defineService({
         .where(eq(mediaCaptureSessions.id, row.id));
       expired.push(row.id);
     }
+    await deleteAfterCommit(ctx, forgotten);
     return { expired };
   },
 });
@@ -1180,8 +1481,14 @@ export default [
   bindCaptureAsset,
   stageCompletedUpload,
   appendCaptureChunk,
+  claimCaptureChunk,
+  applyCaptureChunk,
   assembleCapture,
+  claimCaptureAssembly,
+  applyCaptureAssembly,
   attachCaptureUpload,
+  claimCaptureOriginal,
+  applyCaptureOriginal,
   confirmCapture,
   confirmCaptureSource,
   confirmCaptureApply,

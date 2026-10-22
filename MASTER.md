@@ -9634,6 +9634,33 @@ schema they inherit reads as a designed thing rather than an excavation.
   `tests/core/owner-password-script.test.ts`. Refreshed review packet records
   the remaining API-token/ephemeral-Basic hashing findings for independent
   disposition. These repairs do not close C11.10.)*
+  Audit follow-up 2026-10-21 (service boundaries and gates): provider I/O
+  left inside `defineService` transactions now runs outside them. Capture
+  chunk/original writes and assembly reserve keys in the pending object
+  ledger, store bytes with no transaction open, and delete chunk objects only
+  through a post-commit job, so a failed write leaves the recording
+  recoverable. `messaging.sendSms` stages the message and enqueues
+  `core.deliverSms` (provider idempotency token = caller key; the job id is
+  the message id); number import/health, calendar sync, mailbox import,
+  gallery archive build, builder PR delivery, assistant answers, translation
+  drafts and builder proposals are orchestrators around short claim/apply
+  phases. `tests/core/long-running-service-boundary.test.ts` now scans every
+  `defineService` file in src/plugins/app, derives provider methods from the
+  adapter contracts, detects `storage()` I/O and follows named handlers
+  (temporary allowlist: invoicing payment-provider/POS, fixed separately);
+  `service-composition` covers plugins/app and named handlers;
+  `merge-completeness` checks per column and polymorphic `subject_id`, and a
+  conflicting second `registerContactReference` now throws — documents and
+  signup commissions filed against a contact are repointed. ESLint bans
+  contact creation from public app surfaces and SVG hex fills; packages are
+  scanned for colour literals; licence headers cover .py/.cjs/.nix/systemd/
+  Caddy; the plugin provider-boundary contract test is DB-free. Regression
+  evidence: `sms.test.ts`, `media-capture.test.ts`, `calendar-sync.test.ts`,
+  `mail-import.test.ts`, `assistant.test.ts`, `cms-translation-workflow.test.ts`,
+  `builder-content-lane.test.ts`, `documents.test.ts`,
+  `referrals-commission.test.ts`, `lint-gates.test.ts`,
+  `colour-literals.test.ts`. Changeset
+  `provider-calls-outside-transactions.md`. Not independent review evidence.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.

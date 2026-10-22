@@ -429,6 +429,12 @@ export const resolveContact = defineService({
 export interface ContactReference {
   /** Physical table name â€” what the completeness gate matches against. */
   table: string;
+  /**
+   * Every column on `table` this entry repoints, physical names. Omitted means
+   * `["contact_id"]`. The completeness gate checks coverage per column, so a
+   * second contact column (or a polymorphic `subject_id`) must be named here.
+   */
+  columns?: readonly string[];
   repoint: (
     tx: Tx,
     duplicateId: string,
@@ -505,6 +511,7 @@ function assertPointerState(
 const references: ContactReference[] = [
   {
     table: "contact_relationships",
+    columns: ["from_contact_id", "to_contact_id"],
     repoint: repointContactRelationships,
     captureForUndo: async (tx, duplicateId, survivingId) => ({
       state: await captureContactRelationships(tx, duplicateId, survivingId),
@@ -544,6 +551,7 @@ const references: ContactReference[] = [
     // merged before this runs; every other open suspicion touching the deleted
     // identity is retired and can be rediscovered by the next scan after undo.
     table: "merge_candidates",
+    columns: ["contact_a_id", "contact_b_id"],
     repoint: (tx, duplicateId) =>
       tx
         .update(mergeCandidates)
@@ -710,8 +718,28 @@ const references: ContactReference[] = [
  */
 export function registerContactReference(reference: ContactReference): void {
   const existing = references.find((r) => r.table === reference.table);
-  if (existing) return;
+  if (existing === reference) return;
+  if (existing) {
+    const columns = (r: ContactReference) => [...contactReferenceColumns(r)].sort().join(",");
+    if (columns(existing) === columns(reference)) {
+      // The same declaration evaluated again (a re-imported module graph):
+      // the newest closure wins, and nothing is left uncovered.
+      references[references.indexOf(existing)] = reference;
+      return;
+    }
+    // One entry per table: merge undo looks its state up by table, and a
+    // second registration naming other columns used to be dropped silently —
+    // so those columns were never repointed while the gate believed they were.
+    throw new Error(
+      `contacts.merge already has a repoint for "${reference.table}". Declare every contact column of that table in one registerContactReference() call.`,
+    );
+  }
   references.push(reference);
+}
+
+/** The columns a reference repoints (see `ContactReference.columns`). */
+export function contactReferenceColumns(reference: ContactReference): readonly string[] {
+  return reference.columns ?? ["contact_id"];
 }
 
 /** Every table that references `contacts.id`, core's and every module's. */

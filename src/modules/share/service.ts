@@ -596,6 +596,7 @@ export const linkReport = defineService({
 
 registerContactReference({
   table: "shared_links",
+  columns: ["sharer_contact_id"],
   repoint: (tx, duplicateId, survivingId) =>
     tx
       .update(sharedLinks)

@@ -822,6 +822,7 @@ registerContactReference({
 /** The portal member who supplied a signup batch remains the same person after a merge. */
 registerContactReference({
   table: "contact_imports",
+  columns: ["subject_contact_id"],
   repoint: (tx, duplicateId, survivingId) =>
     tx
       .update(contactImports)

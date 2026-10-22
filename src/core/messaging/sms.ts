@@ -34,8 +34,10 @@ import type { SmsAdapter } from "@/adapters/sms";
 import { AdapterError } from "@/adapters/types";
 import { storage } from "@/adapters/storage";
 import { contacts } from "@/core/contacts/schema";
+import { db } from "@/core/db";
 import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy";
 import { env } from "@/core/env";
+import { jobIdempotencyKeys } from "@/core/jobs/schema";
 import { assets } from "@/core/media/schema";
 import {
   defineOrchestratedService,
@@ -64,11 +66,13 @@ import policyServices, {
   SMS_POLICY_EXCEPTION_KINDS,
 } from "./policy";
 import keywordServices, { applyInboundKeywordRule } from "./keywords";
-import { messages } from "./schema";
+import { messageDeliveries, messages } from "./schema";
 import { resolveMessageContact } from "./service";
 
 const id = z.string().uuid();
 const HARD_INVALID_NUMBER_CODES = new Set(["21211", "21614"]);
+/** The post-commit job that submits a staged text to its carrier. */
+export const SMS_DELIVERY_JOB = "core.deliverSms";
 
 function normalizedPhone(value: string): string {
   const digits = value.replace(/\D/g, "");
@@ -143,9 +147,9 @@ async function markPhoneInvalid(
     .where(eq(contacts.id, input.contactId));
 }
 
-async function outboundMediaUrls(ctx: ServiceContext, mediaAssetIds: string[]): Promise<string[]> {
+async function outboundMediaAssets(tx: Tx, mediaAssetIds: string[]) {
   if (mediaAssetIds.length === 0) return [];
-  const rows = await ctx.tx
+  const rows = await tx
     .select()
     .from(assets)
     .where(inArray(assets.id, mediaAssetIds));
@@ -162,11 +166,7 @@ async function outboundMediaUrls(ctx: ServiceContext, mediaAssetIds: string[]): 
       throw new ServiceError("validation", "MMS accepts images, audio, or video—not documents.");
     }
   }
-  return Promise.all(
-    ordered.map((asset) =>
-      storage().url(asset!.storageKey, { contentType: asset!.mime, expiresIn: 3_600 }),
-    ),
-  );
+  return ordered.map((asset) => asset!);
 }
 
 function requirePerson(actor: Actor): void {
@@ -220,37 +220,42 @@ export const listMessagingNumbers = defineService({
       .orderBy(desc(messagingNumbers.isDefault), asc(messagingNumbers.e164)),
 });
 
-/**
- * Read the numbers the provider actually holds.
- *
- * Listing, never buying. Buying a number spends the owner's money on a vendor's
- * terms, in a country with its own rules about who may hold one — that belongs
- * in the provider's own console, and a platform that hides it behind one button
- * is a platform that bought somebody the wrong thing.
- */
-export const importMessagingNumbers = defineService({
-  name: "messaging.importNumbers",
-  summary: "Read the numbers the provider holds and record what each can do.",
+const importedNumber = z.object({
+  providerRef: z.string().min(1).max(300),
+  e164: z.string().min(1).max(40),
+  country: z.string().max(10).nullable(),
+  kind: z.enum(NUMBER_KINDS),
+  capabilities: z.object({
+    sms: z.boolean().optional(),
+    mms: z.boolean().optional(),
+    inbound: z.boolean().optional(),
+  }).passthrough(),
+});
+
+/** Records a provider's number listing that was read with no transaction open. */
+const importMessagingNumbersApply = defineService({
+  name: "messaging.importNumbersApply",
+  summary: "Record the numbers a provider listing returned.",
   kind: "mutation",
   permission: "scoped",
   writeClass: "write",
-  input: z.object({ provider: z.string().trim().max(50).optional() }),
+  external: false,
+  agentCallable: false,
+  input: z.object({
+    provider: z.string().trim().min(1).max(50),
+    numbers: z.array(importedNumber).max(1_000),
+  }),
   output: row({ found: z.number().int(), added: z.number().int() }),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
-    const adapter = smsAdapter(input.provider);
-    if (!adapter.available || !adapter.listNumbers) {
-      throw new ServiceError("validation", adapter.status.message);
-    }
-    const numbers = await adapter.listNumbers();
     let added = 0;
-    for (const number of numbers) {
+    for (const number of input.numbers) {
       const [existing] = await ctx.tx
         .select({ id: messagingNumbers.id })
         .from(messagingNumbers)
         .where(
           and(
-            eq(messagingNumbers.provider, adapter.id),
+            eq(messagingNumbers.provider, input.provider),
             eq(messagingNumbers.providerRef, number.providerRef),
           ),
         )
@@ -271,7 +276,7 @@ export const importMessagingNumbers = defineService({
         continue;
       }
       await ctx.tx.insert(messagingNumbers).values({
-        provider: adapter.id,
+        provider: input.provider,
         providerRef: number.providerRef,
         e164: number.e164,
         country: number.country,
@@ -280,8 +285,44 @@ export const importMessagingNumbers = defineService({
       });
       added += 1;
     }
-    ctx.queueEvent("messaging.numbersImported", { provider: adapter.id, found: numbers.length });
-    return { found: numbers.length, added };
+    ctx.queueEvent("messaging.numbersImported", {
+      provider: input.provider,
+      found: input.numbers.length,
+    });
+    return { found: input.numbers.length, added };
+  },
+});
+
+/**
+ * Read the numbers the provider actually holds.
+ *
+ * Listing, never buying. Buying a number spends the owner's money on a vendor's
+ * terms, in a country with its own rules about who may hold one — that belongs
+ * in the provider's own console, and a platform that hides it behind one button
+ * is a platform that bought somebody the wrong thing.
+ *
+ * The provider is asked with no database transaction open (§11): a slow carrier
+ * API must not hold a connection and row locks while it answers.
+ */
+export const importMessagingNumbers = defineOrchestratedService({
+  name: "messaging.importNumbers",
+  summary: "Read the numbers the provider holds and record what each can do.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  input: z.object({ provider: z.string().trim().max(50).optional() }),
+  output: row({ found: z.number().int(), added: z.number().int() }),
+  handler: async (input, actor) => {
+    requirePerson(actor);
+    const adapter = smsAdapter(input.provider);
+    if (!adapter.available || !adapter.listNumbers) {
+      throw new ServiceError("validation", adapter.status.message);
+    }
+    const numbers = await adapter.listNumbers();
+    return importMessagingNumbersApply.call(
+      { provider: adapter.id, numbers: numbers.map((number) => ({ ...number })) },
+      actor,
+    );
   },
 });
 
@@ -335,32 +376,30 @@ export const updateMessagingNumber = defineService({
   },
 });
 
-/**
- * Ask the provider whether each number can actually be used.
- *
- * §4.14: "an unregistered number silently filtered by carriers is the most
- * common way an SMS launch fails". A check that could not be made is recorded
- * as *unknown* rather than as healthy, because a green tick nobody verified is
- * that failure wearing a disguise.
- */
-export const checkNumberHealth = defineService({
-  name: "messaging.checkNumbers",
-  summary: "Ask the provider whether each number can be used right now.",
+const numberHealth = z.object({
+  id,
+  usable: z.boolean(),
+  unknown: z.boolean(),
+  problem: z.string().max(2_000).nullable(),
+  providerStatus: z.string().max(300).nullable(),
+});
+
+/** Records provider health answers gathered with no transaction open. */
+const checkNumberHealthApply = defineService({
+  name: "messaging.checkNumbersApply",
+  summary: "Record what the provider said about each number's health.",
   kind: "mutation",
   permission: "scoped",
   writeClass: "write",
-  input: z.object({}),
-  output: row({ checked: z.number().int(), problems: z.number().int() }),
-  handler: async (_input, ctx) => {
+  external: false,
+  agentCallable: false,
+  input: z.object({ results: z.array(numberHealth).max(1_000) }),
+  output: row({ updated: z.number().int() }),
+  handler: async (input, ctx) => {
     requirePerson(ctx.actor);
-    const rows = await ctx.tx.select().from(messagingNumbers);
-    let problems = 0;
-    for (const number of rows) {
-      const adapter = smsAdapter(number.provider);
-      if (!adapter.available || !adapter.checkNumber) continue;
-      const health = await adapter.checkNumber(number.providerRef);
-      if (!health.usable) problems += 1;
-      await ctx.tx
+    let updated = 0;
+    for (const health of input.results) {
+      const changed = await ctx.tx
         .update(messagingNumbers)
         .set({
           healthy: health.usable,
@@ -370,9 +409,56 @@ export const checkNumberHealth = defineService({
           healthCheckedAt: new Date(),
           updatedAt: sql`now()`,
         })
-        .where(eq(messagingNumbers.id, number.id));
+        .where(eq(messagingNumbers.id, health.id))
+        .returning({ id: messagingNumbers.id });
+      updated += changed.length;
     }
-    return { checked: rows.length, problems };
+    return { updated };
+  },
+});
+
+/**
+ * Ask the provider whether each number can actually be used.
+ *
+ * §4.14: "an unregistered number silently filtered by carriers is the most
+ * common way an SMS launch fails". A check that could not be made is recorded
+ * as *unknown* rather than as healthy, because a green tick nobody verified is
+ * that failure wearing a disguise. Each provider question runs with no
+ * database transaction open; the answers are applied together afterwards.
+ */
+export const checkNumberHealth = defineOrchestratedService({
+  name: "messaging.checkNumbers",
+  summary: "Ask the provider whether each number can be used right now.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  input: z.object({}),
+  output: row({ checked: z.number().int(), problems: z.number().int() }),
+  handler: async (_input, actor) => {
+    requirePerson(actor);
+    const rows = (await listMessagingNumbers.call({}, actor)) as Array<{
+      id: string;
+      provider: string;
+      providerRef: string;
+    }>;
+    const results: z.input<typeof numberHealth>[] = [];
+    for (const number of rows) {
+      const adapter = smsAdapter(number.provider);
+      if (!adapter.available || !adapter.checkNumber) continue;
+      const health = await adapter.checkNumber(number.providerRef);
+      results.push({
+        id: number.id,
+        usable: health.usable,
+        unknown: health.unknown,
+        problem: health.problem,
+        providerStatus: health.providerStatus,
+      });
+    }
+    if (results.length > 0) await checkNumberHealthApply.call({ results }, actor);
+    return {
+      checked: rows.length,
+      problems: results.filter((health) => !health.usable).length,
+    };
   },
 });
 
@@ -480,8 +566,8 @@ export const sendSms = defineService({
       // will never arrive.
       throw new ServiceError("validation", adapter.status.message);
     }
-    const mediaUrls = await outboundMediaUrls(ctx, input.mediaAssetIds);
-    const sender = await senderFor(ctx.tx, input.purpose, mediaUrls.length > 0);
+    const media = await outboundMediaAssets(ctx.tx, input.mediaAssetIds);
+    const sender = await senderFor(ctx.tx, input.purpose, media.length > 0);
     if (!sender) {
       // Say *why*, not just "no". A blocked registration is a form somebody has
       // to fill in, and an owner told only "no usable number" will check the
@@ -489,80 +575,64 @@ export const sendSms = defineService({
       throw new ServiceError("validation", await whyNothingCanSend(ctx.tx));
     }
 
-    let result;
-    try {
-      result = await adapter.send({
-        to: input.to,
-        from: sender.e164,
-        title: "",
-        body: input.body,
-        mediaUrls,
-        deliveryId: input.idempotencyKey,
-      });
-    } catch (error) {
-      if (
-        error instanceof AdapterError &&
-        error.providerCode &&
-        HARD_INVALID_NUMBER_CODES.has(error.providerCode)
-      ) {
-        await markPhoneInvalid(ctx, {
-          contactId,
-          phone: input.to,
-          code: error.providerCode,
-          reason: error.message,
-        });
-        ctx.setSubject("contact", contactId);
-        return {
-          sent: false,
-          providerRef: null,
-          reason: error.message,
-          messageId: null,
-        };
+    // A retry with the same key is the same message. The delivery job's id is
+    // the message id, so its idempotency claim leads straight back to it.
+    const [staged] = await ctx.tx
+      .select({ jobId: jobIdempotencyKeys.jobId })
+      .from(jobIdempotencyKeys)
+      .where(
+        and(
+          eq(jobIdempotencyKeys.jobName, SMS_DELIVERY_JOB),
+          eq(jobIdempotencyKeys.idempotencyKey, input.idempotencyKey),
+        ),
+      )
+      .limit(1);
+    if (staged) {
+      const [existing] = await ctx.tx
+        .select({ id: messages.id, providerRef: messages.providerRef })
+        .from(messages)
+        .where(eq(messages.id, staged.jobId))
+        .limit(1);
+      if (existing) {
+        return { sent: true, providerRef: existing.providerRef, reason: null, messageId: existing.id };
       }
-      // The provider's own words, already stripped of credentials by the
-      // adapter boundary (§12), so an owner gets something they can act on.
-      throw new ServiceError(
-        "conflict",
-        error instanceof AdapterError ? error.message : "The message could not be sent.",
-      );
-    }
-    if (!result.delivers) {
-      return {
-        sent: false,
-        providerRef: result.providerRef,
-        reason: result.reason ?? "The provider would not take it.",
-        messageId: null,
-      };
     }
 
     // Into the one conversation model, so a text sits in the same thread as the
-    // email and the form submission (C7.08).
+    // email and the form submission (C7.08). Recorded before the carrier is
+    // asked: provider I/O never runs inside this transaction (§11), so the
+    // message is staged here and `deliverQueuedSms` submits it after commit.
     const recorded = (await recordOutbound(ctx, {
       contactId,
       to: input.to,
       body: input.body,
       conversationId: input.conversationId,
-      providerRef: result.providerRef,
-      segments: result.segments,
-      costMinor: result.costMinor,
-      costCurrency: result.costCurrency,
+      providerRef: null,
       purpose: input.purpose,
       policyException: input.policyException,
       mediaAssetIds: input.mediaAssetIds,
       templateId: input.templateId,
-      mms: mediaUrls.length > 0,
+      mms: media.length > 0,
     })) as { message: { id: string } };
 
     // Queued, not delivered: the carrier says what actually happened later.
-    if (result.providerRef) {
-      await ctx.call(getService("conversations.recordDelivery"), {
+    await ctx.call(getService("conversations.recordDelivery"), {
+      messageId: recorded.message.id,
+      status: "queued",
+    });
+    await ctx.queueJob(
+      SMS_DELIVERY_JOB,
+      {
         messageId: recorded.message.id,
-        status: "queued",
-      });
-    }
+        provider: adapter.id,
+        from: sender.e164,
+        idempotencyKey: input.idempotencyKey,
+      },
+      { id: recorded.message.id, idempotencyKey: input.idempotencyKey },
+    );
     return {
       sent: true,
-      providerRef: result.providerRef,
+      providerRef: null,
       reason: null,
       messageId: recorded.message.id,
     };
@@ -608,6 +678,182 @@ function recordOutbound(
     costMinor: input.costMinor,
     costCurrency: input.costCurrency,
   });
+}
+
+/** Retries for one staged text before it is recorded as failed. */
+export const SMS_DELIVERY_RETRIES = 8;
+
+const smsSendOutcome = z.discriminatedUnion("outcome", [
+  z.object({
+    outcome: z.literal("accepted"),
+    messageId: id,
+    providerRef: z.string().min(1).max(300),
+    segments: z.number().int().min(0).max(1_000).optional(),
+    costMinor: z.number().int().min(0).optional(),
+    costCurrency: z.string().trim().toUpperCase().length(3).optional(),
+  }),
+  z.object({
+    outcome: z.literal("failed"),
+    messageId: id,
+    errorCode: z.string().max(50).nullable(),
+    errorText: z.string().max(500),
+  }),
+]);
+
+/**
+ * Record what the carrier said when a staged text was submitted.
+ *
+ * Runs in its own short transaction after the provider call returned, so a
+ * slow or failing carrier never holds the business transaction that staged
+ * the message.
+ */
+const applySmsSendResult = defineService({
+  name: "messaging.applySmsSendResult",
+  summary: "Record the provider's answer for one staged text message.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "message",
+  agentCallable: false,
+  mcpExclude: true,
+  external: false,
+  input: smsSendOutcome,
+  output: row({ applied: z.boolean() }),
+  handler: async (input, ctx) => {
+    const [message] = await ctx.tx
+      .select()
+      .from(messages)
+      .where(eq(messages.id, input.messageId))
+      .for("update")
+      .limit(1);
+    if (!message || message.providerRef) return { applied: false };
+    ctx.setSubject("message", message.id);
+    if (input.outcome === "accepted") {
+      await ctx.tx
+        .update(messages)
+        .set({
+          providerRef: input.providerRef,
+          ...(input.segments !== undefined ? { segments: input.segments } : {}),
+          ...(input.costMinor !== undefined
+            ? { costMinor: input.costMinor, costCurrency: input.costCurrency }
+            : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(messages.id, message.id));
+      return { applied: true };
+    }
+    await ctx.call(getService("conversations.recordDelivery"), {
+      messageId: message.id,
+      status: "failed",
+      errorCode: input.errorCode,
+      errorText: input.errorText,
+    });
+    if (input.errorCode && HARD_INVALID_NUMBER_CODES.has(input.errorCode) && message.recipientAddress) {
+      await markPhoneInvalid(ctx, {
+        contactId: message.contactId,
+        phone: message.recipientAddress,
+        code: input.errorCode,
+        reason: input.errorText,
+      });
+    }
+    return { applied: true };
+  },
+});
+
+/**
+ * Submit one staged text to its carrier, after the transaction that staged it
+ * committed (§11). The provider idempotency token is the caller's key, so a
+ * retried job cannot send twice; a text that already has a provider reference
+ * or a recorded failure is left alone.
+ */
+export async function deliverQueuedSms(
+  data: { messageId: string; provider: string; from: string; idempotencyKey: string },
+  attempt = 1,
+): Promise<{ status: "submitted" | "failed" | "skipped" }> {
+  const system: Actor = { kind: "system" };
+  const [message] = await db()
+    .select()
+    .from(messages)
+    .where(eq(messages.id, data.messageId))
+    .limit(1);
+  if (!message || message.providerRef || !message.recipientAddress) return { status: "skipped" };
+  const [failed] = await db()
+    .select({ id: messageDeliveries.id })
+    .from(messageDeliveries)
+    .where(and(eq(messageDeliveries.messageId, message.id), eq(messageDeliveries.status, "failed")))
+    .limit(1);
+  if (failed) return { status: "skipped" };
+
+  const fail = async (errorText: string, errorCode: string | null = null) => {
+    await applySmsSendResult.call(
+      { outcome: "failed", messageId: message.id, errorCode, errorText: errorText.slice(0, 500) },
+      system,
+    );
+    return { status: "failed" as const };
+  };
+  if (playgroundBlocksExternalDelivery(env())) {
+    return fail("Text message delivery is disabled in the public playground.");
+  }
+  const adapter = smsAdapter(data.provider);
+  if (!adapter.available) return fail(adapter.status.message);
+
+  let mediaUrls: string[] = [];
+  if (message.mediaAssetIds.length > 0) {
+    const rows = await db().select().from(assets).where(inArray(assets.id, message.mediaAssetIds));
+    const byId = new Map(rows.map((asset) => [asset.id, asset]));
+    const ordered = message.mediaAssetIds.map((assetId) => byId.get(assetId));
+    if (ordered.some((asset) => !asset || asset.status !== "ready")) {
+      return fail("A picture in this message is no longer available to send.");
+    }
+    mediaUrls = await Promise.all(
+      ordered.map((asset) =>
+        storage().url(asset!.storageKey, { contentType: asset!.mime, expiresIn: 3_600 }),
+      ),
+    );
+  }
+
+  let result;
+  try {
+    result = await adapter.send({
+      to: message.recipientAddress,
+      from: data.from,
+      title: "",
+      body: message.body,
+      mediaUrls,
+      deliveryId: data.idempotencyKey,
+    });
+  } catch (error) {
+    if (
+      error instanceof AdapterError &&
+      error.providerCode &&
+      HARD_INVALID_NUMBER_CODES.has(error.providerCode)
+    ) {
+      return fail(error.message, error.providerCode);
+    }
+    // Transient: the queue retries with the same provider idempotency token.
+    // Only the last attempt is recorded as a failure an owner can see.
+    if (attempt > SMS_DELIVERY_RETRIES) {
+      return fail(
+        error instanceof AdapterError ? error.message : "The message could not be sent.",
+        error instanceof AdapterError ? (error.providerCode ?? null) : null,
+      );
+    }
+    throw error;
+  }
+  if (!result.delivers || !result.providerRef) {
+    return fail(result.reason ?? "The provider would not take it.");
+  }
+  await applySmsSendResult.call(
+    {
+      outcome: "accepted",
+      messageId: message.id,
+      providerRef: result.providerRef,
+      segments: result.segments,
+      costMinor: result.costMinor,
+      costCurrency: result.costCurrency,
+    },
+    system,
+  );
+  return { status: "submitted" };
 }
 
 /**
@@ -1047,6 +1293,9 @@ export default [
   numberRegistrations,
   setRegistration,
   sendSms,
+  applySmsSendResult,
+  importMessagingNumbersApply,
+  checkNumberHealthApply,
   applySmsEvents,
   applySmsEventsApply,
 ];
