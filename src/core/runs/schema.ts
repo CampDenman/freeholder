@@ -244,7 +244,12 @@ export const runApprovals = pgTable(
     })
       .notNull()
       .default("approve"),
-    status: text("status", { enum: ["pending", "approved", "rejected", "expired"] })
+    /**
+     * `executing`: approved, and its write is running after the claim committed
+     * (an orchestrated service, §11). `decided_at` is when that began; the
+     * approval sweep returns a stale one to pending, never re-running it.
+     */
+    status: text("status", { enum: ["pending", "executing", "approved", "rejected", "expired"] })
       .notNull()
       .default("pending"),
     decidedBy: uuid("decided_by").references(() => users.id, { onDelete: "set null" }),

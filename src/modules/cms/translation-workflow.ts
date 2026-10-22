@@ -4,7 +4,13 @@
 import { z } from "zod";
 import { and, eq, isNull } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineService, ServiceError } from "@/core/service";
+import { createHash } from "node:crypto";
+import {
+  defineOrchestratedService,
+  defineService,
+  ServiceError,
+  type ServiceContext,
+} from "@/core/service";
 import { getTranslation, setTranslation } from "@/core/i18n/service";
 import { entityTranslations } from "@/core/i18n/schema";
 import { pages } from "./schema";
@@ -124,62 +130,127 @@ export function seoComplete(fields: {
   return title.length > 0 && description.length > 0;
 }
 
-export const draftPageTranslation = defineService({
-  name: "cms.draftPageTranslation",
-  summary:
-    "Seed a translation draft — machine-translated only when an AI adapter actually ran. Never served publicly until reviewed.",
+const draftInput = z.object({
+  pageId: z.string().uuid(),
+  locale: z.string().min(2).max(20),
+  replace: z.boolean().default(false),
+});
+
+async function draftablePage(ctx: ServiceContext, input: z.output<typeof draftInput>, lock: boolean) {
+  const query = ctx.tx
+    .select()
+    .from(pages)
+    .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
+    .limit(1);
+  const [page] = lock ? await query.for("update") : await query;
+  if (!page) throw new ServiceError("not_found", "That page is not on this site.");
+  const existing = await ctx.call(getTranslation, {
+    entityType: "page",
+    entityId: page.id,
+    locale: input.locale,
+    includeUnreviewed: true,
+  });
+  if (existing?.status === "reviewed" && !input.replace) {
+    throw new ServiceError(
+      "conflict",
+      "That translation is already reviewed. Replace it explicitly to draft over it.",
+    );
+  }
+  const blocks = parseBlockTree(page.workingBlocks ?? page.blocks, "page");
+  const seo = pageSeo(page.workingSeo ?? page.seo);
+  const title = page.workingTitle ?? page.title;
+  const rows = sourceStrings(title, seo, blocks);
+  return { page, blocks, rows, identity: sourceIdentity(rows) };
+}
+
+function sourceIdentity(rows: { key: string; value: string }[]): string {
+  return createHash("sha256").update(JSON.stringify(rows)).digest("hex");
+}
+
+const draftSourceService = defineService({
+  name: "cms.draftPageTranslationSource",
+  summary: "Authorize and snapshot a page's strings before a translation model runs.",
+  kind: "query",
+  permission: "scoped",
+  external: false,
+  input: draftInput,
+  output: row({
+    pageId: uuid,
+    rows: z.array(z.object({ key: z.string(), value: z.string() })),
+    identity: z.string(),
+  }),
+  handler: async (input, ctx) => {
+    const source = await draftablePage(ctx, input, false);
+    return { pageId: source.page.id, rows: source.rows, identity: source.identity };
+  },
+});
+
+const applyDraftService = defineService({
+  name: "cms.applyPageTranslationDraft",
+  summary: "Revalidate a page and store a translation draft produced outside the transaction.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({
-    pageId: z.string().uuid(),
-    locale: z.string().min(2).max(20),
-    replace: z.boolean().default(false),
+  external: false,
+  input: draftInput.extend({
+    identity: z.string(),
+    values: z.record(z.string(), z.string()),
+    machine: z.boolean(),
   }),
   output: translationRow,
   handler: async (input, ctx) => {
-    const [page] = await ctx.tx
-      .select()
-      .from(pages)
-      .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
-      .limit(1);
-    if (!page) throw new ServiceError("not_found", "That page is not on this site.");
-    const existing = await ctx.call(getTranslation, {
-      entityType: "page",
-      entityId: page.id,
-      locale: input.locale,
-      includeUnreviewed: true,
-    });
-    if (existing?.status === "reviewed" && !input.replace) {
+    // The model ran with no transaction open. Re-lock the page and compare
+    // its strings, so an edit made meanwhile is never overwritten by a draft
+    // of the text it replaced.
+    const source = await draftablePage(ctx, input, true);
+    if (source.identity !== input.identity) {
       throw new ServiceError(
         "conflict",
-        "That translation is already reviewed. Replace it explicitly to draft over it.",
+        "The page changed while its translation was drafted. Nothing was saved; draft it again from the current text.",
       );
     }
-    const blocks = parseBlockTree(page.workingBlocks ?? page.blocks, "page");
-    const seo = pageSeo(page.workingSeo ?? page.seo);
-    const title = page.workingTitle ?? page.title;
-    const rows = sourceStrings(title, seo, blocks);
-    const drafted = await draftValues(rows, input.locale, page.id);
     const blockValues: Record<string, string> = {};
-    for (const [key, value] of Object.entries(drafted.values)) {
+    for (const [key, value] of Object.entries(input.values)) {
       if (key !== "title" && key !== "seo.description" && key !== "seo.title") {
         blockValues[key] = value;
       }
     }
     return ctx.call(setTranslation, {
       entityType: "page",
-      entityId: page.id,
+      entityId: source.page.id,
       locale: input.locale,
-      status: drafted.machine ? "machine" : "draft",
+      status: input.machine ? "machine" : "draft",
       fields: {
-        title: drafted.values.title,
+        title: input.values.title,
         seo: {
-          title: drafted.values["seo.title"],
-          description: drafted.values["seo.description"],
+          title: input.values["seo.title"],
+          description: input.values["seo.description"],
         },
-        blocks: applyTranslations(blocks, blockValues),
+        blocks: applyTranslations(source.blocks, blockValues),
       },
     });
+  },
+});
+
+/**
+ * Seed a translation draft (C2.16). An orchestrator, because a translation
+ * model can take many seconds and no service transaction may wait on it
+ * (MASTER.md §11): snapshot, draft with nothing open, then re-lock and apply.
+ */
+export const draftPageTranslation = defineOrchestratedService({
+  name: "cms.draftPageTranslation",
+  summary:
+    "Seed a translation draft — machine-translated only when an AI adapter actually ran. Never served publicly until reviewed.",
+  kind: "mutation",
+  permission: "scoped",
+  input: draftInput,
+  output: translationRow,
+  handler: async (input, actor) => {
+    const source = await draftSourceService.call(input, actor);
+    const drafted = await draftValues(source.rows, input.locale, source.pageId);
+    return applyDraftService.call(
+      { ...input, identity: source.identity, values: drafted.values, machine: drafted.machine },
+      actor,
+    );
   },
 });
 
@@ -233,3 +304,6 @@ export const pageTranslationReport = defineService({
     });
   },
 });
+
+/** The short phases behind `cms.draftPageTranslation`, registered with it. */
+export const draftPageTranslationPhases = [draftSourceService, applyDraftService];

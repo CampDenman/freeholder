@@ -74,7 +74,7 @@ export const myMembership = defineService({
 });
 export const myMembershipPaymentMethods = defineService({
   name:"subscriptions.myPaymentMethods",summary:"Your consented, active methods that can bill a membership.",kind:"query",permission:"authenticated",input:z.object({}),output:z.array(z.object({id:z.uuid(),label:z.string()})),
-  handler:async(_input,ctx)=>{const contact=await contactForActor(ctx);return ctx.tx.select({id:paymentMethods.id,label:paymentMethods.label}).from(paymentMethods).where(and(eq(paymentMethods.contactId,contact.id),eq(paymentMethods.status,"active"),eq(paymentMethods.provider,paymentAdapter().id)));},
+  handler:async(_input,ctx)=>{const contact=await contactForActor(ctx);return ctx.tx.select({id:paymentMethods.id,label:paymentMethods.label}).from(paymentMethods).where(and(eq(paymentMethods.contactId,contact.id),eq(paymentMethods.status,"active"),eq(paymentMethods.provider,paymentAdapter().id),eq(paymentMethods.consentSource,"provider_checkout")));},
 });
 export const joinMembership = defineService({
   name:"subscriptions.join",summary:"Join a public plan as yourself; paid access waits for the first invoice to settle.",kind:"mutation",permission:"authenticated",writeClass:"money",
@@ -93,7 +93,16 @@ export const joinMembership = defineService({
     const [existing]=await ctx.tx.select({id:subscriptions.id}).from(subscriptions).where(and(eq(subscriptions.contactId,contact.id),eq(subscriptions.planId,input.planId),inArray(subscriptions.status,["active","trialing","past_due","paused"]))).limit(1);
     if(existing)throw new ServiceError("conflict","You already have this membership. Manage it in your portal.");
     const { subscribe } = await import("./service");
-    const created=await ctx.callAsSystem(subscribe,{contactId:contact.id,planId:plan.id,currency:plan.currency,paymentMethodId:input.paymentMethodId,deferFirstPayment:true});
+    // A chosen card must be the customer's own, consented, for this provider:
+    // a staff-entered card never starts customer billing. A card trial with a
+    // setup fee opens only from that fee's payment, so a saved card cannot
+    // skip the fee invoice (C11.10).
+    if(input.paymentMethodId){
+      const [method]=await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id,input.paymentMethodId)).limit(1);
+      if(!method||method.contactId!==contact.id||method.status!=="active"||method.provider!==paymentAdapter().id||method.consentSource!=="provider_checkout")throw new ServiceError("conflict","That saved card cannot be used for this membership.");
+    }
+    const paymentMethodId=needsCardTrial(plan)&&plan.setupFeeMinor>0?undefined:input.paymentMethodId;
+    const created=await ctx.callAsSystem(subscribe,{contactId:contact.id,planId:plan.id,currency:plan.currency,paymentMethodId,deferFirstPayment:true});
     await ctx.tx.update(subscriptions).set({publicRequestKey:input.requestKey,publicTermsHash:input.termsHash}).where(eq(subscriptions.id,created.subscription.id));
     ctx.setSubject("subscription",created.subscription.id);
     return{id:created.subscription.id,invoiceId:created.invoiceId,pending:created.subscription.signupPending,cardSetup:created.subscription.signupPending&&created.invoiceId===null};

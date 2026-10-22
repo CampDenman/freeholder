@@ -146,7 +146,15 @@ test.describe("C11.01 visitor to paid", () => {
     await test.step("inbox, owner follow-up task, quote, conversion, contract, invoice and payment", async () => {
       await page.goto("/admin/inbox");
       await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
-      await expect(page.getByText(VISITOR.name)).toBeVisible();
+      // The enquiry is the person's own conversation. The chat typed their
+      // address without proving it, so it is a separate, marked row (C11.10).
+      const rows = page.locator("li").filter({ hasText: VISITOR.name });
+      await expect(rows).toHaveCount(2);
+      const chatRow = rows.filter({ hasText: "Can we book a sitting next month?" });
+      await expect(chatRow).toContainText(`Unverified — says they are ${VISITOR.email}`);
+      const enquiryRow = rows.filter({ hasNotText: "Unverified" });
+      await expect(enquiryRow).toHaveCount(1);
+      await expect(enquiryRow.getByRole("link", { name: VISITOR.name })).toBeVisible();
 
       // Tasks have no contactId; this is the owner's follow-up, not a row
       // produced by the enquiry itself.

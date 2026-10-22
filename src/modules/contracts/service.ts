@@ -191,12 +191,14 @@ export const signContract = defineService({
      * the signature the business's rather than the person's.
      */
     signerName: z.string().trim().min(2).max(200),
-    /** Passed by the route from the request, never by the browser. */
-    ip: z.string().trim().max(100).nullish(),
-    userAgent: z.string().trim().max(500).nullish(),
   }),
   output: z.object({ id: uuid, signedAt: timestamp, signatureHash: z.string() }),
   handler: async (input, ctx) => {
+    // Read from the request the HTTP boundary saw, never from the caller's
+    // body: evidence the signer could type is not evidence (C11.10).
+    const origin = ctx.actor.request;
+    const ip = (origin?.trustedIp ?? origin?.ip)?.slice(0, 100) ?? null;
+    const userAgent = origin?.userAgent?.slice(0, 500) ?? null;
     const [document] = await ctx.tx
       .select()
       .from(contractDocuments)
@@ -226,8 +228,8 @@ export const signContract = defineService({
         input.signerName,
         signerEmail?.email ?? "",
         signedAt.toISOString(),
-        input.ip ?? "",
-        input.userAgent ?? "",
+        ip ?? "",
+        userAgent ?? "",
       ].join("\n"),
     );
 
@@ -238,8 +240,8 @@ export const signContract = defineService({
         signedAt,
         signerName: input.signerName,
         signerEmail: signerEmail?.email ?? null,
-        signerIp: input.ip ?? null,
-        signerUserAgent: input.userAgent ?? null,
+        signerIp: ip,
+        signerUserAgent: userAgent,
         signatureHash,
         // The link is spent. A signing link that keeps working is a second
         // signature waiting to happen.

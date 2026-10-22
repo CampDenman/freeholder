@@ -6,7 +6,9 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { cookies } from "next/headers";
 import { PATH_HEADER } from "@/core/http/headers";
+import { actorFromToken } from "@/core/http/actor";
 import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
+import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale } from "../i18n";
@@ -66,7 +68,12 @@ export async function submitInboundAction(form: FormData): Promise<void> {
           message: text(form, "message"),
           locale,
         },
-        await visitor(),
+        // A signed-in customer chats as themselves, so their own address
+        // continues their own thread (C11.10); anyone else starts a new one.
+        {
+          ...(await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value)),
+          request: requestMetadataFromHeaders(requestHeaders),
+        },
       );
       (await cookies()).set(SITE_CHAT_COOKIE, started.token, {
         httpOnly: true,

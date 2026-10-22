@@ -624,6 +624,9 @@ export const getConversation = defineService({
   output: conversationRow
     .extend({
       contactName: z.string().nullable(),
+      contactEmail: z.string().nullable(),
+      /** A site chat whose email nobody verified (C11.10). */
+      unverified: z.boolean(),
       messages: listed(
         messageRow.extend({
           deliveries: listed(
@@ -640,7 +643,7 @@ export const getConversation = defineService({
     .nullable(),
   handler: async (input, ctx) => {
     const [found] = await ctx.tx
-      .select({ thread: conversations, contactName: contacts.name })
+      .select({ thread: conversations, contactName: contacts.name, contactEmail: contacts.email })
       .from(conversations)
       .innerJoin(contacts, eq(contacts.id, conversations.contactId))
       .where(eq(conversations.id, input.id))
@@ -670,6 +673,10 @@ export const getConversation = defineService({
     return {
       ...found.thread,
       contactName: found.contactName,
+      contactEmail: found.contactEmail,
+      // `UNVERIFIED_CHAT_PREFIX` in ./chat; literal so this core module does
+      // not load the chat services (tests/core/site-chat.test.ts pins both).
+      unverified: Boolean(found.thread.threadKey?.startsWith("site-chat:")),
       messages: said.map((message) => ({
         ...message,
         deliveries: reports.filter((report) => report.messageId === message.id),
