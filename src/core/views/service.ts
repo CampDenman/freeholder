@@ -201,10 +201,6 @@ export const listViews = defineService({
   output: listed(viewRow.extend({ mine: z.boolean() })),
   handler: async (input, ctx) => {
     const userId = ctx.actor.kind === "user" ? ctx.actor.userId : null;
-    // Shared views are colleagues' working lists; only someone with a staff
-    // grant sees them. A customer sees at most their own (C11.10).
-    const colleague =
-      ctx.actor.kind === "user" && !ctx.actor.keyScopes && ctx.actor.grants.length > 0;
     const rows = await ctx.tx
       .select()
       .from(savedViews)
@@ -219,16 +215,23 @@ export const listViews = defineService({
               ? eq(savedViews.ownerUserId, userId)
               : undefined
             : userId
-              ? colleague
-                ? or(eq(savedViews.ownerUserId, userId), eq(savedViews.shared, true))
-                : eq(savedViews.ownerUserId, userId)
+              ? or(eq(savedViews.ownerUserId, userId), eq(savedViews.shared, true))
               : eq(savedViews.shared, true),
           input.trashedOnly ? isNotNull(savedViews.trashedAt) : isNull(savedViews.trashedAt),
         ),
       )
       .orderBy(asc(savedViews.name))
       .limit(100);
-    return rows.map((view) => ({ ...view, mine: view.ownerUserId === userId }));
+    // A colleague's shared view is a working list of a module; it shows only
+    // to somebody who may open that list, by the same grant decision services
+    // use (two-factor included). A customer sees at most their own (C11.10).
+    return rows
+      .filter((view) => {
+        if (view.ownerUserId === userId) return true;
+        const entity = viewEntity(view.entity);
+        return Boolean(entity && mayUseEntity(ctx.actor, entity));
+      })
+      .map((view) => ({ ...view, mine: view.ownerUserId === userId }));
   },
 });
 

@@ -299,6 +299,12 @@ describe.runIf(hasDatabase)("daily briefing", { timeout: 60_000 }, () => {
     const demoted = { kind: "user" as const, userId: OWNER.userId, role: "customer", grants: [] };
     expect((await failure(readBriefing.call({ onDate: "2026-09-14" }, demoted))).code).toBe("permission");
     expect((await failure(listBriefings.call({}, demoted))).code).toBe("permission");
+    // Staff who still owe their two-factor check read nothing either.
+    const unverified = {
+      ...OWNER,
+      security: { twoFactorRequired: true, twoFactorEnrolled: true, twoFactorVerified: false, stepUpValid: false },
+    };
+    expect((await failure(readBriefing.call({ onDate: "2026-09-14" }, unverified))).code).toBe("permission");
   });
 
   it("has nothing to show before the first one is built", async () => {

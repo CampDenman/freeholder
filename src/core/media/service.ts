@@ -22,6 +22,7 @@ import {
   actorString,
   defineOrchestratedService,
   defineService,
+  permits,
   ServiceError,
   type Actor,
   type ServiceContext,
@@ -200,12 +201,19 @@ async function requireLiveCaptureToken(tx: Tx, token: string): Promise<void> {
 async function checkCaptureUpload(
   tx: Tx,
   actor: Actor,
-  provenance: { captureToken?: string },
+  provenance: { captureToken?: string; captureSessionId?: string },
 ): Promise<void> {
   if (provenance.captureToken) {
     await requireLiveCaptureToken(tx, provenance.captureToken);
   } else if (actor.kind === "anonymous") {
     throw new ServiceError("permission", "Sign in or use an upload link.");
+  } else if (
+    provenance.captureSessionId &&
+    !permits(actor, "scoped", "media.stageCompletedUpload", "mutation")
+  ) {
+    // A session id names a capture; it is not the capability to add to one.
+    // Without the link's token only media staff may stage into it.
+    throw new ServiceError("permission", "Use an upload link or an authorized media account.");
   }
 }
 
@@ -215,7 +223,7 @@ const verifyCaptureUpload = defineService({
   kind: "query",
   permission: "public",
   external: false,
-  input: z.object({ captureToken: z.string().optional() }),
+  input: z.object({ captureToken: z.string().optional(), captureSessionId: z.string().uuid().optional() }),
   output: z.object({ ok: z.literal(true) }),
   handler: async (input, ctx) => {
     await checkCaptureUpload(ctx.tx, ctx.actor, input);
@@ -709,7 +717,11 @@ const applyStoredOriginal = defineService({
   }),
   output: assetRow,
   handler: async (input, ctx) => {
-    if (input.provenance.captureToken || (!input.uploadId && ctx.actor.kind === "anonymous")) {
+    if (
+      input.provenance.captureToken ||
+      input.provenance.captureSessionId ||
+      (!input.uploadId && ctx.actor.kind === "anonymous")
+    ) {
       await checkCaptureUpload(ctx.tx, ctx.actor, input.provenance);
     }
     if (input.uploadId) {
@@ -774,8 +786,11 @@ export const uploadAsset = defineOrchestratedService({
     if (actor.kind === "anonymous" && !input.uploadId && !input.provenance.captureToken) {
       throw new ServiceError("permission", "Sign in or use an upload link.");
     }
-    if (input.provenance.captureToken) {
-      await verifyCaptureUpload.call({ captureToken: input.provenance.captureToken }, actor);
+    if (input.provenance.captureToken || input.provenance.captureSessionId) {
+      await verifyCaptureUpload.call(
+        { captureToken: input.provenance.captureToken, captureSessionId: input.provenance.captureSessionId },
+        actor,
+      );
     }
     const body = input.bytes;
     if (body.byteLength > PROXY_UPLOAD_LIMIT) {
@@ -948,7 +963,10 @@ export const beginUpload = defineOrchestratedService({
   input: uploadIntent,
   output: beginUploadOutput,
   handler: async (input, actor) => {
-    await verifyCaptureUpload.call({ captureToken: input.provenance.captureToken }, actor);
+    await verifyCaptureUpload.call(
+      { captureToken: input.provenance.captureToken, captureSessionId: input.provenance.captureSessionId },
+      actor,
+    );
     let kind: MediaKind;
     try {
       kind = expectedKind(input.filename, input.contentType);
@@ -1289,6 +1307,13 @@ const applyCaptureComplete = defineService({
   }),
   output: completeUploadResult,
   handler: async (input, ctx) => {
+    // Staging runs as the platform, so the caller's capability is proved
+    // here: a live token, or media authority for a session id (C11.10).
+    if (input.token) {
+      await requireLiveCaptureToken(ctx.tx, input.token);
+    } else if (!permits(ctx.actor, "scoped", "media.stageCompletedUpload", "mutation")) {
+      throw new ServiceError("permission", "Use an upload link or an authorized media account.");
+    }
     const { stageCompletedUpload } = await import("./capture");
     await ctx.callAsSystem(stageCompletedUpload, {
       uploadId: input.uploadId,

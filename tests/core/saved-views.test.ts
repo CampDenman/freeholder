@@ -160,6 +160,11 @@ describe.runIf(hasDatabase)("saved views", { timeout: 90_000 }, () => {
     await view({ name: "For everybody", shared: true });
     expect(await listViews.call({ entity: "contacts" }, CUSTOMER)).toEqual([]);
     expect(await listViews.call({}, CUSTOMER)).toEqual([]);
+    const unverified = {
+      ...STAFF,
+      security: { twoFactorRequired: true, twoFactorEnrolled: true, twoFactorVerified: false, stepUpValid: false },
+    };
+    expect(await listViews.call({ entity: "contacts" }, unverified)).toEqual([]);
   });
 
   // Shared makes a view visible; it never makes it theirs.
