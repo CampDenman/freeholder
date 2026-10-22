@@ -102,6 +102,23 @@ describe.runIf(hasDatabase)("site live chat", { timeout: 90_000 }, () => {
     );
   });
 
+  it("gives an unverified chat start its own thread so it cannot take over another visitor's (C11.10)", async () => {
+    const victim = await begin();
+    const impostor = await begin();
+    expect(impostor.contactId).toBe(victim.contactId);
+    expect(impostor.conversationId).not.toBe(victim.conversationId);
+    // The first visitor keeps their session, and a reply on their thread goes
+    // to them alone.
+    await replyToConversation.call(
+      { id: victim.conversationId, body: "Your booking is confirmed.", close: false },
+      OWNER,
+    );
+    expect((await getSiteChat.call({ token: victim.token }, ANONYMOUS)).messages.map((m) => m.body))
+      .toContain("Your booking is confirmed.");
+    expect((await getSiteChat.call({ token: impostor.token }, ANONYMOUS)).messages.map((m) => m.body))
+      .not.toContain("Your booking is confirmed.");
+  });
+
   it("never exposes another channel from the shared Contact conversation", async () => {
     const started = await begin();
     const [session] = await db()

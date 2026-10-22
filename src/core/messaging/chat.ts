@@ -20,6 +20,7 @@ import {
   type ServiceContext,
   type Tx,
 } from "@/core/service";
+import { contacts } from "@/core/contacts/schema";
 import { conversations, messages, siteChatSessions } from "./schema";
 
 const CHAT_LIFETIME_HOURS = 24;
@@ -170,9 +171,45 @@ export const startSiteChat = defineService({
   },
   output: row({ ok: z.literal(true), token: z.string(), conversationId: uuid, contactId: uuid }),
   handler: async (input, ctx) => {
+    // Typing an address proves nothing. Only a signed-in customer whose own
+    // Contact holds that address continues the Contact's thread; anyone else
+    // gets a thread of their own, so they can neither take over another
+    // visitor's chat nor receive replies meant for the real person (C11.10).
+    const [owned] =
+      ctx.actor.kind === "user"
+        ? await ctx.tx
+            .select({ id: contacts.id })
+            .from(contacts)
+            .where(and(eq(contacts.userId, ctx.actor.userId), eq(contacts.email, input.email)))
+            .limit(1)
+        : [];
+    let conversationId: string | undefined;
+    let contactId: string | undefined;
+    if (!owned) {
+      const resolved = (await ctx.callAsSystem(getService("contacts.resolve"), {
+        email: input.email,
+        name: input.name,
+        source: "chat",
+      })) as { contact: { id: string } };
+      contactId = resolved.contact.id;
+      // A thread key of its own keeps other channels from threading onto it.
+      const [opened] = await ctx.tx
+        .insert(conversations)
+        .values({
+          contactId,
+          subject: "Website chat",
+          replyChannel: "chat",
+          threadKey: `site-chat:${randomBytes(16).toString("hex")}`,
+        })
+        .returning({ id: conversations.id });
+      conversationId = opened!.id;
+      ctx.queueEvent("conversation.opened", { id: conversationId, contactId, channel: "chat" });
+    }
     const recorded = (await ctx.callAsSystem(getService("conversations.record"), {
       name: input.name,
-      email: input.email,
+      email: contactId ? undefined : input.email,
+      contactId,
+      conversationId,
       direction: "inbound",
       channel: "chat",
       subject: "Website chat",
