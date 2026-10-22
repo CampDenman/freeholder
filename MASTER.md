@@ -5259,6 +5259,20 @@ deployments are portable, testable and incapable of silently forking the truth.
   `timezone`, `next_run_at`, `last_run_at`, `catch_up` and `last_outcome` with
   a partial index on the due predicate. Coverage in
   `tests/core/agents-schedule.test.ts`. **F04** `/admin/briefing` daily briefing. **F05** `agents.setPlaybookSchedule` at `/api/v1/agents.setPlaybookSchedule`, MCP `agents_setPlaybookSchedule`; `agents.runDuePlaybooks` is the system tick (hidden). **F07** `tests/core/agents-schedule.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-schedule.test.ts` is the composition proof.)
+  Audit follow-up 2026-10-21: a merge-queue failure (`expected 1792641000000 to
+  be greater than 1792641000004`) was investigated as a possible double run and
+  is a test-harness defect, not a product one. A tick at hh:m4:59.996 correctly
+  schedules the boundary four milliseconds away; the assertion read the real
+  clock after the call and saw that genuine next occurrence as already due.
+  `next_run_at` is computed strictly after the tick's `now`, and a tick is only
+  claimed when `next_run_at <= now`, so it is already strictly after
+  max(now, scheduled); claims are row-locked `skip locked`, so a second
+  scheduler skips or re-reads the advanced row. The suite now pins the
+  JavaScript clock (Date only), and adds a boundary regression (tick 4 ms
+  before the boundary schedules exactly the boundary, nothing runs before it,
+  the boundary occurrence runs once and advances one window) and a concurrent
+  two-scheduler tick that starts exactly one run, in
+  `tests/core/agents-schedule.test.ts`. No product or release-note change.
 - [x] **C4.15** Build briefing entities, contributor registry, preassembly,
   needs-me-first ordering, read state and per-section preferences.
   (`src/core/briefing/` holds the three tables §42 names and the mechanism
