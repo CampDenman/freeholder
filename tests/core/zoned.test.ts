@@ -11,6 +11,7 @@ import {
   localPeriodOf,
   monthsBetween,
   nextOffsetChange,
+  renderableTimezone,
   startOfPeriod,
   zonedDate,
   zonedInstant,
@@ -155,6 +156,12 @@ describe("wall time to instant across clock changes", () => {
     expect(isTimezone("Australia/Sydney")).toBe(true);
     expect(isTimezone("Mars/Olympus_Mons")).toBe(false);
   });
+
+  it("lets a screen count in UTC, and say so, when the stored zone is unknown", () => {
+    expect(renderableTimezone("Australia/Sydney")).toEqual({ timezone: "Australia/Sydney", recognised: true });
+    expect(renderableTimezone(null)).toEqual({ timezone: "UTC", recognised: true });
+    expect(renderableTimezone("Mars/Olympus_Mons")).toEqual({ timezone: "UTC", recognised: false });
+  });
 });
 
 describe("local periods as UTC boundaries", () => {
@@ -203,5 +210,30 @@ describe("local periods as UTC boundaries", () => {
     expect(startOfPeriod({ year: 2026, month: 11, day: 20 }, "quarter")).toEqual({ year: 2026, month: 10, day: 1 });
     expect(addPeriods({ year: 2026, month: 1, day: 1 }, "quarter", -1)).toEqual({ year: 2025, month: 10, day: 1 });
     expect(monthsBetween("2025-11", "2026-02")).toBe(3);
+  });
+
+  it.each([
+    // Santiago skips midnight going forward and repeats 23:00 going back.
+    ["America/Santiago", "2026-04-04T12:00:00Z", [["2026-04-04", "2026-04-04T03:00:00.000Z", 25], ["2026-04-05", "2026-04-05T04:00:00.000Z", 24]]],
+    ["America/Santiago", "2026-09-05T12:00:00Z", [["2026-09-05", "2026-09-05T04:00:00.000Z", 24], ["2026-09-06", "2026-09-06T04:00:00.000Z", 23]]],
+    // Havana skips midnight in March and repeats it in November: the day
+    // starts at the first midnight, and the one it skipped starts at 01:00.
+    ["America/Havana", "2026-03-07T12:00:00Z", [["2026-03-07", "2026-03-07T05:00:00.000Z", 24], ["2026-03-08", "2026-03-08T05:00:00.000Z", 23]]],
+    ["America/Havana", "2026-10-31T12:00:00Z", [["2026-10-31", "2026-10-31T04:00:00.000Z", 24], ["2026-11-01", "2026-11-01T04:00:00.000Z", 25]]],
+  ])("%s: a day whose midnight moves still starts at its first real instant", (zone, from, expected) => {
+    const start = new Date(from);
+    const buckets = localBuckets(zone, start, new Date(start.getTime() + 36 * HOUR), "day");
+    expect(buckets.slice(0, 2).map((each) => [each.key, each.start.toISOString(), hours(each)])).toEqual(expected);
+  });
+
+  it("lays out two years of days quickly enough for a report", () => {
+    // One formatter per zone and no repeated-hour scan away from a change:
+    // 730 buckets were ~320 ms of synchronous CPU before both.
+    const run = () =>
+      localBuckets("America/Vancouver", new Date("2025-01-01T08:00:00Z"), new Date("2027-01-01T08:00:00Z"), "day");
+    run();
+    const started = performance.now();
+    expect(run()).toHaveLength(730);
+    expect(performance.now() - started).toBeLessThan(100);
   });
 });

@@ -8110,7 +8110,7 @@ customer has one secure, comprehensible home for the relationship.
   cohort months were bucketed with `date_trunc(... at time zone ...)`, so a
   payment near midnight could land in a different month from the one the page
   printed. Both now join paid instants to month boundaries computed in Node
-  (`localBuckets`, `bucketTable`) and the query names no zone; the rule is
+  (`localBuckets`, `bucketKey`) and the query names no zone; the rule is
   normative in §4.9 ("local-time math lives in Node; SQL sees UTC instants").
   An unknown zone is now refused as a validation error. Regression:
   `tests/modules/reporting.test.ts` (a `+05:00` zone, which Node reads as
@@ -8121,7 +8121,19 @@ customer has one secure, comprehensible home for the relationship.
   Sydney, Tokyo) found that `zonedInstant` resolved a skipped local time to
   the instant *before* the gap in zones east of UTC; it now takes the later
   instant everywhere, and a repeated hour resolves to the earlier instant
-  unless the caller asks for the later.
+  unless the caller asks for the later. Review follow-ups the same day:
+  `/admin/reports` never passed the business's zone, so its months were UTC
+  months — it now does; a stored zone `Intl` does not know (profiles were not
+  validated, and Postgres accepted names Node refuses) makes the reports and
+  traffic screens count in UTC with a visible warning instead of failing,
+  doctor warns about it, and `settings.updateBusiness`/`patchBusiness` now
+  refuse one (`tests/core/settings.test.ts`). Buckets reach SQL as a
+  `width_bucket` over start instants rather than a join over ranges, so a
+  two-year daily chart is a binary search per row, not a nested loop; and
+  `zoneOffsetMs` keeps one `Intl.DateTimeFormat` per zone, bringing 730 day
+  buckets from an estimated ~320 ms to ~10 ms (bounded in `tests/core/zoned.test.ts`, with
+  Santiago and Havana midnight transitions). No `paid_at` index was added:
+  the window filter was already a sequential scan before this change.
 
 #### Referral, loyalty, subscriptions, and paywalls
 - [x] **C9.09** Build first-party attribution touches, codes, invitations,

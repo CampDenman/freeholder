@@ -11,18 +11,31 @@
 // `Intl` is the only correct source for this in the platform, so both helpers
 // are built on it rather than on an offset somebody typed into a setting.
 
+// Building an `Intl.DateTimeFormat` costs far more than using one, and a year
+// of day buckets asks for thousands of offsets. One formatter per zone, kept.
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+function offsetFormatter(timezone: string): Intl.DateTimeFormat {
+  let found = formatters.get(timezone);
+  if (!found) {
+    found = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    formatters.set(timezone, found);
+  }
+  return found;
+}
+
 /** How far ahead of UTC a zone is at a given instant, in milliseconds. */
 export function zoneOffsetMs(instant: Date, timezone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(instant);
+  const parts = offsetFormatter(timezone).formatToParts(instant);
   const read = (type: string): number =>
     Number(parts.find((part) => part.type === type)?.value ?? "0");
   const asIfUtc = Date.UTC(
@@ -75,8 +88,14 @@ export function zonedInstant(
   if (!reads) return first.getTime() > second.getTime() ? first : second;
   const chosen = second;
   // A repeated hour reads correctly at two instants, an offset change apart
-  // (an hour almost everywhere, thirty minutes on Lord Howe Island). Look
-  // either side of the one found and pick deliberately.
+  // (an hour almost everywhere, thirty minutes on Lord Howe Island). Only when
+  // the offset changes near the answer can there be a second reading, so the
+  // scan either side runs only then — nearly every boundary skips it.
+  const offset = wall - chosen.getTime();
+  const steady = [-3, 3].every(
+    (hours) => zoneOffsetMs(new Date(chosen.getTime() + hours * 3_600_000), timezone) === offset,
+  );
+  if (steady) return chosen;
   const readings = [-4, -3, -2, -1, 0, 1, 2, 3, 4]
     .map((halfHours) => new Date(chosen.getTime() + halfHours * 1_800_000))
     .filter((each) => wall - zoneOffsetMs(each, timezone) === each.getTime());
@@ -226,6 +245,22 @@ export function monthsBetween(fromKey: string, toKey: string): number {
   const [fromYear, fromMonth] = fromKey.split("-").map(Number);
   const [toYear, toMonth] = toKey.split("-").map(Number);
   return (toYear! - fromYear!) * 12 + (toMonth! - fromMonth!);
+}
+
+/**
+ * A stored zone a screen can count in, or UTC when `Intl` does not know it.
+ *
+ * Older profiles could save any string, and Postgres accepted abbreviations
+ * such as `PST` that `Intl` refuses. A screen should still render — in UTC,
+ * saying so — rather than fail because the profile predates validation.
+ */
+export function renderableTimezone(
+  value: string | null | undefined,
+): { timezone: string; recognised: boolean } {
+  if (!value) return { timezone: "UTC", recognised: true };
+  return isTimezone(value)
+    ? { timezone: value, recognised: true }
+    : { timezone: "UTC", recognised: false };
 }
 
 /** True when `Intl` — the zone source every local-time answer comes from — knows this zone. */

@@ -41,6 +41,22 @@ export interface ZoneProbe {
 
 const TITLE = "Time zone data";
 
+/**
+ * The business's stored zone is not one `Intl` knows — saved before profiles
+ * were validated, or an abbreviation Postgres accepted. Screens count in UTC
+ * until it is fixed; doctor says so rather than staying silent.
+ */
+export function unknownZoneCheck(timezone: string): Check {
+  return {
+    id: "time.zoneData",
+    title: TITLE,
+    verdict: "warn",
+    detail: `The business's time zone "${timezone}" is not one the site recognises, so reports and charts are counting in UTC.`,
+    remedy: "Choose the business's time zone again in Settings, from the list.",
+    message: { key: "doctor.timeZone.unknown", params: { zone: timezone } },
+  };
+}
+
 export async function checkTimezoneData(
   timezone: string,
   probe: ZoneProbe,

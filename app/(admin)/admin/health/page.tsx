@@ -44,6 +44,13 @@ function localized(
         detail: t("doctor.timeZone.disagree", params),
         remedy: t("doctor.timeZone.disagreeRemedy", params),
       };
+    case "doctor.timeZone.unknown":
+      return {
+        ...check,
+        title: t("doctor.timeZone.title"),
+        detail: t("doctor.timeZone.unknown", params),
+        remedy: t("doctor.timeZone.unknownRemedy", params),
+      };
     case "doctor.timeZone.unreadable":
       return {
         ...check,

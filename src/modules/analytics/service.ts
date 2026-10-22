@@ -28,7 +28,7 @@ import {
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { db } from "@/core/db";
-import { bucketTable } from "@/core/db/buckets";
+import { bucketKey, inBuckets } from "@/core/db/buckets";
 import { isTimezone, localBuckets } from "@/core/i18n/zoned";
 import { getModuleConfig } from "@/core/settings/service";
 import { registerContactReference } from "@/core/contacts/service";
@@ -650,14 +650,14 @@ export const dailyViews = defineService({
     const now = new Date();
     const from = new Date(now.getTime() - input.days * 86_400_000);
     const humans = humansOnly(input.includeBots);
+    const days = localBuckets(input.timezone, from, now, "day");
     const rows = (await ctx.tx.execute(sql`
-      select bucket.key as day,
+      select ${bucketKey(analyticsEvents.at, days)} as day,
              count(*)::int as views,
              count(distinct ${analyticsEvents.anonId})::int as visitors
       from ${analyticsEvents}
-      join ${bucketTable(localBuckets(input.timezone, from, now, "day"))}
-        on ${analyticsEvents.at} >= bucket.starts and ${analyticsEvents.at} < bucket.ends
       where ${analyticsEvents.name} = 'page.viewed'
+        and ${inBuckets(analyticsEvents.at, days)}
         and ${analyticsEvents.at} >= ${from.toISOString()}::timestamptz
         ${humans ? sql`and ${humans}` : sql``}
       group by 1
@@ -1061,8 +1061,9 @@ export const exportAnonymizedAnalytics = defineService({
     const effective = effectiveVisitorKind;
     const humans = input.includeBots ? undefined : humansOnly(false);
     // Days are the business's days, bounded in Node (§4.9).
+    const days = localBuckets(input.timezone, from, now, "day");
     const dailyRows = (await ctx.tx.execute(sql`
-      select bucket.key as day,
+      select ${bucketKey(analyticsEvents.at, days)} as day,
              count(*) filter (where ${analyticsEvents.name} = 'page.viewed')::int as views,
              ${pageVisitors}::int as visitors,
              count(distinct ${analyticsEvents.sessionId})
@@ -1072,9 +1073,8 @@ export const exportAnonymizedAnalytics = defineService({
                where ${analyticsEvents.name} = 'page.viewed' and ${effective} <> 'human'
              )::int as automated
       from ${analyticsEvents}
-      join ${bucketTable(localBuckets(input.timezone, from, now, "day"))}
-        on ${analyticsEvents.at} >= bucket.starts and ${analyticsEvents.at} < bucket.ends
-      where ${analyticsEvents.at} >= ${from.toISOString()}::timestamptz
+      where ${inBuckets(analyticsEvents.at, days)}
+        and ${analyticsEvents.at} >= ${from.toISOString()}::timestamptz
         ${humans ? sql`and ${humans}` : sql``}
       group by 1
       -- A date with fewer than three visitors is omitted rather than exporting

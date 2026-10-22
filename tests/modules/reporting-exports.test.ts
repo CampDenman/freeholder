@@ -233,6 +233,16 @@ describe("the period an export covers", () => {
     ]);
   });
 
+  it.each([
+    // zone, now, period, from, to — each across a transition at or near midnight
+    ["America/Santiago", "2026-10-10T12:00:00Z", "previous_month", "2026-09-01T04:00:00.000Z", "2026-10-01T03:00:00.000Z"],
+    ["America/Santiago", "2026-09-08T12:00:00Z", "previous_week", "2026-08-31T04:00:00.000Z", "2026-09-07T03:00:00.000Z"],
+    ["America/Havana", "2026-11-15T12:00:00Z", "previous_month", "2026-10-01T04:00:00.000Z", "2026-11-01T04:00:00.000Z"],
+    ["America/Havana", "2026-03-10T12:00:00Z", "previous_week", "2026-03-02T05:00:00.000Z", "2026-03-09T04:00:00.000Z"],
+  ] as const)("%s at %s: %s spans midnight-moving clock changes", (zone, now, period, from, to) => {
+    expect(bounds(period, zone, now)).toEqual([from, to]);
+  });
+
   it("follows the zone data the site renders with, not the database's", () => {
     // "+05:00" is five hours ahead to Node and — POSIX sign convention — five
     // hours behind to Postgres: a real, deterministic disagreement between the

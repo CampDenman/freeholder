@@ -199,6 +199,22 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
     const check = (await runDoctor()).checks.find((each) => each.id === "time.zoneData");
     expect(check).toMatchObject({ verdict: "ok", message: { key: "doctor.timeZone.agree" } });
   });
+
+  it("warns, rather than staying silent, about a stored zone the site cannot render", async () => {
+    // Saved before profiles were validated: the row exists, Intl refuses it.
+    await db().insert(businessProfile).values({
+      name: "Zone Studio",
+      country: "CA",
+      baseCurrency: "CAD",
+      timezone: "Mars/Olympus_Mons",
+    });
+    const check = (await runDoctor()).checks.find((each) => each.id === "time.zoneData");
+    expect(check).toMatchObject({
+      verdict: "warn",
+      message: { key: "doctor.timeZone.unknown", params: { zone: "Mars/Olympus_Mons" } },
+    });
+    expect(check!.remedy).toBeTruthy();
+  });
 });
 
 describe("comparing the two copies of the tz database", () => {

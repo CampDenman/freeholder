@@ -22,6 +22,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { readdir } from "node:fs/promises";
 import { env } from "@/core/env";
 import { db } from "@/core/db";
+import { isTimezone } from "@/core/i18n/zoned";
 import { PLATFORM_VERSION } from "@/core/platform";
 import { updateCheckEnabled, updateFeedUrl } from "@/core/update/check";
 import { activeReleaseKeys } from "@/core/update/keys";
@@ -1140,7 +1141,8 @@ async function checkZoneData(): Promise<Check[]> {
       .limit(1);
     const timezone = business?.timezone ?? "UTC";
     if (timezone === "UTC") return [];
-    const { checkTimezoneData } = await import("./timezone");
+    const { checkTimezoneData, unknownZoneCheck } = await import("./timezone");
+    if (!isTimezone(timezone)) return [unknownZoneCheck(timezone)];
     return [
       await checkTimezoneData(timezone, {
         async offsets(instants, zone) {

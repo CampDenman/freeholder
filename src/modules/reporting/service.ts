@@ -29,7 +29,7 @@ import {
   revenueSourcesFor,
   type RevenueWindow,
 } from "@/core/reporting/dimensions";
-import { bucketTable } from "@/core/db/buckets";
+import { bucketKey, inBuckets } from "@/core/db/buckets";
 import {
   addPeriods,
   isTimezone,
@@ -96,15 +96,14 @@ export const revenueReport = defineService({
     // tz data may disagree with what the page renders.
     const months = localBuckets(input.timezone, window.from, window.to, "month");
     const result = await ctx.tx.execute(sql`
-      select bucket.key as month,
+      select ${bucketKey(invoices.paidAt, months)} as month,
              ${invoices.currency} as currency,
              coalesce(sum(${invoices.paidMinor}), 0)::bigint as paid_minor,
              coalesce(sum(${invoices.refundedMinor}), 0)::bigint as refunded_minor,
              count(*)::int as invoice_count
       from ${invoices}
-      join ${bucketTable(months)}
-        on ${invoices.paidAt} >= bucket.starts and ${invoices.paidAt} < bucket.ends
       where ${invoices.paidAt} is not null
+        and ${inBuckets(invoices.paidAt, months)}
         and ${invoices.paidAt} >= ${window.from.toISOString()}::timestamptz
         and ${invoices.paidAt} < ${window.to.toISOString()}::timestamptz
       group by 1, 2
@@ -324,11 +323,10 @@ export const cohortReport = defineService({
         select ${invoices.contactId} as contact_id,
                ${invoices.currency} as currency,
                (${invoices.paidMinor} - ${invoices.refundedMinor}) as net,
-               bucket.key as month
+               ${bucketKey(invoices.paidAt, months)} as month
         from ${invoices}
-        join ${bucketTable(months)}
-          on ${invoices.paidAt} >= bucket.starts and ${invoices.paidAt} < bucket.ends
         where ${eligible}
+          and ${inBuckets(invoices.paidAt, months)}
       ),
       first_payment as (
         select contact_id, currency, min(month) as cohort

@@ -12,7 +12,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
-import { bucketTable } from "@/core/db/buckets";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { bucketKey, inBuckets } from "@/core/db/buckets";
 import { db, SESSION_SETTINGS } from "@/core/db";
 import { localBuckets } from "@/core/i18n/zoned";
 import { closeDb, hasDatabase } from "../helpers/spine";
@@ -67,22 +68,21 @@ describe("no query asks Postgres for a local time", () => {
   });
 
   it("hands buckets to SQL as instants, with no zone in the query text", () => {
-    const query = db()
-      .select({ one: sql`1` })
-      .from(
-        bucketTable(
-          localBuckets(
-            "America/Vancouver",
-            new Date("2026-12-09T08:00:00Z"),
-            new Date("2026-12-10T08:00:00Z"),
-            "day",
-          ),
-        ),
-      )
-      .toSQL();
+    const buckets = localBuckets(
+      "America/Vancouver",
+      new Date("2026-12-09T08:00:00Z"),
+      new Date("2026-12-10T08:00:00Z"),
+      "day",
+    );
+    const query = new PgDialect().sqlToQuery(
+      sql`select ${bucketKey(sql.raw("at"), buckets)} from t where ${inBuckets(sql.raw("at"), buckets)}`,
+    );
     expect(query.sql).not.toMatch(/time zone|Vancouver/i);
+    // A binary search over start instants, not a join over ranges.
+    expect(query.sql).toContain("width_bucket");
     expect(query.params).toEqual([
       "2026-12-09",
+      "2026-12-09T08:00:00.000Z",
       "2026-12-09T08:00:00.000Z",
       "2026-12-10T08:00:00.000Z",
     ]);
@@ -96,6 +96,9 @@ describe.runIf(hasDatabase)("every database session runs in UTC", () => {
 
   it("pins TimeZone on the connection rather than trusting the server default", async () => {
     expect(SESSION_SETTINGS).toEqual({ TimeZone: "UTC" });
+    // The app's own pool, asked the way an operator would ask psql.
+    const shown = await db().execute<{ TimeZone: string }>(sql`show timezone`);
+    expect(shown[0]).toEqual({ TimeZone: "UTC" });
     const [row] = await db().execute<{ zone: string; day: string; month: string }>(sql`
       select current_setting('TimeZone') as zone,
              ('2026-12-09T23:30:00Z'::timestamptz)::date::text as day,
@@ -112,22 +115,35 @@ describe.runIf(hasDatabase)("every database session runs in UTC", () => {
   });
 
   it("buckets an instant by Node's boundaries whatever zone the session names", async () => {
-    // Even a session deliberately set elsewhere cannot move a bucket: the join
-    // compares instants with instants.
+    // Even a session deliberately set elsewhere cannot move a bucket: the
+    // query compares instants with instants.
     const buckets = localBuckets(
       "America/Vancouver",
       new Date("2026-12-09T08:00:00Z"),
       new Date("2026-12-11T08:00:00Z"),
       "day",
     );
+    const at = sql.raw("probe.at");
     const rows = await db().transaction(async (tx) => {
       await tx.execute(sql`set local TimeZone = 'Pacific/Kiritimati'`);
-      return tx.execute<{ key: string }>(sql`
-        select bucket.key from ${bucketTable(buckets)}
-        where '2026-12-09T23:30:00Z'::timestamptz >= bucket.starts
-          and '2026-12-09T23:30:00Z'::timestamptz < bucket.ends
+      return tx.execute<{ at: string; key: string }>(sql`
+        select probe.at::text as at, ${bucketKey(at, buckets)} as key
+        from (values ('2026-12-09T08:00:00Z'::timestamptz),
+                     ('2026-12-09T23:30:00Z'::timestamptz),
+                     ('2026-12-10T07:59:59Z'::timestamptz),
+                     ('2026-12-10T08:00:00Z'::timestamptz),
+                     ('2026-12-12T00:00:00Z'::timestamptz)) as probe(at)
+        where ${inBuckets(at, buckets)}
+        order by probe.at
       `);
     });
-    expect(rows.map((each) => each.key)).toEqual(["2026-12-09"]);
+    // The first instant of a day opens it, the last second before the next
+    // midnight still belongs to it, and anything past the span is left out.
+    expect(rows.map((each) => each.key)).toEqual([
+      "2026-12-09",
+      "2026-12-09",
+      "2026-12-09",
+      "2026-12-10",
+    ]);
   });
 });

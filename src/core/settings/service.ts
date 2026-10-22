@@ -10,6 +10,7 @@ import { z } from "zod";
 import { eq, sql } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { businessProfile, moduleSettings } from "@/core/settings/schema";
+import { isTimezone } from "@/core/i18n/zoned";
 import { requireSetupOwner } from "@/core/settings/setup";
 import { listed, row, timestamp } from "@/core/contract";
 import {
@@ -57,7 +58,7 @@ const profileShape = {
   defaultLocale: locale,
   enabledLocales: z.array(locale).min(1),
   baseCurrency: z.string().length(3).toUpperCase(),
-  timezone: z.string().min(1),
+  timezone: z.string().min(1).refine(isTimezone, "That is not a time zone this site knows."),
   units: z.enum(["metric", "imperial"]),
   firstDayOfWeek: z.number().int().min(0).max(6),
 };
