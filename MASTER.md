@@ -9574,9 +9574,13 @@ schema they inherit reads as a designed thing rather than an excavation.
   Business-type-specific flows (add a service, share a booking link) would
   need new versioned guidance definitions and are not in this change.
   "What changed" reads `events.recentActivity` with `include: "people"`
-  (a named denylist of scheduled sweeps and demo entry is hidden — by action,
-  not by the `system` actor, because webhook-applied payments, refunds and
-  disputes are recorded as `system` too; `?activity=all` shows everything).
+  (a named denylist of never-newsworthy sweeps and demo entry is hidden — by
+  action, not by the `system` actor, because webhook-applied payments,
+  refunds and disputes are recorded as `system` too; `?activity=all` shows
+  everything). Sweeps that can act on the owner's behalf (scheduled
+  publishing, cart recovery, released seats, finished signups) declare the
+  new `auditWhen` service option, so a no-op tick writes no audit row and a
+  run that acted stays visible.
   Owner copy loses "Chrome", "contact spine", "A cart is a token", "RMA",
   "deterministic", ppm, adapter talk, raw module keys and actor ids; coupons
   take a percent; currency, time-zone and language fields are pickers
