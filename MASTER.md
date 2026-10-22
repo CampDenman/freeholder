@@ -9647,18 +9647,21 @@ schema they inherit reads as a designed thing rather than an excavation.
   For 23 hours (inside the provider's 24-hour idempotency window) a same-key
   retry replays the request and converges. After that the retry is refused
   and the attempt needs owner reconciliation. Hosted payments are also matched
-  by the webhook and listed by `reconcilePaymentProviders`. Terminal takes and
-  pending Terminal refunds are listed by `reconcileInPersonPayments`
-  (`unsettledRefunds`, which is additive output). A failed, cancelled or
-  settled attempt is never sent to the provider again under its key. Only
-  allow-listed provider codes count as a definite refusal, which is recorded
-  as failed and releases any reservation. A 409 same-key conflict, a busy
-  reader or an unknown 4xx keeps the attempt open, and `AdapterError` now
+  by the webhook and listed by `reconcilePaymentProviders`. Terminal takes
+  are listed by `reconcileInPersonPayments`. Both views gain
+  `refundsNeedingReview`, which lists open refunds and refunds the provider
+  reports as already refunded (`provider_already_refunded`, not a plain
+  refusal). In-person `balanced` is false while any are listed. A failed,
+  cancelled or settled attempt is never sent to the provider again under its
+  key. Only allow-listed provider codes count as a definite refusal, which is
+  recorded as failed and releases any reservation. A 409 same-key conflict, a
+  busy reader or an unknown 4xx keeps the attempt open, and `AdapterError` now
   carries the provider's code. Checkout is attached only while the invoice is
-  still open for that amount. Internal steps run under the caller's
-  authorization for the public service, so an API key scoped to that service
-  alone still works. Public service names and inputs are unchanged.
-  Regressions in
+  still open for that amount. Orchestrator phases are `permission: "system"`
+  services, called as the system after the public service has authorized the
+  caller. Each records the initiator in its audit input (`initiatedBy`), so an
+  API key scoped to the public service alone still works. Public service
+  names and inputs are unchanged. Regressions in
   `tests/core/payment-provider-service.test.ts` and
   `tests/core/invoicing-pos.test.ts` failed before each repair.
   Changeset `payment-provider-boundary.md`. This repair is not independent

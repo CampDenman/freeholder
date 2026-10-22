@@ -9,6 +9,7 @@ import { providerJson } from "@/adapters/payments/http";
 import { AdapterError } from "@/adapters/types";
 import { db } from "@/core/db";
 import { env } from "@/core/env";
+import { auditLog } from "@/core/events/schema";
 import { createContact } from "@/core/contacts/service";
 import {
   createDraftInvoice,
@@ -18,10 +19,12 @@ import {
   settlePayment,
   startPayment,
 } from "@/modules/invoicing/invoice-service";
+import * as providerService from "@/modules/invoicing/payment-provider-service";
 import {
   beginPaymentCheckout,
   completePaymentCheckout,
   listPaymentDisputes,
+  reconcilePaymentProviders,
   listSavedPaymentMethods,
   processPaymentProviderEvents,
   recordOfflinePayment,
@@ -339,7 +342,7 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     it("records a definitive provider refusal and releases the refund reservation", async () => {
       const { refund } = hostedStripe();
       const payment = await settledStripePayment("owner-refused");
-      refund.mockRejectedValueOnce(new AdapterError("payments", "stripe", "invalid_request", "Refund amount is invalid.", false, "amount_too_large"));
+      refund.mockRejectedValueOnce(new AdapterError("payments", "stripe", "invalid_request", "Refund amount is invalid.", false, "amount_too_small"));
       expect(await failure(submitProviderRefund.call({ paymentId: payment.id, amountMinor: 4_000, reason: "Refused by provider", idempotencyKey: "owner-refused-1" }, OWNER))).toMatchObject({ code: "validation" });
       expect(await db().select().from(refunds)).toMatchObject([{ status: "failed", failureCode: "provider_refused" }]);
     });
@@ -432,6 +435,32 @@ describe.runIf(hasDatabase)("payment provider services", () => {
       });
       expect(await failure(beginPaymentCheckout.call({ invoiceId: invoice.id, provider: "stripe", successUrl: back(), cancelUrl: back(), idempotencyKey: "paid-meanwhile-1" }, OWNER))).toMatchObject({ code: "conflict" });
       expect(await db().select().from(payments).where(eq(payments.provider, "stripe"))).toMatchObject([{ status: "created", providerCheckoutRef: null }]);
+    });
+
+    it("records a provider's already-refunded answer for review instead of as a plain refusal", async () => {
+      const { refund } = hostedStripe();
+      const payment = await settledStripePayment("already-refunded");
+      refund.mockRejectedValueOnce(new AdapterError("payments", "stripe", "invalid_request", "The payment provider refused the request (charge_already_refunded).", false, "charge_already_refunded"));
+      await expect(submitProviderRefund.call({ paymentId: payment.id, amountMinor: 4_000, reason: "Refunded in the provider dashboard", idempotencyKey: "already-refunded-1" }, OWNER)).rejects.toThrow();
+      const [recorded] = await db().select().from(refunds);
+      expect(recorded).toMatchObject({ status: "failed", failureCode: "provider_already_refunded" });
+      const books = await reconcilePaymentProviders.call({}, OWNER);
+      expect(books.refundsNeedingReview).toMatchObject([{ id: recorded!.id, failureCode: "provider_already_refunded" }]);
+    });
+
+    it("elevates orchestrator phases only as the system and keeps who asked in the audit", async () => {
+      expect(Object.keys(providerService)).not.toContain("phaseActor");
+      const { createCheckout } = hostedStripe();
+      const { invoice } = await issuedInvoice("audit-initiator");
+      createCheckout.mockResolvedValue({ providerRef: "cs_audit", paymentRef: "pi_audit", url: "https://checkout.example.test/pay" });
+      await beginPaymentCheckout.call(
+        { invoiceId: invoice.id, provider: "stripe", successUrl: back(), cancelUrl: back(), idempotencyKey: "audit-initiator-1" },
+        { kind: "agent", keyName: "checkout-only", scopes: ["invoicing.beginPaymentCheckout"] },
+      );
+      const rows = await db().select().from(auditLog).where(eq(auditLog.action, "invoicing.claimPaymentCheckout"));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.actor).toBe("system");
+      expect((rows[0]?.diff as Record<string, unknown>).initiatedBy).toBe("agent:checkout-only");
     });
 
     it("revokes a saved method with the provider outside a transaction", async () => {

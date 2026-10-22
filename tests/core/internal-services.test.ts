@@ -100,6 +100,18 @@ const INTERNAL = [
   "galleries.buildArchive",
   "galleries.expireSessions",
   "invoicing.briefingOverdue",
+  // C11.10: phases of the owner payment orchestrators. The public service
+  // authorizes the caller; these run as the system around provider I/O.
+  "invoicing.claimPaymentCheckout",
+  "invoicing.applyPaymentCheckout",
+  "invoicing.providerPaymentSource",
+  "invoicing.recordProviderPaymentResult",
+  "invoicing.claimProviderRefund",
+  "invoicing.recordProviderRefundResult",
+  "invoicing.savedPaymentMethodSource",
+  "invoicing.applySavedPaymentMethodRevocation",
+  "invoicing.claimInPersonPayment",
+  "invoicing.applyInPersonPayment",
   "mail.applySenderVerification",
   "mail.recordProviderEvent",
   "media.applyWatermarkBackfill",
@@ -192,14 +204,6 @@ const CALLER_AUTHORIZED_PHASES = [
   "invoicing.applyCustomerCheckout",
   "invoicing.customerPaymentSource",
   "invoicing.applyCustomerPayment",
-  // C11.10: owner hosted checkout, in-person takes and method revocation
-  // commit before provider I/O and apply its answer in a fresh transaction.
-  "invoicing.claimPaymentCheckout",
-  "invoicing.applyPaymentCheckout",
-  "invoicing.savedPaymentMethodSource",
-  "invoicing.applySavedPaymentMethodRevocation",
-  "invoicing.claimInPersonPayment",
-  "invoicing.applyInPersonPayment",
   "demo.installApply",
   "demo.installGuard",
   "connections.applyCalendarOAuthCompletion",

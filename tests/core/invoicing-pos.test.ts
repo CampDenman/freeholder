@@ -236,7 +236,7 @@ describe.runIf(hasDatabase)("in-person payments", { timeout: 30_000 }, () => {
       expect(pending).toMatchObject({ status: "processing", providerRef: "re_pending" });
       const books = await reconcileInPersonPayments.call({}, OWNER);
       expect(books.balanced).toBe(false);
-      expect(books.unsettledRefunds).toMatchObject([{ id: pending.id, status: "processing" }]);
+      expect(books.refundsNeedingReview).toMatchObject([{ id: pending.id, status: "processing" }]);
     });
   });
 });

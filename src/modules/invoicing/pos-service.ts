@@ -9,7 +9,7 @@ import { pointOfSaleAdapter, pointOfSaleAdapters, type PointOfSaleAdapter, type 
 import { AdapterError } from "@/adapters/types";
 import { listed } from "@/core/contract";
 import { listLocations } from "@/core/locations/service";
-import { defineOrchestratedService, defineService, ServiceError } from "@/core/service";
+import { actorString, defineOrchestratedService, defineService, ServiceError } from "@/core/service";
 import {
   adapterStatus,
   paymentReceipt,
@@ -19,16 +19,20 @@ import {
 } from "./contract";
 import {
   createPayment,
-  createRefund,
   failPayment,
-  failRefund,
   getPaymentReceipt,
   settlePayment,
-  settleRefund,
   startPayment,
-  startRefund,
 } from "./invoice-service";
-import { assertRetryableAttempt, definitiveRefusal, getPayment, phaseActor } from "./payment-provider-service";
+import {
+  assertRetryableAttempt,
+  claimProviderRefund,
+  providerPaymentSource,
+  recordProviderRefundResult,
+  refundNeedsReview,
+  refundRefusalCode,
+  refundRefusalMessage,
+} from "./payment-provider-service";
 import { invoices, payments, refunds } from "./schema";
 
 const id = z.string().uuid();
@@ -84,10 +88,10 @@ export const claimInPersonPayment = defineService({
   name: "invoicing.claimInPersonPayment",
   summary: "Check an in-person take and durably reserve a Terminal attempt before contacting the reader.",
   kind: "mutation",
-  permission: "scoped",
-  stepUp: true,
-  external: false,
-  input: beginInPersonInput,
+  // A phase of beginInPersonPayment, which authorized the caller (and its
+  // step-up) before running it; `initiatedBy` keeps who asked in the audit.
+  permission: "system",
+  input: beginInPersonInput.extend({ initiatedBy: z.string().min(1).max(300) }),
   output: z.object({
     invoiceId: id,
     currency: z.string(),
@@ -141,10 +145,9 @@ export const applyInPersonPayment = defineService({
   name: "invoicing.applyInPersonPayment",
   summary: "Record what the in-person adapter reported for a claimed take.",
   kind: "mutation",
-  permission: "scoped",
-  stepUp: true,
-  external: false,
+  permission: "system",
   input: z.object({
+    initiatedBy: z.string().min(1).max(300),
     invoiceId: id,
     locationId: id,
     locationName: z.string(),
@@ -210,8 +213,9 @@ export const beginInPersonPayment = defineOrchestratedService({
     receipt: paymentReceipt.nullable(),
   }),
   handler: async (input, caller) => {
-    const actor = phaseActor(caller);
-    const claimed = await claimInPersonPayment.call(input, actor);
+    const system = { kind: "system", request: caller.request } as const;
+    const by = actorString(caller);
+    const claimed = await claimInPersonPayment.call({ ...input, initiatedBy: by }, system);
     const adapter = pointOfSaleAdapter(claimed.payment ? "stripe" : "manual");
     let collected: PointOfSalePayment;
     try {
@@ -230,6 +234,7 @@ export const beginInPersonPayment = defineOrchestratedService({
       return posError(error);
     }
     return applyInPersonPayment.call({
+      initiatedBy: by,
       invoiceId: claimed.invoiceId,
       locationId: claimed.locationId,
       locationName: claimed.locationName,
@@ -238,7 +243,7 @@ export const beginInPersonPayment = defineOrchestratedService({
       idempotencyKey: input.idempotencyKey,
       paymentId: claimed.payment?.id,
       collection: collected,
-    }, actor);
+    }, system);
   },
 });
 
@@ -267,8 +272,11 @@ export const reconcileInPersonPayments = defineService({
   output: z.object({
     balanced: z.boolean(),
     unsettled: listed(paymentRow),
-    /** Refunds the adapter accepted but has not finished (or whose answer was lost). */
-    unsettledRefunds: listed(refundRow),
+    /**
+     * In-person refunds to check with the provider: accepted but not finished
+     * (or their answer was lost), or reported as already refunded.
+     */
+    refundsNeedingReview: listed(refundRow),
     succeeded: z.number().int(),
     methods: listed(z.enum(["cash", "card_present", "tap_to_pay"])),
   }),
@@ -281,17 +289,17 @@ export const reconcileInPersonPayments = defineService({
       .limit(500);
     const unsettled = rows.filter((row) => row.status === "created" || row.status === "processing");
     const succeeded = rows.filter((row) => row.status === "succeeded");
-    const unsettledRefunds = (await ctx.tx
+    const refundsNeedingReview = (await ctx.tx
       .select({ refund: refunds })
       .from(refunds)
       .innerJoin(payments, eq(payments.id, refunds.paymentId))
-      .where(and(inArray(payments.method, [...IN_PERSON_METHODS]), inArray(refunds.status, ["created", "processing"])))
+      .where(and(inArray(payments.method, [...IN_PERSON_METHODS]), refundNeedsReview))
       .orderBy(desc(refunds.createdAt))
       .limit(500)).map((row) => row.refund);
     return {
-      balanced: unsettled.length === 0 && unsettledRefunds.length === 0,
+      balanced: unsettled.length === 0 && refundsNeedingReview.length === 0,
       unsettled,
-      unsettledRefunds,
+      refundsNeedingReview,
       succeeded: succeeded.length,
       methods: IN_PERSON_METHODS,
     };
@@ -317,18 +325,20 @@ export const refundInPersonPayment = defineOrchestratedService({
   }),
   output: refundRow,
   handler: async (input, caller) => {
-    const actor = phaseActor(caller);
-    const { payment } = await getPayment.call({ id: input.paymentId }, actor);
+    const system = { kind: "system", request: caller.request } as const;
+    const by = actorString(caller);
+    const payment = await providerPaymentSource.call({ paymentId: input.paymentId }, system);
     if (!IN_PERSON_METHODS.includes(payment.method as (typeof IN_PERSON_METHODS)[number])) {
       throw new ServiceError("conflict", "That payment was not collected in person.");
     }
     const adapter = pointOfSaleAdapter(payment.provider === "stripe" ? "stripe" : "manual");
-    const refund = await createRefund.call({
+    const refund = await claimProviderRefund.call({
       paymentId: payment.id,
       amountMinor: input.amountMinor,
       reason: input.reason,
       idempotencyKey: input.idempotencyKey,
-    }, actor);
+      initiatedBy: by,
+    }, system);
     if (refund.status !== "created" && refund.status !== "processing") return refund;
     assertRetryableAttempt(refund, "refund");
     let result: Awaited<ReturnType<PointOfSaleAdapter["refund"]>>;
@@ -340,18 +350,19 @@ export const refundInPersonPayment = defineOrchestratedService({
         idempotencyKey: input.idempotencyKey,
       });
     } catch (error) {
-      if (refund.status === "created" && definitiveRefusal(error)) {
-        await failRefund.call({ id: refund.id, code: "provider_refused", message: "The in-person adapter refused that refund." }, actor);
+      const refused = refund.status === "created" ? refundRefusalCode(error) : null;
+      if (refused) {
+        await recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "fail", code: refused, message: refundRefusalMessage(refused, "The in-person adapter") } }, system);
       }
       return posError(error);
     }
     if (result.status === "failed") {
       // Record the refusal (releasing the reservation) before reporting it.
-      await failRefund.call({ id: refund.id, code: "provider_failed", message: "The in-person adapter refused that refund." }, actor);
+      await recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "fail", code: "provider_failed", message: "The in-person adapter refused that refund." } }, system);
       throw new ServiceError("conflict", "The in-person adapter refused that refund.");
     }
-    if (result.status === "pending") return startRefund.call({ id: refund.id, providerRef: result.providerRef }, actor);
-    return settleRefund.call({ id: refund.id, providerRef: result.providerRef }, actor);
+    const outcome = result.status === "pending" ? "start" as const : "settle" as const;
+    return recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: outcome, providerRef: result.providerRef } }, system);
   },
 });
 
