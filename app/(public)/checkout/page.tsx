@@ -20,6 +20,7 @@
 // SEO: checkout is a private utility — noindexed, nofollowed, like the
 // portal's sign-in screens.
 
+import { env } from "@/core/env";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -147,6 +148,10 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
                 defaultValue={email}
                 className={inputClass}
               />
+              {env().FREEHOLDER_PLAYGROUND === "1" ? (
+                // C1.38: the demo places the order only for a made-up address.
+                <span className="text-xs">{t("store.checkout.playgroundEmailHint")}</span>
+              ) : null}
             </label>
             <label className="grid gap-1 text-sm text-ink-muted">
               {t("store.checkout.name")}
@@ -358,7 +363,9 @@ function CheckoutError({ code, t }: { code: string; t: Awaited<ReturnType<typeof
       <Callout tone="danger">
         {t(code === "playground"
           ? "public.failure.playground"
-          : known ? `store.checkout.error.${code}` : "store.checkout.error.failed")}
+          : code === "playgroundEmail"
+            ? "store.checkout.error.playgroundEmail"
+            : known ? `store.checkout.error.${code}` : "store.checkout.error.failed")}
       </Callout>
     </div>
   );

@@ -327,7 +327,7 @@ export const checkoutCart = defineService({
       lines: basket.lines.map((line, index) => ({
         sourceType: "variant",
         sourceId: line.variantId,
-        description: `${line.productName} Â· ${line.sku}`,
+        description: `${line.productName} · ${line.sku}`,
         quantityMicros: line.quantity * QUANTITY_SCALE,
         unitAmountMinor: line.unitAmountMinor!,
         discountMinor: discountShares[index] ?? 0,

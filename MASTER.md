@@ -4337,6 +4337,25 @@ project without silent telemetry, and ready to carry money.
   reset hook timed out with every request answering 200), and the
   "separation and reset recovery" cases were blocked by a shared cluster
   stuck on `DROP DATABASE`; both need a clean run.
+  Follow-up 2026-10-22 (playground checkout): an evaluator could fill a
+  cart but "Place order" ended at `/checkout?error=playground`, because a
+  signed-out checkout proves the email with a customer magic link and the
+  playground refuses (and could never deliver) one. In playground mode only,
+  `catalog.shopperCheckout` now accepts an address on a reserved,
+  undeliverable domain (`isFictionalEmail`: example.com/.net/.org and
+  `.example`, `.test`, `.invalid`, `.localhost`, RFC 2606/6761) as its own
+  proof, resolves the contact through `contacts.resolve` and places the
+  order; a real-looking address is refused with a "use a made-up
+  @example.com address" message and creates no contact or order. Row caps
+  and the per-client budget still apply (the checkout action now passes the
+  client address). Ordinary installs keep the proof unchanged. Regressions:
+  `tests/core/storefront-commerce.test.ts` (playground order placed for a
+  reserved address with no magic link; real-looking address refused with
+  nothing written; outside the playground even a reserved address gets
+  `verification_sent` and no order; the reserved-domain predicate). Walked
+  on a local production playground: product → cart (CA$28.00) → checkout
+  refusal for a real-looking address → order confirmation → invoice with
+  the offline payment option. Changeset `playground-checkout-fictional-email.md`.
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable

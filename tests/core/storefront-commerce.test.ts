@@ -17,7 +17,9 @@
 //      cart's order, and nothing wider: one guest cannot read another's
 //      order, and the projection carries no contact ids or addresses.
 
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetEnvForTests } from "@/core/env";
+import { isFictionalEmail, PLAYGROUND_FICTIONAL_EMAIL } from "@/core/demo/playground-policy";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
@@ -144,6 +146,67 @@ describe.runIf(hasDatabase)("storefront commerce services", { timeout: 60_000 },
   });
 
   describe("catalog.shopperCheckout", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      resetEnvForTests();
+    });
+
+    it("places a public-playground order for a reserved address without mailing a proof (C1.38)", async () => {
+      const { variants } = await sizedPrint("Coast print", "coast-print", "s");
+      const variant = variants.find((row) => row.status === "active")!;
+      const basket = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
+      await addCartItem.call(
+        { cartId: basket.cart.id, cartToken: basket.cart.token!, variantId: variant.id },
+        ANONYMOUS,
+      );
+      vi.stubEnv("FREEHOLDER_PLAYGROUND", "1"); resetEnvForTests();
+      const checkout = (email: string, key: string) => shopperCheckout.call(
+        { cartId: basket.cart.id, cartToken: basket.cart.token!, email, acceptedTerms: true, idempotencyKey: key },
+        ANONYMOUS,
+      );
+      // A real-looking inbox is refused with the demo's own instruction…
+      await expect(checkout("ada@gmail.com", "pg-real-1")).rejects.toMatchObject({
+        code: "validation",
+        message: PLAYGROUND_FICTIONAL_EMAIL,
+      });
+      expect(await db().select().from(orders)).toHaveLength(0);
+      expect(await db().select().from(contacts).where(eq(contacts.email, "ada@gmail.com"))).toHaveLength(0);
+      // …and a reserved one, which nobody can receive at, places the order.
+      const placed = await checkout("ada@example.com", "pg-fictional-1");
+      expect(placed.status).toBe("placed");
+      const [order] = await db().select().from(orders);
+      expect(order?.id).toBe(placed.orderId);
+      const [contact] = await db().select().from(contacts).where(eq(contacts.email, "ada@example.com"));
+      expect(order?.contactId).toBe(contact?.id);
+      expect(await db().select().from(customerMagicLinks)).toHaveLength(0);
+    });
+
+    it("still demands the email proof outside the playground, even for a reserved address", async () => {
+      vi.stubEnv("FREEHOLDER_PLAYGROUND", "0"); resetEnvForTests();
+      const { variants } = await sizedPrint("Coast print", "coast-print", "s");
+      const variant = variants.find((row) => row.status === "active")!;
+      const basket = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
+      await addCartItem.call(
+        { cartId: basket.cart.id, cartToken: basket.cart.token!, variantId: variant.id },
+        ANONYMOUS,
+      );
+      const asked = await shopperCheckout.call(
+        { cartId: basket.cart.id, cartToken: basket.cart.token!, email: "ada@example.com", acceptedTerms: true, idempotencyKey: "prod-proof-1" },
+        ANONYMOUS,
+      );
+      expect(asked).toEqual({ status: "verification_sent", email: "ada@example.com", orderId: null });
+      expect(await db().select().from(orders)).toHaveLength(0);
+    });
+
+    it("recognises only the reserved, undeliverable domains as fictional", () => {
+      for (const email of ["a@example.com", "a@example.net", "a@example.org", "a@shop.example", "a@demo.test", "a@x.invalid", "a@box.localhost"]) {
+        expect(isFictionalEmail(email), email).toBe(true);
+      }
+      for (const email of ["a@gmail.com", "a@example.co", "a@notexample.com", "a@test", "a@example.com.evil.io", "a@testing.com", "nobody"]) {
+        expect(isFictionalEmail(email), email).toBe(false);
+      }
+    });
+
     it("refuses anonymous one-step checkout and demands the email proof first", async () => {
       const { variants } = await sizedPrint("Coast print", "coast-print", "s");
       const variant = variants.find((row) => row.status === "active")!;

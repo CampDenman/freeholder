@@ -38,6 +38,7 @@ const steps = [
       "tests/core/merge-completeness.test.ts",
       "tests/core/registry-completeness.test.ts",
       "tests/core/docs-availability.test.ts",
+      "tests/core/text-encoding.test.ts",
       "tests/core/plan-gate.test.ts",
       "tests/core/contract-evidence.test.ts",
       "tests/core/mobile-screens.test.ts",
