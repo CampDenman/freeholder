@@ -281,7 +281,7 @@ describe.runIf(hasDatabase)("daily briefing", { timeout: 60_000 }, () => {
     const refused = await failure(
       markBriefingRead.call(
         { id: mine.id },
-        { kind: "user", userId: stranger, role: "staff", grants: [] },
+        { kind: "user", userId: stranger, role: "staff", grants: [{ module: "contacts", access: "view" }] },
       ),
     );
     expect(refused.code).toBe("not_found");
@@ -290,6 +290,15 @@ describe.runIf(hasDatabase)("daily briefing", { timeout: 60_000 }, () => {
       .from(briefings)
       .where(and(eq(briefings.id, mine.id), eq(briefings.userId, OWNER.userId)));
     expect(untouched?.readAt).toBeNull();
+  });
+
+  it("is not readable by somebody without a staff grant, even their own old one (C11.10)", async () => {
+    answers.set(NEWS, { title: "What changed", items: [{ label: "One thing" }] });
+    await assemble();
+    const { listBriefings, readBriefing } = await import("@/core/briefing/service");
+    const demoted = { kind: "user" as const, userId: OWNER.userId, role: "customer", grants: [] };
+    expect((await failure(readBriefing.call({ onDate: "2026-09-14" }, demoted))).code).toBe("permission");
+    expect((await failure(listBriefings.call({}, demoted))).code).toBe("permission");
   });
 
   it("has nothing to show before the first one is built", async () => {

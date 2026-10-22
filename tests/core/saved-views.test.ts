@@ -37,7 +37,7 @@ import {
   toQueryString,
   viewEntity,
 } from "@/core/views/service";
-import { closeDb, failure, hasDatabase, OWNER, STAFF, truncateSpine } from "../helpers/spine";
+import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, STAFF, truncateSpine } from "../helpers/spine";
 
 describe("what a view keeps of a URL", () => {
   // Flash markers and paging are not part of what a list *is*; a view carrying
@@ -154,6 +154,12 @@ describe.runIf(hasDatabase)("saved views", { timeout: 90_000 }, () => {
     const owner = await listViews.call({ entity: "contacts" }, OWNER);
     expect(owner.map((one) => one.name).sort()).toEqual(["For everybody", "Mine alone"]);
     expect(owner.every((one) => one.mine)).toBe(true);
+  });
+
+  it("never shows a customer the views colleagues shared (C11.10)", async () => {
+    await view({ name: "For everybody", shared: true });
+    expect(await listViews.call({ entity: "contacts" }, CUSTOMER)).toEqual([]);
+    expect(await listViews.call({}, CUSTOMER)).toEqual([]);
   });
 
   // Shared makes a view visible; it never makes it theirs.
