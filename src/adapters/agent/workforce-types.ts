@@ -14,6 +14,7 @@
 // is a step in a bounded loop under a worker's own scopes. Sharing an
 // interface would invite sharing authority.
 
+import { normalizeAgentProviderId } from "./aliases";
 import type { AgentToolDefinition } from "./types";
 
 export interface WorkforceToolCall {
@@ -52,13 +53,29 @@ export interface WorkforceTurnResult {
   };
 }
 
+/**
+ * `gateway` is any OpenAI-compatible endpoint (base URL and model named on
+ * the connection); `paradise` is Paradise Modern's hosted gateway, one
+ * optional provider among others.
+ */
 export const WORKFORCE_ADAPTER_IDS = [
   "anthropic",
   "openai",
-  "pm_brain",
+  "gateway",
+  "paradise",
 ] as const;
 
 export type WorkforceAdapterId = (typeof WORKFORCE_ADAPTER_IDS)[number];
+
+/**
+ * Maps a deprecated adapter name (see ./aliases) to its current id; anything
+ * else passes through. Stored rows are aliased on read, never rewritten.
+ */
+export function normalizeWorkforceAdapterId(value: string): string;
+export function normalizeWorkforceAdapterId(value: string | null): string | null;
+export function normalizeWorkforceAdapterId(value: string | null): string | null {
+  return value === null ? null : normalizeAgentProviderId(value);
+}
 
 export interface WorkforceAgentAdapter {
   readonly id: WorkforceAdapterId | "none";
@@ -68,6 +85,8 @@ export interface WorkforceAgentAdapter {
   readonly credentialRef: string | null;
   /** The model a turn will use when the connection does not name one. */
   readonly defaultModel: string | null;
+  /** Every setting an unconfigured adapter still needs; doctor names them all. */
+  readonly missing?: readonly string[];
   turn(request: WorkforceTurnRequest): Promise<WorkforceTurnResult>;
 }
 

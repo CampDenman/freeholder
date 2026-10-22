@@ -34,11 +34,20 @@ const PRIVATE = [
   /^\/feeds\//,
 ];
 
-/** Things a link may point at that are not pages to crawl. */
-const NOT_A_PAGE = [/^\/media\//, /^\/_next\//, /\.(xml|txt|json|jpg|png|webp|avif|svg|ico)$/];
+/**
+ * Things a link may point at that are not pages to crawl. Event calendar
+ * downloads (`/ics/events/…`) are .ics files served without an extension:
+ * a file has no title, h1 or sitemap entry to check.
+ */
+const NOT_A_PAGE = [/^\/media\//, /^\/_next\//, /^\/ics\//, /\.(xml|txt|json|jpg|png|webp|avif|svg|ico|ics)$/];
 
-const isPrivate = (path) => PRIVATE.some((rx) => rx.test(path));
-const isPage = (path) => !NOT_A_PAGE.some((rx) => rx.test(path));
+/** "/fr-CA/portal/login" is the same private surface as "/portal/login". */
+const LOCALE_PREFIX = /^\/[a-z]{2}(?:-[A-Za-z]{2,4})?(?=\/)/;
+export const isPrivate = (path) => {
+  const bare = path.replace(LOCALE_PREFIX, "");
+  return PRIVATE.some((rx) => rx.test(path) || rx.test(bare));
+};
+export const isPage = (path) => !NOT_A_PAGE.some((rx) => rx.test(path));
 
 /**
  * Every schema.org type this platform emits, and what each must carry.
@@ -188,7 +197,11 @@ export function auditPage({ url, html, status, locales = 1 }) {
     !/^https?:\/\//.test(canonical) ||
     new URL(canonical).pathname === new URL(url).pathname;
 
-  return { problems, links, title, description, isCanonical };
+  // A page that asks not to be indexed (search results, booking) is a page
+  // people use, not one the sitemap should advertise.
+  const robots = document.querySelector('meta[name="robots"]')?.getAttribute("content") ?? "";
+  const noindex = /\bnoindex\b/i.test(robots);
+  return { problems, links, title, description, isCanonical, noindex };
 }
 
 /** Follow every internal link from the root, recording how deep each page is. */
@@ -216,7 +229,7 @@ async function crawl(base) {
     const page = auditPage({ url, html, status: response.status });
     problems.push(...page.problems);
 
-    if (!page.isCanonical) alternates.add(path);
+    if (!page.isCanonical || page.noindex) alternates.add(path);
     if (page.title && page.isCanonical) {
       titles.set(page.title, [...(titles.get(page.title) ?? []), path]);
     }

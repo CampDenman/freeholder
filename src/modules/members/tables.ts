@@ -43,5 +43,4 @@ export {
   memberRemoteFollows,
   memberRemotePosts,
   memberPayoutTransfers,
-  abuseReports,
 } from "./schema";

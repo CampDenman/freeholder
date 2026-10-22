@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import { listBlogPosts } from "./blog";
-// CMS services (MASTER.md Â§11, Â§32).
+// CMS services (MASTER.md §11, §32).
 //
 // The module's only entry points. The public route, the admin, the REST API
 // and MCP all arrive here, which is what makes "structure is a database write"
@@ -115,7 +115,11 @@ import {
   rejoinLayout,
 } from "./layout-service";
 export { draftPageTranslation, pageTranslationReport } from "./translation-workflow";
-import { draftPageTranslation, pageTranslationReport } from "./translation-workflow";
+import {
+  draftPageTranslation,
+  draftPageTranslationPhases,
+  pageTranslationReport,
+} from "./translation-workflow";
 export { previewEmail, testSendEmail } from "./email-service";
 import { previewEmail, testSendEmail } from "./email-service";
 export { previewSms, sendSmsTemplate, testSendSms } from "./sms-template-service";
@@ -160,7 +164,7 @@ import {
   HEADER_KEY,
   NAV_KEY,
 } from "./defaults";
-import { extractNavBlocks, navHasLinks } from "./chrome-nav";
+import { extractNavBlocks, mergeNavLinks, navHasLinks } from "./chrome-nav";
 import {
   demoHandlerInputSchema,
   demoLoadResultSchema,
@@ -323,7 +327,7 @@ const restoreResult = z.discriminatedUnion("subjectType", [
 /**
  * The page behind a path, for the public surface.
  *
- * Public, and *only* published rows â€” a draft must not be readable by URL,
+ * Public, and *only* published rows — a draft must not be readable by URL,
  * because "unlisted" is not a permission model. The admin preview path reads
  * through `cms.getPage`, which is staff-only and can see drafts.
  */
@@ -350,8 +354,8 @@ export const resolvePageForRender = defineService({
   output: publishedPageRow.nullable(),
   handler: async (input, ctx) => {
     // Pages are stored in the site's own language and *translated*, not
-    // duplicated (Â§4.9). So the lookup is by slug in the source language, and
-    // the requested locale decides which words come back â€” which is what makes
+    // duplicated (§4.9). So the lookup is by slug in the source language, and
+    // the requested locale decides which words come back — which is what makes
     // /fr/services the same page as /services rather than a parallel one
     // somebody has to remember to keep in step.
     const [source] = await ctx.tx
@@ -393,7 +397,7 @@ export const resolvePageForRender = defineService({
     if (!translation) {
       // No reviewed translation: the page is served in the site's own
       // language rather than not at all. A visitor who followed a French link
-      // to an untranslated page should read the English one, not a 404 â€” and
+      // to an untranslated page should read the English one, not a 404 — and
       // hreflang only ever advertises the locales that do have one.
       return publishedPageRow.parse(page);
     }
@@ -474,7 +478,7 @@ export const listPages = defineService({
 });
 
 /**
- * Published pages as paths â€” the sitemap source this module contributes (Â§5).
+ * Published pages as paths — the sitemap source this module contributes (§5).
  *
  * Public because a sitemap is public. It returns only what is already readable
  * at a URL, so it cannot leak a draft.
@@ -540,7 +544,7 @@ export const publishedPaths = defineService({
       return published.map((page) => toEntry(page.slug, page));
     }
 
-    // A locale's sitemap lists what that locale actually has (Â§5). A page with
+    // A locale's sitemap lists what that locale actually has (§5). A page with
     // no reviewed translation is served in the site's own language, and
     // listing it under /fr/ would advertise a French page that is in English.
     const translated = new Set(
@@ -561,6 +565,75 @@ export const publishedPaths = defineService({
           page,
         ),
       );
+  },
+});
+
+/**
+ * Published pages whose title or summary match a visitor's search (C1.38).
+ *
+ * The public /search page searched only products, so a wedding photographer's
+ * site answered "wedding" with nothing. This is the pages half: title, SEO
+ * title and SEO description only — never the body — so a search can never
+ * surface text from behind a paywall or a members-only block, and the same
+ * vetoes that keep a page out of the sitemap keep it out of results.
+ * Product pages are left to the product results beside these.
+ */
+export const searchPublishedPages = defineService({
+  name: "cms.searchPublishedPages",
+  summary: "Published pages matching a search term, by title and summary.",
+  kind: "query",
+  permission: "public",
+  input: z.object({
+    term: z.string().trim().min(1).max(120),
+    limit: z.number().int().min(1).max(50).default(10),
+  }),
+  output: listed(
+    row({
+      slug: z.string(),
+      title: z.string(),
+      description: z.string().nullable(),
+      kind: z.string(),
+    }),
+  ),
+  handler: async (input, ctx) => {
+    const [business] = await ctx.tx
+      .select({ defaultLocale: businessProfile.defaultLocale })
+      .from(businessProfile)
+      .limit(1);
+    const pattern = `%${input.term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    const candidates = await ctx.tx
+      .select({ id: pages.id, slug: pages.slug, title: pages.title, seo: pages.seo })
+      .from(pages)
+      .where(
+        and(
+          eq(pages.status, "published"),
+          isNull(pages.trashedAt),
+          eq(pages.locale, business?.defaultLocale ?? "en"),
+          visibleLocationPage,
+          // The product results beside these already cover the shop.
+          sql`${pages.slug} <> 'products' and ${pages.slug} not like 'products/%'`,
+          or(
+            sql`${pages.title} ilike ${pattern}`,
+            sql`${pages.seo}->>'title' ilike ${pattern}`,
+            sql`${pages.seo}->>'description' ilike ${pattern}`,
+          ),
+        ),
+      )
+      .orderBy(asc(pages.slug))
+      .limit(input.limit * 2);
+    const found = [];
+    for (const page of candidates) {
+      if (found.length >= input.limit) break;
+      if ((await blockingVetoes(ctx.tx, { id: page.id, slug: page.slug })).length > 0) continue;
+      const seo = (page.seo ?? {}) as { title?: string; description?: string };
+      found.push({
+        slug: page.slug,
+        title: seo.title ?? page.title,
+        description: seo.description ?? null,
+        kind: kindFromSlug(page.slug),
+      });
+    }
+    return found;
   },
 });
 
@@ -870,7 +943,7 @@ export const verifyDemoCms = defineService({
  *
  * The revision is written *before* the update, inside the same transaction, so
  * "restore" always has somewhere to go back to and a failed save cannot leave a
- * revision describing a state that never existed (Â§2 principle 12).
+ * revision describing a state that never existed (§2 principle 12).
  */
 export const updatePage = defineService({
   name: "cms.updatePage",
@@ -953,7 +1026,7 @@ export const updatePage = defineService({
         throw error;
       });
 
-    // Â§5: "automatic redirect creation on slug change â€” slugs never silently
+    // §5: "automatic redirect creation on slug change — slugs never silently
     // break". Renaming a page is a normal editorial act; every link anyone
     // ever shared to the old address breaking is not, and the platform is the
     // only party that can see the rename happen.
@@ -995,7 +1068,7 @@ export const updatePage = defineService({
  *
  * The editor has already seen `cms.describeConflict`. This write is the same
  * working-copy update as `cms.updatePage`, but only after the caller names the
- * current server version â€” "keep mine" is explicit, not a silent overwrite.
+ * current server version — "keep mine" is explicit, not a silent overwrite.
  */
 export const mergePage = defineService({
   name: "cms.mergePage",
@@ -1122,7 +1195,7 @@ export const publishPage = defineService({
  */
 export const getSection = defineService({
   name: "cms.getSection",
-  summary: "One section by key â€” the header, the footer, a saved arrangement.",
+  summary: "One section by key — the header, the footer, a saved arrangement.",
   kind: "query",
   permission: "public",
   input: z.object({
@@ -1443,7 +1516,7 @@ export const pageAuthorSummary = defineService({
  * Put a page or section back to an earlier version.
  *
  * Restoring is itself a change, so it writes a revision of the *current* state
- * first â€” Â§37 requires every change to be "reversible within one action", and
+ * first — §37 requires every change to be "reversible within one action", and
  * an undo you cannot undo only half satisfies that.
  */
 export const restoreRevision = defineService({
@@ -1536,18 +1609,18 @@ export const restoreRevision = defineService({
 /* ---------------------------------------------------------------- defaults */
 
 /**
- * Give a fresh instance a site (Â§32: "day one still looks designed").
+ * Give a fresh instance a site (§32: "day one still looks designed").
  *
- * Idempotent by construction â€” every insert is `onConflictDoNothing` against
- * the natural key â€” so it is safe to call on every setup completion, on a
+ * Idempotent by construction — every insert is `onConflictDoNothing` against
+ * the natural key — so it is safe to call on every setup completion, on a
  * re-run, and from an admin button that repairs a site somebody emptied.
  *
  * Owner-permission, because creating a site's chrome is not a routine staff
  * edit. The setup-completion listener is not a user and has nobody to act as,
- * so it calls as `system` â€” which `permits()` allows past every check. That is
+ * so it calls as `system` — which `permits()` allows past every check. That is
  * the one elevation in this module, it is named `onSetupCompleted`, and it is
  * greppable, which is the whole reason elevation is spelled out rather than
- * implied (Â§11).
+ * implied (§11).
  */
 /**
  * Parse a chrome tree, naming the section when it will not parse.
@@ -1636,6 +1709,18 @@ export const ensureDefaults = defineService({
             .update(sections)
             .set({ blocks: parseChrome(pulled.nav, NAV_KEY) })
             .where(eq(sections.id, navRow.id));
+        } else {
+          // The nav section already has links (the platform appends
+          // /locations when a first location is created). The header's menu
+          // is still a menu somebody chose: merge it in rather than drop it,
+          // keeping an owner-arranged order (chrome-nav.ts).
+          const merged = structuredClone(navRow.blocks) as BlockNode[];
+          if (mergeNavLinks(merged, pulled.nav)) {
+            await ctx.tx
+              .update(sections)
+              .set({ blocks: parseChrome(merged, NAV_KEY) })
+              .where(eq(sections.id, navRow.id));
+          }
         }
         created.push("section:nav-migrated");
       }
@@ -1673,7 +1758,7 @@ export const ensureDefaults = defineService({
  *
  * The first module event listener in the codebase, and the reason the bus
  * exists: core's settings module announces that a business now exists, and cms
- * responds without either module importing the other (Â§11 â€” "modules
+ * responds without either module importing the other (§11 — "modules
  * communicate only via the event bus and core services").
  */
 export {
@@ -1731,6 +1816,7 @@ export default [
   getPage,
   listPages,
   publishedPaths,
+  searchPublishedPages,
   createPage,
   deleteDraftPage,
   removePage,
@@ -1764,6 +1850,7 @@ export default [
   detachLayout,
   rejoinLayout,
   draftPageTranslation,
+  ...draftPageTranslationPhases,
   pageTranslationReport,
   previewEmail,
   testSendEmail,

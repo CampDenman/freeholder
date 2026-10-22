@@ -33,6 +33,7 @@ import { getBusiness } from "@/core/settings/service";
 import {
   defineService,
   getService,
+  hasModuleAccess,
   ServiceError,
   type Actor,
   type ServiceContext,
@@ -56,6 +57,16 @@ function requirePerson(actor: Actor): string {
       "permission",
       "A briefing belongs to a person. Sign in to read yours.",
     );
+  }
+  // A briefing is a working document about the business. Somebody with no
+  // staff grant — a customer, or a former colleague since demoted — reads
+  // none, including any assembled while they were staff (C11.10).
+  if (
+    !actor.grants.some((grant) =>
+      hasModuleAccess(actor, grant.module === "*" ? "briefing" : grant.module, "view"),
+    )
+  ) {
+    throw new ServiceError("permission", "Briefings are for the people who run this site.");
   }
   return actor.userId;
 }

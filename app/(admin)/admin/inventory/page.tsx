@@ -15,6 +15,7 @@ import {
 } from "@/modules/catalog/service";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { getT } from "../../../i18n";
+import { actorLabel } from "../actorLabel";
 import { productAction } from "../../catalog-actions";
 import { requireStaffActor } from "../guard";
 
@@ -260,7 +261,7 @@ export default async function InventoryPage({
                     </Pill>
                     <span>{t(`catalog.inventory.reason.${row.reason}`)}</span>
                     {row.note ? <span className="text-ink-muted">{row.note}</span> : null}
-                    <span className="ms-auto font-mono text-xs text-ink-muted">{row.actor}</span>
+                    <span className="ms-auto text-xs text-ink-muted">{actorLabel(row.actor, t)}</span>
                   </li>
                 ))}
               </ol>

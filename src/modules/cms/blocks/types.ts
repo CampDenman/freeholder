@@ -18,6 +18,7 @@ import type { z } from "zod";
 import type { Translate } from "@/core/i18n";
 import type { Actor } from "@/core/service";
 import type { FieldHint } from "./fields";
+import type { FormReturn } from "@/core/http/public-form-return";
 
 export type BlockContext = "page" | "chrome" | "email";
 
@@ -117,6 +118,13 @@ export interface BlockRenderContext {
    * blocks never touch the jar themselves (§10).
    */
   shopperCart?: () => Promise<ShopperCartSnapshot | null>;
+  /**
+   * The visitor's own answers to a public form that was just refused, so the
+   * form re-renders filled in rather than empty (see
+   * `src/core/http/public-form-return.ts`). The routing layer reads the
+   * cookie; a block only compares the key with its own.
+   */
+  formReturn?: FormReturn | null;
 }
 
 /**

@@ -79,6 +79,11 @@ export default async function ThreadPage({
           <Pill tone={closed ? "neutral" : "accent"}>
             {t(`conversations.status.${thread.status}`)}
           </Pill>
+          {thread.unverified ? (
+            <Pill tone="warning">
+              {t("inbox.unverifiedChat", { email: thread.contactEmail ?? "" })}
+            </Pill>
+          ) : null}
           {thread.subject ? <span>{thread.subject}</span> : null}
         </p>
       </div>

@@ -575,6 +575,7 @@ export const tick = defineService({
   permission: "system",
   input: z.object({}),
   output: row({ started: z.number().int(), sent: z.number().int() }),
+  auditWhen: (out: { started: number; sent: number }) => out.started + out.sent > 0,
   handler: async (_input, ctx) => {
     const due = await ctx.tx
       .select({ id: broadcasts.id })

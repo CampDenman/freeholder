@@ -208,6 +208,7 @@ export interface EditorLabels {
   bullet: string;
   numbered: string;
   richHint: string;
+  richHtmlRefused: string;
   saveAsSection?: string;
   detachSection?: string;
   sectionName?: string;
@@ -1900,6 +1901,7 @@ function Field({
             bullet: labels.bullet,
             numbered: labels.numbered,
             hint: labels.richHint,
+            htmlRefused: labels.richHtmlRefused,
           }}
         />
       ) : field.kind === "multiline" ? (

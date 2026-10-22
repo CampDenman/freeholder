@@ -584,6 +584,7 @@ export async function sendTaskReminders(): Promise<{ sent: number; skipped: numb
  */
 registerContactReference({
   table: "tasks",
+  columns: ["contact_id", "subject_id"],
   repoint: (tx, duplicateId, survivingId) =>
     tx.update(tasks).set({ contactId: survivingId, subjectId: sql`case when ${tasks.subjectType} = 'contact' then ${survivingId}::uuid else ${tasks.subjectId} end` }).where(eq(tasks.contactId, duplicateId)),
   captureForUndo: async (tx, duplicateId, survivingId) => ({

@@ -49,7 +49,10 @@ import {
   Pill,
   Select,
 } from "@/ui/primitives";
-import { getT } from "../../../../i18n";
+import { getLocale, getT } from "../../../../i18n";
+import { OptionSelect, currencyOptions } from "@/ui/pickers";
+import { actorLabel } from "../../actorLabel";
+import { ppmToPercent } from "../../../percent";
 import { collectionAction, productAction } from "../../../catalog-actions";
 import { requireStaffActor } from "../../guard";
 import { editorBlockTypes, editorLabels } from "../../editorLabels";
@@ -558,7 +561,7 @@ export default async function ProductPage({
                 <Input id="offering-deposit-amount" name="depositAmount" inputMode="decimal" />
               </Field>
               <Field label={t("catalog.offering.depositPercent")} htmlFor="offering-deposit-ppm">
-                <Input id="offering-deposit-ppm" name="depositPercentPpm" inputMode="numeric" defaultValue={offering?.depositType === "percent" ? offering.depositValue : ""} />
+                <Input id="offering-deposit-ppm" name="depositPercent" inputMode="decimal" defaultValue={offering?.depositType === "percent" && offering.depositValue != null ? ppmToPercent(Number(offering.depositValue)) : ""} />
               </Field>
               <Field label={t("catalog.offering.policy")} htmlFor="offering-policy">
                 <Select id="offering-policy" name="cancellationPolicyId" defaultValue={offering?.cancellationPolicyId ?? ""}>
@@ -702,7 +705,7 @@ export default async function ProductPage({
                 </Field>
                 <Field label={t("catalog.bundle.fixedAmount")} htmlFor="bundle-amount"><Input id="bundle-amount" name="amount" inputMode="decimal" /></Field>
                 <Field label={t("catalog.bundle.currency")} htmlFor="bundle-currency">
-                  <Input id="bundle-currency" name="currency" maxLength={3} defaultValue={business?.baseCurrency ?? "USD"} className="font-mono uppercase" />
+                  <OptionSelect id="bundle-currency" name="currency" defaultValue={business?.baseCurrency ?? "USD"} options={currencyOptions(await getLocale(), business?.baseCurrency)} />
                 </Field>
                 <div><Button type="submit">{t("catalog.bundle.add")}</Button></div>
               </form>
@@ -772,7 +775,7 @@ export default async function ProductPage({
               <li key={event.id} className="flex flex-wrap items-center gap-2 border-b border-rule pb-3 text-sm last:border-0">
                 <Pill>{t(`catalog.status.${event.toStatus}`)}</Pill>
                 <span>{event.reason ?? t("catalog.historyChanged")}</span>
-                <span className="ms-auto text-xs text-ink-muted">{formatDateTime(event.createdAt, timezone, locale)} · {event.actor}</span>
+                <span className="ms-auto text-xs text-ink-muted">{formatDateTime(event.createdAt, timezone, locale)} · {actorLabel(event.actor, t)}</span>
               </li>
             ))}
           </ol>

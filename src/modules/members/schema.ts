@@ -912,10 +912,26 @@ export const memberRemotePosts = pgTable(
   (t) => [uniqueIndex("member_remote_posts_object_idx").on(t.objectId), index("member_remote_posts_actor_idx").on(t.actorUri, t.publishedAt)],
 );
 
+/** An earlier attempt at a transfer, kept so a late provider event finds it. */
+export interface PayoutTransferAttempt {
+  attempt: number;
+  key: string;
+  reference: string | null;
+  state: "failed" | "settled" | "unclaimed";
+  lastError: string | null;
+  endedAt: string;
+}
+
 /**
  * C12.26–C12.27: a payout carried out (or a refunded one reversed) by the
  * site's payout provider. One of each kind per payout, so a retry never pays
  * twice; the provider's reference settles it when its webhook confirms.
+ * `attempt` numbers the current provider attempt (its idempotency key is the
+ * payout id, then `<payout id>:<n>`); a new attempt is only ever made once
+ * the previous one is dead at the provider, and the previous ones stay in
+ * `previous_attempts`. `unknown` means the provider may or may not have paid
+ * and the owner must check; `unclaimed` means PayPal is holding the money
+ * for the seller to claim.
  */
 export const memberPayoutTransfers = pgTable(
   "member_payout_transfers",
@@ -924,13 +940,16 @@ export const memberPayoutTransfers = pgTable(
     payoutId: uuid("payout_id").notNull().references(() => memberPayouts.id, { onDelete: "cascade" }),
     kind: text("kind", { enum: ["transfer", "reversal"] }).notNull(),
     provider: text("provider").notNull(),
-    state: text("state", { enum: ["pending", "sent", "settled", "failed"] }).notNull().default("pending"),
+    state: text("state", { enum: ["pending", "sent", "settled", "failed", "unknown", "unclaimed"] }).notNull().default("pending"),
     amountMinor: integer("amount_minor").notNull(),
     currency: text("currency").notNull(),
     reference: text("reference"),
     attempts: integer("attempts").notNull().default(0),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
     lastError: text("last_error"),
+    attempt: integer("attempt").notNull().default(1),
+    attemptStartedAt: timestamp("attempt_started_at", { withTimezone: true }),
+    previousAttempts: jsonb("previous_attempts").$type<PayoutTransferAttempt[]>().notNull().default([]),
     createdAt: createdAtColumn(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -938,35 +957,10 @@ export const memberPayoutTransfers = pgTable(
     uniqueIndex("member_payout_transfers_once_idx").on(t.payoutId, t.kind),
     index("member_payout_transfers_due_idx").on(t.state, t.nextAttemptAt),
     index("member_payout_transfers_reference_idx").on(t.provider, t.reference),
+    index("member_payout_transfers_previous_attempts_idx").using("gin", t.previousAttempts.op("jsonb_path_ops")),
     check("member_payout_transfers_kind_valid", sql`${t.kind} in ('transfer','reversal')`),
-    check("member_payout_transfers_state_valid", sql`${t.state} in ('pending','sent','settled','failed')`),
+    check("member_payout_transfers_state_valid", sql`${t.state} in ('pending','sent','settled','failed','unknown','unclaimed')`),
   ],
 );
 
-/**
- * C12.30: an upload that matched known abuse imagery. The file itself stays
- * quarantined in media storage under legal hold; this row keeps what the
- * legal report needs — the provider's match id, the file's SHA-256, when it
- * arrived and who uploaded it — and never the image.
- */
-export const abuseReports = pgTable(
-  "abuse_reports",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    provider: text("provider").notNull(),
-    matchId: text("match_id"),
-    matchSource: text("match_source"),
-    sha256: text("sha256").notNull(),
-    contentType: text("content_type").notNull(),
-    bytes: integer("bytes").notNull(),
-    detectedAt: timestamp("detected_at", { withTimezone: true }).notNull().defaultNow(),
-    assetId: uuid("asset_id"),
-    uploadedBy: text("uploaded_by"),
-    state: text("state", { enum: ["to_report", "reported"] }).notNull().default("to_report"),
-    reportedTo: text("reported_to"),
-    reportReference: text("report_reference"),
-    reportedAt: timestamp("reported_at", { withTimezone: true }),
-    reportedBy: uuid("reported_by"),
-  },
-  (t) => [index("abuse_reports_state_idx").on(t.state, t.detectedAt), index("abuse_reports_sha256_idx").on(t.sha256), check("abuse_reports_state_valid", sql`${t.state} in ('to_report','reported')`)],
-);
+// C12.30: abuse_reports is owned by core media (src/core/media/abuse-schema.ts).

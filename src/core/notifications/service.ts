@@ -211,6 +211,7 @@ async function restoreContactPointers(
 
 registerContactReference({
   table: "notifications",
+  columns: ["recipient_contact_id"],
   repoint: (tx, duplicateId, survivingId) =>
     tx.update(notifications).set({ recipientContactId: survivingId })
       .where(eq(notifications.recipientContactId, duplicateId)),
@@ -265,6 +266,7 @@ registerContactReference({
 
 registerContactReference({
   table: "notification_digests",
+  columns: ["recipient_contact_id"],
   repoint: (tx, duplicateId, survivingId) =>
     tx.update(notificationDigests).set({ recipientContactId: survivingId })
       .where(eq(notificationDigests.recipientContactId, duplicateId)),

@@ -9,7 +9,7 @@
 // legitimate second heading gets suppressed, and a suppressed gate is a
 // worse outcome than no gate at all.
 import { describe, expect, it } from "vitest";
-import { auditPage } from "../../scripts/seo-gate.mjs";
+import { auditPage, isPage, isPrivate } from "../../scripts/seo-gate.mjs";
 
 const page = (body: string, head = "") => `<!doctype html>
 <html lang="en"><head>
@@ -189,5 +189,22 @@ describe("hreflang", () => {
     expect(messages(withAlternates, { locales: 2 })).toEqual([
       "emits hreflang alternates but no x-default",
     ]);
+  });
+});
+
+describe("what the crawl treats as a page", () => {
+  it("skips calendar downloads and locale-prefixed private surfaces", () => {
+    expect(isPage("/ics/events/golden-hour-workshop")).toBe(false);
+    expect(isPage("/events/golden-hour.ics")).toBe(false);
+    expect(isPage("/events/golden-hour-workshop")).toBe(true);
+    expect(isPrivate("/fr-CA/portal/login")).toBe(true);
+    expect(isPrivate("/portal/login")).toBe(true);
+    expect(isPrivate("/fr-CA/about")).toBe(false);
+  });
+
+  it("marks a noindex page so the sitemap rule leaves it alone", () => {
+    const html = page("<h1>Search</h1>", '<meta name="robots" content="noindex, follow">');
+    expect(audit(html).noindex).toBe(true);
+    expect(audit(page("<h1>Services</h1>")).noindex).toBe(false);
   });
 });

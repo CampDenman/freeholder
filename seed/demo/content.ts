@@ -22,9 +22,18 @@ import type {
   CalculatorInput,
   CalculatorStep,
 } from "@/modules/calculators/formula";
+import { ILLUSTRATIONS } from "./illustrations";
 
 /** Which generated image a block wants. Resolved to asset ids at install. */
-export type ImageSlot = "coastline" | "portrait" | "studio";
+export type ImageSlot =
+  | "coastline"
+  | "portrait"
+  | "studio"
+  | "fog"
+  | "dawn"
+  | "headland"
+  | "calendar"
+  | "giftCard";
 
 export interface SeedPage {
   slug: string;
@@ -96,76 +105,95 @@ export const HOURS = [
   { weekday: 0, closed: true },
 ];
 
+/**
+ * The demo's images: generated illustrations (seed/demo/illustrations.ts),
+ * original to this repository, rasterised at install. Every one carries alt
+ * text that describes what is drawn — §5 wants images described, and
+ * "image1.jpg" passing a gate is how alt text becomes decoration.
+ */
 export const IMAGES: Record<ImageSlot, { filename: string; alt: string; svg: string }> = {
   coastline: {
     filename: "aurora-coast-shoreline.jpg",
-    // Alt text that describes rather than labels: §5 wants images described,
-    // and "image1.jpg" passing a gate is how alt text becomes decoration.
-    alt: "Low tide on a pebble shoreline at dusk, with fog on the far headland",
-    svg: gradient("#1f3347", "#7796ad", "#c9d6de"),
+    alt: "Illustration of a low sun over the strait at dusk, headlands layered blue behind a dark pebble shore",
+    svg: ILLUSTRATIONS.coastline(),
   },
   portrait: {
     filename: "aurora-coast-portrait.jpg",
-    alt: "A portrait session on the beach, shot into the last of the evening light",
-    svg: gradient("#3a2b2b", "#a2705c", "#e8cbb2"),
+    alt: "Illustration of two people walking the tideline at dusk, the sun low over the water behind them",
+    svg: ILLUSTRATIONS.portrait(),
   },
   studio: {
     filename: "aurora-coast-studio.jpg",
-    alt: "The studio on a grey morning, prints drying along the north wall",
-    svg: gradient("#2b2f2c", "#6f7d7f", "#cdd6cd"),
+    alt: "Illustration of the studio wall: five prints drying on a line above a window onto the strait",
+    svg: ILLUSTRATIONS.studio(),
+  },
+  fog: {
+    filename: "aurora-coast-strait-in-fog.jpg",
+    alt: "Illustration of the strait in morning fog, pale headlands fading into a white sky",
+    svg: ILLUSTRATIONS.fog(),
+  },
+  dawn: {
+    filename: "aurora-coast-driftwood-dawn.jpg",
+    alt: "Illustration of dawn over the water in rose and violet, a dark driftwood shore in the foreground",
+    svg: ILLUSTRATIONS.dawn(),
+  },
+  headland: {
+    filename: "aurora-coast-headland.jpg",
+    alt: "Illustration of a headland at low tide under a pale sky, light catching the wet sand",
+    svg: ILLUSTRATIONS.headland(),
+  },
+  calendar: {
+    filename: "aurora-coast-calendar.jpg",
+    alt: "Illustration of a wall calendar open on a dawn coastal scene above a grid of days",
+    svg: ILLUSTRATIONS.calendar(),
+  },
+  giftCard: {
+    filename: "aurora-coast-gift-card.jpg",
+    alt: "Illustration of an Aurora Coast gift card with a dusk seascape, lying on linen",
+    svg: ILLUSTRATIONS.giftCard(),
   },
 };
 
 /**
- * A placeholder that is honest about being one.
- *
- * Real photographs cannot ship here: they would be somebody's copyright, tens
- * of megabytes in a repository that has to stay cloneable, and a licence
- * question on every fork. Generated bands of colour are none of those things,
- * and they still exercise what matters — sharp reads them, renditions are
- * built at every width, `<picture>` gets real AVIF and WebP sources, and the
- * page reserves real intrinsic dimensions.
+ * The site's menu. It lives in the Navigation chrome section — the platform's
+ * one menu (C2.11) — rather than on a nav block inside the header, which is
+ * the older shape `cms.ensureDefaults` migrates out of headers.
  */
-function gradient(from: string, via: string, to: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1067">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="0.35" y2="1">
-      <stop offset="0%" stop-color="${from}"/>
-      <stop offset="55%" stop-color="${via}"/>
-      <stop offset="100%" stop-color="${to}"/>
-    </linearGradient>
-  </defs>
-  <rect width="1600" height="1067" fill="url(#g)"/>
-  <rect y="712" width="1600" height="3" fill="${from}" opacity="0.35"/>
-  <rect y="760" width="1600" height="1" fill="${from}" opacity="0.25"/>
-</svg>`;
-}
-
-const NAV_LINKS = [
+export const NAV_LINKS = [
   { label: "Services", href: "/services" },
-  { label: "Planning", href: "/planning" },
+  { label: "Shop", href: "/products" },
+  { label: "Book", href: "/book" },
+  { label: "Events", href: "/events" },
+  { label: "Journal", href: "/blog" },
   { label: "About", href: "/about" },
   { label: "Contact", href: "/contact" },
 ];
 
+/** Brand on the left; the cart and the language switch on the right. */
 export function header(): BlockNode[] {
   return [
     {
       id: "seed-header",
-      type: "columns",
-      props: { count: 2, gap: "normal" },
+      type: "chromeBar",
+      props: { align: "between" },
       children: [
         {
           id: "seed-header-brand",
           type: "brand",
           props: { href: "/", showTagline: true },
         },
-        {
-          id: "seed-header-nav",
-          type: "nav",
-          props: { links: NAV_LINKS, ariaLabelKey: "cms.nav.primary" },
-        },
+        { id: "seed-header-cart", type: "cartWidget", props: {} },
       ],
+    },
+  ];
+}
+
+export function nav(): BlockNode[] {
+  return [
+    {
+      id: "chrome-nav",
+      type: "nav",
+      props: { links: NAV_LINKS, ariaLabelKey: "cms.nav.primary" },
     },
   ];
 }
@@ -195,13 +223,15 @@ export function footer(): BlockNode[] {
             // Every page is reachable from the chrome, which is what keeps the
             // site inside §5's three-hops rule without anyone checking by hand.
             links: [
-              ...NAV_LINKS,
               { label: "Weddings", href: "/services/weddings" },
               { label: "Portraits", href: "/services/portraits" },
-              { label: "Blog", href: "/blog" },
+              { label: "Planning", href: "/planning" },
               { label: "Newsletters", href: "/newsletters" },
+              { label: "Gifts", href: "/c/gifts" },
+              { label: "Search", href: "/search" },
             ],
-            ariaLabelKey: "cms.nav.primary",
+            ariaLabelKey: "cms.nav.footer",
+            collapseOnMobile: false,
           },
         },
         {
@@ -603,7 +633,7 @@ export const PAGES: SeedPage[] = [
         id: "svc-intro",
         type: "text",
         props: {
-          body: "Three things, done properly, rather than everything done adequately.",
+          body: "Two things, done properly, rather than everything done adequately — and prints from the studio wall for anyone who would rather take the coast home.",
           align: "start",
           measure: true,
         },
@@ -651,7 +681,9 @@ export const PAGES: SeedPage[] = [
           { id: "svc-por-b", type: "button", props: { label: "Portrait sessions", href: "/services/portraits", variant: "quiet" } },
         ],
       },
-      { id: "svc-img", type: "image", props: { assetId: a.studio, width: "wide", rounded: true } },
+      { id: "svc-img", type: "image", props: { assetId: a.headland, width: "wide", rounded: true } },
+      { id: "svc-shop", type: "button", props: { label: "Prints and gift cards", href: "/c/prints", variant: "quiet" } },
+      { id: "svc-book", type: "button", props: { label: "Book a session online", href: "/book", variant: "solid" } },
     ],
   },
   {
@@ -673,7 +705,7 @@ export const PAGES: SeedPage[] = [
           measure: true,
         },
       },
-      { id: "wed-img", type: "image", props: { assetId: a.coastline, width: "wide", rounded: true } },
+      { id: "wed-img", type: "image", props: { assetId: a.dawn, width: "wide", rounded: true } },
       {
         id: "wed-faq",
         type: "faq",
@@ -742,7 +774,7 @@ export const PAGES: SeedPage[] = [
           ],
         },
       },
-      { id: "por-cta", type: "button", props: { label: "Book a session", href: "/contact", variant: "solid" } },
+      { id: "por-cta", type: "button", props: { label: "Book a session", href: "/book", variant: "solid" } },
     ],
   },
   {
@@ -838,4 +870,219 @@ export const PAGES: SeedPage[] = [
       },
     ],
   },
+];
+
+/**
+ * The shop (C1.38). Complete enough to buy: every product carries the
+ * standard tax category, an active variant per size, a price on the CAD
+ * retail list, stock on hand at the studio and a picture. A demo shop with
+ * no products taught evaluators that the catalog cannot sell.
+ */
+export interface SeedProduct {
+  slug: string;
+  name: string;
+  kind: "physical" | "digital";
+  subtitle: string;
+  description: string;
+  image: ImageSlot;
+  /** Variant sizes (option "print-size"), or one price for a single variant. */
+  sizes?: Array<{ name: string; fragment: string; price: string; stock: number }>;
+  price?: string;
+  stock?: number;
+  collections: string[];
+}
+
+export const PRINT_SIZES = [
+  { name: "8 × 10 in", fragment: "8x10", price: "45.00", stock: 24 },
+  { name: "12 × 18 in", fragment: "12x18", price: "85.00", stock: 12 },
+  { name: "24 × 36 in", fragment: "24x36", price: "180.00", stock: 4 },
+];
+
+export const CATALOG: SeedProduct[] = [
+  {
+    slug: "driftwood-dawn-print",
+    name: "Driftwood Dawn",
+    kind: "physical",
+    subtitle: "Archival print, signed on the back",
+    description:
+      "Twenty minutes before sunrise at Kye Bay, when the strait turns the colour of the inside of a shell.\n\nPrinted on 310 gsm cotton rag with pigment inks, rated for a hundred years out of direct sun. Shipped flat in a rigid mailer, or collected from the studio.",
+    image: "dawn",
+    sizes: PRINT_SIZES,
+    collections: ["prints"],
+  },
+  {
+    slug: "strait-in-fog-print",
+    name: "Strait in Fog",
+    kind: "physical",
+    subtitle: "Archival print, signed on the back",
+    description:
+      "A November morning when the far shore simply was not there. The quietest picture on the studio wall, and the one people ask about most.\n\nCotton rag, pigment inks, shipped flat.",
+    image: "fog",
+    sizes: PRINT_SIZES,
+    collections: ["prints"],
+  },
+  {
+    slug: "headland-low-tide-print",
+    name: "Headland at Low Tide",
+    kind: "physical",
+    subtitle: "Archival print, signed on the back",
+    description:
+      "Goose Spit at the bottom of a spring tide, the sand still holding the sky.\n\nCotton rag, pigment inks, shipped flat.",
+    image: "headland",
+    sizes: PRINT_SIZES,
+    collections: ["prints"],
+  },
+  {
+    slug: "coastal-calendar-2027",
+    name: "Coastal Calendar 2027",
+    kind: "physical",
+    subtitle: "Twelve months of the east coast",
+    description:
+      "A wall calendar of twelve pictures from the year's walks, with the spring tides marked. Printed in Courtenay on recycled stock.",
+    image: "calendar",
+    price: "28.00",
+    stock: 60,
+    collections: ["prints", "gifts"],
+  },
+  {
+    slug: "aurora-coast-gift-card",
+    name: "Gift card",
+    kind: "digital",
+    subtitle: "Spend it on prints or a session",
+    description:
+      "A gift card delivered by email, good for prints, calendars or towards any session. It never expires.",
+    image: "giftCard",
+    price: "100.00",
+    collections: ["gifts"],
+  },
+  {
+    slug: "portrait-session-voucher",
+    name: "Portrait session voucher",
+    kind: "digital",
+    subtitle: "Ninety minutes on the coast, as a gift",
+    description:
+      "One ninety-minute portrait session for a family, a couple or one brave person, with the edited gallery and print rights. The recipient books the date themselves.",
+    image: "portrait",
+    price: "450.00",
+    collections: ["gifts"],
+  },
+];
+
+export const COLLECTIONS = [
+  {
+    slug: "prints",
+    title: "Prints from the studio wall",
+    description: "Archival prints and the 2027 calendar, printed and signed in the Comox Valley.",
+  },
+  {
+    slug: "gifts",
+    title: "Gifts",
+    description: "Gift cards, session vouchers and the coastal calendar.",
+  },
+];
+
+/**
+ * Bookable services (C1.38): what /book offers. Each is a service product
+ * with an offering, a full-payment price rule and the studio calendar behind
+ * it, which has weekly hours — so /book shows real open times.
+ */
+export const SERVICES = [
+  {
+    slug: "portrait-session",
+    name: "Portrait session",
+    subtitle: "Ninety minutes on the beach or in the studio",
+    price: "450.00",
+    durationMin: 90,
+    bufferAfterMin: 30,
+  },
+  {
+    slug: "mini-session",
+    name: "Mini session",
+    subtitle: "Thirty minutes, one location, ten edited pictures",
+    price: "175.00",
+    durationMin: 30,
+    bufferAfterMin: 15,
+  },
+  {
+    slug: "headshot-session",
+    name: "Headshot session",
+    subtitle: "Forty-five minutes in the studio for profiles and press",
+    price: "225.00",
+    durationMin: 45,
+    bufferAfterMin: 15,
+  },
+];
+
+/** The studio calendar's weekly bookable hours (weekday 0 = Sunday). */
+export const STUDIO_AVAILABILITY = [
+  { weekday: 1, starts: "09:00", ends: "17:00" },
+  { weekday: 2, starts: "09:00", ends: "17:00" },
+  { weekday: 3, starts: "09:00", ends: "17:00" },
+  { weekday: 4, starts: "09:00", ends: "17:00" },
+  { weekday: 5, starts: "09:00", ends: "16:00" },
+  { weekday: 6, starts: "10:00", ends: "14:00" },
+];
+
+/**
+ * Upcoming events, dated relative to install so the playground always has
+ * something next month: one free, two paid.
+ */
+export const EVENTS = [
+  {
+    slug: "open-studio-print-sale",
+    name: "Open studio and print sale",
+    summary:
+      "Drop in, see the prints on the wall, and take home last season's test prints at cost. Free; coffee from the boatyard café.",
+    daysAhead: 9,
+    startHour: 11,
+    hours: 4,
+    capacity: 60,
+    ticket: { name: "Free entry", priceMinor: 0 },
+  },
+  {
+    slug: "golden-hour-workshop",
+    name: "Golden-hour beach workshop",
+    summary:
+      "Two hours on Goose Spit learning to read evening light with whatever camera you own — a phone is fine. Eight places.",
+    daysAhead: 16,
+    startHour: 17,
+    hours: 2,
+    capacity: 8,
+    ticket: { name: "Workshop place", priceMinor: 9500 },
+  },
+  {
+    slug: "winter-portrait-day",
+    name: "Winter portrait day",
+    summary:
+      "Twenty-minute studio portraits for families and pets, booked in slots, with five edited pictures each.",
+    daysAhead: 34,
+    startHour: 10,
+    hours: 6,
+    capacity: 18,
+    ticket: { name: "Twenty-minute slot", priceMinor: 6000 },
+  },
+];
+
+/**
+ * Pages that are the site rather than content (C1.38). The share bar belongs
+ * on things people pass along — journal posts, products, events — not on the
+ * contact form; these are switched off through the owner's own share
+ * control, so an owner can switch any of them back on.
+ */
+export const SHARE_OFF = [
+  "",
+  "services",
+  "services/weddings",
+  "services/portraits",
+  "planning",
+  "about",
+  "contact",
+  "blog",
+  "newsletters",
+  "locations",
+  "locations/courtenay",
+  "products",
+  "events",
+  "c/prints",
+  "c/gifts",
 ];

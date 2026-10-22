@@ -13,11 +13,20 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { registerForEvent } from "@/modules/events/service";
 import { PATH_HEADER } from "@/core/http/headers";
+import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale } from "../i18n";
+import { publicFailure } from "@/core/http/public-form-return";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
+/**
+ * A signed-out visitor, carrying the request's client address so per-client
+ * limits (the playground's among them) key on this visitor rather than on
+ * one bucket every visitor shares.
+ */
+async function visitor() {
+  return { kind: "anonymous" as const, request: requestMetadataFromHeaders(await headers()) };
+}
 
 function text(form: FormData, name: string): string {
   const value = form.get(name);
@@ -54,15 +63,16 @@ export async function registerForEventAction(form: FormData): Promise<void> {
         name: text(form, "name") || undefined,
         quantity: Math.max(1, Math.min(50, Number(text(form, "quantity")) || 1)),
       },
-      ANONYMOUS,
+      await visitor(),
     );
   } catch (error) {
     // redirect() throws to do its work; let Next's own signals through.
     if (error && typeof error === "object" && "digest" in error) throw error;
     // The visitor sees a code; the audit log keeps the real reason. A public
     // form that explains *why* it refused is telling a script how to get past
-    // it — full, duplicate and closed all read the same.
-    redirect(`${path}${join}eventError=${encodeURIComponent(slug)}`);
+    // it — full, duplicate and closed all read the same ("invalid"). Only the
+    // coarse class travels: wait, unavailable here, or our fault.
+    redirect(`${path}${join}eventError=${encodeURIComponent(slug)}&failure=${publicFailure(error)}`);
   }
 
   if (outcome.paymentUrl) {

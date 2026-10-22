@@ -700,7 +700,7 @@ export const createDraftInvoice = defineService({
         customerTaxId: input.customerTaxId,
         requiredTaxLegend:
           quoteDetails.exemption?.kind === "reverse_charge"
-            ? "Tax not charged â€” reverse charge applies."
+            ? "Tax not charged — reverse charge applies."
             : input.tax.mode === "not_applicable"
               ? input.tax.reason
               : quote.totalTaxMinor === 0

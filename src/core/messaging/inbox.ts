@@ -53,7 +53,7 @@ import {
   conversations,
   siteChatSessions,
 } from "./schema";
-import { activeSiteChatSession, closeSiteChatSessions } from "./chat";
+import { activeSiteChatSession, closeSiteChatSessions, UNVERIFIED_CHAT_PREFIX } from "./chat";
 
 const id = z.string().uuid();
 
@@ -485,6 +485,8 @@ export const searchInbox = defineService({
       contactEmail: z.string().nullable(),
       assigneeEmail: z.string().nullable(),
       preview: z.string().nullable(),
+      /** A site chat whose email nobody verified (C11.10). */
+      unverified: z.boolean(),
     }),
   ),
   handler: async (input, ctx) => {
@@ -536,6 +538,7 @@ export const searchInbox = defineService({
       contactEmail,
       assigneeEmail,
       preview,
+      unverified: Boolean(thread.threadKey?.startsWith(UNVERIFIED_CHAT_PREFIX)),
     }));
   },
 });

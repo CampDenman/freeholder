@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 import config from "../../../freeholder.config";
 import { env } from "@/core/env";
-import { pmBrainAdapter } from "./pm-brain";
+import { gatewayBuilderAdapter } from "./gateway";
 import type { BuilderAgentAdapter } from "./types";
 
 function unavailable(
-  id: Exclude<BuilderAgentAdapter["id"], "pm_brain">,
+  id: Exclude<BuilderAgentAdapter["id"], "gateway" | "paradise">,
 ): BuilderAgentAdapter {
   return {
     id,
@@ -22,8 +22,9 @@ function unavailable(
 }
 
 export function builderAgent(): BuilderAgentAdapter {
+  // Both sources already map the deprecated `pm_brain` alias to `paradise`.
   const selected = env().FREEHOLDER_AGENT ?? config.adapters.agent;
-  if (selected === "pm_brain") return pmBrainAdapter();
+  if (selected === "gateway" || selected === "paradise") return gatewayBuilderAdapter(selected);
   return unavailable(selected);
 }
 

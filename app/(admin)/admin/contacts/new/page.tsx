@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Deliberate entry by a human. Automated paths use contacts.resolve instead,
 // so a form submission never mints a second record for somebody already known.
-import { getT } from "../../../../i18n";
+import { getLocale, getT } from "../../../../i18n";
+import { localeOptions, timezoneOptions } from "@/ui/pickers";
 import { contactFormLabels } from "../contactLabels";
 import { ContactForm } from "../ContactForm";
 import { requireStaffActor } from "../../guard";
@@ -32,6 +33,10 @@ export default async function NewContactPage() {
         labels={contactFormLabels(t)}
         organizations={organizationResult.rows}
         customFields={customFields}
+        pickers={{
+          locales: localeOptions(await getLocale()),
+          timezones: timezoneOptions(),
+        }}
         values={{
           name: "",
           email: "",

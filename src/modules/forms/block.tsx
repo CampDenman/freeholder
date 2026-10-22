@@ -12,10 +12,17 @@
 // SEO gate both rest on — so the submission result travels back in the URL and
 // is rendered, rather than being held in client state.
 import { z } from "zod";
+import { env } from "@/core/env";
 import { defineBlock } from "@/modules/cms/blocks/types";
 import { submitPublicForm } from "../../../app/(public)/form-actions";
 import { HONEYPOT_FIELD, issueStamp, STAMP_FIELD } from "./antispam";
-import type { FormField } from "./fields";
+import { submissionSchema, type FormField } from "./fields";
+import {
+  failureFromQuery,
+  failureMessageKey,
+  returnedValues,
+  type PublicFailure,
+} from "@/core/http/public-form-return";
 import type { Translate } from "@/core/i18n";
 
 export interface Resolved {
@@ -73,10 +80,14 @@ export const formBlock = defineBlock({
       );
     }
 
+    const failed = ctx.query?.formError === resolved.slug;
+    const failure = failed ? failureFromQuery(ctx.query?.failure) : undefined;
     return (
       <RenderedForm
         form={resolved}
-        failed={ctx.query?.formError === resolved.slug}
+        failed={failed}
+        failure={failure}
+        values={failed ? returnedValues(ctx.formReturn, `form:${resolved.slug}`) : undefined}
         t={ctx.t}
       />
     );
@@ -95,16 +106,28 @@ export const formBlock = defineBlock({
 export function RenderedForm({
   form,
   failed,
+  failure,
+  values,
   t,
   action = submitPublicForm,
   extraFields,
 }: {
   form: Resolved;
   failed: boolean;
+  /** Why it was refused; absent reads as "check your answers", as before. */
+  failure?: PublicFailure;
+  /** The visitor's own answers from the refused attempt, to refill. */
+  values?: Record<string, string>;
   t: Translate;
   action?: (form: FormData) => Promise<void>;
   extraFields?: React.ReactNode;
 }) {
+  // Only an answer problem marks fields, and only with the form's own rules:
+  // the same schema the service applied, so the marks cannot disagree with
+  // the refusal. A playground or server refusal leaves every field unmarked.
+  const fieldErrors = failed && (failure ?? "invalid") === "invalid" && values
+    ? answerIssues(form.fields, values)
+    : {};
   return (
     <form action={action} className="grid max-w-prose gap-4">
       <input type="hidden" name="form_slug" value={form.slug} />
@@ -116,7 +139,9 @@ export function RenderedForm({
           role="alert"
           className="rounded-md border border-rule bg-danger-soft px-4 py-3 text-sm text-danger"
         >
-          {t("forms.public.error")}
+          {t(failureMessageKey(failure, "forms.public.error"))}
+          {/* Only claimed when the answers really did come back. */}
+          {values ? ` ${t("public.failure.kept")}` : null}
         </p>
       ) : null}
 
@@ -150,7 +175,14 @@ export function RenderedForm({
       </div>
 
       {form.fields.map((field) => (
-        <Field key={field.key} slug={form.slug} field={field} t={t} />
+        <Field
+          key={field.key}
+          slug={form.slug}
+          field={field}
+          t={t}
+          value={values?.[field.key]}
+          error={fieldErrors[field.key]}
+        />
       ))}
 
       <button
@@ -167,13 +199,20 @@ function Field({
   slug,
   field,
   t,
+  value,
+  error,
 }: {
   slug: string;
   field: FormField;
   t: Translate;
+  value?: string;
+  error?: string;
 }) {
   const id = `${slug}-${field.key}`;
-  const describedBy = field.help ? `${id}-help` : undefined;
+  const describedBy = [field.help ? `${id}-help` : null, error ? `${id}-error` : null]
+    .filter(Boolean)
+    .join(" ") || undefined;
+  const invalid = error ? true : undefined;
   // 16px, not 14px. iOS Safari zooms the whole page when a control under 16px
   // takes focus, so every phone visitor's first tap on the enquiry form shifted
   // the page under them — on the form that exists to collect enquiries.
@@ -204,6 +243,8 @@ function Field({
           required={field.required}
           placeholder={field.placeholder}
           aria-describedby={describedBy}
+          aria-invalid={invalid}
+          defaultValue={value}
           rows={5}
           maxLength={field.maxLength ?? 2000}
           className={control}
@@ -214,7 +255,8 @@ function Field({
           name={field.key}
           required={field.required}
           aria-describedby={describedBy}
-          defaultValue=""
+          aria-invalid={invalid}
+          defaultValue={value ?? ""}
           className={control}
         >
           <option value="" disabled>
@@ -232,6 +274,8 @@ function Field({
           name={field.key}
           required={field.required}
           aria-describedby={describedBy}
+          aria-invalid={invalid}
+          defaultChecked={value === "on" || value === "true"}
           type="checkbox"
           className="size-4 rounded border-rule-strong"
         />
@@ -242,6 +286,8 @@ function Field({
           required={field.required}
           placeholder={field.placeholder}
           aria-describedby={describedBy}
+          aria-invalid={invalid}
+          defaultValue={value}
           type={inputType(field.kind)}
           maxLength={field.maxLength}
           // Which keyboard a phone shows, and whether the browser can fill it
@@ -251,9 +297,18 @@ function Field({
         />
       )}
 
+      {(field.kind === "email" || field.kind === "tel") && env().FREEHOLDER_PLAYGROUND === "1" ? (
+        // C1.38: the shared demo is public; say so where people type contact details.
+        <p className="text-xs text-ink-muted">{t("playground.fictionalHint")}</p>
+      ) : null}
       {field.help ? (
-        <p id={describedBy} className="text-xs text-ink-muted">
+        <p id={`${id}-help`} className="text-xs text-ink-muted">
           {field.help}
+        </p>
+      ) : null}
+      {error ? (
+        <p id={`${id}-error`} className="text-xs text-danger">
+          {error}
         </p>
       ) : null}
     </div>
@@ -272,4 +327,22 @@ function autoCompleteFor(field: FormField): string | undefined {
   if (field.kind === "tel") return "tel";
   if (field.key.includes("name")) return "name";
   return undefined;
+}
+
+/** The first message per field from the form's own rules, keyed by field. */
+function answerIssues(fields: FormField[], values: Record<string, string>): Record<string, string> {
+  const answers: Record<string, unknown> = {};
+  for (const field of fields) {
+    const value = values[field.key];
+    // The action posts a ticked box as `true` and an unticked one not at all.
+    answers[field.key] = field.kind === "checkbox" ? (value === "on" || value === "true" ? true : undefined) : value;
+  }
+  const parsed = submissionSchema(fields).safeParse(answers);
+  if (parsed.success) return {};
+  const issues: Record<string, string> = {};
+  for (const issue of parsed.error.issues) {
+    const key = String(issue.path[0] ?? "");
+    if (key && !issues[key]) issues[key] = issue.message;
+  }
+  return issues;
 }

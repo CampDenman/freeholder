@@ -12,7 +12,8 @@ import {
   listPriceLists,
 } from "@/modules/catalog/service";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
-import { getT } from "../../../i18n";
+import { getLocale, getT } from "../../../i18n";
+import { OptionSelect, currencyOptions } from "@/ui/pickers";
 import { productAction } from "../../catalog-actions";
 import { requireStaffActor } from "../guard";
 
@@ -91,7 +92,7 @@ export default async function PriceListsPage({
               <input type="hidden" name="returnTo" value="/admin/price-lists" />
               <Field label={t("catalog.prices.listName")} htmlFor="list-name"><Input id="list-name" name="name" required /></Field>
               <Field label={t("catalog.prices.currency")} htmlFor="list-currency">
-                <Input id="list-currency" name="currency" required maxLength={3} defaultValue={business?.baseCurrency ?? "USD"} className="font-mono uppercase" />
+                <OptionSelect id="list-currency" name="currency" required defaultValue={business?.baseCurrency ?? "USD"} options={currencyOptions(await getLocale(), business?.baseCurrency)} />
               </Field>
               <Field label={t("catalog.prices.kindLabel")} htmlFor="list-kind">
                 <Select id="list-kind" name="kind" required>

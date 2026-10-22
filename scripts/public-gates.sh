@@ -119,7 +119,7 @@ node -e '
     ["authored home heading", "Coastal light, honestly made"],
     ["site header", "<header"],
     ["site footer", "<footer"],
-    ["generated demo image", "Low tide on a pebble shoreline at dusk"],
+    ["generated demo image", "Illustration of a low sun over the strait at dusk"],
   ];
   const missing = required.filter(([, text]) => !html.includes(text));
   if (missing.length > 0) {

@@ -48,8 +48,14 @@ export function PageComments({
     approve: string;
     requestChanges: string;
     mentionsHint: string;
+    notify: string;
+    teammate: string;
   };
 }) {
+  // Comments record who wrote them as an actor id (`user:<uuid>`); people
+  // read names. A former teammate no longer on staff is still "a teammate".
+  const emails = new Map(staff.map((person) => [`user:${person.id}`, person.email]));
+  const author = (actor: string) => emails.get(actor.toLowerCase()) ?? labels.teammate;
   const roots = comments.filter((row) => !row.parentId);
   const replies = new Map<string, CommentRow[]>();
   for (const row of comments) {
@@ -78,6 +84,19 @@ export function PageComments({
               className="rounded-md border border-rule-strong bg-surface px-3 py-2 text-ink"
             />
           </label>
+          {staff.length === 0 ? null : (
+            <fieldset className="grid gap-1.5">
+              <legend className="text-sm text-ink-muted">{labels.notify}</legend>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {staff.map((person) => (
+                  <label key={person.id} className="inline-flex items-center gap-2 text-sm text-ink">
+                    <input type="checkbox" name="mentions" value={`user:${person.id}`} />
+                    {person.email}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
           <p className="text-xs text-ink-muted">{labels.mentionsHint}</p>
           <button
             type="submit"
@@ -131,7 +150,7 @@ export function PageComments({
             {roots.map((root) => (
               <li key={root.id} className="grid gap-2 border-t border-rule pt-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-xs text-ink-muted">{root.createdBy}</span>
+                  <span className="text-xs font-medium text-ink-muted">{author(root.createdBy)}</span>
                   {root.blockId ? (
                     <span className="text-xs text-ink-muted">
                       {labels.block} {root.blockId}
@@ -157,7 +176,7 @@ export function PageComments({
                 <p className="text-sm text-ink">{root.body}</p>
                 {(replies.get(root.id) ?? []).map((reply) => (
                   <p key={reply.id} className="ms-4 text-sm text-ink-muted">
-                    <span className="font-mono text-xs">{reply.createdBy}</span> {reply.body}
+                    <span className="text-xs font-medium">{author(reply.createdBy)}</span> {reply.body}
                   </p>
                 ))}
                 <div className="flex flex-wrap gap-2">
