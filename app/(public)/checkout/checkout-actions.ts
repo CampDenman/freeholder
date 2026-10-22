@@ -11,13 +11,14 @@
 // the same catalog.quoteShipping the server validates with, offered to the
 // address fields so the method list is live. Only codes travel in URLs.
 import { randomUUID } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { redirect } from "next/navigation";
 import { getCart, quoteShipping, shopperCheckout } from "@/modules/catalog/service";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
-import { PLAYGROUND_REFUSAL } from "@/core/demo/playground-policy";
+import { PLAYGROUND_FICTIONAL_EMAIL, PLAYGROUND_REFUSAL } from "@/core/demo/playground-policy";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale } from "../../i18n";
@@ -40,6 +41,9 @@ function serviceCode(error: unknown): string {
   if (error instanceof ServiceError && error.code === "permission" && error.message === PLAYGROUND_REFUSAL) {
     return "playground";
   }
+  if (error instanceof ServiceError && error.message === PLAYGROUND_FICTIONAL_EMAIL) {
+    return "playgroundEmail";
+  }
   return error instanceof ServiceError ? error.code : "failed";
 }
 
@@ -61,9 +65,12 @@ export async function shopperCheckoutAction(form: FormData): Promise<void> {
 
   let outcome: Awaited<ReturnType<typeof shopperCheckout.call>>;
   try {
-    const actor = await actorFromToken(
-      (await cookies()).get(SESSION_COOKIE)?.value,
-    );
+    // With the client address, so per-client limits (the playground's
+    // among them) key on this shopper rather than on everyone at once.
+    const actor = {
+      ...(await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value)),
+      request: requestMetadataFromHeaders(await headers()),
+    };
     outcome = await shopperCheckout.call(
       {
         cartId: credential.cartId,

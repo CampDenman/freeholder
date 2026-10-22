@@ -185,6 +185,27 @@ export function playgroundAllows(name: string, kind: "query" | "mutation"): bool
   return MUTATIONS.has(name) || PUBLIC.has(name);
 }
 
+/**
+ * Whether an address can never reach a real person: the documentation and
+ * test names reserved by RFC 2606 and RFC 6761. The playground sends no mail,
+ * so a storefront checkout cannot prove an email the usual way (a magic
+ * link); for these addresses there is nobody to prove anything to, and the
+ * order is placed straight away. A real-looking address is refused instead,
+ * so the demo never builds an order history against somebody's inbox.
+ */
+export function isFictionalEmail(email: string): boolean {
+  const at = email.trim().toLowerCase().lastIndexOf("@");
+  const domain = at > 0 ? email.trim().toLowerCase().slice(at + 1) : "";
+  if (["example.com", "example.net", "example.org"].includes(domain)) return true;
+  const labels = domain.split(".");
+  return labels.length > 1 && labels.every(Boolean)
+    && ["example", "test", "invalid", "localhost"].includes(labels.at(-1)!);
+}
+
+/** Shown when a playground checkout uses a real-looking address. */
+export const PLAYGROUND_FICTIONAL_EMAIL =
+  "In the public demo, check out with a made-up address such as you@example.com.";
+
 /** The visitor-facing sentence for a refused playground action. */
 export const PLAYGROUND_REFUSAL = "This action is unavailable in the public playground.";
 

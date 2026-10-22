@@ -7929,5 +7929,7 @@
   "portal.login.playground": "This is where customers sign in to see their bookings, invoices, quotes and files. The public playground sends no email, so sign-in links are switched off here — explore the customer side through the admin's Contacts, Invoices and Quotes instead.",
   "newsletters.playgroundPending": "You are on the list as pending. On a real site a confirmation email goes out now; the public playground sends no email, so it stops here.",
   "public.failure.kept": "Your answers are still in the form below.",
-  "playground.fictionalHint": "Public demo: use made-up details, not your own."
+  "playground.fictionalHint": "Public demo: use made-up details, not your own.",
+  "store.checkout.error.playgroundEmail": "In the public demo, check out with a made-up address such as you@example.com. The demo sends no email, so that address stands in for the usual sign-in link.",
+  "store.checkout.playgroundEmailHint": "Public demo: use a made-up address ending in @example.com — the order is placed without an email check."
 }
