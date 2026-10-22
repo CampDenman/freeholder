@@ -23,6 +23,7 @@ import {
   syncDueCalendarAccounts,
 } from "@/core/connections/calendar-sync";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { openTransactions } from "../helpers/open-transactions";
 
 const ACCOUNT = "00000000-0000-4000-8000-0000000000c4";
 
@@ -160,6 +161,23 @@ describe.runIf(hasDatabase)("external calendar sync", { timeout: 60_000 }, () =>
     expect(event?.title).toBeNull();
     expect(event?.raw).toBeNull();
     expect(JSON.stringify(event)).not.toContain("Divorce");
+  });
+
+  // §11: calendars and events are fetched with no service transaction open.
+  it("asks the provider with no transaction open", async () => {
+    await connectAccount();
+    const provider = googleHolding({
+      events: [{ id: "event-1", summary: "Busy", start: at(soon(24)), end: at(soon(25)) }],
+    });
+    const open: number[] = [];
+    vi.stubGlobal("fetch", async (...args: Parameters<typeof provider>) => {
+      open.push(await openTransactions());
+      return provider(...args);
+    });
+    const result = await syncCalendars.call({ id: ACCOUNT }, OWNER);
+    expect(result).toMatchObject({ calendars: 1, events: 1 });
+    expect(open.length).toBeGreaterThanOrEqual(2);
+    expect(open.every((count) => count === 0), open.join(",")).toBe(true);
   });
 
   it("keeps the title only when the account said details were allowed", async () => {

@@ -1341,6 +1341,7 @@ export const expireQuotes = defineService({
  */
 registerContactReference({
   table: "quote_partner_links",
+  columns: ["contact_id", "invited_by_contact_id"],
   repoint: async (tx, duplicateId, survivingId) => {
     const duplicateLinks = await tx
       .select()

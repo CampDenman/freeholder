@@ -115,7 +115,11 @@ import {
   rejoinLayout,
 } from "./layout-service";
 export { draftPageTranslation, pageTranslationReport } from "./translation-workflow";
-import { draftPageTranslation, pageTranslationReport } from "./translation-workflow";
+import {
+  draftPageTranslation,
+  draftPageTranslationPhases,
+  pageTranslationReport,
+} from "./translation-workflow";
 export { previewEmail, testSendEmail } from "./email-service";
 import { previewEmail, testSendEmail } from "./email-service";
 export { previewSms, sendSmsTemplate, testSendSms } from "./sms-template-service";
@@ -1764,6 +1768,7 @@ export default [
   detachLayout,
   rejoinLayout,
   draftPageTranslation,
+  ...draftPageTranslationPhases,
   pageTranslationReport,
   previewEmail,
   testSendEmail,

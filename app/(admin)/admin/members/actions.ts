@@ -110,7 +110,7 @@ export async function settlePayoutsAction(form: FormData): Promise<void> {
     settlePayouts.call(
       {
         ids,
-        action: action === "paid" || action === "cancel" || action === "owe" ? action : "release",
+        action: action === "paid" || action === "cancel" || action === "owe" || action === "providerPaid" || action === "sendAgain" ? action : "release",
         reference: text(form, "reference") || undefined,
         note: text(form, "note") || undefined,
       },

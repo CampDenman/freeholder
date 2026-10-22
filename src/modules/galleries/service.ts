@@ -33,8 +33,9 @@ import {
   watermarkedRenditions,
   type VariantSet,
 } from "@/core/media/variants";
-import { isUniqueViolation } from "@/core/db";
+import { db, isUniqueViolation } from "@/core/db";
 import {
+  defineOrchestratedService,
   defineService,
   ServiceError,
   type Actor,
@@ -2201,65 +2202,111 @@ export const requestGalleryArchive = defineService({
  * `web_res` gallery packages renditions rather than masters. An archive that
  * ignored the policy would be the hole every per-file check exists to close.
  */
-export const buildGalleryArchive = defineService({
-  name: "galleries.buildArchive",
-  summary: "Package a gallery's deliverable files into one download.",
+async function failArchive(ctx: ServiceContext, galleryId: string, message: string) {
+  const [failed] = await ctx.tx
+    .update(galleryArchives)
+    .set({ state: "failed", error: message, storageKey: null, updatedAt: new Date() })
+    .where(eq(galleryArchives.galleryId, galleryId))
+    .returning();
+  return publicArchive(failed!);
+}
+
+function requireSystem(actor: { kind: string }): void {
+  if (actor.kind !== "system") {
+    throw new ServiceError("permission", "Only trusted platform work packages a gallery.");
+  }
+}
+
+const buildArchiveSource = defineService({
+  name: "galleries.buildArchiveSource",
+  summary: "List a gallery's deliverable files before they are read from storage.",
   kind: "mutation",
   permission: "system",
+  external: false,
   writeClass: "write",
   input: z.object({ galleryId: id }),
-  output: archiveRow,
+  output: z.discriminatedUnion("outcome", [
+    z.object({ outcome: z.literal("failed"), archive: archiveRow }),
+    z.object({
+      outcome: z.literal("package"),
+      galleryId: uuid,
+      slug: z.string(),
+      deliveryHash: z.string(),
+      entries: z.array(
+        z.object({ storageKey: z.string(), name: z.string(), modifiedAt: z.date() }),
+      ),
+    }),
+  ]),
   handler: async (input, ctx) => {
-    if (ctx.actor.kind !== "system") {
-      throw new ServiceError("permission", "Only trusted platform work packages a gallery.");
-    }
+    requireSystem(ctx.actor);
     const gallery = await loadGallery(ctx, input.galleryId);
     const { deliverable, deliveryHash } = await archiveContents(ctx, gallery);
-
-    const fail = async (message: string) => {
-      const [failed] = await ctx.tx
-        .update(galleryArchives)
-        .set({ state: "failed", error: message, storageKey: null, updatedAt: new Date() })
-        .where(eq(galleryArchives.galleryId, gallery.id))
-        .returning();
-      return publicArchive(failed!);
-    };
-
     if (deliverable.length === 0) {
-      return fail("There is nothing in this gallery that can be downloaded.");
+      return {
+        outcome: "failed" as const,
+        archive: await failArchive(ctx, gallery.id, "There is nothing in this gallery that can be downloaded."),
+      };
     }
-
     const names = uniqueNames(deliverable.map((entry) => entry.delivery.filename));
-    const store = storage();
-    const entries = [];
-    for (const [index, entry] of deliverable.entries()) {
-      const body = await store.get(entry.delivery.storageKey);
-      // A missing object is the owner's problem to see, not something to
-      // paper over by delivering an archive quietly short of files.
-      if (!body) return fail(`A file in this gallery is missing: ${entry.delivery.filename}`);
-      entries.push({
+    return {
+      outcome: "package" as const,
+      galleryId: gallery.id,
+      slug: gallery.slug,
+      deliveryHash,
+      entries: deliverable.map((entry, index) => ({
+        storageKey: entry.delivery.storageKey,
         name: names[index]!,
-        body,
         modifiedAt: entry.row.asset.createdAt,
-      });
-    }
+      })),
+    };
+  },
+});
 
-    if (zipCeilingExceeded(entries)) {
-      return fail(
-        "This gallery is too large for a single download. Deliver it in parts.",
-      );
-    }
+const buildArchiveFail = defineService({
+  name: "galleries.buildArchiveFail",
+  summary: "Record why a gallery could not be packaged.",
+  kind: "mutation",
+  permission: "system",
+  external: false,
+  writeClass: "write",
+  input: z.object({ galleryId: id, message: z.string().min(1).max(500) }),
+  output: archiveRow,
+  handler: async (input, ctx) => {
+    requireSystem(ctx.actor);
+    return failArchive(ctx, input.galleryId, input.message);
+  },
+});
 
-    const zip = buildZip(entries);
-    const key = `${gallery.slug}-${zip.sha256.slice(0, 12)}.zip`;
-    await store.put(key, zip.body, "application/zip");
+const buildArchiveApply = defineService({
+  name: "galleries.buildArchiveApply",
+  summary: "Publish a stored gallery package if the gallery has not changed since.",
+  kind: "mutation",
+  permission: "system",
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    galleryId: id,
+    deliveryHash: z.string(),
+    key: z.string().min(1).max(500),
+    bytes: z.number().int().nonnegative(),
+    fileCount: z.number().int().nonnegative(),
+    sha256: z.string(),
+  }),
+  output: z.object({ stale: z.boolean(), archive: archiveRow.nullable() }),
+  handler: async (input, ctx) => {
+    requireSystem(ctx.actor);
+    const gallery = await loadGallery(ctx, input.galleryId, true);
+    // The package is only right if it was built from what is deliverable
+    // now; a restriction made while the bytes were read must not ship.
+    const { deliveryHash } = await archiveContents(ctx, gallery);
+    if (deliveryHash !== input.deliveryHash) return { stale: true, archive: null };
     const [ready] = await ctx.tx
       .update(galleryArchives)
       .set({
         state: "ready",
-        storageKey: key,
-        bytes: zip.bytes,
-        fileCount: zip.entries,
+        storageKey: input.key,
+        bytes: input.bytes,
+        fileCount: input.fileCount,
         deliveryHash,
         error: null,
         builtAt: new Date(),
@@ -2267,6 +2314,7 @@ export const buildGalleryArchive = defineService({
       })
       .where(eq(galleryArchives.galleryId, gallery.id))
       .returning();
+    const zip = { sha256: input.sha256, bytes: input.bytes };
 
     // Gallery ready: the client asked for this, so they hear about it.
     if (gallery.contactId) {
@@ -2280,7 +2328,73 @@ export const buildGalleryArchive = defineService({
     }
     ctx.setSubject("gallery", gallery.id);
     ctx.queueEvent("gallery.ready", { id: gallery.id, bytes: zip.bytes });
-    return publicArchive(ready!);
+    return { stale: false, archive: publicArchive(ready!) };
+  },
+});
+
+/**
+ * Package one gallery. System-only: it reads every deliverable file.
+ *
+ * Contents follow the same policy the single-file download follows, through
+ * `deliverableFor` — a watermarked gallery packages marked renditions, and a
+ * `web_res` gallery packages renditions rather than masters. An archive that
+ * ignored the policy would be the hole every per-file check exists to close.
+ *
+ * The files are read, zipped and stored with no database transaction open
+ * (§11). If the gallery changed meanwhile the package is discarded and the
+ * archive stays queued for the next run.
+ */
+export const buildGalleryArchive = defineOrchestratedService({
+  name: "galleries.buildArchive",
+  summary: "Package a gallery's deliverable files into one download.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({ galleryId: id }),
+  output: archiveRow,
+  handler: async (input, actor) => {
+    requireSystem(actor);
+    const source = await buildArchiveSource.call(input, actor);
+    if (source.outcome === "failed") return source.archive;
+    const fail = (message: string) =>
+      buildArchiveFail.call({ galleryId: source.galleryId, message }, actor);
+
+    const store = storage();
+    const entries = [];
+    for (const entry of source.entries) {
+      const body = await store.get(entry.storageKey);
+      // A missing object is the owner's problem to see, not something to
+      // paper over by delivering an archive quietly short of files.
+      if (!body) return fail(`A file in this gallery is missing: ${entry.name}`);
+      entries.push({ name: entry.name, body, modifiedAt: entry.modifiedAt });
+    }
+    if (zipCeilingExceeded(entries)) {
+      return fail("This gallery is too large for a single download. Deliver it in parts.");
+    }
+
+    const zip = buildZip(entries);
+    const key = `${source.slug}-${zip.sha256.slice(0, 12)}.zip`;
+    await store.put(key, zip.body, "application/zip");
+    const applied = await buildArchiveApply.call(
+      {
+        galleryId: source.galleryId,
+        deliveryHash: source.deliveryHash,
+        key,
+        bytes: zip.bytes,
+        fileCount: zip.entries,
+        sha256: zip.sha256,
+      },
+      actor,
+    );
+    if (applied.archive) return applied.archive;
+    // Stale: the key is content-addressed, so a still-current package with
+    // the same bytes may share it; leave the object to the next build.
+    const [current] = await db()
+      .select()
+      .from(galleryArchives)
+      .where(eq(galleryArchives.galleryId, source.galleryId))
+      .limit(1);
+    return publicArchive(current!);
   },
 });
 
@@ -2593,6 +2707,7 @@ registerContactReference({
 
 registerContactReference({
   table: "gallery_guests",
+  columns: ["contact_id", "invited_by_contact_id"],
   // A guest row is unique per gallery+person. If the survivor is already a
   // guest on the same gallery, the duplicate's row is dropped rather than
   // violating the unique index — two invitations to the same person are one.
@@ -2770,6 +2885,7 @@ registerContactReference({
 
 registerContactReference({
   table: "gallery_rounds",
+  columns: ["submitted_by_contact_id"],
   // Who submitted a round is a plain attribution with no uniqueness to
   // violate, so this repoints rather than reconciling. The snapshot alongside
   // it holds no contact id precisely so there is nothing here that a merge
@@ -2958,6 +3074,9 @@ export default [
   listGalleryRounds,
   requestGalleryArchive,
   buildGalleryArchive,
+  buildArchiveSource,
+  buildArchiveFail,
+  buildArchiveApply,
   galleryArchiveState,
   downloadGalleryArchive,
   addGalleryPriceSheetItem,

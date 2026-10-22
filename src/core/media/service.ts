@@ -34,6 +34,7 @@ import {
   type MultipartPart,
 } from "@/adapters/storage/types";
 import { malwareScanner, type MalwareScanResult } from "@/adapters/malware";
+import { underLegalHold } from "@/core/media/abuse-evidence";
 import {
   altTextSuggester,
   AltTextSuggestionError,
@@ -2780,7 +2781,7 @@ export const trashAsset = defineService({
       .limit(1);
     if (!asset) throw new ServiceError("not_found", "That file is not here.");
     // C12.30: a file held as evidence of abuse imagery stays until it has been reported and released by law.
-    if (asset.status === "quarantined" && asset.scanEngine?.startsWith("abuse-hash:")) {
+    if (underLegalHold(asset)) {
       throw new ServiceError("conflict", "This file is held as evidence for a legal report and cannot be deleted.");
     }
 
@@ -3078,7 +3079,8 @@ const rescanSource = z.object({
   bytes: z.number(),
   kind: z.enum(["image", "video", "doc", "audio"]),
   status: z.enum(["processing", "ready", "quarantined", "failed", "trashed"]),
-  /** C12.30: which scan held the file, so evidence is never rescanned. */
+  /** C12.30: what the scan found and which scan held it, so evidence is never rescanned. */
+  scanStatus: z.enum(["pending", "clean", "not_configured", "infected", "error"]),
   scanEngine: z.string().nullable(),
   variants: z.unknown(),
   checksumSha256: z.string().nullable(),
@@ -3199,7 +3201,7 @@ export const rescanAsset = defineOrchestratedService({
   handler: async (input, actor) => {
     const asset = await rescanSourceService.call(input, actor);
     // C12.30: evidence of abuse imagery is never released by a later scan.
-    if (asset.status === "quarantined" && asset.scanEngine?.startsWith("abuse-hash:")) {
+    if (underLegalHold(asset)) {
       throw new ServiceError("conflict", "This file is held as evidence for a legal report and cannot be rescanned.");
     }
     let scan;
