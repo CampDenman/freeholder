@@ -514,12 +514,19 @@ describe.runIf(hasDatabase)("disposable playground", () => {
     // …with the boot-time baseline, visitors keep their whole allowance.
     await markPlaygroundBaseline();
     expect((await submitForm.call({ slug: "contact", values: { message: "hello" } }, ANONYMOUS)).ok).toBe(true);
+    // A restart mid-hour re-runs boot; it must not re-baseline visitor rows.
+    await submitForm.call({ slug: "contact", values: { message: "before restart" } }, ANONYMOUS);
+    await markPlaygroundBaseline();
+    const [stored] = await db().execute<{ baseline: Record<string, number> }>(
+      sql`select config->'baseline' as baseline from module_settings where module = 'playground'`,
+    );
+    expect(stored?.baseline.form_submissions).toBe(seededSubmissions);
     // And the cap still bites on what visitors add past the seed.
     await db().insert(formSubmissions).values(
       Array.from({ length: PLAYGROUND_ROW_CAPS["forms.submit"]!.limit }, (_, index) => ({ formId: form.id, data: { message: `visitor ${index}` }, status: "received" as const })),
     );
     await expect(submitForm.call({ slug: "contact", values: { message: "one too many" } }, ANONYMOUS)).rejects.toMatchObject({ code: "rate_limited" });
-  });
+  }, 120_000);
 
   it("spends one client's budget before the ceiling every visitor shares", async () => {
     await initializePlayground();

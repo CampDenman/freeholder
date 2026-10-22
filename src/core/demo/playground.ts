@@ -45,6 +45,11 @@ export async function initializePlayground(): Promise<void> {
  * Record how many rows each capped table holds now that the sample site is
  * installed. Boot calls this after the demo seed (instrumentation.node.ts),
  * so every hourly reset starts the caps from the freshly seeded sample.
+ *
+ * Once per database, never again: the hourly reset recreates the database,
+ * so the first boot after it is the one that follows the seed. A restart
+ * mid-hour (a crash, a heal, a deploy) must not count visitors' rows as
+ * seed and hand the caps back their headroom.
  */
 export async function markPlaygroundBaseline(): Promise<void> {
   if (env().FREEHOLDER_PLAYGROUND !== "1") return;
@@ -58,7 +63,7 @@ export async function markPlaygroundBaseline(): Promise<void> {
   await db()
     .insert(moduleSettings)
     .values({ module: PLAYGROUND_BASELINE_MODULE, config: { baseline } })
-    .onConflictDoUpdate({ target: moduleSettings.module, set: { config: { baseline } } });
+    .onConflictDoNothing({ target: moduleSettings.module });
 }
 
 export const enterPlayground = defineService({

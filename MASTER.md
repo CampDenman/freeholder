@@ -4174,7 +4174,8 @@ project without silent telemetry, and ready to carry money.
   `POST /api/analytics/vitals` answered 401 on every page. `PLAYGROUND_PUBLIC`
   now admits the public site's verbs under new `PLAYGROUND_ROW_CAPS`
   entries counted as growth past the post-seed baseline
-  (`markPlaygroundBaseline`, so the seed never uses visitor headroom), a
+  (`markPlaygroundBaseline`, once per reset database, so the seed never
+  uses visitor headroom and a mid-hour restart never refunds it), a
   shared `contacts` cap (public verbs resolve contacts as the
   system), a per-client minute/hour budget spent before the shared ceiling
   (`anonymousClientKey`, only when a client address is known) and an 8 KB
