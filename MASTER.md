@@ -445,8 +445,10 @@ Customer access is a session tied to the invoice contact or an invoice-specific
 HMAC link (`SESSION_SECRET`, bound to the contact and issue date). Paid, void
 and refunded invoices retire the email link; the customer's session retains
 read-only history. `invoicing.send` queues that link in the encrypted mail
-outbox. Hosted checkout commits its payment attempt before provider I/O and
-attaches the provider response in a fresh authorized transaction. Repeated
+outbox. Hosted checkout (customer, owner and API alike), capture, provider refunds
+and in-person Terminal takes commit their payment or refund attempt before
+provider I/O and apply the provider response in a fresh authorized
+transaction. Repeated
 requests reuse the outstanding attempt; a timeout cannot create a new charge.
 The provider return has a separate seven-day capability exposing only payment
 status, currency and amount. A redirect never settles money: provider checks
@@ -9634,6 +9636,22 @@ schema they inherit reads as a designed thing rather than an excavation.
   `tests/core/owner-password-script.test.ts`. Refreshed review packet records
   the remaining API-token/ephemeral-Basic hashing findings for independent
   disposition. These repairs do not close C11.10.)*
+  Audit follow-up 2026-10-21 (payment provider boundary): owner/API hosted
+  checkout, checkout capture, provider refunds, saved-method revocation and
+  Stripe Terminal collection/refunds called their provider inside a service
+  transaction, so a rollback after the provider acted could move money with
+  no ledger row. Each is now a `defineOrchestratedService`: the attempt or
+  refund reservation commits under its idempotency key first, the provider
+  runs with no transaction open, and its answer is applied in a fresh one.
+  A crash in between leaves a `created` attempt that a same-key retry,
+  webhooks and the reconciliation views converge; a definitive provider
+  refusal is recorded and releases any reservation. Public service names and
+  contracts are unchanged. Regressions in
+  `tests/core/payment-provider-service.test.ts` and
+  `tests/core/invoicing-pos.test.ts` failed before the repair (open
+  transaction observed during provider I/O; attempt lost on timeout).
+  Changeset `payment-provider-boundary.md`. This repair is not independent
+  review evidence.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.

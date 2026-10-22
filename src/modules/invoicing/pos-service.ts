@@ -5,11 +5,11 @@
 
 import { desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { pointOfSaleAdapter, pointOfSaleAdapters } from "@/adapters/point-of-sale";
+import { pointOfSaleAdapter, pointOfSaleAdapters, type PointOfSaleAdapter, type PointOfSalePayment } from "@/adapters/point-of-sale";
 import { AdapterError } from "@/adapters/types";
 import { listed } from "@/core/contract";
 import { listLocations } from "@/core/locations/service";
-import { defineService, ServiceError } from "@/core/service";
+import { defineOrchestratedService, defineService, ServiceError } from "@/core/service";
 import {
   adapterStatus,
   paymentReceipt,
@@ -20,11 +20,15 @@ import {
 import {
   createPayment,
   createRefund,
+  failPayment,
+  failRefund,
   getPaymentReceipt,
   settlePayment,
   settleRefund,
   startPayment,
+  startRefund,
 } from "./invoice-service";
+import { definitiveRefusal, getPayment } from "./payment-provider-service";
 import { invoices, payments } from "./schema";
 
 const id = z.string().uuid();
@@ -66,24 +70,31 @@ export const listPointOfSale = defineService({
       })),
 });
 
-export const beginInPersonPayment = defineService({
-  name: "invoicing.beginInPersonPayment",
-  summary: "Collect cash or a Terminal/tap-to-pay take against an issued invoice.",
+const beginInPersonInput = z.object({
+  invoiceId: id,
+  locationId: id,
+  method: z.enum(IN_PERSON_METHODS),
+  amountMinor: z.number().int().positive().optional(),
+  readerRef: z.string().trim().min(1).max(200).optional(),
+  idempotencyKey: z.string().trim().min(8).max(240),
+});
+
+/** Validates the take and, for Terminal, commits its attempt before the reader is contacted. */
+export const claimInPersonPayment = defineService({
+  name: "invoicing.claimInPersonPayment",
+  summary: "Check an in-person take and durably reserve a Terminal attempt before contacting the reader.",
   kind: "mutation",
   permission: "scoped",
   stepUp: true,
-  input: z.object({
-    invoiceId: id,
-    locationId: id,
-    method: z.enum(IN_PERSON_METHODS),
-    amountMinor: z.number().int().positive().optional(),
-    readerRef: z.string().trim().min(1).max(200).optional(),
-    idempotencyKey: z.string().trim().min(8).max(240),
-  }),
+  external: false,
+  input: beginInPersonInput,
   output: z.object({
-    payment: paymentRow,
-    collection: posCollection,
-    receipt: paymentReceipt.nullable(),
+    invoiceId: id,
+    currency: z.string(),
+    locationId: id,
+    locationName: z.string(),
+    amountMinor: z.number().int().positive(),
+    payment: paymentRow.nullable(),
   }),
   handler: async (input, ctx) => {
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
@@ -93,37 +104,9 @@ export const beginInPersonPayment = defineService({
     if (!location) throw new ServiceError("not_found", "That location is not here.");
     const amountMinor = input.amountMinor ?? invoice.totalMinor - invoice.paidMinor;
     if (amountMinor <= 0) throw new ServiceError("validation", "That invoice has no outstanding balance.");
-
-    if (input.method === "cash") {
-      const adapter = pointOfSaleAdapter("manual");
-      const collected = await adapter.collect({
-        invoiceId: invoice.id,
-        locationId: location.id,
-        currency: invoice.currency,
-        amountMinor,
-        idempotencyKey: input.idempotencyKey,
-      }).catch(posError);
-      const payment = await ctx.call(createPayment, {
-        invoiceId: invoice.id,
-        provider: "manual",
-        method: "cash",
-        amountMinor,
-        idempotencyKey: input.idempotencyKey,
-        metadata: { inPerson: true, locationId: location.id, locationName: location.name },
-      });
-      const settled = await ctx.call(settlePayment, {
-        id: payment.id,
-        providerRef: collected.providerRef,
-      });
-      const receipt = await ctx.call(getPaymentReceipt, { paymentId: settled.id });
-      ctx.queueEvent("payment.inPerson", {
-        paymentId: settled.id,
-        invoiceId: invoice.id,
-        method: input.method,
-        locationId: location.id,
-      });
-      return { payment: settled, collection: collected, receipt };
-    }
+    const claimed = { invoiceId: invoice.id, currency: invoice.currency, locationId: location.id, locationName: location.name, amountMinor };
+    // Cash needs no external party, so its payment is written once, settled.
+    if (input.method === "cash") return { ...claimed, payment: null };
 
     const adapter = pointOfSaleAdapter("stripe");
     if (!adapter.status.available) throw new ServiceError("conflict", adapter.status.message);
@@ -133,6 +116,7 @@ export const beginInPersonPayment = defineService({
     if (input.method === "card_present" && !adapter.capabilities().countertop) {
       throw new ServiceError("conflict", "A card reader is not available on this adapter.");
     }
+    // Idempotent on (provider, key): a retry after a crash reuses this attempt.
     const payment = await ctx.call(createPayment, {
       invoiceId: invoice.id,
       provider: "stripe",
@@ -146,35 +130,110 @@ export const beginInPersonPayment = defineService({
         readerRef: input.readerRef ?? null,
       },
     });
-    const collected = await adapter
-      .collect({
-        invoiceId: invoice.id,
-        locationId: location.id,
-        currency: invoice.currency,
-        amountMinor,
-        idempotencyKey: input.idempotencyKey,
-        readerRef: input.readerRef,
-      })
-      .catch(posError);
-    const started = await ctx.call(startPayment, {
-      id: payment.id,
-      providerRef: collected.providerRef,
-    });
+    return { ...claimed, payment };
+  },
+});
+
+export const applyInPersonPayment = defineService({
+  name: "invoicing.applyInPersonPayment",
+  summary: "Record what the in-person adapter reported for a claimed take.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  external: false,
+  input: z.object({
+    invoiceId: id,
+    locationId: id,
+    locationName: z.string(),
+    method: z.enum(IN_PERSON_METHODS),
+    amountMinor: z.number().int().positive(),
+    idempotencyKey: z.string().trim().min(8).max(240),
+    paymentId: id.optional(),
+    collection: posCollection,
+  }),
+  output: z.object({
+    payment: paymentRow,
+    collection: posCollection,
+    receipt: paymentReceipt.nullable(),
+  }),
+  handler: async (input, ctx) => {
+    const collected = input.collection;
+    const payment = input.paymentId
+      ? await ctx.call(startPayment, { id: input.paymentId, providerRef: collected.providerRef })
+      : await ctx.call(createPayment, {
+          invoiceId: input.invoiceId,
+          provider: "manual",
+          method: "cash",
+          amountMinor: input.amountMinor,
+          idempotencyKey: input.idempotencyKey,
+          metadata: { inPerson: true, locationId: input.locationId, locationName: input.locationName },
+        });
     ctx.queueEvent("payment.inPerson", {
-      paymentId: started.id,
-      invoiceId: invoice.id,
+      paymentId: payment.id,
+      invoiceId: input.invoiceId,
       method: input.method,
-      locationId: location.id,
+      locationId: input.locationId,
     });
     if (collected.status === "succeeded") {
-      const settled = await ctx.call(settlePayment, {
-        id: started.id,
-        providerRef: collected.providerRef,
-      });
+      const settled = await ctx.call(settlePayment, { id: payment.id, providerRef: collected.providerRef });
       const receipt = await ctx.call(getPaymentReceipt, { paymentId: settled.id });
       return { payment: settled, collection: collected, receipt };
     }
-    return { payment: started, collection: collected, receipt: null };
+    if (collected.status === "failed") {
+      const failed = await ctx.call(failPayment, { id: payment.id, code: "provider_failed", message: "The card reader reported that the payment failed." });
+      return { payment: failed, collection: collected, receipt: null };
+    }
+    return { payment, collection: collected, receipt: null };
+  },
+});
+
+/**
+ * C11.10: Terminal collection commits its attempt first, contacts the reader
+ * with no transaction open, and records the answer in a fresh one. A crash in
+ * between leaves a `created` in-person payment that
+ * `reconcileInPersonPayments` lists and a same-key retry converges.
+ */
+export const beginInPersonPayment = defineOrchestratedService({
+  name: "invoicing.beginInPersonPayment",
+  summary: "Collect cash or a Terminal/tap-to-pay take against an issued invoice.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  input: beginInPersonInput,
+  output: z.object({
+    payment: paymentRow,
+    collection: posCollection,
+    receipt: paymentReceipt.nullable(),
+  }),
+  handler: async (input, actor) => {
+    const claimed = await claimInPersonPayment.call(input, actor);
+    const adapter = pointOfSaleAdapter(claimed.payment ? "stripe" : "manual");
+    let collected: PointOfSalePayment;
+    try {
+      collected = await adapter.collect({
+        invoiceId: claimed.invoiceId,
+        locationId: claimed.locationId,
+        currency: claimed.currency,
+        amountMinor: claimed.amountMinor,
+        idempotencyKey: input.idempotencyKey,
+        ...(claimed.payment ? { readerRef: input.readerRef } : {}),
+      });
+    } catch (error) {
+      if (claimed.payment?.status === "created" && definitiveRefusal(error)) {
+        await failPayment.call({ id: claimed.payment.id, code: "provider_refused", message: "The card reader service refused this payment." }, actor);
+      }
+      return posError(error);
+    }
+    return applyInPersonPayment.call({
+      invoiceId: claimed.invoiceId,
+      locationId: claimed.locationId,
+      locationName: claimed.locationName,
+      method: input.method,
+      amountMinor: claimed.amountMinor,
+      idempotencyKey: input.idempotencyKey,
+      paymentId: claimed.payment?.id,
+      collection: collected,
+    }, actor);
   },
 });
 
@@ -224,7 +283,12 @@ export const reconcileInPersonPayments = defineService({
   },
 });
 
-export const refundInPersonPayment = defineService({
+/**
+ * C11.10: the refund reservation commits before the adapter is asked, and the
+ * answer is applied in a fresh transaction. A crash in between leaves a
+ * `created` refund holding the amount, which a same-key retry converges.
+ */
+export const refundInPersonPayment = defineOrchestratedService({
   name: "invoicing.refundInPersonPayment",
   summary: "Refund an in-person take through the adapter that collected it.",
   kind: "mutation",
@@ -237,37 +301,47 @@ export const refundInPersonPayment = defineService({
     idempotencyKey: z.string().trim().min(8).max(240),
   }),
   output: refundRow,
-  handler: async (input, ctx) => {
-    const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
-    if (!payment) throw new ServiceError("not_found", "That payment is not here.");
+  handler: async (input, actor) => {
+    const { payment } = await getPayment.call({ id: input.paymentId }, actor);
     if (!IN_PERSON_METHODS.includes(payment.method as (typeof IN_PERSON_METHODS)[number])) {
       throw new ServiceError("conflict", "That payment was not collected in person.");
     }
-    const adapterId = payment.provider === "stripe" ? "stripe" : "manual";
-    const adapter = pointOfSaleAdapter(adapterId);
-    const refund = await ctx.call(createRefund, {
+    const adapter = pointOfSaleAdapter(payment.provider === "stripe" ? "stripe" : "manual");
+    const refund = await createRefund.call({
       paymentId: payment.id,
       amountMinor: input.amountMinor,
       reason: input.reason,
       idempotencyKey: input.idempotencyKey,
-    });
-    const collected = await adapter
-      .refund({
+    }, actor);
+    if (refund.status !== "created" && refund.status !== "processing") return refund;
+    let result: Awaited<ReturnType<PointOfSaleAdapter["refund"]>>;
+    try {
+      result = await adapter.refund({
         providerRef: payment.providerRef ?? payment.id,
         currency: payment.currency,
         amountMinor: input.amountMinor,
         idempotencyKey: input.idempotencyKey,
-      })
-      .catch(posError);
-    if (collected.status === "failed") {
+      });
+    } catch (error) {
+      if (refund.status === "created" && definitiveRefusal(error)) {
+        await failRefund.call({ id: refund.id, code: "provider_refused", message: "The in-person adapter refused that refund." }, actor);
+      }
+      return posError(error);
+    }
+    if (result.status === "failed") {
+      // Record the refusal (releasing the reservation) before reporting it.
+      await failRefund.call({ id: refund.id, code: "provider_failed", message: "The in-person adapter refused that refund." }, actor);
       throw new ServiceError("conflict", "The in-person adapter refused that refund.");
     }
-    return ctx.call(settleRefund, { id: refund.id, providerRef: collected.providerRef });
+    if (result.status === "pending") return startRefund.call({ id: refund.id, providerRef: result.providerRef }, actor);
+    return settleRefund.call({ id: refund.id, providerRef: result.providerRef }, actor);
   },
 });
 
 export default [
   listPointOfSale,
+  claimInPersonPayment,
+  applyInPersonPayment,
   beginInPersonPayment,
   listInPersonPayments,
   reconcileInPersonPayments,

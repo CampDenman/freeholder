@@ -10,12 +10,12 @@ import {
   LEDGER_PAYMENT_PROVIDER_IDS,
   isHostedPaymentProvider,
 } from "@/adapters/payments/providers";
-import type { PaymentProviderEvent, SavedPaymentMethodEvidence } from "@/adapters/payments";
+import type { PaymentAdapter, PaymentProviderEvent, SavedPaymentMethodEvidence } from "@/adapters/payments";
 import { AdapterError } from "@/adapters/types";
 import { contacts } from "@/core/contacts/schema";
 import { env } from "@/core/env";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { actorString, defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import { actorString, defineOrchestratedService, defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import {
   adapterStatus,
   checkoutSession,
@@ -541,26 +541,36 @@ export const listPaymentProviders = defineService({
   }))),
 });
 
-export const beginPaymentCheckout = defineService({
-  name: "invoicing.beginPaymentCheckout",
-  summary: "Create one idempotent hosted checkout against an issued invoice.",
+const beginCheckoutInput = z.object({
+  invoiceId: z.string().uuid(),
+  provider,
+  amountMinor: positiveMinor.optional(),
+  methodIds: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
+  saveMethod: z.boolean().default(false),
+  saveMethodConsent: z.literal(true).optional(),
+  successUrl: z.string().url().max(2_000),
+  cancelUrl: z.string().url().max(2_000),
+  idempotencyKey,
+});
+
+/**
+ * A provider that answered "this request is invalid" took no money and, under
+ * the same idempotency key, will give the same answer again. Every other
+ * failure (timeout, outage, rate limit, credentials) may hide an accepted
+ * request, so the committed attempt is kept for a same-key retry.
+ */
+export function definitiveRefusal(error: unknown): boolean {
+  return error instanceof AdapterError && error.code === "invalid_request";
+}
+
+export const claimPaymentCheckout = defineService({
+  name: "invoicing.claimPaymentCheckout",
+  summary: "Durably reserve an owner hosted-checkout attempt before contacting its provider.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({
-    invoiceId: z.string().uuid(),
-    provider,
-    amountMinor: positiveMinor.optional(),
-    methodIds: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
-    saveMethod: z.boolean().default(false),
-    saveMethodConsent: z.literal(true).optional(),
-    successUrl: z.string().url().max(2_000),
-    cancelUrl: z.string().url().max(2_000),
-    idempotencyKey,
-  }),
-  output: z.object({
-    payment: paymentRow,
-    checkout: checkoutSession,
-  }),
+  external: false,
+  input: beginCheckoutInput,
+  output: z.object({ payment: paymentRow, invoice: invoiceRow, email: z.string(), name: z.string(), providerCustomerRef: z.string().nullable() }),
   handler: async (input, ctx) => {
     if (input.saveMethod && input.saveMethodConsent !== true) throw new ServiceError("validation", "Saving a payment method requires the customer's explicit consent.");
     const adapter = paymentAdapter(input.provider);
@@ -574,7 +584,8 @@ export const beginPaymentCheckout = defineService({
     if (!contact?.email) throw new ServiceError("validation", "Hosted checkout needs an email address on the invoice contact.");
     const amountMinor = input.amountMinor ?? invoice.totalMinor - invoice.paidMinor;
     const [customer] = await ctx.tx.select().from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, invoice.contactId), eq(paymentProviderCustomers.provider, input.provider))).orderBy(desc(paymentProviderCustomers.updatedAt)).limit(1);
-    const providerCustomerRef = customer?.providerCustomerRef;
+    // Idempotent on (provider, key): a retry after a crash or timeout returns
+    // this same committed attempt instead of minting a second one.
     const payment = await ctx.call(createPayment, {
       invoiceId: invoice.id,
       provider: input.provider,
@@ -583,55 +594,86 @@ export const beginPaymentCheckout = defineService({
       idempotencyKey: input.idempotencyKey,
       metadata: { saveMethodRequested: input.saveMethod, methodIds: input.methodIds },
     });
-    try {
-      const checkout = await adapter.createCheckout({
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.number,
-        contactId: invoice.contactId,
-        currency: invoice.currency,
-        amountMinor,
-        description: `Invoice ${invoice.number}`,
-        customer: { email: contact.email, name: contact.name },
-        successUrl: sameInstanceUrl(input.successUrl),
-        cancelUrl: sameInstanceUrl(input.cancelUrl),
-        idempotencyKey: input.idempotencyKey,
-        methodIds: input.methodIds,
-        saveMethod: input.saveMethod,
-        providerCustomerRef,
-      });
-      const updated = await ctx.call(startPayment, {
-        id: payment.id,
-        providerRef: checkout.paymentRef ?? checkout.providerRef,
-        providerCheckoutRef: checkout.providerRef,
-      });
-      return { payment: updated, checkout };
-    } catch (error) { return adapterFailure(error); }
+    return { payment, invoice, email: contact.email, name: contact.name, providerCustomerRef: customer?.providerCustomerRef ?? null };
   },
 });
 
-export const completePaymentCheckout = defineService({
+/**
+ * C11.10: the attempt commits before provider I/O, the provider is called with
+ * no transaction open, and its answer is applied in a fresh one. A crash in
+ * between leaves a `created` attempt that a same-key retry, the provider
+ * webhook (matched by invoice) and `reconcilePaymentProviders` all converge.
+ */
+export const beginPaymentCheckout = defineOrchestratedService({
+  name: "invoicing.beginPaymentCheckout",
+  summary: "Create one idempotent hosted checkout against an issued invoice.",
+  kind: "mutation",
+  permission: "scoped",
+  input: beginCheckoutInput,
+  output: z.object({
+    payment: paymentRow,
+    checkout: checkoutSession,
+  }),
+  handler: async (input, actor) => {
+    const successUrl = sameInstanceUrl(input.successUrl);
+    const cancelUrl = sameInstanceUrl(input.cancelUrl);
+    const source = await claimPaymentCheckout.call(input, actor);
+    const { payment, invoice } = source;
+    let checkout: z.infer<typeof checkoutSession>;
+    try {
+      checkout = await paymentAdapter(input.provider).createCheckout({
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.number!,
+        contactId: invoice.contactId,
+        currency: invoice.currency,
+        amountMinor: payment.amountMinor,
+        description: `Invoice ${invoice.number}`,
+        customer: { email: source.email, name: source.name },
+        successUrl,
+        cancelUrl,
+        idempotencyKey: input.idempotencyKey,
+        methodIds: input.methodIds,
+        saveMethod: input.saveMethod,
+        providerCustomerRef: source.providerCustomerRef ?? undefined,
+      });
+    } catch (error) {
+      if (definitiveRefusal(error) && payment.status === "created") {
+        await failPayment.call({ id: payment.id, code: "provider_refused", message: `${input.provider} refused to open this checkout.` }, actor);
+      }
+      return adapterFailure(error);
+    }
+    const updated = await startPayment.call({
+      id: payment.id,
+      providerRef: checkout.paymentRef ?? checkout.providerRef,
+      providerCheckoutRef: checkout.providerRef,
+    }, actor);
+    return { payment: updated, checkout };
+  },
+});
+
+export const completePaymentCheckout = defineOrchestratedService({
   name: "invoicing.completePaymentCheckout",
   summary: "Capture or recheck an approved hosted checkout and converge its result.",
   kind: "mutation",
   permission: "scoped",
   input: z.object({ paymentId: z.string().uuid(), idempotencyKey }),
   output: paymentRow,
-  handler: async (input, ctx) => {
-    const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
-    if (!payment) throw new ServiceError("not_found", "That payment is not here.");
+  handler: async (input, actor) => {
+    const { payment } = await getPayment.call({ id: input.paymentId }, actor);
     if (payment.status === "succeeded") return payment;
     if (!payment.providerCheckoutRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment has no hosted checkout to complete.");
+    let result: Awaited<ReturnType<PaymentAdapter["captureCheckout"]>>;
     try {
-      const result = await paymentAdapter(payment.provider).captureCheckout({ checkoutRef: payment.providerCheckoutRef, idempotencyKey: input.idempotencyKey });
-      assertMovement(payment, result);
-      if (result.status === "succeeded") return ctx.call(settlePayment, { id: payment.id, providerRef: result.providerRef, processedAt: result.occurredAt ? new Date(result.occurredAt) : new Date() });
-      if (result.status === "failed") return ctx.call(failPayment, { id: payment.id, code: "provider_failed", message: `${payment.provider} reported that checkout failed.` });
-      return payment;
+      result = await paymentAdapter(payment.provider).captureCheckout({ checkoutRef: payment.providerCheckoutRef, idempotencyKey: input.idempotencyKey });
     } catch (error) { return adapterFailure(error); }
+    assertMovement(payment, result);
+    if (result.status === "succeeded") return settlePayment.call({ id: payment.id, providerRef: result.providerRef, processedAt: result.occurredAt ? new Date(result.occurredAt) : new Date() }, actor);
+    if (result.status === "failed") return failPayment.call({ id: payment.id, code: "provider_failed", message: `${payment.provider} reported that checkout failed.` }, actor);
+    return payment;
   },
 });
 
-export const submitProviderRefund = defineService({
+export const submitProviderRefund = defineOrchestratedService({
   name: "invoicing.submitProviderRefund",
   summary: "Submit an idempotent provider refund through the shared refund ledger.",
   kind: "mutation",
@@ -639,14 +681,18 @@ export const submitProviderRefund = defineService({
   stepUp: true,
   input: z.object({ paymentId: z.string().uuid(), amountMinor: positiveMinor, reason: z.string().trim().min(3).max(1_000), idempotencyKey }),
   output: refundRow,
-  handler: async (input, ctx) => {
-    const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
-    if (!payment?.providerRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment does not have a refundable hosted-provider settlement.");
+  handler: async (input, actor) => {
+    const { payment } = await getPayment.call({ id: input.paymentId }, actor);
+    if (!payment.providerRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment does not have a refundable hosted-provider settlement.");
     if (!paymentAdapter(payment.provider).capabilities().refunds) throw new ServiceError("conflict", `${payment.provider} refunds are not implemented by this adapter.`);
-    const refund = await ctx.call(createRefund, input);
+    // The reservation commits before the provider is asked. A crash after the
+    // provider accepted leaves this `created` refund holding the amount, and a
+    // same-key retry reuses it rather than reserving (or refunding) twice.
+    const refund = await createRefund.call(input, actor);
     if (refund.status !== "created") return refund;
+    let result: Awaited<ReturnType<PaymentAdapter["refund"]>>;
     try {
-      const result = await paymentAdapter(payment.provider).refund({
+      result = await paymentAdapter(payment.provider).refund({
         paymentId: payment.id,
         providerRef: payment.providerRef,
         currency: payment.currency,
@@ -654,10 +700,15 @@ export const submitProviderRefund = defineService({
         reason: input.reason,
         idempotencyKey: input.idempotencyKey,
       });
-      if (result.status === "succeeded") return ctx.call(settleRefund, { id: refund.id, providerRef: result.providerRef, processedAt: new Date() });
-      if (result.status === "failed") return ctx.call(failRefund, { id: refund.id, code: "provider_failed", message: `${payment.provider} reported that the refund failed.` });
-      return ctx.call(startRefund, { id: refund.id, providerRef: result.providerRef });
-    } catch (error) { return adapterFailure(error); }
+    } catch (error) {
+      if (definitiveRefusal(error)) {
+        await failRefund.call({ id: refund.id, code: "provider_refused", message: `${payment.provider} refused this refund.` }, actor);
+      }
+      return adapterFailure(error);
+    }
+    if (result.status === "succeeded") return settleRefund.call({ id: refund.id, providerRef: result.providerRef, processedAt: new Date() }, actor);
+    if (result.status === "failed") return failRefund.call({ id: refund.id, code: "provider_failed", message: `${payment.provider} reported that the refund failed.` }, actor);
+    return startRefund.call({ id: refund.id, providerRef: result.providerRef }, actor);
   },
 });
 
@@ -796,7 +847,46 @@ export const getPayment = defineService({
   },
 });
 
-export const revokeSavedPaymentMethod = defineService({
+export const savedPaymentMethodSource = defineService({
+  name: "invoicing.savedPaymentMethodSource",
+  summary: "Read one saved payment method before revoking it with its provider.",
+  kind: "query",
+  permission: "scoped",
+  external: false,
+  input: z.object({ id: z.string().uuid() }),
+  output: paymentMethodRow,
+  handler: async (input, ctx) => {
+    const [method] = await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, input.id)).limit(1);
+    if (!method) throw new ServiceError("not_found", "That saved payment method is not here.");
+    return method;
+  },
+});
+
+export const applySavedPaymentMethodRevocation = defineService({
+  name: "invoicing.applySavedPaymentMethodRevocation",
+  summary: "Record that the provider revoked a saved payment method.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  external: false,
+  input: z.object({ id: z.string().uuid() }),
+  output: paymentMethodRow,
+  handler: async (input, ctx) => {
+    const [method] = await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, input.id)).limit(1).for("update");
+    if (!method) throw new ServiceError("not_found", "That saved payment method is not here.");
+    if (method.status === "revoked") return method;
+    const now = new Date();
+    const [updated] = await ctx.tx.update(paymentMethods).set({ status: "revoked", revokedAt: now, providerStatusAt: now }).where(eq(paymentMethods.id, method.id)).returning();
+    return updated!;
+  },
+});
+
+/**
+ * Provider revocation is idempotent under its key. A crash after the provider
+ * answered leaves the method `active` here until a same-key retry or the
+ * provider's `saved_method_removed` event records the revocation.
+ */
+export const revokeSavedPaymentMethod = defineOrchestratedService({
   name: "invoicing.revokeSavedPaymentMethod",
   summary: "Revoke a provider token and retain only masked revocation evidence.",
   kind: "mutation",
@@ -804,16 +894,13 @@ export const revokeSavedPaymentMethod = defineService({
   stepUp: true,
   input: z.object({ id: z.string().uuid(), idempotencyKey }),
   output: paymentMethodRow,
-  handler: async (input, ctx) => {
-    const [method] = await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, input.id)).limit(1);
-    if (!method) throw new ServiceError("not_found", "That saved payment method is not here.");
+  handler: async (input, actor) => {
+    const method = await savedPaymentMethodSource.call({ id: input.id }, actor);
     if (method.status === "revoked") return method;
     try {
       await paymentAdapter(method.provider).revokeSavedMethod({ providerRef: method.providerMethodRef, idempotencyKey: input.idempotencyKey });
     } catch (error) { return adapterFailure(error); }
-    const now = new Date();
-    const [updated] = await ctx.tx.update(paymentMethods).set({ status: "revoked", revokedAt: now, providerStatusAt: now }).where(eq(paymentMethods.id, method.id)).returning();
-    return updated!;
+    return applySavedPaymentMethodRevocation.call({ id: method.id }, actor);
   },
 });
 
@@ -859,6 +946,7 @@ export default [
   // same thing as the registry knowing it exists.
   processPaymentProviderEvents,
   listPaymentProviders,
+  claimPaymentCheckout,
   beginPaymentCheckout,
   completePaymentCheckout,
   submitProviderRefund,
@@ -867,6 +955,8 @@ export default [
   listSavedPaymentMethods,
   listPayments,
   getPayment,
+  savedPaymentMethodSource,
+  applySavedPaymentMethodRevocation,
   revokeSavedPaymentMethod,
   listPaymentDisputes,
   reconcilePaymentProviders,

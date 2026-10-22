@@ -192,6 +192,13 @@ const CALLER_AUTHORIZED_PHASES = [
   "invoicing.applyCustomerCheckout",
   "invoicing.customerPaymentSource",
   "invoicing.applyCustomerPayment",
+  // C11.10: owner hosted checkout, in-person takes and method revocation
+  // commit before provider I/O and apply its answer in a fresh transaction.
+  "invoicing.claimPaymentCheckout",
+  "invoicing.savedPaymentMethodSource",
+  "invoicing.applySavedPaymentMethodRevocation",
+  "invoicing.claimInPersonPayment",
+  "invoicing.applyInPersonPayment",
   "demo.installApply",
   "demo.installGuard",
   "connections.applyCalendarOAuthCompletion",
