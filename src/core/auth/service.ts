@@ -266,13 +266,24 @@ export const changePassword = defineService({
   rateLimit: {
     limit: 10,
     windowSeconds: 15 * 60,
-    subject: (_input) => "change-password",
+    // Per account (C11.10): one shared bucket let any signed-in person lock
+    // every other account out of changing its password for the window.
+    subject: (_input, actor) => (actor.kind === "user" ? `user:${actor.userId}` : undefined),
     message: "Too many attempts. Wait a few minutes and try again.",
   },
   output: okResult.extend({ otherSessionsRevoked: z.number().int() }),
   handler: async (input, ctx) => {
     if (ctx.actor.kind !== "user") {
       throw new ServiceError("permission", "Sign in to change your password.");
+    }
+    // A personal API key carries no session and so no step-up state; letting
+    // it through would skip two-factor confirmation entirely (C11.10). A
+    // password is changed from a signed-in browser session, nowhere else.
+    if (ctx.actor.keyScopes || !ctx.actor.sessionId) {
+      throw new ServiceError(
+        "permission",
+        "Change your password from a signed-in browser session, not with an API key.",
+      );
     }
     if (
       ctx.actor.security?.twoFactorEnrolled &&

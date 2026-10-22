@@ -301,9 +301,27 @@ describe.runIf(hasDatabase)("sharing", () => {
       input: { path: string },
       actor: Actor,
     ) => string | undefined;
-    const actor: Actor = { kind: "anonymous", request: { ip: "203.0.113.9" } };
-    expect(subject({ path: "one" }, actor)).toBe("ip:203.0.113.9");
-    expect(subject({ path: "two" }, actor)).toBe("ip:203.0.113.9");
+    const actor: Actor = { kind: "anonymous", request: { ip: "203.0.113.9", trustedIp: "198.51.100.4" } };
+    expect(subject({ path: "one" }, actor)).toBe("ip:198.51.100.4");
+    expect(subject({ path: "two" }, actor)).toBe("ip:198.51.100.4");
+  });
+
+  it("never keys a limit on a client-written forwarding address (C11.10)", () => {
+    const subject = shareVia.def.rateLimit!.subject as (
+      input: { path: string },
+      actor: Actor,
+    ) => string | undefined;
+    // No trusted proxy header: the forwarded address keys the visitor, so
+    // nobody can spend everybody's allowance, and it is marked untrusted.
+    const first: Actor = { kind: "anonymous", request: { ip: "203.0.113.9" } };
+    const second: Actor = { kind: "anonymous", request: { ip: "203.0.113.10" } };
+    expect(subject({ path: "one" }, first)).not.toBe(subject({ path: "one" }, second));
+    expect(subject({ path: "one" }, first)).toBe("untrusted-ip:203.0.113.9");
+    // The forgeable remainder is bounded site-wide.
+    expect(shareVia.def.rateLimit!.untrustedBackstop).toMatchObject({ limit: 5_000 });
+    // A validated address always wins over the forwarded one.
+    expect(subject({ path: "one" }, { kind: "anonymous", request: { ip: "203.0.113.9", trustedIp: "198.51.100.4" } }))
+      .toBe("ip:198.51.100.4");
   });
 
   it("offers no channels when an owner unticks every one", async () => {

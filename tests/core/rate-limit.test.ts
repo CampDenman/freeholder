@@ -8,8 +8,9 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { login, registerOwner } from "@/core/auth/service";
-import { consume, rateLimitKey, reset } from "@/core/security/rate-limit";
-import { ServiceError } from "@/core/service";
+import { anonymousClientKey, consume, rateLimitKey, reset } from "@/core/security/rate-limit";
+import { defineService, ServiceError } from "@/core/service";
+import { z } from "zod";
 import {
   ANONYMOUS,
   closeDb,
@@ -109,6 +110,65 @@ describe.runIf(hasDatabase)("rate limiting", () => {
 
       await reset(key);
       expect((await consume(key, policy)).allowed).toBe(true);
+    });
+  });
+
+  // C11.10: without TRUSTED_CLIENT_IP_HEADER the per-visitor key is the
+  // forwarded address. It must never become one shared bucket (a site-wide
+  // off switch), and the forgeable remainder is bounded by a backstop.
+  describe("anonymous callers without a validated address", () => {
+    const probe = defineService({
+      name: "test.untrustedProbe",
+      summary: "Rate-limit probe.",
+      kind: "query",
+      permission: "public",
+      input: z.object({}),
+      output: z.object({ ok: z.literal(true) }),
+      rateLimit: {
+        limit: 2,
+        windowSeconds: 60,
+        subject: (_input, actor) => anonymousClientKey(actor),
+        untrustedBackstop: { limit: 5, windowSeconds: 60 },
+        message: "Slow down.",
+      },
+      handler: async () => ({ ok: true as const }),
+    });
+    const from = (ip: string, trustedIp?: string) => ({
+      kind: "anonymous" as const,
+      request: { ip, ...(trustedIp ? { trustedIp } : {}) },
+    });
+
+    it("keys each forwarded address separately, so one visitor cannot lock out the rest", async () => {
+      await probe.call({}, from("203.0.113.1"));
+      await probe.call({}, from("203.0.113.1"));
+      expect((await failure(probe.call({}, from("203.0.113.1")))).code).toBe("rate_limited");
+      await expect(probe.call({}, from("203.0.113.2"))).resolves.toEqual({ ok: true });
+    });
+
+    it("bounds forged addresses with the site-wide backstop", async () => {
+      for (let index = 0; index < 5; index += 1) {
+        await probe.call({}, from(`198.51.100.${index}`));
+      }
+      expect((await failure(probe.call({}, from("198.51.100.99")))).code).toBe("rate_limited");
+      // A validated address is not counted against the untrusted ceiling.
+      await expect(probe.call({}, from("198.51.100.99", "192.0.2.7"))).resolves.toEqual({ ok: true });
+    });
+
+    it("does not let one client over its own limit spend the shared ceiling", async () => {
+      // Two allowed, eight refused by the client's own bucket.
+      for (let index = 0; index < 10; index += 1) {
+        await probe.call({}, from("203.0.113.77")).catch(() => undefined);
+      }
+      // Only the two accepted calls reached the backstop (limit 5), so three
+      // other visitors still get through.
+      for (const ip of ["192.0.2.11", "192.0.2.12", "192.0.2.13"]) {
+        await expect(probe.call({}, from(ip))).resolves.toEqual({ ok: true });
+      }
+    });
+
+    it("prefers the validated address when the deployment provides one", () => {
+      expect(anonymousClientKey(from("203.0.113.1", "192.0.2.7"))).toBe("ip:192.0.2.7");
+      expect(anonymousClientKey(from("203.0.113.1"))).toBe("untrusted-ip:203.0.113.1");
     });
   });
 

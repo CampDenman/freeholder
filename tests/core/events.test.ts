@@ -38,6 +38,7 @@ import { addTaxRate, createTaxZone, setTaxRegistration } from "@/modules/invoici
 import { createLocationService } from "@/core/locations/service";
 import { contacts } from "@/core/contacts/schema";
 import { ANONYMOUS, closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { consume, rateLimitKey } from "@/core/security/rate-limit";
 
 describe.runIf(hasDatabase)("events module", { timeout: 30_000 }, () => {
   beforeEach(async () => {
@@ -574,4 +575,43 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     expect(second.registration.status).toBe("reserved");
     expect(second.registration.id).not.toBe(first.registration.id);
   });
+
+  it("caps the free seats one public registration can take, but not staff's (C11.10)", async () => {
+    const { event, session, ticket } = await paidClass(100, 0);
+    const base = { eventId: event.id, sessionId: session.id, ticketId: ticket.id };
+    expect(
+      await failure(registerForEvent.call({ ...base, email: "made-up@example.test", quantity: 50 }, ANONYMOUS)),
+    ).toMatchObject({ code: "validation" });
+    const party = await registerForEvent.call({ ...base, email: "party@example.test", quantity: 10 }, ANONYMOUS);
+    expect(party.registration.status).toBe("confirmed");
+    const block = await registerForEvent.call({ ...base, email: "school@example.test", quantity: 40 }, OWNER);
+    expect(block.registration.quantity).toBe(40);
+  });
+
+  it("bounds public registrations per address (C11.10)", async () => {
+    const codes: string[] = [];
+    for (let index = 0; index < 11; index++) {
+      const { event, session, ticket } = await paidClass(5, 0);
+      codes.push(
+        await registerForEvent.call(
+          { eventId: event.id, sessionId: session.id, ticketId: ticket.id, email: "flood@example.test" },
+          ANONYMOUS,
+        ).then(() => "ok", (error: { code?: string }) => error.code ?? "error"),
+      );
+    }
+    expect(codes.slice(0, 10).every((code) => code === "ok")).toBe(true);
+    expect(codes[10]).toBe("rate_limited");
+  }, 120_000);
+
+  it("stops one client cycling made-up addresses, even without a trusted proxy (C11.10)", async () => {
+    const { event, session, ticket } = await paidClass(100, 0);
+    const key = rateLimitKey("events.register", "untrusted-ip:203.0.113.60");
+    for (let index = 0; index < 30; index++) await consume(key, { limit: 30, windowSeconds: 3600 });
+    const base = { eventId: event.id, sessionId: session.id, ticketId: ticket.id };
+    expect(
+      await failure(registerForEvent.call({ ...base, email: "new-name@example.test" }, { kind: "anonymous", request: { ip: "203.0.113.60" } })),
+    ).toMatchObject({ code: "rate_limited" });
+    const other = await registerForEvent.call({ ...base, email: "neighbour@example.test" }, { kind: "anonymous", request: { ip: "203.0.113.61" } });
+    expect(other.registration.status).toBe("confirmed");
+  }, 120_000);
 });

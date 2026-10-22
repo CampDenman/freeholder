@@ -6,7 +6,8 @@ import { and, asc, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isUniqueViolation } from "@/core/db";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineOrchestratedService, defineService, ServiceError, type ServiceContext } from "@/core/service";
+import { defineOrchestratedService, defineService, permits, ServiceError, type ServiceContext } from "@/core/service";
+import { anonymousClientKey, consumeAccepted, rateLimitKey } from "@/core/security/rate-limit";
 import { registerContactReference } from "@/core/contacts/service";
 import { listLocations } from "@/core/locations/service";
 import { resolveContact } from "@/core/contacts/service";
@@ -747,6 +748,17 @@ export const addEventTicket = defineService({
   },
 });
 
+/**
+ * C11.10: the most seats one public registration may take. A visitor can
+ * still bring a party; a made-up address cannot empty a session in one call.
+ * Staff registering on somebody's behalf keep the full range.
+ */
+const PUBLIC_SEATS_PER_REGISTRATION = 10;
+/** Public registrations one email address may make per hour. */
+const PUBLIC_REGISTRATION_LIMIT = { limit: 10, windowSeconds: 60 * 60 } as const;
+/** Per client network address; looser, since honest people share addresses. */
+const PUBLIC_CLIENT_LIMIT = { limit: 30, windowSeconds: 60 * 60 } as const;
+
 export const registerForEvent = defineService({
   name: "events.register",
   summary: "Register a contact for a session, holding paid seats behind an issued invoice and waitlisting when the session is full.",
@@ -768,6 +780,39 @@ export const registerForEvent = defineService({
     paymentUrl: z.string().url().nullable(),
   }),
   handler: async (input, ctx) => {
+    const staff = permits(ctx.actor, "scoped", "events.cancelRegistration", "mutation");
+    if (!staff) {
+      if (input.quantity > PUBLIC_SEATS_PER_REGISTRATION) {
+        throw new ServiceError(
+          "validation",
+          `One registration can hold up to ${PUBLIC_SEATS_PER_REGISTRATION} seats. Contact the organiser for a larger group.`,
+        );
+      }
+      // Counted in this transaction, so a refused registration costs nothing
+      // and the limit holds when another flow composes this one.
+      // The client address (validated, or forwarded when the deployment has
+      // no trusted header) stops one caller cycling made-up emails.
+      const keys: Array<[string, typeof PUBLIC_REGISTRATION_LIMIT | typeof PUBLIC_CLIENT_LIMIT]> = [
+        [`email:${input.email}`, PUBLIC_REGISTRATION_LIMIT],
+      ];
+      if (ctx.actor.request?.trustedIp || ctx.actor.request?.ip) {
+        keys.push([anonymousClientKey(ctx.actor), PUBLIC_CLIENT_LIMIT]);
+      }
+      for (const [key, policy] of keys) {
+        const verdict = await consumeAccepted(
+          ctx.tx,
+          rateLimitKey("events.register", key),
+          policy,
+        );
+        if (!verdict.allowed) {
+          throw new ServiceError(
+            "rate_limited",
+            "That is a lot of registrations at once. Try again later.",
+            verdict.retryAfterSeconds,
+          );
+        }
+      }
+    }
     const event = await loadEvent(ctx, input.eventId);
     if (event.status !== "published") {
       throw new ServiceError("conflict", "This event is not open for registration.");

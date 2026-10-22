@@ -119,6 +119,42 @@ describe("the compose stack does not contradict the storage mandate", () => {
   }
 });
 
+describe("a trusted client address only where a proxy overwrites it (C11.10)", () => {
+  const recipesWithCaddy = [
+    { caddy: "digitalocean-droplet/infra/Caddyfile", compose: "digitalocean-droplet/infra/compose.yml" },
+    { caddy: "docker-selfhost/docker-updater/Caddyfile", compose: "docker-selfhost/docker-updater/compose.yml" },
+    { caddy: "docker-selfhost/playground/demo.freeholder.ai.caddy", compose: "docker-selfhost/playground/compose.yml" },
+  ];
+
+  for (const recipe of recipesWithCaddy) {
+    it(`${recipe.compose}: Caddy sets the header the app trusts, and the app is not published`, () => {
+      const caddy = readFileSync(join(DEPLOY, recipe.caddy), "utf8");
+      const compose = readFileSync(join(DEPLOY, recipe.compose), "utf8");
+      expect(caddy).toMatch(/header_up X-Freeholder-Client-Ip \{client_ip\}/);
+      expect(compose).toMatch(/TRUSTED_CLIENT_IP_HEADER:\s*x-freeholder-client-ip/);
+      // A published app port would let a client reach the app directly and
+      // write the trusted header itself.
+      const app = compose.slice(compose.indexOf("  app:"));
+      const appSection = app.slice(0, app.search(/\n  [a-z]+:\n/) === -1 ? undefined : app.search(/\n  [a-z]+:\n/));
+      expect(appSection).not.toMatch(/^\s{4}ports:/m);
+    });
+  }
+
+  it("documented proxy snippets overwrite the trusted header too", () => {
+    // Following a README must not produce a proxy that passes a client's own
+    // X-Freeholder-Client-Ip through to an app that trusts it.
+    const readme = readFileSync(join(DEPLOY, "docker-selfhost/playground/README.md"), "utf8");
+    const proxies = [...readme.matchAll(/reverse_proxy [^\n]*\n[^\n]*/g)].map((m) => m[0]);
+    expect(proxies.length).toBeGreaterThan(0);
+    for (const proxy of proxies) expect(proxy).toMatch(/header_up X-Freeholder-Client-Ip \{client_ip\}/);
+  });
+
+  it("the plain compose recipe, which publishes the app, trusts no header", () => {
+    const compose = readFileSync(join(DEPLOY, "docker-selfhost/infra/compose.yml"), "utf8");
+    expect(compose).not.toMatch(/TRUSTED_CLIENT_IP_HEADER/);
+  });
+});
+
 describe("the droplet backup is a verifiable restore artifact", () => {
   const backup = readFileSync(
     join(DEPLOY, "digitalocean-droplet", "infra", "backup.sh"),

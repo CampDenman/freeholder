@@ -14,6 +14,7 @@ import { recordSuccessfulLogin } from "@/core/auth/session-management/service";
 import { hashCustomerMagicLinkToken } from "@/core/auth/two-factor-crypto";
 import { contacts, customerMagicLinks } from "@/core/contacts/schema";
 import { env } from "@/core/env";
+import { consumeAccepted, rateLimitKey } from "@/core/security/rate-limit";
 import { businessProfile } from "@/core/settings/schema";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
@@ -28,6 +29,8 @@ import {
 
 export const CUSTOMER_MAGIC_COOKIE = "freeholder_customer_magic";
 const MAGIC_LINK_TTL_MINUTES = 15;
+/** How many sign-in emails one address receives per window, by any route. */
+const RECIPIENT_LIMIT = { limit: 5, windowSeconds: 15 * 60 } as const;
 const requestedLocale = z.string().trim().min(2).max(35)
   .regex(/^[a-z]{2}(-[A-Za-z]{2,4})?$/).optional();
 
@@ -72,6 +75,16 @@ export const requestCustomerMagicLink = defineService({
       .where(eq(contacts.email, input.email))
       .limit(1);
     if (!contact?.email) return genericAnswer;
+    // C11.10: per recipient, counted in this transaction so it holds when the
+    // link is requested by another flow (`ctx.call` skips the declared limit
+    // above — checkout's email proof is one). Over the limit, the answer is
+    // the same generic one and no further mail is sent.
+    const delivery = await consumeAccepted(
+      ctx.tx,
+      rateLimitKey("auth.customerMagicLink.recipient", contact.email),
+      RECIPIENT_LIMIT,
+    );
+    if (!delivery.allowed) return genericAnswer;
 
     const [business] = await ctx.tx
       .select({

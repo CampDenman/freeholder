@@ -37,7 +37,14 @@ import { defineBlock } from "@/modules/cms/blocks/types";
 import type { ResolvedImage } from "@/core/media/service";
 import { AdBeacon } from "./AdBeacon";
 import { ThirdPartyConsent } from "./ThirdPartyConsent";
-import { isThirdPartyKind, providerMarkup, stampNonce, type ProviderSpec } from "./tags";
+import {
+  CREATIVE_FRAME_SANDBOX,
+  creativeFramePath,
+  isThirdPartyKind,
+  providerMarkup,
+  stampNonce,
+  type ProviderSpec,
+} from "./tags";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
@@ -169,6 +176,23 @@ export const adSlot = defineBlock({
                 <div {...box}>
                   <ThirdPartyConsent returnTo={ctx.path || "/"} t={ctx.t} />
                 </div>
+              ) : creative.kind === "html_tag" ? (
+                <AdBeacon creativeId={creative.id} slotId={creative.slotId}>
+                  {/* C11.10: pasted markup runs in an opaque-origin frame,
+                      never in this page and never with its nonce. */}
+                  <div {...box}>
+                    <iframe
+                      src={creativeFramePath(creative.id)}
+                      sandbox={CREATIVE_FRAME_SANDBOX}
+                      title={ctx.t(`ads.label.${creative.label ?? "sponsored"}`)}
+                      width={fill.width}
+                      height={fill.height}
+                      loading={resolved.lazy ? "lazy" : "eager"}
+                      referrerPolicy="strict-origin-when-cross-origin"
+                      className="block border-0"
+                    />
+                  </div>
+                </AdBeacon>
               ) : isThirdPartyKind(creative.kind) ? (
                 <AdBeacon creativeId={creative.id} slotId={creative.slotId}>
                   <div
@@ -228,19 +252,19 @@ export const adSlot = defineBlock({
   },
 });
 
+/**
+ * The generated provider snippet, nonce-stamped because this module wrote it.
+ * A pasted `html_tag` never reaches here: it renders in its sandboxed frame.
+ */
 function thirdPartyHtml(
   creative: NonNullable<ServedFill["creative"]>,
   fill: { width: number; height: number },
   nonce: string,
 ): string {
-  if (creative.kind === "provider") {
-    const parsed = creative.provider as ProviderSpec | null;
-    if (parsed?.network && parsed.unitPath) {
-      const markup = providerMarkup(parsed, fill, `fh-gpt-${creative.id}`);
-      if (markup) return stampNonce(markup, nonce);
-    }
-  }
-  return stampNonce(creative.tagHtml ?? "", nonce);
+  const parsed = creative.provider as ProviderSpec | null;
+  if (creative.kind !== "provider" || !parsed?.network || !parsed.unitPath) return "";
+  const markup = providerMarkup(parsed, fill, `fh-gpt-${creative.id}`);
+  return markup ? stampNonce(markup, nonce) : "";
 }
 
 export default [adSlot];
