@@ -9674,6 +9674,9 @@ schema they inherit reads as a designed thing rather than an excavation.
   (attestation subjects are repointed). Known gate limits: the boundary gate
   follows only same-file helpers, and the merge gate trusts each
   registration's declared `columns` — per-module merge tests prove the moves.
+  A deferred approval is `executing` until its write reports back; the
+  approval sweep returns one stranded over an hour to pending with a note and
+  never re-runs it.
   Evidence: `agents-approvals.test.ts`, `referrals-commission.test.ts`,
   `sms.test.ts`, `media-capture.test.ts`, `builder-code-lane.test.ts`,
   `attestations.test.ts`, `merge-completeness.test.ts`.

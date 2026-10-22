@@ -21,7 +21,9 @@ lose work:
   providers without keeping a database transaction waiting, so one slow
   provider no longer slows the rest of your site.
 - **Agent approvals** for any of these actions now run once approved, instead
-  of staying pending.
+  of staying pending. While one runs it shows as "Running"; if it never
+  reports back, it returns to your approval inbox within the hour with a note
+  to check whether it took effect. It is never re-run on its own.
 - **Merging contacts** now also moves documents, published facts and signup
   commissions filed against the duplicate contact, and undo puts them back.
   If both people had earned the same referral code's signup commission, the

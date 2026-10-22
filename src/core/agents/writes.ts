@@ -36,7 +36,7 @@ const approvalRow = row({
   serviceName: z.string(),
   input: z.unknown(),
   proposedAutonomy: z.enum(["suggest", "approve", "autonomous"]),
-  status: z.enum(["pending", "approved", "rejected", "expired"]),
+  status: z.enum(["pending", "executing", "approved", "rejected", "expired"]),
   decidedBy: uuid.nullable(),
   decidedAt: timestamp.nullable(),
   decisionNote: z.string().nullable(),
@@ -255,7 +255,7 @@ export const listApprovals = defineService({
   permission: "scoped",
   input: z.object({
     taskId: z.uuid().optional(),
-    status: z.enum(["pending", "approved", "rejected", "expired"]).optional(),
+    status: z.enum(["pending", "executing", "approved", "rejected", "expired"]).optional(),
     limit: z.number().int().min(1).max(200).default(50),
   }),
   output: listed(approvalRow),
@@ -310,6 +310,11 @@ function requireDecider(ctx: ServiceContext): string {
   }
   return ctx.actor.userId;
 }
+
+/** Generous: a deferred write that has not reported back in an hour is stranded. */
+export const STRANDED_AFTER_SECONDS = 60 * 60;
+const STRANDED_NOTE =
+  "This approved write did not report back, so it was returned for review. Check whether it took effect before approving again.";
 
 const CLAIMABLE = and(
   eq(runApprovals.status, "pending"),
@@ -385,9 +390,14 @@ const claimApproval = defineService({
     // who let it happen.
     const service = getExternalService(claimed!.serviceName);
     if (service.def.orchestrated) {
-      // Committed as approved so a second decision loses the race; the
-      // orchestrator below runs the write and puts the row back to pending
-      // if it fails, so approved still means executed.
+      // Committed as executing so a second decision loses the race; the
+      // orchestrator below runs the write, then marks it approved, or puts it
+      // back to pending if it fails. Approved still means executed, and a
+      // crash in between is left executing for the sweep to surface.
+      await ctx.tx
+        .update(runApprovals)
+        .set({ status: "executing" })
+        .where(eq(runApprovals.id, claimed!.id));
       return {
         deferred: { id: claimed!.id, serviceName: claimed!.serviceName, input: claimed!.input },
       };
@@ -412,7 +422,7 @@ const releaseApproval = defineService({
     const released = await ctx.tx
       .update(runApprovals)
       .set({ status: "pending", decidedBy: null, decidedAt: null, decisionNote: null })
-      .where(and(eq(runApprovals.id, input.id), eq(runApprovals.status, "approved")))
+      .where(and(eq(runApprovals.id, input.id), eq(runApprovals.status, "executing")))
       .returning({ id: runApprovals.id });
     return { released: released.length > 0 };
   },
@@ -431,10 +441,10 @@ const completeApproval = defineService({
   handler: async (input, ctx) => {
     requireDecider(ctx);
     const [approval] = await ctx.tx
-      .select()
-      .from(runApprovals)
-      .where(and(eq(runApprovals.id, input.id), eq(runApprovals.status, "approved")))
-      .limit(1);
+      .update(runApprovals)
+      .set({ status: "approved" })
+      .where(and(eq(runApprovals.id, input.id), eq(runApprovals.status, "executing")))
+      .returning();
     if (!approval) throw new ServiceError("conflict", "That approval changed while it ran.");
     return finishApproval(ctx, approval, input.result);
   },
@@ -510,7 +520,7 @@ export const expireApprovals = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
-  output: row({ expired: z.number().int() }),
+  output: row({ expired: z.number().int(), returned: z.number().int() }),
   handler: async (_input, ctx) => {
     const lapsed = await ctx.tx
       .update(runApprovals)
@@ -528,7 +538,29 @@ export const expireApprovals = defineService({
     for (const row of lapsed) {
       ctx.queueEvent("agentApproval.expired", { id: row.id, taskId: row.taskId });
     }
-    return { expired: lapsed.length };
+    // An approval whose deferred write never reported back (a crash during
+    // it, or a failure recording its result) goes back to the owner. It is
+    // never re-run automatically: whether the write happened is a question
+    // for a person, so the note says to check before approving again.
+    const stranded = await ctx.tx
+      .update(runApprovals)
+      .set({
+        status: "pending",
+        decidedBy: null,
+        decidedAt: null,
+        decisionNote: STRANDED_NOTE,
+      })
+      .where(
+        and(
+          eq(runApprovals.status, "executing"),
+          sql`${runApprovals.decidedAt} < now() - make_interval(secs => ${STRANDED_AFTER_SECONDS})`,
+        ),
+      )
+      .returning({ id: runApprovals.id, taskId: runApprovals.subjectId });
+    for (const row of stranded) {
+      ctx.queueEvent("agentApproval.stranded", { id: row.id, taskId: row.taskId });
+    }
+    return { expired: lapsed.length, returned: stranded.length };
   },
 });
 

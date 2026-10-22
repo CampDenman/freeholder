@@ -121,6 +121,33 @@ describe.runIf(hasDatabase)("the approval inbox (C4.04)", { timeout: 30_000 }, (
     expect(refused.message).toContain("text messaging");
   });
 
+  it("returns a stranded executing approval to the owner without re-running it", async () => {
+    const { task, approval } = await parkedWrite("Stranded", "stranded@example.test");
+    // What a crash during the deferred write leaves behind: claimed, never
+    // reported back.
+    await db()
+      .update(runApprovals)
+      .set({ status: "executing", decidedBy: OWNER.userId, decidedAt: sql`now() - interval '2 hours'` })
+      .where(eq(runApprovals.id, approval.id));
+    const fresh = await parkedWrite("StillRunning", "still-running@example.test");
+    await db()
+      .update(runApprovals)
+      .set({ status: "executing", decidedBy: OWNER.userId, decidedAt: sql`now()` })
+      .where(eq(runApprovals.id, fresh.approval.id));
+
+    const swept = await expireApprovals.call({}, { kind: "system" });
+    expect(swept.returned).toBe(1);
+    const [returned] = await listApprovals.call({ taskId: task.id }, OWNER);
+    expect(returned).toMatchObject({ status: "pending", decidedBy: null });
+    expect(returned!.decisionNote).toContain("did not report back");
+    // Never re-run: the stored rename did not happen.
+    const { getContact: read } = await import("@/core/contacts/service");
+    const [row] = await db().select().from(runApprovals).where(eq(runApprovals.id, approval.id));
+    expect(((await read.call({ id: (row!.input as { id: string }).id }, OWNER))?.name)).toBe("Rae");
+    // A write still within the window is left alone.
+    expect((await listApprovals.call({ taskId: fresh.task.id }, OWNER))[0]?.status).toBe("executing");
+  });
+
   it("returns an orchestrated approval to pending when its write fails", async () => {
     const { task, approval } = await parkedWrite("OrchestratedFail", "orchestrated-fail@example.test");
     // No SMS provider is configured, so the import is refused.

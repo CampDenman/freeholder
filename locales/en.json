@@ -6189,6 +6189,7 @@
   "work.approvals.rejectNote": "Why not? The agent and the record keep this.",
   "work.approvals.saved.approved": "Approved and executed.",
   "work.approvals.saved.rejected": "Rejected. The task went back to the queue.",
+  "work.approvals.status.executing": "Running",
   "work.approvals.status.approved": "Approved",
   "work.approvals.status.expired": "Expired",
   "work.approvals.status.rejected": "Rejected",

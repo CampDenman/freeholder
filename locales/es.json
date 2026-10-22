@@ -6189,6 +6189,7 @@
   "work.approvals.rejectNote": "¿Por qué no? El agente y el registro conservan esta nota.",
   "work.approvals.saved.approved": "Aprobado y ejecutado.",
   "work.approvals.saved.rejected": "Rechazado. La tarea volvió a la cola.",
+  "work.approvals.status.executing": "En curso",
   "work.approvals.status.approved": "Aprobada",
   "work.approvals.status.expired": "Caducada",
   "work.approvals.status.rejected": "Rechazada",
