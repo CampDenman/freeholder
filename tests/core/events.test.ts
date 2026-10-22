@@ -267,7 +267,7 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     expect(still?.status).toBe("reserved");
   });
 
-  it("taxes admission where the event happens, and never guesses where a free-text venue is", async () => {
+  it("taxes admission where the event happens, and a free-text venue at the business's location", async () => {
     const studio = await createLocationService.call({ name: "Studio", slug: "studio", city: "Courtenay", region: "BC", country: "CA" }, OWNER);
     const zone = await createTaxZone.call(
       { name: "Canada", country: "CA", regions: [], postalPatterns: [], basis: "destination", pricesIncludeTax: false, roundingScope: "invoice", roundingMode: "half_up" },
@@ -293,10 +293,11 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     // At the business, or at a saved location: taxed there.
     expect(await invoiceFor({})).toMatchObject({ subtotalMinor: 6_500, taxMinor: 325, totalMinor: 6_825 });
     expect(await invoiceFor({ venueLocationId: studio.id })).toMatchObject({ taxMinor: 325, totalMinor: 6_825 });
-    // A venue typed as free text is not placed in a jurisdiction by guesswork.
+    // A venue typed as free text cannot be placed in a jurisdiction: it is
+    // taxed as if held at the business, and the invoice says so.
     const elsewhere = await invoiceFor({ venueName: "Community hall", venueAddress: "12 Main St, Banff" });
-    expect(elsewhere).toMatchObject({ taxMinor: 0, totalMinor: 6_500 });
-    expect(elsewhere.requiredTaxLegend).toMatch(/not one of this business's saved locations/);
+    expect(elsewhere).toMatchObject({ taxMinor: 325, totalMinor: 6_825 });
+    expect(elsewhere.memo).toMatch(/worked out at the business's location/);
   });
 
   it("reaches newer lapsed holds before ones a payment attempt is still holding", async () => {

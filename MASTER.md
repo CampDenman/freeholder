@@ -6266,11 +6266,11 @@ payment, tax, inventory and reporting path, with no floating-point money.
   with the place of supply where the event happens — from the primary
   business location to the event's saved venue location, or to the
   business location when the event names no venue. A venue typed only as
-  free text (`venueName`/`venueAddress` without `venueLocationId`) cannot
-  be placed in a tax jurisdiction, so it is not guessed: the invoice is
-  `not_applicable` with a legend saying the venue is not a saved location,
-  and the owner chooses a saved location to have tax worked out. A
-  business with no location at all also gets `not_applicable`, as catalog
+  free text (`venueName`/`venueAddress` without a saved `venueLocationId`)
+  cannot be placed in a tax jurisdiction, so it is taxed as if held at the
+  business and the invoice memo says so (follow-up commit, droppable with
+  the first); choosing a saved location as the venue taxes it there. A
+  business with no location at all gets `not_applicable`, as catalog
   orders do. Ticket prices are shown as entered, as store prices are; in a
   tax-exclusive zone the tax is its own line on the invoice the attendee
   lands on before paying. Regression: `tests/core/events.test.ts` ("taxes

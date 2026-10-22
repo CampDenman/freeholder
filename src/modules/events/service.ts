@@ -234,16 +234,16 @@ type AdmissionTicket = typeof eventTickets.$inferSelect;
  * tax runs from the business's primary location to the venue, through the
  * same calculate path as every other sale; the attendee's own address plays
  * no part, so none is asked for. An event with no venue of its own is held
- * at the business. A venue typed in as free text cannot be placed in a tax
- * jurisdiction, and guessing would be worse than not charging: such an
- * admission, like a sale by a business with no location at all (catalog
- * orders do the same), carries no tax and its invoice says why.
+ * at the business. A venue typed in as free text (not one of the business's
+ * saved locations) cannot be placed in a tax jurisdiction, so it is taxed
+ * as if held at the business, and the invoice says so. A business with no
+ * location at all adds no tax, as catalog orders do, and the invoice says why.
  */
 async function admissionTax(ctx: ServiceContext, eventId: string) {
   const locations = await ctx.callAsSystem(listLocations, {});
   const origin = locations.find((each) => each.isPrimary) ?? locations[0];
   if (!origin) {
-    return { mode: "not_applicable" as const, reason: "This business has no location to tax event admission from, so no tax was added." };
+    return { tax: { mode: "not_applicable" as const, reason: "This business has no location to tax event admission from, so no tax was added." } };
   }
   const [event] = await ctx.tx
     .select({ venueLocationId: events.venueLocationId, venueName: events.venueName, venueAddress: events.venueAddress })
@@ -251,18 +251,18 @@ async function admissionTax(ctx: ServiceContext, eventId: string) {
     .where(eq(events.id, eventId))
     .limit(1);
   const saved = event?.venueLocationId ? locations.find((each) => each.id === event.venueLocationId) : undefined;
-  const elsewhere = Boolean(event?.venueName?.trim() || event?.venueAddress?.trim());
-  const venue = saved ?? (event?.venueLocationId || elsewhere ? undefined : origin);
-  if (!venue) {
-    return { mode: "not_applicable" as const, reason: "The venue is not one of this business's saved locations, so no tax was added." };
-  }
+  const elsewhere = !saved && Boolean(event?.venueLocationId || event?.venueName?.trim() || event?.venueAddress?.trim());
+  const venue = saved ?? origin;
   const place = (at: typeof origin) => ({
     country: at.country,
     region: at.region ?? undefined,
     postalCode: at.postalCode ?? undefined,
     city: at.city ?? undefined,
   });
-  return { mode: "calculate" as const, origin: place(origin), destination: place(venue) };
+  return {
+    tax: { mode: "calculate" as const, origin: place(origin), destination: place(venue) },
+    memo: elsewhere ? "Tax on this admission was worked out at the business's location: the venue is not one of its saved locations." : undefined,
+  };
 }
 
 /**
@@ -282,7 +282,7 @@ async function issueAdmissionInvoice(
     holdExpiresAt: Date;
   },
 ) {
-  const tax = await admissionTax(ctx, args.ticket.eventId);
+  const { tax, memo } = await admissionTax(ctx, args.ticket.eventId);
   const draft = await ctx.callAsSystem(createDraftInvoice, {
     contactId: args.contactId,
     currency: args.ticket.currency,
@@ -299,6 +299,7 @@ async function issueAdmissionInvoice(
       },
     ],
     tax,
+    ...(memo ? { memo } : {}),
     dueAt: args.holdExpiresAt,
   });
   return ctx.callAsSystem(issueInvoice, { id: draft.invoice.id });
