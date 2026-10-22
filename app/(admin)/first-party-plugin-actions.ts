@@ -418,7 +418,9 @@ export async function voiceVideoConfigureAction(form: FormData): Promise<void> {
   try {
     const retention = text(form, "retentionDays");
     await configureVoiceVideo.call({
-      provider: text(form, "provider") === "daily" ? "daily" : "paradise",
+      // No default provider: anything but a listed choice is refused by the
+      // service's own validation.
+      provider: text(form, "provider") as "paradise" | "daily",
       paradise: {
         baseUrl: text(form, "baseUrl") || undefined,
         authScheme: text(form, "authScheme") === "portfolio_token" ? "portfolio_token" : "site_key",

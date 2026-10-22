@@ -108,12 +108,14 @@ test.describe("first-party plugin journeys", () => {
     await context.addCookies([{ name: SESSION_COOKIE, value: token, url: BASE_URL }]);
     await page.goto("/admin/voice-video");
     await expect(page.getByRole("heading", { name: "Provider setup" })).toBeVisible();
-    await expect(page.getByText(/Paradise Comms is the first-party provider/)).toBeVisible();
-    await expect(page.locator("#vv-start-provider")).toHaveValue("paradise");
+    // No provider is chosen on the owner's behalf (owner decision 2026-10-22).
+    await expect(page.getByText(/Choose who carries your calls/)).toBeVisible();
+    await expect(page.locator("#vv-start-provider")).toHaveValue("");
+    await page.locator("#vv-start-provider").selectOption("paradise");
     await page.locator("#vv-contact").selectOption(CONTACT_ID);
     await page.locator("#vv-title").fill("Browser consultation");
     await page.locator("form").filter({ has: page.locator("#vv-title") }).getByRole("button").click();
-    await expect(page.getByText(/Configure a Paradise Comms site API key/)).toBeVisible();
+    await expect(page.getByText(/No live voice\/video provider is configured/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Open as host" })).toHaveCount(0);
   });

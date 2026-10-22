@@ -52,13 +52,37 @@ export interface WorkforceTurnResult {
   };
 }
 
+/**
+ * `gateway` is any OpenAI-compatible endpoint (base URL and model named on
+ * the connection); `paradise` is Paradise Modern's hosted gateway, one
+ * optional provider among others.
+ */
 export const WORKFORCE_ADAPTER_IDS = [
   "anthropic",
   "openai",
-  "pm_brain",
+  "gateway",
+  "paradise",
 ] as const;
 
 export type WorkforceAdapterId = (typeof WORKFORCE_ADAPTER_IDS)[number];
+
+/**
+ * Deprecated adapter names still accepted on input and on stored rows.
+ * Migration 0055 rewrites stored ones; reading stays tolerant so a restore
+ * from an older export keeps working.
+ */
+export const LEGACY_WORKFORCE_ADAPTER_ALIASES: Readonly<Record<string, WorkforceAdapterId>> = {
+  pm_brain: "paradise",
+};
+
+/** Maps a deprecated adapter name to its current id; anything else passes through. */
+export function normalizeWorkforceAdapterId(value: string): string;
+export function normalizeWorkforceAdapterId(value: string | null): string | null;
+export function normalizeWorkforceAdapterId(value: string | null): string | null {
+  return value !== null && Object.hasOwn(LEGACY_WORKFORCE_ADAPTER_ALIASES, value)
+    ? (LEGACY_WORKFORCE_ADAPTER_ALIASES[value] ?? value)
+    : value;
+}
 
 export interface WorkforceAgentAdapter {
   readonly id: WorkforceAdapterId | "none";

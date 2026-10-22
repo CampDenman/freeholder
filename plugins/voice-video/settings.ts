@@ -17,6 +17,9 @@ import { decryptSecret, encryptSecret } from "@/core/connections/crypto";
  * them, through `sealParadiseSecrets`.
  */
 export const voiceVideoSettingsSchema = z.object({
+  // The default only reads rows saved before `provider` was always written.
+  // It does not choose a provider for a new instance: with no stored row,
+  // `voiceVideoProvider` refuses until the owner picks one (2026-10-22).
   provider: z.enum(["paradise", "daily"]).default("paradise"),
   paradise: z
     .object({
@@ -107,10 +110,10 @@ export interface ParadiseConfig {
 }
 
 /**
- * Defaults applied where the stored config is silent. New instances default
- * to Paradise Comms; instances configured for Daily keep their provider
- * until an owner switches them (owner decision 2026-09-27, no forced
- * migration).
+ * Paradise Comms defaults applied where its stored config is silent.
+ * Neither provider is preselected for a new instance (owner decision
+ * 2026-10-22); instances configured for Daily keep their provider until an
+ * owner switches them (owner decision 2026-09-27, no forced migration).
  */
 export function resolveParadiseConfig(settings: VoiceVideoSettings): ParadiseConfig {
   const paradise = settings.paradise ?? {};

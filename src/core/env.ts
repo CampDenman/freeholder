@@ -268,10 +268,20 @@ const envSchema = z.object({
     .optional(),
 
   /** The owner-facing builder is a separate authority from drafting AI. */
+  // `pm_brain` is the deprecated name of the `paradise` choice; still read.
   FREEHOLDER_AGENT: z
-    .enum(["pm_brain", "anthropic", "openai", "local", "none"])
+    .enum(["gateway", "paradise", "pm_brain", "anthropic", "openai", "local", "none"])
+    .transform((value) => (value === "pm_brain" ? "paradise" : value))
     .optional(),
-  /** Purpose-bound Paradise Modern site credential for the PM Brain adapter. */
+  /**
+   * `gateway`: any OpenAI-compatible chat-completions endpoint. The URL is
+   * the origin the `/v1/chat/completions` path is appended to; the key is
+   * sent as a bearer token; the model is named explicitly, never guessed.
+   */
+  AGENT_GATEWAY_URL: z.string().url().optional(),
+  AGENT_GATEWAY_API_KEY: z.string().trim().min(1).optional(),
+  AGENT_GATEWAY_MODEL: z.string().trim().min(1).max(200).optional(),
+  /** `paradise`: purpose-bound Paradise Modern site credential (optional provider). */
   PARADISEMODERN_API_KEY: z.string().trim().min(1).optional(),
   PARADISEMODERN_URL: z.string().url().optional(),
   /** Visible, hard monthly cap for builder model usage. */

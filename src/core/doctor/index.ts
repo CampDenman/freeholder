@@ -775,11 +775,16 @@ async function checkManagedAgentConnections(): Promise<Check[]> {
         );
       }
       if (!adapter.configured) {
+        // A neutral gateway also needs to know where to send the turn.
+        const missing =
+          adapter.id === "gateway" && !connection.baseUrl && !env().AGENT_GATEWAY_URL
+            ? "AGENT_GATEWAY_URL (or a base URL on the connection)"
+            : adapter.credentialRef;
         return fail(
           "agents.managedConnections",
           `Managed runtime — ${connection.name}`,
-          `${adapter.id} is selected but ${adapter.credentialRef} is not set in the environment.`,
-          `Set ${adapter.credentialRef} and restart, or pause the connection. Doctor makes no billable test request.`,
+          `${adapter.id} is selected but ${missing} is not set.`,
+          `Set ${missing} and restart, or pause the connection. Doctor makes no billable test request.`,
         );
       }
       return ok(

@@ -34,13 +34,15 @@ export const configSchema = z.object({
        * Deliberately separate from `ai`: that one grounds answers and drafts
        * translations, this one writes changes, and they carry different risk.
        *
-       * pm_brain is *our* default and nothing more — whoever deploys their own
-       * copy sets this to whatever intelligence they run, or to "none", which
-       * removes the builder entirely. A platform that hardcodes its owner's
-       * choice of model has not understood §1.
+       * Off ("none") until the owner chooses. "gateway" reaches any
+       * OpenAI-compatible endpoint they run or rent; "paradise" is Paradise
+       * Modern's hosted gateway, one optional provider among others
+       * ("pm_brain" is its deprecated alias and still accepted). A platform
+       * that hardcodes its owner's choice of model has not understood §1.
        */
       agent: z
-        .enum(["pm_brain", "anthropic", "openai", "local", "none"])
+        .enum(["gateway", "paradise", "pm_brain", "anthropic", "openai", "local", "none"])
+        .transform((value) => (value === "pm_brain" ? "paradise" : value))
         .default("none"),
       fx: z.enum(["manual", "ecb"]).default("manual"),
     })

@@ -317,14 +317,15 @@ The ledger of accepted dependency advisories is currently empty.
 
 ### paradisemodern Comms surface (C3.13)
 
-The de-facto first-party voice/video provider is paradisemodern's Paradise
-Comms (owner decision 2026-09-27): prod `https://paradisemodern.com/v1`,
+Paradise Comms is Paradise Modern's hosted voice/video relay, one of two
+interchangeable providers with Daily and not preselected
+(owner decisions 2026-09-27 and 2026-10-22): prod `https://paradisemodern.com/v1`,
 staging `https://comms-staging.paradisemodern.com/v1`; auth is a per-site
 `x-api-key` (carrying comms scopes) or a legacy portfolio bearer token.
 Capabilities `comms.calls/rooms/streams/conversations` are reported by
 `/api/integration/capabilities`.
 
-**Code.** The first-party adapter is the Paradise one —
+**Code.** The Paradise adapter —
 `plugins/voice-video/paradise.ts` (HTTP client), `paradise-provider.ts`
 (seam mapping), `settings.ts` (§41-encrypted secrets in module settings),
 `webhook.ts` plus `app/api/plugins/voice-video/webhooks/paradise/route.ts`

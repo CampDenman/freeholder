@@ -1,9 +1,12 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// OpenAI-compatible workforce adapter (C4.05): OpenAI itself, and Paradise
-// Modern's gateway, which speaks the same chat-completions wire format with a
-// different host, auth header and token-limit field. Raw HTTP like every
-// other adapter — the vendor boundary carries no vendor SDK.
+// OpenAI-compatible workforce adapter (C4.05): OpenAI itself, any
+// OpenAI-compatible gateway (`gateway`: the connection names its base URL and
+// model), and Paradise Modern's hosted gateway (`paradise`, one optional
+// provider), which speaks the same chat-completions wire format with its own
+// default host, auth header and correlation field. Raw HTTP like every other
+// adapter — the vendor boundary carries no vendor SDK.
+import { PARADISE_GATEWAY_DEFAULTS, gatewayAuthHeaders } from "./gateway";
 import type {
   WorkforceAdapterId,
   WorkforceAgentAdapter,
@@ -13,10 +16,11 @@ import type {
   WorkforceTurnResult,
 } from "./workforce-types";
 
-// OpenAI has no default here on purpose: guessing a model id is how a
-// connection silently pins itself to whatever was current when this file was
-// written. The connect service requires the owner to name one.
-export const PM_BRAIN_DEFAULT_MODEL = "pm-brain:quality";
+// OpenAI and neutral gateways have no default here on purpose: guessing a
+// model id is how a connection silently pins itself to whatever was current
+// when this file was written. The connect service requires the owner to name
+// one. Paradise publishes a stable default alias.
+export const PARADISE_DEFAULT_MODEL = PARADISE_GATEWAY_DEFAULTS.model;
 const TURN_TIMEOUT_MS = 180_000;
 
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
@@ -67,17 +71,24 @@ export function toChatMessages(system: string, messages: WorkforceMessage[]): Wi
 }
 
 export function openAiCompatibleWorkforceAdapter(options: {
-  id: Extract<WorkforceAdapterId, "openai" | "pm_brain">;
+  id: Extract<WorkforceAdapterId, "openai" | "gateway" | "paradise">;
   apiKey: string | undefined;
   credentialRef: string | null;
   baseUrl: string | null;
   model: string | null;
 }): WorkforceAgentAdapter {
-  const gateway = options.id === "pm_brain";
-  const model = options.model ?? (gateway ? PM_BRAIN_DEFAULT_MODEL : null);
+  const paradise = options.id === "paradise";
+  const model = options.model ?? (paradise ? PARADISE_DEFAULT_MODEL : null);
+  const baseUrl =
+    options.baseUrl ??
+    (paradise
+      ? PARADISE_GATEWAY_DEFAULTS.baseUrl
+      : options.id === "openai"
+        ? "https://api.openai.com"
+        : null);
   return {
     id: options.id,
-    configured: Boolean(options.apiKey),
+    configured: Boolean(options.apiKey) && Boolean(baseUrl),
     credentialRef: options.credentialRef,
     defaultModel: model,
     async turn(request: WorkforceTurnRequest): Promise<WorkforceTurnResult> {
@@ -86,32 +97,37 @@ export function openAiCompatibleWorkforceAdapter(options: {
           `The ${options.id} workforce adapter is selected but ${options.credentialRef ?? "its API key"} is not set.`,
         );
       }
+      if (!baseUrl) {
+        throw new Error(
+          "The gateway workforce adapter needs a base URL: set one on the connection or AGENT_GATEWAY_URL.",
+        );
+      }
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS);
       let response: Response;
       try {
-        const base = (
-          options.baseUrl ??
-          (gateway ? "https://paradisemodern.com" : "https://api.openai.com")
-        ).replace(/\/+$/, "");
+        const base = baseUrl.replace(/\/+$/, "");
         response = await (fetchImpl ?? fetch)(`${base}/v1/chat/completions`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
-            // The gateway authenticates like the §37 builder does; OpenAI
-            // itself takes a bearer token.
-            ...(gateway
-              ? { "x-api-key": options.apiKey }
-              : { authorization: `Bearer ${options.apiKey}` }),
+            // Gateways authenticate like the §37 builder does; OpenAI itself
+            // takes a bearer token.
+            ...(options.id === "openai"
+              ? { authorization: `Bearer ${options.apiKey}` }
+              : gatewayAuthHeaders(options.id, options.apiKey)),
           },
           body: JSON.stringify({
             model: request.model,
             messages: toChatMessages(request.system, request.messages),
             ...(request.tools.length ? { tools: request.tools } : {}),
             parallel_tool_calls: true,
-            ...(gateway
-              ? { max_tokens: request.maxOutputTokens, request_id: request.requestId }
-              : { max_completion_tokens: request.maxOutputTokens }),
+            // `max_tokens` is the field OpenAI-compatible gateways share;
+            // OpenAI itself has moved to `max_completion_tokens`.
+            ...(options.id === "openai"
+              ? { max_completion_tokens: request.maxOutputTokens }
+              : { max_tokens: request.maxOutputTokens }),
+            ...(paradise ? { request_id: request.requestId } : {}),
           }),
           signal: controller.signal,
         });

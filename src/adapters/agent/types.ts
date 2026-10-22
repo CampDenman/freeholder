@@ -33,7 +33,7 @@ export interface AgentProposalResult {
 }
 
 export interface BuilderAgentAdapter {
-  readonly id: "pm_brain" | "anthropic" | "openai" | "local" | "none";
+  readonly id: "gateway" | "paradise" | "anthropic" | "openai" | "local" | "none";
   readonly configured: boolean;
   propose(request: AgentProposalRequest): Promise<AgentProposalResult>;
 }

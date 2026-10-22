@@ -12,9 +12,15 @@ import {
   openAiCompatibleWorkforceAdapter,
   setWorkforceOpenAiFetchForTests,
 } from "@/adapters/agent/workforce-openai";
-import { workforceAdapter } from "@/adapters/agent/workforce";
+import { readFileSync } from "node:fs";
+import { eq, sql } from "drizzle-orm";
+import { builderAgent } from "@/adapters/agent";
+import { setBuilderAgentFetchForTests } from "@/adapters/agent/gateway";
+import { WORKFORCE_ADAPTER_IDS, workforceAdapter } from "@/adapters/agent/workforce";
 import type { WorkforceTurnRequest } from "@/adapters/agent/workforce-types";
+import { agentConnections } from "@/core/agents/schema";
 import { connectAgentRuntime } from "@/core/agents/service";
+import { resetEnvForTests } from "@/core/env";
 import { runDoctor } from "@/core/doctor";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
@@ -186,7 +192,7 @@ describe("the openai-compatible workforce adapter", () => {
     expect(result.stop).toBe("tool_calls");
   });
 
-  it("uses the gateway's auth header, token field and default model for pm_brain", async () => {
+  it("speaks to any OpenAI-compatible gateway with a bearer token and the named model", async () => {
     let seenUrl = "";
     let seenHeaders: Record<string, string> = {};
     let seenBody: Record<string, unknown> = {};
@@ -200,7 +206,49 @@ describe("the openai-compatible workforce adapter", () => {
       });
     });
     const adapter = openAiCompatibleWorkforceAdapter({
-      id: "pm_brain",
+      id: "gateway",
+      apiKey: "gw-key",
+      credentialRef: "AGENT_GATEWAY_API_KEY",
+      baseUrl: "https://llm.example.test/",
+      model: "open-model-7b",
+    });
+    expect(adapter.configured).toBe(true);
+    expect(adapter.defaultModel).toBe("open-model-7b");
+    await adapter.turn(turnRequest({ model: "open-model-7b" }));
+    expect(seenUrl).toBe("https://llm.example.test/v1/chat/completions");
+    expect(seenHeaders.authorization).toBe("Bearer gw-key");
+    expect(seenHeaders["x-api-key"]).toBeUndefined();
+    expect(seenBody.max_tokens).toBe(2000);
+    expect(seenBody.request_id).toBeUndefined();
+  });
+
+  it("does not guess a gateway's host", async () => {
+    const adapter = openAiCompatibleWorkforceAdapter({
+      id: "gateway",
+      apiKey: "gw-key",
+      credentialRef: "AGENT_GATEWAY_API_KEY",
+      baseUrl: null,
+      model: "open-model-7b",
+    });
+    expect(adapter.configured).toBe(false);
+    await expect(adapter.turn(turnRequest())).rejects.toThrow(/base URL/);
+  });
+
+  it("uses Paradise's auth header, token field and default model for the paradise provider", async () => {
+    let seenUrl = "";
+    let seenHeaders: Record<string, string> = {};
+    let seenBody: Record<string, unknown> = {};
+    setWorkforceOpenAiFetchForTests(async (url, init) => {
+      seenUrl = url;
+      seenHeaders = init.headers as Record<string, string>;
+      seenBody = JSON.parse(init.body as string) as Record<string, unknown>;
+      return jsonResponse({
+        choices: [{ finish_reason: "stop", message: { content: "Done." } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+      });
+    });
+    const adapter = openAiCompatibleWorkforceAdapter({
+      id: "paradise",
       apiKey: "pm-key",
       credentialRef: "PARADISEMODERN_API_KEY",
       baseUrl: null,
@@ -211,6 +259,7 @@ describe("the openai-compatible workforce adapter", () => {
     expect(seenUrl).toBe("https://paradisemodern.com/v1/chat/completions");
     expect(seenHeaders["x-api-key"]).toBe("pm-key");
     expect(seenBody.max_tokens).toBe(2000);
+    expect(seenBody.request_id).toBe("run-1");
     expect(result.text).toBe("Done.");
     expect(result.stop).toBe("end");
   });
@@ -238,6 +287,103 @@ describe("the openai-compatible workforce adapter", () => {
     await expect(adapter.turn(turnRequest({ model: "gpt-test" }))).rejects.toThrow(
       /not valid JSON/,
     );
+  });
+});
+
+describe("the §37 builder's provider choice (owner decision 2026-10-22)", () => {
+  const BUILDER_ENV = [
+    "FREEHOLDER_AGENT",
+    "AGENT_GATEWAY_URL",
+    "AGENT_GATEWAY_API_KEY",
+    "AGENT_GATEWAY_MODEL",
+    "PARADISEMODERN_API_KEY",
+    "PARADISEMODERN_URL",
+  ] as const;
+  const prior = Object.fromEntries(BUILDER_ENV.map((name) => [name, process.env[name]]));
+  const proposal = {
+    system: "You build sites.",
+    ownerBrief: "Add a gallery.",
+    tool: {
+      type: "function" as const,
+      function: { name: "propose", description: "Propose.", parameters: { type: "object", properties: {} } },
+    },
+    maxOutputTokens: 1000,
+    requestId: "builder-1",
+  };
+  let seen: { url: string; headers: Record<string, string>; body: Record<string, unknown> } | null = null;
+
+  beforeEach(() => {
+    for (const name of BUILDER_ENV) delete process.env[name];
+    resetEnvForTests();
+    seen = null;
+    setBuilderAgentFetchForTests(async (url, init) => {
+      seen = {
+        url,
+        headers: init.headers as Record<string, string>,
+        body: JSON.parse(init.body as string) as Record<string, unknown>,
+      };
+      return jsonResponse({
+        model: "served-model",
+        choices: [{ message: { tool_calls: [{ function: { name: "propose", arguments: "{\"ok\":true}" } }] } }],
+      });
+    });
+  });
+
+  afterAll(() => {
+    setBuilderAgentFetchForTests(undefined);
+    for (const name of BUILDER_ENV) {
+      if (prior[name] === undefined) delete process.env[name];
+      else process.env[name] = prior[name];
+    }
+    resetEnvForTests();
+  });
+
+  it("reaches a neutral OpenAI-compatible gateway with a bearer token", async () => {
+    process.env.FREEHOLDER_AGENT = "gateway";
+    process.env.AGENT_GATEWAY_URL = "https://llm.example.test";
+    process.env.AGENT_GATEWAY_API_KEY = "gw-key";
+    process.env.AGENT_GATEWAY_MODEL = "open-model-7b";
+    resetEnvForTests();
+    const agent = builderAgent();
+    expect(agent.id).toBe("gateway");
+    expect(agent.configured).toBe(true);
+    const result = await agent.propose(proposal as never);
+    expect(result.arguments).toEqual({ ok: true });
+    expect(seen?.url).toBe("https://llm.example.test/v1/chat/completions");
+    expect(seen?.headers.authorization).toBe("Bearer gw-key");
+    expect(seen?.headers["x-api-key"]).toBeUndefined();
+    expect(seen?.body.model).toBe("open-model-7b");
+    expect(seen?.body.request_id).toBeUndefined();
+  });
+
+  it("refuses a gateway with no URL or model rather than defaulting to any provider", async () => {
+    process.env.FREEHOLDER_AGENT = "gateway";
+    process.env.AGENT_GATEWAY_API_KEY = "gw-key";
+    resetEnvForTests();
+    const agent = builderAgent();
+    expect(agent.configured).toBe(false);
+    await expect(agent.propose(proposal as never)).rejects.toThrow(
+      /AGENT_GATEWAY_URL, AGENT_GATEWAY_MODEL/,
+    );
+    expect(seen).toBeNull();
+  });
+
+  it("keeps FREEHOLDER_AGENT=pm_brain and PARADISEMODERN_API_KEY working as the Paradise provider", async () => {
+    process.env.FREEHOLDER_AGENT = "pm_brain";
+    process.env.PARADISEMODERN_API_KEY = "pm-key";
+    resetEnvForTests();
+    const agent = builderAgent();
+    expect(agent.id).toBe("paradise");
+    expect(agent.configured).toBe(true);
+    await agent.propose(proposal as never);
+    expect(seen?.url).toBe("https://paradisemodern.com/v1/chat/completions");
+    expect(seen?.headers["x-api-key"]).toBe("pm-key");
+    expect(seen?.body.model).toBe("pm-brain:quality");
+    expect(seen?.body.request_id).toBe("builder-1");
+  });
+
+  it("is off with no configuration at all", () => {
+    expect(builderAgent().id).toBe("none");
   });
 });
 
@@ -270,6 +416,29 @@ describe("workforce adapter selection", () => {
       expect(adapter.defaultModel).toBe("claude-opus-5");
     } finally {
       delete process.env.TEST_WORKFORCE_KEY;
+    }
+  });
+
+  it("lists neutral providers, with Paradise as one optional choice", () => {
+    expect([...WORKFORCE_ADAPTER_IDS]).toEqual(["anthropic", "openai", "gateway", "paradise"]);
+    expect(WORKFORCE_ADAPTER_IDS).not.toContain("pm_brain");
+  });
+
+  it("still runs a connection stored under the deprecated pm_brain name", () => {
+    process.env.PARADISEMODERN_API_KEY = "legacy-key";
+    try {
+      const adapter = workforceAdapter({
+        adapter: "pm_brain",
+        model: null,
+        credentialRef: null,
+        baseUrl: null,
+      });
+      expect(adapter.id).toBe("paradise");
+      expect(adapter.configured).toBe(true);
+      expect(adapter.credentialRef).toBe("PARADISEMODERN_API_KEY");
+      expect(adapter.defaultModel).toBe("pm-brain:quality");
+    } finally {
+      delete process.env.PARADISEMODERN_API_KEY;
     }
   });
 
@@ -320,6 +489,37 @@ describe.runIf(hasDatabase)("managed connections end to end", { timeout: 30_000 
       OWNER,
     );
     expect(accepted.kind).toBe("managed");
+  });
+
+  it("requires a gateway model and stores the deprecated pm_brain name as paradise", async () => {
+    const refused = await failure(
+      connectAgentRuntime.call(
+        { name: "Gateway runtime", kind: "managed", adapter: "gateway" },
+        OWNER,
+      ),
+    );
+    expect(refused.code).toBe("validation");
+    const legacy = await connectAgentRuntime.call(
+      { name: "Legacy runtime", kind: "managed", adapter: "pm_brain" },
+      OWNER,
+    );
+    expect(legacy.adapter).toBe("paradise");
+  });
+
+  it("migration 0055 renames stored pm_brain connections to paradise", async () => {
+    await db().insert(agentConnections).values({
+      name: "Stored legacy runtime",
+      kind: "managed",
+      adapter: "pm_brain",
+    });
+    await db().execute(
+      sql.raw(readFileSync("db/migrations/0055_neutral_agent_adapter_ids.sql", "utf8")),
+    );
+    const [row] = await db()
+      .select({ adapter: agentConnections.adapter })
+      .from(agentConnections)
+      .where(eq(agentConnections.name, "Stored legacy runtime"));
+    expect(row?.adapter).toBe("paradise");
   });
 
   it("doctor names the missing credential without spending a cent", async () => {
