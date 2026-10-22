@@ -96,11 +96,11 @@ services:
     pids_limit: 256
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
-    # Readiness, not liveness: it reads the database, so a database that was
-    # killed and restarted empty from tmpfs turns this unhealthy, and
-    # `reset.sh --heal` (freeholder-playground-heal.timer) rebuilds the demo.
+    # The schema probe, not liveness (blind to an emptied database) and not
+    # readiness (which also fails on late job heartbeats, i.e. on a busy demo).
+    # `reset.sh --heal` (freeholder-playground-heal.timer) asks the same probe.
     healthcheck:
-      test: [CMD, node, -e, 'fetch("http://localhost:3000/api/health").then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))']
+      test: [CMD, node, -e, 'fetch("http://localhost:3000/api/health/db").then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))']
       interval: 30s
       timeout: 10s
       retries: 3

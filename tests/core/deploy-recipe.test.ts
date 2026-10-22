@@ -207,10 +207,11 @@ describe("the playground cannot take production down with it (C1.38 capacity)", 
 
   it("reports an emptied database as unhealthy, and a timer acts on it", () => {
     // Liveness would stay green while every page errors against an empty
-    // database; readiness reads it.
+    // database; readiness would turn red on a merely busy demo. The schema
+    // probe answers only the question heal acts on.
     const check = JSON.stringify(compose.services.app!.healthcheck);
-    expect(check).toContain("localhost:3000/api/health");
-    expect(check).not.toContain("/api/health/live");
+    expect(check).toContain("localhost:3000/api/health/db");
+    expect(readFileSync(join(dir, "reset.sh"), "utf8")).toContain("/api/health/db");
     expect(readFileSync(join(dir, "freeholder-playground-heal.service"), "utf8")).toMatch(/reset\.sh --heal/);
     expect(readFileSync(join(dir, "freeholder-playground-heal.timer"), "utf8")).toMatch(/OnUnitActiveSec=/);
   });

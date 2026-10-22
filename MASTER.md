@@ -4180,10 +4180,13 @@ project without silent telemetry, and ready to carry money.
   `oom_score_adj: 1000` and no swap. The app has 896 MB with a fixed 384 MB
   old space; the live heap measured ~315 MB. The tmpfs-tuned database keeps
   512 MB. The same burst peaked at 649 MB. A database restart comes back empty
-  from tmpfs, so the app's health check is readiness (which reads the
-  database), and `freeholder-playground-heal.timer` runs `reset.sh --heal`
-  every two minutes to rebuild the demo when nothing serves or the app is
-  unhealthy. `FREEHOLDER_JOBS_POLL_SECONDS`
+  from tmpfs. The app's health check is therefore a narrow schema probe,
+  `/api/health/db` (`src/core/runtime/schema-probe.ts`: one `to_regclass`
+  query, 3 s timeout). Readiness is not used because it also fails when a busy
+  demo's job heartbeats are late. `freeholder-playground-heal.timer` runs
+  `reset.sh --heal` every two minutes. It rebuilds when nothing serves, or
+  after two consecutive failed probes. Without overlap room it never stops a
+  playground that still answers HTTP unless its schema is missing. `FREEHOLDER_JOBS_POLL_SECONDS`
   (default unchanged) is 15 in the playground, cutting measured idle database
   transactions from ~70 to ~17 a second. `reset.sh` alternates two fixed
   projects, picking the old one by which app holds the proxy network: the

@@ -82,10 +82,14 @@ When the host has less than `PLAYGROUND_OVERLAP_MIN_MB` available, the old
 playground stops first instead. The default, 2200, is the second stack's caps
 (1,408 MB) plus about 800 MB left for production's growth and page cache, so
 a reset never borrows memory production may need. Every two minutes the heal
-timer runs `reset.sh --heal`, which resets only when nothing is serving or
-Docker reports the app unhealthy. The app's health check is readiness, which
-reads the database, so a database restarted empty after an out-of-memory kill
-is rebuilt within minutes rather than at the next hourly reset. Its PostgreSQL data and media use bounded tmpfs
+timer runs `reset.sh --heal`. It asks the serving app's schema probe,
+`/api/health/db`, which is also the Docker health check. The probe is not
+readiness, because readiness also fails while a busy demo's job heartbeats run
+late. Heal rebuilds when nothing is serving, or after two consecutive failed
+probes. Without room to overlap, it never stops a playground that still answers
+HTTP unless the probe reports the schema missing. A database restarted empty
+after an out-of-memory kill is therefore rebuilt within minutes rather than at
+the next hourly reset, and a slow demo under load is left alone. Its PostgreSQL data and media use bounded tmpfs
 mounts. The app filesystem is read-only. Both networks
 are internal: external delivery is blocked even if a background listener runs.
 The existing main-site network must never be attached to the demo app or database.
