@@ -36,7 +36,7 @@ export async function GET(
   if (!/^[0-9a-f-]{36}$/i.test(id)) return empty;
   const consent = (await cookies()).get(THIRD_PARTY_CREATIVE_CONSENT_COOKIE)?.value;
   if (!thirdPartyCreativeConsentGranted(consent)) return empty;
-  const found = await creativeTag.call({ id }, { kind: "anonymous" });
+  const found = await creativeTag.call({ id }, { kind: "system" });
   if (!found) return empty;
   return new Response(creativeDocument(found.html), {
     headers: {

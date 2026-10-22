@@ -35,7 +35,10 @@ import {
   txtEntries,
 } from "@/modules/ads/service";
 import { updateBusiness } from "@/core/settings/service";
+import { isExternallyExposed } from "@/core/service";
 import { ANONYMOUS, closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+
+const SYSTEM = { kind: "system" } as const;
 
 const BUSINESS = {
   name: "Coast Weekly",
@@ -371,9 +374,12 @@ describe.runIf(hasDatabase)("consent-gated serving and generated ads.txt", () =>
     expect(allowedMarkup).not.toContain('rel="sponsored nofollow noopener"');
 
     // The frame's document is handed out only while the creative is servable.
-    expect((await creativeTag.call({ id: tag.id }, ANONYMOUS))?.html).toContain("creative.example");
+    expect((await creativeTag.call({ id: tag.id }, SYSTEM))?.html).toContain("creative.example");
     await reviewCreative.call({ id: tag.id, decision: "rejected" }, OWNER);
-    expect(await creativeTag.call({ id: tag.id }, ANONYMOUS)).toBeNull();
+    expect(await creativeTag.call({ id: tag.id }, SYSTEM)).toBeNull();
+    // Internal only: not a public verb, so the markup is not an API read.
+    expect(isExternallyExposed(creativeTag)).toBe(false);
+    expect((await failure(creativeTag.call({ id: tag.id }, ANONYMOUS))).code).toBe("permission");
   });
 
   it("never self-approves a pasted tag, even on a house line (C11.10)", async () => {
@@ -398,6 +404,6 @@ describe.runIf(hasDatabase)("consent-gated serving and generated ads.txt", () =>
     );
     expect(tag.reviewState).toBe("pending");
     await goLive(house.campaign.id, false);
-    expect(await creativeTag.call({ id: tag.id }, ANONYMOUS)).toBeNull();
+    expect(await creativeTag.call({ id: tag.id }, SYSTEM)).toBeNull();
   });
 });

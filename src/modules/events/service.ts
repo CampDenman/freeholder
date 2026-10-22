@@ -720,8 +720,10 @@ export const addEventTicket = defineService({
  * Staff registering on somebody's behalf keep the full range.
  */
 const PUBLIC_SEATS_PER_REGISTRATION = 10;
-/** Public registrations one address, or one validated client, may make per hour. */
+/** Public registrations one email address may make per hour. */
 const PUBLIC_REGISTRATION_LIMIT = { limit: 10, windowSeconds: 60 * 60 } as const;
+/** Per client network address; looser, since honest people share addresses. */
+const PUBLIC_CLIENT_LIMIT = { limit: 30, windowSeconds: 60 * 60 } as const;
 
 export const registerForEvent = defineService({
   name: "events.register",
@@ -754,13 +756,19 @@ export const registerForEvent = defineService({
       }
       // Counted in this transaction, so a refused registration costs nothing
       // and the limit holds when another flow composes this one.
-      const keys = [`email:${input.email}`];
-      if (ctx.actor.request?.trustedIp) keys.push(anonymousClientKey(ctx.actor));
-      for (const key of keys) {
+      // The client address (validated, or forwarded when the deployment has
+      // no trusted header) stops one caller cycling made-up emails.
+      const keys: Array<[string, typeof PUBLIC_REGISTRATION_LIMIT | typeof PUBLIC_CLIENT_LIMIT]> = [
+        [`email:${input.email}`, PUBLIC_REGISTRATION_LIMIT],
+      ];
+      if (ctx.actor.request?.trustedIp || ctx.actor.request?.ip) {
+        keys.push([anonymousClientKey(ctx.actor), PUBLIC_CLIENT_LIMIT]);
+      }
+      for (const [key, policy] of keys) {
         const verdict = await consumeAccepted(
           ctx.tx,
           rateLimitKey("events.register", key),
-          PUBLIC_REGISTRATION_LIMIT,
+          policy,
         );
         if (!verdict.allowed) {
           throw new ServiceError(

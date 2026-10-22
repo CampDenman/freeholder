@@ -236,11 +236,13 @@ export const shareVia = defineService({
     windowSeconds: 15 * 60,
     // A path-based bucket is bypassed by changing the path and lets one caller
     // grow the table without a ceiling. Prefer a signed-in identity, then the
-    // deployment-validated client address, with one bounded fallback bucket.
+    // client address (validated when the deployment says so), and bound the
+    // forgeable remainder with a high site-wide ceiling (C11.10).
     subject: (_input, actor) =>
       actor.kind === "user" || actor.kind === "agent"
         ? actorString(actor)
         : anonymousClientKey(actor),
+    untrustedBackstop: { limit: 5_000, windowSeconds: 15 * 60 },
     message: "That is a lot of sharing at once. Wait a few minutes and try again.",
   },
   handler: async (input, ctx) => {

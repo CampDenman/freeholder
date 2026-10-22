@@ -6,5 +6,8 @@ demo.freeholder.ai {
 	request_body {
 		max_size 64KB
 	}
-	reverse_proxy playground-app:3000
+	# C11.10: overwritten per request; the playground app trusts only this.
+	reverse_proxy playground-app:3000 {
+		header_up X-Freeholder-Client-Ip {remote_host}
+	}
 }

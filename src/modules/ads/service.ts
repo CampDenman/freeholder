@@ -963,7 +963,9 @@ export const creativeTag = defineService({
   name: "ads.creativeTag",
   summary: "The markup of a live third-party tag, for its sandboxed frame.",
   kind: "query",
-  permission: "public",
+  // Internal: only the creative route reads it, on the visitor's behalf after
+  // its own consent check. Not an API, MCP or SDK verb.
+  permission: "system",
   input: z.object({ id: uuidSchema }),
   output: row({ html: z.string(), width: z.number().int(), height: z.number().int() }).nullable(),
   handler: async (input, ctx) => {

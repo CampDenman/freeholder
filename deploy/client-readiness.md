@@ -30,6 +30,20 @@ access to the application is blocked. Supported headers are
 `x-freeholder-client-ip`, `cf-connecting-ip`, and `x-real-ip`. Client-supplied
 forwarding headers are not trusted by default.
 
+The Caddy recipes (DigitalOcean droplet, Docker host-updater, playground) set
+`X-Freeholder-Client-Ip` from the connecting address on every request and
+configure `TRUSTED_CLIENT_IP_HEADER=x-freeholder-client-ip`; their app port is
+not published. If a CDN such as Cloudflare sits in front of Caddy, that address
+is the CDN's, so per-visitor limits group by CDN edge until the proxy is told
+the real client. The plain Docker Compose recipe (`docker-selfhost/infra`)
+publishes port 3000 directly and sets no trusted header; only set one after
+putting an overwriting proxy in front and blocking direct access. Render,
+Railway, Replit and DigitalOcean App Platform are unchanged: no platform header
+is assumed until verified for that platform. Without a trusted header,
+anonymous limits key on the forwarded address (forgeable, so each service also
+has a site-wide ceiling for unvalidated callers) rather than one shared bucket
+(C11.10).
+
 Free event registrations remain supported. Events with tickets require an active
 ticket belonging to that event. Paid registrations are currently refused before
 contact creation, reservation, or charging: payment settlement has not been

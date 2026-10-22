@@ -315,14 +315,24 @@ export const quoteHire = defineService({
   },
 });
 
-/** Hire requests one address, or one validated client, may make per hour. */
+/** Hire requests one email address may make per hour. */
 const HIRE_REQUEST_LIMIT = { limit: 5, windowSeconds: 60 * 60 } as const;
+/**
+ * Per client network address — validated when the deployment provides one,
+ * forwarded otherwise. Looser than the email limit because several honest
+ * people can share an address; it is what stops one caller cycling emails.
+ */
+const HIRE_CLIENT_LIMIT = { limit: 20, windowSeconds: 60 * 60 } as const;
 
 async function throttleRequests(ctx: ServiceContext, email: string): Promise<void> {
-  const keys = [`email:${email}`];
-  if (ctx.actor.request?.trustedIp) keys.push(anonymousClientKey(ctx.actor));
-  for (const key of keys) {
-    const verdict = await consumeAccepted(ctx.tx, rateLimitKey("rentals.reserve", key), HIRE_REQUEST_LIMIT);
+  const keys: Array<[string, typeof HIRE_REQUEST_LIMIT | typeof HIRE_CLIENT_LIMIT]> = [
+    [`email:${email}`, HIRE_REQUEST_LIMIT],
+  ];
+  if (ctx.actor.request?.trustedIp || ctx.actor.request?.ip) {
+    keys.push([anonymousClientKey(ctx.actor), HIRE_CLIENT_LIMIT]);
+  }
+  for (const [key, policy] of keys) {
+    const verdict = await consumeAccepted(ctx.tx, rateLimitKey("rentals.reserve", key), policy);
     if (!verdict.allowed) {
       throw new ServiceError(
         "rate_limited",
@@ -446,6 +456,12 @@ export const handOver = defineService({
   input: z.object({
     id,
     condition: z.string().trim().max(2_000).nullish(),
+    /**
+     * Passed to `bookings.setStatus` when hand-over confirms a visitor's
+     * request: the owner's statement that an outstanding intake or waiver was
+     * met another way (signed on paper at the counter). Never implied.
+     */
+    overrideRequirements: z.boolean().default(false),
   }),
   output: agreementRow,
   handler: async (input, ctx) => {
@@ -464,7 +480,10 @@ export const handOver = defineService({
     }
     // A visitor's hire was booked as a request (C11.10). Handing the thing
     // over is the owner accepting it, so the booking is confirmed here unless
-    // they already confirmed it from the calendar.
+    // they already confirmed it from the calendar. Confirmation keeps the
+    // booking layer's rule (§4.4): outstanding intake or waiver refuses it
+    // unless the owner says it was met. Hire bookings carry no service
+    // offering today, so there is normally nothing outstanding.
     if (agreement.bookingId) {
       const [booking] = await ctx.tx
         .select({ status: bookings.status })
@@ -475,6 +494,7 @@ export const handOver = defineService({
         await ctx.callAsSystem(getService("bookings.setStatus"), {
           id: agreement.bookingId,
           status: "confirmed",
+          overrideRequirements: input.overrideRequirements,
         });
       }
     }

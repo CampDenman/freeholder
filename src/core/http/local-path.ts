@@ -20,10 +20,16 @@ export function safeLocalPath(value: unknown, fallback: string): string {
   if (/[\\\x00-\x20\x7f]/.test(value) || /%(?:5c|2f%2f|0[0-9a-f]|1[0-9a-f]|7f)/i.test(value)) {
     return fallback;
   }
+  // Dot segments, raw or encoded, are refused outright: resolving them is
+  // what turns `/.//evil.test` into the protocol-relative `//evil.test`.
+  if (/(?:^|\/)(?:\.|%2e){1,2}(?:\/|[?#]|$)/i.test(value)) return fallback;
   try {
     const parsed = new URL(value, BASE);
     if (parsed.origin !== BASE) return fallback;
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    const local = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    // Checked again after resolution, whatever normalisation did.
+    if (local.startsWith("//") || local.startsWith("/\\")) return fallback;
+    return local;
   } catch {
     return fallback;
   }

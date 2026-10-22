@@ -667,6 +667,7 @@ export const recordPopupEvent = defineService({
           ? actorString(actor)
           : anonymousClientKey(actor)
       }`,
+    untrustedBackstop: { limit: 30_000, windowSeconds: 60 },
     message: "This popup has been reported a lot just now. Try again shortly.",
   },
   output: recordOutput,
@@ -741,10 +742,9 @@ export const capturePopup = defineService({
       `popup-capture:${input.popupId}:${
         actor.kind === "user" || actor.kind === "agent"
           ? actorString(actor)
-          : actor.request?.trustedIp
-            ? anonymousClientKey(actor)
-            : `email:${input.email}`
+          : anonymousClientKey(actor)
       }`,
+    untrustedBackstop: { limit: 1_000, windowSeconds: 10 * 60 },
     message: "This popup has taken a lot of sign-ups just now. Try again shortly.",
   },
   output: row({

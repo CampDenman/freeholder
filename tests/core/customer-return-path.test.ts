@@ -16,12 +16,21 @@ describe("local redirect path", () => {
   it("keeps ordinary paths with their query and fragment", () => {
     expect(safeLocalPath("/admin/settings?tab=mail#smtp", "/admin")).toBe("/admin/settings?tab=mail#smtp");
     expect(safeLocalPath("/", "/admin")).toBe("/");
+    expect(safeLocalPath("/media/report.v2.pdf", "/admin")).toBe("/media/report.v2.pdf");
   });
   it.each([
     "/\\evil.test",
     "/\\/evil.test",
     "/%5Cevil.test",
     "/%2F%2Fevil.test",
+    // Dot segments that normalise into a protocol-relative `//evil.test`.
+    "/.//evil.test",
+    "/..//evil.test",
+    "/%2e//evil.test",
+    "/%2E//evil.test",
+    "/%2E%2e//evil.test",
+    "/a/..//evil.test",
+    "/a/./../..//evil.test",
     "//evil.test",
     "/\t/evil.test",
     "/\n/evil.test",

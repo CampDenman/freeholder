@@ -31,15 +31,18 @@ import type { Actor, Tx } from "@/core/service";
 /**
  * The bucket an anonymous caller is counted in (C11.10).
  *
- * Only the deployment-validated address (`TRUSTED_CLIENT_IP_HEADER`) can
- * separate one visitor from another. The first `X-Forwarded-For` entry is
- * whatever the client wrote, so keying on it gives every request a fresh
- * allowance. Without a trusted header, anonymous callers share one bucket:
- * a ceiling that holds, rather than one that is only decorative.
+ * The deployment-validated address (`TRUSTED_CLIENT_IP_HEADER`) is the one a
+ * client cannot choose, and is used whenever it is configured. Without it,
+ * the forwarded address is still the best per-visitor key there is: a caller
+ * who forges it escapes their own limit, but nobody can spend everybody
+ * else's. One shared bucket would be the opposite trade — unforgeable, and a
+ * site-wide off switch. Services pair this with `untrustedBackstop`, the
+ * high site-wide ceiling that bounds the forgers.
  */
 export function anonymousClientKey(actor: Actor): string {
   const trusted = actor.request?.trustedIp;
-  return trusted ? `ip:${trusted}` : "ip:untrusted";
+  if (trusted) return `ip:${trusted}`;
+  return `untrusted-ip:${actor.request?.ip ?? "unknown"}`;
 }
 
 export interface RateLimitPolicy {
