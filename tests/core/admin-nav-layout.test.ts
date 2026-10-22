@@ -38,14 +38,18 @@ describe("admin navigation grouping", () => {
     expect(isActiveAdminHref("/admin", "/admin/products")).toBe(false);
   });
 
-  it("collapses behind a native disclosure below the desktop breakpoint", () => {
-    // <details>, not a script-driven button: the phone menu must open even
-    // before (or without) JavaScript.
+  it("collapses behind a script-free toggle below the desktop breakpoint, with one copy of the links", () => {
+    // A checkbox toggle, not a script-driven button: the phone menu must
+    // open even before (or without) JavaScript. And one list, not a phone
+    // copy plus a desktop copy: duplicated links made every "find the
+    // invitations link" ambiguous.
     const nav = read("app/(admin)/admin/AdminNav.tsx");
-    expect(nav).toMatch(/<details\s+className="group lg:hidden"/);
-    expect(nav).toContain("<summary");
-    expect(nav).toContain('<div className="hidden lg:block">{groups("admin-nav-sidebar")}</div>');
+    expect(nav).toMatch(/<input\s+id="admin-nav-toggle"\s+type="checkbox"/);
+    expect(nav).toContain('htmlFor="admin-nav-toggle"');
+    expect(nav).toMatch(/id="admin-nav-groups" className="hidden [^"]*peer-checked:block lg:block/);
+    expect(nav.match(/\{groups\}/g)).toHaveLength(1);
     expect(nav).not.toContain("useState");
+    expect(nav).not.toContain("overflow-y-auto");
     expect(nav).toContain('event.key !== "Escape"');
     const layout = read("app/(admin)/admin/layout.tsx");
     expect(layout).toContain("lg:grid-cols-[14rem_minmax(0,1fr)]");

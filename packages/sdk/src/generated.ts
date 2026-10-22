@@ -4372,7 +4372,7 @@ export interface ServiceCatalog {
     output: { purged: { subjectType: string; subjectId: string }[] };
   };
   "events.recentActivity": {
-    input: { limit?: number };
+    input: { limit?: number; include?: "all" | "people" };
     output: { id: string; actor: string; action: string; at: string; [key: string]: unknown }[];
   };
   "events.register": {

@@ -66,7 +66,6 @@ import {
   Bell,
   BookOpen,
   List,
-  X,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -369,84 +368,91 @@ export function AdminNav({
   );
   const current = links.find((link) => isActiveAdminHref(link.href, pathname));
 
-  // The same groups render twice: once inside the phone's disclosure, once
-  // as the desktop sidebar. Exactly one copy is displayed at any width, and
-  // `display: none` takes the other out of the accessibility tree, so a
-  // screen reader never meets the links twice. `prefix` keeps ids unique.
-  const groups = (prefix: string) =>
-    ADMIN_NAV_GROUPS.map((group) => {
-      const items = group.links.flatMap((key) => {
-        const link = byKey.get(key);
-        return link ? [link] : [];
-      });
-      if (items.length === 0) return null;
-      const headingId = `${prefix}-${group.key}`;
-      return (
-        <div key={group.key} className="pb-3">
-          <p
-            id={headingId}
-            className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted"
-          >
-            {groupLabels[group.key]}
-          </p>
-          <ul aria-labelledby={headingId} className="grid list-none gap-0.5 p-0">
-            {items.map(({ href, key, Icon }) => {
-              const active = isActiveAdminHref(href, pathname);
-              return (
-                <li key={href}>
-                  <a
-                    href={href}
-                    aria-current={active ? "page" : undefined}
-                    className={cx(
-                      "flex items-center gap-2 rounded-md border-s-2 px-3 py-1.5 text-sm hover:bg-surface-muted hover:text-ink",
-                      active
-                        ? "border-accent bg-surface-muted font-semibold text-ink"
-                        : "border-transparent text-ink-muted",
-                    )}
-                  >
-                    <Icon size={16} weight={active ? "fill" : "regular"} />
-                    {labels[key]}
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      );
+  const groups = ADMIN_NAV_GROUPS.map((group) => {
+    const items = group.links.flatMap((key) => {
+      const link = byKey.get(key);
+      return link ? [link] : [];
     });
+    if (items.length === 0) return null;
+    const headingId = `admin-nav-${group.key}`;
+    return (
+      <div key={group.key} className="pb-3">
+        <p
+          id={headingId}
+          className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted"
+        >
+          {groupLabels[group.key]}
+        </p>
+        <ul aria-labelledby={headingId} className="grid list-none gap-0.5 p-0">
+          {items.map(({ href, key, Icon }) => {
+            const active = isActiveAdminHref(href, pathname);
+            return (
+              <li key={href}>
+                <a
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  className={cx(
+                    "flex items-center gap-2 rounded-md border-s-2 px-3 py-1.5 text-sm hover:bg-surface-muted hover:text-ink",
+                    active
+                      ? "border-accent bg-surface-muted font-semibold text-ink"
+                      : "border-transparent text-ink-muted",
+                  )}
+                >
+                  <Icon size={16} weight={active ? "fill" : "regular"} />
+                  {labels[key]}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  });
 
   return (
-    // A sidebar from the lg breakpoint; below it, one "Menu" disclosure so
-    // the page's own content starts near the top of a phone screen instead
-    // of under every link the admin has. A native <details>, so it opens
-    // before (and without) JavaScript and is a disclosure to assistive tech
-    // for free; Escape also closes it back to its summary.
+    // A sidebar from the lg breakpoint; below it, one "Menu" toggle so the
+    // page's own content starts near the top of a phone screen instead of
+    // under every link the admin has.
+    //
+    // One list, rendered once: a second copy for phones put every link in
+    // the document twice, which broke "the invitations link" for anyone
+    // (or any test) looking for it. The toggle is a real checkbox styled as
+    // a button, so it works before and without JavaScript, is reachable by
+    // keyboard (Space toggles it) and reports its state to a screen reader;
+    // Escape closes the open menu back to it. The sidebar scrolls with the
+    // page rather than inside its own box, so no link is clipped out of
+    // sight (axe could not judge the contrast of links scrolled away).
     <nav
       aria-label={labels.region}
-      className="lg:sticky lg:top-4 lg:max-h-[calc(100svh-2rem)] lg:overflow-y-auto"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        const toggle = event.currentTarget.querySelector<HTMLInputElement>("#admin-nav-toggle");
+        if (!toggle?.checked) return;
+        toggle.checked = false;
+        toggle.focus();
+      }}
     >
-      <details
-        className="group lg:hidden"
-        onKeyDown={(event) => {
-          const details = event.currentTarget;
-          if (event.key !== "Escape" || !details.open) return;
-          details.open = false;
-          details.querySelector("summary")?.focus();
-        }}
+      <input
+        id="admin-nav-toggle"
+        type="checkbox"
+        aria-controls="admin-nav-groups"
+        className="peer sr-only lg:hidden"
+      />
+      <label
+        htmlFor="admin-nav-toggle"
+        className="flex w-full cursor-pointer items-center gap-2 rounded-md border border-rule bg-surface px-3 py-2 text-start text-sm font-semibold text-ink peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent lg:hidden"
       >
-        <summary className="flex w-full cursor-pointer list-none items-center gap-2 rounded-md border border-rule bg-surface px-3 py-2 text-start text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden">
-          <List size={16} weight="bold" className="group-open:hidden" />
-          <X size={16} weight="bold" className="hidden group-open:block" />
-          <span>{groupLabels.menu}</span>
-          {current ? (
-            <span className="ms-auto truncate font-normal text-ink-muted">
-              {labels[current.key]}
-            </span>
-          ) : null}
-        </summary>
-        <div className="pt-2">{groups("admin-nav-menu")}</div>
-      </details>
-      <div className="hidden lg:block">{groups("admin-nav-sidebar")}</div>
+        <List size={16} weight="bold" aria-hidden="true" />
+        <span>{groupLabels.menu}</span>
+        {current ? (
+          <span className="ms-auto truncate font-normal text-ink-muted">
+            {labels[current.key]}
+          </span>
+        ) : null}
+      </label>
+      <div id="admin-nav-groups" className="hidden pt-2 peer-checked:block lg:block lg:pt-0">
+        {groups}
+      </div>
     </nav>
   );
 }
