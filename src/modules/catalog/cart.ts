@@ -962,6 +962,7 @@ export const abandonStaleCarts = defineService({
   permission: "scoped",
   input: z.object({}),
   output: z.object({ abandoned: z.number().int() }),
+  auditWhen: (out: { abandoned: number }) => out.abandoned > 0,
   handler: async (_input, ctx) => {
     const cutoff = new Date(Date.now() - ABANDON_AFTER_MS);
     const stale = await ctx.tx

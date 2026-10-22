@@ -7,6 +7,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { contactStats, createContact, resolveContact } from "@/core/contacts/service";
 import { recentActivity } from "@/core/events/service";
 import { auditLog } from "@/core/events/schema";
+import { createPage } from "@/modules/cms/service";
+import { applyDueSchedules, schedulePage } from "@/modules/cms/lifecycle";
 import { db } from "@/core/db";
 import { updateBusiness } from "@/core/settings/service";
 import {
@@ -106,7 +108,7 @@ describe.runIf(hasDatabase)("the admin overview data", () => {
       await createContact.call({ name: "Ada" }, STAFF);
       await db().insert(auditLog).values([
         { actor: "system", action: "cms.expireStalePresence" },
-        { actor: "system", action: "subscriptions.finishSignups" },
+        { actor: "system", action: "media.expireCaptureSessions" },
         { actor: "user:00000000-0000-4000-8000-000000000000", action: "playground.enter" },
         // A payment webhook applies its event as `system`; the owner must
         // still see it, so the filter is by action, never by actor.
@@ -123,9 +125,35 @@ describe.runIf(hasDatabase)("the admin overview data", () => {
         "cms.expireStalePresence",
         "contacts.create",
         "invoicing.applyProviderEvent",
+        "media.expireCaptureSessions",
         "playground.enter",
-        "subscriptions.finishSignups",
       ]);
+    });
+
+    it("shows a scheduled publish, but not the ticks that found nothing due", async () => {
+      // Owners should see the sweep that published their page; the same
+      // sweep running every minute with nothing due writes no row at all.
+      const system = { kind: "system" } as const;
+      await applyDueSchedules.call({}, system);
+      const created = await createPage.call(
+        {
+          slug: "soon",
+          title: "Soon",
+          blocks: [{ id: "h", type: "heading", props: { text: "Soon", level: 1 } }],
+        },
+        OWNER,
+      );
+      await schedulePage.call({ id: created.id, publishAt: new Date(Date.now() - 1_000) }, OWNER);
+      const applied = await applyDueSchedules.call({}, system);
+      expect(applied.published).toContain(created.id);
+      await applyDueSchedules.call({}, system);
+
+      const people = await recentActivity.call({ limit: 20, include: "people" }, STAFF);
+      const actions = people.map((row) => row.action);
+      expect(actions.filter((action) => action === "cms.applyDueSchedules")).toHaveLength(1);
+      expect(actions).toContain("cms.publishPage");
+      const all = await recentActivity.call({ limit: 20 }, STAFF);
+      expect(all.filter((row) => row.action === "cms.applyDueSchedules")).toHaveLength(1);
     });
 
     it("is not readable by a customer or a stranger", async () => {

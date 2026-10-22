@@ -684,6 +684,7 @@ export const sweepLapsedConsent = defineService({
   permission: "system",
   input: z.object({}),
   output: z.object({ unpublished: z.number().int() }),
+  auditWhen: (out: { unpublished: number }) => out.unpublished > 0,
   handler: async (_input, ctx) => {
     const live = await ctx.tx
       .select({

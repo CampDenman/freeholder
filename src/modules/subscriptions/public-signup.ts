@@ -294,7 +294,7 @@ export const startCardTrial = defineService({
   },
 });
 export const finishMembershipSignups = defineService({
-  name:"subscriptions.finishSignups",summary:"Recover settled signup activation and attach future provider renewals.",kind:"mutation",permission:"system",input:z.object({}),output:z.object({finished:z.number().int()}),
+  name:"subscriptions.finishSignups",summary:"Recover settled signup activation and attach future provider renewals.",kind:"mutation",permission:"system",input:z.object({}),output:z.object({finished:z.number().int()}),auditWhen:(out:{finished:number})=>out.finished>0,
   handler:async(_input,ctx)=>{
     const pending=await ctx.tx.select({invoiceId:subscriptions.signupInvoiceId}).from(subscriptions).innerJoin(invoices,eq(invoices.id,subscriptions.signupInvoiceId)).where(and(eq(subscriptions.signupPending,true),eq(invoices.status,"paid"),eq(subscriptions.status,"paused"),isNull(subscriptions.cancelledAt))).limit(100);
     let finished=0;

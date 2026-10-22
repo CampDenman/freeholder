@@ -723,6 +723,7 @@ export const recoverAbandonedCarts = defineService({
   permission: "scoped",
   input: z.object({}),
   output: z.object({ sent: z.number().int() }),
+  auditWhen: (out: { sent: number }) => out.sent > 0,
   handler: async (_input, ctx) => {
     const abandoned = await ctx.tx
       .select()

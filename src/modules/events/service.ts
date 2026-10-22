@@ -1043,6 +1043,7 @@ export const expireHeldRegistrations = defineService({
   permission: "system",
   input: z.object({ limit: z.number().int().min(1).max(500).default(100) }),
   output: row({ expired: z.number().int() }),
+  auditWhen: (out: { expired: number }) => out.expired > 0,
   handler: async (input, ctx) => {
     const candidates = await ctx.tx
       .select({ id: eventRegistrations.id })

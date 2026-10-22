@@ -364,6 +364,8 @@ export const applyDueSchedules = defineService({
     published: listed(uuid),
     unpublished: listed(uuid),
   }),
+  auditWhen: (out: { published: string[]; unpublished: string[] }) =>
+    out.published.length + out.unpublished.length > 0,
   handler: async (_input, ctx) => {
     const now = new Date();
     const duePublish = await ctx.tx

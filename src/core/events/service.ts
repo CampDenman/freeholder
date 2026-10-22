@@ -11,31 +11,26 @@ import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService } from "@/core/service";
 
 /**
- * Scheduled sweeps that record a row on every tick whether or not anything
- * happened, plus demo entry. Named one by one rather than "everything the
- * system actor did": payment and payout webhooks, refunds, disputes and
- * every nested `ctx.callAsSystem` are recorded as `system` too, and an owner
- * must still see "invoice paid" in what changed. A new sweep joins this list
- * when it starts cluttering the feed; forgetting it costs a noisy row, not a
- * hidden payment.
+ * Work that is never news to an owner even when it acts: editor presence
+ * clean-up, expiring guest and capture sessions, stats roll-ups, search
+ * reindexing, IndexNow pings, and demo entry.
+ *
+ * Named one by one rather than "everything the system actor did": payment
+ * and payout webhooks, refunds, disputes and every nested `ctx.callAsSystem`
+ * are recorded as `system` too, and an owner must still see "invoice paid".
+ * Sweeps that *can* do something an owner cares about (scheduled publishing,
+ * cart-recovery emails, released event seats, finished signups) are not
+ * listed here: they declare `auditWhen` so a no-op tick writes no row and a
+ * run that acted appears like any other change.
  */
 export const HOUSEKEEPING_ACTIONS = [
   "playground.enter",
   "cms.expireStalePresence",
-  "cms.applyDueSchedules",
-  "broadcasts.tick",
-  "subscriptions.finishSignups",
-  "subscriptions.pendingCustomerSchedules",
-  "catalog.abandonStaleCarts",
-  "catalog.recoverAbandonedCarts",
-  "catalog.expireReservations",
   "media.expireCaptureSessions",
   "galleries.expireSessions",
-  "events.expireHeldRegistrations",
   "ads.rollUpStats",
   "assistant.reindex",
   "seo.submitIndexNow",
-  "projects.sweepLapsedConsent",
 ] as const;
 
 export const recentActivity = defineService({
