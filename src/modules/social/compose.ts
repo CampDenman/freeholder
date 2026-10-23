@@ -11,6 +11,7 @@ import { socialAdapters } from "@/adapters/social";
 import { decryptSecret } from "@/core/connections/crypto";
 import { assets } from "@/core/media/schema";
 import { registerStoredOriginal } from "@/core/media/service";
+import { sniffRasterImage } from "@/core/media/validation";
 import {
   defineOrchestratedService,
   defineService,
@@ -335,6 +336,14 @@ export const createVariants = defineOrchestratedService({
           continue;
         }
         if (original.kind === "image") {
+          // The stored kind is a label; only allow-listed raster bytes are
+          // cropped. A legacy SVG is refused by name, not passed to sharp.
+          if (!sniffRasterImage(stored)) {
+            throw new ServiceError(
+              "validation",
+              `${original.filename} is not a JPEG, PNG, GIF, WebP or AVIF image, so it cannot be prepared for social accounts. Replace it with one of those formats.`,
+            );
+          }
           const crop = await cropStill(stored, policy.aspect, original.filename);
           generated = generated || crop.generated;
           assetIds.push(await storeRendition(crop.bytes, crop.mime, crop.filename));

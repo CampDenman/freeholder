@@ -43,9 +43,11 @@ import {
   expectedKind,
   MEDIA_LIMITS,
   MediaValidationError,
+  NOT_RASTER_IMAGE_REASON,
   PROXY_UPLOAD_LIMIT,
   SIGNATURE_BYTES,
   mediaSignatureSample,
+  sniffRasterImage,
   validateMediaFile,
   type MediaKind,
 } from "@/core/media/validation";
@@ -507,6 +509,13 @@ async function prepareDerivedObjects(
   if (input.kind === "image" && scan.status === "ready") {
     const body = input.body ?? (await storage().get(input.key));
     if (!body) throw new Error(`storage: ${input.key} disappeared during processing`);
+    // Upload validation already sniffed the prefix; the stored bytes are
+    // checked again here because they are what sharp would actually read.
+    if (!sniffRasterImage(body)) {
+      throw new MediaValidationError(
+        "The image contents are not a JPEG, PNG, GIF, WebP or AVIF image.",
+      );
+    }
     facts = await readImageFacts(body);
     if (!facts) {
       throw new MediaValidationError(
@@ -3211,7 +3220,10 @@ export const rescanAsset = defineOrchestratedService({
   permission: "scoped",
   writeClass: "write",
   input: z.object({ id: z.string().uuid() }),
-  output: assetRow,
+  output: assetRow.extend({
+    /** Why no resized copies were made, when the stored bytes are not raster. */
+    renditionsSkipped: z.string().nullable(),
+  }),
   handler: async (input, actor) => {
     const asset = await rescanSourceService.call(input, actor);
     // C12.30: evidence of abuse imagery is never released by a later scan.
@@ -3241,12 +3253,20 @@ export const rescanAsset = defineOrchestratedService({
     let width = asset.width;
     let height = asset.height;
     const variantKeys: string[] = [];
-    if (
+    let renditionsSkipped: string | null = null;
+    const needsRenditions =
       status === "ready" &&
       asset.kind === "image" &&
-      Object.keys(asset.variants as VariantSet).length === 0
-    ) {
-      const body = await storage().get(asset.storageKey);
+      Object.keys(asset.variants as VariantSet).length === 0;
+    const body = needsRenditions ? await storage().get(asset.storageKey) : undefined;
+    if (body && !sniffRasterImage(body)) {
+      // An "image" whose bytes are SVG or anything else outside the upload
+      // allow-list — typically stored before SVG uploads were refused (#70).
+      // Its kind and mime are labels, so the bytes decide: it is never given
+      // to sharp, it keeps its scan result, and it is neither altered nor
+      // deleted. The owner gets the reason instead of a failed rescan.
+      renditionsSkipped = NOT_RASTER_IMAGE_REASON;
+    } else if (needsRenditions) {
       const facts = body ? await readImageFacts(body) : undefined;
       if (!body || !facts) {
         throw new ServiceError(
@@ -3270,7 +3290,7 @@ export const rescanAsset = defineOrchestratedService({
       width = facts.width;
       height = facts.height;
     }
-    return applyRescan.call(
+    const updated = await applyRescan.call(
       {
         id: asset.id,
         sourceChecksum: sourceIdentity(asset),
@@ -3286,6 +3306,7 @@ export const rescanAsset = defineOrchestratedService({
       },
       actor,
     );
+    return { ...updated, renditionsSkipped };
   },
 });
 

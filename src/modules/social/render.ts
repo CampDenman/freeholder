@@ -7,6 +7,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
+import { NotRasterImageError, sniffRasterImage } from "@/core/media/validation";
 import type { SocialAspect } from "./contract";
 
 const exec = promisify(execFile);
@@ -29,6 +30,16 @@ function asBuffer(bytes: Uint8Array): Buffer {
   return Buffer.from(bytes);
 }
 
+/**
+ * A stored still as a Buffer for sharp, but only when its bytes are an
+ * allow-listed raster. Stored mime types and extensions are not trusted: an
+ * SVG stored before SVG uploads were refused must not reach librsvg (C11.10).
+ */
+function rasterBuffer(bytes: Uint8Array): Buffer {
+  if (!sniffRasterImage(bytes)) throw new NotRasterImageError();
+  return asBuffer(bytes);
+}
+
 /** Centre-weighted crop to the network's aspect, then a 1080-wide JPEG. */
 export async function cropStill(
   bytes: Uint8Array,
@@ -36,7 +47,7 @@ export async function cropStill(
   filename: string,
 ): Promise<Rendition> {
   const ratio = RATIOS[aspect];
-  const image = sharp(asBuffer(bytes), { failOn: "none" });
+  const image = sharp(rasterBuffer(bytes), { failOn: "none" });
   const meta = await image.metadata();
   const width = meta.width ?? 1080;
   const height = meta.height ?? 1080;
@@ -66,7 +77,7 @@ export async function cropStill(
 }
 
 export async function stillThumbnail(bytes: Uint8Array, filename: string): Promise<Rendition> {
-  const out = await sharp(asBuffer(bytes), { failOn: "none" })
+  const out = await sharp(rasterBuffer(bytes), { failOn: "none" })
     .resize({ width: 320, withoutEnlargement: true })
     .jpeg({ quality: 70 })
     .toBuffer();
