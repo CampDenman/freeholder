@@ -128,6 +128,56 @@ connect Freeholder to a service whose certificate chains to one of the three
 removed emSign roots, those connections will now fail until that service
 changes certificates.
 
+## British Columbia time zone
+
+British Columbia has moved to permanent UTC−7. The spring change on 8 March
+2026 was its last; on 1 November 2026, when clocks would usually go back,
+they stay where they are
+([B.C. government release, 2 March 2026](https://news.gov.bc.ca/releases/2026AG0013-000209)).
+The communities in eastern B.C. that keep mountain time are not affected.
+
+The tz database added this in release 2026b
+([tzdb NEWS](https://github.com/eggert/tz/blob/main/NEWS)). Until CLDR and
+ICU can express it, tzdb models the change as taking effect at 02:00 on
+1 November 2026. The same NEWS file records three more changes:
+
+- Alberta moved to permanent UTC−6 (2026c).
+- The Northwest Territories moved to permanent UTC−6 (2026d).
+- Manitoba moves to permanent UTC−5 (2026e).
+
+The Node.js versions involved carry these tz data releases (from each
+release's `test/fixtures/tz-version.txt`):
+
+| Node.js | tz data | Has these rules |
+| --- | --- | --- |
+| 22.23.4 | 2026e | Yes |
+| 22.23.2 | 2026a | No |
+| 22.20.0 | 2025b | No |
+
+Freeholder works out every local time in Node.js. That includes booking
+days and slots, reminders, report buckets and the times on pages. So a
+British Columbia business keeps correct times after 1 November only on the
+new image. On Node.js 22.23.2, or on the Node.js 22.20.0 that Replit's
+current Nix channel provides, B.C. times from 1 November are an hour off:
+the app still applies the old UTC−8 winter. The same applies to Alberta,
+the Northwest Territories and Manitoba. **This makes the Replit gap below
+urgent for any Canadian business in those provinces.**
+
+**Freeholder doctor.** The "Time zone data" check
+(`src/core/doctor/timezone.ts`) compares the business's zone in the app and
+in Postgres. It warns when they disagree. The warning is not a failure:
+pages, reports and reminders all use the app's answer, so they agree with
+each other. It matters only for things that read Postgres directly, such as
+a hand-run export or a BI tool. Updating the database image's time zone
+data clears it.
+
+**Zone labels.** ICU 78.3 still calls a British Columbia winter "Pacific
+Daylight Time" (short form "PDT"), because CLDR has no name yet for the new
+rule. Booking pages now label zones by their generic name, such as
+"Pacific Time (Vancouver)", which is right under either rule. Event times
+still print ICU's short name, so a December event in Vancouver reads
+"PDT". The time itself is correct.
+
 ## Next.js October advisories
 
 Freeholder runs Next.js 16.4.2. It arrived on `main` on 22 October 2026 in
@@ -300,7 +350,11 @@ does not change Replit's channel; that needs a tested change of its own.
 
 Replit owners should run `node --version` in their Deployment. If it
 reports a version older than 22.23.4, Node.js's fixes above are not in
-effect there.
+effect there. Older versions also miss the 2026 Canadian time zone rules.
+Check `node -p process.versions.tz` too. Below `2026b`, British Columbia
+times from 1 November 2026 will be an hour off. Below `2026e`, at least
+one of the four provinces will be. A business in any of them should not
+run on Replit until the runtime is updated.
 
 ## Deployment
 

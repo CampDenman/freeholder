@@ -52,7 +52,7 @@ function event(overrides: Record<string, unknown> = {}) {
         eventId: "729a66c4-21a7-47ec-ad1e-7b0f7288bb11",
         startsAt: new Date("2099-11-09T00:00:00.000Z"),
         endsAt: new Date("2099-11-09T02:00:00.000Z"),
-        timezone: "America/Vancouver",
+        timezone: "America/Los_Angeles",
         capacity: 8,
         waitlistEnabled: true,
         remaining: 3,
@@ -125,7 +125,7 @@ describe("public events list", () => {
     ...event({ slug, name: slug }),
     nextStartsAt: next,
     nextEndsAt: next ? new Date(next.getTime() + 7_200_000) : null,
-    nextTimezone: next ? "America/Vancouver" : null,
+    nextTimezone: next ? "America/Los_Angeles" : null,
     endedAt,
   });
 

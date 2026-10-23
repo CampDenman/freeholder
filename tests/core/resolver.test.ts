@@ -393,9 +393,9 @@ describe.runIf(hasDatabase)("the availability resolver", { timeout: 60_000 }, ()
   });
 
   it("bounds a business day to its instants before the limit, 25 hours on the day the clocks go back", async () => {
-    const calendar = await createCalendar.call({ kind: "resource", name: "Desk", timezone: "America/Vancouver" }, OWNER);
+    const calendar = await createCalendar.call({ kind: "resource", name: "Desk", timezone: "America/Los_Angeles" }, OWNER);
     await serves([{ calendarId: calendar.id, role: "primary" }]);
-    const day = businessDayBounds("2026-11-01", "America/Vancouver");
+    const day = businessDayBounds("2026-11-01", "America/Los_Angeles");
     const found = await slots({
       from: "2026-10-31",
       to: "2026-11-02",

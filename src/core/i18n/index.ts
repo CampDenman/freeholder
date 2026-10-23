@@ -304,25 +304,36 @@ export function formatDateTimeShort(utc: Date, timezone: string, locale: string 
 }
 
 /**
- * A time zone as a visitor says it — "Pacific Daylight Time (Vancouver)" —
- * rather than its IANA id. Named for the instant shown, so daylight saving
- * reads correctly; an id the runtime does not know is shown as given.
+ * A time zone as a visitor says it — "Pacific Time (Vancouver)" — rather than
+ * its IANA id. The generic name is used, not the standard/daylight one: the
+ * times beside it are already in that zone, and after British Columbia's 2026
+ * move to permanent UTC−7, ICU 78 names Vancouver's winter "Pacific Daylight
+ * Time", which reads as wrong in December. ICU sometimes adds its own region
+ * to the generic name ("Pacific Time (Canada)"); the city replaces it. `at`
+ * stays for zones whose generic name changes with history. An id the runtime
+ * does not know is shown as given.
  */
 export function zoneLabel(
   timezone: string,
   locale: string = DEFAULT_LOCALE,
   at: Date = new Date(),
 ): string {
-  let name: string;
-  try {
-    name = new Intl.DateTimeFormat(locale, { timeZone: timezone, timeZoneName: "long" })
+  const named = (style: "long" | "longGeneric") =>
+    new Intl.DateTimeFormat(locale, { timeZone: timezone, timeZoneName: style })
       .formatToParts(at)
       .find((part) => part.type === "timeZoneName")?.value ?? timezone;
+  let name: string;
+  try {
+    name = named("longGeneric");
+    // A zone with no generic name (UTC, Etc/GMT+5) gets a bare offset such as
+    // "GMT+00:00"; its long name ("Coordinated Universal Time") reads better.
+    if (/[+−-]\d/.test(name)) name = named("long");
   } catch {
     return timezone;
   }
   const city = timezone.includes("/") ? timezone.split("/").at(-1)!.replace(/_/g, " ") : "";
-  return city && !name.includes(city) ? `${name} (${city})` : name;
+  if (!city || name.includes(city)) return name;
+  return `${name.replace(/\s*\([^()]*\)$/, "")} (${city})`;
 }
 
 /** Store UTC, display in an explicit timezone (§4.9 timezone discipline). */

@@ -111,7 +111,7 @@ const at = (
 describe("wall time to instant across clock changes", () => {
   it.each([
     // zone, skipped local time, the instant it is read as (after the gap)
-    ["America/Vancouver", { year: 2026, month: 3, day: 8, hour: 2, minute: 30 }, "2026-03-08T10:30:00.000Z"],
+    ["America/Los_Angeles", { year: 2026, month: 3, day: 8, hour: 2, minute: 30 }, "2026-03-08T10:30:00.000Z"],
     ["Europe/London", { year: 2026, month: 3, day: 29, hour: 1, minute: 30 }, "2026-03-29T01:30:00.000Z"],
     ["Australia/Sydney", { year: 2026, month: 10, day: 4, hour: 2, minute: 30 }, "2026-10-03T16:30:00.000Z"],
   ])("%s: an hour the clock skipped lands after the gap", (zone, parts, expected) => {
@@ -120,7 +120,7 @@ describe("wall time to instant across clock changes", () => {
 
   it.each([
     // zone, repeated local time, first instant, second instant
-    ["America/Vancouver", { year: 2025, month: 11, day: 2, hour: 1, minute: 30 }, "2025-11-02T08:30:00.000Z", "2025-11-02T09:30:00.000Z"],
+    ["America/Los_Angeles", { year: 2025, month: 11, day: 2, hour: 1, minute: 30 }, "2025-11-02T08:30:00.000Z", "2025-11-02T09:30:00.000Z"],
     ["Europe/London", { year: 2026, month: 10, day: 25, hour: 1, minute: 30 }, "2026-10-25T00:30:00.000Z", "2026-10-25T01:30:00.000Z"],
     ["Australia/Sydney", { year: 2026, month: 4, day: 5, hour: 2, minute: 30 }, "2026-04-04T15:30:00.000Z", "2026-04-04T16:30:00.000Z"],
   ])("%s: an hour the clock repeated resolves deliberately", (zone, parts, earlier, later) => {
@@ -137,7 +137,7 @@ describe("wall time to instant across clock changes", () => {
   });
 
   it("reads an instant back as the wall clock showed it", () => {
-    expect(zonedWallTime(new Date("2025-11-02T09:30:00Z"), "America/Vancouver")).toEqual({
+    expect(zonedWallTime(new Date("2025-11-02T09:30:00Z"), "America/Los_Angeles")).toEqual({
       year: 2025, month: 11, day: 2, hour: 1, minute: 30,
     });
     expect(zonedWallTime(new Date("2026-04-04T16:30:00Z"), "Australia/Sydney")).toEqual({
@@ -147,7 +147,7 @@ describe("wall time to instant across clock changes", () => {
 
   it("finds the next clock change to the minute", () => {
     const from = new Date("2026-01-01T00:00:00Z");
-    expect(nextOffsetChange(from, "America/Vancouver")?.toISOString()).toBe("2026-03-08T10:00:00.000Z");
+    expect(nextOffsetChange(from, "America/Los_Angeles")?.toISOString()).toBe("2026-03-08T10:00:00.000Z");
     expect(nextOffsetChange(from, "Europe/London")?.toISOString()).toBe("2026-03-29T01:00:00.000Z");
     expect(nextOffsetChange(from, "Australia/Sydney")?.toISOString()).toBe("2026-04-04T16:00:00.000Z");
   });
@@ -169,8 +169,8 @@ describe("local periods as UTC boundaries", () => {
     (bucket.end.getTime() - bucket.start.getTime()) / HOUR;
 
   it.each([
-    ["America/Vancouver", "2026-03-07T12:00:00Z", "2026-03-10T00:00:00Z", [24, 23, 24]],
-    ["America/Vancouver", "2025-11-01T12:00:00Z", "2025-11-03T00:00:00Z", [24, 25]],
+    ["America/Los_Angeles", "2026-03-07T12:00:00Z", "2026-03-10T00:00:00Z", [24, 23, 24]],
+    ["America/Los_Angeles", "2025-11-01T12:00:00Z", "2025-11-03T00:00:00Z", [24, 25]],
     ["Europe/London", "2026-10-24T12:00:00Z", "2026-10-26T00:00:00Z", [24, 25]],
     ["Australia/Sydney", "2026-04-04T00:00:00Z", "2026-04-05T12:00:00Z", [24, 25]],
     ["Asia/Tokyo", "2026-03-07T00:00:00Z", "2026-03-09T00:00:00Z", [24, 24, 24]],
@@ -198,10 +198,10 @@ describe("local periods as UTC boundaries", () => {
   });
 
   it("names the local day, not the UTC one", () => {
-    // 22:00 UTC is already tomorrow in Sydney and still today in Vancouver.
+    // 22:00 UTC is already tomorrow in Sydney and still today in Los Angeles.
     const instant = new Date("2026-12-09T22:00:00Z");
     expect(localPeriodOf(instant, "Australia/Sydney", "day").key).toBe("2026-12-10");
-    expect(localPeriodOf(instant, "America/Vancouver", "day").key).toBe("2026-12-09");
+    expect(localPeriodOf(instant, "America/Los_Angeles", "day").key).toBe("2026-12-09");
   });
 
   it("starts weeks on Monday and quarters on their first month, like date_trunc did", () => {
@@ -230,7 +230,7 @@ describe("local periods as UTC boundaries", () => {
     // One formatter per zone and no repeated-hour scan away from a change:
     // 730 buckets were ~320 ms of synchronous CPU before both.
     const run = () =>
-      localBuckets("America/Vancouver", new Date("2025-01-01T08:00:00Z"), new Date("2027-01-01T08:00:00Z"), "day");
+      localBuckets("America/Los_Angeles", new Date("2025-01-01T08:00:00Z"), new Date("2027-01-01T08:00:00Z"), "day");
     run();
     const started = performance.now();
     expect(run()).toHaveLength(730);

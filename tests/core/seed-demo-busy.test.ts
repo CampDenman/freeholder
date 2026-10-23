@@ -76,14 +76,18 @@ describe("the busy world, before anything installs it", () => {
   });
 
   it("puts studio hours on the studio's clock, summer and winter", () => {
-    // 9 am in Vancouver is 16:00 UTC under daylight time and 17:00 UTC after
-    // the November switch; a fixed offset gets one of them wrong.
-    expect(studioTime(new Date("2026-07-14T20:00:00Z"), 9).toISOString()).toBe("2026-07-14T16:00:00.000Z");
-    expect(studioTime(new Date("2026-11-10T20:00:00Z"), 9).toISOString()).toBe("2026-11-10T17:00:00.000Z");
+    // Nine o'clock on the studio's own clock in July and in January, whatever
+    // the tz data says the offset is: British Columbia's 2026 move to
+    // permanent UTC-7 changed the winter answer between Node releases, so the
+    // check is the wall clock, not a UTC hour.
+    for (const day of ["2026-07-14T20:00:00Z", "2027-01-12T20:00:00Z"]) {
+      const sitting = studioTime(new Date(day), 9);
+      expect(studioParts(sitting)).toMatchObject({ day: Number(day.slice(8, 10)), hour: 9, minute: 0 });
+    }
     // A Pacific evening is already tomorrow in UTC; the studio's date is not.
     const evening = new Date("2026-07-15T04:30:00Z");
     expect(studioParts(evening)).toMatchObject({ day: 14, hour: 21 });
-    expect(studioTime(evening, 9).toISOString()).toBe("2026-07-14T16:00:00.000Z");
+    expect(studioParts(studioTime(evening, 9))).toMatchObject({ day: 14, hour: 9 });
     // History asked for "today at five" before five lands in the past.
     const morning = world(new Date("2026-07-14T17:00:00Z")); // 10 am Pacific
     expect(morning.daysAgo(0, 17).getTime()).toBeLessThan(morning.now.getTime());
