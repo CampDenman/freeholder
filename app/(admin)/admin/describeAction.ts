@@ -400,7 +400,7 @@ export function needsOwnLine(action: string): boolean {
  * `entries` is the raw feed in order, with `line: null` for rows the owner
  * view hides. Only rows truly adjacent in it fold: a hidden row between two
  * identical lines is something else that happened, so it breaks the run (and
- * is then dropped). When the read stopped at its limit (`truncated`), the run
+ * is then dropped). When the read stopped at its limit (`truncated`), a run
  * that reaches the last row read may go on past it, so its count says "+"
  * rather than undercounting silently. The row shown is the newest of its run.
  */
@@ -426,7 +426,8 @@ export function collapseOwnerFeed<Entry extends { actor: string; line: string | 
     runs.push(open);
   });
   return runs.map(({ entry, count, reachesEnd }) => {
-    const more = Boolean(options.truncated) && reachesEnd;
+    // A single row is not a run: it gets no count, "+" or otherwise.
+    const more = Boolean(options.truncated) && reachesEnd && count > 1;
     return {
       ...entry,
       count,

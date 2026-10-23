@@ -5,7 +5,7 @@
 // log nobody can read does not keep it. This is the read side of the rows the
 // service wrapper has been writing since the spine landed.
 import { z } from "zod";
-import { and, desc, ne, notInArray, sql } from "drizzle-orm";
+import { and, desc, getTableColumns, ne, notInArray, sql } from "drizzle-orm";
 import { auditLog } from "@/core/events/schema";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, SEED_AUDIT_ACTOR } from "@/core/service";
@@ -72,11 +72,12 @@ export const recentActivity = defineService({
   handler: (input, ctx) =>
     ctx.tx
       .select({
-        id: auditLog.id,
-        actor: auditLog.actor,
-        action: auditLog.action,
-        at: auditLog.at,
-        sample: sql<boolean>`coalesce((${auditLog.diff}->>'seeded')::boolean, false)`,
+        // Every column the response has always carried (subject and diff
+        // included), plus the flag.
+        ...getTableColumns(auditLog),
+        // A jsonb comparison, not a cast: a stray `seeded: "yes"` is simply
+        // not sample, and can never make the cast throw and take the feed down.
+        sample: sql<boolean>`coalesce(${auditLog.diff} -> 'seeded' = 'true'::jsonb, false)`,
       })
       .from(auditLog)
       .where(

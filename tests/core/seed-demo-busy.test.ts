@@ -532,9 +532,9 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
     // The 360 backdated rows the busy layer writes directly are all tagged,
     // and every backdated row carrying one of its actions is one of them.
     const [tagged] = await rows<{ sample: number; sample_after: number; backdated_untagged: number }>(sql`
-      select count(*) filter (where (diff->>'seeded')::boolean)::int as sample,
-             count(*) filter (where (diff->>'seeded')::boolean and at >= ${now.toISOString()}::timestamptz)::int as sample_after,
-             count(*) filter (where at < ${now.toISOString()}::timestamptz and action in ('forms.submit', 'catalog.shopperCheckout', 'catalog.bookService', 'events.register', 'newsletters.subscribe', 'reviews.submit', 'conversations.record', 'invoicing.settlePayment', 'conversations.reply', 'invoicing.issue', 'invoicing.send', 'bookings.reschedule', 'catalog.shipFulfillment', 'contacts.update') and coalesce((diff->>'seeded')::boolean, false) = false)::int as backdated_untagged
+      select count(*) filter (where (diff->'seeded' = 'true'::jsonb))::int as sample,
+             count(*) filter (where (diff->'seeded' = 'true'::jsonb) and at >= ${now.toISOString()}::timestamptz)::int as sample_after,
+             count(*) filter (where at < ${now.toISOString()}::timestamptz and action in ('forms.submit', 'catalog.shopperCheckout', 'catalog.bookService', 'events.register', 'newsletters.subscribe', 'reviews.submit', 'conversations.record', 'invoicing.settlePayment', 'conversations.reply', 'invoicing.issue', 'invoicing.send', 'bookings.reschedule', 'catalog.shipFulfillment', 'contacts.update') and coalesce((diff->'seeded' = 'true'::jsonb), false) = false)::int as backdated_untagged
       from audit_log`);
     expect(tagged).toEqual({ sample: 360, sample_after: 0, backdated_untagged: 0 });
     // The read side carries the tag, so the full log can say "(sample)".

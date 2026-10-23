@@ -207,7 +207,8 @@ describe("audit log labels", () => {
     expect(collapseOwnerFeed([...page, row(200, "anonymous", "A visitor sent a form")], t, { truncated: true }).map((entry) => entry.line)).toEqual([
       "A visitor sent a form",
       "Freeholder updated pages ×99",
-      "A visitor sent a form ×1+",
+      // A single row at the limit is not a run and gets no suffix.
+      "A visitor sent a form",
     ]);
     // A hidden row as the last one read ends no visible run at the limit.
     expect(collapseOwnerFeed([...page, hidden], t, { truncated: true }).map((entry) => entry.line)).toEqual([
