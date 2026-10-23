@@ -118,6 +118,108 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "members.applyPayoutWebhook": "admin.activity.payoutRecorded",
   "members.reversePayouts": "admin.activity.payoutReversed",
   "members.openDispute": "admin.activity.disputeOpened",
+  // Money, sign-in, keys, roles and grants never fall through to the
+  // generic line: an owner reads each as what it is (2026-10-23 review).
+  "auth.registerOwner": "admin.activity.ownerRegistered",
+  "auth.login": "admin.activity.signedIn",
+  "auth.completePasskeyLogin": "admin.activity.signedIn",
+  "auth.completeTwoFactorLogin": "admin.activity.signedIn",
+  "auth.completeWebAuthnLogin": "admin.activity.signedIn",
+  "auth.consumeCustomerMagicLink": "admin.activity.signedIn",
+  "auth.beginPasskeyLogin": "admin.activity.signInStarted",
+  "auth.requestCustomerMagicLink": "admin.activity.signInLinkRequested",
+  "auth.logout": "admin.activity.signedOut",
+  "auth.revokeSession": "admin.activity.signedOut",
+  "auth.revokeOtherSessions": "admin.activity.signedOut",
+  "auth.changePassword": "admin.activity.passwordChanged",
+  "auth.resetPassword": "admin.activity.passwordChanged",
+  "auth.requestPasswordReset": "admin.activity.passwordResetRequested",
+  "auth.verifyStepUpCode": "admin.activity.identityConfirmed",
+  "auth.beginWebAuthnStepUp": "admin.activity.identityConfirmed",
+  "auth.finishWebAuthnStepUp": "admin.activity.identityConfirmed",
+  "auth.beginTotpEnrollment": "admin.activity.securityChanged",
+  "auth.confirmTotpEnrollment": "admin.activity.securityChanged",
+  "auth.beginWebAuthnRegistration": "admin.activity.securityChanged",
+  "auth.finishWebAuthnRegistration": "admin.activity.securityChanged",
+  "auth.regenerateRecoveryCodes": "admin.activity.securityChanged",
+  "auth.removeTotpFactor": "admin.activity.securityChanged",
+  "auth.removeWebAuthnFactor": "admin.activity.securityChanged",
+  "apikeys.create": "admin.activity.apiKeyCreated",
+  "apikeys.createMine": "admin.activity.apiKeyCreated",
+  "apikeys.revoke": "admin.activity.apiKeyRevoked",
+  "apikeys.revokeMine": "admin.activity.apiKeyRevoked",
+  "roles.create": "admin.activity.rolesChanged",
+  "roles.update": "admin.activity.rolesChanged",
+  "roles.delete": "admin.activity.rolesChanged",
+  "roles.assign": "admin.activity.roleAssigned",
+  "connections.grantToAgent": "admin.activity.agentAccessGranted",
+  "entitlements.grant": "admin.activity.accessGranted",
+  "privacy.grantMediaConsent": "admin.activity.consentRecorded",
+  "media.grantCapturePermission": "admin.activity.recordingAllowed",
+  "catalog.grantDigitalFulfillment": "admin.activity.downloadsGranted",
+  "webhooks.rotateSecret": "admin.activity.secretRotated",
+  "calendars.issueFeed": "admin.activity.calendarLinkChanged",
+  "calendars.revokeFeed": "admin.activity.calendarLinkChanged",
+  "catalog.createPriceList": "admin.activity.pricesChanged",
+  "catalog.setPriceListEntry": "admin.activity.pricesChanged",
+  "catalog.setPriceBreak": "admin.activity.pricesChanged",
+  "galleries.addPriceSheetItem": "admin.activity.pricesChanged",
+  "galleries.removePriceSheetItem": "admin.activity.pricesChanged",
+  "catalog.setPriceRule": "admin.activity.paymentOptionsChanged",
+  "catalog.removePriceRule": "admin.activity.paymentOptionsChanged",
+  "invoicing.createCreditNote": "admin.activity.creditNoteDrafted",
+  "invoicing.issueCreditNote": "admin.activity.creditNoteIssued",
+  "invoicing.voidCreditNote": "admin.activity.creditNoteVoided",
+  "marketplace.reconcileRefund": "admin.activity.creditNoteIssued",
+  "invoicing.createDepositAndBalance": "admin.activity.invoiceDrafted",
+  "invoicing.createFlexiblePayment": "admin.activity.invoiceDrafted",
+  "time.invoice": "admin.activity.invoiceDrafted",
+  "ads.invoiceCampaign": "admin.activity.invoiceDrafted",
+  "giftRegistry.invoiceItem": "admin.activity.invoiceDrafted",
+  "giftRegistry.claimItemInvoice": "admin.activity.invoiceDrafted",
+  "giftRegistry.applyItemInvoice": "admin.activity.invoiceDrafted",
+  "invoicing.assessLateFee": "admin.activity.lateFeeAdded",
+  "invoicing.adjustCustomerBalance": "admin.activity.balanceChanged",
+  "invoicing.applyCustomerBalance": "admin.activity.balanceChanged",
+  "catalog.applyGiftCardToInvoice": "admin.activity.balanceChanged",
+  "invoicing.createPaymentPlan": "admin.activity.paymentPlanChanged",
+  "invoicing.refreshPaymentPlans": "admin.activity.paymentPlanChanged",
+  "invoicing.cancelPaymentPlan": "admin.activity.paymentPlanChanged",
+  "invoicing.createPayment": "admin.activity.paymentStarted",
+  "invoicing.startPayment": "admin.activity.paymentStarted",
+  "invoicing.beginPaymentCheckout": "admin.activity.paymentStarted",
+  "invoicing.claimPaymentCheckout": "admin.activity.paymentStarted",
+  "invoicing.beginInPersonPayment": "admin.activity.paymentStarted",
+  "invoicing.claimInPersonPayment": "admin.activity.paymentStarted",
+  "invoicing.beginCustomerCheckout": "admin.activity.paymentStarted",
+  "invoicing.claimCustomerCheckout": "admin.activity.paymentStarted",
+  "catalog.issueGiftCard": "admin.activity.giftCardIssued",
+  "catalog.sendGiftCard": "admin.activity.giftCardSent",
+  "subscriptions.chargePlatformInvoice": "admin.activity.paymentStarted",
+  "subscriptions.chargePlatformDue": "admin.activity.paymentStarted",
+  "invoicing.cancelPayment": "admin.activity.paymentCancelled",
+  "invoicing.recordProviderBalanceTransaction": "admin.activity.paymentUpdated",
+  "invoicing.revokeSavedPaymentMethod": "admin.activity.savedMethodRemoved",
+  "invoicing.applySavedPaymentMethodRevocation": "admin.activity.savedMethodRemoved",
+  "catalog.payOrder": "admin.activity.orderPaid",
+  "catalog.releaseOrderPaymentMilestone": "admin.activity.paymentMilestoneReleased",
+  "events.cancelRegistrationForInvoice": "admin.activity.eventRegistrationCancelled",
+  "invoicing.cancelRefund": "admin.activity.refundCancelled",
+  "invoicing.refundCustomerBalancePayment": "admin.activity.refundUpdated",
+  "invoicing.submitProviderRefund": "admin.activity.refundUpdated",
+  "invoicing.claimProviderRefund": "admin.activity.refundUpdated",
+  "members.releaseDuePayouts": "admin.activity.payoutRecorded",
+  "members.recordInvoicePayout": "admin.activity.payoutRecorded",
+  "referrals.buildPayoutBatch": "admin.activity.payoutRecorded",
+  "referrals.approvePayoutBatch": "admin.activity.payoutRecorded",
+  "referrals.markPayoutBatchPaid": "admin.activity.payoutRecorded",
+  "members.savePayoutInstructions": "admin.activity.payoutDetailsChanged",
+  "members.setPayoutAccountStatus": "admin.activity.payoutDetailsChanged",
+  "members.applyPayoutAccount": "admin.activity.payoutDetailsChanged",
+  "members.startPayoutSetup": "admin.activity.payoutDetailsChanged",
+  "members.refreshPayoutAccount": "admin.activity.payoutDetailsChanged",
+  "members.withdrawDispute": "admin.activity.disputeUpdated",
+  "members.resolveDispute": "admin.activity.disputeUpdated",
 };
 
 /**
@@ -188,9 +290,27 @@ export function ownerActivityLine(
   if (OWNER_HIDDEN_ACTIONS.has(entry.action)) return null;
   const areaKey = OWNER_ACTIVITY_AREAS[entry.action.split(".")[0] ?? ""];
   const area = t(areaKey ?? "admin.activity.area.site");
-  // The actor is printed beside the line, so a teammate's change does not
-  // claim Freeholder made it.
-  return entry.actor.startsWith("user:")
-    ? t("admin.activity.teamUpdated", { area })
-    : t("admin.activity.platformUpdated", { area });
+  // Said by who did it (the `actorString` kinds): only the platform's own
+  // work reads as "Freeholder updated…".
+  if (entry.actor.startsWith("user:")) return t("admin.activity.teamUpdated", { area });
+  if (entry.actor.startsWith("agent:")) return t("admin.activity.agentUpdated", { area });
+  if (entry.actor === "system") return t("admin.activity.platformUpdated", { area });
+  return t("admin.activity.visitorUpdated", { area });
+}
+
+/**
+ * Actions an owner must never see as the generic "updated {area}" line:
+ * money (payments, refunds, payouts, disputes, prices, balances, credit,
+ * invoices), sign-in, API keys, roles, grants and secrets. Every registered
+ * mutation this matches needs its own `OWNER_ACTIVITY_LABELS` entry, which
+ * `tests/core/audit-labels.test.ts` enforces.
+ */
+export function needsOwnLine(action: string): boolean {
+  const [module = "", verb = ""] = action.split(".");
+  if (["auth", "apikeys", "roles"].includes(module)) return true;
+  return (
+    /^(pay|refund|charge)/.test(verb) ||
+    /grant|Grant|Payment|Refund|Payout|Dispute|Price|Balance|Credit|Charge|LateFee|GiftCard|Invoice|Secret|Feed/.test(verb) ||
+    (module === "invoicing" && /^(issue|void|send|createDraft|cancel|apply|settle|fail|record|reconcile|submit|claim|begin|start|complete|confirm|revoke|adjust|assess)/.test(verb))
+  );
 }

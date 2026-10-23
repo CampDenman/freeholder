@@ -53,7 +53,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { assets } from "@/core/media/schema";
 import { products } from "@/modules/catalog/schema";
-import { attachProductMedia } from "@/modules/catalog/merchandising";
+import { attachProductMedia, productCardImages } from "@/modules/catalog/merchandising";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const BUSINESS = {
@@ -452,6 +452,16 @@ describe.runIf(hasDatabase)("the merchandising blocks against the catalog", { ti
       .returning();
     const [current] = await db().select({ version: products.version }).from(products).where(eq(products.id, coast.id));
     await attachProductMedia.call({ productId: coast.id, expectedVersion: current!.version, assetId: asset!.id, role: "hero" }, OWNER);
+    // A private picture never reaches the public shelf, even as a hero.
+    const dune = (await resolveVisibleProduct.call({ slug: "dune-print" }, OWNER))!;
+    const [hidden] = await db()
+      .insert(assets)
+      .values({ kind: "image", storageKey: "test/dune.jpg", filename: "dune.jpg", mime: "image/jpeg", legacyBytes: 100, bytes: 100, status: "ready", isPrivate: true, altText: "Private dune" })
+      .returning();
+    const [duneNow] = await db().select({ version: products.version }).from(products).where(eq(products.id, dune.id));
+    await attachProductMedia.call({ productId: dune.id, expectedVersion: duneNow!.version, assetId: hidden!.id, role: "hero" }, OWNER);
+    const cards = await productCardImages.call({ slugs: ["coast-print", "dune-print"] }, { kind: "anonymous" });
+    expect(cards.map((card) => [card.slug, card.altText])).toEqual([["coast-print", "Coast at dawn"]]);
 
     const html = await htmlOf([{ id: "p1", type: "productsIndex", props: {} }]);
     expect(html).toContain('href="/products/coast-print"');

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Customer journeys run against real PostgreSQL, shared services and permissions.
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
@@ -24,14 +24,14 @@ import { createAudience, setAudienceServices } from "@/core/scheduling/audiences
 import { availableSlots } from "@/core/scheduling/resolver-service";
 import { bookings } from "@/core/scheduling/schema";
 import { bookingByToken } from "@/core/scheduling/bookings";
-import { NO_POLICY } from "@/core/scheduling/policy";
+import { isNoPolicy, NO_POLICY } from "@/core/scheduling/policy";
 import { PLAYGROUND_BASELINE_MODULE, PLAYGROUND_FICTIONAL_BOOKING_EMAIL, PLAYGROUND_ROW_CAPS } from "@/core/demo/playground-policy";
 import { moduleSettings } from "@/core/settings/schema";
 import { chosenSlot } from "../../app/(public)/book/chosen";
 import { hasAccess } from "@/core/entitlements/service";
 import { productVariants, products, priceLists, priceListEntries } from "@/modules/catalog/schema";
 import { upsertServiceOffering, setPriceRule } from "@/modules/catalog/offerings";
-import { publicBookingQuote, bookPublicService, moveMyBooking } from "@/modules/catalog/public-booking";
+import { bookingTermsHash, publicBookingQuote, bookPublicService, moveMyBooking } from "@/modules/catalog/public-booking";
 import { createPage, publishPage, updatePage, ensureDefaults } from "@/modules/cms/service";
 import { listBlogPosts } from "@/modules/cms/blog";
 import { savePlan, cancelMySubscription } from "@/modules/subscriptions/service";
@@ -146,6 +146,16 @@ describe.runIf(hasDatabase)("public customer surfaces",()=>{
     // the other naming "No cancellation policy" (2026-10-23 pre-launch check).
     expect((await publicBookingQuote.call({productId:input.productId,currency:input.currency,mode:input.mode,seats:input.seats},ANONYMOUS)).policy).toBeNull();
     expect((await bookingByToken.call({token:guest.manageToken!},ANONYMOUS))?.policyName).toBeNull();
+    // The terms hash is the one the old fallback quote produced, so a booking
+    // page open across the deploy still books (2026-10-23 review).
+    const fields={productId:"p",offeringId:"o",durationMin:60,capacity:1,offeringUpdatedAt:new Date(0),price:9_500,due:9_500,currency:"CAD",mode:"full",seats:1};
+    const before=createHash("sha256").update(JSON.stringify({...fields,policy:NO_POLICY})).digest("hex");
+    expect(bookingTermsHash({...fields,policy:null})).toBe(before);
+    // Recognised by shape, not by serialisation: an owner's policy that shares
+    // the name but charges a fee is still a policy.
+    expect(isNoPolicy(NO_POLICY)).toBe(true);
+    expect(isNoPolicy({...NO_POLICY,feeType:"fixed",feeValue:2_500})).toBe(false);
+    expect(isNoPolicy({noShowFeeMinor:0,rescheduleLimit:100,feeValue:null,feeType:"none",freeUntilHours:0,name:"No cancellation policy"})).toBe(true);
     // A booking that stored the old fallback reads the same way.
     await db().update(bookings).set({cancellationPolicy:NO_POLICY}).where(eq(bookings.id,guest.bookingId));
     expect((await bookingByToken.call({token:guest.manageToken!},ANONYMOUS))?.policyName).toBeNull();

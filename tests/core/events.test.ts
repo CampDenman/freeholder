@@ -347,7 +347,7 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     const customerCopy = await getCustomerInvoice.call({ id: atBusiness.id, token: invoiceAccessToken(atBusiness) }, ANONYMOUS);
     expect(customerCopy.lines.map((line) => line.amountMinor)).toEqual([6_500]);
     expect(customerCopy.lines.reduce((sum, line) => sum + line.amountMinor, 0))
-      .toBe(customerCopy.subtotalMinor - customerCopy.discountMinor);
+      .toBe(customerCopy.subtotalMinor);
     expect(customerCopy.subtotalMinor - customerCopy.discountMinor + customerCopy.shippingMinor + customerCopy.taxMinor)
       .toBe(customerCopy.totalMinor);
     expect(await invoiceFor({ venueLocationId: studio.id })).toMatchObject({ taxMinor: 325, totalMinor: 6_825 });

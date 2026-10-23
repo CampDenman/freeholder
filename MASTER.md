@@ -4457,16 +4457,24 @@ project without silent telemetry, and ready to carry money.
   bookings made, moved and updated, order cancel/ship/deliver/return,
   offline and in-person payments, refunds, provider payouts, form review and
   event check-in/cancel map to owner lines in all four locales; anything
-  still unmapped reads "Freeholder updated {area}" (or "Updated {area}" for a
-  teammate, whose name is printed beside it) from `OWNER_ACTIVITY_AREAS`,
-  falling back to "your site". Payment, refund, dispute and payout rows stay
-  visible by default; the summary stays in the full log. Demo copy: pickup
+  still unmapped reads "Updated {area}" (a teammate), "An API key or agent
+  updated {area}", "A visitor updated {area}" or, for the platform's own
+  work only, "Freeholder updated {area}", from `OWNER_ACTIVITY_AREAS`,
+  falling back to "your site". Money, sign-in, API key, role, grant and
+  secret actions never take that generic line: `needsOwnLine` names the
+  classes and every registered mutation in them has its own label (credit
+  notes, price lists and rules, refunds cancelled, payment attempts,
+  balances, payout details, disputes, sign-in and factor changes, keys,
+  roles, agent and contact grants). Payment, refund, dispute and payout rows
+  stay visible by default; the summary stays in the full log. Demo copy: pickup
   is "at the Courtenay studio" (the studio's address); the order
   confirmation replaces "Sign in to track this order in your portal" with a
   note that customer sign-in is off in the playground. Regressions:
   `tests/core/audit-labels.test.ts` (every registered service, in every
   locale and for system, visitor and teammate actors, is hidden or gets a
-  translated line that is neither its summary nor its code name),
+  translated line that is neither its summary nor its code name; every
+  `needsOwnLine` mutation has its own label; generic lines name the actor
+  kind),
   `tests/core/seed-demo-busy.test.ts` (pickup names the location's city),
   `tests/core/cart-storefront.test.ts` (playground confirmation). Changeset
   `demo-prelaunch-polish.md`.
@@ -5241,7 +5249,10 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   and every shelf (collection page, collection showcase, product row,
   /products) shows the product's lead picture through the new batched
   public query `catalog.productCardImages` (hero, else first gallery image;
-  public, ready, non-private images only; one query per shelf). Regression:
+  active public products, ready non-private images only). It is one query:
+  the asset columns ride on the product/media join and URLs are built by
+  `renderableImage` (shared with `media.resolveImage`) with no per-product
+  lookup. Regression:
   `tests/core/merch-blocks.test.ts` ("gives /products the collection
   card…"). Changeset `demo-prelaunch-polish.md`.
 - [x] **C3.26** World-class merchandising: first-class product taxonomy —
@@ -6404,11 +6415,16 @@ owner operations, never substitute for them.
   total 106.40, invoice subtotal 95.00); the customer projection
   `invoicing.customerInvoice` gave the page only the line's tax-inclusive
   `totalMinor` to print beside a pre-tax subtotal. Each line now also
-  carries `amountMinor` (subtotal less discount, the line's share of the
-  invoice subtotal), which the portal invoice and the admin invoice detail
-  print; `totalMinor` stays for existing API readers. Regression:
-  `tests/core/events.test.ts` ("taxes admission where the event happens…":
-  the customer copy's lines add up to its subtotal). Changeset
+  carries `amountMinor` (the line's pre-discount, pre-tax subtotal — exactly
+  what the invoice subtotal sums, with the discount on its own row), which
+  the portal invoice prints; `totalMinor` stays for existing API readers.
+  The admin detail prints "quantity × unit = gross" as entered and, when
+  they differ, the pre-tax amount ("Before tax", tax-inclusive zones) and
+  any line discount on their own labelled lines (`invoiceLineAmounts`).
+  Regressions: `tests/core/events.test.ts` ("taxes admission where the event
+  happens…"), `tests/core/customer-invoices.test.ts` (discounted,
+  tax-exclusive and tax-inclusive lines add up to the printed subtotal and
+  the admin arithmetic holds). Changeset
   `demo-prelaunch-polish.md`.
 
 - [x] **C5.26** Build owner-configured calculators that compute only from inputs
@@ -7216,7 +7232,11 @@ equipment, classes and expertise without double-booking or duplicated records.
   `catalog.publicBookingQuote` now quotes `policy: null` when none is
   attached (cancelling still runs on `NO_POLICY`), and both pages print the
   same "No cancellation policy applies…" line; a booking that stored the
-  old fallback reads the same way (`policyName` null). Regression:
+  old fallback reads the same way (`policyName` null, recognised
+  structurally by `isNoPolicy`). `bookingTermsHash` hashes `NO_POLICY` for
+  the no-policy case, so the terms hash is byte-identical to the one pages
+  computed before the change and a page open across the deploy still
+  books. Regression:
   `tests/modules/customer-surfaces.test.ts`. Changeset
   `demo-prelaunch-polish.md`.
 

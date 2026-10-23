@@ -7,7 +7,7 @@ import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import { assets } from "@/core/media/schema";
-import { resolveImage } from "@/core/media/service";
+import { renderableImage } from "@/core/media/service";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import {
   ATTRIBUTE_KINDS,
@@ -508,7 +508,17 @@ export const productCardImages = defineService({
   handler: async (input, ctx) => {
     if (input.slugs.length === 0) return [];
     const rows = await ctx.tx
-      .selectDistinctOn([products.id], { slug: products.slug, assetId: productMedia.assetId })
+      .selectDistinctOn([products.id], {
+        slug: products.slug,
+        storageKey: assets.storageKey,
+        mime: assets.mime,
+        variants: assets.variants,
+        width: assets.width,
+        height: assets.height,
+        altText: assets.altText,
+        focalX: assets.focalX,
+        focalY: assets.focalY,
+      })
       .from(productMedia)
       .innerJoin(products, eq(products.id, productMedia.productId))
       .innerJoin(assets, eq(assets.id, productMedia.assetId))
@@ -525,14 +535,15 @@ export const productCardImages = defineService({
         ),
       )
       .orderBy(products.id, sql`case when ${productMedia.role} = 'hero' then 0 else 1 end`, asc(productMedia.position));
-    const out = [];
-    for (const row of rows) {
-      const image = await ctx.call(resolveImage, { id: row.assetId });
-      if (image) {
-        out.push({ slug: row.slug, src: image.src, width: image.width, height: image.height, altText: image.altText });
-      }
-    }
-    return out;
+    // One query: the asset columns ride along, so no per-product lookup. The
+    // WHERE clause above is the visibility rule (active public products;
+    // ready, non-private images), so rows go straight to URL building.
+    return Promise.all(
+      rows.map(async ({ slug, ...asset }) => {
+        const image = await renderableImage(asset);
+        return { slug, src: image.src, width: image.width, height: image.height, altText: image.altText };
+      }),
+    );
   },
 });
 

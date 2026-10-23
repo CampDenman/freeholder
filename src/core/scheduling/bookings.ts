@@ -39,8 +39,8 @@ import { registerContactPrivacySource } from "@/core/privacy/service";
 import {
   cancellationOutcome,
   cancellationTerms,
+  isNoPolicy,
   mayReschedule,
-  NO_POLICY,
   noShowOutcome,
   storedOutcome,
   termsFrom,
@@ -760,7 +760,7 @@ function tokenViewOf(
     // A booking that stored the no-policy fallback (public bookings did,
     // before 2026-10-23) has no policy to name either.
     policyName:
-      booking.cancellationPolicy && JSON.stringify(terms) !== JSON.stringify(NO_POLICY) ? terms.name : null,
+      booking.cancellationPolicy && !isNoPolicy(terms) ? terms.name : null,
     intakeFormId: outstanding?.intakeFormId ?? null,
     waiverToken: outstanding?.waiverToken ?? null,
   };

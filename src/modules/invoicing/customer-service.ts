@@ -84,8 +84,10 @@ const customerInvoice = z.object({
   subtotalMinor: z.number().int(), discountMinor: z.number().int(), shippingMinor: z.number().int(),
   taxMinor: z.number().int(), totalMinor: z.number().int(), paidMinor: z.number().int(),
   dueAt: z.date().nullable(), memo: z.string().nullable(), requiredTaxLegend: z.string().nullable(),
-  // `amountMinor` is the line's share of the subtotal (net of discount, before
-  // tax), so the lines add up to the subtotal printed under them. `totalMinor`
+  // `amountMinor` is the line's share of the subtotal (before discount and
+  // before tax — the invoice subtotal sums exactly these, and the discount is
+  // its own row beneath it), so the lines add up to the subtotal printed under
+  // them. `totalMinor`
   // includes the line's tax and stays for API readers that already use it; a
   // page that lists it beside a pre-tax subtotal shows tax twice (2026-10-23
   // pre-launch check: CA$106.40 on the line, CA$95.00 + CA$11.40 below).
@@ -103,10 +105,9 @@ export const getCustomerInvoice = defineService({
   handler: async (input, ctx) => {
     const invoice = await authorizedInvoice(input, ctx);
     const lines = (await ctx.tx.select({ id: invoiceLines.id, description: invoiceLines.description,
-      quantityMicros: invoiceLines.quantityMicros, subtotalMinor: invoiceLines.subtotalMinor,
-      discountMinor: invoiceLines.discountMinor, totalMinor: invoiceLines.totalMinor })
-      .from(invoiceLines).where(eq(invoiceLines.invoiceId, invoice.id)).orderBy(asc(invoiceLines.position)))
-      .map(({ subtotalMinor, discountMinor, ...line }) => ({ ...line, amountMinor: subtotalMinor - discountMinor }));
+      quantityMicros: invoiceLines.quantityMicros, amountMinor: invoiceLines.subtotalMinor,
+      totalMinor: invoiceLines.totalMinor })
+      .from(invoiceLines).where(eq(invoiceLines.invoiceId, invoice.id)).orderBy(asc(invoiceLines.position)));
     const adapter = paymentAdapter();
     const nextPaymentMinor = payable(invoice) ? await customerCheckoutAmount(invoice, ctx) : null;
     return { id: invoice.id, number: invoice.number!, status: invoice.status, currency: invoice.currency,

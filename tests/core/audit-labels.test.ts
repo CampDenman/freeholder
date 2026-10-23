@@ -7,7 +7,7 @@
 // rendered `cms.ensureDefaults` as "Cm — ensure defaults" because the label
 // was derived by stripping a trailing s from the module name.
 import { describe, expect, it } from "vitest";
-import { describeAction, OWNER_ACTIVITY_AREAS, OWNER_ACTIVITY_LABELS, OWNER_HIDDEN_ACTIONS, ownerActivityLine } from "../../app/(admin)/admin/describeAction";
+import { describeAction, OWNER_ACTIVITY_AREAS, OWNER_ACTIVITY_LABELS, OWNER_HIDDEN_ACTIONS, needsOwnLine, ownerActivityLine } from "../../app/(admin)/admin/describeAction";
 import { catalogKeys, translator } from "@/core/i18n";
 import { HOUSEKEEPING_ACTIONS } from "@/core/events/service";
 import { ensureDefaults } from "@/modules/cms/service";
@@ -78,6 +78,32 @@ describe("audit log labels", () => {
     // Unmapped: a generic line naming the area, never the code name.
     expect(ownerActivityLine({ action: "invoicing.addTaxRate", actor: "system" }, en)).toBe("Freeholder updated invoices");
     expect(ownerActivityLine({ action: "proof.somethingNew", actor: "system" }, en)).toBe("Freeholder updated your site");
+    // …said by who did it: only the platform itself is "Freeholder".
+    expect(ownerActivityLine({ action: "invoicing.addTaxRate", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("Updated invoices");
+    expect(ownerActivityLine({ action: "invoicing.addTaxRate", actor: "agent:Inbox triager" }, en)).toBe("An API key or agent updated invoices");
+    expect(ownerActivityLine({ action: "invoicing.addTaxRate", actor: "anonymous" }, en)).toBe("A visitor updated invoices");
+    // Money, sign-in, keys and grants each say what they are (2026-10-23 review).
+    expect(ownerActivityLine({ action: "apikeys.create", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("An API key was created");
+    expect(ownerActivityLine({ action: "apikeys.revoke", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("An API key was revoked");
+    expect(ownerActivityLine({ action: "auth.changePassword", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("A password was changed");
+    expect(ownerActivityLine({ action: "connections.grantToAgent", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("An agent was given use of a connected account");
+    expect(ownerActivityLine({ action: "entitlements.grant", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("A contact was given access");
+    expect(ownerActivityLine({ action: "invoicing.createCreditNote", actor: "system" }, en)).toBe("A credit note was drafted");
+    expect(ownerActivityLine({ action: "invoicing.voidCreditNote", actor: "system" }, en)).toBe("A credit note was voided");
+    expect(ownerActivityLine({ action: "invoicing.cancelRefund", actor: "system" }, en)).toBe("A refund was cancelled");
+    expect(ownerActivityLine({ action: "invoicing.refundCustomerBalancePayment", actor: "system" }, en)).toBe("A refund was updated");
+    expect(ownerActivityLine({ action: "catalog.setPriceListEntry", actor: "system" }, en)).toBe("Prices were changed");
+    expect(ownerActivityLine({ action: "catalog.setPriceRule", actor: "system" }, en)).toBe("A service's payment options were changed");
+    // Every registered mutation in those classes has its own line, so none
+    // can fall through to "updated {area}".
+    const unmapped = [...listServices()]
+      .filter(([name, service]) => service.def.kind === "mutation" && needsOwnLine(name))
+      .map(([name]) => name)
+      .filter((name) => !OWNER_ACTIVITY_LABELS[name]);
+    expect(unmapped).toEqual([]);
+    for (const name of ["apikeys.create", "auth.login", "invoicing.cancelRefund", "members.resolveDispute", "catalog.removePriceRule", "entitlements.grant"]) {
+      expect(needsOwnLine(name), name).toBe(true);
+    }
     // Every registered service, in every locale: hidden, or a translated line
     // that is neither its summary, a missing catalog key nor its code name.
     for (const locale of ["en", "es", "fr", "ar"]) {
