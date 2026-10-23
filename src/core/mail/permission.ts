@@ -22,7 +22,7 @@
 //   contact whose email has changed since is withdrawn where the carrier
 //   actually holds them.
 import { isIP } from "node:net";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { MailAdapterError, type MarketingConsentEvidence } from "@/adapters/mail/types";
 import { db } from "@/core/db";
 import type { Tx } from "@/core/service";
@@ -133,14 +133,37 @@ export async function rememberProviderGrant(
 
 type GrantRow = { id: string; email: string };
 
-/** The carrier that keeps a consent ledger, or null when none is reachable here. */
-async function withdrawalCarrier() {
-  if (playgroundBlocksExternalDelivery(env())) return null;
-  const { bulkMail, mailConfigurationStatus } = await import("@/adapters/mail");
-  if (!mailConfigurationStatus().bulk.sendConfigured) return null;
-  const carrier = bulkMail();
-  if (!carrier.recordWithdrawal || carrier.id !== "paradise") return null;
-  return carrier as typeof carrier & { recordWithdrawal: (email: string) => Promise<void> };
+type Withdrawer = { recordWithdrawal: (email: string) => Promise<void> };
+
+/**
+ * Who can withdraw a grant held by Paradise Modern: its mail adapter,
+ * whenever the site's Paradise credentials are configured — whichever adapter
+ * is the campaign carrier today, since a grant recorded there stays there
+ * after the owner switches carriers. "playground" when this instance may not
+ * contact any provider; null when there are no credentials to do it with.
+ */
+async function grantWithdrawer(): Promise<Withdrawer | "playground" | null> {
+  const current = env();
+  if (playgroundBlocksExternalDelivery(current)) return "playground";
+  if (!current.PARADISEMODERN_API_KEY) return null;
+  const { createParadiseMail } = await import("@/adapters/mail/paradise");
+  const adapter = createParadiseMail({ kind: "bulk", topic: current.PARADISEMODERN_MAIL_TOPIC ?? "newsletter" });
+  return { recordWithdrawal: (email) => adapter.recordWithdrawal!(email) };
+}
+
+/** Detached grants still waiting for the carrier to be told (doctor, C3.31). */
+export async function grantsAwaitingWithdrawal(): Promise<number> {
+  const [row] = await db()
+    .select({ count: sql<number>`count(*)::int` })
+    .from(mailProviderGrants)
+    .where(
+      and(
+        isNull(mailProviderGrants.consentRecordId),
+        isNull(mailProviderGrants.withdrawnAt),
+        isNull(mailProviderGrants.withdrawalError),
+      ),
+    );
+  return row?.count ?? 0;
 }
 
 /**
@@ -190,8 +213,10 @@ export async function mirrorMarketingWithdrawal(payload: unknown): Promise<void>
   // A denial was never a grant, so the carrier holds nothing to withdraw.
   if (event.state !== "withdrawn") return;
   if (!event.contactId) return;
-  const carrier = await withdrawalCarrier();
-  if (!carrier) return;
+  const carrier = await grantWithdrawer();
+  // Nothing to tell, or no way to tell it: the grant stays open, so a later
+  // withdrawal (or erasure) can still reach the carrier once it can.
+  if (!carrier || carrier === "playground") return;
   const grants = await db()
     .select({ id: mailProviderGrants.id, email: mailProviderGrants.email })
     .from(mailProviderGrants)
@@ -218,32 +243,73 @@ export async function mirrorMarketingWithdrawal(payload: unknown): Promise<void>
  * Finish grants whose contact is gone — erased (detached on purpose) or
  * deleted (`consent_record_id` set null by the cascade): withdraw each at the
  * carrier, then delete the row, so the address is kept only as long as the
- * withdrawal needs it. With no reachable carrier there is nothing to tell,
- * and the rows are deleted. A transient failure throws for a retry.
+ * withdrawal needs it. An erasure waiting on these rows is acknowledged once
+ * its last row is gone.
+ *
+ * Never deleted unwithdrawn: on the playground nothing is touched, and with
+ * no Paradise credentials the rows stay (doctor reports them) until the
+ * credentials are back and the next sweep finishes them. A transient carrier
+ * failure throws for a retry; a permanent refusal is logged and the row is
+ * finished.
  */
-export async function withdrawDetachedGrants(grantIds?: readonly string[]): Promise<number> {
-  const detached = and(
-    isNull(mailProviderGrants.consentRecordId),
-    ...(grantIds ? [inArray(mailProviderGrants.id, [...grantIds])] : []),
-  );
-  const grants = grantIds && grantIds.length === 0
-    ? []
-    : await db()
-        .select({
-          id: mailProviderGrants.id,
-          email: mailProviderGrants.email,
-          withdrawnAt: mailProviderGrants.withdrawnAt,
-          withdrawalError: mailProviderGrants.withdrawalError,
-        })
-        .from(mailProviderGrants)
-        .where(detached);
-  if (grants.length === 0) return 0;
+export async function withdrawDetachedGrants(
+  grantIds?: readonly string[],
+): Promise<{ removed: number; waiting: number }> {
+  if (grantIds && grantIds.length === 0) return { removed: 0, waiting: 0 };
+  const grants = await db()
+    .select({
+      id: mailProviderGrants.id,
+      email: mailProviderGrants.email,
+      withdrawnAt: mailProviderGrants.withdrawnAt,
+      withdrawalError: mailProviderGrants.withdrawalError,
+      erasureRequestId: mailProviderGrants.erasureRequestId,
+      erasureJobId: mailProviderGrants.erasureJobId,
+    })
+    .from(mailProviderGrants)
+    .where(
+      and(
+        isNull(mailProviderGrants.consentRecordId),
+        ...(grantIds ? [inArray(mailProviderGrants.id, [...grantIds])] : []),
+      ),
+    );
+  if (grants.length === 0) return { removed: 0, waiting: 0 };
   const open = grants.filter((grant) => !grant.withdrawnAt && !grant.withdrawalError);
-  const carrier = open.length ? await withdrawalCarrier() : null;
-  if (carrier) await withdrawAddresses(carrier, open);
+  let finishable = grants.filter((grant) => grant.withdrawnAt || grant.withdrawalError);
+  let waiting = 0;
+  if (open.length) {
+    const withdrawer = await grantWithdrawer();
+    if (withdrawer === "playground") return { removed: 0, waiting: open.length };
+    if (withdrawer === null) {
+      waiting = open.length;
+      console.warn(
+        `[mail] ${open.length} Paradise Modern marketing grant(s) of deleted or erased contacts await withdrawal; set PARADISEMODERN_API_KEY so Freeholder can tell Paradise Modern and finish.`,
+      );
+    } else {
+      await withdrawAddresses(withdrawer, open);
+      finishable = grants;
+    }
+  }
+  if (finishable.length === 0) return { removed: 0, waiting };
   const removed = await db()
     .delete(mailProviderGrants)
-    .where(inArray(mailProviderGrants.id, grants.map((grant) => grant.id)))
+    .where(inArray(mailProviderGrants.id, finishable.map((grant) => grant.id)))
     .returning({ id: mailProviderGrants.id });
-  return removed.length;
+  const erasures = new Map<string, string>();
+  for (const grant of finishable) {
+    if (grant.erasureRequestId && grant.erasureJobId) erasures.set(grant.erasureRequestId, grant.erasureJobId);
+  }
+  for (const [requestId, jobId] of erasures) {
+    const [left] = await db()
+      .select({ id: mailProviderGrants.id })
+      .from(mailProviderGrants)
+      .where(eq(mailProviderGrants.erasureRequestId, requestId))
+      .limit(1);
+    if (left) continue;
+    const { completeErasureJob } = await import("@/core/privacy/service");
+    await completeErasureJob.call(
+      { requestId, scope: "mail.provider_grants", jobId },
+      { kind: "system" },
+    );
+  }
+  return { removed: removed.length, waiting };
 }

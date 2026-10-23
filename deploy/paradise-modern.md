@@ -115,7 +115,13 @@ in a data export (`mail.provider_grants`). Erasure detaches any grant the
 carrier still holds from the contact and queues a job that withdraws it at
 the carrier and then deletes the row; the erasure receipt stays "pending"
 until that job finishes. Deleting a contact detaches its grants the same way,
-and a sweep every ten minutes withdraws and deletes them. Withdrawn or
+and a sweep every ten minutes withdraws and deletes them. A grant is
+withdrawn through the Paradise Modern credentials whichever adapter is the
+campaign carrier now, since a grant recorded there stays there after a
+switch. Without `PARADISEMODERN_API_KEY` the detached grants are kept, the
+erasure stays pending, and `freeholder doctor` warns
+(`mail.providerGrants`) until the key is set and the next sweep finishes
+them; the public playground never touches them. Withdrawn or
 refused grants age out under the `mail_provider_grants` retention kind. The delivery worker also rechecks consent immediately before
 every campaign send, so a withdrawal stops the next message even before the
 mirror lands.

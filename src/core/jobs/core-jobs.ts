@@ -92,20 +92,14 @@ export const withdrawProviderGrants = defineJob({
   retry: { limit: 8, delaySeconds: 30, backoff: true, maxDelaySeconds: 3_600 },
   concurrency: 1,
   leaseSeconds: 2 * 60,
-  handler: async (data, context) => {
+  handler: async (data) => {
     const grantIds = Array.isArray(data.grantIds)
       ? data.grantIds.filter((id): id is string => typeof id === "string")
       : [];
+    // Acknowledges the erasure itself once its last grant is gone; grants it
+    // cannot finish yet (no credentials) are left for the sweep.
     const { withdrawDetachedGrants } = await import("@/core/mail/permission");
-    const removed = await withdrawDetachedGrants(grantIds);
-    if (typeof data.requestId === "string" && typeof data.scope === "string" && context) {
-      const { completeErasureJob } = await import("@/core/privacy/service");
-      await completeErasureJob.call(
-        { requestId: data.requestId, scope: data.scope, jobId: context.id },
-        { kind: "system" },
-      );
-    }
-    return { removed };
+    return withdrawDetachedGrants(grantIds);
   },
 });
 
@@ -122,7 +116,7 @@ export const sweepDetachedProviderGrants = defineJob({
   leaseSeconds: 5 * 60,
   handler: async () => {
     const { withdrawDetachedGrants } = await import("@/core/mail/permission");
-    return { removed: await withdrawDetachedGrants() };
+    return withdrawDetachedGrants();
   },
 });
 

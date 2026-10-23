@@ -5376,7 +5376,10 @@ deployments are portable, testable and incapable of silently forking the truth.
   `mail.provider_grants`: erasure detaches open grants and a pending job
   withdraws them at the carrier before deleting them); a deleted contact's
   grants are detached by the cascade and withdrawn by
-  `core.sweepDetachedProviderGrants`; finished grants age out under the
+  `core.sweepDetachedProviderGrants` — through the Paradise credentials
+  whichever adapter carries campaigns, and never deleted unwithdrawn:
+  without credentials they wait (doctor `mail.providerGrants` warns, the
+  erasure stays pending); finished grants age out under the
   `mail_provider_grants` retention kind. Known gap, not addressed here: the
   older mail tables (`mail_deliveries`, `mail_suppressions`,
   `mail_provider_events`) hold addresses but are in no retention kind.

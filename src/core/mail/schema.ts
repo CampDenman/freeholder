@@ -386,6 +386,9 @@ export const mailProviderGrants = pgTable(
     consentRecordId: uuid("consent_record_id").references(() => consentRecords.id, {
       onDelete: "set null",
     }),
+    /** Set when an erasure detached this grant: the receipt waits on it. */
+    erasureRequestId: uuid("erasure_request_id"),
+    erasureJobId: uuid("erasure_job_id"),
     withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
     /** A permanent refusal of the withdrawal, recorded once rather than retried forever. */
     withdrawalError: text("withdrawal_error"),

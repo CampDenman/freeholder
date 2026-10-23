@@ -54,16 +54,24 @@ registerContactPrivacySource({
     if (open.length === 0) return { affected: grants.length };
     // Detached: no longer linked to the person, kept only until the carrier
     // has been told, then deleted by the job.
-    await tx
-      .update(mailProviderGrants)
-      .set({ consentRecordId: null, updatedAt: new Date() })
-      .where(inArray(mailProviderGrants.id, open.map((grant) => grant.id)));
     const job = await enqueueJob(
       tx,
       "core.withdrawProviderGrants",
-      { grantIds: open.map((grant) => grant.id), requestId: context.requestId, scope: PROVIDER_GRANTS_SCOPE },
+      { grantIds: open.map((grant) => grant.id) },
       { idempotencyKey: `provider-grants-erasure:${context.requestId}` },
     );
+    // The rows remember which erasure waits on them, so whichever run
+    // finishes them — this job, or the sweep once credentials are back —
+    // acknowledges the receipt.
+    await tx
+      .update(mailProviderGrants)
+      .set({
+        consentRecordId: null,
+        erasureRequestId: context.requestId,
+        erasureJobId: job.id,
+        updatedAt: new Date(),
+      })
+      .where(inArray(mailProviderGrants.id, open.map((grant) => grant.id)));
     return { affected: grants.length, pendingJobs: [job.id] };
   },
 });

@@ -40,6 +40,8 @@ CREATE TABLE "mail_provider_grants" (
 	"provider" text NOT NULL,
 	"email" text NOT NULL,
 	"consent_record_id" uuid,
+	"erasure_request_id" uuid,
+	"erasure_job_id" uuid,
 	"withdrawn_at" timestamp with time zone,
 	"withdrawal_error" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
