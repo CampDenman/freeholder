@@ -13,6 +13,7 @@ import { anonymousClientKey } from "@/core/security/rate-limit";
 import { isFictionalEmail, PLAYGROUND_FICTIONAL_BOOKING_EMAIL } from "@/core/demo/playground-policy";
 import { getBusiness } from "@/core/settings/service";
 import { availableSlots } from "@/core/scheduling/resolver-service";
+import { aroundBusinessDay } from "@/core/scheduling/business-day";
 import { createBooking, rescheduleBooking } from "@/core/scheduling/bookings";
 import { bookings, calendars } from "@/core/scheduling/schema";
 import { createDraftInvoice, issueInvoice } from "@/modules/invoicing/invoice-service";
@@ -123,8 +124,9 @@ export const bookPublicService = defineService({
     if (quote.termsHash !== input.termsHash) throw new ServiceError("conflict", "The price or terms changed. Review them before booking.");
     const business = await ctx.call(getBusiness, {});
     const day = new Intl.DateTimeFormat("en-CA", { timeZone: business?.timezone ?? "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(input.startsAt));
-    const from = day;
-    const to = day;
+    // The business's day, asked as the calendar days around it: a calendar in
+    // another zone keeps some of this day's times on its own neighbouring date.
+    const { from, to } = aroundBusinessDay(day);
     const find = async () => (await ctx.call(availableSlots, { productId: input.productId, serviceOfferingId: quote.offeringId, from, to, seats: input.seats, preferredCalendarId: input.calendarId, onlyPreferred: true, limit: 500 })).find(s=>s.calendarId===input.calendarId && s.startsAt.toISOString()===input.startsAt);
     const candidate = await find();
     if (!candidate) throw new ServiceError("conflict", "That time is no longer available. Choose another.");
@@ -167,7 +169,7 @@ export const moveMyBooking = defineService({
     const [old]=await ctx.tx.select().from(bookings).where(eq(bookings.id,input.id)).limit(1);
     const business=await ctx.call(getBusiness,{});
     const date=new Intl.DateTimeFormat("en-CA",{timeZone:business?.timezone??"UTC",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(input.startsAt));
-    const find=async()=>(await ctx.call(availableSlots,{productId:selection.productId,serviceOfferingId:selection.offeringId,from:date,to:date,seats:selection.seats,preferredCalendarId:input.calendarId,onlyPreferred:true,excludeBookingId:input.id,limit:500})).find(s=>s.calendarId===input.calendarId&&s.startsAt.toISOString()===input.startsAt);
+    const find=async()=>(await ctx.call(availableSlots,{productId:selection.productId,serviceOfferingId:selection.offeringId,...aroundBusinessDay(date),seats:selection.seats,preferredCalendarId:input.calendarId,onlyPreferred:true,excludeBookingId:input.id,limit:500})).find(s=>s.calendarId===input.calendarId&&s.startsAt.toISOString()===input.startsAt);
     const candidate=await find();
     if(!candidate)throw new ServiceError("conflict","That time is no longer available.");
     const ids=[...new Set([old!.calendarId,...old!.secondaryCalendarIds,candidate.calendarId,...candidate.resourceCalendarIds])].sort();
