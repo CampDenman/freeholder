@@ -69,7 +69,7 @@ function actorLabel(actor: string, t: Translate): string {
     return t("actor.agent", { name: actor.slice(6) });
   }
   if (actor.startsWith("user:")) return t("actor.staff");
-  if (actor === "system") return t("actor.system");
+  if (actor === "system" || actor.startsWith("system:")) return t("actor.system");
   return t("actor.visitor");
 }
 

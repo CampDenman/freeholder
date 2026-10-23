@@ -776,18 +776,34 @@ const eqRun = (id: string) => eq(runs.id, id);
 
 /* ------------------------------------------------------------- audit log */
 
-const AUDIT_ACTIONS: Array<{ action: string; subject: "contact" | "page" | "invoice" | "product" | "booking" }> = [
-  { action: "contacts.update", subject: "contact" },
-  { action: "contacts.create", subject: "contact" },
-  { action: "notes.write", subject: "contact" },
-  { action: "tasks.setStatus", subject: "contact" },
-  { action: "cms.updatePage", subject: "page" },
-  { action: "cms.publishPage", subject: "page" },
-  { action: "invoicing.issueInvoice", subject: "invoice" },
-  { action: "invoicing.recordPayment", subject: "invoice" },
-  { action: "catalog.updateProduct", subject: "product" },
-  { action: "bookings.setStatus", subject: "booking" },
-  { action: "bookings.reschedule", subject: "booking" },
+/**
+ * What the owner's "What changed" reads after a reset: the business the demo
+ * depicts — enquiries, orders, bookings, messages, payments — said by whoever
+ * would really have done it (a visitor, the platform recording a payment, the
+ * owner or Sam at the studio). Real service names, so every row reads through
+ * `ownerActivityLine` exactly as a live site's would (2026-10-23: the seeded
+ * names `invoicing.issueInvoice`/`recordPayment` were never services, and the
+ * feed was the platform's own install work).
+ */
+const AUDIT_ACTIONS: Array<{
+  action: string;
+  subject: "contact" | "page" | "invoice" | "product" | "booking" | "order" | "conversation";
+  by: "visitor" | "platform" | "team";
+}> = [
+  { action: "forms.submit", subject: "contact", by: "visitor" },
+  { action: "catalog.shopperCheckout", subject: "order", by: "visitor" },
+  { action: "catalog.bookService", subject: "booking", by: "visitor" },
+  { action: "events.register", subject: "contact", by: "visitor" },
+  { action: "newsletters.subscribe", subject: "contact", by: "visitor" },
+  { action: "reviews.submit", subject: "contact", by: "visitor" },
+  { action: "conversations.record", subject: "conversation", by: "platform" },
+  { action: "invoicing.settlePayment", subject: "invoice", by: "platform" },
+  { action: "conversations.reply", subject: "conversation", by: "team" },
+  { action: "invoicing.issue", subject: "invoice", by: "team" },
+  { action: "invoicing.send", subject: "invoice", by: "team" },
+  { action: "bookings.reschedule", subject: "booking", by: "team" },
+  { action: "catalog.shipFulfillment", subject: "order", by: "team" },
+  { action: "contacts.update", subject: "contact", by: "team" },
 ];
 
 async function seedAudit(tx: Tx, w: World) {
@@ -796,9 +812,9 @@ async function seedAudit(tx: Tx, w: World) {
   for (let n = 0; n < 360; n += 1) {
     const entry = w.r.pick(AUDIT_ACTIONS);
     const person = w.r.pick(w.people);
-    const actor = actors[n % 5 === 0 || actors.length === 1 ? 0 : 1]!;
+    const teammate = actors[n % 5 === 0 || actors.length === 1 ? 0 : 1]!;
     rows.push({
-      actor: `user:${actor}`,
+      actor: entry.by === "visitor" ? "anonymous" : entry.by === "platform" ? "system" : `user:${teammate}`,
       action: entry.action,
       subjectType: entry.subject,
       subjectId: entry.subject === "contact" ? w.contactIds.get(person.key)! : null,

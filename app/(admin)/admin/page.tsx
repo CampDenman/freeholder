@@ -6,7 +6,7 @@ import { Users, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { contactStats } from "@/core/contacts/service";
 import { recentActivity } from "@/core/events/service";
 import { formatDateTime } from "@/core/i18n";
-import { describeAction, ownerActivityLine } from "./describeAction";
+import { collapseOwnerFeed, describeAction, ownerActivityLine } from "./describeAction";
 import { actorLabel } from "./actorLabel";
 import { chooseFirstWin } from "@/core/guidance/first-win";
 import { Callout, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
@@ -43,7 +43,7 @@ export default async function AdminOverviewPage({
   const [business, stats, rawActivity, t, jobSummary, guidance] = await Promise.all([
     currentBusiness(),
     canViewContacts ? contactStats.call({}, actor) : Promise.resolve(null),
-    canViewEvents ? recentActivity.call({ limit: includeSystem ? 12 : 60, include: includeSystem ? "all" : "people" }, actor) : Promise.resolve(null),
+    canViewEvents ? recentActivity.call({ limit: includeSystem ? 12 : 100, include: includeSystem ? "all" : "people" }, actor) : Promise.resolve(null),
     getT(),
     canViewPlatform ? getJobSummary.call({}, actor) : Promise.resolve(null),
     listGuidance.call({}, actor),
@@ -53,13 +53,14 @@ export default async function AdminOverviewPage({
     : null;
 
   // The owner's feed says each row as business news or leaves it to the full
-  // log; the full log keeps every row and its service summary.
-  const activity = rawActivity
+  // log, and folds a run of the same line by the same actor into one row with
+  // a count; the full log keeps every row and its service summary.
+  const lines = rawActivity
     ? rawActivity
         .map((entry) => ({ ...entry, line: includeSystem ? describeAction(entry.action) : ownerActivityLine(entry, t) }))
         .filter((entry): entry is typeof entry & { line: string } => entry.line !== null)
-        .slice(0, 12)
     : null;
+  const activity = lines ? (includeSystem ? lines : collapseOwnerFeed(lines, t)).slice(0, 12) : null;
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
   const preferredGuidance = chooseFirstWin(guidance);

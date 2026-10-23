@@ -13,6 +13,7 @@
 // traffic through services, and §2 principle 12 requires one transaction per
 // multi-table mutation — so composition must not mean a second transaction on
 // a second connection.
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { z } from "zod";
 import { sql } from "drizzle-orm";
 import { env } from "@/core/env";
@@ -109,6 +110,34 @@ export class ServiceError extends Error {
     super(message);
     this.name = "ServiceError";
   }
+}
+
+/**
+ * The audit actor for platform work done while installing a site's starting
+ * content (the demo seed at boot). Still recorded — the trail stays complete
+ * and honest about what wrote each row — but distinguishable from the
+ * platform's ongoing work, so an owner's "What changed" can leave the bulk
+ * install out (2026-10-23: a reset playground's feed was fifteen identical
+ * "Freeholder updated pages" rows).
+ */
+export const SEED_AUDIT_ACTOR = "system:seed";
+
+const seeding = new AsyncLocalStorage<true>();
+
+/**
+ * Run `work` as seeding: every audit row a system actor writes inside it —
+ * including composed calls, `callAsSystem` and the listeners an outermost call
+ * dispatches after commit, which all stay in this async context — is recorded
+ * as `SEED_AUDIT_ACTOR`. Authorization is untouched: the actor is still
+ * `{ kind: "system" }`; only the audit string differs.
+ */
+export function runAsSeed<T>(work: () => Promise<T>): Promise<T> {
+  return seeding.run(true, work);
+}
+
+/** The audit_log actor for a call: `actorString`, or the seed marker. */
+export function auditActorString(actor: Actor): string {
+  return actor.kind === "system" && seeding.getStore() ? SEED_AUDIT_ACTOR : actorString(actor);
 }
 
 export function actorString(actor: Actor): string {
@@ -738,7 +767,7 @@ export function defineService<In extends z.ZodType, Out>(
 
         if (def.kind === "mutation" && (def.auditWhen?.(out) ?? true)) {
           await tx.insert(auditLog).values({
-            actor: actorString(actor),
+            actor: auditActorString(actor),
             action: def.name,
             subjectType: subject?.subjectType,
             subjectId: subject?.subjectId,

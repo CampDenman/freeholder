@@ -4481,6 +4481,37 @@ project without silent telemetry, and ready to carry money.
   `tests/core/seed-demo-busy.test.ts` (pickup names the location's city),
   `tests/core/cart-storefront.test.ts` (playground confirmation). Changeset
   `demo-prelaunch-polish.md`.
+  Follow-up 2026-10-23 (seed noise in "What changed"): right after an hourly
+  reset the default feed was about fifteen identical "Freeholder updated
+  pages · The platform" rows. Traced locally by seeding the way the
+  playground boots (`seedDemoIfRequested`, busy layer): the install wrote
+  300 `system` audit rows, 87 of them `cms.*` (create/attach layout/publish
+  for every page, the events' public pages, defaults and templates), all
+  stamped the boot minute, and `include: "people"` filtered only
+  `HOUSEKEEPING_ACTIONS` by name. Nothing extra runs at the swap:
+  `reset.sh` boots, seeds and goes live within minutes, and the seeded
+  history sits at least an hour before the seed by design (`clampPast`,
+  notifications, analytics), which is the hour between receipts and the
+  page rows the live demo showed — not a time-zone fault. Seeding now runs
+  under `runAsSeed` (an `AsyncLocalStorage` scope in `src/core/service.ts`):
+  audit rows that system actors write inside it, including composed calls,
+  `callAsSystem` and the listeners dispatched after commit, are recorded as
+  `system:seed` (`SEED_AUDIT_ACTOR`). Still recorded, so the full log stays
+  honest; `people` excludes them; authorization is unchanged because the
+  actor is still `{ kind: "system" }`. `actorLabel` reads it as "Site
+  setup", and the owner line, page history and invitation/contact labels
+  treat any `system:*` as the platform. The owner feed now folds a run of
+  the same line by the same actor into one row with a count ("Freeholder
+  updated pages ×15", `collapseOwnerFeed`) before taking twelve rows. The
+  busy demo's 360 seeded audit rows now use real service names said by who
+  would have done them (visitors' forms, orders, bookings and event
+  registrations; the platform's incoming messages and payments; the team's
+  replies, invoices, reschedules and shipments), so a reset feed reads as
+  the business. Regressions: `tests/core/seed-demo.test.ts` ("keeps the
+  install out of the owner's feed…": seed rows recorded as `system:seed`,
+  none in `people`, twelve business rows with no "Freeholder updated"),
+  `tests/core/audit-labels.test.ts` (collapse, seed actor wording).
+  Changeset `owner-feed-seed-noise.md`.
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable

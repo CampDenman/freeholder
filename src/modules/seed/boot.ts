@@ -13,7 +13,7 @@
 // cannot be triggered by a request at all — it is read once, at startup, by
 // the process that owns the database.
 import { env } from "@/core/env";
-import { ServiceError } from "@/core/service";
+import { runAsSeed, ServiceError } from "@/core/service";
 
 export type DemoSeedOutcome =
   | { status: "skipped"; reason: "disabled" | "development-not-pristine" }
@@ -88,7 +88,7 @@ export async function seedDemoIfRequested(): Promise<DemoSeedOutcome> {
   const installBusy = async () => {
     const started = Date.now();
     const { installBusyDemo } = await import("./busy");
-    const busy = await installBusyDemo.call({}, { kind: "system" });
+    const busy = await runAsSeed(() => installBusyDemo.call({}, { kind: "system" }));
     const contacts = busy.counts.crm?.contacts ?? 0;
     console.log(
       `[freeholder] busy demo installed: ${contacts} contacts in ${Date.now() - started} ms`,
@@ -96,9 +96,12 @@ export async function seedDemoIfRequested(): Promise<DemoSeedOutcome> {
     return busy.counts;
   };
 
+  // Both installs run as seeding (`runAsSeed`): their audit rows read
+  // `system:seed`, so the owner's default feed starts with the business the
+  // demo depicts rather than the platform building it.
   try {
     const { installDemo } = await import("./service");
-    const result = await installDemo.call({ publish: true }, { kind: "system" });
+    const result = await runAsSeed(() => installDemo.call({ publish: true }, { kind: "system" }));
     console.log(
       `[freeholder] demo installed: ${result.business}, ${result.pages.length} pages, ${result.assets} images`,
     );

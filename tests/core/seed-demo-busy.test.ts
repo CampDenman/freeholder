@@ -358,7 +358,7 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
       select 'timeline' as source, count(*)::int as n from timeline_events where occurred_at > ${now.toISOString()}::timestamptz
       union all select 'analytics', count(*)::int from analytics_events where at > ${now.toISOString()}::timestamptz
       union all select 'messages', count(*)::int from messages where created_at > ${now.toISOString()}::timestamptz
-      union all select 'audit', count(*)::int from audit_log where at > ${now.toISOString()}::timestamptz and actor like 'user:%' and action not like 'demo.%'
+      union all select 'audit', count(*)::int from audit_log where at > ${now.toISOString()}::timestamptz and actor not like 'system%' and action not like 'demo.%'
       union all select 'payments', count(*)::int from payments where created_at > ${now.toISOString()}::timestamptz
       union all select 'runs', count(*)::int from runs where started_at > ${now.toISOString()}::timestamptz`);
     for (const row of future) expect(row).toEqual({ source: row.source, n: 0 });

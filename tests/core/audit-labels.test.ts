@@ -7,8 +7,11 @@
 // rendered `cms.ensureDefaults` as "Cm — ensure defaults" because the label
 // was derived by stripping a trailing s from the module name.
 import { describe, expect, it } from "vitest";
-import { describeAction, OWNER_ACTIVITY_AREAS, OWNER_ACTIVITY_LABELS, OWNER_HIDDEN_ACTIONS, needsOwnLine, ownerActivityLine } from "../../app/(admin)/admin/describeAction";
+import { collapseOwnerFeed, describeAction, OWNER_ACTIVITY_AREAS, OWNER_ACTIVITY_LABELS, OWNER_HIDDEN_ACTIONS, needsOwnLine, ownerActivityLine } from "../../app/(admin)/admin/describeAction";
 import { catalogKeys, translator } from "@/core/i18n";
+import { actorLabel } from "../../app/(admin)/admin/actorLabel";
+import { SEED_AUDIT_ACTOR } from "@/core/service";
+import { parseActor } from "@/modules/cms/history";
 import { HOUSEKEEPING_ACTIONS } from "@/core/events/service";
 import { ensureDefaults } from "@/modules/cms/service";
 import { mergeContacts } from "@/core/contacts/service";
@@ -157,6 +160,45 @@ describe("audit log labels", () => {
         }
       }
     }
+  });
+
+  it("folds a run of the same line by the same actor into one row with a count (2026-10-23)", () => {
+    const t = translator("en");
+    const row = (id: number, actor: string, line: string) => ({ id: String(id), actor, line });
+    const folded = collapseOwnerFeed(
+      [
+        ...Array.from({ length: 15 }, (_, i) => row(i, "system", "Freeholder updated pages")),
+        row(20, "anonymous", "A visitor sent a form"),
+        row(21, "user:a", "Updated contacts"),
+        row(22, "user:b", "Updated contacts"),
+        row(23, "user:a", "Updated contacts"),
+        row(24, "user:a", "Updated contacts"),
+        row(25, "system", "Freeholder updated pages"),
+      ],
+      t,
+    );
+    expect(folded.map((entry) => [entry.line, entry.count, entry.id])).toEqual([
+      ["Freeholder updated pages ×15", 15, "0"],
+      ["A visitor sent a form", 1, "20"],
+      ["Updated contacts", 1, "21"],
+      // A different teammate breaks the run; the order of events is kept.
+      ["Updated contacts", 1, "22"],
+      ["Updated contacts ×2", 2, "23"],
+      ["Freeholder updated pages", 1, "25"],
+    ]);
+    expect(collapseOwnerFeed([], t)).toEqual([]);
+    for (const locale of ["en", "es", "fr", "ar"]) {
+      expect(collapseOwnerFeed([row(1, "system", "x"), row(2, "system", "x")], translator(locale))[0]!.line).toBe("x ×2");
+      expect(catalogKeys(locale)).toContain("actor.seed");
+    }
+  });
+
+  it("names seeding as setup, never as a visitor (2026-10-23)", () => {
+    const t = translator("en");
+    expect(actorLabel(SEED_AUDIT_ACTOR, t)).toBe("Site setup");
+    expect(actorLabel("system", t)).toBe("The platform");
+    expect(ownerActivityLine({ action: "invoicing.createSchedule", actor: SEED_AUDIT_ACTOR }, t)).toBe("Freeholder updated invoices");
+    expect(parseActor(SEED_AUDIT_ACTOR)).toEqual({ kind: "system", id: null });
   });
 
   it("keeps history readable when the service is gone", () => {

@@ -369,7 +369,7 @@ export function ownerActivityLine(
   // work reads as "Freeholder updated…".
   if (entry.actor.startsWith("user:")) return t("admin.activity.teamUpdated", { area });
   if (entry.actor.startsWith("agent:")) return t("admin.activity.agentUpdated", { area });
-  if (entry.actor === "system") return t("admin.activity.platformUpdated", { area });
+  if (entry.actor === "system" || entry.actor.startsWith("system:")) return t("admin.activity.platformUpdated", { area });
   return t("admin.activity.visitorUpdated", { area });
 }
 
@@ -389,4 +389,31 @@ export function needsOwnLine(action: string): boolean {
     /grant|Grant|Payment|Refund|Payout|Dispute|Price|Balance|Credit|Charge|LateFee|GiftCard|Invoice|Secret|Feed/.test(verb) ||
     (module === "invoicing" && /^(issue|void|send|createDraft|cancel|apply|settle|fail|record|reconcile|submit|claim|begin|start|complete|confirm|revoke|adjust|assess)/.test(verb))
   );
+}
+
+/**
+ * Fold runs of the same owner line from the same actor into one row:
+ * "Freeholder updated pages ×15" instead of fifteen rows. A bulk edit, an
+ * import or a burst of platform work is one thing that happened, and the feed
+ * has twelve rows to say what else did (2026-10-23). Only consecutive rows
+ * fold, so the order of events is kept; the row shown is the newest of its run.
+ */
+export function collapseOwnerFeed<Entry extends { actor: string; line: string }>(
+  entries: readonly Entry[],
+  t: Translate,
+): Array<Entry & { count: number }> {
+  const runs: Array<{ entry: Entry; count: number }> = [];
+  for (const entry of entries) {
+    const last = runs[runs.length - 1];
+    if (last && last.entry.actor === entry.actor && last.entry.line === entry.line) {
+      last.count += 1;
+    } else {
+      runs.push({ entry, count: 1 });
+    }
+  }
+  return runs.map(({ entry, count }) => ({
+    ...entry,
+    count,
+    line: count > 1 ? t("admin.activity.repeated", { line: entry.line, count }) : entry.line,
+  }));
 }
