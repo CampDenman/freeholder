@@ -74,7 +74,7 @@ describe("public event page", () => {
     expect(html).not.toContain(">2099-11-09T00:00:00.000Z<");
     expect(html).toContain('dateTime="2099-11-09T00:00:00.000Z"');
     // 00:00 UTC on 9 November is 4 PM the evening before on the coast.
-    expect(html).toMatch(/Sun, Nov 8, 4:00\s*[–-]\s*6:00\sPM PST/);
+    expect(html).toMatch(/Sun, Nov 8, 4:00\s*[–-]\s*6:00\sPM PT\b/);
     expect(html).toContain("3 of 8 seats left");
     expect(html).toContain('href="/ics/events/golden-hour-workshop"');
   });
@@ -137,7 +137,7 @@ describe("public events list", () => {
     const past = html.indexOf("Past events");
     expect(past).toBeGreaterThan(html.indexOf("/events/winter-portrait-day"));
     expect(html.indexOf("/events/autumn-open-studio")).toBeGreaterThan(past);
-    expect(html).toMatch(/Sat, Dec 5, 10:00\sAM\s*[–-]\s*12:00\sPM PST/);
+    expect(html).toMatch(/Sat, Dec 5, 10:00\sAM\s*[–-]\s*12:00\sPM PT\b/);
   });
 
   it("says so when nothing is ahead", () => {

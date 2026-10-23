@@ -6997,7 +6997,11 @@ payment, tax, inventory and reporting path, with no floating-point money.
   an event page is now `page.blank` (its title) plus the bound
   `eventDetail`, and the landing copy itself no longer speaks to the
   owner. Sessions read in their own zone and the visitor's locale
-  (`formatDateTimeRange`, "Sun, Nov 8, 4:00 – 6:00 PM PST") with the
+  (`formatDateTimeRange`, "Sun, Nov 8, 4:00 – 6:00 PM PT"; since 2026-10-23
+  North American zones use their generic abbreviation, PT/MT/CT/ET/AT/AKT,
+  so BC, Alberta and Manitoba never read "PDT"/"MDT"/"CDT" in winter, and
+  every other zone keeps ICU's short name, e.g. CET/CEST or GMT+1 —
+  `tests/core/i18n.test.ts`) with the
   start on `<time datetime>`; seats read "3 of 8 seats left" in all four
   locales. **Past events.** `/events` listed published events whose public
   page did not exist (the busy demo bulk-inserts its past events), so four

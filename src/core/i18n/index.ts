@@ -283,8 +283,45 @@ const RANGE_PARTS: Intl.DateTimeFormatOptions = {
 };
 
 /**
+ * A North American zone's short generic abbreviation — "PT", "MT", "CT",
+ * "ET", "AT", "AKT" — in place of its standard/daylight one, or undefined to
+ * keep the short name as ICU gives it. Those abbreviations encode a daylight
+ * rule, and Canada's rules changed in 2026: with tz data 2026e, ICU 78.3
+ * calls a December in Vancouver "PDT", in Edmonton "MDT" and in Winnipeg
+ * "CDT". The generic one is right under any rule. ICU adds its region to
+ * some ("PT (Canada)"), which is dropped. Only a real abbreviation is used
+ * (two to five capitals); a spelled-out generic ("Germany Time"), an offset
+ * ("GMT+0") or nothing keeps the short name. Elsewhere the short name stays
+ * exactly as it was, so Europe keeps "CET"/"CEST" and "GMT+1".
+ */
+function genericAbbreviation(locale: string, timezone: string, at: Date): string | undefined {
+  if (!timezone.startsWith("America/")) return undefined;
+  const generic = new Intl.DateTimeFormat(locale, { timeZone: timezone, timeZoneName: "shortGeneric" })
+    .formatToParts(at)
+    .find((part) => part.type === "timeZoneName")?.value;
+  const cleaned = generic?.replace(/\s*\([^()]*\)$/, "");
+  return cleaned && /^[A-Z]{2,5}$/.test(cleaned) ? cleaned : undefined;
+}
+
+function withZoneName(
+  parts: Array<Intl.DateTimeFormatPart & { source?: string }>,
+  locale: string,
+  timezone: string,
+  start: Date,
+  end: Date,
+): string {
+  return parts
+    .map((part) =>
+      part.type === "timeZoneName"
+        ? genericAbbreviation(locale, timezone, part.source === "endRange" ? end : start) ?? part.value
+        : part.value,
+    )
+    .join("");
+}
+
+/**
  * A start–end span as a visitor reads it, in the zone it happens in: "Sun,
- * Nov 8, 4:00 – 6:00 PM PST". `formatRange` drops what the two ends share,
+ * Nov 8, 4:00 – 6:00 PM PT". `formatRange` drops what the two ends share,
  * so a same-day span names its day once and a span past midnight names both.
  */
 export function formatDateTimeRange(
@@ -293,14 +330,16 @@ export function formatDateTimeRange(
   timezone: string,
   locale: string = DEFAULT_LOCALE,
 ): string {
-  return new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: renderableTimezone(timezone).timezone })
-    .formatRange(start, end);
+  const zone = renderableTimezone(timezone).timezone;
+  const format = new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: zone });
+  return withZoneName(format.formatRangeToParts(start, end), locale, zone, start, end);
 }
 
 /** One instant in the same reading, for a picker option or a list line. */
 export function formatDateTimeShort(utc: Date, timezone: string, locale: string = DEFAULT_LOCALE): string {
-  return new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: renderableTimezone(timezone).timezone })
-    .format(utc);
+  const zone = renderableTimezone(timezone).timezone;
+  const format = new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: zone });
+  return withZoneName(format.formatToParts(utc), locale, zone, utc, utc);
 }
 
 /**
