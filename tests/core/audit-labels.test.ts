@@ -7,10 +7,13 @@
 // rendered `cms.ensureDefaults` as "Cm — ensure defaults" because the label
 // was derived by stripping a trailing s from the module name.
 import { describe, expect, it } from "vitest";
-import { describeAction } from "../../app/(admin)/admin/describeAction";
+import { describeAction, OWNER_ACTIVITY_LABELS, OWNER_HIDDEN_ACTIONS, ownerActivityLine } from "../../app/(admin)/admin/describeAction";
+import { catalogKeys, translator } from "@/core/i18n";
+import { HOUSEKEEPING_ACTIONS } from "@/core/events/service";
 import { ensureDefaults } from "@/modules/cms/service";
 import { mergeContacts } from "@/core/contacts/service";
 import { ready } from "@/core/runtime";
+import { listServices } from "@/core/service";
 
 describe("audit log labels", () => {
   it("says what the service says about itself", async () => {
@@ -26,6 +29,38 @@ describe("audit log labels", () => {
     expect(describeAction("cms.somethingRemovedLaterOn")).toBe(
       "Cms — something removed later on",
     );
+  });
+
+  it("tells an owner business news, never a visitor's service summary (2026-10-23 demo audit)", async () => {
+    await ready();
+    const t = translator("en");
+    // What visitors and the platform set off reads as news…
+    expect(ownerActivityLine({ action: "catalog.getOrCreateCart", actor: "anonymous" }, t)).toBe("A shopper started a cart");
+    expect(ownerActivityLine({ action: "members.linkAbuseReports", actor: "system" }, t)).toBe("A flagged upload was held for review");
+    expect(ownerActivityLine({ action: "catalog.bookService", actor: "anonymous" }, t)).toBe("A customer booked an appointment");
+    // …machinery they triggered stays in the full log only…
+    expect(ownerActivityLine({ action: "contacts.resolve", actor: "system" }, t)).toBeNull();
+    expect(ownerActivityLine({ action: "catalog.attachCartToContact", actor: "anonymous" }, t)).toBeNull();
+    // …but money the platform records is shown by default, mapped or not…
+    expect(ownerActivityLine({ action: "invoicing.processPaymentProviderEvents", actor: "system" }, t)).toBe("The payment provider updated a payment");
+    expect(ownerActivityLine({ action: "members.reversePayouts", actor: "system" }, t)).toBe("A payout was reversed");
+    expect(ownerActivityLine({ action: "invoicing.reconcileProviderPayout", actor: "system" }, t)).toBe(describeAction("invoicing.reconcileProviderPayout"));
+    for (const action of OWNER_HIDDEN_ACTIONS) expect(OWNER_ACTIVITY_LABELS[action], action).toBeUndefined();
+    // …and what the team did keeps its own words.
+    expect(ownerActivityLine({ action: "contacts.merge", actor: "user:00000000-0000-4000-8000-000000000001" }, t)).toBe(mergeContacts.def.summary);
+    // Every mapped label is a real, translated string in every locale.
+    for (const locale of ["en", "es", "fr", "ar"]) {
+      for (const key of new Set(Object.values(OWNER_ACTIVITY_LABELS))) {
+        expect(catalogKeys(locale), `${locale}: ${key}`).toContain(key);
+      }
+    }
+    // Opening the editor heartbeats presence and a lease; that is not news.
+    for (const action of ["cms.heartbeatPresence", "cms.leavePresence", "cms.touchEditLease", "cms.releaseEditLease"]) {
+      expect(HOUSEKEEPING_ACTIONS as readonly string[]).toContain(action);
+    }
+    for (const action of [...Object.keys(OWNER_ACTIVITY_LABELS), "cms.heartbeatPresence", "cms.touchEditLease"]) {
+      expect(listServices().has(action), `${action} is a registered service`).toBe(true);
+    }
   });
 
   it("keeps history readable when the service is gone", () => {

@@ -6,7 +6,7 @@ import { Users, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { contactStats } from "@/core/contacts/service";
 import { recentActivity } from "@/core/events/service";
 import { formatDateTime } from "@/core/i18n";
-import { describeAction } from "./describeAction";
+import { describeAction, ownerActivityLine } from "./describeAction";
 import { actorLabel } from "./actorLabel";
 import { chooseFirstWin } from "@/core/guidance/first-win";
 import { Callout, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
@@ -40,10 +40,10 @@ export default async function AdminOverviewPage({
   const canViewPlatform = hasModuleAccess(actor, "platform", "view");
   const canViewContacts = hasModuleAccess(actor, "contacts", "view");
   const canViewEvents = hasModuleAccess(actor, "events", "view");
-  const [business, stats, activity, t, jobSummary, guidance] = await Promise.all([
+  const [business, stats, rawActivity, t, jobSummary, guidance] = await Promise.all([
     currentBusiness(),
     canViewContacts ? contactStats.call({}, actor) : Promise.resolve(null),
-    canViewEvents ? recentActivity.call({ limit: 12, include: includeSystem ? "all" : "people" }, actor) : Promise.resolve(null),
+    canViewEvents ? recentActivity.call({ limit: includeSystem ? 12 : 60, include: includeSystem ? "all" : "people" }, actor) : Promise.resolve(null),
     getT(),
     canViewPlatform ? getJobSummary.call({}, actor) : Promise.resolve(null),
     listGuidance.call({}, actor),
@@ -52,6 +52,14 @@ export default async function AdminOverviewPage({
     ? await backgroundJobsBriefingContribution(jobSummary)
     : null;
 
+  // The owner's feed says each row as business news or leaves it to the full
+  // log; the full log keeps every row and its service summary.
+  const activity = rawActivity
+    ? rawActivity
+        .map((entry) => ({ ...entry, line: includeSystem ? describeAction(entry.action) : ownerActivityLine(entry, t) }))
+        .filter((entry): entry is typeof entry & { line: string } => entry.line !== null)
+        .slice(0, 12)
+    : null;
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
   const preferredGuidance = chooseFirstWin(guidance);
@@ -150,7 +158,7 @@ export default async function AdminOverviewPage({
                   className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-rule py-2.5 last:border-b-0"
                 >
                   <span className="text-sm font-medium">
-                    {describeAction(entry.action)}
+                    {entry.line}
                   </span>
                   <span className="text-xs text-ink-muted">
                     {actorLabel(entry.actor, t)}
