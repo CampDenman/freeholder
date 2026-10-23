@@ -5364,6 +5364,27 @@ deployments are portable, testable and incapable of silently forking the truth.
   submission from such a visitor sends one server-side `lead` conversion,
   deduplicated by the submission's id, with nothing about the visitor stored
   to send it. Open until verified in a real browser against a live edge host.
+  *(Progress 2026-10-23: the category is `src/adapters/measurement/`
+  (`config.ts` holds every gate as pure functions the Edge proxy shares;
+  `paradise.ts` is the first adapter); `proxy.ts` adds the edge origin only
+  for `fh_ac=granted`, `contentSecurityPolicy` keeps it off admin pages; the
+  public layout renders the nonced scripts under the owner's policy; the
+  consent control names "measurement provider (<name>)" in four locales and
+  offers an explicit allow in opt-out mode; the public form action plans the
+  conversion (`src/modules/analytics/measurement.ts`) and runs it with
+  `after()`, reading the accepted submission's email/phone only after commit
+  (`src/modules/forms/conversion.ts`). Evidence:
+  `tests/core/measurement-provider.test.ts` (gating, playground, CSP, script
+  sources, click-ID parsing, the deduplicable event, consent with a
+  database), `tests/core/analytics-consent.test.ts` (consent markup and its
+  accessibility gate); changeset `measurement-provider.md`. Review fixes:
+  email and phone leave only as SHA-256 hashes (`custom.identifierHashes`);
+  the consent text lists exactly what is sent; member, account, community,
+  portal and checkout/cart/buy/book/gifts/memberships pages never render the
+  script or list the edge
+  (`measurementPathAllowed`); a failure to plan a conversion never errors a
+  saved enquiry (`tests/core/measurement-form-action.test.ts`). Unchecked: no
+  real-browser run against a live edge host.)*
 - [ ] **C3.33** Add a form-screening category (`FORM_SCREENING_PROVIDER`,
   default `none`) with Paradise Modern as its first adapter (§12, §36):
   screening runs whenever a provider is configured (a security purpose), on

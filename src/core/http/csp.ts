@@ -53,6 +53,13 @@ export interface ContentSecurityPolicyOptions {
   thirdPartyCreativeConsent?: boolean;
   /** C12.24: the site's own SFU, reachable only from group call pages. */
   callOrigins?: string[];
+  /**
+   * C3.32: the chosen measurement provider's edge. The caller passes it only
+   * for a visitor who explicitly allowed measurement; it is never implied by
+   * first-party analytics or by the third-party-creative choice, and admin
+   * pages never receive it.
+   */
+  measurementOrigins?: string[];
 }
 
 /**
@@ -71,6 +78,9 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
     ? [...new Set(options.creativeOrigins ?? [])].sort()
     : [];
   const call = options.path.startsWith("/call/group/") ? [...new Set(options.callOrigins ?? [])].sort() : [];
+  const measurement = options.path.startsWith("/admin")
+    ? []
+    : [...new Set(options.measurementOrigins ?? [])].sort();
   const preview = options.path === "/preview" || options.path.startsWith("/preview/");
   const embed = options.path === "/embed" || options.path.startsWith("/embed/");
   const development = options.production
@@ -78,14 +88,14 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
     : " 'unsafe-eval'";
   const policy = [
     "default-src 'self'",
-    `script-src 'nonce-${options.nonce}' 'strict-dynamic' 'self'${development}${sources(creative)}`,
+    `script-src 'nonce-${options.nonce}' 'strict-dynamic' 'self'${development}${sources([...creative, ...measurement])}`,
     "script-src-attr 'none'",
     `style-src 'self' 'nonce-${options.nonce}'${sources(creative)}`,
     "style-src-attr 'unsafe-inline'",
-    `img-src 'self' data: blob:${sources([...media, ...creative])}`,
+    `img-src 'self' data: blob:${sources([...media, ...creative, ...measurement])}`,
     `font-src 'self' data:${sources(creative)}`,
     `media-src 'self' blob:${sources([...media, ...creative])}`,
-    `connect-src 'self'${sources([...upload, ...creative, ...call])}`,
+    `connect-src 'self'${sources([...upload, ...creative, ...call, ...measurement])}`,
     `frame-src 'self'${sources(creative)}`,
     "worker-src 'self' blob:",
     "manifest-src 'self'",

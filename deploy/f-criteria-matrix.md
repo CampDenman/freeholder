@@ -1684,18 +1684,18 @@ v2.
 
 ## C3.32 — Add a measurement-provider category
 
-- **F01** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
-- **F02** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
-- **F03** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
-- **F04** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
-- **F05** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
-- **F06** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
-- **F07** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
-- **F08** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
-- **F09** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
-- **F10** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
-- **F11** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
-- **F12** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F01** — N/A — no schema change: measurement keeps nothing in Freeholder's database; the conversion reads an accepted submission after commit (`src/modules/forms/conversion.ts`) and stores no address, browser or click ID.
+- **F02** — `src/modules/analytics/measurement.ts` — `leadConversionTask` plans one conversion from a committed submission outside any service transaction; covered in `tests/core/measurement-provider.test.ts` and `tests/core/measurement-form-action.test.ts`.
+- **F03** — N/A — measurement writes nothing to the contact spine; it reads the accepted submission's email and phone only to hash them for one conversion.
+- **F04** — `app/(public)/AnalyticsConsentControl.tsx` — the privacy choice names the provider and lists what is sent, with an explicit allow; `tests/core/analytics-consent.test.ts` covers the markup and its accessibility gate.
+- **F05** — N/A — visitor consent is a browser choice, not an API action; operators choose the provider by environment (`.env.example`, `deploy/paradise-modern.md`), like every other adapter.
+- **F06** — `locales/en.json`, `locales/es.json`, `locales/fr.json`, `locales/ar.json` — `analytics.consent.allowWithMeasurement` and `analytics.consent.measurementExplanation`; `tests/core/locale-quality.test.ts`.
+- **F07** — `tests/core/measurement-provider.test.ts`: Pending — explicit-allow gating, disabled policy, playground refusal, excluded private and payment pages (locale prefixes included), CSP edge origin only when allowed and never on admin, email and phone sent only as SHA-256 hashes. No real-browser run against a live edge host yet.
+- **F08** — `tests/core/measurement-provider.test.ts`: Pending — the provider is faked at `setParadiseFetchForTests` for the conversion endpoint and its request body. No real-browser run against a live edge host yet.
+- **F09** — N/A — no data is kept to export, back up or erase: Freeholder stores none of what it forwards, and the setting is listed in `src/core/portability/ownership-export.mjs`.
+- **F10** — `app/(public)/form-actions.ts` — the conversion runs with `after()`, once the visitor's response is sent, and planning it can never delay or fail the enquiry; `tests/core/measurement-form-action.test.ts`.
+- **F11** — `deploy/paradise-modern.md`, `deploy/analytics-governance.md`, `deploy/content-security-policy.md`, changeset `.changeset/measurement-provider.md`.
+- **F12** — `tests/core/measurement-provider.test.ts` composes consent → layout scripts → CSP → form submission → hashed lead conversion; `tests/core/measurement-form-action.test.ts` composes the form action's wiring.
 
 ## C3.33 — Add a form-screening category
 

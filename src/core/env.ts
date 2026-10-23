@@ -5,6 +5,7 @@
 // Validation is lazy so `next build` succeeds without a database attached;
 // anything that *uses* env at runtime gets a plain-English failure instead.
 import { z } from "zod";
+import { MEASUREMENT_PROVIDERS } from "../adapters/measurement/config";
 import { normalizeAgentProviderId } from "../adapters/agent/aliases";
 import { FORM_SCREENING_PROVIDERS } from "../adapters/form-screening/types";
 import { LEAD_SINK_PROVIDERS } from "../adapters/lead-sink/types";
@@ -145,6 +146,24 @@ const envSchema = z.object({
    * choice is also required before the response policy includes these.
    */
   CSP_THIRD_PARTY_ORIGINS: z.string().optional(),
+
+  /**
+   * The measurement-provider category (C3.32): a third party's browser
+   * measurement and server-side lead conversions, only for visitors who
+   * explicitly allow it. `none` (the default) or one adapter.
+   */
+  MEASUREMENT_PROVIDER: z.enum(MEASUREMENT_PROVIDERS).optional(),
+  /** Paradise Modern measurement: the site's public id at the provider. */
+  PARADISEMODERN_SITE_ID: z.string().trim().uuid().optional(),
+  /** Paradise Modern measurement: the site's own edge host, one https origin. */
+  PARADISEMODERN_EDGE_URL: z
+    .string()
+    .url()
+    .refine((value) => {
+      const url = new URL(value);
+      return url.protocol === "https:" && url.pathname === "/" && !url.search && !url.hash && !url.username;
+    }, "must be one https origin, such as https://pm.example.com")
+    .optional(),
 
   /**
    * Transactional mail (§12). Overrides `adapters.mailTransactional`.

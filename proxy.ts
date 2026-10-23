@@ -24,6 +24,7 @@ import {
   REQUEST_TARGET_HEADER,
 } from "@/core/http/headers";
 import { env } from "@/core/env";
+import { measurementCspOrigins } from "@/adapters/measurement/config";
 import {
   CSP_NONCE_HEADER,
   THIRD_PARTY_CREATIVE_CONSENT_COOKIE,
@@ -243,6 +244,14 @@ function requestPolicy(
       callOrigins: sfuOrigins(runtime.LIVEKIT_URL),
       thirdPartyCreativeConsent: thirdPartyCreativeConsentGranted(
         request.cookies.get(THIRD_PARTY_CREATIVE_CONSENT_COOKIE)?.value,
+      ),
+      // C3.32: the measurement provider's edge, only after this visitor's
+      // explicit "allow". The layout applies the owner's policy before it
+      // renders the scripts; this only lets them reach their own host.
+      measurementOrigins: measurementCspOrigins(
+        runtime,
+        parseAnalyticsConsentState(request.cookies.get(ANALYTICS_CONSENT_COOKIE)?.value),
+        { path },
       ),
     }),
   };
