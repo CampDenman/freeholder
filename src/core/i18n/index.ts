@@ -331,7 +331,11 @@ export function zoneLabel(
   } catch {
     return timezone;
   }
-  const city = timezone.includes("/") ? timezone.split("/").at(-1)!.replace(/_/g, " ") : "";
+  // Only a place id names a city. `Etc/GMT+5` would add "(GMT+5)" beside
+  // "GMT-05:00" (POSIX signs are inverted), and "UTC" has no city at all.
+  const city = timezone.includes("/") && !timezone.startsWith("Etc/")
+    ? timezone.split("/").at(-1)!.replace(/_/g, " ")
+    : "";
   if (!city || name.includes(city)) return name;
   return `${name.replace(/\s*\([^()]*\)$/, "")} (${city})`;
 }

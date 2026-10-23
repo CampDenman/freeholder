@@ -56,14 +56,19 @@ function describe(text: string, prefix: string): BlockNode[] {
 }
 
 /**
- * `hour` o'clock on the studio's wall clock, on the studio-local date `days`
- * from now. The offset comes from the zone's rules rather than a constant:
+ * `hour` o'clock on `timezone`'s wall clock, on that zone's local date `days`
+ * after `now`. The offset comes from the zone's rules rather than a constant:
  * British Columbia left UTC−8 winters behind in 2026, and a hard-coded
- * offset is right under only one version of the tz data.
+ * offset is right under only one version of the tz data. (Before 2026-10-23
+ * this took the UTC date, which is already tomorrow on a Pacific evening.)
  */
+export function demoStudioTime(now: Date, days: number, hour: number, timezone: string): Date {
+  const date = zonedDate(new Date(now.getTime() + days * DAY), timezone);
+  return zonedInstant(timezone, { ...date, hour });
+}
+
 function studioTime(days: number, hour: number): Date {
-  const date = zonedDate(new Date(Date.now() + days * DAY), BUSINESS_TIMEZONE);
-  return zonedInstant(BUSINESS_TIMEZONE, { ...date, hour });
+  return demoStudioTime(new Date(), days, hour, BUSINESS_TIMEZONE);
 }
 
 export async function installDemoBusiness(

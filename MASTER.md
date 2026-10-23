@@ -4412,8 +4412,8 @@ project without silent telemetry, and ready to carry money.
   a real-looking address is refused with nothing written; outside the
   playground an anonymous caller is still refused and a typed address is
   ignored. Slots show the calendar name only when several calendars have
-  openings, and zones read as `zoneLabel` ("Pacific Daylight Time
-  (Vancouver)") on /book and the appointment page. The demo inbox was empty
+  openings, and zones read as `zoneLabel` ("Pacific Time (Vancouver)", the
+  generic name since 2026-10-23) on /book and the appointment page. The demo inbox was empty
   for visitors because the playground role lacked the `conversations` view
   grant while §4.14 already threads form enquiries into conversations; the
   grant is added. Consequence, accepted: every demo visitor shares one

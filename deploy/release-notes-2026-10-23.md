@@ -134,12 +134,19 @@ British Columbia has moved to permanent UTC−7. The spring change on 8 March
 2026 was its last; on 1 November 2026, when clocks would usually go back,
 they stay where they are
 ([B.C. government release, 2 March 2026](https://news.gov.bc.ca/releases/2026AG0013-000209)).
-The communities in eastern B.C. that keep mountain time are not affected.
+The province's release says its mountain-time communities in eastern B.C.
+are not affected by that change. Their own rule still changed, though:
+
+- Southeastern B.C., such as Cranbrook and Golden, follows Alberta. tzdb
+  maps it to `America/Edmonton`, which moved to permanent UTC−6 in 2026c.
+- Northeastern B.C., such as Dawson Creek and Fort St. John, was already on
+  UTC−7 all year (`America/Dawson_Creek`, `America/Fort_Nelson`).
 
 The tz database added this in release 2026b
 ([tzdb NEWS](https://github.com/eggert/tz/blob/main/NEWS)). Until CLDR and
 ICU can express it, tzdb models the change as taking effect at 02:00 on
-1 November 2026. The same NEWS file records three more changes:
+1 November 2026. tzdb's own abbreviation for these B.C. timestamps is
+"MST". The same NEWS file records three more changes:
 
 - Alberta moved to permanent UTC−6 (2026c).
 - The Northwest Territories moved to permanent UTC−6 (2026d).
@@ -161,7 +168,14 @@ new image. On Node.js 22.23.2, or on the Node.js 22.20.0 that Replit's
 current Nix channel provides, B.C. times from 1 November are an hour off:
 the app still applies the old UTC−8 winter. The same applies to Alberta,
 the Northwest Territories and Manitoba. **This makes the Replit gap below
-urgent for any Canadian business in those provinces.**
+urgent for any business in British Columbia, Alberta, Manitoba or the
+Northwest Territories.**
+
+**Demo content.** The plain demo's event sessions now start at the
+studio's wall-clock hour on the studio's own date. Before this update, they
+used the UTC date with a fixed UTC−7 hour. On a Pacific evening, that put
+an event a day later than intended, and in winter an hour off under the old
+rule.
 
 **Freeholder doctor.** The "Time zone data" check
 (`src/core/doctor/timezone.ts`) compares the business's zone in the app and
@@ -171,9 +185,10 @@ each other. It matters only for things that read Postgres directly, such as
 a hand-run export or a BI tool. Updating the database image's time zone
 data clears it.
 
-**Zone labels.** ICU 78.3 still calls a British Columbia winter "Pacific
-Daylight Time" (short form "PDT"), because CLDR has no name yet for the new
-rule. Booking pages now label zones by their generic name, such as
+**Zone labels.** tzdb names these B.C. timestamps "MST". In our testing
+with Node.js 22.23.4, though, ICU 78.3 still calls a British Columbia winter
+"Pacific Daylight Time" (short form "PDT"). The tzdb NEWS entry attributes
+this to a CLDR and ICU limitation. Booking pages now label zones by their generic name, such as
 "Pacific Time (Vancouver)", which is right under either rule. Event times
 still print ICU's short name, so a December event in Vancouver reads
 "PDT". The time itself is correct.
@@ -353,7 +368,8 @@ reports a version older than 22.23.4, Node.js's fixes above are not in
 effect there. Older versions also miss the 2026 Canadian time zone rules.
 Check `node -p process.versions.tz` too. Below `2026b`, British Columbia
 times from 1 November 2026 will be an hour off. Below `2026e`, at least
-one of the four provinces will be. A business in any of them should not
+one of British Columbia, Alberta, the Northwest Territories and Manitoba
+will be. A business in any of them should not
 run on Replit until the runtime is updated.
 
 ## Deployment

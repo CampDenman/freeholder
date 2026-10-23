@@ -29,6 +29,9 @@ describe("zoneLabel()", () => {
       expect(zoneLabel("Europe/Berlin", "en", at)).toBe("Central European Time (Berlin)");
     }
     expect(zoneLabel("America/Vancouver", "fr", summer)).not.toContain("America/");
+    // An Etc/ id is an offset, not a place: no "(GMT+5)" beside "GMT-05:00".
+    expect(zoneLabel("Etc/GMT+5", "en", summer)).toBe("GMT-05:00");
+    expect(zoneLabel("Etc/UTC", "en", summer)).toBe("Coordinated Universal Time");
     expect(zoneLabel("UTC", "en", summer)).toBe("Coordinated Universal Time");
     // An id the runtime does not know is shown as given rather than thrown.
     expect(zoneLabel("Not/AZone", "en", summer)).toBe("Not/AZone");
