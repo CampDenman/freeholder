@@ -7243,6 +7243,37 @@ equipment, classes and expertise without double-booking or duplicated records.
   books. Regression:
   `tests/modules/customer-surfaces.test.ts`. Changeset
   `demo-prelaunch-polish.md`.
+  Pre-launch check 2026-10-23 (opening date): with no `?date=`, /book
+  opened on `new Date().toISOString().slice(0,10)` — UTC's today, so every
+  evening in Pacific time it opened on tomorrow — and on a day with nothing
+  free it led with "No times available on this date". The page now computes
+  today in the business zone (`zonedDate`/`addDays`/`periodKey` from
+  `src/core/i18n/zoned.ts`) and opens on the first business day with a free
+  time: one ranged `scheduling.slots` call with `limit: 1` over the next
+  week, widened to a 60-day window only when the week is empty
+  (`app/(public)/book/opening-date.ts`). An anonymous visitor's answer is
+  reused for 60 s in-process, keyed by offering, seller and party size only
+  (never a move or a signed-in customer), so a fully booked service is not
+  scanned on every view. With nothing free it opens on today with the
+  existing message; a real `?date=` always wins, and one that does not exist
+  (2026-02-31) counts as absent. A "day" is the business's day:
+  `scheduling.slots` reads dates in each calendar's zone, so the day view,
+  `catalog.bookService` and `catalog.moveMyBooking` ask the calendar days
+  either side, cut to the business day's exact instants (or, for reserve
+  and move, the one chosen instant) by the new optional `notBefore`/
+  `notAfter` inputs of `scheduling.slots`, applied before the slot limit
+  counts and DST-correct via `zonedInstant`
+  (`src/core/scheduling/business-day.ts`). Filtering afterwards let the day
+  before use up the 500-slot limit: three pool calendars open any hour cut
+  the chosen day at 212 of 288 times; before, a Vancouver business with
+  a UTC calendar never showed, and could not reserve, its evening times. The
+  embed and the reschedule (`?move=`, searched with the booking excluded)
+  render the same page. The resolver's `maxSlots` now caps each calendar and
+  trims the sorted answer, rather than returning as soon as the first
+  calendar filled it, which could hide a later calendar's earlier time.
+  Regression: `tests/modules/booking-opening-date.test.ts`,
+  `tests/modules/customer-surfaces.test.ts`, `tests/core/resolver.test.ts`.
+  Changeset `booking-opening-date.md`.
 
 ### 43.12 C7 — Working CRM, messaging, inbox, and human operations
 

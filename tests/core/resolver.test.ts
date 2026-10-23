@@ -16,6 +16,7 @@ import { setAvailability, addAvailabilityException } from "@/core/scheduling/ava
 import { createBooking, setBookingStatus } from "@/core/scheduling/bookings";
 import { externalBusyBlocks } from "@/core/scheduling/schema";
 import { resolveSlots } from "@/core/scheduling/resolver";
+import { businessDayBounds } from "@/core/scheduling/business-day";
 import { availableSlots } from "@/core/scheduling/resolver-service";
 import { createAudience, setAudienceServices } from "@/core/scheduling/audiences";
 import {
@@ -369,6 +370,44 @@ describe.runIf(hasDatabase)("the availability resolver", { timeout: 60_000 }, ()
     // Sam is still there.
     expect(found[0]?.calendarId).toBe(kim.id);
     expect(found.some((slot) => slot.calendarId === sam.id)).toBe(true);
+  });
+
+  it("keeps the earliest times when a limit cuts across several calendars", async () => {
+    // Kim sorts first but only works afternoons. Stopping once Kim filled the
+    // limit hid Sam's morning, and /book's first free day (C6.19) asks with a
+    // limit of one.
+    const kim = await therapist("Kim");
+    const sam = await therapist("Sam");
+    await setAvailability.call(
+      { calendarId: kim.id, rules: [{ weekday: 1, starts: "14:00", ends: "17:00", kind: "bookable" }] },
+      OWNER,
+    );
+    await serves([
+      { calendarId: kim.id, role: "primary" },
+      { calendarId: sam.id, role: "primary" },
+    ]);
+    const two = await slots({ assignment: "pool", maxSlots: 2 });
+    expect(times(two)).toEqual(["09:00", "10:00"]);
+    expect(two.every((slot) => slot.calendarId === sam.id)).toBe(true);
+    expect(times(await slots({ assignment: "round_robin", maxSlots: 1 }))).toEqual(["09:00"]);
+  });
+
+  it("bounds a business day to its instants before the limit, 25 hours on the day the clocks go back", async () => {
+    const calendar = await createCalendar.call({ kind: "resource", name: "Desk", timezone: "America/Vancouver" }, OWNER);
+    await serves([{ calendarId: calendar.id, role: "primary" }]);
+    const day = businessDayBounds("2026-11-01", "America/Vancouver");
+    const found = await slots({
+      from: "2026-10-31",
+      to: "2026-11-02",
+      audienceHours: { mode: "any" },
+      notBefore: day.notBefore,
+      notAfter: day.notAfter,
+      // The three calendar days hold 73 hourly starts; the business day 25.
+      maxSlots: 25,
+    });
+    expect(found).toHaveLength(25);
+    expect(found[0]!.startsAt.toISOString()).toBe("2026-11-01T07:00:00.000Z");
+    expect(found.at(-1)!.startsAt.toISOString()).toBe("2026-11-02T07:00:00.000Z");
   });
 
   it("offers only the named person when the service names one", async () => {

@@ -125,6 +125,19 @@ describe.runIf(hasDatabase)("public customer surfaces",()=>{
     await actOnMyRecord.call({section:"bookings",id:moved.id,action:"cancel"},CUSTOMER);
     expect((await myRecord.call({section:"bookings",id:moved.id},CUSTOMER)).status).toBe("cancelled");
   });
+  it("reserves and moves a time the business dates to the day before the calendar does (C6.19)",async()=>{
+    // A Vancouver business with a UTC calendar open 01:00–05:00 UTC: those
+    // times are the previous evening in Vancouver, which is the day /book shows
+    // them on, so reserving and moving must find them on that business day.
+    await updateBusiness.call({name:"Customer proof",country:"CA",baseCurrency:"CAD",timezone:"America/Vancouver",enabledLocales:["en","fr"]},OWNER);
+    const {input,slots}=await bookingSelection();
+    await setAvailability.call({calendarId:slots[0]!.calendarId,rules:[{weekday:futureDay.getUTCDay(),starts:"01:00",ends:"05:00",kind:"bookable"}]},OWNER);
+    const at=(hour:string)=>`${DAY}T${hour}:00:00.000Z`;
+    const reserved=await bookPublicService.call({...input,startsAt:at("03"),requestKey:randomUUID()},CUSTOMER);
+    expect((await db().select().from(bookings))[0]!.startsAt.toISOString()).toBe(at("03"));
+    const moved=await moveMyBooking.call({id:reserved.bookingId,calendarId:slots[0]!.calendarId,startsAt:at("01")},CUSTOMER);
+    expect(moved.id).not.toBe(reserved.bookingId);
+  });
   it("reserves a public-playground time for a made-up address and refuses a real-looking one (C1.38)",async()=>{
     const {input}=await bookingSelection();
     vi.stubEnv("FREEHOLDER_PLAYGROUND","1"); resetEnvForTests();

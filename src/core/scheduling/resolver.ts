@@ -77,6 +77,15 @@ export interface SlotRequest {
   now?: Date;
   maxSlots?: number;
   /**
+   * Only starts in `[notBefore, notAfter]`, both inclusive, counted before
+   * `maxSlots`. `from`/`to` are dates in each calendar's own zone; these are
+   * instants, so a caller showing one business day across calendars in other
+   * zones asks for the dates around it and bounds it exactly here, without
+   * the neighbouring days using up the cap (C6.19).
+   */
+  notBefore?: Date;
+  notAfter?: Date;
+  /**
    * Hours imposed by the audience rather than by the calendar (C6.05).
    *
    * §41: bookability is a property of the audience, not of the calendar. A
@@ -455,14 +464,22 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
       timezone: member.timezone,
     });
 
+    // The cap is per calendar, and the answer is trimmed only once every
+    // calendar has had its turn: returning as soon as the first calendar
+    // filled it would hide a second calendar's earlier time, and "the first
+    // day anything is free" (/book's opening date) would land too late.
+    let mine = 0;
     for (const window of windows) {
+      if (mine >= maxSlots) break;
       for (const startsAt of startsIn(window, request.durationMin, granularity)) {
-        if (found.length >= maxSlots) return found;
+        if (mine >= maxSlots) break;
         const endsAt = new Date(startsAt.getTime() + request.durationMin * 60_000);
 
         // Lead time and horizon: no bookings in the next two hours, none more
         // than six months out.
         if (startsAt < earliest || startsAt > latest) continue;
+        if (request.notBefore && startsAt < request.notBefore) continue;
+        if (request.notAfter && startsAt > request.notAfter) continue;
 
         // The buffers are what is tested against existing work, not the
         // appointment itself, so a slot that would leave no travel time is
@@ -513,6 +530,7 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
             ? capacity - seatsHeld(heldByCalendar.get(member.calendarId) ?? [], guarded)
             : 1,
         });
+        mine += 1;
       }
     }
   }
@@ -524,15 +542,17 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
     return dedupeByStart(
       found.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()),
       load,
-    );
+    ).slice(0, maxSlots);
   }
 
-  return found.sort(
-    (a, b) =>
-      a.startsAt.getTime() - b.startsAt.getTime() ||
-      candidates.findIndex((member) => member.calendarId === a.calendarId) -
-        candidates.findIndex((member) => member.calendarId === b.calendarId),
-  );
+  return found
+    .sort(
+      (a, b) =>
+        a.startsAt.getTime() - b.startsAt.getTime() ||
+        candidates.findIndex((member) => member.calendarId === a.calendarId) -
+          candidates.findIndex((member) => member.calendarId === b.calendarId),
+    )
+    .slice(0, maxSlots);
 }
 
 /**
