@@ -31,6 +31,8 @@ demo.example.com {
   request_body {
     max_size 64KB
   }
+  @nextImage path /_next/image /_next/image/*
+  respond @nextImage 404
   reverse_proxy playground-app:3000 {
     header_up X-Freeholder-Client-Ip {client_ip}
     lb_try_duration 20s

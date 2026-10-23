@@ -9,6 +9,11 @@ demo.freeholder.ai {
 	request_body {
 		max_size 64KB
 	}
+	# C11.10: Next's image optimizer is off (images.unoptimized); refuse its
+	# endpoint at the edge too, so a regression in either layer alone cannot
+	# expose it (GHSA-2464-fhr4-w9xw). Caddy path matching ignores case.
+	@nextImage path /_next/image /_next/image/*
+	respond @nextImage 404
 	# C11.10: overwritten per request; the playground app trusts only this.
 	# {client_ip} is the connecting address unless trusted_proxies is set.
 	reverse_proxy playground-app:3000 {
