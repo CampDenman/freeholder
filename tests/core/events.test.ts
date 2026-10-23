@@ -20,7 +20,6 @@ import {
   listPublicEvents,
   onInvoiceRefunded,
   publishEvent,
-  AlreadyRegisteredError,
   registerForEvent,
   resolvePublicEvent,
 } from "@/modules/events/service";
@@ -674,13 +673,39 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     // Another browser: a different form token, or none at all.
     for (const attempt of [{ ...base, submissionToken: "a-strangers-form-token-xx" }, base]) {
       const refused = await failure(registerForEvent.call(attempt, ANONYMOUS));
-      expect(refused).toBeInstanceOf(AlreadyRegisteredError);
+      // The same refusal a full or closed session gets: nothing to tell apart.
       expect(refused.code).toBe("conflict");
       expect(JSON.stringify(refused)).not.toContain("/portal/invoices/");
       expect(refused.message).not.toContain("/portal/invoices/");
     }
     expect(await db().select().from(invoices).where(eq(invoices.sourceId, first.registration.id))).toHaveLength(1);
     expect(await db().select().from(eventRegistrations).where(eq(eventRegistrations.sessionId, session.id))).toHaveLength(1);
+  });
+
+  it("counts refused public attempts toward the rate limit", async () => {
+    const { event, session, ticket } = await paidClass(8);
+    const base = { eventId: event.id, sessionId: session.id, ticketId: ticket.id, email: "probe@example.test" };
+    await registerForEvent.call({ ...base, submissionToken: "the-owners-form-token-0001" }, ANONYMOUS);
+    const codes: string[] = [];
+    for (let attempt = 0; attempt < 45; attempt += 1) {
+      codes.push((await failure(registerForEvent.call(base, ANONYMOUS))).code);
+    }
+    // Refusals roll their transaction back, but the attempt still counted.
+    expect(codes.slice(0, 39).every((code) => code === "conflict")).toBe(true);
+    expect(codes.at(-1)).toBe("rate_limited");
+  });
+
+  it("refuses a session time zone Intl does not know", async () => {
+    const event = await createEvent.call({ name: "Zone typo", slug: "zone-typo" }, OWNER);
+    const startsAt = new Date(Date.now() + 86_400_000);
+    expect(
+      await failure(
+        addEventSession.call(
+          { eventId: event.id, startsAt, endsAt: new Date(startsAt.getTime() + 3_600_000), capacity: 4, timezone: "America/Vancuver" },
+          OWNER,
+        ),
+      ),
+    ).toMatchObject({ code: "validation" });
   });
 
   it("answers a repeated free submit with the same confirmed seat", async () => {

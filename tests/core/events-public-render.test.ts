@@ -97,25 +97,26 @@ describe("public event page", () => {
     expect(html).not.toContain("seats left");
   });
 
-  it("gives each rendered form its own submission token", () => {
-    const token = (html: string) => /name="submissionToken" value="([A-Za-z0-9_-]{32})"/.exec(html)?.[1];
-    const first = token(draw(eventDetail, event()));
-    const second = token(draw(eventDetail, event()));
-    expect(first).toBeTruthy();
-    expect(second).toBeTruthy();
-    expect(first).not.toBe(second);
+  it("puts no submission token in the HTML a shared cache could hand to another visitor", () => {
+    const html = draw(eventDetail, event());
+    expect(html).toContain('name="submissionToken" value=""');
   });
 
-  it("says plainly when the email is already registered, with no invoice link", () => {
+  it("answers every refusal with the same neutral message", () => {
     const html = renderToStaticMarkup(
       eventDetail.render({
         props: {},
         resolved: event(),
-        ctx: { ...ctx, query: { eventAlreadyRegistered: "golden-hour-workshop" } },
+        ctx: { ...ctx, query: { eventError: "golden-hour-workshop", failure: "invalid" } },
       } as never) as never,
     );
-    expect(html).toContain("already registered for this session");
+    expect(html).toContain("If you already registered, check your email.");
     expect(html).not.toContain("/portal/invoices/");
+  });
+
+  it("still renders when a stored session zone is not one Intl knows", () => {
+    const broken = event({ sessions: [{ ...event().sessions[0]!, timezone: "America/Vancuver" }] });
+    expect(draw(eventDetail, broken)).toMatch(/Mon, Nov 9, 12:00\s*[–-]\s*2:00\sAM UTC/);
   });
 });
 

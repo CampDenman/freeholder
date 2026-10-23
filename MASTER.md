@@ -6605,19 +6605,27 @@ payment, tax, inventory and reporting path, with no floating-point money.
   double click, a retried request) met the one-live-registration rule and
   answered `conflict`, so the last answer the visitor saw was a failure.
   `events.register` now replays, bound to the submitter rather than the
-  email: each rendered form carries a random one-time `submissionToken`
-  whose SHA-256 is stored on the registration
+  email: the form carries a random one-time `submissionToken` minted in
+  the visitor's browser (`SubmissionTokenField`; never server-rendered,
+  because the playground lets a CDN share cookie-less CMS pages for a few
+  seconds, and a token in shared HTML would be one token for everyone
+  who loaded it). Its SHA-256 is stored on the registration
   (`event_registrations.submission_token_hash`, never in any output). A
   repeat with the same token, session, ticket and seat count within the
   hold window gets the same registration back — a paid one with the same
   invoice's payment page while it is issued, unpaid and its hold live,
-  never a second invoice. A same-email submit without the matching token
-  is refused with `AlreadyRegisteredError` (a `conflict`) and the form
-  says only "already registered — check your email", with no invoice link,
-  playground included; so someone who knows an attendee's email cannot
-  open their invoice. That message does confirm the email is registered
-  for the session. Every refusal still rolls back the whole transaction
-  (no contact, registration or invoice written). **Public pages.** Event
+  never a second invoice. Any other duplicate is a plain `conflict`, and
+  the form answers it exactly like a full or closed session ("We couldn't
+  register that request… If you already registered, check your email."),
+  so someone who knows an attendee's email learns nothing and gets no
+  invoice. Without JavaScript the token is empty and a repeat is answered
+  that way too. Every public attempt, accepted or refused, also counts
+  toward a pre-transaction limit (40/hour per client, or per email when
+  the client has no address), so refusals cannot be probed for free. Every
+  refusal still rolls back the whole transaction (no contact,
+  registration or invoice written). Session time zones are validated on
+  write (`isTimezone`), and the date formatters fall back to UTC for a
+  stored zone Intl does not know rather than failing the page. **Public pages.** Event
   pages were built from the landing template, so its placeholder intro
   ("This page is a block tree…"), its "Get in touch" button and, per
   preset, a products index or booking form appeared on every event page;

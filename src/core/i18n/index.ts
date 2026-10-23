@@ -13,6 +13,7 @@ import {
   isSelectElement,
   isTagElement,
 } from "@formatjs/icu-messageformat-parser";
+import { renderableTimezone } from "./zoned";
 import en from "../../../locales/en.json";
 import es from "../../../locales/es.json";
 import fr from "../../../locales/fr.json";
@@ -292,12 +293,14 @@ export function formatDateTimeRange(
   timezone: string,
   locale: string = DEFAULT_LOCALE,
 ): string {
-  return new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: timezone }).formatRange(start, end);
+  return new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: renderableTimezone(timezone).timezone })
+    .formatRange(start, end);
 }
 
 /** One instant in the same reading, for a picker option or a list line. */
 export function formatDateTimeShort(utc: Date, timezone: string, locale: string = DEFAULT_LOCALE): string {
-  return new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: timezone }).format(utc);
+  return new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: renderableTimezone(timezone).timezone })
+    .format(utc);
 }
 
 /** Store UTC, display in an explicit timezone (§4.9 timezone discipline). */

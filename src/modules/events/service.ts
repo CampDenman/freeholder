@@ -7,8 +7,9 @@ import { and, asc, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isUniqueViolation } from "@/core/db";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineOrchestratedService, defineService, permits, ServiceError, type ServiceContext } from "@/core/service";
+import { defineOrchestratedService, defineService, permits, ServiceError, type Actor, type ServiceContext } from "@/core/service";
 import { anonymousClientKey, consumeAccepted, rateLimitKey } from "@/core/security/rate-limit";
+import { isTimezone } from "@/core/i18n/zoned";
 import { registerContactReference } from "@/core/contacts/service";
 import { listLocations } from "@/core/locations/service";
 import { resolveContact } from "@/core/contacts/service";
@@ -769,7 +770,14 @@ export const addEventSession = defineService({
     eventId: id,
     startsAt: z.coerce.date(),
     endsAt: z.coerce.date(),
-    timezone: z.string().trim().min(1).max(80).default("UTC"),
+    // An unknown zone would make every page that formats the session throw.
+    timezone: z
+      .string()
+      .trim()
+      .min(1)
+      .max(80)
+      .refine(isTimezone, "Use an IANA time zone, such as America/Vancouver.")
+      .default("UTC"),
     capacity: z.number().int().min(0).max(100_000),
     waitlistEnabled: z.boolean().default(true),
   }),
@@ -816,6 +824,8 @@ const PUBLIC_SEATS_PER_REGISTRATION = 10;
 const PUBLIC_REGISTRATION_LIMIT = { limit: 10, windowSeconds: 60 * 60 } as const;
 /** Per client network address; looser, since honest people share addresses. */
 const PUBLIC_CLIENT_LIMIT = { limit: 30, windowSeconds: 60 * 60 } as const;
+/** Every public attempt, accepted or refused — what bounds probing. */
+const PUBLIC_ATTEMPT_LIMIT = { limit: 40, windowSeconds: 60 * 60 } as const;
 
 /**
  * The earlier registration a repeated submit should return, or null when the
@@ -824,17 +834,6 @@ const PUBLIC_CLIENT_LIMIT = { limit: 30, windowSeconds: 60 * 60 } as const;
  * invoice's payment page — never a second invoice — and only while that
  * invoice is still issued, unpaid and its hold live.
  */
-/**
- * A duplicate that is not a repeat of the visitor's own submit. Refused like
- * any conflict (nothing is written), but the public form can say so plainly —
- * "already registered, check your email" — without handing over the invoice.
- */
-export class AlreadyRegisteredError extends ServiceError {
-  constructor() {
-    super("conflict", "This email is already registered for that session.");
-  }
-}
-
 function submissionTokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -883,6 +882,21 @@ export const registerForEvent = defineService({
   summary: "Register a contact for a session, holding paid seats behind an issued invoice and waitlisting when the session is full.",
   kind: "mutation",
   permission: "public",
+  // Every public attempt counts, refused or not, before the transaction
+  // opens: a refusal rolls the in-transaction counters below back, and an
+  // uncounted refusal is free probing (2026-10-23 review). Keyed on the
+  // client when it has an address, else on the email being tried.
+  rateLimit: {
+    limit: PUBLIC_ATTEMPT_LIMIT.limit,
+    windowSeconds: PUBLIC_ATTEMPT_LIMIT.windowSeconds,
+    message: "That is a lot of registrations at once. Try again later.",
+    subject: (input: { email: string }, actor: Actor) =>
+      actor.kind !== "anonymous"
+        ? undefined
+        : actor.request?.trustedIp || actor.request?.ip
+          ? `attempt:${anonymousClientKey(actor)}`
+          : `attempt:email:${input.email.trim().toLowerCase()}`,
+  },
   input: z.object({
     eventId: id,
     sessionId: id,
@@ -989,7 +1003,9 @@ export const registerForEvent = defineService({
         ctx.setSubject("eventRegistration", duplicate.id);
         return replay;
       }
-      throw new AlreadyRegisteredError();
+      // Not a repeat of this submitter's own form: refused like a full or
+      // closed session, and the public form answers all of them alike.
+      throw new ServiceError("conflict", "This email is already registered for that session.");
     }
     const taken = await occupied(ctx, session.id);
     const remaining = session.capacity - taken;
