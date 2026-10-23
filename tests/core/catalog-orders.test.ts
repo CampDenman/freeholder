@@ -3,11 +3,12 @@
 // C5.21 checkout and C5.22 orders from a cart.
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { readFileSync } from "node:fs";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { createContact } from "@/core/contacts/service";
 import { createLocationService } from "@/core/locations/service";
-import { orderPaymentMilestones, orders, productVariants } from "@/modules/catalog/schema";
+import { orderPaymentMilestones, orders, products, productVariants } from "@/modules/catalog/schema";
 import {
   addCartItem,
   applyVariantMatrix,
@@ -27,6 +28,7 @@ import {
   recordStockMovement,
   releaseOrderPaymentMilestone,
   setPriceListEntry,
+  updateProduct,
 } from "@/modules/catalog/service";
 import { cancelPayment, createPayment, failPayment, getInvoice, settlePayment } from "@/modules/invoicing/invoice-service";
 import { getCustomerInvoice } from "@/modules/invoicing/customer-service";
@@ -73,6 +75,38 @@ describe.runIf(hasDatabase)("catalog orders", { timeout: 30_000 }, () => {
     expect(row).toMatchObject({ contactId: buyer.id, contactName: "Ada Example", contactEmail: "ada@example.com" });
     // A customer reading their own orders gets the same projection.
     expect((await listOrders.call({ contactId: buyer.id }, OWNER))[0]?.contactName).toBe("Ada Example");
+    // Catalog-only staff and agents see the name but not the email: that is
+    // contact data, behind the contacts read permission as before.
+    const catalogOnly = { ...STAFF, grants: [{ module: "catalog", access: "view" as const }] };
+    expect((await listOrders.call({}, catalogOnly))[0]).toMatchObject({ contactName: "Ada Example", contactEmail: null });
+    const withContacts = { ...STAFF, grants: [{ module: "catalog", access: "view" as const }, { module: "contacts", access: "view" as const }] };
+    expect((await listOrders.call({}, withContacts))[0]?.contactEmail).toBe("ada@example.com");
+    const agent = { kind: "agent" as const, keyName: "orders", scopes: ["catalog.listOrders"] };
+    expect((await listOrders.call({}, agent))[0]?.contactEmail).toBeNull();
+    expect((await listOrders.call({}, { ...agent, scopes: ["catalog.listOrders", "contacts.*"] }))[0]?.contactEmail).toBe("ada@example.com");
+  });
+
+  it("keeps a variant's shipping flag with its product's kind, and backfills old ones", async () => {
+    // New variants follow the kind; a draft that changes kind takes them along.
+    const draft = await createProduct.call({ name: "Gift card", slug: "gift-card", kind: "physical" }, OWNER);
+    const matrix = await applyVariantMatrix.call({ productId: draft.id, expectedVersion: draft.version }, OWNER);
+    const shipping = async () =>
+      (await getProductVariants.call({ productId: draft.id }, OWNER)).variants.map((variant) => variant.requiresShipping);
+    expect(await shipping()).toEqual([true]);
+    const renamed = await updateProduct.call({ id: draft.id, expectedVersion: matrix.version, kind: "pass" }, OWNER);
+    expect(await shipping()).toEqual([false]);
+    await updateProduct.call({ id: draft.id, expectedVersion: renamed.version, kind: "rental" }, OWNER);
+    expect(await shipping()).toEqual([true]);
+
+    // Migration 0055: variants made before this took the column's default.
+    const download = await sellable("old-download", true);
+    await db().update(products).set({ kind: "digital" }).where(eq(products.id, download.productId));
+    const print = await sellable("old-print", true);
+    const migration = readFileSync("db/migrations/0055_nonshipping_variant_backfill.sql", "utf8");
+    await db().execute(sql.raw(migration));
+    const after = await db().select().from(productVariants);
+    expect(after.find((variant) => variant.id === download.id)?.requiresShipping).toBe(false);
+    expect(after.find((variant) => variant.id === print.id)?.requiresShipping).toBe(true);
   });
 
   async function sellable(slug: string, ship = false) {

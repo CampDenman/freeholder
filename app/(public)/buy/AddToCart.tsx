@@ -100,8 +100,10 @@ export function AddToCart({
 
   const ordered = byPrice(product.variants);
   const chosen = ordered.find(sellable);
-  // The same lowest price the product's JSON-LD offer quotes (priceFromMinor).
-  const lowest = ordered[0]?.priceMinor ?? null;
+  // The lowest price a shopper can actually pay: the cheapest sellable
+  // variant, which is also the one chosen already. An unavailable or
+  // unpriced variant never sets the "From" price.
+  const lowest = chosen?.priceMinor ?? null;
   return (
     <form action={addToCartAction} className="grid gap-2">
       <input type="hidden" name="product" value={product.slug} />

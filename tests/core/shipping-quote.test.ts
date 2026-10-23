@@ -92,25 +92,41 @@ describe("shipping quotes", () => {
     );
   });
 
-  it("offers pickup to any address and honours a named location (2026-10-23)", () => {
-    const method = (id: string, kind: "pickup" | "local_delivery" | "flat", locationId: string | null) => ({
-      id, zoneId: "zone-ca", name: id, kind, handlingFeeMinor: 0, amountMinor: kind === "flat" ? 900 : 500,
+  it("keeps pickup and local delivery to the zone and location the owner chose, cheapest first", () => {
+    // 2026-10-23 review: pickup had been offered to every address, and local
+    // delivery to every address in its zone, whatever the location.
+    const method = (id: string, name: string, kind: "pickup" | "local_delivery" | "flat", zoneId: string, locationId: string | null, amountMinor = 900) => ({
+      id, zoneId, name, kind, handlingFeeMinor: 0, amountMinor,
       thresholdMinor: null, locationId, minDays: null, maxDays: null, bands: [],
     });
     const parcel = [{ quantity: 1, weightG: 300, priceMinor: 2800, requiresShipping: true }];
-    const methods = [method("pickup", "pickup", "studio"), method("van", "local_delivery", "studio"), method("parcel", "flat", null)];
-    const quote = (destination: { country: string; postal?: string }, locationId?: string) =>
-      quoteMethods({ destination, currency: "CAD", locationId, items: parcel, zones: [domestic], boxes: [], methods });
-    // The storefront names no location: each method's own location stands.
-    const home = quote({ country: "CA", postal: "V9N1A1" });
-    expect(home.quotes.map((row) => row.methodId).sort()).toEqual(["parcel", "pickup", "van"]);
-    expect(home.quotes.find((row) => row.methodId === "pickup")?.amountMinor).toBe(0);
-    // No zone reaches the address: pickup is still a way to get it.
-    const away = quote({ country: "US" });
-    expect(away).toMatchObject({ needed: true, zoneId: null });
-    expect(away.quotes.map((row) => row.methodId)).toEqual(["pickup"]);
-    // A caller that names another location gets neither counter method.
-    expect(quote({ country: "CA", postal: "V9N1A1" }, "warehouse").quotes.map((row) => row.methodId)).toEqual(["parcel"]);
+    const methods = [
+      method("m-parcel", "Parcel", "flat", "zone-ca", null, 1200),
+      method("m-courier", "Courier", "flat", "zone-ca", null, 1200),
+      method("m-pickup", "Pick up at the studio", "pickup", "zone-ca", "studio"),
+      method("m-van", "Studio van", "local_delivery", "zone-ca", "studio", 500),
+      method("m-world-pickup", "Pick up anywhere", "pickup", "zone-world", "studio"),
+    ];
+    const quote = (destination: { country: string; postal?: string }, zones = [domestic], locationId?: string) =>
+      quoteMethods({ destination, currency: "CAD", locationId, items: parcel, zones, boxes: [], methods });
+
+    // The storefront names no location: pickup stands on its own location,
+    // local delivery is not quoted, and the order is price then name.
+    expect(quote({ country: "CA", postal: "V9N1A1" }).quotes.map((row) => row.methodId)).toEqual([
+      "m-pickup",
+      "m-courier",
+      "m-parcel",
+    ]);
+    // No zone reaches the address: nothing, pickup included.
+    expect(quote({ country: "US" })).toMatchObject({ needed: true, zoneId: null, quotes: [] });
+    // An owner who offers pickup to anyone puts it in a zone with no countries.
+    expect(quote({ country: "US" }, [domestic, world]).quotes.map((row) => row.methodId)).toEqual(["m-world-pickup"]);
+    // Naming the location brings local delivery in; another location drops both counter methods.
+    expect(quote({ country: "CA", postal: "V9N1A1" }, [domestic], "studio").quotes.map((row) => row.methodId)).toContain("m-van");
+    expect(quote({ country: "CA", postal: "V9N1A1" }, [domestic], "warehouse").quotes.map((row) => row.methodId)).toEqual([
+      "m-courier",
+      "m-parcel",
+    ]);
   });
 
   it("picks the smallest box that fits volume and weight", () => {

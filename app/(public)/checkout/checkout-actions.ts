@@ -145,6 +145,8 @@ export async function shopperCheckoutAction(form: FormData): Promise<void> {
   // outside the try — swallowing NEXT_REDIRECT would turn every success
   // into ?error=failed.
   if (outcome!.status === "verification_sent") {
+    // Nothing was refused, so no answers are kept for the next render.
+    (await cookies()).delete(FORM_RETURN_COOKIE);
     redirect(`${path}?sent=1`);
   }
   // Placed. The cart is converted; drop the device credential and any

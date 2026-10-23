@@ -32,7 +32,14 @@ export type CheckoutField = (typeof CHECKOUT_FIELDS)[number];
 export const CHECKOUT_RETURN_KEY = "checkout";
 
 /** Refusal reasons the checkout page has its own words for. */
-export type CheckoutReason = "validation" | "address" | "delivery" | "coverage" | "coupon" | "playgroundEmail";
+export type CheckoutReason =
+  | "validation"
+  | "address"
+  | "delivery"
+  | "chooseMethod"
+  | "coverage"
+  | "coupon"
+  | "playgroundEmail";
 
 /**
  * A validation refusal that knows which fields it is about. Still a

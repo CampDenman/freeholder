@@ -15,7 +15,7 @@ import { contacts } from "@/core/contacts/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { listLocations } from "@/core/locations/service";
 import { checkCoverage } from "@/core/locations/coverage";
-import { defineService, ServiceError, type Tx } from "@/core/service";
+import { defineService, permits, ServiceError, type Tx } from "@/core/service";
 import { QUANTITY_SCALE } from "@/modules/invoicing/money";
 import { payments } from "@/modules/invoicing/schema";
 import {
@@ -264,6 +264,17 @@ export const checkoutCart = defineService({
           "No shipping method reaches that destination.",
           ["country", "region", "postalCode"],
           "delivery",
+        );
+      }
+      // The shopper chooses how the order reaches them. One eligible method
+      // is the only answer; with more than one, nothing is picked for them —
+      // a silent default once charged a parcel rate or gave away a $0 pickup
+      // depending on row order (2026-10-23 review).
+      if (quotes.needed && !input.shippingMethodId && quotes.quotes.length > 1) {
+        throw new CheckoutFieldError(
+          "Choose how you would like to receive this order.",
+          ["shippingMethodId"],
+          "chooseMethod",
         );
       }
       const chosen = input.shippingMethodId
@@ -689,11 +700,14 @@ export const listOrders = defineService({
   // about themselves and nothing else.
   selfService: { contactField: "contactId" },
   input: z.object({ contactId: id.optional() }),
-  // Each order carries its customer's name and email, joined here: the
-  // workspace used to look names up in the first 80 contacts and printed a
-  // raw UUID for everyone else (2026-10-23 demo audit).
+  // Each order carries its customer's name, joined here: the workspace used
+  // to look names up in the first 80 contacts and printed a raw UUID for
+  // everyone else (2026-10-23 demo audit). The email is contact data, so it
+  // is returned only to a caller who may read contacts; catalog-only staff
+  // and agents get null, the boundary contacts.get already draws.
   output: listed(orderRow.extend({ contactName: z.string().nullable(), contactEmail: z.string().nullable() })),
   handler: async (input, ctx) => {
+    const mayReadContacts = permits(ctx.actor, "scoped", "contacts.get", "query");
     const rows = await ctx.tx
       .select({ order: orders, contactName: contacts.name, contactEmail: contacts.email })
       .from(orders)
@@ -701,7 +715,11 @@ export const listOrders = defineService({
       .where(input.contactId ? eq(orders.contactId, input.contactId) : undefined)
       .orderBy(desc(orders.createdAt))
       .limit(200);
-    return rows.map((row) => ({ ...row.order, contactName: row.contactName ?? null, contactEmail: row.contactEmail ?? null }));
+    return rows.map((row) => ({
+      ...row.order,
+      contactName: row.contactName ?? null,
+      contactEmail: mayReadContacts ? (row.contactEmail ?? null) : null,
+    }));
   },
 });
 

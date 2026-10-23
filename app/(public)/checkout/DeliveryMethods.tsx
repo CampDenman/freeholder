@@ -3,12 +3,16 @@
 "use client";
 // The delivery-method picker's live half (C3.25 slice 3).
 //
-// Without JavaScript this renders a note and the form simply omits
-// shippingMethodId, which catalog.checkoutCart resolves to the first eligible
-// quote for the submitted address. With JavaScript, the address fields are
-// watched and catalog.quoteShipping's eligible methods are offered as radios
-// — the same service the server re-runs authoritatively, so the preview can
-// never disagree with the charge.
+// The shopper always chooses: no method is picked on their behalf unless it
+// is the only one, because a silent default once charged a parcel rate or
+// handed out a free pickup depending on row order (2026-10-23 review).
+// Without JavaScript the first submission carries no choice; when more than
+// one method applies, catalog.checkoutCart refuses with a field error and the
+// page renders those methods here from `initial`, already quoted for the
+// address the shopper gave. With JavaScript, the address fields are watched
+// and catalog.quoteShipping's eligible methods are offered as radios — the
+// same service the server re-runs authoritatively, so the preview can never
+// disagree with the charge.
 
 import { useEffect, useRef, useState } from "react";
 import { quoteDeliveryAction, type DeliveryQuotes } from "./checkout-actions";
@@ -16,7 +20,6 @@ import { quoteDeliveryAction, type DeliveryQuotes } from "./checkout-actions";
 export interface DeliveryMethodsLabels {
   legend: string;
   note: string;
-  anyMethod: string;
   noShipping: string;
   noneReach: string;
   working: string;
@@ -24,9 +27,22 @@ export interface DeliveryMethodsLabels {
 
 const ADDRESS_IDS = ["checkout-country", "checkout-region", "checkout-postal"];
 
-export function DeliveryMethods({ labels }: { labels: DeliveryMethodsLabels }) {
+export function DeliveryMethods({
+  labels,
+  initial = null,
+  chosen,
+  invalid,
+}: {
+  labels: DeliveryMethodsLabels;
+  /** Methods quoted on the server for a returned address. */
+  initial?: DeliveryQuotes | null;
+  /** The method the shopper picked before a refusal. */
+  chosen?: string;
+  /** The refusal was about the method: mark the group and name the error. */
+  invalid?: { message: string };
+}) {
   const rootRef = useRef<HTMLFieldSetElement>(null);
-  const [quotes, setQuotes] = useState<DeliveryQuotes | null>(null);
+  const [quotes, setQuotes] = useState<DeliveryQuotes | null>(initial);
   const [busy, setBusy] = useState(false);
   const seq = useRef(0);
 
@@ -75,9 +91,20 @@ export function DeliveryMethods({ labels }: { labels: DeliveryMethodsLabels }) {
     };
   }, []);
 
+  const only = quotes?.quotes.length === 1 ? quotes.quotes[0]!.methodId : undefined;
   return (
-    <fieldset ref={rootRef} className="grid gap-2" data-delivery-methods>
+    <fieldset
+      ref={rootRef}
+      className="grid gap-2"
+      data-delivery-methods
+      {...(invalid ? { "aria-invalid": true, "aria-describedby": "checkout-method-error" } : {})}
+    >
       <legend className="text-sm font-semibold text-ink">{labels.legend}</legend>
+      {invalid ? (
+        <span id="checkout-method-error" className="text-xs font-semibold text-danger">
+          {invalid.message}
+        </span>
+      ) : null}
       {quotes === null ? (
         <p className="text-sm text-ink-muted">{busy ? labels.working : labels.note}</p>
       ) : !quotes.needed ? (
@@ -86,13 +113,15 @@ export function DeliveryMethods({ labels }: { labels: DeliveryMethodsLabels }) {
         <p className="text-sm text-danger">{labels.noneReach}</p>
       ) : (
         <div className="grid gap-2" role="radiogroup">
-          <label className="flex items-center gap-2 text-sm text-ink">
-            <input type="radio" name="shippingMethodId" value="" defaultChecked />
-            {labels.anyMethod}
-          </label>
           {quotes.quotes.map((quote) => (
             <label key={quote.methodId} className="flex items-center gap-2 text-sm text-ink">
-              <input type="radio" name="shippingMethodId" value={quote.methodId} />
+              <input
+                type="radio"
+                name="shippingMethodId"
+                value={quote.methodId}
+                required
+                defaultChecked={quote.methodId === (chosen || only)}
+              />
               {quote.name}
               <span className="text-ink-muted">
                 {(quote.amountMinor / 100).toLocaleString(undefined, {

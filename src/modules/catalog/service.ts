@@ -30,7 +30,8 @@ import {
   schemaTypeFor,
   type ProductStatus,
 } from "./contract";
-import { productLifecycleEvents, products, collectionProducts } from "./schema";
+import { productLifecycleEvents, products, collectionProducts, productVariants } from "./schema";
+import { shipsByDefault } from "./variants";
 import { syncProductPublicPage } from "./public-pages";
 import demoServices from "./demo";
 import collectionServices, {
@@ -778,6 +779,15 @@ export const updateProduct = defineService({
         throw error;
       });
     if (!updated) throw new ServiceError("conflict", "This product changed while it was being saved.");
+    if (updated.kind !== existing.kind) {
+      // A draft that changes kind takes its variants with it: a download
+      // turned into a print now ships, and a print turned into a voucher
+      // stops asking for an address (2026-10-23 review).
+      await ctx.tx
+        .update(productVariants)
+        .set({ requiresShipping: shipsByDefault(updated.kind) })
+        .where(eq(productVariants.productId, updated.id));
+    }
 
     if (existing.slug !== updated.slug && existing.publishedAt) {
       await ctx.callAsSystem(recordRedirect, {

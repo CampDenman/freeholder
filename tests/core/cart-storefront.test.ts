@@ -43,6 +43,9 @@ import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { SHOPPER_CART_COOKIE } from "@/modules/catalog/cookies";
 import { quoteDeliveryAction, shopperCheckoutAction } from "../../app/(public)/checkout/checkout-actions";
 import { AddedNotice, addedNoticeKind } from "../../app/(public)/buy/AddedNotice";
+import { AddToCart } from "../../app/(public)/buy/AddToCart";
+import { orders } from "@/modules/catalog/schema";
+import { FORM_RETURN_COOKIE } from "@/core/http/public-form-return";
 import { createContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
 import { localeDirection } from "@/core/i18n";
@@ -541,21 +544,76 @@ describe.runIf(hasDatabase)("the public cart, checkout and confirmation pages", 
       { name: "Studio", slug: "studio", street: "1 Harbour Road", city: "Comox", region: "BC", postalCode: "V9M 1A1", country: "CA" },
       OWNER,
     );
-    // Pickup sits in a zone that does not match the address, and is still
-    // offered: collecting at the counter does not depend on where you live.
-    const elsewhere = await createShippingZone.call({ name: "US", countries: ["US"] }, OWNER);
+    const canada = await createShippingZone.call({ name: "Canada", countries: ["CA"] }, OWNER);
+    const parcel = await createShippingMethod.call(
+      { zoneId: canada.id, name: "Parcel", kind: "flat", currency: "CAD", amount: "12.00" },
+      OWNER,
+    );
+    const pickup = await createShippingMethod.call(
+      { zoneId: canada.id, name: "Pick up at the studio", kind: "pickup", currency: "CAD", locationId: studio.id },
+      OWNER,
+    );
+    // Pickup elsewhere is not offered here: it keeps to the zone it is in.
+    const us = await createShippingZone.call({ name: "US", countries: ["US"] }, OWNER);
     await createShippingMethod.call(
-      { zoneId: elsewhere.id, name: "Pick up at the studio", kind: "pickup", currency: "CAD", locationId: studio.id },
+      { zoneId: us.id, name: "Pick up in Seattle", kind: "pickup", currency: "CAD", locationId: studio.id },
       OWNER,
     );
     await calendarInCart();
     const offered = await quoteDeliveryAction({ country: "CA", region: "BC", postal: "V9N1A1" });
-    expect(offered.quotes).toEqual([expect.objectContaining({ name: "Pick up at the studio", amountMinor: 0 })]);
+    expect(offered.quotes.map((quote) => [quote.name, quote.amountMinor])).toEqual([
+      ["Pick up at the studio", 0],
+      ["Parcel", 1200],
+    ]);
 
     const { session } = await signedInCustomer(ADA.email);
     jarState.cookies[SESSION_COOKIE] = session.token;
-    const target = await redirectOf(shopperCheckoutAction(checkoutForm(ADA)));
+    // Two methods apply and none was chosen (no JavaScript): nothing is
+    // picked for the shopper; the page comes back with both to choose from.
+    const refused = await redirectOf(shopperCheckoutAction(checkoutForm(ADA)));
+    expect(refused).toBe("/checkout?error=chooseMethod&fields=shippingMethodId");
+    const { html } = await renderCheckout(Object.fromEntries(new URL(refused, "http://x").searchParams));
+    expect(html).toContain("Choose how you would like to receive your order.");
+    expect(html).toMatch(/data-delivery-methods="true" aria-invalid="true"/);
+    expect(html.match(/name="shippingMethodId"/g)).toHaveLength(2);
+    expect(html).not.toMatch(/name="shippingMethodId"[^>]*checked/);
+    expect(html).toContain('value="210 Example Street"');
+
+    const target = await redirectOf(
+      shopperCheckoutAction(checkoutForm({ ...ADA, shippingMethodId: pickup.id })),
+    );
     expect(target).toMatch(/^\/orders\/confirm\?cart=/);
+    const [order] = await db().select().from(orders).where(eq(orders.shippingMethodId, pickup.id));
+    expect(order?.shippingMinor).toBe(0);
+    expect(parcel.id).not.toBe(pickup.id);
+  });
+
+  it("forgets kept answers once the verification email is sent", async () => {
+    await calendarInCart();
+    jarState.cookies[FORM_RETURN_COOKIE] = "stale";
+    const target = await redirectOf(shopperCheckoutAction(checkoutForm({ email: "new@example.test" })));
+    expect(target).toBe("/checkout?sent=1");
+    expect(jarState.cookies[FORM_RETURN_COOKIE]).toBeUndefined();
+  });
+
+  it("quotes the 'From' price from what a shopper can buy", () => {
+    const html = renderToStaticMarkup(
+      createElement(AddToCart, {
+        product: {
+          slug: "coast-print",
+          variants: [
+            { variantId: "v-gone", optionLabel: "Size: Tiny", priceMinor: 900, priceAvailable: true, available: false },
+            { variantId: "v-small", optionLabel: "Size: Small", priceMinor: 2500, priceAvailable: true, available: true },
+            { variantId: "v-large", optionLabel: "Size: Large", priceMinor: 4000, priceAvailable: true, available: true },
+          ],
+        },
+        formatMinor: (minor: number) => `$${(minor / 100).toFixed(2)}`,
+        labels: { add: "Add to cart", choose: "Choose options", from: "From {price}", unavailable: "Sold out", priceUnavailable: "No price" },
+      }),
+    );
+    expect(html).toContain("From $25.00");
+    expect(html).not.toContain("From $9.00");
+    expect(html).toMatch(/checked="" value="v-small"/);
   });
 
   it("places a voucher-only order with no address and no country", async () => {

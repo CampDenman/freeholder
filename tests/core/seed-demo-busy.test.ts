@@ -420,7 +420,9 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
       { country: "CA", region: "BC", postal: "V9N1A1", currency: "CAD", items: [{ quantity: 1, weightG: 0, priceMinor: 2_800 }] },
       ANONYMOUS,
     );
-    expect(quoted.quotes.map((quote) => quote.name).sort()).toEqual([SHIPPING.parcel, SHIPPING.pickup].sort());
+    // Cheapest first: pickup, then the parcel rate.
+    expect(quoted.quotes.map((quote) => quote.name)).toEqual([SHIPPING.pickup, SHIPPING.parcel]);
+    const parcel = quoted.quotes.find((quote) => quote.name === SHIPPING.parcel)!;
 
     vi.stubEnv("FREEHOLDER_PLAYGROUND", "1");
     resetEnvForTests();
@@ -436,7 +438,7 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
             name: "Ada Example",
             acceptedTerms: true,
             idempotencyKey: key,
-            ...(address ? { shippingAddress: address as { country: string } } : {}),
+            ...(address ? { shippingAddress: address as { country: string }, shippingMethodId: parcel.methodId } : {}),
           },
           ANONYMOUS,
         );

@@ -44,6 +44,7 @@ import { loadShopperCart } from "../shopper-cart";
 import { recordPageView } from "../[[...slug]]/pageview";
 import { shopperCheckoutAction } from "./checkout-actions";
 import { DeliveryMethods } from "./DeliveryMethods";
+import { quoteDeliveryAction } from "./checkout-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -121,6 +122,15 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
       </span>
     ) : null;
   const valueOf = (field: CheckoutField, fallback = "") => returned[field] ?? fallback;
+  // A returned address is quoted here, so a shopper without JavaScript sees
+  // the methods it can choose from after a refusal.
+  const returnedQuotes = /^[A-Za-z]{2}$/.test(returned.country ?? "")
+    ? await quoteDeliveryAction({
+        country: returned.country!,
+        region: returned.region || undefined,
+        postal: returned.postalCode || undefined,
+      })
+    : null;
 
   const adapter = paymentAdapter();
   const paymentMode = !adapter.status.available || adapter.id === "none"
@@ -274,11 +284,13 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
               labels={{
                 legend: t("store.checkout.deliveryLegend"),
                 note: t("store.checkout.deliveryNote"),
-                anyMethod: t("store.checkout.methodAny"),
                 noShipping: t("store.checkout.noShipping"),
                 noneReach: t("store.checkout.noneReach"),
                 working: t("common.working"),
               }}
+              initial={returnedQuotes}
+              chosen={valueOf("shippingMethodId") || undefined}
+              invalid={invalid.has("shippingMethodId") ? { message: t("store.checkout.error.chooseMethod") } : undefined}
             />
           ) : null}
 
@@ -392,6 +404,7 @@ function CheckoutError({ code, t }: { code: string; t: Awaited<ReturnType<typeof
     "terms",
     "address",
     "delivery",
+    "chooseMethod",
     "coverage",
     "coupon",
     "validation",

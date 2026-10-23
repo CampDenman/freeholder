@@ -164,22 +164,21 @@ export function quoteMethods(input: {
   const box = selectBox(input.items, input.boxes);
   const billableWeightG = Math.max(packed.weightG, packed.volumeWeightG) + (box?.tareWeightG ?? 0);
   const quotes: ShippingQuote[] = [];
-  // Collecting from the owner's own counter does not depend on where the
-  // shopper lives, so a pickup method is offered from every zone, even when
-  // no zone reaches the address. Everything else is the matched zone's.
-  // A named location narrows pickup and local delivery to that location;
-  // without one (the storefront checkout) each method's own location stands.
-  // Before this, storefront pickup could never be quoted (2026-10-23 audit).
-  const eligible = input.methods.filter((row) =>
-    row.kind === "pickup" ? true : zone !== null && row.zoneId === zone.id,
-  );
+  // Every method belongs to the zone the owner put it in: pickup is offered
+  // only where its zone reaches the address (an owner who offers pickup to
+  // anyone puts it in a zone with no countries). Pickup needs the location
+  // it happens at, and a named location narrows it to that one; the
+  // storefront names none, so each pickup method's own location stands.
+  // Local delivery is strict: it runs from one location, so it is quoted
+  // only when the caller names that location (2026-10-23 review).
+  const eligible = zone ? input.methods.filter((row) => row.zoneId === zone.id) : [];
   for (const method of eligible) {
     let amount: number | null = null;
     if (method.kind === "pickup") {
       if (!method.locationId || (input.locationId && method.locationId !== input.locationId)) continue;
       amount = 0;
     } else if (method.kind === "local_delivery") {
-      if (!method.locationId || (input.locationId && method.locationId !== input.locationId)) continue;
+      if (!method.locationId || method.locationId !== input.locationId) continue;
       amount = method.amountMinor ?? 0;
     } else if (method.kind === "free") {
       if (method.thresholdMinor == null || packed.subtotalMinor < method.thresholdMinor) continue;
@@ -209,5 +208,13 @@ export function quoteMethods(input: {
       boxId: box?.id ?? null,
     });
   }
+  // A stable order, cheapest first, so a list or a single-choice default
+  // never depends on the order rows came back from the database.
+  quotes.sort(
+    (left, right) =>
+      left.amountMinor - right.amountMinor ||
+      left.name.localeCompare(right.name) ||
+      left.methodId.localeCompare(right.methodId),
+  );
   return { needed: true, zoneId: zone?.id ?? null, quotes };
 }
