@@ -171,7 +171,19 @@ export function quoteMethods(input: {
   // storefront names none, so each pickup method's own location stands.
   // Local delivery is strict: it runs from one location, so it is quoted
   // only when the caller names that location (2026-10-23 review).
-  const eligible = zone ? input.methods.filter((row) => row.zoneId === zone.id) : [];
+  // matchZone picks one best zone, and a catch-all scores below any country
+  // match, so pickup in a catch-all zone is added on top of the matched
+  // zone's methods; that is how "pickup for anyone" actually reaches a
+  // Canadian address that also matches a Canada zone. Each method is listed
+  // once.
+  const catchAllIds = new Set(
+    input.zones
+      .filter((row) => row.countries.length === 0 && row.regions.length === 0 && row.postalPatterns.length === 0)
+      .map((row) => row.id),
+  );
+  const eligible = input.methods.filter(
+    (row) => (zone !== null && row.zoneId === zone.id) || (row.kind === "pickup" && catchAllIds.has(row.zoneId)),
+  );
   for (const method of eligible) {
     let amount: number | null = null;
     if (method.kind === "pickup") {

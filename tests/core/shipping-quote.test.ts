@@ -121,6 +121,19 @@ describe("shipping quotes", () => {
     expect(quote({ country: "US" })).toMatchObject({ needed: true, zoneId: null, quotes: [] });
     // An owner who offers pickup to anyone puts it in a zone with no countries.
     expect(quote({ country: "US" }, [domestic, world]).quotes.map((row) => row.methodId)).toEqual(["m-world-pickup"]);
+    // …and it still reaches an address that matches a more specific zone,
+    // once, in price/name order. Other world-zone methods do not leak in.
+    const withWorldParcel = [...methods, method("m-world-parcel", "World parcel", "flat", "zone-world", null, 3000)];
+    expect(
+      quoteMethods({
+        destination: { country: "CA", region: "BC", postal: "V9N1A1" },
+        currency: "CAD",
+        items: parcel,
+        zones: [domestic, world],
+        boxes: [],
+        methods: withWorldParcel,
+      }).quotes.map((row) => row.methodId),
+    ).toEqual(["m-world-pickup", "m-pickup", "m-courier", "m-parcel"]);
     // Naming the location brings local delivery in; another location drops both counter methods.
     expect(quote({ country: "CA", postal: "V9N1A1" }, [domestic], "studio").quotes.map((row) => row.methodId)).toContain("m-van");
     expect(quote({ country: "CA", postal: "V9N1A1" }, [domestic], "warehouse").quotes.map((row) => row.methodId)).toEqual([
