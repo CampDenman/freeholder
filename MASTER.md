@@ -4511,7 +4511,24 @@ project without silent telemetry, and ready to carry money.
   install out of the owner's feed…": seed rows recorded as `system:seed`,
   none in `people`, twelve business rows with no "Freeholder updated"),
   `tests/core/audit-labels.test.ts` (collapse, seed actor wording).
-  Changeset `owner-feed-seed-noise.md`.
+  Changeset `owner-feed-seed-noise.md`. Review follow-ups (same day):
+  `demo.installBusy` is now `permission: "system"` and refuses unless the
+  deploy asked for the busy demo (`demoSeedBusy`: `FREEHOLDER_SEED_DEMO=busy`
+  or the playground), so no person or agent can plant its backdated history
+  in a real site's trail; it is the only installer that writes synthetic
+  audit rows (`demo.install`, `seed.installPreset` and the demo scenarios
+  write real content through services under the true actor). Each
+  synthetic row carries `diff.seeded = true`; `events.recentActivity`
+  returns it as `sample` and both feed views say "(sample)". The job
+  producer and workers start under `outsideSeeding` (`src/core/audit-origin.ts`),
+  so long-lived work the seed happens to start never inherits the marker.
+  Folding works on the raw feed: a hidden row breaks a run, and a run
+  reaching the end of a read that hit its 100-row limit reads "×N+".
+  Regressions: `tests/core/seed-demo-busy.test.ts` (owner, staff and agent
+  refused; non-demo deploys refused even for the system; 360 tagged rows),
+  `tests/core/transactional-jobs.test.ts` (a job enqueued and run from
+  inside the seed scope runs outside it; fails without the change),
+  `tests/core/audit-labels.test.ts` (hidden-row break, "+" at the limit).
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable

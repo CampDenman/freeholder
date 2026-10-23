@@ -82,6 +82,8 @@
   "admin.activity.payoutReversed": "تم عكس دفعة مستحقة",
   "admin.activity.disputeOpened": "تم فتح نزاع",
   "admin.activity.repeated": "{line} ×{count}",
+  "admin.activity.sample": "{line} (مثال)",
+  "admin.activity.repeatedMore": "{line} ×{count}+",
   "admin.activity.credentialsRotated": "أُعيد تشفير بيانات اعتماد الحسابات المحفوظة",
   "admin.activity.agentAccessRevoked": "فقد وكيل استخدام حساب متصل",
   "admin.activity.accountConnectStarted": "بدأ أحدهم ربط حساب خارجي",

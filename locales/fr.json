@@ -84,6 +84,8 @@
   "admin.activity.payoutReversed": "Un versement a été annulé",
   "admin.activity.disputeOpened": "Un litige a été ouvert",
   "admin.activity.repeated": "{line} ×{count}",
+  "admin.activity.sample": "{line} (exemple)",
+  "admin.activity.repeatedMore": "{line} ×{count}+",
   "admin.activity.credentialsRotated": "Les identifiants enregistrés ont été chiffrés à nouveau",
   "admin.activity.agentAccessRevoked": "Un agent a perdu l'accès à un compte connecté",
   "admin.activity.accountConnectStarted": "Quelqu'un a commencé à connecter un compte externe",

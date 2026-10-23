@@ -278,14 +278,16 @@ describe.runIf(hasDatabase)("installing the demo", { timeout: 120_000 }, () => {
     expect(people.filter((row) => row.action.startsWith("cms.") || row.action.startsWith("demo."))).toEqual([]);
     const t = translator("en");
     const feed = collapseOwnerFeed(
-      people
-        .map((row) => ({ ...row, line: ownerActivityLine(row, t) }))
-        .filter((row): row is typeof row & { line: string } => row.line !== null),
+      people.map((row) => ({ ...row, line: ownerActivityLine(row, t) })),
       t,
+      { truncated: people.length >= 100 },
     ).slice(0, 12);
     expect(feed).toHaveLength(12);
     expect(feed.map((row) => row.line).join("\n")).not.toMatch(/Freeholder updated/);
     expect(feed.some((row) => /order|appointment|message|payment|invoice|form/i.test(row.line))).toBe(true);
+    // The read side marks the invented history, so the page says "(sample)".
+    expect(people.slice(0, 12).every((row) => row.sample)).toBe(true);
+    expect(all.filter((row) => row.actor === SEED_AUDIT_ACTOR).every((row) => !row.sample)).toBe(true);
   });
 
   it("counts a late busy layer as playground seed, not visitor rows", async () => {

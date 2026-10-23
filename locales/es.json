@@ -84,6 +84,8 @@
   "admin.activity.payoutReversed": "Se revirtió un pago a un vendedor",
   "admin.activity.disputeOpened": "Se abrió una disputa",
   "admin.activity.repeated": "{line} ×{count}",
+  "admin.activity.sample": "{line} (ejemplo)",
+  "admin.activity.repeatedMore": "{line} ×{count}+",
   "admin.activity.credentialsRotated": "Se volvieron a cifrar las credenciales guardadas",
   "admin.activity.agentAccessRevoked": "Un agente dejó de tener acceso a una cuenta conectada",
   "admin.activity.accountConnectStarted": "Alguien empezó a conectar una cuenta externa",

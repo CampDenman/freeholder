@@ -818,7 +818,9 @@ async function seedAudit(tx: Tx, w: World) {
       action: entry.action,
       subjectType: entry.subject,
       subjectId: entry.subject === "contact" ? w.contactIds.get(person.key)! : null,
-      diff: entry.subject === "contact" ? { name: person.name } : {},
+      // Tagged so the full log, exports and audits can always tell this
+      // invented history from what really happened on the site.
+      diff: entry.subject === "contact" ? { seeded: true, name: person.name } : { seeded: true },
       at: new Date(w.now.getTime() - Math.floor(Math.pow(w.r.next(), 1.3) * 178 * DAY) - w.r.int(1, 600) * 60_000),
     });
   }

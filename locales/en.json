@@ -84,6 +84,8 @@
   "admin.activity.payoutReversed": "A payout was reversed",
   "admin.activity.disputeOpened": "A dispute was opened",
   "admin.activity.repeated": "{line} ×{count}",
+  "admin.activity.sample": "{line} (sample)",
+  "admin.activity.repeatedMore": "{line} ×{count}+",
   "admin.activity.credentialsRotated": "Stored account credentials were re-encrypted",
   "admin.activity.agentAccessRevoked": "An agent lost use of a connected account",
   "admin.activity.accountConnectStarted": "Someone started connecting an outside account",

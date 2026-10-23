@@ -5,7 +5,7 @@
 // log nobody can read does not keep it. This is the read side of the rows the
 // service wrapper has been writing since the spine landed.
 import { z } from "zod";
-import { and, desc, ne, notInArray } from "drizzle-orm";
+import { and, desc, ne, notInArray, sql } from "drizzle-orm";
 import { auditLog } from "@/core/events/schema";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, SEED_AUDIT_ACTOR } from "@/core/service";
@@ -62,11 +62,22 @@ export const recentActivity = defineService({
       actor: z.string(),
       action: z.string(),
       at: timestamp,
+      /**
+       * Invented sample history (the busy demo writes it with
+       * `diff.seeded = true`), never something that happened on the site.
+       */
+      sample: z.boolean(),
     }),
   ),
   handler: (input, ctx) =>
     ctx.tx
-      .select()
+      .select({
+        id: auditLog.id,
+        actor: auditLog.actor,
+        action: auditLog.action,
+        at: auditLog.at,
+        sample: sql<boolean>`coalesce((${auditLog.diff}->>'seeded')::boolean, false)`,
+      })
       .from(auditLog)
       .where(
         input.include === "people"

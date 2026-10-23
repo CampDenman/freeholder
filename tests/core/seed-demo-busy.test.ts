@@ -32,7 +32,10 @@ import { AREAS } from "../../seed/demo/busy";
 import { PAST_EVENT_SLUGS } from "../../seed/demo/busy/calendar";
 import { users } from "@/core/auth/schema";
 import type { BlockNode } from "@/modules/cms/blocks/types";
-import { ANONYMOUS, closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { ANONYMOUS, closeDb, hasDatabase, OWNER, STAFF, truncateSpine } from "../helpers/spine";
+import { recentActivity } from "@/core/events/service";
+
+const SYSTEM = { kind: "system" } as const;
 
 /**
  * Budgets. The busy layer is bulk SQL and is held to the playground's reset
@@ -195,7 +198,15 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
     for (const [label, clock] of PINNED_CLOCKS) pinnedFindings.set(label, await seedAtPinnedClock(clock()));
     now = new Date();
     const busyStarted = Date.now();
-    counts = (await installBusyDemo.call({ now }, OWNER)).counts;
+    // The busy layer installs only as the system, on a deploy that asked for it.
+    vi.stubEnv("FREEHOLDER_SEED_DEMO", "busy");
+    resetEnvForTests();
+    try {
+      counts = (await installBusyDemo.call({ now }, SYSTEM)).counts;
+    } finally {
+      vi.unstubAllEnvs();
+      resetEnvForTests();
+    }
     busyMs = Date.now() - busyStarted;
     plainMs = plain;
     elapsed = plain + busyMs;
@@ -482,6 +493,53 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
   });
 
   it("refuses to run twice", async () => {
-    await expect(installBusyDemo.call({}, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    vi.stubEnv("FREEHOLDER_SEED_DEMO", "busy");
+    resetEnvForTests();
+    try {
+      await expect(installBusyDemo.call({}, SYSTEM)).rejects.toMatchObject({ code: "conflict" });
+    } finally {
+      vi.unstubAllEnvs();
+      resetEnvForTests();
+    }
+  });
+
+  it("never lets a person or agent plant sample history, nor a real site (2026-10-23 review)", async () => {
+    vi.stubEnv("FREEHOLDER_SEED_DEMO", "busy");
+    resetEnvForTests();
+    try {
+      for (const caller of [OWNER, STAFF, { kind: "agent" as const, keyName: "agent:helper", scopes: ["demo.installBusy"] }]) {
+        await expect(installBusyDemo.call({}, caller)).rejects.toMatchObject({ code: "permission" });
+      }
+    } finally {
+      vi.unstubAllEnvs();
+      resetEnvForTests();
+    }
+    // A deploy that did not ask for the busy demo refuses even the system.
+    const notDemo: Array<Record<string, string>> = [{ FREEHOLDER_SEED_DEMO: "1" }, { FREEHOLDER_SEED_DEMO: "0", FREEHOLDER_PLAYGROUND: "1" }, {}];
+    for (const environment of notDemo) {
+      for (const [key, value] of Object.entries(environment)) vi.stubEnv(key, value);
+      resetEnvForTests();
+      try {
+        await expect(installBusyDemo.call({}, SYSTEM)).rejects.toMatchObject({ code: "permission" });
+      } finally {
+        vi.unstubAllEnvs();
+        resetEnvForTests();
+      }
+    }
+  });
+
+  it("tags every synthetic audit row as sample history (2026-10-23 review)", async () => {
+    // The 360 backdated rows the busy layer writes directly are all tagged,
+    // and every backdated row carrying one of its actions is one of them.
+    const [tagged] = await rows<{ sample: number; sample_after: number; backdated_untagged: number }>(sql`
+      select count(*) filter (where (diff->>'seeded')::boolean)::int as sample,
+             count(*) filter (where (diff->>'seeded')::boolean and at >= ${now.toISOString()}::timestamptz)::int as sample_after,
+             count(*) filter (where at < ${now.toISOString()}::timestamptz and action in ('forms.submit', 'catalog.shopperCheckout', 'catalog.bookService', 'events.register', 'newsletters.subscribe', 'reviews.submit', 'conversations.record', 'invoicing.settlePayment', 'conversations.reply', 'invoicing.issue', 'invoicing.send', 'bookings.reschedule', 'catalog.shipFulfillment', 'contacts.update') and coalesce((diff->>'seeded')::boolean, false) = false)::int as backdated_untagged
+      from audit_log`);
+    expect(tagged).toEqual({ sample: 360, sample_after: 0, backdated_untagged: 0 });
+    // The read side carries the tag, so the full log can say "(sample)".
+    const all = await recentActivity.call({ limit: 100, include: "all" }, OWNER);
+    expect(all.every((row) => typeof row.sample === "boolean")).toBe(true);
+    expect(all.filter((row) => row.action === "demo.installBusy").every((row) => !row.sample)).toBe(true);
   });
 });
