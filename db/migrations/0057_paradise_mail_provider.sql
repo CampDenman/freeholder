@@ -39,7 +39,7 @@ CREATE TABLE "mail_provider_grants" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"provider" text NOT NULL,
 	"email" text NOT NULL,
-	"consent_record_id" uuid NOT NULL,
+	"consent_record_id" uuid,
 	"withdrawn_at" timestamp with time zone,
 	"withdrawal_error" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -47,8 +47,10 @@ CREATE TABLE "mail_provider_grants" (
 	CONSTRAINT "mail_provider_grants_provider_allowed" CHECK ("mail_provider_grants"."provider" in ('paradise'))
 );
 --> statement-breakpoint
-ALTER TABLE "mail_provider_grants" ADD CONSTRAINT "mail_provider_grants_consent_record_id_consent_records_id_fk" FOREIGN KEY ("consent_record_id") REFERENCES "public"."consent_records"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "mail_provider_grants" ADD CONSTRAINT "mail_provider_grants_consent_record_id_consent_records_id_fk" FOREIGN KEY ("consent_record_id") REFERENCES "public"."consent_records"("id") ON DELETE set null ON UPDATE no action;
 --> statement-breakpoint
 CREATE UNIQUE INDEX "mail_provider_grants_unique_idx" ON "mail_provider_grants" USING btree ("provider","email","consent_record_id");
 --> statement-breakpoint
 CREATE INDEX "mail_provider_grants_consent_idx" ON "mail_provider_grants" USING btree ("consent_record_id");
+--> statement-breakpoint
+CREATE INDEX "mail_provider_grants_detached_idx" ON "mail_provider_grants" USING btree ("id") WHERE "mail_provider_grants"."consent_record_id" is null;

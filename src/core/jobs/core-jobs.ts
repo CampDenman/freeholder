@@ -82,6 +82,50 @@ export const pruneMailOutbox = defineJob({
   },
 });
 
+/**
+ * Withdraw grants detached from an erased contact at the campaign carrier,
+ * then delete them (C3.31), and tell the erasure its provider work is done.
+ */
+export const withdrawProviderGrants = defineJob({
+  name: "core.withdrawProviderGrants",
+  summary: "Withdraw an erased contact's grants at the mail carrier, then delete them.",
+  retry: { limit: 8, delaySeconds: 30, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 1,
+  leaseSeconds: 2 * 60,
+  handler: async (data, context) => {
+    const grantIds = Array.isArray(data.grantIds)
+      ? data.grantIds.filter((id): id is string => typeof id === "string")
+      : [];
+    const { withdrawDetachedGrants } = await import("@/core/mail/permission");
+    const removed = await withdrawDetachedGrants(grantIds);
+    if (typeof data.requestId === "string" && typeof data.scope === "string" && context) {
+      const { completeErasureJob } = await import("@/core/privacy/service");
+      await completeErasureJob.call(
+        { requestId: data.requestId, scope: data.scope, jobId: context.id },
+        { kind: "system" },
+      );
+    }
+    return { removed };
+  },
+});
+
+/**
+ * Grants whose contact was deleted (the consent record's cascade sets them
+ * loose) are withdrawn at the carrier and then deleted (C3.31).
+ */
+export const sweepDetachedProviderGrants = defineJob({
+  name: "core.sweepDetachedProviderGrants",
+  summary: "Withdraw and delete mail carrier grants whose contact no longer exists.",
+  schedule: "*/10 * * * *",
+  retry: { limit: 3, delaySeconds: 60, backoff: true, maxDelaySeconds: 900 },
+  concurrency: 1,
+  leaseSeconds: 5 * 60,
+  handler: async () => {
+    const { withdrawDetachedGrants } = await import("@/core/mail/permission");
+    return { removed: await withdrawDetachedGrants() };
+  },
+});
+
 /** Check provider identity ownership only after the settings transaction commits. */
 export const verifyMailSender = defineJob({
   name: "core.verifyMailSender",
@@ -997,6 +1041,8 @@ export default [
   deliverMail,
   pruneMailOutbox,
   verifyMailSender,
+  withdrawProviderGrants,
+  sweepDetachedProviderGrants,
   sweepLoginSecurityEvents,
   sweepRateLimits,
   sweepPasswordResets,

@@ -5369,6 +5369,17 @@ deployments are portable, testable and incapable of silently forking the truth.
   `tests/core/mail-service.test.ts` (database: the delivery worker's
   declared reason and event, the widened constraint, the withdrawal mirror
   only for a ledger-keeping carrier); changeset `paradise-mail-adapter.md`.
+  Review fixes: grants recorded at the carrier live in `mail_provider_grants`
+  (saved in the transaction that records the send), are mirrored only for
+  a withdrawal that follows them, to the address they were recorded under;
+  exported and erased with the contact (`src/core/mail/privacy.ts`, scope
+  `mail.provider_grants`: erasure detaches open grants and a pending job
+  withdraws them at the carrier before deleting them); a deleted contact's
+  grants are detached by the cascade and withdrawn by
+  `core.sweepDetachedProviderGrants`; finished grants age out under the
+  `mail_provider_grants` retention kind. Known gap, not addressed here: the
+  older mail tables (`mail_deliveries`, `mail_suppressions`,
+  `mail_provider_events`) hold addresses but are in no retention kind.
   Unchecked: no live send against the provider.)*
 - [ ] **C3.32** Add a measurement-provider category (`MEASUREMENT_PROVIDER`,
   default `none`) with Paradise Modern as its first adapter (§12, C1.18):

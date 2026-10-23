@@ -108,7 +108,15 @@ withdrawn where the provider holds them, and a denial or a contact never
 granted there sends nothing. It runs through the outbox and is retried while
 the provider is unreachable; a permanent refusal is recorded on the grant and
 logged once rather than retried into a dead letter; the public playground
-skips it. The delivery worker also rechecks consent immediately before
+skips it.
+
+**Privacy.** The remembered grants are the person's data. They are included
+in a data export (`mail.provider_grants`). Erasure detaches any grant the
+carrier still holds from the contact and queues a job that withdraws it at
+the carrier and then deletes the row; the erasure receipt stays "pending"
+until that job finishes. Deleting a contact detaches its grants the same way,
+and a sweep every ten minutes withdraws and deletes them. Withdrawn or
+refused grants age out under the `mail_provider_grants` retention kind. The delivery worker also rechecks consent immediately before
 every campaign send, so a withdrawal stops the next message even before the
 mirror lands.
 

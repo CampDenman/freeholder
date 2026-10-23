@@ -22,9 +22,10 @@
 //   contact whose email has changed since is withdrawn where the carrier
 //   actually holds them.
 import { isIP } from "node:net";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { MailAdapterError, type MarketingConsentEvidence } from "@/adapters/mail/types";
 import { db } from "@/core/db";
+import type { Tx } from "@/core/service";
 import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy";
 import { env } from "@/core/env";
 import { mailProviderGrants } from "@/core/mail/schema";
@@ -111,18 +112,60 @@ export async function marketingEvidence(contactId: string): Promise<MarketingCon
 const EVIDENCE_PREFIX = "freeholder-consent:";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Remember a grant a carrier recorded while sending, from its evidence reference. */
+/**
+ * Remember a grant a carrier recorded while sending, from its evidence
+ * reference. Called inside the transaction that records the send's outcome,
+ * so the two are saved together or not at all.
+ */
 export async function rememberProviderGrant(
+  executor: Pick<Tx, "insert">,
   provider: string,
   grant: { email: string; evidenceRef: string },
 ): Promise<void> {
   if (provider !== "paradise" || !grant.evidenceRef.startsWith(EVIDENCE_PREFIX)) return;
   const consentRecordId = grant.evidenceRef.slice(EVIDENCE_PREFIX.length);
   if (!UUID.test(consentRecordId)) return;
-  await db()
+  await executor
     .insert(mailProviderGrants)
     .values({ provider, email: grant.email.trim().toLowerCase(), consentRecordId })
     .onConflictDoNothing();
+}
+
+type GrantRow = { id: string; email: string };
+
+/** The carrier that keeps a consent ledger, or null when none is reachable here. */
+async function withdrawalCarrier() {
+  if (playgroundBlocksExternalDelivery(env())) return null;
+  const { bulkMail, mailConfigurationStatus } = await import("@/adapters/mail");
+  if (!mailConfigurationStatus().bulk.sendConfigured) return null;
+  const carrier = bulkMail();
+  if (!carrier.recordWithdrawal || carrier.id !== "paradise") return null;
+  return carrier as typeof carrier & { recordWithdrawal: (email: string) => Promise<void> };
+}
+
+/**
+ * Withdraw these grants at the carrier, one call per address. A transient
+ * failure throws (the caller retries). A permanent refusal is logged once
+ * and reported as `refused` so the caller can record it rather than retry it.
+ */
+async function withdrawAddresses(
+  carrier: { recordWithdrawal: (email: string) => Promise<void> },
+  grants: readonly GrantRow[],
+): Promise<Map<string, { refused?: string }>> {
+  const outcome = new Map<string, { refused?: string }>();
+  for (const email of new Set(grants.map((grant) => grant.email))) {
+    try {
+      await carrier.recordWithdrawal(email);
+      outcome.set(email, {});
+    } catch (error) {
+      if (!(error instanceof MailAdapterError) || error.retryable) throw error;
+      console.warn(
+        `[mail] The campaign carrier refused to record a marketing withdrawal (${error.providerCode ?? error.httpStatus ?? "refused"}); Freeholder's own ledger still stops every campaign to this address.`,
+      );
+      outcome.set(email, { refused: error.message.slice(0, 500) });
+    }
+  }
+  return outcome;
 }
 
 /**
@@ -147,11 +190,8 @@ export async function mirrorMarketingWithdrawal(payload: unknown): Promise<void>
   // A denial was never a grant, so the carrier holds nothing to withdraw.
   if (event.state !== "withdrawn") return;
   if (!event.contactId) return;
-  if (playgroundBlocksExternalDelivery(env())) return;
-  const { bulkMail, mailConfigurationStatus } = await import("@/adapters/mail");
-  if (!mailConfigurationStatus().bulk.sendConfigured) return;
-  const carrier = bulkMail();
-  if (!carrier.recordWithdrawal || carrier.id !== "paradise") return;
+  const carrier = await withdrawalCarrier();
+  if (!carrier) return;
   const grants = await db()
     .select({ id: mailProviderGrants.id, email: mailProviderGrants.email })
     .from(mailProviderGrants)
@@ -159,36 +199,51 @@ export async function mirrorMarketingWithdrawal(payload: unknown): Promise<void>
     .where(
       and(
         eq(consentRecords.contactId, event.contactId),
-        eq(mailProviderGrants.provider, carrier.id),
+        eq(mailProviderGrants.provider, "paradise"),
         isNull(mailProviderGrants.withdrawnAt),
         isNull(mailProviderGrants.withdrawalError),
       ),
     );
-  // One call per address the carrier holds, however many grants led there.
-  const byEmail = new Map<string, string[]>();
-  for (const grant of grants) byEmail.set(grant.email, [...(byEmail.get(grant.email) ?? []), grant.id]);
-  for (const [email, ids] of byEmail) {
-    try {
-      await carrier.recordWithdrawal(email);
-    } catch (error) {
-      if (!(error instanceof MailAdapterError) || error.retryable) throw error;
-      const message = error.message.slice(0, 500);
-      for (const id of ids) {
-        await db()
-          .update(mailProviderGrants)
-          .set({ withdrawalError: message, updatedAt: new Date() })
-          .where(eq(mailProviderGrants.id, id));
-      }
-      console.warn(
-        `[mail] The campaign carrier refused to record a marketing withdrawal (${error.providerCode ?? error.httpStatus ?? "refused"}); Freeholder's own ledger still stops every campaign to this contact.`,
-      );
-      continue;
-    }
-    for (const id of ids) {
-      await db()
-        .update(mailProviderGrants)
-        .set({ withdrawnAt: new Date(), updatedAt: new Date() })
-        .where(eq(mailProviderGrants.id, id));
-    }
+  const outcome = await withdrawAddresses(carrier, grants);
+  for (const grant of grants) {
+    const refused = outcome.get(grant.email)?.refused;
+    await db()
+      .update(mailProviderGrants)
+      .set(refused ? { withdrawalError: refused, updatedAt: new Date() } : { withdrawnAt: new Date(), updatedAt: new Date() })
+      .where(eq(mailProviderGrants.id, grant.id));
   }
+}
+
+/**
+ * Finish grants whose contact is gone — erased (detached on purpose) or
+ * deleted (`consent_record_id` set null by the cascade): withdraw each at the
+ * carrier, then delete the row, so the address is kept only as long as the
+ * withdrawal needs it. With no reachable carrier there is nothing to tell,
+ * and the rows are deleted. A transient failure throws for a retry.
+ */
+export async function withdrawDetachedGrants(grantIds?: readonly string[]): Promise<number> {
+  const detached = and(
+    isNull(mailProviderGrants.consentRecordId),
+    ...(grantIds ? [inArray(mailProviderGrants.id, [...grantIds])] : []),
+  );
+  const grants = grantIds && grantIds.length === 0
+    ? []
+    : await db()
+        .select({
+          id: mailProviderGrants.id,
+          email: mailProviderGrants.email,
+          withdrawnAt: mailProviderGrants.withdrawnAt,
+          withdrawalError: mailProviderGrants.withdrawalError,
+        })
+        .from(mailProviderGrants)
+        .where(detached);
+  if (grants.length === 0) return 0;
+  const open = grants.filter((grant) => !grant.withdrawnAt && !grant.withdrawalError);
+  const carrier = open.length ? await withdrawalCarrier() : null;
+  if (carrier) await withdrawAddresses(carrier, open);
+  const removed = await db()
+    .delete(mailProviderGrants)
+    .where(inArray(mailProviderGrants.id, grants.map((grant) => grant.id)))
+    .returning({ id: mailProviderGrants.id });
+  return removed.length;
 }

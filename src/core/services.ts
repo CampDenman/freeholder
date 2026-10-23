@@ -15,6 +15,8 @@ import resetServices from "@/core/auth/reset";
 // `core/runs` owns the table, so it owns the obligations that come with a
 // `contact_id`, and something loaded at boot has to make the registration.
 import "@/core/runs/spine";
+// The same for the mail carrier grants (C3.31): export, erasure, retention.
+import "@/core/mail/privacy";
 import agentServices from "@/core/agents/service";
 import agentExecution from "@/core/agents/execution";
 import agentWrites from "@/core/agents/writes";

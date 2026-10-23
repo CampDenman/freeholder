@@ -582,6 +582,8 @@ function safeDeliveryError(error: unknown): string {
 async function finishQueuedMail(
   deliveryId: string,
   values: Partial<typeof mailDeliveries.$inferInsert>,
+  /** Saved in the same transaction as the outcome (C3.31: a recorded grant). */
+  alsoRecord?: (tx: Tx) => Promise<void>,
 ): Promise<void> {
   const events: Array<{ id: string; eventName: string; payload: unknown }> = [];
   await db().transaction(async (tx) => {
@@ -590,6 +592,7 @@ async function finishQueuedMail(
       .set({ ...values, updatedAt: new Date() })
       .where(eq(mailDeliveries.id, deliveryId))
       .returning({ recipient: mailDeliveries.recipient });
+    if (alsoRecord) await alsoRecord(tx);
     await tx.delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
     if (delivery && (values.status === "suppressed" || values.status === "failed")) {
       const eventName = "mail.deliveryUpdated";
@@ -706,17 +709,21 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
             eventRef: eventRef ?? `mail-delivery:${deliveryId}`,
           };
     const result = await adapter.send({ ...outbound, deliveryId, ...(permission ? { permission } : {}) });
-    if (result.grantRecorded) {
-      // Remembered so a later withdrawal is mirrored to exactly this address,
-      // and so a contact never granted there is never withdrawn there.
-      await (await import("@/core/mail/permission")).rememberProviderGrant(adapter.id, result.grantRecorded);
-    }
-    await finishQueuedMail(deliveryId, {
-      providerRef: result.providerRef,
-      status: adapter.delivers ? "submitted" : "failed",
-      submittedAt: adapter.delivers ? new Date() : null,
-      lastError: adapter.delivers ? null : "The configured adapter does not deliver.",
-    });
+    // A grant the carrier recorded is remembered with the send's outcome, in
+    // one transaction, so a later withdrawal reaches exactly this address and
+    // a contact never granted there is never withdrawn there.
+    const grant = result.grantRecorded;
+    const { rememberProviderGrant } = await import("@/core/mail/permission");
+    await finishQueuedMail(
+      deliveryId,
+      {
+        providerRef: result.providerRef,
+        status: adapter.delivers ? "submitted" : "failed",
+        submittedAt: adapter.delivers ? new Date() : null,
+        lastError: adapter.delivers ? null : "The configured adapter does not deliver.",
+      },
+      grant ? (tx) => rememberProviderGrant(tx, adapter.id, grant) : undefined,
+    );
     return { status: adapter.delivers ? "submitted" : "failed" };
   } catch (error) {
     const retryable =

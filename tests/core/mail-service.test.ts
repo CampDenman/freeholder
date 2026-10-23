@@ -6,7 +6,10 @@ import { eq } from "drizzle-orm";
 import { resetMailForTests } from "@/adapters/mail";
 import { setParadiseFetchForTests } from "@/adapters/paradise/http";
 import { contacts } from "@/core/contacts/schema";
-import { mirrorMarketingWithdrawal, rememberProviderGrant } from "@/core/mail/permission";
+import { mirrorMarketingWithdrawal, rememberProviderGrant, withdrawDetachedGrants } from "@/core/mail/permission";
+import { PROVIDER_GRANTS_SCOPE } from "@/core/mail/privacy";
+import { contactPrivacySources } from "@/core/privacy/service";
+import { retentionSources } from "@/core/retention/registry";
 import { consentRecords } from "@/core/privacy/schema";
 import { MailAdapterError } from "@/adapters/mail/types";
 import { users } from "@/core/auth/schema";
@@ -349,7 +352,7 @@ describe.runIf(hasDatabase)("mail services", () => {
       RESEND_API_KEY: "re_test",
       PARADISEMODERN_API_KEY: "site-key",
     });
-    await rememberProviderGrant("paradise", { email: "Old@Example.test", evidenceRef: `freeholder-consent:${grant!.id}` });
+    await rememberProviderGrant(db(), "paradise", { email: "Old@Example.test", evidenceRef: `freeholder-consent:${grant!.id}` });
     // A carrier without a consent ledger is never told.
     await mirrorMarketingWithdrawal(withdrawal);
     expect(urls).toEqual([]);
@@ -387,7 +390,7 @@ describe.runIf(hasDatabase)("mail services", () => {
       method: "double_opt_in",
       actor: "system",
     }).returning();
-    await rememberProviderGrant("paradise", { email: "r2@example.test", evidenceRef: `freeholder-consent:${grant!.id}` });
+    await rememberProviderGrant(db(), "paradise", { email: "r2@example.test", evidenceRef: `freeholder-consent:${grant!.id}` });
     let status = 503;
     let calls = 0;
     setParadiseFetchForTests(async () => {
@@ -413,6 +416,83 @@ describe.runIf(hasDatabase)("mail services", () => {
     environment({ FREEHOLDER_PLAYGROUND: "1" });
     await expect(mirrorMarketingWithdrawal(withdrawal)).resolves.toBeUndefined();
     expect(calls).toBe(2);
+  });
+
+  async function grantedReader(email: string) {
+    const [contact] = await db().insert(contacts).values({ name: "Reader", email }).returning();
+    const [grant] = await db().insert(consentRecords).values({
+      contactId: contact!.id,
+      purpose: "marketing",
+      channel: "email",
+      state: "granted",
+      method: "double_opt_in",
+      actor: "system",
+    }).returning();
+    await rememberProviderGrant(db(), "paradise", { email, evidenceRef: `freeholder-consent:${grant!.id}` });
+    return { contactId: contact!.id, consentRecordId: grant!.id };
+  }
+
+  function carrierCalls() {
+    const bodies: Array<{ email?: string }> = [];
+    setParadiseFetchForTests(async (_url, init) => {
+      bodies.push(JSON.parse(init.body as string) as { email?: string });
+      return new Response("{}", { status: 200 });
+    });
+    environment({ MAIL_BULK_ADAPTER: "paradise", MAIL_BULK_FROM: "news@example.test", PARADISEMODERN_API_KEY: "site-key" });
+    return bodies;
+  }
+
+  it("exports a contact's carrier grants and erases them only after the carrier is told (C3.31)", async () => {
+    const { contactId } = await grantedReader("erase-me@example.test");
+    const bodies = carrierCalls();
+    const source = contactPrivacySources().find((item) => item.scope === PROVIDER_GRANTS_SCOPE)!;
+    expect(source.tables).toEqual(["mail_provider_grants"]);
+
+    const exported = (await source.exportData(db() as never, contactId)) as Array<{ email: string }>;
+    expect(exported.map((row) => row.email)).toEqual(["erase-me@example.test"]);
+
+    const requestId = crypto.randomUUID();
+    const erased = await db().transaction((tx) => source.erase(tx as never, contactId, { requestId }));
+    expect(erased.pendingJobs).toHaveLength(1);
+    // Detached from the person at once; the address stays only for the job.
+    expect(await source.exportData(db() as never, contactId)).toEqual([]);
+    const queued = await (await startJobProducer())?.findJobs("core.withdrawProviderGrants");
+    const job = queued?.find((item) => (item.data as { requestId?: string }).requestId === requestId);
+    expect(job).toBeTruthy();
+
+    // What the job does: tell the carrier, then delete the row.
+    await withdrawDetachedGrants((job!.data as { grantIds: string[] }).grantIds);
+    expect(bodies).toEqual([{ email: "erase-me@example.test" }]);
+    const left = await db().select().from(mailProviderGrants);
+    expect(left).toEqual([]);
+  });
+
+  it("withdraws a deleted contact's grants at the carrier before forgetting them (C3.31)", async () => {
+    const { contactId } = await grantedReader("deleted@example.test");
+    const bodies = carrierCalls();
+    // The consent record's cascade detaches the grant rather than dropping it.
+    await db().delete(contacts).where(eq(contacts.id, contactId));
+    const [detached] = await db().select().from(mailProviderGrants);
+    expect(detached?.consentRecordId).toBeNull();
+    expect(detached?.email).toBe("deleted@example.test");
+    await expect(withdrawDetachedGrants()).resolves.toBe(1);
+    expect(bodies).toEqual([{ email: "deleted@example.test" }]);
+    expect(await db().select().from(mailProviderGrants)).toEqual([]);
+  });
+
+  it("ages out only finished carrier grants (C3.31)", async () => {
+    await grantedReader("open@example.test");
+    const { consentRecordId } = await grantedReader("done@example.test");
+    const old = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
+    await db()
+      .update(mailProviderGrants)
+      .set({ withdrawnAt: old, updatedAt: old })
+      .where(eq(mailProviderGrants.consentRecordId, consentRecordId));
+    await db().update(mailProviderGrants).set({ updatedAt: old }).where(eq(mailProviderGrants.email, "open@example.test"));
+    const kind = retentionSources().find((source) => source.kind === "mail_provider_grants")!;
+    expect(kind.privacyScope).toBe(PROVIDER_GRANTS_SCOPE);
+    await expect(kind.purge({ cutoff: new Date(), exceptContactIds: [] })).resolves.toBe(1);
+    expect((await db().select().from(mailProviderGrants)).map((row) => row.email)).toEqual(["open@example.test"]);
   });
 
   it("verifies a Paradise Modern transactional sender before it can send (C3.31)", async () => {

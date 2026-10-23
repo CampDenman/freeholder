@@ -367,7 +367,9 @@ export const mailSuppressions = pgTable(
  * never opted in, or was never mailed through such a carrier has nothing to
  * mirror. Keyed to the consent record the grant came from and the address it
  * was recorded under, so a withdrawal reaches the address the carrier holds
- * even after the contact's email has changed.
+ * even after the contact's email has changed. Exported and erased with the
+ * contact (`mail.provider_grants`); finished rows age out under the
+ * `mail_provider_grants` retention kind.
  */
 export const mailProviderGrants = pgTable(
   "mail_provider_grants",
@@ -375,9 +377,15 @@ export const mailProviderGrants = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     provider: text("provider", { enum: ["paradise"] }).notNull(),
     email: text("email").notNull(),
-    consentRecordId: uuid("consent_record_id")
-      .notNull()
-      .references(() => consentRecords.id, { onDelete: "cascade" }),
+    /**
+     * Null once the contact is gone: erasure detaches it on purpose, and
+     * deleting a contact sets it null through the consent record's cascade.
+     * A detached grant is withdrawn at the carrier and then deleted
+     * (`withdrawDetachedGrants`), never silently dropped.
+     */
+    consentRecordId: uuid("consent_record_id").references(() => consentRecords.id, {
+      onDelete: "set null",
+    }),
     withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
     /** A permanent refusal of the withdrawal, recorded once rather than retried forever. */
     withdrawalError: text("withdrawal_error"),
@@ -387,6 +395,7 @@ export const mailProviderGrants = pgTable(
   (t) => [
     uniqueIndex("mail_provider_grants_unique_idx").on(t.provider, t.email, t.consentRecordId),
     index("mail_provider_grants_consent_idx").on(t.consentRecordId),
+    index("mail_provider_grants_detached_idx").on(t.id).where(sql`${t.consentRecordId} is null`),
     check("mail_provider_grants_provider_allowed", sql`${t.provider} in ('paradise')`),
   ],
 );
