@@ -140,13 +140,23 @@ describe("a trusted client address only where a proxy overwrites it (C11.10)", (
       expect(appSection).not.toMatch(/^\s{4}ports:/m);
     });
 
-    it(`${recipe.caddy}: Caddy refuses Next's image optimizer before proxying`, () => {
+    it(`${recipe.caddy}: the proxied site block refuses Next's image optimizer`, () => {
       // next.config.ts sets images.unoptimized; the edge refuses the endpoint
       // as well, so neither layer alone exposes it (GHSA-2464-fhr4-w9xw).
-      const caddy = readFileSync(join(DEPLOY, recipe.caddy), "utf8");
-      expect(caddy).toMatch(/^\s*@nextImage path \/_next\/image \/_next\/image\/\*$/m);
-      expect(caddy).toMatch(/^\s*respond @nextImage 404$/m);
-      expect(caddy.indexOf("respond @nextImage")).toBeLessThan(caddy.indexOf("reverse_proxy"));
+      // Caddy orders `respond` ahead of `reverse_proxy` itself, so what must
+      // hold is that both live, uncommented, in the same top-level site block.
+      const lines = readFileSync(join(DEPLOY, recipe.caddy), "utf8")
+        .split("\n")
+        .filter((line) => !/^\s*#/.test(line));
+      const blocks: string[][] = [];
+      for (const line of lines) {
+        if (/^\S.*\{\s*$/.test(line)) blocks.push([]);
+        blocks.at(-1)?.push(line.trim());
+      }
+      const proxied = blocks.filter((block) => block.some((line) => line.startsWith("reverse_proxy ")));
+      expect(proxied).toHaveLength(1);
+      expect(proxied[0]).toContain("@nextImage path /_next/image /_next/image/*");
+      expect(proxied[0]).toContain("respond @nextImage 404");
     });
   }
 

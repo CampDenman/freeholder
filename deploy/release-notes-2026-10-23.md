@@ -82,23 +82,45 @@ Node.js checking certificates correctly and parsing responses safely.
   upstream `node:*-bookworm-slim` image removes it after installing Node.js,
   and the 22.23.4 image's package database confirms this. So there is no
   Debian certificate bundle in the image to update.
-- The compiled-in block on the eight intermediates applies to every TLS
-  context Node.js creates. It still applies if you add your own CA
-  certificates with `NODE_EXTRA_CA_CERTS`.
+- Node.js reports a chain through one of the eight blocked keys as a revoked
+  certificate, through its normal verification
+  ([nodejs/node#66871](https://github.com/nodejs/node/pull/66871)). Code
+  that turns verification off, for example with `rejectUnauthorized: false`
+  or `NODE_TLS_REJECT_UNAUTHORIZED=0`, therefore does not get this
+  protection. Freeholder's source and deployment files set neither, and
+  none sets `NODE_EXTRA_CA_CERTS`. If your own configuration turns
+  certificate verification off for a database, mail or storage connection,
+  this block does not cover that connection.
 
 ## eMudhra certificate key compromise
 
-The private keys of eight eMudhra (emSign) intermediate certificate
-authorities were reported compromised on 17 October 2026. Six were used for
-TLS and two for code signing. Chrome and Firefox blocked the TLS
-intermediates through their revocation lists that day; other vendors
-followed over the next three days. Software that keeps its own certificate
-store and does not read browser revocation lists, as Node.js does, needs
-an update to stop trusting them. Node.js 22.23.4 is that update.
+eMudhra's statement of 21 October 2026 says eight of its intermediate
+certificate authorities had weak private keys. The intermediates belong to
+its global TLS business and were created at a key ceremony on 30 April
+2025. An independent researcher found that the keys could be derived "last
+weekend", which was the weekend before the statement. The researcher
+reported this to Apple, Google, Microsoft and Mozilla.
 
-Sources: the Node.js advisory above;
-[Mozilla's dev-tech-crypto notice on NSS 3.131.1](https://groups.google.com/a/mozilla.org/g/dev-tech-crypto/c/vSxZxnOMMvs);
-[eMudhra's press release of 21 October 2026](https://nsearchives.nseindia.com/corporate/EMUDHRA2008_21102026105726_Press_Release_21102026.pdf).
+Mozilla's NSS 3.131.1 notice says Firefox users were already protected by
+a OneCRL update. NSS 3.131.1, released on 20 October 2026, removes the
+emSign ECC Root CA - G3 in response to the incident. Press reports add
+more detail that the primary sources above do not state:
+
+- six of the intermediates issue TLS certificates and two are for code
+  signing;
+- Chrome and Firefox blocked them on the day of the report, Apple followed
+  on 19 October and Microsoft on 20 October.
+
+Software that keeps its own certificate store and does not read browser
+revocation lists needs an update to stop trusting these intermediates.
+Node.js is such software, and 22.23.4 is that update.
+
+Sources:
+
+- [eMudhra's statement of 21 October 2026](https://nsearchives.nseindia.com/corporate/EMUDHRA2008_21102026105726_Press_Release_21102026.pdf)
+- [Mozilla's dev-tech-crypto notice on NSS 3.131.1](https://groups.google.com/a/mozilla.org/g/dev-tech-crypto/c/vSxZxnOMMvs)
+- [nodejs/node#66871](https://github.com/nodejs/node/pull/66871)
+- press report: [Help Net Security, 21 October 2026](https://www.helpnetsecurity.com/2026/10/21/emudhra-certificates-private-keys-compromised/)
 
 **Self-hosters must pull or rebuild the image to get this protection.** An
 image built before this revision still trusts those intermediates. If you
@@ -117,8 +139,10 @@ fixed the following, so 16.4.2 includes those fixes:
   typed arrays.
 - [GHSA-2464-fhr4-w9xw](https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw)
   (Critical, CVE-2026-96889): remote code execution in the Image
-  Optimization API when SVG files are used. Next.js lists this CVE on its
-  advisory. NVD describes CVE-2026-96889 as the underlying librsvg flaw.
+  Optimization API when SVG files are used, on glibc-based Linux. The flaw
+  is in an upstream image library, not in Next.js itself. NVD describes
+  CVE-2026-96889 as a librsvg flaw. Next.js gives the workaround as using
+  `sharp` 0.35.5 or later.
 - [GHSA-p3m5-59mp-jv5r](https://github.com/vercel/next.js/security/advisories/GHSA-p3m5-59mp-jv5r)
   (High, CVE-2026-94482): denial of service in App Router applications that
   use Server Actions.
@@ -141,8 +165,39 @@ Caddy now answers 404 for that path without contacting the app.
 Caddy rely on the Next.js setting alone: the plain Docker Compose recipe,
 App Platform, Render, Railway and Replit.
 
-Freeholder also refuses SVG uploads. Its only SVG rendering is the
-watermark text it generates itself, with the text escaped.
+**The real protection is the image library itself.** Turning off the
+optimizer closes the Next.js route, but Freeholder also calls `sharp`
+directly:
+
+- `src/core/media/variants.ts` reads image dimensions and builds
+  renditions.
+- `src/modules/social/render.ts` crops stills and makes thumbnails, with
+  `failOn: "none"`.
+
+So what protects Freeholder from this flaw is the version of `sharp` it
+runs, together with its refusal of SVG uploads:
+
+- `pnpm-lock.yaml` locks a single `sharp`, 0.35.5. That is the fixed
+  version Next.js names, and Next.js uses the same copy.
+- `sharp` 0.35.5 bundles `@img/sharp-libvips` 1.3.4. Its installed
+  `versions.json` lists libvips 8.18.7 and librsvg 2.63.2.
+- Upload validation (`src/core/media/validation.ts`) has refused SVG by
+  extension and by declared type since the media lifecycle landed (#70,
+  August 2026).
+- Validation accepts images only when the file's own signature is JPEG,
+  PNG, GIF, WebP or AVIF. The media and social pipelines pass `sharp` only
+  assets stored as images, so visitor-supplied SVG does not reach it
+  through them.
+
+Freeholder renders SVG with `sharp` in two places. Both render markup
+written by Freeholder's own code:
+
+- `src/core/media/watermark.ts` builds a watermark from the owner's
+  watermark text, with that text XML-escaped.
+- `src/modules/seed/service.ts` turns the demo illustrations in
+  `seed/demo/content` into JPEGs when demo content is installed. Those
+  illustrations ship in the repository. The install refuses to run on a
+  site that already has pages.
 
 **CVE-2026-75604**
 ([GHSA-p293-qw3h-jr36](https://github.com/vercel/next.js/security/advisories/GHSA-p293-qw3h-jr36),
@@ -172,33 +227,55 @@ so you can roll back.
   docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml pull && docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml up -d
   ```
 
-- **DigitalOcean droplet:** pin `FREEHOLDER_IMAGE` to
-  `ghcr.io/campdenman/freeholder@sha256:<64 hex>`. Use the linux/amd64
-  digest, not the tag's index digest. Then run:
+- **DigitalOcean droplet:** use `scripts/deploy-droplet.mjs`, as
+  described in "Doing it by hand" in `deploy/digitalocean-droplet/deploy.md`.
+  It does five things:
+  - verifies the image's signed build provenance;
+  - selects the linux/amd64 digest;
+  - takes a database backup;
+  - pins `FREEHOLDER_IMAGE` and keeps the previous pin for rollback;
+  - waits for readiness.
+
+  Start with a dry run:
 
   ```bash
-  ssh root@DROPLET_IP 'cd /opt/freeholder && docker compose pull && docker compose up -d'
+  node scripts/deploy-droplet.mjs --revision <12-char-or-full-sha> --dry-run
   ```
 
-  Alternatively, follow "Doing it by hand" in
-  `deploy/digitalocean-droplet/deploy.md`. It starts with
-  `node scripts/deploy-droplet.mjs --revision <12-char-or-full-sha> --dry-run`
-  and verifies, backs up and pins the image for you.
+  Then apply it as that document describes.
 
-  To add the edge refusal, copy the updated
-  `deploy/digitalocean-droplet/infra/Caddyfile` to
-  `/opt/freeholder/Caddyfile`. Then run
-  `docker compose up -d --force-recreate caddy`. This step is optional:
-  the app already refuses the path.
+  There is a fallback, `docker compose pull && docker compose up -d` on the
+  droplet with a hand-pinned digest (`deploy/digitalocean-droplet/README.md`).
+  It skips provenance verification and the backup, so use it only if you
+  cannot run the script.
+
+  To add the edge refusal, merge the two `@nextImage` lines from
+  `deploy/digitalocean-droplet/infra/Caddyfile` into your
+  `/opt/freeholder/Caddyfile`, so your own edits survive. The Caddy notes
+  below apply.
 
 - **Host updater:** apply the new release through the updater
   (`deploy/update-apply.md`). The updater keeps your deployment's own
   `Caddyfile` and does not install the recipe's copy. To add the edge
   refusal, merge the two `@nextImage` lines from
-  `deploy/docker-selfhost/docker-updater/Caddyfile` into it. Then reload
-  Caddy from the deployment directory with
-  `docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`.
-  This step is optional, as for the droplet.
+  `deploy/docker-selfhost/docker-updater/Caddyfile` into it. The Caddy
+  notes below apply.
+
+  Do not edit the file while an update is running. During an update the
+  executor copies your `Caddyfile` aside, swaps in a maintenance page, and
+  then writes the copy back. An edit made in between would be lost.
+
+  **Caddy notes, for both droplet and host updater.** These steps are
+  optional, because the app already refuses the path.
+  - Both recipes mount the single file `./Caddyfile` read-only into the
+    Caddy container. Many editors save by replacing the file rather than
+    rewriting it. After such a save, the container still sees the old
+    content, and `caddy reload` reloads that old content.
+  - So either edit the file in place, or recreate Caddy from the deployment
+    directory with `docker compose up -d --force-recreate caddy`.
+  - Then confirm that `curl -sI https://YOUR-SITE/_next/image` returns
+    `404`.
+
 - **Render, Railway, DigitalOcean App Platform:** run each recipe's
   `update` operation with the new image tag or digest (`recipe.yaml` in
   `deploy/render`, `deploy/railway`, `deploy/digitalocean-app`).
