@@ -77,12 +77,25 @@ panel offers that explicit choice. Choose **Explicit opt-in** under **Traffic
 For a visitor who allowed it, an accepted (not quarantined) form submission
 also sends one `lead` event to `POST /api/capi/{site}/event` after the
 visitor's response has been sent, deduplicated by the event id
-`freeholder-form:<submission id>`. **What is sent:** the enquiry's email and
-phone answers (when the form has them), the visitor's IP address and browser
-user agent, the page address, the click IDs the provider's script stored on
-the site's own domain (recognised keys only), and the submission id. Freeholder
-stores none of the address, user agent or click IDs it forwards. This is best
-effort: a failed conversion is not retried, and the enquiry is unaffected.
+`freeholder-form:<submission id>`. **What is sent:** SHA-256 hashes of the
+enquiry's email (trimmed, lowercased) and phone (digits only) answers when the
+form has them, sent as `custom.identifierHashes` (`em`, `ph`) — never the
+plain values; the visitor's IP address and browser user agent; the page
+address; the click IDs the provider's script stored on the site's own domain
+(recognised keys only); and the submission id. Freeholder stores none of the
+address, user agent or click IDs it forwards. This is best effort: a failed
+conversion is not retried, and neither a failure to send nor a failure to plan
+it affects the saved enquiry.
+
+**Pages it never runs on**, whatever the visitor chose: admin, the member and
+account areas (`/messages`, `/call`, `/m`, `/feed`, `/community`, `/join`,
+`/orders`, `/account`), the customer portal, setup and the playground, with or
+without a locale prefix. The CSP's `'strict-dynamic'` would let a provider
+script load others, so these pages never render it and never list the edge
+origin. The owner's **Collection disabled** policy is read from the database,
+which the Edge proxy cannot see: on the first page after it is chosen the
+visitor's consent cookie is rewritten to "disabled", and until then the layout
+renders no provider script.
 
 ## Form screening (C3.33)
 

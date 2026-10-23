@@ -3,12 +3,15 @@
 // C3.32: the measurement-provider category. Its adapter runs only on a
 // visitor's explicit consent, the CSP opens its edge only then, and a lead
 // conversion is one deduplicable event. Mocked HTTP only.
+import { createHash } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   measurement,
   measurementAllowed,
   measurementConfig,
   measurementCspOrigins,
+  measurementPathAllowed,
+  measurementScriptsFor,
 } from "@/adapters/measurement";
 import { paradiseClickIds } from "@/adapters/measurement/paradise";
 import { setParadiseFetchForTests } from "@/adapters/paradise/http";
@@ -71,7 +74,7 @@ describe("the measurement category", () => {
     configured();
     environment({ FREEHOLDER_PLAYGROUND: "1" });
     expect(measurement()).toBeNull();
-    expect(measurementCspOrigins(env(), "granted")).toEqual([]);
+    expect(measurementCspOrigins(env(), "granted", { path: "/" })).toEqual([]);
   });
 
   it("needs an explicit allow under a policy that collects", () => {
@@ -102,12 +105,49 @@ describe("the measurement category", () => {
   });
 });
 
+describe("which pages render the provider's scripts", () => {
+  const scripts = (state: string | null, path = "/", policy = "privacy_first") =>
+    measurementScriptsFor({
+      environment: env(),
+      policy,
+      state,
+      path,
+      scriptSources: () => measurement()?.scriptSources() ?? [],
+    });
+
+  it("renders them only for an explicit allow", () => {
+    configured();
+    expect(scripts("granted")).toHaveLength(2);
+    expect(scripts("denied")).toEqual([]);
+    // The privacy-first opt-out default's implied state is not an allow.
+    expect(scripts("implicit")).toEqual([]);
+    expect(scripts(null)).toEqual([]);
+    expect(scripts("granted", "/", "disabled")).toEqual([]);
+  });
+
+  it("never renders them on the playground, admin, member, account or portal pages", () => {
+    configured();
+    for (const path of ["/admin", "/admin/traffic", "/messages", "/messages/1", "/call/group/x", "/m/ada", "/feed", "/community", "/join", "/orders/confirm", "/portal", "/fr/messages", "/es/m/ada"]) {
+      expect(measurementPathAllowed(path), path).toBe(false);
+      expect(scripts("granted", path), path).toEqual([]);
+    }
+    for (const path of ["/", "/contact", "/fr/contact", "/market", "/memberships", "/mentors"]) {
+      expect(measurementPathAllowed(path), path).toBe(true);
+    }
+    environment({ FREEHOLDER_PLAYGROUND: "1" });
+    expect(scripts("granted")).toEqual([]);
+  });
+});
+
 describe("content security policy", () => {
   it("adds the edge only for an explicit allow, and never in admin", () => {
     configured();
-    expect(measurementCspOrigins(env(), "granted")).toEqual([EDGE]);
-    expect(measurementCspOrigins(env(), "implicit")).toEqual([]);
-    expect(measurementCspOrigins(env(), null)).toEqual([]);
+    expect(measurementCspOrigins(env(), "granted", { path: "/" })).toEqual([EDGE]);
+    expect(measurementCspOrigins(env(), "implicit", { path: "/" })).toEqual([]);
+    expect(measurementCspOrigins(env(), null, { path: "/" })).toEqual([]);
+    expect(measurementCspOrigins(env(), "granted", { path: "/", policy: "disabled" })).toEqual([]);
+    expect(measurementCspOrigins(env(), "granted", { path: "/messages/abc" })).toEqual([]);
+    expect(measurementCspOrigins(env(), "granted", { path: "/fr/portal" })).toEqual([]);
     const base = { nonce: "n", production: true };
     const open = contentSecurityPolicy({ ...base, path: "/", measurementOrigins: [EDGE] });
     expect(open).toMatch(/script-src [^;]*https:\/\/edge\.auroracoast\.test/);
@@ -147,12 +187,33 @@ describe("lead conversions", () => {
       clickIds: { gclid: "abc" },
     });
     expect(call!.url).toBe(`https://paradisemodern.com/api/capi/${SITE_ID}/event`);
+    const sha = (value: string) => createHash("sha256").update(value).digest("hex");
     expect(call!.body).toMatchObject({
       eventId: "freeholder-form:sub-1",
       eventName: "lead",
-      user: { email: "ada@example.test", ip: "198.51.100.7", userAgent: "Mozilla/5.0", externalId: "sub-1" },
+      user: { ip: "198.51.100.7", userAgent: "Mozilla/5.0", externalId: "sub-1" },
       context: { sourceUrl: "https://auroracoast.test/contact", clickIds: { gclid: "abc" } },
+      custom: { identifierHashes: { em: sha("ada@example.test") } },
     });
+  });
+
+  it("sends email and phone only as hashes of their normalised form", async () => {
+    configured();
+    let body = "";
+    setParadiseFetchForTests(async (_url, init) => {
+      body = init.body as string;
+      return new Response("{}", { status: 200 });
+    });
+    await measurement()!.recordConversion({
+      submissionId: "sub-2",
+      email: "  Ada@Example.TEST ",
+      phone: "+1 (604) 555-0100",
+      clickIds: {},
+    });
+    const sha = (value: string) => createHash("sha256").update(value).digest("hex");
+    const parsed = JSON.parse(body) as { custom: { identifierHashes: Record<string, string> } };
+    expect(parsed.custom.identifierHashes).toEqual({ em: sha("ada@example.test"), ph: sha("16045550100") });
+    expect(body).not.toMatch(/ada@example|example\.test|604|555/i);
   });
 
   it("plans nothing when the category is off", async () => {

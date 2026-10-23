@@ -42,7 +42,7 @@ import { AnalyticsRuntime } from "./AnalyticsRuntime";
 import { IncomingCall } from "./call/IncomingCall";
 import { myMembership } from "@/modules/members/service";
 import { AnalyticsConsentControl } from "./AnalyticsConsentControl";
-import { measurement as measurementProvider, measurementAllowed, measurementConfig } from "@/adapters/measurement";
+import { measurement as measurementProvider, measurementScriptsFor } from "@/adapters/measurement";
 import { env } from "@/core/env";
 import { SkipLink } from "@/ui/SkipLink";
 import { actorFromToken } from "@/core/http/actor";
@@ -76,10 +76,14 @@ export default async function PublicLayout({
   );
   // C3.32: the owner's optional measurement provider, for explicit consent only.
   const measurement = measurementProvider();
-  const measurementScripts =
-    measurement && measurementAllowed(measurementConfig(env()), analytics.consentPolicy, consent)
-      ? measurement.scriptSources()
-      : [];
+  // Never on member, account or portal pages (see `measurementPathAllowed`).
+  const measurementScripts = measurementScriptsFor({
+    environment: env(),
+    policy: analytics.consentPolicy,
+    state: consent,
+    path: requestHeaders.get(PATH_HEADER) ?? "/",
+    scriptSources: () => measurement?.scriptSources() ?? [],
+  });
   const publicActor = await actorFromToken(
     cookieJar.get(SESSION_COOKIE_NAME)?.value,
   );

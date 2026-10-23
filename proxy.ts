@@ -251,6 +251,7 @@ function requestPolicy(
       measurementOrigins: measurementCspOrigins(
         runtime,
         parseAnalyticsConsentState(request.cookies.get(ANALYTICS_CONSENT_COOKIE)?.value),
+        { path },
       ),
     }),
   };

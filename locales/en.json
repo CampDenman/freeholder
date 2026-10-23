@@ -309,7 +309,7 @@
   "analytics.consent.choices": "Privacy choices",
   "analytics.consent.decline": "No thanks",
   "analytics.consent.explanation": "Freeholder stores first-party page counts and performance for up to {days, plural, one {# day} other {# days}}. It stores no IP address, user-agent, fingerprint, or third-party identifier.",
-  "analytics.consent.measurementExplanation": "If you allow, this site's measurement provider ({provider}) also records your visit, including your IP address and browser, and may share an enquiry you send with the advertising service that brought you here. Without your permission none of that happens.",
+  "analytics.consent.measurementExplanation": "If you allow, this site's measurement provider ({provider}) also records your visit: your IP address, your browser, the pages you view and any ad click IDs. If you then send an enquiry, it also receives a scrambled (hashed) copy of the email address and phone number you gave, so the ad that brought you here can be credited. Without your permission none of that happens.",
   "analytics.consent.title": "Anonymous analytics",
   "analytics.consent.turnOff": "Turn analytics off",
   "analytics.consent.turnOn": "Turn analytics on",

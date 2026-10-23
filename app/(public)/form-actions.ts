@@ -103,13 +103,19 @@ export async function submitPublicForm(form: FormData): Promise<void> {
   jar.delete(FORM_RETURN_COOKIE);
   // C3.32: one lead conversion for the chosen measurement provider, only for
   // a visitor who explicitly allowed measurement, sent after the response.
-  const conversion = await leadConversionTask({
-    submissionId: submitted.submissionId,
-    consentCookie: jar.get(ANALYTICS_CONSENT_COOKIE)?.value,
-    readCookie: (name) => jar.get(name)?.value,
-    request: requestMetadataFromHeaders(requestHeaders),
-    path,
-  });
-  if (conversion) after(conversion);
+  // Attribution is best effort: the enquiry is already saved, so nothing here
+  // may turn a successful submission into an error page.
+  try {
+    const conversion = await leadConversionTask({
+      submissionId: submitted.submissionId,
+      consentCookie: jar.get(ANALYTICS_CONSENT_COOKIE)?.value,
+      readCookie: (name) => jar.get(name)?.value,
+      request: requestMetadataFromHeaders(requestHeaders),
+      path,
+    });
+    if (conversion) after(conversion);
+  } catch {
+    // Measurement unavailable; the visitor still sees "sent".
+  }
   redirect(`${path}?sent=${encodeURIComponent(slug)}`);
 }

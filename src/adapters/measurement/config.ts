@@ -48,6 +48,20 @@ export function measurementConfig(environment: MeasurementEnvironment): Measurem
   return { provider: "paradise", displayName: "Paradise Modern", siteId, edgeOrigin: new URL(edge).origin };
 }
 
+/**
+ * Pages a measurement script never loads on, whatever the visitor chose:
+ * admin, the member and account areas (messages, calls, member profiles and
+ * feed, joining, order confirmations, the customer portal), setup and the
+ * playground. The CSP's `'strict-dynamic'` lets a nonced script load others,
+ * so the only safe way to keep a third party off a private page is not to
+ * render its script there at all. A leading locale segment is ignored.
+ */
+const EXCLUDED_PATHS = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:admin|portal|messages|call|m|feed|community|join|orders|account|setup|playground|member-files|member-blobs)(?:\/|$)/i;
+
+export function measurementPathAllowed(path: string): boolean {
+  return !EXCLUDED_PATHS.test(path);
+}
+
 /** Explicit visitor permission under a policy that collects at all. */
 export function measurementAllowed(
   config: MeasurementConfig | null,
@@ -66,7 +80,32 @@ export function measurementAllowed(
 export function measurementCspOrigins(
   environment: MeasurementEnvironment,
   state: string | null | undefined,
+  options: { path: string; policy?: string },
 ): string[] {
   const config = measurementConfig(environment);
-  return config && state === "granted" ? [config.edgeOrigin] : [];
+  if (!config || state !== "granted") return [];
+  // The owner's policy lives in the database, which the Edge proxy cannot
+  // read; a caller that knows it passes it. When an owner disables
+  // collection the visitor's consent cookie is rewritten to "disabled" on
+  // the next page, and until then the layout renders no script.
+  if (options.policy === "disabled") return [];
+  return measurementPathAllowed(options.path) ? [config.edgeOrigin] : [];
+}
+
+/**
+ * The provider scripts the public layout renders for this request: only for
+ * an explicit allow, under a policy that collects, on a page that is not
+ * excluded, and never on the playground (where `measurementConfig` is null).
+ */
+export function measurementScriptsFor(input: {
+  environment: MeasurementEnvironment;
+  policy: string;
+  state: string | null | undefined;
+  path: string;
+  scriptSources: (config: MeasurementConfig) => string[];
+}): string[] {
+  const config = measurementConfig(input.environment);
+  if (!measurementAllowed(config, input.policy, input.state)) return [];
+  if (!measurementPathAllowed(input.path)) return [];
+  return input.scriptSources(config);
 }

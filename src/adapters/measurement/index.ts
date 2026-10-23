@@ -26,5 +26,11 @@ export function measurement(): MeasurementAdapter | null {
   };
 }
 
-export { measurementAllowed, measurementConfig, measurementCspOrigins } from "./config";
+export {
+  measurementAllowed,
+  measurementConfig,
+  measurementCspOrigins,
+  measurementPathAllowed,
+  measurementScriptsFor,
+} from "./config";
 export type { LeadConversion, MeasurementAdapter } from "./types";

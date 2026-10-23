@@ -309,7 +309,7 @@
   "analytics.consent.choices": "Opciones de privacidad",
   "analytics.consent.decline": "No, gracias",
   "analytics.consent.explanation": "Freeholder conserva recuentos de páginas y rendimiento propios durante un máximo de {days, plural, one {# día} other {# días}}. No guarda direcciones IP, agentes de usuario, huellas ni identificadores de terceros.",
-  "analytics.consent.measurementExplanation": "Si lo permites, el proveedor de medición de este sitio ({provider}) también registra tu visita, incluida tu dirección IP y tu navegador, y puede compartir una consulta que envíes con el servicio publicitario que te trajo aquí. Sin tu permiso, nada de eso ocurre.",
+  "analytics.consent.measurementExplanation": "Si lo permites, el proveedor de medición de este sitio ({provider}) también registra tu visita: tu dirección IP, tu navegador, las páginas que ves y los identificadores de clic de anuncios. Si luego envías una consulta, también recibe una copia cifrada (hash) del correo electrónico y el teléfono que diste, para atribuirla al anuncio que te trajo aquí. Sin tu permiso, nada de eso ocurre.",
   "analytics.consent.title": "Analítica anónima",
   "analytics.consent.turnOff": "Desactivar la analítica",
   "analytics.consent.turnOn": "Activar la analítica",

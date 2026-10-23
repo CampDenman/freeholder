@@ -6,6 +6,7 @@
 // Two browser scripts from the site's own edge host, and one server-side
 // `lead` conversion per accepted enquiry from a visitor who allowed it. Every
 // gate lives in `./config` and the callers; this file is only the wire.
+import { createHash } from "node:crypto";
 import { paradiseRequest } from "@/adapters/paradise/http";
 import type { MeasurementConfig } from "./config";
 import type { LeadConversion } from "./types";
@@ -48,11 +49,32 @@ export function paradiseClickIds(raw: string | undefined): Record<string, string
   );
 }
 
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+/**
+ * Email and phone leave only as SHA-256 hashes of their normalised form —
+ * the email trimmed and lowercased, the phone reduced to its digits (country
+ * code included when the visitor gave one), which is the normalisation the
+ * provider applies before matching. The provider accepts pre-hashed
+ * identifiers as `custom.identifierHashes` (`em`, `ph`, 64 hex characters).
+ */
+export function hashedIdentifiers(event: Pick<LeadConversion, "email" | "phone">): Record<string, string> {
+  const email = event.email?.trim().toLowerCase();
+  const phone = event.phone?.replace(/[^0-9]/g, "");
+  return {
+    ...(email && email.includes("@") ? { em: sha256(email) } : {}),
+    ...(phone && phone.length >= 3 ? { ph: sha256(phone) } : {}),
+  };
+}
+
 /**
  * One `lead` conversion, `POST /api/capi/{site}/event`. The event id is the
  * submission's, so the provider deduplicates a repeat.
  */
 export async function recordParadiseConversion(config: MeasurementConfig, event: LeadConversion): Promise<void> {
+  const identifiers = hashedIdentifiers(event);
   await paradiseRequest(`/api/capi/${encodeURIComponent(config.siteId)}/event`, {
     timeoutMs: 10_000,
     body: {
@@ -60,8 +82,6 @@ export async function recordParadiseConversion(config: MeasurementConfig, event:
       eventName: "lead",
       eventTime: new Date().toISOString(),
       user: {
-        ...(event.email ? { email: event.email } : {}),
-        ...(event.phone && event.phone.length >= 3 ? { phone: event.phone } : {}),
         ...(event.ip ? { ip: event.ip } : {}),
         ...(event.userAgent ? { userAgent: event.userAgent } : {}),
         externalId: event.submissionId,
@@ -70,6 +90,7 @@ export async function recordParadiseConversion(config: MeasurementConfig, event:
         ...(event.sourceUrl ? { sourceUrl: event.sourceUrl } : {}),
         ...(Object.keys(event.clickIds).length > 0 ? { clickIds: event.clickIds } : {}),
       },
+      ...(Object.keys(identifiers).length > 0 ? { custom: { identifierHashes: identifiers } } : {}),
     },
   });
 }

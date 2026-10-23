@@ -5326,7 +5326,12 @@ deployments are portable, testable and incapable of silently forking the truth.
   `tests/core/measurement-provider.test.ts` (gating, playground, CSP, script
   sources, click-ID parsing, the deduplicable event, consent with a
   database), `tests/core/analytics-consent.test.ts` (consent markup and its
-  accessibility gate); changeset `measurement-provider.md`. Unchecked: no
+  accessibility gate); changeset `measurement-provider.md`. Review fixes:
+  email and phone leave only as SHA-256 hashes (`custom.identifierHashes`);
+  the consent text lists exactly what is sent; member, account, community and
+  portal pages never render the script or list the edge
+  (`measurementPathAllowed`); a failure to plan a conversion never errors a
+  saved enquiry (`tests/core/measurement-form-action.test.ts`). Unchecked: no
   real-browser run against a live edge host.)*
 - [ ] **C3.33** Add a form-screening category (`FORM_SCREENING_PROVIDER`,
   default `none`) with Paradise Modern as its first adapter (§12, §36):
