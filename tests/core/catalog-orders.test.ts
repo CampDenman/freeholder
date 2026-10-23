@@ -98,11 +98,11 @@ describe.runIf(hasDatabase)("catalog orders", { timeout: 30_000 }, () => {
     await updateProduct.call({ id: draft.id, expectedVersion: renamed.version, kind: "rental" }, OWNER);
     expect(await shipping()).toEqual([true]);
 
-    // Migration 0055: variants made before this took the column's default.
+    // Migration 0056: variants made before this took the column's default.
     const download = await sellable("old-download", true);
     await db().update(products).set({ kind: "digital" }).where(eq(products.id, download.productId));
     const print = await sellable("old-print", true);
-    const migration = readFileSync("db/migrations/0055_nonshipping_variant_backfill.sql", "utf8");
+    const migration = readFileSync("db/migrations/0056_nonshipping_variant_backfill.sql", "utf8");
     await db().execute(sql.raw(migration));
     const after = await db().select().from(productVariants);
     expect(after.find((variant) => variant.id === download.id)?.requiresShipping).toBe(false);

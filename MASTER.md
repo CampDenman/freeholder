@@ -6071,7 +6071,7 @@ owner operations, never substitute for them.
   - Quotes are ordered by price, then name. When more than one method
     applies and none was chosen, `checkoutCart` refuses with `chooseMethod`;
     the page then renders the server-quoted methods, so the no-JS path works.
-  - Migration `0055_nonshipping_variant_backfill.sql` clears
+  - Migration `0056_nonshipping_variant_backfill.sql` clears
     `requires_shipping` on digital/service/pass variants.
     `catalog.updateProduct` re-derives it when a draft's kind changes.
   - The "From" price uses the cheapest sellable variant.
