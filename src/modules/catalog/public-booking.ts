@@ -5,8 +5,12 @@ import { cancellationTerms, termsFrom } from "@/core/scheduling/policy";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { actorString, defineService, ServiceError } from "@/core/service";
+import { actorString, defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { contactForActor } from "@/core/portal/service";
+import { resolveContact } from "@/core/contacts/service";
+import { env } from "@/core/env";
+import { anonymousClientKey } from "@/core/security/rate-limit";
+import { isFictionalEmail, PLAYGROUND_FICTIONAL_BOOKING_EMAIL } from "@/core/demo/playground-policy";
 import { getBusiness } from "@/core/settings/service";
 import { availableSlots } from "@/core/scheduling/resolver-service";
 import { createBooking, rescheduleBooking } from "@/core/scheduling/bookings";
@@ -59,20 +63,42 @@ export const bookableServices = defineService({
   },
 });
 
+/**
+ * Who a reservation is for. Normally the signed-in customer, whose email the
+ * portal sign-in already proved (C6.19). C1.38: the public playground sends no
+ * mail, so that proof can never arrive there; a reserved, undeliverable
+ * address (`isFictionalEmail`) stands in as its own proof and resolves through
+ * `contacts.resolve`, and a real-looking one is refused so the shared demo
+ * never books against somebody's inbox. Outside the playground an address in
+ * the input is ignored and an anonymous caller is refused exactly as before.
+ */
+async function bookingContact(ctx: ServiceContext, input: { email?: string; name?: string }) {
+  if (env().FREEHOLDER_PLAYGROUND === "1" && ctx.actor.kind !== "system" && input.email !== undefined) {
+    if (!isFictionalEmail(input.email)) throw new ServiceError("validation", PLAYGROUND_FICTIONAL_BOOKING_EMAIL);
+    const resolved = await ctx.callAsSystem(resolveContact, { email: input.email, ...(input.name ? { name: input.name } : {}), source: "site_booking" });
+    return { contact: resolved.contact, guest: true };
+  }
+  return { contact: await contactForActor(ctx), guest: false };
+}
+
 export const bookPublicService = defineService({
-  name: "catalog.bookService", summary: "Reserve a currently available service for the signed-in customer and issue its canonical invoice.", kind: "mutation", permission: "authenticated", writeClass: "money",
-  input: selection.extend({ calendarId: z.uuid(), startsAt: z.iso.datetime(), termsHash: z.string().regex(/^[a-f0-9]{64}$/), acceptedTerms: z.literal(true), requestKey: z.uuid() }),
-  rateLimit: { limit: 10, windowSeconds: 60, subject: (_input, actor) => actorString(actor), message: "Please wait before trying this reservation again." },
-  output: z.object({ bookingId: z.uuid(), invoiceId: z.uuid().nullable() }),
+  name: "catalog.bookService", summary: "Reserve a currently available service for the signed-in customer and issue its canonical invoice.", kind: "mutation", permission: "public", writeClass: "money",
+  input: selection.extend({ calendarId: z.uuid(), startsAt: z.iso.datetime(), termsHash: z.string().regex(/^[a-f0-9]{64}$/), acceptedTerms: z.literal(true), requestKey: z.uuid(),
+    // C1.38: honoured only in the public playground, and only for a made-up address.
+    email: z.string().trim().email().toLowerCase().max(320).optional(), name: z.string().trim().min(1).max(200).optional() }),
+  rateLimit: { limit: 10, windowSeconds: 60, subject: (_input, actor) => actor.kind === "anonymous" ? `booking-guest:${anonymousClientKey(actor)}` : actorString(actor), message: "Please wait before trying this reservation again." },
+  // `manageToken` is a playground guest's own appointment link
+  // (/portal/appointments/<token>); a signed-in customer has the portal record.
+  output: z.object({ bookingId: z.uuid(), invoiceId: z.uuid().nullable(), manageToken: z.string().nullable() }),
   handler: async (input, ctx) => {
-    const contact = await contactForActor(ctx);
+    const { contact, guest } = await bookingContact(ctx, input);
     if (!contact.email) throw new ServiceError("conflict", "Verify your customer email before booking.");
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`booking-request:${contact.id}:${input.requestKey}`}))`);
     const [prior] = await ctx.tx.select().from(bookings).where(and(eq(bookings.contactId, contact.id), eq(bookings.publicRequestKey, input.requestKey))).limit(1);
     if (prior) {
       const priorProduct = await ctx.call(getServiceOffering, { productId: input.productId });
       if (prior.serviceOfferingId !== priorProduct?.id || prior.calendarId !== input.calendarId || prior.startsAt.getTime() !== new Date(input.startsAt).getTime() || prior.capacityUsed !== input.seats || (prior.meta as {publicTermsHash?:string})?.publicTermsHash !== input.termsHash) throw new ServiceError("conflict", "This request was already used for a different reservation.");
-      return { bookingId: prior.id, invoiceId: prior.invoiceId };
+      return { bookingId: prior.id, invoiceId: prior.invoiceId, manageToken: guest ? prior.rescheduleToken : null };
     }
     const [owner] = await ctx.tx.select({ seller: productTable.sellerUserId }).from(productTable).where(eq(productTable.id, input.productId)).limit(1);
     if (owner?.seller && !(await sellerCanSell(ctx, owner.seller))) throw new ServiceError("conflict", "This member cannot take bookings yet.");
@@ -102,9 +128,9 @@ export const bookPublicService = defineService({
       const deposit = Math.min(quote.dueNowMinor, issued.invoice.totalMinor);
       if (quote.mode === "deposit_balance" && deposit > 0 && deposit < issued.invoice.totalMinor) await ctx.callAsSystem(createPaymentPlan, { invoiceId: issued.invoice.id, idempotencyKey: `booking-deposit:${booking.id}`, installments: [{ dueAt: new Date(), amountMinor: deposit }, { dueAt: slot.startsAt, amountMinor: issued.invoice.totalMinor-deposit }] });
     }
-    await ctx.tx.update(bookings).set({ invoiceId, cancellationPolicy: quote.policy, publicRequestKey: input.requestKey, meta: { publicTermsHash: input.termsHash } }).where(eq(bookings.id, booking.id));
+    const [saved] = await ctx.tx.update(bookings).set({ invoiceId, cancellationPolicy: quote.policy, publicRequestKey: input.requestKey, meta: { publicTermsHash: input.termsHash } }).where(eq(bookings.id, booking.id)).returning({ token: bookings.rescheduleToken });
     ctx.setSubject("booking", booking.id);
-    return { bookingId: booking.id, invoiceId };
+    return { bookingId: booking.id, invoiceId, manageToken: guest ? saved?.token ?? null : null };
   },
 });
 

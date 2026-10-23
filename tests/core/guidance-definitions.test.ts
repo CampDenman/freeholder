@@ -11,6 +11,8 @@ import {
 import {
   actorHasGuidanceCapability,
   eligibleGuidanceSteps,
+  flowDescriptionKey,
+  PARTIAL_FLOW_DESCRIPTION_KEY,
   isGuidanceFlowEligible,
 } from "@/core/guidance/service";
 import { DEFAULT_ROLES, type DefaultRole } from "@/core/roles/defaults";
@@ -131,5 +133,21 @@ describe("the guidance migration seed", () => {
     }));
     expect(seeded).toEqual(CORE_GUIDANCE_FLOWS);
     expect(migration).toContain('ON CONFLICT ("key", "version") DO NOTHING');
+  });
+
+  it("never describes steps a role cannot see (2026-10-23 demo audit)", () => {
+    // The editor flow's description names media; a role without the media
+    // library saw "add reusable media" above a list of two tasks.
+    const editor = CORE_GUIDANCE_FLOWS.find((flow) => flow.key === "core.editor-first-win")!;
+    const noMedia: Extract<Actor, { kind: "user" }> = {
+      kind: "user",
+      userId: crypto.randomUUID(),
+      role: "playground",
+      grants: [{ module: "cms", access: "manage" }, { module: "forms", access: "manage" }],
+    };
+    const visible = eligibleGuidanceSteps(noMedia, editor);
+    expect(visible.map((step) => step.key)).toEqual(["publish-page", "launch-form"]);
+    expect(flowDescriptionKey(editor, visible)).toBe(PARTIAL_FLOW_DESCRIPTION_KEY);
+    expect(flowDescriptionKey(editor, editor.steps)).toBe(editor.descriptionKey);
   });
 });

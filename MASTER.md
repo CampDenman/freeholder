@@ -4398,6 +4398,57 @@ project without silent telemetry, and ready to carry money.
   on a local production playground: product → cart (CA$28.00) → checkout
   refusal for a real-looking address → order confirmation → invoice with
   the offline payment option. Changeset `playground-checkout-fictional-email.md`.
+  Follow-up 2026-10-23 (demo booking and admin polish, live audit of
+  demo.freeholder.ai): /book listed times as plain text and its only action
+  was "Verify your email to reserve a time", which led to a portal sign-in the
+  playground cannot send. Times are now links (signed out) or per-time reserve
+  forms (verified); a signed-out visitor chooses a time first and the chosen
+  time rides through `/portal/login?returnTo=` (C6.19's verified identity is
+  unchanged, verification simply follows the choice). In playground mode only,
+  `catalog.bookService` (now `public`, classified in `PLAYGROUND_PUBLIC` with a
+  `bookings` row cap) accepts a reserved address (`isFictionalEmail`) as its
+  own proof, resolves the contact through `contacts.resolve`, and returns the
+  booking's `manageToken`, so the visitor lands on `/portal/appointments/<token>`;
+  a real-looking address is refused with nothing written; outside the
+  playground an anonymous caller is still refused and a typed address is
+  ignored. Slots show the calendar name only when several calendars have
+  openings, and zones read as `zoneLabel` ("Pacific Daylight Time
+  (Vancouver)") on /book and the appointment page. The demo inbox was empty
+  for visitors because the playground role lacked the `conversations` view
+  grant while §4.14 already threads form enquiries into conversations; the
+  grant is added. Consequence, accepted: every demo visitor shares one
+  playground role, so visitors can read each other's demo enquiries in that
+  inbox. The playground holds fictional data only, the public form and
+  booking pages say to use made-up details, and the hourly reset wipes it.
+  "What changed" now maps visitor/system actions, including provider-recorded
+  payments, refunds, payouts and disputes, to owner locale strings
+  (`OWNER_ACTIVITY_LABELS`); only a named list of visitor plumbing
+  (`OWNER_HIDDEN_ACTIONS`) moves to "Include background work", and any other
+  unmapped action still shows with its service summary. Guest bookings are
+  rate-limited per client network (`anonymousClientKey`), not per typed
+  address; a tampered `calendar`/`at` on /book is ignored (`chosenSlot`); `members.linkAbuseReports` gained `auditWhen`.
+  A first-win card whose steps a role cannot all see shows
+  `guidance.flow.partial.description` instead of describing hidden steps.
+  Regressions: `tests/modules/customer-surfaces.test.ts` (playground guest
+  booking, refusal, retry, token confirmation, row cap, per-client limit,
+  tampered chosen time; production still refuses),
+  `tests/core/playground.test.ts` (enquiry visible in the visitor's inbox),
+  `tests/core/audit-labels.test.ts`, `tests/core/i18n.test.ts` (`zoneLabel`),
+  `tests/core/guidance-definitions.test.ts`, `tests/modules/member-abuse.test.ts`;
+  `tests/browser/customer-surfaces.spec.ts` updated for choose-then-verify.
+  Editor presence and edit-lease heartbeats joined `HOUSEKEEPING_ACTIONS`.
+  Hydration error #418, reproduced in a local playground dev boot: on
+  /admin/voice-video the verify-connection form was nested inside the
+  settings form (moved after it); in the page editor the preview frame's
+  `fhReorderLevel` re-appended already-ordered blocks behind React's
+  boundary markers when the editor's first draft arrived before hydration
+  (now a no-op when the order matches, and an in-place re-sort otherwise;
+  `tests/core/editor-canvas-drag.test.ts`). Walked on a local playground
+  boot: /book time buttons → chosen time → real-looking address refused →
+  `ada@example.com` → appointment page "Pacific Daylight Time (Vancouver)";
+  contact enquiry visible in the visitor's inbox; "What changed" reads "A
+  visitor sent a form"; no hydration errors on either page after the fixes.
+  Changeset `demo-booking-and-admin-polish.md`.
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable

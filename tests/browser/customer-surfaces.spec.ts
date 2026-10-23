@@ -75,7 +75,10 @@ test.describe("public customer surfaces",()=>{
   test("a customer reserves, moves and cancels an appointment, then joins a membership awaiting payment",async({page,context,browser})=>{
     await seedC11Owner("Public journeys");const data=await fixture();
     await page.goto(`/book?service=${data.serviceId}&date=${data.date}`);
-    await expect(page.getByRole("link",{name:"Verify your email to reserve a time"})).toBeVisible();
+    // A time is chosen first; the email is verified for that chosen time.
+    await page.getByRole("link",{name:/^Choose /}).first().click();
+    await expect(page.getByRole("heading",{name:"Your chosen time"})).toBeVisible();
+    await expect(page.getByRole("link",{name:"Verify your email to reserve this time"})).toHaveAttribute("href",/returnTo=.*calendar%3D/);
     await assertThemes(page);
     await context.addCookies([{name:SESSION_COOKIE,value:data.token,url:C11_BASE_URL}]);
     await page.reload();

@@ -15,6 +15,7 @@ import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primit
 import { SkipLink } from "@/ui/SkipLink";
 import { bookingByToken } from "@/core/scheduling/bookings";
 import { currentBusiness } from "@/core/settings/read";
+import { zoneLabel } from "@/core/i18n";
 import { getT } from "../../../i18n";
 import { cancelMyAppointmentAction, moveMyAppointmentAction } from "../actions";
 
@@ -77,10 +78,10 @@ export default async function MyAppointmentPage({
             </Pill>
           </h1>
           <p className="mt-2 text-lg">{inZone(booking.timezoneAtBooking)}</p>
-          <p className="text-sm text-ink-muted">{booking.timezoneAtBooking}</p>
+          <p className="text-sm text-ink-muted">{zoneLabel(booking.timezoneAtBooking, locale, new Date(booking.startsAt))}</p>
           {differs ? (
             <p className="mt-1 text-sm text-ink-muted">
-              {t("myBooking.alsoShown", { when: inZone(timezone), timezone })}
+              {t("myBooking.alsoShown", { when: inZone(timezone), timezone: zoneLabel(timezone, locale, new Date(booking.startsAt)) })}
             </p>
           ) : null}
           <p className="mt-2 text-sm text-ink-muted">{booking.calendarName}</p>
@@ -89,6 +90,11 @@ export default async function MyAppointmentPage({
           ) : null}
         </div>
 
+        {query.saved === "booked" ? (
+          <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+            {t("myBooking.booked")}
+          </p>
+        ) : null}
         {query.saved === "cancelled" ? (
           <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
             {t("myBooking.cancelled")}

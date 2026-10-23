@@ -11,7 +11,7 @@ export const PLAYGROUND_MANAGE = ["cms", "forms", "contacts", "catalog", "notes"
 // contribution) stays out — `PLAYGROUND_UNAVAILABLE` explains it instead.
 export const PLAYGROUND_VIEW = [
   "admin", "settings", "events", "analytics", "search", "media", "guidance", "notifications", "members",
-  "crm", "segments", "invoicing", "scheduling", "connections", "newsletters", "galleries", "quotes",
+  "crm", "conversations", "segments", "invoicing", "scheduling", "connections", "newsletters", "galleries", "quotes",
   "assistant", "projects", "documents", "contracts", "reviews", "popups", "subscriptions", "entitlements",
   "paywalls", "loyalty", "referrals", "rentals", "assessments", "calculators", "attestations",
   "locations", "automations", "reporting", "ads", "social", "share", "community", "marketplace",
@@ -81,6 +81,8 @@ export const PLAYGROUND_PUBLIC = [
   "documents.open",
   "paywalls.evaluate",
   "rentals.reserve",
+  // C1.38: signed out, only for a made-up address — see `isFictionalEmail`.
+  "catalog.bookService",
   "invoicing.viewCustomerInvoice",
   "community.joinBySlug", "community.requestJoinBySlug", "community.reportPostBySlug",
 ] as const;
@@ -206,6 +208,10 @@ export function isFictionalEmail(email: string): boolean {
 export const PLAYGROUND_FICTIONAL_EMAIL =
   "In the public demo, check out with a made-up address such as you@example.com.";
 
+/** Shown when a playground booking uses a real-looking address. */
+export const PLAYGROUND_FICTIONAL_BOOKING_EMAIL =
+  "In the public demo, book with a made-up address such as you@example.com.";
+
 /** The visitor-facing sentence for a refused playground action. */
 export const PLAYGROUND_REFUSAL = "This action is unavailable in the public playground.";
 
@@ -281,6 +287,7 @@ export const PLAYGROUND_ROW_CAPS: Readonly<Record<string, PlaygroundRowCap>> = {
   "quotes.message": { table: "quote_messages", limit: 500 },
   "documents.open": { table: "document_access_logs", limit: 2000 },
   "rentals.reserve": { table: "bookings", limit: 300 },
+  "catalog.bookService": { table: "bookings", limit: 300 },
   "community.joinBySlug": { table: "community_members", limit: 200 },
   "community.requestJoinBySlug": { table: "community_join_requests", limit: 200 },
 };
