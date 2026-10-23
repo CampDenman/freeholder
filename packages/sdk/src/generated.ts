@@ -2911,7 +2911,7 @@ export interface ServiceCatalog {
   };
   "catalog.listOrders": {
     input: { contactId?: string };
-    output: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "partially_paid" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; checkoutTermsSnapshot: unknown | null; checkoutPaymentSnapshot: unknown | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+    output: { id: string; contactId: string; cartId: string | null; invoiceId: string | null; currency: string; status: "pending_payment" | "partially_paid" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; couponId: string | null; shippingMethodId: string | null; shippingAddress: unknown | null; checkoutTermsSnapshot: unknown | null; checkoutPaymentSnapshot: unknown | null; createdAt: string; updatedAt: string; contactName: string | null; contactEmail: string | null; [key: string]: unknown }[];
   };
   "catalog.listPriceLists": {
     input: { currency?: string; kind?: "retail" | "wholesale" | "member" | "sale" | "contract" };
