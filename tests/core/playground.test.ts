@@ -57,6 +57,8 @@ import { createInvitation } from "@/core/invitations/service";
 import { beginUpload } from "@/core/media/service";
 import { sendMail, deliverQueuedMail, testMailSender } from "@/core/mail/service";
 import { sendSms } from "@/core/messaging/sms";
+import { searchInbox } from "@/core/messaging/inbox";
+import { issueStamp, STAMP_FIELD } from "@/modules/forms/antispam";
 import { mailDeliveries, mailOutbox } from "@/core/mail/schema";
 import { webhookDeliveries, webhookSubscriptions } from "@/core/webhooks/schema";
 import { deliverDue } from "@/core/webhooks/deliver";
@@ -366,10 +368,16 @@ describe.runIf(hasDatabase)("disposable playground", () => {
     // Signed out, as a visitor to the demo's public site.
     const sent = await submitForm.call({
       slug: "contact",
-      values: { name: "Ada", email: "ada@example.test", message: "Do you shoot in October?" },
+      // As a browser sends it: with the stamp the rendered form carried.
+      values: { name: "Ada", email: "ada@example.test", message: "Do you shoot in October?", [STAMP_FIELD]: issueStamp(new Date(Date.now() - 10_000)) },
       sourceUrl: "/contact",
     }, ANONYMOUS);
     expect(sent.ok).toBe(true);
+    // §4.14: the enquiry is a conversation in the inbox the demo visitor can
+    // open, not only a form submission and a contact (2026-10-23 demo audit:
+    // the playground role could read Contacts and Forms but not the inbox).
+    const inbox = await searchInbox.call({ openOnly: true, limit: 100 }, await visitorActor());
+    expect(inbox.find((thread) => thread.contactEmail === "ada@example.test")?.replyChannel).toBe("form");
     const subscribed = await subscribeToNewsletter.call({ newsletterId: newsletter.id, email: "ada@example.test" }, ANONYMOUS);
     expect(subscribed.status).toBe("pending");
     const registered = await registerForEvent.call({

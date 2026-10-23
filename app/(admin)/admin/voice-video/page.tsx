@@ -128,9 +128,14 @@ export default async function VoiceVideoPage({
             </Field>
             <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
               <Button type="submit">{t("voiceVideo.saveSettings")}</Button>
-              <VerifyConnection label={t("voiceVideo.verify")} topUpLabel={t("voiceVideo.topUp")} />
             </div>
           </form>
+          {/* Its own form, so it sits after the settings form rather than
+              inside it: a form nested in a form is invalid HTML, and React
+              rebuilt the page on every load (hydration error #418). */}
+          <div className="mt-3">
+            <VerifyConnection label={t("voiceVideo.verify")} topUpLabel={t("voiceVideo.topUp")} />
+          </div>
           <p className="mt-3 text-sm text-ink-muted">
             {provider === "daily"
               ? t(configuration?.dailyConfigured ? "voiceVideo.configured" : "voiceVideo.setupHelpDaily", { domain: configuration?.dailyDomain ?? "" })

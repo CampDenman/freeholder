@@ -1667,6 +1667,66 @@ v2.
 - **F11** — `packages/cli/README.md`, `deploy/digitalocean-droplet/README.md`, changesets `.changeset/cli-launch.md` and `.changeset/cli-launch-hardening.md`.
 - **F12** — `packages/cli/scripts/copy-recipe.mjs` ships exactly the repository's `deploy/digitalocean-droplet/infra` recipe, asserted byte-for-byte in `tests/core/launch-cli.test.ts`.
 
+## C3.31 — Offer Paradise Modern as one more transactional and bulk mail adapter
+
+- **F01** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F02** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F03** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F04** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F05** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F06** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F07** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F08** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F09** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F10** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F11** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F12** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+
+## C3.32 — Add a measurement-provider category
+
+- **F01** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F02** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F03** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F04** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F05** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F06** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F07** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F08** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F09** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F10** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F11** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F12** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+
+## C3.33 — Add a form-screening category
+
+- **F01** — N/A — no schema change: the seal travels with the request and a screening outcome lands in the existing `form_submissions.spam_reasons` (`src/modules/forms/schema.ts`).
+- **F02** — `src/modules/forms/service.ts` — `forms.submit` takes the optional sealed `screening` input and only adds a reason; covered in `tests/core/form-screening-lead-sink.test.ts` (blocked, allowed, trap reasons kept, unchecked).
+- **F03** — N/A — screening never touches the contact spine: a quarantined submission creates no contact (`forms.submit` already skips `contacts.resolve` for suspected spam), and an allowed one takes the unchanged path.
+- **F04** — `src/modules/forms/block.tsx` — `ProviderNotice` under every site form names the provider, what is sent and why; quarantined submissions surface in the existing review queue (`app/(admin)/admin/forms/[id]/page.tsx`). Render covered in `tests/core/form-screening-lead-sink.test.ts`.
+- **F05** — `src/modules/forms/screening.ts` — an anonymous `forms.submit` through the public API or MCP carries no seal and is held as unchecked while screening is on; API keys, agents and signed-in callers are exempt; traps and the per-form rate limit apply to all; documented in `deploy/paradise-modern.md`; covered in `tests/core/form-screening-lead-sink.test.ts`.
+- **F06** — `locales/en.json`, `locales/es.json`, `locales/fr.json`, `locales/ar.json` — `forms.public.notice.screening` in all four catalogs; `tests/core/locale-quality.test.ts`.
+- **F07** — `tests/core/form-screening-lead-sink.test.ts`: Pending — HMAC seal bound to form and answers, expiry, no seal without `SESSION_SECRET` (fail closed), traps and a per-client budget before any provider call, add-only reasons, request body limited to form reference, client IP and multi-line text, playground refusal; `tests/core/long-running-service-boundary.test.ts` keeps the calls out of transactions. No live assessment against the provider yet.
+- **F08** — `tests/core/form-screening-lead-sink.test.ts`: Pending — the provider is faked at `setParadiseFetchForTests` (allow, block, 503, malformed, unreachable); `tests/core/form-intake-screening.test.ts` covers the intake path. No live assessment against the provider yet.
+- **F09** — N/A — screening keeps no state of its own: the per-client budget is an ordinary expiring `rate_limit_counters` row, and outcomes live in submissions the existing export and erasure already cover.
+- **F10** — `src/adapters/form-screening/paradise.ts` — one call per anonymous site-form submission, a 4-second limit, skipped entirely when the traps fire or the client is over budget; asserted in `tests/core/form-screening-lead-sink.test.ts`.
+- **F11** — `deploy/paradise-modern.md` (what is sent, why, fail-closed rules), `.env.example`, changeset `.changeset/form-screening-lead-sink.md`.
+- **F12** — `tests/core/form-screening-lead-sink.test.ts` composes site form seal → `forms.submit` → quarantine queue and `forms.submitted` provenance; `tests/core/form-intake-screening.test.ts` composes the intake form with the same seal.
+
+## C3.34 — Add a lead-sink category
+
+- **F01** — N/A — no schema change: copies are outbox deliveries on the existing `forms.submitted` event (`src/core/events/schema.ts`), and the submission row is unchanged.
+- **F02** — `src/modules/forms/lead-sink.ts` — core's `forms.submitted` listener `onFormSubmittedLeadSink` (`src/core/services.ts`); covered in `tests/core/form-screening-lead-sink.test.ts`.
+- **F03** — N/A — the lead sink reads an accepted submission after commit and writes nothing to the contact spine; the contact was already resolved by `forms.submit`.
+- **F04** — `src/modules/forms/block.tsx` — `ProviderNotice` lists what is copied and to whom; failed copies surface as dead letters on `app/(admin)/admin/jobs/outbox/page.tsx` for replay. Render covered in `tests/core/form-screening-lead-sink.test.ts`.
+- **F05** — `src/modules/forms/service.ts` — `forms.submitted` carries `fromSiteForm`; API, MCP and owner entries are never copied; covered in `tests/core/form-screening-lead-sink.test.ts`.
+- **F06** — `locales/en.json`, `locales/es.json`, `locales/fr.json`, `locales/ar.json` — `forms.public.notice.leadSink` in all four catalogs; `tests/core/locale-quality.test.ts`.
+- **F07** — `tests/core/form-screening-lead-sink.test.ts`: Pending — separate switch, off by default; only accepted, site-form-sealed submissions; every failure throws with no visitor answer in the message; playground refusal. No live lead copy against the provider yet.
+- **F08** — `tests/core/form-screening-lead-sink.test.ts`: Pending — the provider is faked at `setParadiseFetchForTests` (accept, 400, 503). No live lead copy against the provider yet.
+- **F09** — `src/core/events/outbox.ts` — a failed copy retries with backoff and then dead-letters for 90 days, replayable from Jobs → Outbox; the submission itself is always kept in Freeholder.
+- **F10** — N/A — the copy runs in the outbox worker after commit, never on the visitor's request; one HTTP call per accepted site-form submission.
+- **F11** — `deploy/paradise-modern.md` (what is copied, why, failure handling), `.env.example`, changeset `.changeset/form-screening-lead-sink.md`.
+- **F12** — `tests/core/form-screening-lead-sink.test.ts` composes site form seal → `forms.submit` → `forms.submitted` → `copySubmissionToLeadSink` → provider request.
+
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/agents-board.test.ts`.

@@ -16,6 +16,8 @@
 // (see ./aliases, applied where `FREEHOLDER_AGENT` and `adapters.agent` are
 // parsed) so existing configurations keep working.
 import { env } from "@/core/env";
+import { PARADISE_DEFAULT_URL, paradiseBaseUrl, paradiseProjectHeaders } from "@/adapters/paradise/config";
+import { paradiseUrl } from "@/adapters/paradise/http";
 import type {
   AgentProposalRequest,
   AgentProposalResult,
@@ -31,7 +33,7 @@ export function setBuilderAgentFetchForTests(next: FetchLike | undefined): void 
 
 /** Paradise Modern's gateway defaults; used only when that provider is chosen. */
 export const PARADISE_GATEWAY_DEFAULTS = {
-  baseUrl: "https://paradisemodern.com",
+  baseUrl: PARADISE_DEFAULT_URL,
   model: "pm-brain:quality",
   credentialRef: "PARADISEMODERN_API_KEY",
 } as const;
@@ -52,7 +54,7 @@ export function builderGatewayTarget(provider: GatewayProvider): GatewayTarget {
     const apiKey = current.PARADISEMODERN_API_KEY;
     return {
       apiKey,
-      baseUrl: current.PARADISEMODERN_URL ?? PARADISE_GATEWAY_DEFAULTS.baseUrl,
+      baseUrl: paradiseBaseUrl(current.PARADISEMODERN_URL),
       model: PARADISE_GATEWAY_DEFAULTS.model,
       missing: apiKey ? [] : ["PARADISEMODERN_API_KEY"],
     };
@@ -72,11 +74,44 @@ export function builderGatewayTarget(provider: GatewayProvider): GatewayTarget {
   };
 }
 
-/** Request headers for one gateway call. */
-export function gatewayAuthHeaders(provider: GatewayProvider, apiKey: string): Record<string, string> {
-  // Paradise authenticates with a per-site `x-api-key`; OpenAI-compatible
-  // gateways take a bearer token.
-  return provider === "paradise" ? { "x-api-key": apiKey } : { authorization: `Bearer ${apiKey}` };
+/**
+ * Request headers for one gateway call.
+ *
+ * Paradise authenticates with a per-site `x-api-key` and meters the call
+ * against `PARADISEMODERN_PROJECT` (it refuses a call naming no project it
+ * knows); OpenAI-compatible gateways take a bearer token and nothing else.
+ */
+export function gatewayAuthHeaders(
+  provider: GatewayProvider,
+  apiKey: string,
+  options: { project?: boolean } = {},
+): Record<string, string> {
+  if (provider !== "paradise") return { authorization: `Bearer ${apiKey}` };
+  // The project names this site's Paradise account; it goes to the configured
+  // PARADISEMODERN_URL origin only, never to a connection's own host.
+  return { "x-api-key": apiKey, ...(options.project === false ? {} : paradiseProjectHeaders()) };
+}
+
+/**
+ * The chat-completions endpoint under a configured base URL.
+ *
+ * Settings name the origin the `/v1/...` path is appended to, but owners
+ * paste the provider's documented base, which usually already ends in `/v1`;
+ * appending again produced `/v1/v1/chat/completions`. One trailing `/v1` is
+ * therefore treated as part of the path, not of the base.
+ */
+export function chatCompletionsUrl(baseUrl: string): string {
+  return `${baseUrl.trim().replace(/\/+$/, "").replace(/\/v1$/i, "")}/v1/chat/completions`;
+}
+
+/**
+ * The chat-completions endpoint at the configured Paradise Modern origin,
+ * through the same rule every other Paradise call obeys: `https://` only
+ * (loopback excepted), no credentials or query in the base, and a path that
+ * cannot leave that origin. Throws a plain refusal otherwise.
+ */
+export function paradiseChatCompletionsUrl(baseUrl: string): string {
+  return paradiseUrl(paradiseBaseUrl(baseUrl), "/v1/chat/completions");
 }
 
 function usage(value: {
@@ -111,9 +146,13 @@ export function gatewayBuilderAdapter(provider: GatewayProvider): BuilderAgentAd
       let response: Response;
       try {
         response = await (fetchImpl ?? fetch)(
-          `${target.baseUrl.replace(/\/+$/, "")}/v1/chat/completions`,
+          provider === "paradise"
+            ? paradiseChatCompletionsUrl(target.baseUrl)
+            : chatCompletionsUrl(target.baseUrl),
           {
             method: "POST",
+            // A redirect would carry the key to wherever it pointed.
+            redirect: "error",
             headers: {
               "content-type": "application/json",
               ...gatewayAuthHeaders(provider, target.apiKey),

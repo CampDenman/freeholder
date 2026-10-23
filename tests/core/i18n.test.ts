@@ -7,12 +7,26 @@ import {
   formatDateTime,
   formatMoney,
   t,
+  zoneLabel,
 } from "@/core/i18n";
 import {
   localizeCustomerHref,
   localePath,
   resolveEnabledLocale,
 } from "@/core/i18n/customer";
+
+describe("zoneLabel()", () => {
+  it("names a zone the way a visitor says it, for the instant shown (2026-10-23 demo audit)", () => {
+    const summer = new Date("2026-07-01T18:00:00Z");
+    const winter = new Date("2026-12-01T18:00:00Z");
+    expect(zoneLabel("America/Vancouver", "en", summer)).toBe("Pacific Daylight Time (Vancouver)");
+    expect(zoneLabel("America/Vancouver", "en", winter)).toBe("Pacific Standard Time (Vancouver)");
+    expect(zoneLabel("America/Vancouver", "fr", summer)).not.toContain("America/");
+    expect(zoneLabel("UTC", "en", summer)).toBe("Coordinated Universal Time");
+    // An id the runtime does not know is shown as given rather than thrown.
+    expect(zoneLabel("Not/AZone", "en", summer)).toBe("Not/AZone");
+  });
+});
 
 describe("t()", () => {
   it("formats ICU plurals, including the zero case", () => {

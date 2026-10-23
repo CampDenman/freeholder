@@ -6,6 +6,8 @@
 // anything that *uses* env at runtime gets a plain-English failure instead.
 import { z } from "zod";
 import { normalizeAgentProviderId } from "../adapters/agent/aliases";
+import { FORM_SCREENING_PROVIDERS } from "../adapters/form-screening/types";
+import { LEAD_SINK_PROVIDERS } from "../adapters/lead-sink/types";
 
 const envSchema = z.object({
   NODE_ENV: z
@@ -298,7 +300,42 @@ const envSchema = z.object({
   AGENT_GATEWAY_MODEL: z.string().trim().min(1).max(200).optional(),
   /** `paradise`: purpose-bound Paradise Modern site credential (optional provider). */
   PARADISEMODERN_API_KEY: z.string().trim().min(1).optional(),
-  PARADISEMODERN_URL: z.string().url().optional(),
+  /** `https://` only, or `http://` on a loopback host for tests and local work. */
+  PARADISEMODERN_URL: z
+    .string()
+    .url()
+    .refine((value) => {
+      const url = new URL(value);
+      return (
+        url.protocol === "https:" ||
+        (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+      );
+    }, "must be an https:// address (http:// only for localhost)")
+    .optional(),
+  /**
+   * The project Paradise's model gateway meters calls against, sent as
+   * `x-pm-project` by the builder and workforce when Paradise is the chosen
+   * gateway. Paradise refuses a gateway call naming no project it knows.
+   */
+  // Sent exactly as written: Paradise issued ids before its lowercase-slug
+  // convention, so uppercase letters and underscores are accepted too.
+  PARADISEMODERN_PROJECT: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/)
+    .max(64)
+    .optional(),
+  /**
+   * The form-screening category (C3.33): a second opinion on anonymous public
+   * form submissions that can only add a quarantine reason. `none` (default)
+   * or one adapter; Freeholder's own traps always run.
+   */
+  FORM_SCREENING_PROVIDER: z.enum(FORM_SCREENING_PROVIDERS).optional(),
+  /**
+   * The lead-sink category (C3.34): copy accepted form submissions to an
+   * outside CRM after commit. A switch of its own, `none` by default.
+   */
+  LEAD_SINK_PROVIDER: z.enum(LEAD_SINK_PROVIDERS).optional(),
   /** Visible, hard monthly cap for builder model usage. */
   BUILDER_MONTHLY_TOKEN_BUDGET: z.string().regex(/^\d+$/).default("250000"),
   /** Per-proposal output ceiling; the adapter never gets an open-ended call. */

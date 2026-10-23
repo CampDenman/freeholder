@@ -23,6 +23,10 @@ import { setAvailability } from "@/core/scheduling/availability-service";
 import { createAudience, setAudienceServices } from "@/core/scheduling/audiences";
 import { availableSlots } from "@/core/scheduling/resolver-service";
 import { bookings } from "@/core/scheduling/schema";
+import { bookingByToken } from "@/core/scheduling/bookings";
+import { PLAYGROUND_BASELINE_MODULE, PLAYGROUND_FICTIONAL_BOOKING_EMAIL, PLAYGROUND_ROW_CAPS } from "@/core/demo/playground-policy";
+import { moduleSettings } from "@/core/settings/schema";
+import { chosenSlot } from "../../app/(public)/book/chosen";
 import { hasAccess } from "@/core/entitlements/service";
 import { productVariants, products, priceLists, priceListEntries } from "@/modules/catalog/schema";
 import { upsertServiceOffering, setPriceRule } from "@/modules/catalog/offerings";
@@ -119,6 +123,78 @@ describe.runIf(hasDatabase)("public customer surfaces",()=>{
     expect(moved.id).not.toBe(reserved.bookingId);
     await actOnMyRecord.call({section:"bookings",id:moved.id,action:"cancel"},CUSTOMER);
     expect((await myRecord.call({section:"bookings",id:moved.id},CUSTOMER)).status).toBe("cancelled");
+  });
+  it("reserves a public-playground time for a made-up address and refuses a real-looking one (C1.38)",async()=>{
+    const {input}=await bookingSelection();
+    vi.stubEnv("FREEHOLDER_PLAYGROUND","1"); resetEnvForTests();
+    // A real-looking inbox is refused with the demo's own instruction, and nothing is written…
+    expect(await failure(bookPublicService.call({...input,email:"ada@gmail.com"},ANONYMOUS))).toMatchObject({code:"validation",message:PLAYGROUND_FICTIONAL_BOOKING_EMAIL});
+    expect(await db().select().from(bookings)).toHaveLength(0);
+    expect(await db().select().from(contacts).where(eq(contacts.email,"ada@gmail.com"))).toHaveLength(0);
+    // …and a reserved one, which nobody can receive at, books straight away.
+    const guest=await bookPublicService.call({...input,email:"Ada@Example.com",name:"Ada"},ANONYMOUS);
+    const [contact]=await db().select().from(contacts).where(eq(contacts.email,"ada@example.com"));
+    const [row]=await db().select().from(bookings);
+    expect(row).toMatchObject({id:guest.bookingId,contactId:contact!.id,rescheduleToken:guest.manageToken});
+    expect(guest.manageToken).toMatch(/^[\w-]{20,}$/);
+    // The retry converges on the same reservation, and the link is a real confirmation.
+    expect(await bookPublicService.call({...input,email:"ada@example.com"},ANONYMOUS)).toEqual(guest);
+    expect((await bookingByToken.call({token:guest.manageToken!},ANONYMOUS))?.status).toBe("requested");
+  });
+  it("refuses a playground guest booking once the bookings surface is full (C1.38)",async()=>{
+    const {input}=await bookingSelection();
+    vi.stubEnv("FREEHOLDER_PLAYGROUND","1"); resetEnvForTests();
+    // The cap counts growth over the installed sample: record a baseline that
+    // leaves this table already at its cap, as 300 earlier guest bookings would.
+    const cap=PLAYGROUND_ROW_CAPS["catalog.bookService"]!.limit;
+    await db().insert(moduleSettings).values({module:PLAYGROUND_BASELINE_MODULE,config:{baseline:{bookings:-cap}}});
+    const full=await failure(bookPublicService.call({...input,email:"ada@example.com"},ANONYMOUS));
+    expect(full.code).toBe("rate_limited"); expect(full.message).toMatch(/surface is full/);
+    expect(await db().select().from(bookings)).toHaveLength(0);
+  });
+  it("ignores a tampered chosen time in the /book address, and the service refuses it too",async()=>{
+    const {input,slots}=await bookingSelection();
+    const real=slots[1]!;
+    expect(chosenSlot(slots,real.calendarId,real.startsAt.toISOString())).toBe(real);
+    // A calendar that is not offered, a time that is not open, or half a choice is no choice.
+    expect(chosenSlot(slots,randomUUID(),real.startsAt.toISOString())).toBeUndefined();
+    expect(chosenSlot(slots,real.calendarId,"2026-01-01T03:00:00.000Z")).toBeUndefined();
+    expect(chosenSlot(slots,real.calendarId,new Date(real.startsAt.getTime()+60_000).toISOString())).toBeUndefined();
+    expect(chosenSlot(slots,real.calendarId,undefined)).toBeUndefined();
+    // Posting the tampered time straight to the service does not book it.
+    vi.stubEnv("FREEHOLDER_PLAYGROUND","1"); resetEnvForTests();
+    const night=new Date(`${DAY}T03:00:00.000Z`).toISOString();
+    expect(["conflict","validation"]).toContain((await failure(bookPublicService.call({...input,startsAt:night,email:"ada@example.com"},ANONYMOUS))).code);
+    expect(await db().select().from(bookings)).toHaveLength(0);
+  });
+  it("limits playground guest bookings per client, not per typed address (C1.38)",async()=>{
+    const {input}=await bookingSelection();
+    vi.stubEnv("FREEHOLDER_PLAYGROUND","1"); resetEnvForTests();
+    const script={...ANONYMOUS,request:{trustedIp:"203.0.113.5"}};
+    const neighbour={...ANONYMOUS,request:{trustedIp:"203.0.113.6"}};
+    // A fresh made-up address each time must not buy a fresh budget.
+    let refusal:{code?:string;message?:string}|undefined;
+    let attempts=0;
+    for(;attempts<20&&!refusal;attempts++){
+      await bookPublicService.call({...input,requestKey:randomUUID(),email:`guest${attempts}@example.com`},script).catch((error:unknown)=>{
+        const e=error as {code?:string;message?:string};
+        if(e.code==="rate_limited") refusal=e;
+      });
+    }
+    expect(refusal).toMatchObject({code:"rate_limited",message:"Please wait before trying this reservation again."});
+    expect(attempts).toBe(11);
+    // Another connection still has its own budget.
+    expect((await failure(bookPublicService.call({...input,requestKey:randomUUID(),email:"other@example.com"},neighbour))).code).not.toBe("rate_limited");
+  });
+  it("still demands a signed-in customer outside the playground, even for a made-up address",async()=>{
+    const {input}=await bookingSelection();
+    vi.stubEnv("FREEHOLDER_PLAYGROUND","0"); resetEnvForTests();
+    expect((await failure(bookPublicService.call({...input,email:"ada@example.com"},ANONYMOUS))).code).toBe("permission");
+    expect(await db().select().from(bookings)).toHaveLength(0);
+    // A signed-in customer's own address is the one used; a typed one is ignored.
+    const reserved=await bookPublicService.call({...input,email:"ada@example.com"},CUSTOMER);
+    expect(reserved.manageToken).toBeNull();
+    expect((await db().select().from(bookings))[0]?.contactId).toBe(contactId);
   });
   it("refuses an owner duration change after a customer accepted the original appointment",async()=>{
     const {input}=await bookingSelection();

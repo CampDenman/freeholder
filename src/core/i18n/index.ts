@@ -13,6 +13,7 @@ import {
   isSelectElement,
   isTagElement,
 } from "@formatjs/icu-messageformat-parser";
+import { renderableTimezone } from "./zoned";
 import en from "../../../locales/en.json";
 import es from "../../../locales/es.json";
 import fr from "../../../locales/fr.json";
@@ -270,6 +271,58 @@ export function moneyDecimal(
   const whole = digits.slice(0, digits.length - exponent);
   const fraction = digits.slice(digits.length - exponent);
   return `${sign}${whole}${fraction ? `.${fraction}` : ""}`;
+}
+
+const RANGE_PARTS: Intl.DateTimeFormatOptions = {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZoneName: "short",
+};
+
+/**
+ * A start–end span as a visitor reads it, in the zone it happens in: "Sun,
+ * Nov 8, 4:00 – 6:00 PM PST". `formatRange` drops what the two ends share,
+ * so a same-day span names its day once and a span past midnight names both.
+ */
+export function formatDateTimeRange(
+  start: Date,
+  end: Date,
+  timezone: string,
+  locale: string = DEFAULT_LOCALE,
+): string {
+  return new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: renderableTimezone(timezone).timezone })
+    .formatRange(start, end);
+}
+
+/** One instant in the same reading, for a picker option or a list line. */
+export function formatDateTimeShort(utc: Date, timezone: string, locale: string = DEFAULT_LOCALE): string {
+  return new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: renderableTimezone(timezone).timezone })
+    .format(utc);
+}
+
+/**
+ * A time zone as a visitor says it — "Pacific Daylight Time (Vancouver)" —
+ * rather than its IANA id. Named for the instant shown, so daylight saving
+ * reads correctly; an id the runtime does not know is shown as given.
+ */
+export function zoneLabel(
+  timezone: string,
+  locale: string = DEFAULT_LOCALE,
+  at: Date = new Date(),
+): string {
+  let name: string;
+  try {
+    name = new Intl.DateTimeFormat(locale, { timeZone: timezone, timeZoneName: "long" })
+      .formatToParts(at)
+      .find((part) => part.type === "timeZoneName")?.value ?? timezone;
+  } catch {
+    return timezone;
+  }
+  const city = timezone.includes("/") ? timezone.split("/").at(-1)!.replace(/_/g, " ") : "";
+  return city && !name.includes(city) ? `${name} (${city})` : name;
 }
 
 /** Store UTC, display in an explicit timezone (§4.9 timezone discipline). */

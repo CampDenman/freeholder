@@ -7,7 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { mailDeliveries } from "@/core/mail/schema";
 import { pages } from "@/modules/cms/schema";
-import { publishedPaths } from "@/modules/cms/service";
+import { ensureDefaults, publishedPaths } from "@/modules/cms/service";
 import { updateBusiness } from "@/core/settings/service";
 import {
   addEventSession,
@@ -17,12 +17,13 @@ import {
   createEvent,
   eventCalendar,
   expireHeldRegistrations,
+  listPublicEvents,
   onInvoiceRefunded,
   publishEvent,
   registerForEvent,
   resolvePublicEvent,
 } from "@/modules/events/service";
-import { eventRegistrations } from "@/modules/events/schema";
+import { eventRegistrations, events } from "@/modules/events/schema";
 import {
   createPayment,
   failPayment,
@@ -130,6 +131,50 @@ describe.runIf(hasDatabase)("events module", { timeout: 30_000 }, () => {
     expect(ics).toContain("BEGIN:VEVENT");
     expect(ics).toContain("SUMMARY:Coast workshop");
     expect(ics).toContain("LOCATION:Studio 3\\, 210 Fifth Street\\, Courtenay");
+  });
+
+  it("builds an event page from its title and the event, with no landing-page placeholder", async () => {
+    // The seeded templates, as every real site has them.
+    await ensureDefaults.call({}, OWNER);
+    const event = await createEvent.call({ name: "Print walk", slug: "print-walk" }, OWNER);
+    await publishEvent.call({ id: event.id, expectedVersion: event.version }, OWNER);
+    const [page] = await db().select().from(pages).where(eq(pages.slug, "events/print-walk"));
+    const blocks = page!.blocks as Array<{ type: string; props: Record<string, unknown> }>;
+    expect(blocks.map((block) => block.type)).toEqual(["heading", "eventDetail"]);
+    expect(blocks[0]!.props.text).toBe("Print walk");
+    expect(JSON.stringify(blocks)).not.toContain("block tree");
+  });
+
+  it("lists only events with a live page: upcoming first, finished ones marked past", async () => {
+    const hour = 60 * 60 * 1000;
+    async function published(slug: string, startsAt: Date) {
+      const event = await createEvent.call({ name: slug, slug }, OWNER);
+      await addEventSession.call(
+        { eventId: event.id, startsAt, endsAt: new Date(startsAt.getTime() + 2 * hour), capacity: 5, waitlistEnabled: false },
+        OWNER,
+      );
+      return publishEvent.call({ id: event.id, expectedVersion: event.version }, OWNER);
+    }
+    await published("later", new Date(Date.now() + 72 * hour));
+    await published("sooner", new Date(Date.now() + 24 * hour));
+    await published("finished", new Date(Date.now() - 72 * hour));
+    // Published without a page — the state the busy demo's bulk insert left
+    // its past events in. The list must not link to a 404.
+    await db().insert(events).values({ name: "Orphan", slug: "orphan", status: "published", publishedAt: new Date() });
+
+    const listed = await listPublicEvents.call({}, ANONYMOUS);
+    expect(listed.map((event) => event.slug)).toEqual(["sooner", "later", "finished"]);
+    expect(listed[0]!.nextStartsAt).toBeInstanceOf(Date);
+    expect(listed[0]!.nextTimezone).toBeTruthy();
+    expect(listed[0]!.endedAt).toBeNull();
+    expect(listed[2]!.endedAt).toBeInstanceOf(Date);
+    expect(listed[2]!.nextStartsAt).toBeNull();
+
+    // A finished event keeps a viewable page, in the sitemap like the rest.
+    const paths = await publishedPaths.call({ locale: "en" }, ANONYMOUS);
+    expect(paths.map((entry) => entry.slug)).toEqual(expect.arrayContaining(["events/finished"]));
+    expect(paths.map((entry) => entry.slug)).not.toContain("events/orphan");
+    expect(await resolvePublicEvent.call({ slug: "finished" }, ANONYMOUS)).toMatchObject({ slug: "finished" });
   });
 });
 
@@ -567,13 +612,134 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     const input = { eventId: event.id, sessionId: session.id, ticketId: ticket.id, email: "twice@example.test" };
     const first = await registerForEvent.call(input, ANONYMOUS);
     expect(first.registration.status).toBe("reserved");
-    expect(await failure(registerForEvent.call(input, ANONYMOUS))).toMatchObject({ code: "conflict" });
+    // A different ask from the same person is a conflict, not a second seat.
+    expect(await failure(registerForEvent.call({ ...input, quantity: 2 }, ANONYMOUS))).toMatchObject({ code: "conflict" });
 
     // Cancelling frees the person to register again.
     await cancelRegistration.call({ id: first.registration.id }, OWNER);
     const second = await registerForEvent.call(input, ANONYMOUS);
     expect(second.registration.status).toBe("reserved");
     expect(second.registration.id).not.toBe(first.registration.id);
+  });
+
+  it("answers a repeated paid submit with the same hold and invoice, not a failure or a second invoice", async () => {
+    // 2026-10-23 audit: a double submit of "Register and pay" created the hold
+    // and invoice, then the twin request reported failure=invalid. The same
+    // rendered form repeats its token, so the repeat is recognised.
+    const { event, session, ticket } = await paidClass(8);
+    const input = {
+      eventId: event.id,
+      sessionId: session.id,
+      ticketId: ticket.id,
+      email: "ada@example.test",
+      name: "Ada Example",
+      submissionToken: "form-token-ada-0123456789",
+    };
+    const [first, second] = await Promise.all([
+      registerForEvent.call(input, ANONYMOUS),
+      registerForEvent.call(input, ANONYMOUS),
+    ]);
+    expect(second.registration.id).toBe(first.registration.id);
+    expect(second.paymentUrl).toBe(first.paymentUrl);
+    expect(first.paymentUrl).toContain(`/portal/invoices/${first.registration.invoiceId}?token=`);
+    // The token's hash is the service's own business.
+    expect(first.registration).not.toHaveProperty("submissionTokenHash", expect.anything());
+    const third = await registerForEvent.call(input, ANONYMOUS);
+    expect(third.registration.id).toBe(first.registration.id);
+
+    const rows = await db().select().from(eventRegistrations).where(eq(eventRegistrations.sessionId, session.id));
+    expect(rows).toHaveLength(1);
+    const issued = await db().select().from(invoices).where(eq(invoices.sourceId, first.registration.id));
+    expect(issued).toHaveLength(1);
+    const view = await resolvePublicEvent.call({ slug: event.slug }, ANONYMOUS);
+    expect(view?.sessions[0]?.remaining).toBe(7);
+
+    // Once the hold has lapsed the same ask is no longer a replay.
+    await db()
+      .update(eventRegistrations)
+      .set({ holdExpiresAt: new Date(Date.now() - 1_000) })
+      .where(eq(eventRegistrations.id, first.registration.id));
+    expect(await failure(registerForEvent.call(input, ANONYMOUS))).toMatchObject({ code: "conflict" });
+  });
+
+  it("never hands a paid registration's invoice to someone who only knows the email", async () => {
+    const { event, session, ticket } = await paidClass(8);
+    const base = { eventId: event.id, sessionId: session.id, ticketId: ticket.id, email: "victim@example.test" };
+    const first = await registerForEvent.call(
+      { ...base, name: "Real Person", submissionToken: "the-victims-own-form-token" },
+      ANONYMOUS,
+    );
+    expect(first.paymentUrl).toBeTruthy();
+    // Another browser: a different form token, or none at all.
+    for (const attempt of [{ ...base, submissionToken: "a-strangers-form-token-xx" }, base]) {
+      const refused = await failure(registerForEvent.call(attempt, ANONYMOUS));
+      // The same refusal a full or closed session gets: nothing to tell apart.
+      expect(refused.code).toBe("conflict");
+      expect(JSON.stringify(refused)).not.toContain("/portal/invoices/");
+      expect(refused.message).not.toContain("/portal/invoices/");
+    }
+    expect(await db().select().from(invoices).where(eq(invoices.sourceId, first.registration.id))).toHaveLength(1);
+    expect(await db().select().from(eventRegistrations).where(eq(eventRegistrations.sessionId, session.id))).toHaveLength(1);
+  });
+
+  it("counts refused public attempts toward the rate limit", async () => {
+    const { event, session, ticket } = await paidClass(8);
+    const base = { eventId: event.id, sessionId: session.id, ticketId: ticket.id, email: "probe@example.test" };
+    await registerForEvent.call({ ...base, submissionToken: "the-owners-form-token-0001" }, ANONYMOUS);
+    const codes: string[] = [];
+    for (let attempt = 0; attempt < 45; attempt += 1) {
+      codes.push((await failure(registerForEvent.call(base, ANONYMOUS))).code);
+    }
+    // Refusals roll their transaction back, but the attempt still counted.
+    expect(codes.slice(0, 39).every((code) => code === "conflict")).toBe(true);
+    expect(codes.at(-1)).toBe("rate_limited");
+  });
+
+  it("refuses a session time zone Intl does not know", async () => {
+    const event = await createEvent.call({ name: "Zone typo", slug: "zone-typo" }, OWNER);
+    const startsAt = new Date(Date.now() + 86_400_000);
+    expect(
+      await failure(
+        addEventSession.call(
+          { eventId: event.id, startsAt, endsAt: new Date(startsAt.getTime() + 3_600_000), capacity: 4, timezone: "America/Vancuver" },
+          OWNER,
+        ),
+      ),
+    ).toMatchObject({ code: "validation" });
+  });
+
+  it("answers a repeated free submit with the same confirmed seat", async () => {
+    const { event, session, ticket } = await paidClass(4, 0);
+    const input = {
+      eventId: event.id,
+      sessionId: session.id,
+      ticketId: ticket.id,
+      email: "free@example.test",
+      submissionToken: "form-token-free-0123456789",
+    };
+    const first = await registerForEvent.call(input, ANONYMOUS);
+    const again = await registerForEvent.call(input, ANONYMOUS);
+    expect(again).toMatchObject({ paymentUrl: null, registration: { id: first.registration.id, status: "confirmed" } });
+  });
+
+  it("writes nothing when a paid registration is refused", async () => {
+    const event = await createEvent.call({ name: "Tiny class", slug: "tiny-class" }, OWNER);
+    const startsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const session = await addEventSession.call(
+      { eventId: event.id, startsAt, endsAt: new Date(startsAt.getTime() + 3_600_000), capacity: 1, waitlistEnabled: false },
+      OWNER,
+    );
+    const ticket = await addEventTicket.call({ eventId: event.id, name: "Seat", priceMinor: 9_000, currency: "CAD" }, OWNER);
+    await publishEvent.call({ id: event.id, expectedVersion: event.version }, OWNER);
+    const base = { eventId: event.id, sessionId: session.id, ticketId: ticket.id };
+    await registerForEvent.call({ ...base, email: "first@example.test" }, ANONYMOUS);
+    const before = await db().select().from(invoices);
+
+    expect(await failure(registerForEvent.call({ ...base, email: "late@example.test", name: "Late" }, ANONYMOUS)))
+      .toMatchObject({ code: "conflict" });
+    expect(await db().select().from(contacts).where(eq(contacts.email, "late@example.test"))).toHaveLength(0);
+    expect(await db().select().from(invoices)).toHaveLength(before.length);
+    expect(await db().select().from(eventRegistrations).where(eq(eventRegistrations.sessionId, session.id))).toHaveLength(1);
   });
 
   it("caps the free seats one public registration can take, but not staff's (C11.10)", async () => {

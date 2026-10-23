@@ -263,6 +263,42 @@ describe("the openai-compatible workforce adapter", () => {
     expect(result.stop).toBe("end");
   });
 
+  it("sends Paradise's project header on workforce turns and only to Paradise", async () => {
+    const prior = process.env.PARADISEMODERN_PROJECT;
+    process.env.PARADISEMODERN_PROJECT = "example-site";
+    resetEnvForTests();
+    const seen: Array<{ url: string; headers: Record<string, string>; redirect?: RequestRedirect }> = [];
+    setWorkforceOpenAiFetchForTests(async (url, init) => {
+      seen.push({ url, headers: init.headers as Record<string, string>, redirect: init.redirect });
+      return jsonResponse({ choices: [{ finish_reason: "stop", message: { content: "Done." } }] });
+    });
+    try {
+      await openAiCompatibleWorkforceAdapter({
+        id: "paradise",
+        apiKey: "pm-key",
+        credentialRef: "PARADISEMODERN_API_KEY",
+        baseUrl: "https://gateway.example.test/v1",
+        model: null,
+      }).turn(turnRequest({ model: "pm-brain:quality" }));
+      await openAiCompatibleWorkforceAdapter({
+        id: "gateway",
+        apiKey: "gw-key",
+        credentialRef: "AGENT_GATEWAY_API_KEY",
+        baseUrl: "https://llm.example.test/v1/",
+        model: "open-model-7b",
+      }).turn(turnRequest({ model: "open-model-7b" }));
+    } finally {
+      if (prior === undefined) delete process.env.PARADISEMODERN_PROJECT;
+      else process.env.PARADISEMODERN_PROJECT = prior;
+      resetEnvForTests();
+    }
+    expect(seen[0]?.url).toBe("https://gateway.example.test/v1/chat/completions");
+    expect(seen[0]?.headers["x-pm-project"]).toBe("example-site");
+    expect(seen[1]?.url).toBe("https://llm.example.test/v1/chat/completions");
+    expect(seen[1]?.headers["x-pm-project"]).toBeUndefined();
+    expect(seen.every((call) => call.redirect === "error")).toBe(true);
+  });
+
   it("refuses tool arguments that are not valid JSON", async () => {
     setWorkforceOpenAiFetchForTests(async () =>
       jsonResponse({
@@ -297,6 +333,7 @@ describe("the §37 builder's provider choice (owner decision 2026-10-22)", () =>
     "AGENT_GATEWAY_MODEL",
     "PARADISEMODERN_API_KEY",
     "PARADISEMODERN_URL",
+    "PARADISEMODERN_PROJECT",
   ] as const;
   const prior = Object.fromEntries(BUILDER_ENV.map((name) => [name, process.env[name]]));
   const proposal = {
@@ -383,6 +420,38 @@ describe("the §37 builder's provider choice (owner decision 2026-10-22)", () =>
 
   it("is off with no configuration at all", () => {
     expect(builderAgent().id).toBe("none");
+  });
+
+  it("sends Paradise's project header and never builds /v1/v1 from a base ending in /v1", async () => {
+    process.env.FREEHOLDER_AGENT = "paradise";
+    process.env.PARADISEMODERN_API_KEY = "pm-key";
+    process.env.PARADISEMODERN_URL = "https://gateway.example.test/v1/";
+    process.env.PARADISEMODERN_PROJECT = "example-site";
+    resetEnvForTests();
+    let redirect: RequestRedirect | undefined;
+    setBuilderAgentFetchForTests(async (url, init) => {
+      redirect = init.redirect;
+      seen = { url, headers: init.headers as Record<string, string>, body: {} };
+      return jsonResponse({
+        choices: [{ message: { tool_calls: [{ function: { name: "propose", arguments: "{}" } }] } }],
+      });
+    });
+    await builderAgent().propose(proposal);
+    expect(seen?.url).toBe("https://gateway.example.test/v1/chat/completions");
+    expect(seen?.headers["x-pm-project"]).toBe("example-site");
+    expect(redirect).toBe("error");
+  });
+
+  it("keeps the project header away from a neutral gateway, and strips its /v1 too", async () => {
+    process.env.FREEHOLDER_AGENT = "gateway";
+    process.env.AGENT_GATEWAY_URL = "https://llm.example.test/v1";
+    process.env.AGENT_GATEWAY_API_KEY = "gw-key";
+    process.env.AGENT_GATEWAY_MODEL = "open-model-7b";
+    process.env.PARADISEMODERN_PROJECT = "example-site";
+    resetEnvForTests();
+    await builderAgent().propose(proposal);
+    expect(seen?.url).toBe("https://llm.example.test/v1/chat/completions");
+    expect(seen?.headers["x-pm-project"]).toBeUndefined();
   });
 });
 
@@ -473,6 +542,59 @@ describe("workforce adapter selection", () => {
     } finally {
       delete process.env.AGENT_GATEWAY_URL;
       delete process.env.AGENT_GATEWAY_API_KEY;
+      resetEnvForTests();
+    }
+  });
+
+  it("sends the Paradise key and project only to the PARADISEMODERN_URL origin", async () => {
+    const names = ["PARADISEMODERN_API_KEY", "PARADISEMODERN_URL", "PARADISEMODERN_PROJECT", "TEST_OWN_PM_KEY"] as const;
+    const before = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+    process.env.PARADISEMODERN_API_KEY = "instance-pm-key";
+    process.env.PARADISEMODERN_URL = "https://pm.example.test/v1";
+    process.env.PARADISEMODERN_PROJECT = "example-site";
+    process.env.TEST_OWN_PM_KEY = "own-key";
+    resetEnvForTests();
+    const seen: Array<{ url: string; headers: Record<string, string> }> = [];
+    setWorkforceOpenAiFetchForTests(async (url, init) => {
+      seen.push({ url, headers: init.headers as Record<string, string> });
+      return jsonResponse({ choices: [{ finish_reason: "stop", message: { content: "Done." } }] });
+    });
+    try {
+      // No base URL: the configured origin, not a hardcoded default.
+      const instance = workforceAdapter({ adapter: "paradise", model: null, credentialRef: null, baseUrl: null });
+      await instance.turn(turnRequest({ model: "pm-brain:quality" }));
+      expect(seen[0]?.url).toBe("https://pm.example.test/v1/chat/completions");
+      expect(seen[0]?.headers["x-api-key"]).toBe("instance-pm-key");
+      expect(seen[0]?.headers["x-pm-project"]).toBe("example-site");
+
+      // Another host without its own credential never borrows the site key.
+      const borrowing = workforceAdapter({
+        adapter: "paradise",
+        model: null,
+        credentialRef: null,
+        baseUrl: "https://elsewhere.example.test",
+      });
+      expect(borrowing.configured).toBe(false);
+      await expect(borrowing.turn(turnRequest())).rejects.toThrow(/credential of its own/);
+      expect(seen).toHaveLength(1);
+
+      // With its own credential it gets that key, and never the project.
+      const own = workforceAdapter({
+        adapter: "paradise",
+        model: null,
+        credentialRef: "TEST_OWN_PM_KEY",
+        baseUrl: "https://elsewhere.example.test",
+      });
+      await own.turn(turnRequest({ model: "pm-brain:quality" }));
+      expect(seen[1]?.url).toBe("https://elsewhere.example.test/v1/chat/completions");
+      expect(seen[1]?.headers["x-api-key"]).toBe("own-key");
+      expect(seen[1]?.headers["x-pm-project"]).toBeUndefined();
+      expect(JSON.stringify(seen[1])).not.toContain("instance-pm-key");
+    } finally {
+      for (const name of names) {
+        if (before[name] === undefined) delete process.env[name];
+        else process.env[name] = before[name];
+      }
       resetEnvForTests();
     }
   });

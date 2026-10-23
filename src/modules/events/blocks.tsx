@@ -1,11 +1,12 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import { z } from "zod";
-import { formatMoney } from "@/core/i18n";
+import { formatDateTimeRange, formatDateTimeShort, formatMoney } from "@/core/i18n";
 import { defineBlock } from "@/modules/cms/blocks/types";
 import { env } from "@/core/env";
 import { failureFromQuery, failureMessageKey } from "@/core/http/public-form-return";
 import { registerForEventAction } from "../../../app/(public)/event-actions";
+import { SubmissionTokenField } from "./SubmissionTokenField";
 
 export const eventsIndex = defineBlock({
   type: "eventsIndex",
@@ -19,20 +20,45 @@ export const eventsIndex = defineBlock({
   },
   render: ({ resolved, ctx }) => {
     if (!resolved || resolved.length === 0) return null;
+    // A finished event keeps its page — people link to it, and it is the
+    // record that the class happened — but it is filed under "Past events"
+    // rather than offered alongside the ones still open.
+    const upcoming = resolved.filter((event) => !event.endedAt);
+    const past = resolved.filter((event) => event.endedAt);
+    const item = (event: (typeof resolved)[number]) => (
+      <li key={event.id} className="border-b border-rule pb-4 last:border-0">
+        <a
+          href={ctx.localizeHref?.(`/events/${event.slug}`) ?? `/events/${event.slug}`}
+          className="font-semibold text-ink"
+        >
+          {event.name}
+        </a>
+        {event.nextStartsAt && event.nextEndsAt && event.nextTimezone ? (
+          <p className="mt-1 text-sm text-ink-muted">
+            <time dateTime={event.nextStartsAt.toISOString()}>
+              {formatDateTimeRange(event.nextStartsAt, event.nextEndsAt, event.nextTimezone, ctx.locale)}
+            </time>
+          </p>
+        ) : null}
+        {event.summary ? <p className="mt-1 text-sm text-ink-muted">{event.summary}</p> : null}
+      </li>
+    );
     return (
-      <ul className="grid list-none gap-4 p-0">
-        {resolved.map((event) => (
-          <li key={event.id} className="border-b border-rule pb-4 last:border-0">
-            <a
-              href={ctx.localizeHref?.(`/events/${event.slug}`) ?? `/events/${event.slug}`}
-              className="font-semibold text-ink"
-            >
-              {event.name}
-            </a>
-            {event.summary ? <p className="mt-1 text-sm text-ink-muted">{event.summary}</p> : null}
-          </li>
-        ))}
-      </ul>
+      <div className="grid gap-8">
+        {upcoming.length > 0 ? (
+          <ul className="grid list-none gap-4 p-0">{upcoming.map(item)}</ul>
+        ) : (
+          <p className="text-ink-muted">{ctx.t("events.index.noneUpcoming")}</p>
+        )}
+        {past.length > 0 ? (
+          <section aria-labelledby="events-past-heading" className="grid gap-4">
+            <h2 id="events-past-heading" className="text-xl font-semibold text-ink">
+              {ctx.t("events.index.past")}
+            </h2>
+            <ul className="grid list-none gap-4 p-0">{past.map(item)}</ul>
+          </section>
+        ) : null}
+      </div>
     );
   },
 });
@@ -83,19 +109,31 @@ export const eventDetail = defineBlock({
     return (
       <div className="grid gap-3">
         {resolved.summary ? <p className="text-lg text-ink-muted">{resolved.summary}</p> : null}
+        {resolved.status === "published" &&
+        resolved.sessions.length > 0 &&
+        resolved.sessions.every((session) => session.endsAt.getTime() <= Date.now()) ? (
+          <p className="text-sm font-semibold text-ink-muted">{ctx.t("events.ended")}</p>
+        ) : null}
         {venue ? <p className="text-sm text-ink-muted">{venue}</p> : null}
         {resolved.sessions.length > 0 ? (
           <ul className="grid list-none gap-2 p-0 text-sm">
             {resolved.sessions.map((session) => (
               <li key={session.id}>
-                <time dateTime={session.startsAt.toISOString()}>{session.startsAt.toISOString()}</time>
-                {" — "}
-                <time dateTime={session.endsAt.toISOString()}>{session.endsAt.toISOString()}</time>
-                {" · "}
-                {ctx.t("events.sessionSeats", {
-                  remaining: session.remaining,
-                  capacity: session.capacity,
-                })}
+                {/* The span reads in the zone the session happens in; the
+                    machine-readable start rides on <time> (an HTML datetime
+                    is one instant, not an interval). */}
+                <time dateTime={session.startsAt.toISOString()}>
+                  {formatDateTimeRange(session.startsAt, session.endsAt, session.timezone, ctx.locale)}
+                </time>
+                {session.endsAt.getTime() > Date.now() ? (
+                  <>
+                    {" · "}
+                    {ctx.t("events.sessionSeats", {
+                      remaining: session.remaining,
+                      capacity: session.capacity,
+                    })}
+                  </>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -121,10 +159,13 @@ export const eventDetail = defineBlock({
           </p>
         ) : null}
 
+
         {open && !registered && !waitlisted ? (
           <form action={registerForEventAction} className="grid max-w-prose gap-4">
             <input type="hidden" name="eventId" value={resolved.id} />
             <input type="hidden" name="eventSlug" value={resolved.slug} />
+            {/* Minted in the browser, never in shared HTML: see the field. */}
+            <SubmissionTokenField />
             {futureSessions.length === 1 ? (
               <input type="hidden" name="sessionId" value={futureSessions[0]!.id} />
             ) : (
@@ -143,13 +184,13 @@ export const eventDetail = defineBlock({
                       {session.remaining === 0
                         ? session.waitlistEnabled
                           ? ctx.t("events.register.sessionOptionWaitlist", {
-                              starts: session.startsAt.toISOString(),
+                              starts: formatDateTimeShort(session.startsAt, session.timezone, ctx.locale),
                             })
                           : ctx.t("events.register.sessionOptionFull", {
-                              starts: session.startsAt.toISOString(),
+                              starts: formatDateTimeShort(session.startsAt, session.timezone, ctx.locale),
                             })
                         : ctx.t("events.register.sessionOption", {
-                            starts: session.startsAt.toISOString(),
+                            starts: formatDateTimeShort(session.startsAt, session.timezone, ctx.locale),
                             remaining: session.remaining,
                           })}
                     </option>

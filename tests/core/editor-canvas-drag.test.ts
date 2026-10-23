@@ -239,6 +239,34 @@ describe("the canvas drag script", () => {
     expect(order()).toEqual(["b", "a", "c", "row", "y", "x"]);
   });
 
+  it("never moves blocks past React's markers before hydration (2026-10-23 #418)", () => {
+    const { window, document } = canvas();
+    const draftMessage = (blocks: unknown) =>
+      window.dispatchEvent(
+        new window.MessageEvent("message", {
+          origin: ORIGIN,
+          data: { source: "freeholder-editor", draft: blocks },
+        }),
+      );
+    const root = document.querySelector('[data-block-id="a"]')!.parentNode!;
+    // What React streams beside a page's blocks: a Suspense boundary's markers.
+    root.appendChild(document.createComment("$"));
+    root.appendChild(document.createComment("/$"));
+    const snapshot = () => Array.from(root.childNodes);
+    const before = snapshot();
+    const ids = Array.from(document.querySelectorAll("[data-block-id]"))
+      .filter((el) => el.parentNode === root)
+      .map((el) => ({ id: el.getAttribute("data-block-id"), type: "heading", props: {} }));
+    // The editor's first broadcast repeats the stored order: nothing moves.
+    draftMessage(ids);
+    expect(snapshot()).toEqual(before);
+    // A real reorder re-sorts the blocks where they are; the markers stay last.
+    draftMessage([...ids].reverse());
+    const after = snapshot();
+    expect(after.at(-1)?.nodeType).toBe(8);
+    expect(after.at(-2)?.nodeType).toBe(8);
+  });
+
   it("leaves the DOM alone while its level is being typed into", () => {
     const { window, document } = canvas();
     const editable = document.querySelector<HTMLElement>(

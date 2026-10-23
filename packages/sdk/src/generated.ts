@@ -2658,8 +2658,8 @@ export interface ServiceCatalog {
     output: { tracked: false; available: true; quantity: number } | { tracked: true; available: boolean; backordered: boolean; restockAt: string | null; onHand: number; reserved: number; incoming: number; canPromise: number };
   };
   "catalog.bookService": {
-    input: { productId: string; currency: string; mode?: "full" | "deposit_balance"; seats?: number; calendarId: string; startsAt: string; termsHash: string; acceptedTerms: true; requestKey: string };
-    output: { bookingId: string; invoiceId: string | null };
+    input: { productId: string; currency: string; mode?: "full" | "deposit_balance"; seats?: number; calendarId: string; startsAt: string; termsHash: string; acceptedTerms: true; requestKey: string; email?: string; name?: string };
+    output: { bookingId: string; invoiceId: string | null; manageToken: string | null };
   };
   "catalog.bookableServices": {
     input: { sellerUserId?: string };
@@ -4347,11 +4347,11 @@ export interface ServiceCatalog {
   };
   "events.cancelRegistration": {
     input: { id: string };
-    output: { id: string; eventId: string; sessionId: string; ticketId: string | null; contactId: string; status: "reserved" | "confirmed" | "waitlisted" | "cancelled" | "checked_in"; quantity: number; checkedInAt: string | null; invoiceId: string | null; holdExpiresAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+    output: { id: string; eventId: string; sessionId: string; ticketId: string | null; contactId: string; status: "reserved" | "confirmed" | "waitlisted" | "cancelled" | "checked_in"; quantity: number; checkedInAt: string | null; invoiceId: string | null; holdExpiresAt: string | null; createdAt: string; updatedAt: string; submissionTokenHash: unknown; [key: string]: unknown };
   };
   "events.checkIn": {
     input: { id: string };
-    output: { id: string; eventId: string; sessionId: string; ticketId: string | null; contactId: string; status: "reserved" | "confirmed" | "waitlisted" | "cancelled" | "checked_in"; quantity: number; checkedInAt: string | null; invoiceId: string | null; holdExpiresAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+    output: { id: string; eventId: string; sessionId: string; ticketId: string | null; contactId: string; status: "reserved" | "confirmed" | "waitlisted" | "cancelled" | "checked_in"; quantity: number; checkedInAt: string | null; invoiceId: string | null; holdExpiresAt: string | null; createdAt: string; updatedAt: string; submissionTokenHash: unknown; [key: string]: unknown };
   };
   "events.create": {
     input: { name: string; slug: string; summary?: string; venueName?: string; venueAddress?: string; venueLocationId?: string | null };
@@ -4359,7 +4359,7 @@ export interface ServiceCatalog {
   };
   "events.get": {
     input: { id: string };
-    output: { event: { id: string; name: string; slug: string; summary: string | null; venueName: string | null; venueAddress: string | null; venueLocationId: string | null; status: "draft" | "published" | "cancelled"; seo: unknown; workingName: string | null; workingSummary: string | null; workingVenueName: string | null; workingVenueAddress: string | null; workingSeo: unknown | null; version: number; publishedAt: string | null; cancelledAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; sessions: { id: string; eventId: string; startsAt: string; endsAt: string; timezone: string; capacity: number; waitlistEnabled: boolean; createdAt: string; updatedAt: string; remaining: number; [key: string]: unknown }[]; tickets: { id: string; eventId: string; name: string; priceMinor: number; currency: string; active: boolean; createdAt: string; updatedAt: string; [key: string]: unknown }[]; registrations: { id: string; eventId: string; sessionId: string; ticketId: string | null; contactId: string; status: "reserved" | "confirmed" | "waitlisted" | "cancelled" | "checked_in"; quantity: number; checkedInAt: string | null; invoiceId: string | null; holdExpiresAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[] };
+    output: { event: { id: string; name: string; slug: string; summary: string | null; venueName: string | null; venueAddress: string | null; venueLocationId: string | null; status: "draft" | "published" | "cancelled"; seo: unknown; workingName: string | null; workingSummary: string | null; workingVenueName: string | null; workingVenueAddress: string | null; workingSeo: unknown | null; version: number; publishedAt: string | null; cancelledAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; sessions: { id: string; eventId: string; startsAt: string; endsAt: string; timezone: string; capacity: number; waitlistEnabled: boolean; createdAt: string; updatedAt: string; remaining: number; [key: string]: unknown }[]; tickets: { id: string; eventId: string; name: string; priceMinor: number; currency: string; active: boolean; createdAt: string; updatedAt: string; [key: string]: unknown }[]; registrations: { id: string; eventId: string; sessionId: string; ticketId: string | null; contactId: string; status: "reserved" | "confirmed" | "waitlisted" | "cancelled" | "checked_in"; quantity: number; checkedInAt: string | null; invoiceId: string | null; holdExpiresAt: string | null; createdAt: string; updatedAt: string; submissionTokenHash: unknown; [key: string]: unknown }[] };
   };
   "events.list": {
     input: { status?: "draft" | "published" | "cancelled" };
@@ -4367,7 +4367,7 @@ export interface ServiceCatalog {
   };
   "events.listPublic": {
     input: Record<string, never>;
-    output: { id: string; name: string; slug: string; summary: string | null; venueName: string | null; venueAddress: string | null; venueLocationId: string | null; status: "draft" | "published" | "cancelled"; seo: unknown; workingName: string | null; workingSummary: string | null; workingVenueName: string | null; workingVenueAddress: string | null; workingSeo: unknown | null; version: number; publishedAt: string | null; cancelledAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+    output: { id: string; name: string; slug: string; summary: string | null; venueName: string | null; venueAddress: string | null; venueLocationId: string | null; status: "draft" | "published" | "cancelled"; seo: unknown; workingName: string | null; workingSummary: string | null; workingVenueName: string | null; workingVenueAddress: string | null; workingSeo: unknown | null; version: number; publishedAt: string | null; cancelledAt: string | null; createdAt: string; updatedAt: string; nextStartsAt: string | null; nextEndsAt: string | null; nextTimezone: string | null; endedAt: string | null; [key: string]: unknown }[];
   };
   "events.loadDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
@@ -4386,8 +4386,8 @@ export interface ServiceCatalog {
     output: { id: string; actor: string; action: string; at: string; [key: string]: unknown }[];
   };
   "events.register": {
-    input: { eventId: string; sessionId: string; ticketId?: string; email: string; name?: string; quantity?: number };
-    output: { registration: { id: string; eventId: string; sessionId: string; ticketId: string | null; contactId: string; status: "reserved" | "confirmed" | "waitlisted" | "cancelled" | "checked_in"; quantity: number; checkedInAt: string | null; invoiceId: string | null; holdExpiresAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; paymentUrl: string | null };
+    input: { eventId: string; sessionId: string; ticketId?: string; email: string; name?: string; quantity?: number; submissionToken?: string };
+    output: { registration: { id: string; eventId: string; sessionId: string; ticketId: string | null; contactId: string; status: "reserved" | "confirmed" | "waitlisted" | "cancelled" | "checked_in"; quantity: number; checkedInAt: string | null; invoiceId: string | null; holdExpiresAt: string | null; createdAt: string; updatedAt: string; submissionTokenHash: unknown; [key: string]: unknown }; paymentUrl: string | null };
   };
   "events.resolvePublic": {
     input: { slug: string };
@@ -4454,7 +4454,7 @@ export interface ServiceCatalog {
     output: { received: number; spam: number };
   };
   "forms.submit": {
-    input: { slug: string; values: { [key: string]: unknown }; sourceUrl?: string };
+    input: { slug: string; values: { [key: string]: unknown }; sourceUrl?: string; screening?: string };
     output: { ok: true; submissionId: string; message: string };
   };
   "forms.update": {

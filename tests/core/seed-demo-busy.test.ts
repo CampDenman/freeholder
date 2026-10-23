@@ -29,6 +29,7 @@ import { recordOfflinePayment } from "@/modules/invoicing/payment-provider-servi
 import { CATALOG, EVENTS, NAV_LINKS, SERVICES, SHIPPING } from "../../seed/demo/content";
 import { people, random, studioParts, studioTime, world } from "../../seed/demo/busy/world";
 import { AREAS } from "../../seed/demo/busy";
+import { PAST_EVENT_SLUGS } from "../../seed/demo/busy/calendar";
 import { users } from "@/core/auth/schema";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { ANONYMOUS, closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
@@ -254,6 +255,16 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
     expect(slots.length).toBeGreaterThan(0);
     const events = await listPublicEvents.call({}, ANONYMOUS);
     for (const entry of EVENTS) expect(events.map((event) => event.slug)).toContain(entry.slug);
+    // 2026-10-23 audit: the past events were listed but had no page. Every
+    // listed event now has a published page, and the past ones are listed.
+    for (const slug of PAST_EVENT_SLUGS) expect(events.map((event) => event.slug)).toContain(slug);
+    const [{ missing } = { missing: -1 }] = await db().execute<{ missing: number }>(sql`
+      select count(*)::int as missing from events e
+      where e.status = 'published' and not exists (
+        select 1 from pages p where p.slug = 'events/' || e.slug and p.status = 'published' and p.trashed_at is null
+      )
+    `);
+    expect(Number(missing)).toBe(0);
   });
 
   it("finds pages and journal posts by title and summary, not the shop's pages", async () => {

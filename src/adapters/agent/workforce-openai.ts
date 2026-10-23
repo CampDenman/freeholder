@@ -6,7 +6,13 @@
 // provider), which speaks the same chat-completions wire format with its own
 // default host, auth header and correlation field. Raw HTTP like every other
 // adapter — the vendor boundary carries no vendor SDK.
-import { PARADISE_GATEWAY_DEFAULTS, gatewayAuthHeaders } from "./gateway";
+import { paradiseBaseUrl } from "@/adapters/paradise/config";
+import {
+  PARADISE_GATEWAY_DEFAULTS,
+  chatCompletionsUrl,
+  gatewayAuthHeaders,
+  paradiseChatCompletionsUrl,
+} from "./gateway";
 import type {
   WorkforceAdapterId,
   WorkforceAgentAdapter,
@@ -78,13 +84,19 @@ export function openAiCompatibleWorkforceAdapter(options: {
   model: string | null;
   /** How to name the key when there is no credentialRef to name. */
   missingCredential?: string;
+  /**
+   * `paradise` only: true when the connection uses its own host (and so its
+   * own credential) rather than the configured PARADISEMODERN_URL origin.
+   * Such a host never receives the instance's project header.
+   */
+  ownHost?: boolean;
 }): WorkforceAgentAdapter {
   const paradise = options.id === "paradise";
   const model = options.model ?? (paradise ? PARADISE_DEFAULT_MODEL : null);
   const baseUrl =
     options.baseUrl ??
     (paradise
-      ? PARADISE_GATEWAY_DEFAULTS.baseUrl
+      ? paradiseBaseUrl()
       : options.id === "openai"
         ? "https://api.openai.com"
         : null);
@@ -110,16 +122,20 @@ export function openAiCompatibleWorkforceAdapter(options: {
       const timeout = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS);
       let response: Response;
       try {
-        const base = baseUrl.replace(/\/+$/, "");
-        response = await (fetchImpl ?? fetch)(`${base}/v1/chat/completions`, {
+        const url = paradise && !options.ownHost
+          ? paradiseChatCompletionsUrl(baseUrl)
+          : chatCompletionsUrl(baseUrl);
+        response = await (fetchImpl ?? fetch)(url, {
           method: "POST",
+          // A redirect would carry the key to wherever it pointed.
+          redirect: "error",
           headers: {
             "content-type": "application/json",
             // Gateways authenticate like the §37 builder does; OpenAI itself
             // takes a bearer token.
             ...(options.id === "openai"
               ? { authorization: `Bearer ${options.apiKey}` }
-              : gatewayAuthHeaders(options.id, options.apiKey)),
+              : gatewayAuthHeaders(options.id, options.apiKey, { project: !options.ownHost })),
           },
           body: JSON.stringify({
             model: request.model,
