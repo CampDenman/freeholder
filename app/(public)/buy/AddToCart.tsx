@@ -4,20 +4,25 @@
 // cards on collection and search pages, and the product detail block.
 //
 // Presentational on purpose — the caller resolves catalog.purchaseOptions and
-// this renders forms. Products with one sellable variant get a direct
-// add-to-cart button; products with options get a <details> picker whose rows
-// are each a plain form, so the choice works without JavaScript and every
-// control is real markup a crawler and a screen reader both receive.
+// this renders forms. Every product shows its price: the one price for a
+// single variant, "From …" for a product with options. A product with options
+// renders one form whose variants are radio buttons, each with its own price,
+// the cheapest sellable one chosen already, and the add button always in
+// view. Before 2026-10-23 the prices and the button hid inside a collapsed
+// "Choose options" disclosure and a shopper on a listing saw no price at all.
+// It works without JavaScript and every control is real markup a crawler and
+// a screen reader both receive.
 
 import { Button } from "@/ui/primitives";
 import type { Translate } from "@/core/i18n";
 import { addToCartAction } from "./buy-actions";
 
-/** The chrome's catalog keys, gathered where both shelf pages use them. */
+/** The chrome's catalog keys, gathered where every shelf uses them. */
 export function addToCartLabels(t: Translate): AddToCartLabels {
   return {
     add: t("store.buy.add"),
     choose: t("store.buy.choose"),
+    from: t("store.buy.from", { price: "{price}" }),
     unavailable: t("store.buy.unavailable"),
     priceUnavailable: t("store.buy.priceUnavailable"),
   };
@@ -25,7 +30,10 @@ export function addToCartLabels(t: Translate): AddToCartLabels {
 
 export interface AddToCartLabels {
   add: string;
+  /** The option picker's legend. */
   choose: string;
+  /** "From {price}", with the placeholder left in for the component to fill. */
+  from: string;
   unavailable: string;
   priceUnavailable: string;
 }
@@ -43,25 +51,17 @@ export interface AddToCartProduct {
   variants: AddToCartVariant[];
 }
 
-function AddForm({
-  product,
-  variant,
-  label,
-}: {
-  product: AddToCartProduct;
-  variant: AddToCartVariant;
-  label: string;
-}) {
-  const sellable = variant.available && variant.priceAvailable && variant.priceMinor !== null;
-  return (
-    <form action={addToCartAction} className="inline-flex items-center gap-2">
-      <input type="hidden" name="variantId" value={variant.variantId} />
-      <input type="hidden" name="product" value={product.slug} />
-      <Button type="submit" disabled={!sellable} variant="quiet" className="px-3 py-1.5 text-xs">
-        {label}
-      </Button>
-    </form>
-  );
+function sellable(variant: AddToCartVariant): boolean {
+  return variant.available && variant.priceAvailable && variant.priceMinor !== null;
+}
+
+/** Variants cheapest first, unpriced ones last — the order a shopper reads. */
+function byPrice(variants: AddToCartVariant[]): AddToCartVariant[] {
+  return [...variants].sort((left, right) => {
+    if (left.priceMinor === null) return right.priceMinor === null ? 0 : 1;
+    if (right.priceMinor === null) return -1;
+    return left.priceMinor - right.priceMinor;
+  });
 }
 
 export function AddToCart({
@@ -77,47 +77,72 @@ export function AddToCart({
 
   if (product.variants.length === 1) {
     const variant = product.variants[0]!;
-    const sellable = variant.available && variant.priceAvailable && variant.priceMinor !== null;
+    const ok = sellable(variant);
     return (
-      <div className="flex items-center gap-2">
-        <AddForm product={product} variant={variant} label={labels.add} />
-        {sellable ? null : (
+      <form action={addToCartAction} className="flex flex-wrap items-center gap-3">
+        <input type="hidden" name="variantId" value={variant.variantId} />
+        <input type="hidden" name="product" value={product.slug} />
+        {ok ? (
+          <span className="text-sm font-semibold text-ink" data-price>
+            {formatMinor(variant.priceMinor!)}
+          </span>
+        ) : (
           <span className="text-xs text-ink-muted">
             {variant.available ? labels.priceUnavailable : labels.unavailable}
           </span>
         )}
-      </div>
+        <Button type="submit" disabled={!ok} className="px-3 py-1.5 text-xs">
+          {labels.add}
+        </Button>
+      </form>
     );
   }
 
+  const ordered = byPrice(product.variants);
+  const chosen = ordered.find(sellable);
+  // The lowest price a shopper can actually pay: the cheapest sellable
+  // variant, which is also the one chosen already. An unavailable or
+  // unpriced variant never sets the "From" price.
+  const lowest = chosen?.priceMinor ?? null;
   return (
-    <details className="group">
-      <summary className="cursor-pointer text-sm font-semibold text-accent underline-offset-2 hover:underline">
-        {labels.choose}
-      </summary>
-      <ul className="mt-2 grid list-none gap-2 p-0">
-        {product.variants.map((variant) => {
-          const sellable = variant.available && variant.priceAvailable && variant.priceMinor !== null;
+    <form action={addToCartAction} className="grid gap-2">
+      <input type="hidden" name="product" value={product.slug} />
+      {lowest !== null ? (
+        <span className="text-sm font-semibold text-ink" data-price>
+          {labels.from.replace("{price}", formatMinor(lowest))}
+        </span>
+      ) : null}
+      <fieldset className="grid gap-1">
+        <legend className="text-xs font-semibold text-ink-muted">{labels.choose}</legend>
+        {ordered.map((variant) => {
+          const ok = sellable(variant);
           return (
-            <li
-              key={variant.variantId}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-rule bg-paper px-3 py-2"
-            >
-              <span className="text-sm text-ink">
-                {variant.optionLabel ?? variant.variantId.slice(0, 8)}
-                <span className="ms-2 text-xs text-ink-muted">
-                  {sellable && variant.priceMinor !== null
-                    ? formatMinor(variant.priceMinor)
-                    : variant.available
-                      ? labels.priceUnavailable
-                      : labels.unavailable}
-                </span>
+            <label key={variant.variantId} className="flex flex-wrap items-center gap-2 text-sm text-ink">
+              <input
+                type="radio"
+                name="variantId"
+                value={variant.variantId}
+                disabled={!ok}
+                defaultChecked={variant === chosen}
+                required
+              />
+              {variant.optionLabel ?? variant.variantId.slice(0, 8)}
+              <span className="text-xs text-ink-muted">
+                {ok
+                  ? formatMinor(variant.priceMinor!)
+                  : variant.available
+                    ? labels.priceUnavailable
+                    : labels.unavailable}
               </span>
-              <AddForm product={product} variant={variant} label={labels.add} />
-            </li>
+            </label>
           );
         })}
-      </ul>
-    </details>
+      </fieldset>
+      <div>
+        <Button type="submit" disabled={!chosen} className="px-3 py-1.5 text-xs">
+          {labels.add}
+        </Button>
+      </div>
+    </form>
   );
 }

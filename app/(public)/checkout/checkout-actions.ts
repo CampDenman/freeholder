@@ -18,6 +18,12 @@ import { getCart, quoteShipping, shopperCheckout } from "@/modules/catalog/servi
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
+import {
+  encodeFormReturn,
+  FORM_RETURN_COOKIE,
+  FORM_RETURN_MAX_AGE,
+} from "@/core/http/public-form-return";
+import { CHECKOUT_RETURN_KEY, checkoutRefusal, type CheckoutField } from "@/modules/catalog/checkout-fields";
 import { PLAYGROUND_FICTIONAL_EMAIL, PLAYGROUND_REFUSAL } from "@/core/demo/playground-policy";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
@@ -47,11 +53,37 @@ function serviceCode(error: unknown): string {
   return error instanceof ServiceError ? error.code : "failed";
 }
 
+/** What the shopper typed that is worth giving back: never tokens or keys. */
+const KEPT_FIELDS = ["email", "name", "street1", "city", "region", "postalCode", "country", "shippingMethodId", "couponCode"];
+
+/**
+ * Hand the shopper's answers back to their own browser for the next render
+ * (the public-form-return pattern) and send them to the refusal, with the
+ * fields it is about named in the URL — codes only, never text.
+ */
+async function refuse(path: string, form: FormData, reason: string, fields: readonly CheckoutField[] = []): Promise<never> {
+  const values: Record<string, string> = {};
+  for (const name of KEPT_FIELDS) values[name] = text(form, name);
+  const kept = encodeFormReturn(CHECKOUT_RETURN_KEY, values);
+  const jar = await cookies();
+  if (kept) {
+    jar.set(FORM_RETURN_COOKIE, kept, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: FORM_RETURN_MAX_AGE,
+    });
+  }
+  const named = fields.length ? `&fields=${fields.join(",")}` : "";
+  redirect(`${path}?error=${reason}${named}`);
+}
+
 export async function shopperCheckoutAction(form: FormData): Promise<void> {
   const path = await localize("/checkout");
   const credential = await readShopperCart();
   if (!credential) redirect(`${path}?error=expired`);
-  if (form.get("acceptedTerms") !== "on") redirect(`${path}?error=terms`);
+  if (form.get("acceptedTerms") !== "on") await refuse(path, form, "terms");
 
   const country = text(form, "country").toUpperCase();
   const addressFields = {
@@ -61,7 +93,7 @@ export async function shopperCheckoutAction(form: FormData): Promise<void> {
     postalCode: text(form, "postalCode").toUpperCase(),
   };
   const anyAddressField = country || Object.values(addressFields).some(Boolean);
-  if (anyAddressField && !country) redirect(`${path}?error=address`);
+  if (anyAddressField && !/^[A-Z]{2}$/.test(country)) await refuse(path, form, "address", ["country"]);
 
   let outcome: Awaited<ReturnType<typeof shopperCheckout.call>>;
   try {
@@ -102,20 +134,26 @@ export async function shopperCheckoutAction(form: FormData): Promise<void> {
       actor,
     );
   } catch (error) {
-    // The visitor sees a code; the operator sees the cause in the server log.
+    // The visitor sees a code and the fields it is about, with their answers
+    // given back; the operator sees the cause in the server log.
     console.error("storefront checkout failed", error);
-    redirect(`${path}?error=${serviceCode(error)}`);
+    const refusal = checkoutRefusal(error);
+    await refuse(path, form, refusal?.reason ?? serviceCode(error), refusal?.fields ?? []);
   }
 
   // redirect() throws to do its work, so the redirecting branches live
   // outside the try — swallowing NEXT_REDIRECT would turn every success
   // into ?error=failed.
   if (outcome!.status === "verification_sent") {
+    // Nothing was refused, so no answers are kept for the next render.
+    (await cookies()).delete(FORM_RETURN_COOKIE);
     redirect(`${path}?sent=1`);
   }
-  // Placed. The cart is converted; drop the device credential and hand the
-  // browser the order's own token-gated address.
+  // Placed. The cart is converted; drop the device credential and any
+  // answers kept from an earlier refusal, and hand the browser the order's
+  // own token-gated address.
   await clearShopperCart();
+  (await cookies()).delete(FORM_RETURN_COOKIE);
   redirect(
     await localize(
       `/orders/confirm?cart=${encodeURIComponent(credential.cartId)}&t=${encodeURIComponent(credential.token)}`,

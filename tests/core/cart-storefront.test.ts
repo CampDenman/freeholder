@@ -24,7 +24,6 @@ import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
-import { productVariants } from "@/modules/catalog/schema";
 import { createTaxCategory } from "@/modules/invoicing/tax-service";
 import {
   activateProduct,
@@ -42,7 +41,11 @@ import {
 } from "@/modules/catalog/service";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { SHOPPER_CART_COOKIE } from "@/modules/catalog/cookies";
-import { quoteDeliveryAction } from "../../app/(public)/checkout/checkout-actions";
+import { quoteDeliveryAction, shopperCheckoutAction } from "../../app/(public)/checkout/checkout-actions";
+import { AddedNotice, addedNoticeKind } from "../../app/(public)/buy/AddedNotice";
+import { AddToCart } from "../../app/(public)/buy/AddToCart";
+import { orders } from "@/modules/catalog/schema";
+import { FORM_RETURN_COOKIE } from "@/core/http/public-form-return";
 import { createContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
 import { localeDirection } from "@/core/i18n";
@@ -178,10 +181,9 @@ describe.runIf(hasDatabase)("the public cart, checkout and confirmation pages", 
     const variants = (await getProductVariants.call({ productId: product.id }, OWNER)).variants;
     for (const variant of variants) {
       if (variant.status === "active") {
-        await db()
-          .update(productVariants)
-          .set({ requiresShipping: false })
-          .where(eq(productVariants.id, variant.id));
+        // A digital product's generated variants do not ship (2026-10-23):
+        // no address, no delivery method, no manual flag flip.
+        expect(variant.requiresShipping).toBe(false);
         await setPriceListEntry.call(
           { priceListId: list.id, variantId: variant.id, amount: "25.00" },
           OWNER,
@@ -248,9 +250,16 @@ describe.runIf(hasDatabase)("the public cart, checkout and confirmation pages", 
       searchParams: Promise.resolve({}),
     });
     const html = await renderElement(element);
-    // One product, two variants: a chooser, one form per variant, both priced.
+    // One product, two variants: the card quotes its price, both choices
+    // carry theirs, one is chosen already and the add button is in view —
+    // nothing hides inside a collapsed disclosure (2026-10-23 audit).
+    expect(html).toContain("From CA$25.00");
     expect(html).toContain("Choose options");
+    expect(html.match(/type="radio"/g)).toHaveLength(2);
     expect(html.match(/name="variantId"/g)).toHaveLength(2);
+    expect(html.match(/checked=""/g)).toHaveLength(1);
+    expect(html).not.toContain("<details");
+    expect(html).toContain("Add to cart");
     expect(html).toContain("Size: Small");
     expect(html).toContain("Size: Large");
   });
@@ -444,6 +453,221 @@ describe.runIf(hasDatabase)("the public cart, checkout and confirmation pages", 
     const { html } = await renderCheckout();
     expect(html).toContain('id="checkout-country"');
     expect(html).toContain("Enter your address to see the delivery methods");
+  });
+
+  /** One physical, single-variant product in the shopper's cookie cart. */
+  async function calendarInCart() {
+    const tax = await createTaxCategory.call({ code: "standard_cal", name: "Standard" }, OWNER);
+    const product = await createProduct.call(
+      { name: "Coastal Calendar 2027", slug: "coastal-calendar-2027", kind: "physical", taxCategoryId: tax.id },
+      OWNER,
+    );
+    const version = (
+      await applyVariantMatrix.call({ productId: product.id, expectedVersion: product.version }, OWNER)
+    ).version;
+    const list = await createPriceList.call({ name: "Retail cal", currency: "CAD", kind: "retail" }, OWNER);
+    const variant = (await getProductVariants.call({ productId: product.id }, OWNER)).variants[0]!;
+    expect(variant.requiresShipping).toBe(true);
+    await setPriceListEntry.call({ priceListId: list.id, variantId: variant.id, amount: "28.00" }, OWNER);
+    await activateProduct.call({ id: product.id, expectedVersion: version }, OWNER);
+    const basket = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
+    await addCartItem.call(
+      { cartId: basket.cart.id, cartToken: basket.cart.token!, variantId: variant.id },
+      ANONYMOUS,
+    );
+    jarState.cookies[SHOPPER_CART_COOKIE] = `${basket.cart.id}.${basket.cart.token}`;
+    return basket;
+  }
+
+  function checkoutForm(fields: Record<string, string>): FormData {
+    const form = new FormData();
+    form.set("acceptedTerms", "on");
+    form.set("idempotencyKey", `form-${Math.random().toString(36).slice(2)}`);
+    for (const [name, value] of Object.entries(fields)) form.set(name, value);
+    return form;
+  }
+
+  /** Where a Server Action's redirect() sent the browser. */
+  async function redirectOf(action: Promise<unknown>): Promise<string> {
+    const error = await action.then(
+      () => {
+        throw new Error("expected a redirect");
+      },
+      (thrown: unknown) => thrown as { digest?: string },
+    );
+    const target = error.digest?.split(";")[2];
+    if (!target) throw new Error(`not a redirect: ${JSON.stringify(error)}`);
+    return target;
+  }
+
+  const ADA = {
+    email: "ada@example.com",
+    name: "Ada Example",
+    street1: "210 Example Street",
+    city: "Courtenay",
+    region: "BC",
+    postalCode: "V9N 1A1",
+    country: "CA",
+  };
+
+  it("keeps what the shopper typed and marks the fields a refusal is about", async () => {
+    // The audit's blocker: a physical item, no zone reaches the address.
+    await calendarInCart();
+    const { session } = await signedInCustomer(ADA.email);
+    jarState.cookies[SESSION_COOKIE] = session.token;
+
+    const target = await redirectOf(shopperCheckoutAction(checkoutForm(ADA)));
+    expect(target).toBe("/checkout?error=delivery&fields=country,region,postalCode");
+    const query = Object.fromEntries(new URL(target, "http://x").searchParams);
+
+    const { html } = await renderCheckout(query);
+    expect(html).toContain("We cannot deliver to this address yet");
+    // The answers come back…
+    expect(html).toContain('value="210 Example Street"');
+    expect(html).toContain('value="Courtenay"');
+    expect(html).toContain('value="V9N 1A1"');
+    expect(html).toContain(`value="${ADA.email}"`);
+    // …and the fields the refusal named are marked and described.
+    expect(html).toMatch(/id="checkout-country"[^>]*aria-invalid="true"[^>]*aria-describedby="checkout-country-error"/);
+    expect(html).toContain('id="checkout-postal-error"');
+    expect(html).not.toMatch(/id="checkout-street1"[^>]*aria-invalid/);
+    // A bare error with no returned answers still renders, unmarked.
+    jarState.cookies = { [SHOPPER_CART_COOKIE]: jarState.cookies[SHOPPER_CART_COOKIE]! };
+    const bare = await renderCheckout({ error: "validation" });
+    expect(bare.html).not.toContain("aria-invalid");
+  });
+
+  it("places a physical order once the owner offers delivery or pickup", async () => {
+    const { createShippingZone, createShippingMethod } = await import("@/modules/catalog/service");
+    const { createLocationService } = await import("@/core/locations/service");
+    const studio = await createLocationService.call(
+      { name: "Studio", slug: "studio", street: "1 Harbour Road", city: "Comox", region: "BC", postalCode: "V9M 1A1", country: "CA" },
+      OWNER,
+    );
+    const canada = await createShippingZone.call({ name: "Canada", countries: ["CA"] }, OWNER);
+    const parcel = await createShippingMethod.call(
+      { zoneId: canada.id, name: "Parcel", kind: "flat", currency: "CAD", amount: "12.00" },
+      OWNER,
+    );
+    const pickup = await createShippingMethod.call(
+      { zoneId: canada.id, name: "Pick up at the studio", kind: "pickup", currency: "CAD", locationId: studio.id },
+      OWNER,
+    );
+    // Pickup elsewhere is not offered here: it keeps to the zone it is in.
+    const us = await createShippingZone.call({ name: "US", countries: ["US"] }, OWNER);
+    await createShippingMethod.call(
+      { zoneId: us.id, name: "Pick up in Seattle", kind: "pickup", currency: "CAD", locationId: studio.id },
+      OWNER,
+    );
+    await calendarInCart();
+    const offered = await quoteDeliveryAction({ country: "CA", region: "BC", postal: "V9N1A1" });
+    expect(offered.quotes.map((quote) => [quote.name, quote.amountMinor])).toEqual([
+      ["Pick up at the studio", 0],
+      ["Parcel", 1200],
+    ]);
+
+    const { session } = await signedInCustomer(ADA.email);
+    jarState.cookies[SESSION_COOKIE] = session.token;
+    // Two methods apply and none was chosen (no JavaScript): nothing is
+    // picked for the shopper; the page comes back with both to choose from.
+    const refused = await redirectOf(shopperCheckoutAction(checkoutForm(ADA)));
+    expect(refused).toBe("/checkout?error=chooseMethod&fields=shippingMethodId");
+    const { html } = await renderCheckout(Object.fromEntries(new URL(refused, "http://x").searchParams));
+    expect(html).toContain("Choose how you would like to receive your order.");
+    expect(html).toMatch(/data-delivery-methods="true" aria-invalid="true"/);
+    expect(html.match(/name="shippingMethodId"/g)).toHaveLength(2);
+    expect(html).not.toMatch(/name="shippingMethodId"[^>]*checked/);
+    expect(html).toContain('value="210 Example Street"');
+
+    const target = await redirectOf(
+      shopperCheckoutAction(checkoutForm({ ...ADA, shippingMethodId: pickup.id })),
+    );
+    expect(target).toMatch(/^\/orders\/confirm\?cart=/);
+    const [order] = await db().select().from(orders).where(eq(orders.shippingMethodId, pickup.id));
+    expect(order?.shippingMinor).toBe(0);
+    expect(parcel.id).not.toBe(pickup.id);
+  });
+
+  it("forgets kept answers once the verification email is sent", async () => {
+    await calendarInCart();
+    jarState.cookies[FORM_RETURN_COOKIE] = "stale";
+    const target = await redirectOf(shopperCheckoutAction(checkoutForm({ email: "new@example.test" })));
+    expect(target).toBe("/checkout?sent=1");
+    expect(jarState.cookies[FORM_RETURN_COOKIE]).toBeUndefined();
+  });
+
+  it("quotes the 'From' price from what a shopper can buy", () => {
+    const html = renderToStaticMarkup(
+      createElement(AddToCart, {
+        product: {
+          slug: "coast-print",
+          variants: [
+            { variantId: "v-gone", optionLabel: "Size: Tiny", priceMinor: 900, priceAvailable: true, available: false },
+            { variantId: "v-small", optionLabel: "Size: Small", priceMinor: 2500, priceAvailable: true, available: true },
+            { variantId: "v-large", optionLabel: "Size: Large", priceMinor: 4000, priceAvailable: true, available: true },
+          ],
+        },
+        formatMinor: (minor: number) => `$${(minor / 100).toFixed(2)}`,
+        labels: { add: "Add to cart", choose: "Choose options", from: "From {price}", unavailable: "Sold out", priceUnavailable: "No price" },
+      }),
+    );
+    expect(html).toContain("From $25.00");
+    expect(html).not.toContain("From $9.00");
+    expect(html).toMatch(/checked="" value="v-small"/);
+  });
+
+  it("places a voucher-only order with no address and no country", async () => {
+    const { variants } = await twinPrint();
+    const basket = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
+    await addCartItem.call(
+      { cartId: basket.cart.id, cartToken: basket.cart.token!, variantId: variants[0]!.id },
+      ANONYMOUS,
+    );
+    jarState.cookies[SHOPPER_CART_COOKIE] = `${basket.cart.id}.${basket.cart.token}`;
+    const { session } = await signedInCustomer(ADA.email);
+    jarState.cookies[SESSION_COOKIE] = session.token;
+
+    const { html } = await renderCheckout();
+    expect(html).not.toContain('id="checkout-country"');
+    const target = await redirectOf(
+      shopperCheckoutAction(checkoutForm({ email: ADA.email, name: ADA.name })),
+    );
+    expect(target).toMatch(/^\/orders\/confirm\?cart=/);
+  });
+
+  it("names the variant on a cart line, never the product's SKU", async () => {
+    await calendarInCart();
+    const { html } = await renderCart();
+    expect(html).toContain("Coastal Calendar 2027");
+    expect(html).not.toContain(">coastal-calendar-2027<");
+  });
+});
+
+describe("the add-to-cart notice", () => {
+  const labels = { added: "Added to your cart.", viewCart: "View cart", failed: "Could not add." };
+
+  it("reads the action's codes from the request target", () => {
+    expect(addedNoticeKind("/products/x?added=x")).toBe("added");
+    expect(addedNoticeKind("/c/wall?page=2&added=1")).toBe("added");
+    expect(addedNoticeKind("/products/x?cartError=add")).toBe("failed");
+    expect(addedNoticeKind("/products/x")).toBeNull();
+    expect(addedNoticeKind("/products/x?addedd=1")).toBeNull();
+  });
+
+  it("announces success politely with the way to the cart, and failure as an alert", () => {
+    const added = renderToStaticMarkup(
+      createElement(AddedNotice, { target: "/products/x?added=x", cartHref: "/fr/cart", labels }),
+    );
+    expect(added).toContain('role="status"');
+    expect(added).toContain('aria-live="polite"');
+    expect(added).toContain('href="/fr/cart"');
+    expect(added).toContain("View cart");
+    const failed = renderToStaticMarkup(
+      createElement(AddedNotice, { target: "/products/x?cartError=add", cartHref: "/cart", labels }),
+    );
+    expect(failed).toContain('role="alert"');
+    expect(failed).toContain("Could not add.");
+    expect(renderToStaticMarkup(createElement(AddedNotice, { target: "/", cartHref: "/cart", labels }))).toBe("");
   });
 });
 

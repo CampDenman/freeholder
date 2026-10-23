@@ -24,6 +24,7 @@ import {
   setProductOptionValues,
 } from "@/modules/catalog/variants";
 import { createPriceList, setPriceListEntry } from "@/modules/catalog/pricing";
+import { createShippingMethod, createShippingZone } from "@/modules/catalog/shipping";
 import { adjustStock, enableInventory } from "@/modules/catalog/inventory";
 import { addCollectionProduct, createCollection } from "@/modules/catalog/collections";
 import { attachProductMedia } from "@/modules/catalog/merchandising";
@@ -104,6 +105,30 @@ export async function installDemoBusiness(
     name: "CAD retail",
     currency: BUSINESS.baseCurrency,
     kind: "retail",
+  });
+
+  // Delivery (C5.18): a Canada zone with a flat parcel rate, and pickup at
+  // the studio. Without a zone every physical product in the demo stopped at
+  // "No delivery method reaches that address" (2026-10-23 audit).
+  const canada = await ctx.callAsSystem(createShippingZone, {
+    name: demo.SHIPPING.zone,
+    countries: ["CA"],
+  });
+  await ctx.callAsSystem(createShippingMethod, {
+    zoneId: canada.id,
+    name: demo.SHIPPING.parcel,
+    kind: "flat",
+    currency: BUSINESS.baseCurrency,
+    amount: demo.SHIPPING.parcelPrice,
+    minDays: 2,
+    maxDays: 6,
+  });
+  await ctx.callAsSystem(createShippingMethod, {
+    zoneId: canada.id,
+    name: demo.SHIPPING.pickup,
+    kind: "pickup",
+    currency: BUSINESS.baseCurrency,
+    locationId: input.locationId,
   });
 
   const sizeType = await ctx.callAsSystem(createOptionType, { name: "Print size", code: "print-size" });

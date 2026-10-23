@@ -161,14 +161,33 @@ export function quoteMethods(input: {
   const packed = totals(input.items);
   if (packed.quantity === 0) return { needed: false, zoneId: null, quotes: [] };
   const zone = matchZone(input.destination, input.zones);
-  if (!zone) return { needed: true, zoneId: null, quotes: [] };
   const box = selectBox(input.items, input.boxes);
   const billableWeightG = Math.max(packed.weightG, packed.volumeWeightG) + (box?.tareWeightG ?? 0);
   const quotes: ShippingQuote[] = [];
-  for (const method of input.methods.filter((row) => row.zoneId === zone.id)) {
+  // Every method belongs to the zone the owner put it in: pickup is offered
+  // only where its zone reaches the address (an owner who offers pickup to
+  // anyone puts it in a zone with no countries). Pickup needs the location
+  // it happens at, and a named location narrows it to that one; the
+  // storefront names none, so each pickup method's own location stands.
+  // Local delivery is strict: it runs from one location, so it is quoted
+  // only when the caller names that location (2026-10-23 review).
+  // matchZone picks one best zone, and a catch-all scores below any country
+  // match, so pickup in a catch-all zone is added on top of the matched
+  // zone's methods; that is how "pickup for anyone" actually reaches a
+  // Canadian address that also matches a Canada zone. Each method is listed
+  // once.
+  const catchAllIds = new Set(
+    input.zones
+      .filter((row) => row.countries.length === 0 && row.regions.length === 0 && row.postalPatterns.length === 0)
+      .map((row) => row.id),
+  );
+  const eligible = input.methods.filter(
+    (row) => (zone !== null && row.zoneId === zone.id) || (row.kind === "pickup" && catchAllIds.has(row.zoneId)),
+  );
+  for (const method of eligible) {
     let amount: number | null = null;
     if (method.kind === "pickup") {
-      if (!method.locationId || method.locationId !== input.locationId) continue;
+      if (!method.locationId || (input.locationId && method.locationId !== input.locationId)) continue;
       amount = 0;
     } else if (method.kind === "local_delivery") {
       if (!method.locationId || method.locationId !== input.locationId) continue;
@@ -201,5 +220,13 @@ export function quoteMethods(input: {
       boxId: box?.id ?? null,
     });
   }
-  return { needed: true, zoneId: zone.id, quotes };
+  // A stable order, cheapest first, so a list or a single-choice default
+  // never depends on the order rows came back from the database.
+  quotes.sort(
+    (left, right) =>
+      left.amountMinor - right.amountMinor ||
+      left.name.localeCompare(right.name) ||
+      left.methodId.localeCompare(right.methodId),
+  );
+  return { needed: true, zoneId: zone?.id ?? null, quotes };
 }

@@ -10,7 +10,8 @@
 // the ones the services enforce, checked on the bulk-inserted result —
 // a sample business that breaks them would teach evaluators the wrong
 // product, and would break the first screen that relies on them.
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { resetEnvForTests } from "@/core/env";
 import { sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { installDemo } from "@/modules/seed/service";
@@ -18,14 +19,14 @@ import { installBusyDemo } from "@/modules/seed/busy";
 import { demoSeedBusy, demoSeedMode } from "@/modules/seed/boot";
 import { getSection, searchPublishedPages } from "@/modules/cms/service";
 import { HEADER_KEY, NAV_KEY } from "@/modules/cms/defaults";
-import { browseProducts, purchaseOptions } from "@/modules/catalog/service";
+import { addCartItem, browseProducts, getOrCreateCart, purchaseOptions, quoteShipping, shopperCheckout } from "@/modules/catalog/service";
 import { bookableServices } from "@/modules/catalog/public-booking";
 import { availableSlots } from "@/core/scheduling/resolver-service";
 import { listPublicEvents } from "@/modules/events/service";
 import { targetFor } from "@/modules/share/service";
 import { mergeContacts } from "@/core/contacts/service";
 import { recordOfflinePayment } from "@/modules/invoicing/payment-provider-service";
-import { CATALOG, EVENTS, NAV_LINKS, SERVICES } from "../../seed/demo/content";
+import { CATALOG, EVENTS, NAV_LINKS, SERVICES, SHIPPING } from "../../seed/demo/content";
 import { people, random, studioParts, studioTime, world } from "../../seed/demo/busy/world";
 import { AREAS } from "../../seed/demo/busy";
 import { PAST_EVENT_SLUGS } from "../../seed/demo/busy/calendar";
@@ -414,6 +415,60 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
              coalesce((select sum(amount_minor) from payments p where p.invoice_id = i.id and p.status = 'succeeded'), 0)::int as ledger
       from invoices i where i.id = ${invoice!.id}`);
     expect(after).toMatchObject({ status: "paid", paid: after!.total, ledger: after!.total });
+  });
+
+  it("sells the calendar by post or pickup and the voucher with no address, to a made-up shopper", async () => {
+    // The 2026-10-23 audit's blocker: the demo had no shipping zone, so the
+    // calendar stopped at "No delivery method reaches that address", and the
+    // voucher's variant asked for a country it would never be posted to.
+    const options = await purchaseOptions.call({ slugs: ["coastal-calendar-2027", "portrait-session-voucher"] }, ANONYMOUS);
+    const calendar = options.find((entry) => entry.slug === "coastal-calendar-2027")!.variants[0]!;
+    const voucher = options.find((entry) => entry.slug === "portrait-session-voucher")!.variants[0]!;
+    expect(calendar.requiresShipping).toBe(true);
+    expect(voucher.requiresShipping).toBe(false);
+
+    const quoted = await quoteShipping.call(
+      { country: "CA", region: "BC", postal: "V9N1A1", currency: "CAD", items: [{ quantity: 1, weightG: 0, priceMinor: 2_800 }] },
+      ANONYMOUS,
+    );
+    // Cheapest first: pickup, then the parcel rate.
+    expect(quoted.quotes.map((quote) => quote.name)).toEqual([SHIPPING.pickup, SHIPPING.parcel]);
+    const parcel = quoted.quotes.find((quote) => quote.name === SHIPPING.parcel)!;
+
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1");
+    resetEnvForTests();
+    try {
+      const buy = async (variantId: string, key: string, address?: Record<string, string>) => {
+        const basket = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
+        await addCartItem.call({ cartId: basket.cart.id, cartToken: basket.cart.token!, variantId }, ANONYMOUS);
+        return shopperCheckout.call(
+          {
+            cartId: basket.cart.id,
+            cartToken: basket.cart.token!,
+            email: "ada@example.com",
+            name: "Ada Example",
+            acceptedTerms: true,
+            idempotencyKey: key,
+            ...(address ? { shippingAddress: address as { country: string }, shippingMethodId: parcel.methodId } : {}),
+          },
+          ANONYMOUS,
+        );
+      };
+      const posted = await buy(calendar.variantId, "demo-calendar-1", {
+        street1: "210 Example Street", city: "Courtenay", region: "BC", postalCode: "V9N 1A1", country: "CA",
+      });
+      expect(posted.status).toBe("placed");
+      const voucherOrder = await buy(voucher.variantId, "demo-voucher-1");
+      expect(voucherOrder.status).toBe("placed");
+      const placed = await rows<{ shipping_minor: number; invoice_id: string | null }>(sql`
+        select shipping_minor, invoice_id from orders where id in (${posted.orderId}, ${voucherOrder.orderId})
+        order by shipping_minor desc`);
+      expect(placed.map((row) => Number(row.shipping_minor))).toEqual([1_200, 0]);
+      expect(placed.every((row) => row.invoice_id)).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+      resetEnvForTests();
+    }
   });
 
   it("refuses to run twice", async () => {

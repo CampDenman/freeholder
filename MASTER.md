@@ -6241,6 +6241,37 @@ owner operations, never substitute for them.
   and lifecycle proofs are in `tests/core/checkout-policy.test.ts` and
   `tests/core/catalog-orders.test.ts`; the order detail shows each stage and
   its seller release control.
+  Audit follow-up 2026-10-23 (C5.18/C5.20/C5.21/C5.22, live audit of
+  demo.freeholder.ai): checkout could not complete. `applyVariantMatrix`
+  created every variant with `requires_shipping = true`, so digital,
+  service and pass products demanded an address; new variants now ship by
+  kind (`shipsByDefault`). The demo had no shipping zone; it now seeds a
+  Canada flat rate and studio pickup. `quoteMethods` only quoted pickup when
+  the caller named a location, which the storefront never does; pickup is now
+  offered from any zone and a named location only narrows. Checkout refusals
+  raise `CheckoutFieldError` (`src/modules/catalog/checkout-fields.ts`); the
+  action returns the shopper's answers through the public form-return cookie
+  and the page marks the named fields with `aria-invalid`. AddToCart shows the
+  price ("From …"), lists options as pre-chosen radios with the button in
+  view; the public shell announces `?added=` in a status region; cart lines
+  show the variant name, not the SKU; `catalog.listOrders` joins the contact's
+  name and email for the admin list. Evidence: `tests/core/cart-storefront.test.ts`,
+  `checkout-fields.test.ts`, `shipping-quote.test.ts`, `catalog-orders.test.ts`,
+  `merch-blocks.test.ts`, `seed-demo-busy.test.ts` (fictional-email demo
+  checkout of the calendar and the voucher); browser specs updated, not yet
+  re-run (disk exhaustion on the build host); changeset
+  `storefront-checkout-completes.md`.
+  Review follow-up (PR #584):
+  - Pickup keeps to its zone. Local delivery needs its named location again.
+  - Quotes are ordered by price, then name. When more than one method
+    applies and none was chosen, `checkoutCart` refuses with `chooseMethod`;
+    the page then renders the server-quoted methods, so the no-JS path works.
+  - Migration `0056_nonshipping_variant_backfill.sql` clears
+    `requires_shipping` on digital/service/pass variants.
+    `catalog.updateProduct` re-derives it when a draft's kind changes.
+  - The "From" price uses the cheapest sellable variant.
+  - `listOrders` returns `contactEmail` only to callers who may read contacts.
+  - The saved answers are dropped on `verification_sent`.
 - [x] **C5.23** Build coupons, gift cards/credit ledger, bundles, order bumps,
   post-add offers and abandoned-cart recovery without parallel money paths.
   *(Evidence: `coupons`, `coupon_redemptions`, `cart_coupons`, `gift_cards`,

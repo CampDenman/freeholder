@@ -11,10 +11,11 @@ import { z } from "zod";
 import { clipSnippet, matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { registerContactReference } from "@/core/contacts/service";
+import { contacts } from "@/core/contacts/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { listLocations } from "@/core/locations/service";
 import { checkCoverage } from "@/core/locations/coverage";
-import { defineService, ServiceError, type Tx } from "@/core/service";
+import { defineService, permits, ServiceError, type Tx } from "@/core/service";
 import { QUANTITY_SCALE } from "@/modules/invoicing/money";
 import { payments } from "@/modules/invoicing/schema";
 import {
@@ -31,6 +32,7 @@ import { issuePass } from "@/core/entitlements/service";
 import { carts, orderItems, orderPaymentMilestones, orders, products, productVariants, stockReservations } from "./schema";
 import { assertSellable } from "./market";
 import { checkoutSettings, checkoutTermsHash, paymentMilestones, termsSnapshot } from "./checkout-policy";
+import { CheckoutFieldError } from "./checkout-fields";
 
 const id = z.string().uuid();
 
@@ -210,7 +212,11 @@ export const checkoutCart = defineService({
     }
     const needsShipping = basket.lines.some((line) => line.requiresShipping);
     if (needsShipping && !input.shippingAddress) {
-      throw new ServiceError("validation", "A shipping address is required for physical items.");
+      throw new CheckoutFieldError(
+        "A shipping address is required for physical items.",
+        ["street1", "city", "postalCode", "country"],
+        "address",
+      );
     }
 
     // C6.18: the coverage check a visitor ran on the page was information;
@@ -226,9 +232,10 @@ export const checkoutCart = defineService({
         locationId: input.locationId,
       });
       if (coverage.answer === "outside") {
-        throw new ServiceError(
-          "validation",
+        throw new CheckoutFieldError(
           `${coverage.postalCode} is outside the areas we have listed for delivery. Check the postcode, or contact us and we will tell you whether we can come to you.`,
+          ["postalCode"],
+          "coverage",
         );
       }
     }
@@ -253,13 +260,32 @@ export const checkoutCart = defineService({
         })),
       });
       if (quotes.needed && quotes.quotes.length === 0) {
-        throw new ServiceError("validation", "No shipping method reaches that destination.");
+        throw new CheckoutFieldError(
+          "No shipping method reaches that destination.",
+          ["country", "region", "postalCode"],
+          "delivery",
+        );
+      }
+      // The shopper chooses how the order reaches them. One eligible method
+      // is the only answer; with more than one, nothing is picked for them —
+      // a silent default once charged a parcel rate or gave away a $0 pickup
+      // depending on row order (2026-10-23 review).
+      if (quotes.needed && !input.shippingMethodId && quotes.quotes.length > 1) {
+        throw new CheckoutFieldError(
+          "Choose how you would like to receive this order.",
+          ["shippingMethodId"],
+          "chooseMethod",
+        );
       }
       const chosen = input.shippingMethodId
         ? quotes.quotes.find((quote) => quote.methodId === input.shippingMethodId)
         : quotes.quotes[0];
       if (quotes.needed && !chosen) {
-        throw new ServiceError("validation", "That shipping method is not available for this cart.");
+        throw new CheckoutFieldError(
+          "That shipping method is not available for this cart.",
+          ["shippingMethodId"],
+          "delivery",
+        );
       }
       shippingMinor = chosen?.amountMinor ?? 0;
       shippingMethodId = chosen?.methodId ?? null;
@@ -674,14 +700,27 @@ export const listOrders = defineService({
   // about themselves and nothing else.
   selfService: { contactField: "contactId" },
   input: z.object({ contactId: id.optional() }),
-  output: listed(orderRow),
-  handler: (input, ctx) =>
-    ctx.tx
-      .select()
+  // Each order carries its customer's name, joined here: the workspace used
+  // to look names up in the first 80 contacts and printed a raw UUID for
+  // everyone else (2026-10-23 demo audit). The email is contact data, so it
+  // is returned only to a caller who may read contacts; catalog-only staff
+  // and agents get null, the boundary contacts.get already draws.
+  output: listed(orderRow.extend({ contactName: z.string().nullable(), contactEmail: z.string().nullable() })),
+  handler: async (input, ctx) => {
+    const mayReadContacts = permits(ctx.actor, "scoped", "contacts.get", "query");
+    const rows = await ctx.tx
+      .select({ order: orders, contactName: contacts.name, contactEmail: contacts.email })
       .from(orders)
+      .leftJoin(contacts, eq(contacts.id, orders.contactId))
       .where(input.contactId ? eq(orders.contactId, input.contactId) : undefined)
       .orderBy(desc(orders.createdAt))
-      .limit(200),
+      .limit(200);
+    return rows.map((row) => ({
+      ...row.order,
+      contactName: row.contactName ?? null,
+      contactEmail: mayReadContacts ? (row.contactEmail ?? null) : null,
+    }));
+  },
 });
 
 registerSearchSource({
