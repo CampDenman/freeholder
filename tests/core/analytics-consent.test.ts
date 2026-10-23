@@ -97,13 +97,18 @@ describe("analytics identity at the edge", () => {
 });
 
 describe("analytics consent markup", () => {
-  function page(policy: "privacy_first" | "opt_in", state: "implicit" | null) {
+  function page(
+    policy: "privacy_first" | "opt_in",
+    state: "implicit" | null,
+    measurement: { provider: string } | null = null,
+  ) {
     const control = renderToStaticMarkup(createElement(AnalyticsConsentControl, {
       policy,
       state,
       retentionDays: 90,
       returnTo: "/services?utm_source=test",
       t: translator("en"),
+      measurement,
     }));
     return `<!doctype html><html lang="en"><head><title>Services</title><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><main><h1>Services</h1></main>${control}</body></html>`;
   }
@@ -120,6 +125,21 @@ describe("analytics consent markup", () => {
     expect([...document.querySelectorAll('form[method="post"] input[name="decision"]')]
       .map((input) => input.getAttribute("value")))
       .toEqual(["grant", "deny"]);
+  });
+
+  it("names the measurement category and provider, and asks for an explicit allow (C3.32)", async () => {
+    const optIn = new JSDOM(page("opt_in", null, { provider: "Paradise Modern" })).window.document;
+    expect(optIn.querySelector("aside")?.textContent).toContain("measurement provider (Paradise Modern)");
+    expect(optIn.querySelector("aside button")?.textContent).toBe("Allow analytics and measurement");
+    // The opt-out default's implied state gets its own explicit grant.
+    const implied = new JSDOM(page("privacy_first", "implicit", { provider: "Paradise Modern" })).window.document;
+    expect([...implied.querySelectorAll("details button")].map((button) => button.textContent))
+      .toEqual(["Allow analytics and measurement", "Turn analytics off"]);
+    expect(
+      (await auditHtml(page("opt_in", null, { provider: "Paradise Modern" }), "https://example.test/services")).violations,
+    ).toEqual([]);
+    // Without a provider nothing about measurement is shown.
+    expect(page("opt_in", null)).not.toContain("measurement");
   });
 
   it("keeps privacy-first controls quiet but keyboard native", () => {

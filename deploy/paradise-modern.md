@@ -57,7 +57,32 @@ Not available in this release yet.
 
 ## Measurement (C3.32)
 
-Not available in this release yet.
+```dotenv
+MEASUREMENT_PROVIDER=paradise
+PARADISEMODERN_SITE_ID=…                 # the site's public id at the provider
+PARADISEMODERN_EDGE_URL=https://edge.example.com   # the site's own edge host, one https origin
+```
+
+The provider's `track.js` (`/sdk/track.js?site=<id>`) and `capi.js`
+(`/capi.js?site=<id>`) load from the edge host, nonced, and the CSP adds that
+origin (`script-src`, `connect-src`, `img-src`; never on admin pages), only for
+a visitor who explicitly chose **Allow analytics and measurement**
+(`fh_ac=granted`). The privacy-first opt-out default's implied state is never
+enough, **Collection disabled** turns measurement off, and the public
+playground never loads it. While it is on, the privacy choice names the
+category and the provider and explains what allowing it means; the opt-out
+panel offers that explicit choice. Choose **Explicit opt-in** under **Traffic
+→ Collection and retention** to ask every visitor up front.
+
+For a visitor who allowed it, an accepted (not quarantined) form submission
+also sends one `lead` event to `POST /api/capi/{site}/event` after the
+visitor's response has been sent, deduplicated by the event id
+`freeholder-form:<submission id>`. **What is sent:** the enquiry's email and
+phone answers (when the form has them), the visitor's IP address and browser
+user agent, the page address, the click IDs the provider's script stored on
+the site's own domain (recognised keys only), and the submission id. Freeholder
+stores none of the address, user agent or click IDs it forwards. This is best
+effort: a failed conversion is not retried, and the enquiry is unaffected.
 
 ## Form screening (C3.33)
 
