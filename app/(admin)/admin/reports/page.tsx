@@ -14,8 +14,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ChartBar, FileArrowDown } from "@phosphor-icons/react/dist/ssr";
-import { Button, Card, CardBody, CardHeader, Field, Input, Pill } from "@/ui/primitives";
+import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill } from "@/ui/primitives";
 import { currentBusiness } from "@/core/settings/read";
+import { renderableTimezone } from "@/core/i18n/zoned";
 import { formatMoney } from "@/core/i18n";
 import {
   cohortReport,
@@ -59,13 +60,16 @@ export default async function ReportsPage({
   // C7.17), never a filter this screen invents — "who" is answered once.
   const segmentId = typeof query.segment === "string" && query.segment ? query.segment : null;
 
-  const [t, business, revenue, definitions, cohorts, views, audiences] = await Promise.all([
+  // Months are the business's months (§4.9). A stored zone the site cannot
+  // render counts in UTC and says so, rather than emptying the page.
+  const business = await currentBusiness();
+  const { timezone, recognised } = renderableTimezone(business?.timezone);
+  const [t, revenue, definitions, cohorts, views, audiences] = await Promise.all([
     getT(),
-    currentBusiness(),
-    domainOrNull(revenueReport.call({ days }, actor)),
+    domainOrNull(revenueReport.call({ days, timezone }, actor)),
     domainOrNull(reportDefinitions.call({}, actor)),
     domainOrNull(
-      cohortReport.call({ months: 12, ...(segmentId ? { segmentId } : {}) }, actor),
+      cohortReport.call({ months: 12, timezone, ...(segmentId ? { segmentId } : {}) }, actor),
     ),
     domainOrNull(listReportViews.call({}, actor)),
     domainOrNull(listSegments.call({}, actor)),
@@ -102,6 +106,13 @@ export default async function ReportsPage({
           <FileArrowDown size={14} weight="bold" />
           {t("reports.exportsLink")}
         </Link>
+        {recognised ? null : (
+          <div className="mt-3">
+            <Callout tone="warning">
+              {t("timezone.unrecognised", { zone: business?.timezone ?? "" })}
+            </Callout>
+          </div>
+        )}
       </div>
 
       {query.error ? (

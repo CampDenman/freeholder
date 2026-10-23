@@ -22,7 +22,8 @@ import {
   setIncludeBotsAction,
 } from "../../analytics-actions";
 import { currentBusiness } from "@/core/settings/read";
-import { Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
+import { renderableTimezone } from "@/core/i18n/zoned";
+import { Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { hasModuleAccess } from "@/core/service";
@@ -39,7 +40,9 @@ export default async function TrafficPage() {
     currentAnalyticsSettings(),
   ]);
   const includeBots = analytics.includeBots;
-  const timezone = business?.timezone ?? "UTC";
+  // An unrecognised stored zone counts in UTC and says so, rather than
+  // taking the whole page down (§4.9).
+  const { timezone, recognised } = renderableTimezone(business?.timezone);
 
   const [totals, pages, referrers, daily, vitals, campaigns, candidates, t] = await Promise.all([
     overview.call({ days: DAYS, includeBots }, actor),
@@ -78,6 +81,13 @@ export default async function TrafficPage() {
             {t("funnel.title")}
           </Link>
         </p>
+        {recognised ? null : (
+          <div className="mt-3">
+            <Callout tone="warning">
+              {t("timezone.unrecognised", { zone: business?.timezone ?? "" })}
+            </Callout>
+          </div>
+        )}
       </div>
 
       {/*
