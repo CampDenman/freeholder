@@ -58,7 +58,9 @@ export default async function PublicBooking({ searchParams }: { searchParams: Pr
   // C1.38: the public demo sends no mail, so it reserves for a made-up address instead.
   const playground = env().FREEHOLDER_PLAYGROUND === "1" && !verified;
   // One calendar is the common case; naming it beside every time only repeats it.
-  const manyCalendars = new Set(slots.map(s=>s.calendarId)).size > 1;
+  // A member's services (C12.25) always name whose time it is: the visitor
+  // chose a person from a profile, not a business.
+  const manyCalendars = Boolean(seller) || new Set(slots.map(s=>s.calendarId)).size > 1;
   const time = (d:Date) => new Intl.DateTimeFormat(locale,{timeZone:zone,timeStyle:"short"}).format(d);
   const day = (d:Date) => new Intl.DateTimeFormat(locale,{timeZone:zone,dateStyle:"full"}).format(d);
   const label = (slot: (typeof slots)[number]) => manyCalendars ? `${time(slot.startsAt)} · ${slot.calendarName}` : time(slot.startsAt);

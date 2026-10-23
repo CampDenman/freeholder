@@ -1081,7 +1081,13 @@ test.describe("members (C12.01)", () => {
     await anon.getByLabel("Date").fill(day);
     await anon.getByRole("button", { name: /find/i }).click();
     await expect(anon.getByRole("heading", { name: "Portrait session" })).toBeVisible();
-    await expect(anon.locator("form").filter({ hasText: "Rae Lane" }).first()).toBeVisible();
+    // Signed out, each time is a choice that names whose time it is; the
+    // email is verified for the chosen time (C6.19 choose-then-verify).
+    const time = anon.getByRole("link", { name: /^Choose .* · Rae Lane$/ }).first();
+    await expect(time).toBeVisible();
+    await time.click();
+    await expect(anon.getByRole("heading", { name: "Your chosen time" })).toBeVisible();
+    await expect(anon.getByRole("link", { name: "Verify your email to reserve this time" })).toHaveAttribute("href", /returnTo=.*seller%3D/);
     await axeInBothThemes(anon);
     await anon.goto("/book");
     await expect(anon.getByRole("heading", { name: "Portrait session" })).toHaveCount(0);
