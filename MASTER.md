@@ -5221,6 +5221,41 @@ deployments are portable, testable and incapable of silently forking the truth.
   media-pipeline render and retire. Still open: the owner adds the scoped
   credential per `deploy/screenshots-gallery.md`, then one live gallery
   update on freeholder.ai.)
+- [x] **C3.30** Launch a new hosted site with one command: `freeholder launch`
+  provisions the provider's resources (DigitalOcean first: scoped Spaces
+  buckets and key, a droplet from the recipe's cloud-init), generates and
+  keeps the site's secrets privately, installs and starts the stack, waits for
+  real readiness over a valid certificate, schedules and confirms backups,
+  and ends at a one-click owner claim link; resumable, idempotent, with
+  `--dry-run`, `--cutover` to the real domain and `--destroy`.
+  (Progress 2026-10-16: `packages/cli/src/launch/`, tested
+  against fakes of DigitalOcean, Spaces' S3, the registry, DNS and SSH in
+  `tests/core/launch-cli.test.ts`; PR #539, changeset `cli-launch.md`.
+  Checked 2026-10-22 on owner attestation: the owner (Tony Aly) reports
+  running Freeholder on DigitalOcean for multiple projects and directed
+  "Cross this one off as done." #539's tests use fakes; no agent-observed
+  live `freeholder launch` on a real account was run, so the real-account
+  end-to-end run through the owner's claim rests on that attestation, not
+  on recorded evidence here. **F04** N/A — a terminal command, not an admin
+  screen; it ends at the existing `/setup` claim. **F05** the CLI itself is
+  the agent surface: `--non-interactive`, `--json` summary and documented
+  exit codes in `packages/cli/README.md`. **F07** secrets only in the mode-600
+  env file and redacted from output; scoped Spaces key; temporary keys always
+  deleted; `--destroy` needs typed confirmation, keeps non-empty buckets and
+  reports any deletion it could not make; linear-time argument parsing
+  (all in `tests/core/launch-cli.test.ts`). **F09** resumable state in
+  `state.json`, nightly backups scheduled and a first one confirmed,
+  `--destroy` teardown; costs (droplet; Spaces' $5/month minimum continuing
+  after `--destroy` until cancelled) and safe storage of `CREDENTIAL_KEY` in
+  `packages/cli/README.md`. **F12** the package ships exactly the
+  repository's `deploy/digitalocean-droplet/infra` recipe via
+  `packages/cli/scripts/copy-recipe.mjs`, asserted byte-for-byte by
+  `tests/core/launch-cli.test.ts`.)
+  *(Audit follow-up 2026-10-22: rewrote two polynomial-backtracking patterns
+  (`defaultName`, `--domain` trailing-slash trim) as linear loops, and
+  `--destroy` no longer reports the site's Spaces key deleted when that
+  deletion failed. Regression tests in `tests/core/launch-cli.test.ts`;
+  changeset `cli-launch-hardening.md`.)*
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

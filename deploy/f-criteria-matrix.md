@@ -1649,6 +1649,24 @@ v2.
 - **F10** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
 - **F11** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
 - **F12** — `.github/workflows/screenshots.yml`: Partial (2026-10-16) — capture and branch publication are proven in CI on every push to main; the gallery publisher (`scripts/screenshots-gallery.mjs` + the workflow's `gallery` job) is proven end to end against a local instance (upload, dedup, publish, media-pipeline render, retire). Remaining: one live freeholder.ai run after the owner adds the scoped credential (`deploy/screenshots-gallery.md`).
+
+## C3.30 — Launch a new hosted site with one command
+
+*Checked 2026-10-22 on owner attestation: the owner reports running Freeholder on DigitalOcean for multiple projects. The tests below use fakes of every outside party; no agent-observed live launch on a real account is recorded.*
+
+- **F01** — N/A — the CLI adds no schema; the site it installs migrates itself on boot.
+- **F02** — N/A — no new service; `packages/cli/src/launch/` drives DigitalOcean's API and the installed stack from outside the app.
+- **F03** — N/A — no contact data; the owner is created by the existing `/setup` claim, never by the CLI.
+- **F04** — N/A — a terminal command, not an admin screen; it ends at the existing `/setup` claim link.
+- **F05** — `packages/cli/README.md`: `--non-interactive`, `--json` and documented exit codes make the command agent-drivable; covered in `tests/core/launch-cli.test.ts`.
+- **F06** — N/A — operator CLI output is English like the rest of `@freeholder/cli`; the claimed site's own surfaces are localized.
+- **F07** — `tests/core/launch-cli.test.ts`: secrets only in the mode-600 env file and redacted from output, scoped and temporary Spaces keys, confirmed `--destroy` that keeps non-empty buckets and reports any deletion it could not make, linear-time argument parsing.
+- **F08** — `tests/core/launch-cli.test.ts` against fakes of DigitalOcean, Spaces' S3, the registry, DNS and SSH.
+- **F09** — `packages/cli/README.md`: resumable state, nightly backups confirmed at launch, cutover, teardown, costs (Spaces billing continues after `--destroy` until cancelled) and safe storage of the env file holding `CREDENTIAL_KEY`.
+- **F10** — N/A — a one-off provisioning command; the installed site's performance is the recipe's (`deploy/digitalocean-droplet/README.md`).
+- **F11** — `packages/cli/README.md`, `deploy/digitalocean-droplet/README.md`, changesets `.changeset/cli-launch.md` and `.changeset/cli-launch-hardening.md`.
+- **F12** — `packages/cli/scripts/copy-recipe.mjs` ships exactly the repository's `deploy/digitalocean-droplet/infra` recipe, asserted byte-for-byte in `tests/core/launch-cli.test.ts`.
+
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/agents-board.test.ts`.
