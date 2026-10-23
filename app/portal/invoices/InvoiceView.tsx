@@ -32,7 +32,7 @@ export function InvoiceView({ invoice, token, t, locale, timezone, businessName,
           <ul className="grid list-none gap-4 p-0">
             {invoice.lines.map((line) => <li key={line.id} className="flex flex-wrap justify-between gap-2 border-b border-rule pb-3">
               <span>{line.description} <span className="text-ink-muted">({new Intl.NumberFormat(locale).format(line.quantityMicros / 1_000_000)})</span></span>
-              <span className="font-mono">{money(line.totalMinor)}</span>
+              <span className="font-mono">{money(line.amountMinor)}</span>
             </li>)}
           </ul>
           <dl className="mt-5 grid gap-2">

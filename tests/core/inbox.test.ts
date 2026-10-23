@@ -31,6 +31,7 @@ import {
   searchInbox,
   setConversationStatus,
   snoozeConversation,
+  teammateName,
   wakeSnoozedConversations,
 } from "@/core/messaging/inbox";
 import { recordMessage } from "@/core/messaging/service";
@@ -76,6 +77,18 @@ describe.runIf(hasDatabase)("inbox", { timeout: 90_000 }, () => {
     expect(assigned.assigneeUserId).toBe(STAFF.userId);
     const unassigned = await assignConversation.call({ id: one.id, userId: null }, OWNER);
     expect(unassigned.assigneeUserId).toBeNull();
+  });
+
+  it("names the teammate a thread is with, not their address (2026-10-23 pre-launch check)", async () => {
+    const one = await thread();
+    await db().update(users).set({ email: "sam.okafor@demo.freeholder.test" }).where(eq(users.id, STAFF.userId));
+    await assignConversation.call({ id: one.id, userId: STAFF.userId }, OWNER);
+    const [row] = await searchInbox.call({ assigneeUserId: STAFF.userId }, OWNER);
+    expect(row).toMatchObject({ assigneeEmail: "sam.okafor@demo.freeholder.test", assigneeName: "Sam Okafor" });
+    expect((await searchInbox.call({ unassigned: true }, OWNER)).every((each) => each.assigneeName === null)).toBe(true);
+    // A teammate with a linked contact goes by that contact's name.
+    expect(teammateName("Samuel Okafor", "sam.okafor@demo.freeholder.test")).toBe("Samuel Okafor");
+    expect(teammateName(null, "jo-ann_lee@example.test")).toBe("Jo Ann Lee");
   });
 
   it("refuses to hand a thread to somebody who is not here", async () => {

@@ -7,6 +7,7 @@
 // piece of that screen with a right and a wrong answer, and a page file cannot
 // export anything a test could reach.
 import { listServices } from "@/core/service";
+import type { Translate } from "@/core/i18n";
 
 /**
  * A log line for someone who did not build this.
@@ -46,14 +47,27 @@ function humanizeAction(action: string): string {
  */
 export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "forms.submit": "admin.activity.formSubmitted",
+  "forms.reviewSubmission": "admin.activity.formReviewed",
   "catalog.getOrCreateCart": "admin.activity.cartStarted",
   "catalog.addCartItem": "admin.activity.cartItemAdded",
   "catalog.shopperCheckout": "admin.activity.orderPlaced",
   "catalog.checkoutCart": "admin.activity.orderPlaced",
+  "catalog.cancelOrder": "admin.activity.orderCancelled",
+  "catalog.shipFulfillment": "admin.activity.orderShipped",
+  "catalog.deliverFulfillment": "admin.activity.orderDelivered",
+  "catalog.requestReturn": "admin.activity.returnRequested",
+  "catalog.refundReturn": "admin.activity.refundUpdated",
   "catalog.bookService": "admin.activity.appointmentBooked",
+  "catalog.moveMyBooking": "admin.activity.appointmentMoved",
   "bookings.rescheduleByToken": "admin.activity.appointmentMoved",
   "bookings.cancelByToken": "admin.activity.appointmentCancelled",
+  "bookings.create": "admin.activity.bookingCreated",
+  "bookings.reschedule": "admin.activity.bookingMoved",
+  "bookings.setStatus": "admin.activity.bookingUpdated",
   "events.register": "admin.activity.eventRegistration",
+  "events.confirmPaidRegistration": "admin.activity.eventRegistration",
+  "events.cancelRegistration": "admin.activity.eventRegistrationCancelled",
+  "events.checkIn": "admin.activity.eventCheckIn",
   "newsletters.subscribe": "admin.activity.newsletterSubscribed",
   "newsletters.unsubscribe": "admin.activity.newsletterUnsubscribed",
   "reviews.submit": "admin.activity.reviewLeft",
@@ -65,6 +79,16 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "waitlist.join": "admin.activity.waitlistJoined",
   "rentals.reserve": "admin.activity.rentalReserved",
   "invoicing.applyCustomerPayment": "admin.activity.invoicePaid",
+  "invoicing.createDraft": "admin.activity.invoiceDrafted",
+  "invoicing.issue": "admin.activity.invoiceIssued",
+  "invoicing.send": "admin.activity.invoiceSent",
+  "invoicing.viewCustomerInvoice": "admin.activity.invoiceViewed",
+  "invoicing.markViewed": "admin.activity.invoiceViewed",
+  "invoicing.void": "admin.activity.invoiceVoided",
+  "conversations.record": "admin.activity.messageReceived",
+  "conversations.replyAsContact": "admin.activity.messageReceived",
+  "messaging.postSiteChat": "admin.activity.messageReceived",
+  "conversations.reply": "admin.activity.messageReplied",
   "members.join": "admin.activity.memberJoined",
   "community.joinBySlug": "admin.activity.communityJoined",
   "members.linkAbuseReports": "admin.activity.uploadHeld",
@@ -76,11 +100,19 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "invoicing.applyPaymentCheckout": "admin.activity.paymentReceived",
   "invoicing.applyCustomerCheckout": "admin.activity.paymentReceived",
   "invoicing.completePaymentCheckout": "admin.activity.paymentReceived",
+  "invoicing.recordOfflinePayment": "admin.activity.paymentReceived",
+  "invoicing.applyInPersonPayment": "admin.activity.paymentReceived",
+  "invoicing.confirmCustomerPayment": "admin.activity.paymentReceived",
   "invoicing.failPayment": "admin.activity.paymentFailed",
+  "invoicing.createRefund": "admin.activity.refundUpdated",
+  "invoicing.startRefund": "admin.activity.refundUpdated",
+  "invoicing.recordOfflineRefund": "admin.activity.refundUpdated",
+  "invoicing.refundInPersonPayment": "admin.activity.refundUpdated",
   "invoicing.recordProviderRefundResult": "admin.activity.refundUpdated",
   "invoicing.settleRefund": "admin.activity.refundUpdated",
   "invoicing.failRefund": "admin.activity.refundUpdated",
   "invoicing.recordProviderPayout": "admin.activity.payoutRecorded",
+  "invoicing.reconcileProviderPayout": "admin.activity.payoutRecorded",
   "members.recordPayouts": "admin.activity.payoutRecorded",
   "members.settlePayouts": "admin.activity.payoutRecorded",
   "members.applyPayoutWebhook": "admin.activity.payoutRecorded",
@@ -92,8 +124,7 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
  * Plumbing a visitor's visit sets off around the thing they actually did:
  * the contact lookup behind a form, analytics, cart bookkeeping, demo entry.
  * Only these are left out of the owner's default feed; anything not listed
- * still shows with its service summary, so a new business event is never
- * hidden by omission.
+ * still shows, so a new business event is never hidden by omission.
  */
 export const OWNER_HIDDEN_ACTIONS: ReadonlySet<string> = new Set([
   "contacts.resolve",
@@ -107,17 +138,59 @@ export const OWNER_HIDDEN_ACTIONS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The part of the site an unmapped action touched, as a locale noun phrase.
+ * A module missing here reads as "your site" rather than as its code name.
+ */
+export const OWNER_ACTIVITY_AREAS: Readonly<Record<string, string>> = {
+  automations: "admin.activity.area.automations",
+  bookings: "admin.activity.area.bookings",
+  broadcasts: "admin.activity.area.broadcasts",
+  catalog: "admin.activity.area.catalog",
+  cms: "admin.activity.area.cms",
+  community: "admin.activity.area.community",
+  contacts: "admin.activity.area.contacts",
+  contracts: "admin.activity.area.contracts",
+  conversations: "admin.activity.area.conversations",
+  events: "admin.activity.area.events",
+  forms: "admin.activity.area.forms",
+  galleries: "admin.activity.area.galleries",
+  invoicing: "admin.activity.area.invoicing",
+  media: "admin.activity.area.media",
+  members: "admin.activity.area.members",
+  messaging: "admin.activity.area.messaging",
+  newsletters: "admin.activity.area.newsletters",
+  projects: "admin.activity.area.projects",
+  quotes: "admin.activity.area.quotes",
+  rentals: "admin.activity.area.rentals",
+  reviews: "admin.activity.area.reviews",
+  settings: "admin.activity.area.settings",
+  subscriptions: "admin.activity.area.subscriptions",
+  tasks: "admin.activity.area.tasks",
+};
+
+/**
  * One line of the owner's default "What changed" feed, or null to leave the
  * row out of it. A mapped action reads as business news; known visitor
  * plumbing (`OWNER_HIDDEN_ACTIONS`) stays in the full log ("Include
- * background work"); everything else keeps its service summary.
+ * background work"); anything else says which part of the site changed.
+ *
+ * Never the service summary: those are written for whoever calls the
+ * service ("Allocate a gapless number and issue an immutable draft
+ * invoice."), and an owner read them verbatim on the demo (2026-10-23
+ * pre-launch check). The summary stays in the full log.
  */
 export function ownerActivityLine(
   entry: { action: string; actor: string },
-  t: (key: string) => string,
+  t: Translate,
 ): string | null {
   const key = OWNER_ACTIVITY_LABELS[entry.action];
   if (key) return t(key);
   if (OWNER_HIDDEN_ACTIONS.has(entry.action)) return null;
-  return describeAction(entry.action);
+  const areaKey = OWNER_ACTIVITY_AREAS[entry.action.split(".")[0] ?? ""];
+  const area = t(areaKey ?? "admin.activity.area.site");
+  // The actor is printed beside the line, so a teammate's change does not
+  // claim Freeholder made it.
+  return entry.actor.startsWith("user:")
+    ? t("admin.activity.teamUpdated", { area })
+    : t("admin.activity.platformUpdated", { area });
 }

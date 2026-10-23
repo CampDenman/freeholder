@@ -149,7 +149,7 @@ export default async function InvoiceDetailPage({
               <li key={line.id} className="border-b border-rule pb-3 last:border-0">
                 <p className="font-medium">{line.description}</p>
                 <p className="mt-1 font-mono text-xs text-ink-muted">
-                  {quantityFromMicros(line.quantityMicros)} × {money(line.unitAmountMinor, invoice.currency)} = {money(line.totalMinor, invoice.currency)}
+                  {quantityFromMicros(line.quantityMicros)} × {money(line.unitAmountMinor, invoice.currency)} = {money(line.subtotalMinor - line.discountMinor, invoice.currency)}
                 </p>
               </li>
             ))}

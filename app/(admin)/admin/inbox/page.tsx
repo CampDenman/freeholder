@@ -223,7 +223,9 @@ export default async function InboxPage({
                       </Pill>
                     ) : null}
                     {thread.assigneeEmail ? (
-                      <span className="text-xs text-ink-muted">{thread.assigneeEmail}</span>
+                      <span className="text-xs text-ink-muted" title={thread.assigneeEmail}>
+                        {thread.assigneeName ?? thread.assigneeEmail}
+                      </span>
                     ) : (
                       <Pill tone="neutral">{t("inbox.nobody")}</Pill>
                     )}

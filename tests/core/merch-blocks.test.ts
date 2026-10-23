@@ -49,6 +49,11 @@ import {
 } from "@/modules/catalog/service";
 import { createTaxCategory } from "@/modules/invoicing/tax-service";
 import { updateBusiness } from "@/core/settings/service";
+import { eq } from "drizzle-orm";
+import { db } from "@/core/db";
+import { assets } from "@/core/media/schema";
+import { products } from "@/modules/catalog/schema";
+import { attachProductMedia } from "@/modules/catalog/merchandising";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const BUSINESS = {
@@ -437,6 +442,28 @@ describe.runIf(hasDatabase)("the merchandising blocks against the catalog", { ti
     expect(single).not.toContain("From CA$35.00");
     expect(single).toContain("Add to cart");
     expect(single).toContain('name="variantId"');
+  });
+
+  it("gives /products the collection card: picture, From price and add-to-cart (2026-10-23 pre-launch check)", async () => {
+    const coast = (await resolveVisibleProduct.call({ slug: "coast-print" }, OWNER))!;
+    const [asset] = await db()
+      .insert(assets)
+      .values({ kind: "image", storageKey: "test/coast.jpg", filename: "coast.jpg", mime: "image/jpeg", legacyBytes: 100, bytes: 100, status: "ready", altText: "Coast at dawn" })
+      .returning();
+    const [current] = await db().select({ version: products.version }).from(products).where(eq(products.id, coast.id));
+    await attachProductMedia.call({ productId: coast.id, expectedVersion: current!.version, assetId: asset!.id, role: "hero" }, OWNER);
+
+    const html = await htmlOf([{ id: "p1", type: "productsIndex", props: {} }]);
+    expect(html).toContain('href="/products/coast-print"');
+    expect(html).toContain('href="/products/dune-print"');
+    // The same price line the collection page shows: the cheapest sellable
+    // variant for a picker product, the exact price for a single variant.
+    expect(html).toContain("From CA$20.00");
+    expect(html).toContain("CA$35.00");
+    expect(html).toContain("Add to cart");
+    // The lead picture, with its alt text; a product without one stays text.
+    expect(html).toContain('alt="Coast at dawn"');
+    expect(html.match(/<img /g)).toHaveLength(1);
   });
 
   it("translates the chrome and prefixes links in fr, es and ar", async () => {

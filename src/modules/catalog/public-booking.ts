@@ -34,7 +34,12 @@ export const publicBookingQuote = defineService({
     if (!offering) throw new ServiceError("not_found", "That service is not bookable.");
     const price = await ctx.call(quoteServicePayment, { ...input, quantity: input.seats });
     if (!price.available) throw new ServiceError("conflict", "That service cannot be priced in this currency.");
-    const policy = termsFrom(await ctx.call(bookingTerms, { serviceOfferingId: offering.id }));
+    // No policy attached is quoted as none, not as a made-up one: the booking
+    // page and the appointment page then say the same thing (2026-10-23
+    // pre-launch check: "Cancellation and rescheduling policy" on one, "No
+    // cancellation policy" on the other). Cancelling still runs on NO_POLICY.
+    const attached = await ctx.call(bookingTerms, { serviceOfferingId: offering.id });
+    const policy = attached ? termsFrom(attached) : null;
     const hash = createHash("sha256").update(JSON.stringify({ productId: product.id, offeringId: offering.id, durationMin: offering.durationMin, capacity: offering.capacity, offeringUpdatedAt: offering.updatedAt, price: price.priceMinor, due: price.dueNowMinor, currency: input.currency, mode: input.mode, seats: input.seats, policy })).digest("hex");
     return { productId: product.id, offeringId: offering.id, name: product.name, durationMin: offering.durationMin, capacity: offering.capacity, currency: input.currency, totalMinor: price.priceMinor, dueNowMinor: price.dueNowMinor, balanceMinor: price.priceMinor-price.dueNowMinor, mode: input.mode, termsHash: hash, policy };
   },

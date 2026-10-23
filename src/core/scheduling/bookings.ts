@@ -40,6 +40,7 @@ import {
   cancellationOutcome,
   cancellationTerms,
   mayReschedule,
+  NO_POLICY,
   noShowOutcome,
   storedOutcome,
   termsFrom,
@@ -756,7 +757,10 @@ function tokenViewOf(
     // they have told you they cannot make.
     mayCancel: live,
     refusal: live ? (verdict.reason ?? null) : "This appointment is already closed.",
-    policyName: booking.cancellationPolicy ? terms.name : null,
+    // A booking that stored the no-policy fallback (public bookings did,
+    // before 2026-10-23) has no policy to name either.
+    policyName:
+      booking.cancellationPolicy && JSON.stringify(terms) !== JSON.stringify(NO_POLICY) ? terms.name : null,
     intakeFormId: outstanding?.intakeFormId ?? null,
     waiverToken: outstanding?.waiverToken ?? null,
   };

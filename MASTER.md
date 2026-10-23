@@ -4449,6 +4449,27 @@ project without silent telemetry, and ready to carry money.
   contact enquiry visible in the visitor's inbox; "What changed" reads "A
   visitor sent a form"; no hydration errors on either page after the fixes.
   Changeset `demo-booking-and-admin-polish.md`.
+  Pre-launch check 2026-10-23 (demo.freeholder.ai, final pass): the default
+  "What changed" still printed service summaries ("Allocate a gapless number
+  and issue an immutable draft invoice.") for unmapped actions. The rule is
+  now that an owner never sees a summary there: invoices drafted, issued,
+  sent, viewed and voided, messages received and replied, staff-side
+  bookings made, moved and updated, order cancel/ship/deliver/return,
+  offline and in-person payments, refunds, provider payouts, form review and
+  event check-in/cancel map to owner lines in all four locales; anything
+  still unmapped reads "Freeholder updated {area}" (or "Updated {area}" for a
+  teammate, whose name is printed beside it) from `OWNER_ACTIVITY_AREAS`,
+  falling back to "your site". Payment, refund, dispute and payout rows stay
+  visible by default; the summary stays in the full log. Demo copy: pickup
+  is "at the Courtenay studio" (the studio's address); the order
+  confirmation replaces "Sign in to track this order in your portal" with a
+  note that customer sign-in is off in the playground. Regressions:
+  `tests/core/audit-labels.test.ts` (every registered service, in every
+  locale and for system, visitor and teammate actors, is hidden or gets a
+  translated line that is neither its summary nor its code name),
+  `tests/core/seed-demo-busy.test.ts` (pickup names the location's city),
+  `tests/core/cart-storefront.test.ts` (playground confirmation). Changeset
+  `demo-prelaunch-polish.md`.
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable
@@ -5213,6 +5234,16 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   confirmation); the mapping's proof contract lands through #453's
   `tests/core/merch-blocks.test.ts` and
   `tests/browser/storefront-merch-blocks.spec.ts`.)
+  Pre-launch check 2026-10-23: /products, the "Shop" nav target, listed
+  names only while /c/<slug> priced every card. The `productsIndex` block
+  now renders the shared `CollectionGrid` with the same `purchaseOptions`
+  projection ("From CA$X" from the cheapest sellable variant, add-to-cart),
+  and every shelf (collection page, collection showcase, product row,
+  /products) shows the product's lead picture through the new batched
+  public query `catalog.productCardImages` (hero, else first gallery image;
+  public, ready, non-private images only; one query per shelf). Regression:
+  `tests/core/merch-blocks.test.ts` ("gives /products the collection
+  card…"). Changeset `demo-prelaunch-polish.md`.
 - [x] **C3.26** World-class merchandising: first-class product taxonomy —
   collections and categories with manual and rule-based (segment-driven)
   membership; faceted storefront browsing (filter/sort on price, options,
@@ -6367,6 +6398,18 @@ owner operations, never substitute for them.
   covers the same localized invoice URL contract. Hosted-provider timeout,
   replay and settlement tests use adapter doubles; this evidence does not
   claim a live provider charge or completion of C10.26.)*
+  Pre-launch check 2026-10-23: an event admission invoice showed the line at
+  CA$106.40 above a CA$95.00 subtotal and CA$11.40 tax. The invoice itself
+  was right (tax-exclusive zone: line subtotal 95.00, line tax 11.40, line
+  total 106.40, invoice subtotal 95.00); the customer projection
+  `invoicing.customerInvoice` gave the page only the line's tax-inclusive
+  `totalMinor` to print beside a pre-tax subtotal. Each line now also
+  carries `amountMinor` (subtotal less discount, the line's share of the
+  invoice subtotal), which the portal invoice and the admin invoice detail
+  print; `totalMinor` stays for existing API readers. Regression:
+  `tests/core/events.test.ts` ("taxes admission where the event happens…":
+  the customer copy's lines add up to its subtotal). Changeset
+  `demo-prelaunch-polish.md`.
 
 - [x] **C5.26** Build owner-configured calculators that compute only from inputs
   the owner published as attestations (§4.18) — affordability, cost ranges,
@@ -7166,6 +7209,16 @@ equipment, classes and expertise without double-booking or duplicated records.
 
 - [x] **C6.19** Deliver real public self-serve service booking: service selection, live availability, verified customer identity, explicit price/terms, race-safe reservation, invoice/payment handoff and customer confirmation/reschedule/cancel. The contact-link embed is not acceptance.
   *(Closed 2026-10-14 against `C6.19` on `main` (`f9b155be`, released as 0.2.0-beta.3 and live on freeholder.ai). Evidence: `tests/modules/customer-surfaces.test.ts` (stale terms rejected, slot contention, retry identity, deposit invoice, ownership) and `tests/browser/customer-surfaces.spec.ts` (verified customer books, reschedules and cancels); /book serves 200; scope and limits in `deploy/customer-surfaces-2026-10-07.md`; F01–F12 rows in `deploy/f-criteria-matrix.md`. **F04** `app/(public)/book/page.tsx`. **F05** `catalog.publicBookingQuote`/`bookService`/`moveMyBooking` in `src/modules/catalog/public-booking.ts`, projected to HTTP/MCP and `packages/sdk/src/generated.ts`. **F07** customer ownership and privacy in `tests/modules/customer-surfaces.test.ts`. **F09** provider and deployment limits recorded in `deploy/customer-surfaces-2026-10-07.md`. **F12** `tests/browser/customer-surfaces.spec.ts` composed journey. Live payment-provider settlement stays with C11.05.)*
+  Pre-launch check 2026-10-23: a service with no cancellation policy was
+  quoted with the `NO_POLICY` fallback, so /book showed a "Cancellation and
+  rescheduling policy" disclosure ("free until 0 hours", "reschedule up to
+  100 times") while the appointment page said "No cancellation policy".
+  `catalog.publicBookingQuote` now quotes `policy: null` when none is
+  attached (cancelling still runs on `NO_POLICY`), and both pages print the
+  same "No cancellation policy applies…" line; a booking that stored the
+  old fallback reads the same way (`policyName` null). Regression:
+  `tests/modules/customer-surfaces.test.ts`. Changeset
+  `demo-prelaunch-polish.md`.
 
 ### 43.12 C7 — Working CRM, messaging, inbox, and human operations
 
@@ -7432,6 +7485,12 @@ equipment, classes and expertise without double-booking or duplicated records.
   the URL like every other list (C7.06). `/admin/inbox`, no JavaScript, with the
   checkboxes and the action bar in one form. `0109_inbox_search.sql`. Coverage
   in `tests/core/inbox.test.ts`. **F04** `/admin/inbox` search/bulk. **F05** `conversations.assign`/`snooze`/`setStatus`/`reply`/`bulk`/`search`/`counts` at `/api/v1/conversations.*`, MCP `conversations_*`. **F07** `tests/core/inbox.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/inbox.test.ts` is the composition proof.)
+  Pre-launch check 2026-10-23: the inbox list printed an assignee as a raw
+  address (sam.okafor@demo.freeholder.test). `conversations.search` now
+  returns `assigneeName` — the teammate's linked contact name, else the
+  address's local part read as words — and the list shows it with the
+  address on hover. Regression: `tests/core/inbox.test.ts`. Changeset
+  `demo-prelaunch-polish.md`.
 - [x] **C7.10** Build SMS adapter contract and at least one production adapter,
   number provisioning/health and country/capability metadata. (The adapter
   transports; core decides — §4.14 puts consent, quiet hours and who may be
@@ -9090,6 +9149,12 @@ customer has one secure, comprehensible home for the relationship.
   §34's remaining client-side sharing is C9.29 (gallery partners), C9.34
   (quote view-only links), C9.35 (product/gift-registry sharing) and C9.36
   (embeds with backlinks). **F04** `/admin/sharing`. **F05** `share.targetFor`/`shareVia`/`saveTarget`/`resolveLink`/`linkReport` at `/api/v1/share.*`, MCP `share_*`; public `/share` and `/s/[ref]`. **F07** `tests/modules/share.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/share.test.ts` is the composition proof.)
+  Pre-launch check 2026-10-23: the demo showed all ten share channels under
+  every product and event. The demo seed now gives its products, services
+  and events a compact set (copy link, share sheet, email) through the same
+  `share.saveTarget` control an owner uses (`SHARE_COMPACT`); §34's share
+  option stays on every content page. Regression:
+  `tests/core/seed-demo-busy.test.ts`. Changeset `demo-prelaunch-polish.md`.
 - [x] **C9.29** Let a client share their proofing gallery with a partner:
   scoped guest access, owner-permitted, issued from the gallery the client
   already opened.

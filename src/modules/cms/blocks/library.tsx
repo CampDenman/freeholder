@@ -33,6 +33,7 @@ import { renderRichDoc } from "./rich-render";
 import { sanitizeOwnerHtml } from "./html";
 import { selectAssignedVariants } from "../experiments";
 import { AddToCart, addToCartLabels } from "../../../../app/(public)/buy/AddToCart";
+import { CollectionGrid } from "../../../../app/(public)/c/[slug]/CollectionGrid";
 
 /* ------------------------------------------------------------------ text */
 
@@ -861,28 +862,55 @@ export const productsIndex = defineBlock({
     showSubtitle: z.boolean().default(true),
   }),
   starter: () => ({}),
-  resolve: async () => {
-    const { listVisibleProducts } = await import("@/modules/catalog/service");
-    return listVisibleProducts.call({ limit: 200 }, { kind: "anonymous" });
+  // The shop index wears the collection page's card — picture, "From …"
+  // price and add-to-cart — rather than a list of names (2026-10-23
+  // pre-launch check: the "Shop" nav target was the one shelf without prices).
+  resolve: async (_props, ctx) => {
+    const { listVisibleProducts, purchaseOptions } = await import("@/modules/catalog/service");
+    const { productCardImages } = await import("@/modules/catalog/merchandising");
+    const actor = ctx.actor ?? { kind: "anonymous" as const };
+    const products = await listVisibleProducts.call({ limit: 200 }, { kind: "anonymous" });
+    if (products.length === 0) return null;
+    const slugs = products.map((product) => product.slug);
+    const [purchases, images] = await Promise.all([
+      purchaseOptions.call({ slugs }, actor),
+      productCardImages.call({ slugs }, { kind: "anonymous" }),
+    ]);
+    return {
+      products,
+      purchases: Object.fromEntries(purchases.map((entry) => [entry.slug, entry])),
+      currency: purchases.find((entry) => entry.currency)?.currency ?? null,
+      images: Object.fromEntries(images.map(({ slug, ...image }) => [slug, image])),
+    };
   },
   render: ({ props, resolved, ctx }) => {
-    if (!resolved || resolved.length === 0) return null;
+    if (!resolved || resolved.products.length === 0) return null;
     return (
-      <ul className="grid list-none gap-4 p-0">
-        {resolved.map((product) => (
-          <li key={product.id} className="border-b border-rule pb-4 last:border-0">
-            <a
-              href={ctx.localizeHref?.(`/products/${product.slug}`) ?? `/products/${product.slug}`}
-              className="font-semibold text-ink"
-            >
-              {product.name}
-            </a>
-            {props.showSubtitle && product.subtitle ? (
-              <p className="mt-1 text-sm text-ink-muted">{product.subtitle}</p>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+      <CollectionGrid
+        products={resolved.products.map((product) => ({
+          productId: product.id,
+          name: product.name,
+          slug: product.slug,
+          subtitle: props.showSubtitle ? product.subtitle : null,
+          brand: product.brand,
+        }))}
+        page={1}
+        pageCount={1}
+        labels={{
+          empty: ctx.t("store.collection.empty"),
+          previous: ctx.t("store.collection.previous"),
+          next: ctx.t("store.collection.next"),
+          page: ctx.t("store.collection.page", { page: 1, pages: 1 }),
+          pagination: ctx.t("store.collection.pagination"),
+        }}
+        productHref={(product) =>
+          ctx.localizeHref?.(`/products/${product.slug}`) ?? `/products/${product.slug}`
+        }
+        purchases={resolved.purchases}
+        formatMinor={(minor) => formatMoney(minor, resolved.currency ?? "USD", ctx.locale)}
+        buyLabels={addToCartLabels(ctx.t)}
+        images={resolved.images}
+      />
     );
   },
 });

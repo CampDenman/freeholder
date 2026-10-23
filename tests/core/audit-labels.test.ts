@@ -7,7 +7,7 @@
 // rendered `cms.ensureDefaults` as "Cm — ensure defaults" because the label
 // was derived by stripping a trailing s from the module name.
 import { describe, expect, it } from "vitest";
-import { describeAction, OWNER_ACTIVITY_LABELS, OWNER_HIDDEN_ACTIONS, ownerActivityLine } from "../../app/(admin)/admin/describeAction";
+import { describeAction, OWNER_ACTIVITY_AREAS, OWNER_ACTIVITY_LABELS, OWNER_HIDDEN_ACTIONS, ownerActivityLine } from "../../app/(admin)/admin/describeAction";
 import { catalogKeys, translator } from "@/core/i18n";
 import { HOUSEKEEPING_ACTIONS } from "@/core/events/service";
 import { ensureDefaults } from "@/modules/cms/service";
@@ -44,10 +44,10 @@ describe("audit log labels", () => {
     // …but money the platform records is shown by default, mapped or not…
     expect(ownerActivityLine({ action: "invoicing.processPaymentProviderEvents", actor: "system" }, t)).toBe("The payment provider updated a payment");
     expect(ownerActivityLine({ action: "members.reversePayouts", actor: "system" }, t)).toBe("A payout was reversed");
-    expect(ownerActivityLine({ action: "invoicing.reconcileProviderPayout", actor: "system" }, t)).toBe(describeAction("invoicing.reconcileProviderPayout"));
+    expect(ownerActivityLine({ action: "invoicing.reconcileProviderPayout", actor: "system" }, t)).toBe("A payout was recorded");
     for (const action of OWNER_HIDDEN_ACTIONS) expect(OWNER_ACTIVITY_LABELS[action], action).toBeUndefined();
-    // …and what the team did keeps its own words.
-    expect(ownerActivityLine({ action: "contacts.merge", actor: "user:00000000-0000-4000-8000-000000000001" }, t)).toBe(mergeContacts.def.summary);
+    // …and what the team did says where, without the service's jargon.
+    expect(ownerActivityLine({ action: "contacts.merge", actor: "user:00000000-0000-4000-8000-000000000001" }, t)).toBe("Updated contacts");
     // Every mapped label is a real, translated string in every locale.
     for (const locale of ["en", "es", "fr", "ar"]) {
       for (const key of new Set(Object.values(OWNER_ACTIVITY_LABELS))) {
@@ -58,8 +58,42 @@ describe("audit log labels", () => {
     for (const action of ["cms.heartbeatPresence", "cms.leavePresence", "cms.touchEditLease", "cms.releaseEditLease"]) {
       expect(HOUSEKEEPING_ACTIONS as readonly string[]).toContain(action);
     }
+    for (const key of [...new Set(Object.values(OWNER_ACTIVITY_AREAS)), "admin.activity.area.site", "admin.activity.teamUpdated", "admin.activity.platformUpdated"]) {
+      for (const locale of ["en", "es", "fr", "ar"]) expect(catalogKeys(locale), `${locale}: ${key}`).toContain(key);
+    }
     for (const action of [...Object.keys(OWNER_ACTIVITY_LABELS), "cms.heartbeatPresence", "cms.touchEditLease"]) {
       expect(listServices().has(action), `${action} is a registered service`).toBe(true);
+    }
+  });
+
+  it("never shows an owner a raw service summary in the default feed (2026-10-23 pre-launch check)", async () => {
+    await ready();
+    // The four lines the demo's "What changed" printed verbatim.
+    const en = translator("en");
+    expect(ownerActivityLine({ action: "invoicing.issue", actor: "system" }, en)).toBe("An invoice was issued");
+    expect(ownerActivityLine({ action: "invoicing.createDraft", actor: "system" }, en)).toBe("An invoice draft was started");
+    expect(ownerActivityLine({ action: "invoicing.viewCustomerInvoice", actor: "anonymous" }, en)).toBe("A customer opened an invoice");
+    expect(ownerActivityLine({ action: "conversations.record", actor: "system" }, en)).toBe("A message came in");
+    expect(ownerActivityLine({ action: "conversations.reply", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("A reply was sent");
+    // Unmapped: a generic line naming the area, never the code name.
+    expect(ownerActivityLine({ action: "invoicing.addTaxRate", actor: "system" }, en)).toBe("Freeholder updated invoices");
+    expect(ownerActivityLine({ action: "proof.somethingNew", actor: "system" }, en)).toBe("Freeholder updated your site");
+    // Every registered service, in every locale: hidden, or a translated line
+    // that is neither its summary, a missing catalog key nor its code name.
+    for (const locale of ["en", "es", "fr", "ar"]) {
+      const t = translator(locale);
+      for (const [name, service] of listServices()) {
+        for (const actor of ["system", "anonymous", "user:00000000-0000-4000-8000-000000000001"]) {
+          const line = ownerActivityLine({ action: name, actor }, t);
+          if (line === null) {
+            expect(OWNER_HIDDEN_ACTIONS.has(name), name).toBe(true);
+            continue;
+          }
+          expect(line, `${locale} ${name}`).not.toBe(service.def.summary);
+          expect(line, `${locale} ${name}`).not.toMatch(/admin\.activity\./);
+          expect(line, `${locale} ${name}`).not.toContain(name);
+        }
+      }
     }
   });
 

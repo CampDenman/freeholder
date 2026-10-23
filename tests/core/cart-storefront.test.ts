@@ -17,6 +17,7 @@
 //      EN/FR/ES/AR with localized links, and only semantic token classes.
 
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetEnvForTests } from "@/core/env";
 import type { ReactElement } from "react";
 import { createElement } from "react";
 import { renderToReadableStream, renderToStaticMarkup } from "react-dom/server";
@@ -364,6 +365,20 @@ describe.runIf(hasDatabase)("the public cart, checkout and confirmation pages", 
     expect(ok.html).toContain("CA$50.00");
     expect(ok.html).toContain("Pay now");
     expect(ok.html).toMatch(/\/portal\/invoices\/[0-9a-f-]+\?token=/);
+    expect(ok.html).toContain("Sign in to track this order in your portal");
+
+    // The playground turns customer sign-in off, so the confirmation does
+    // not offer it (2026-10-23 pre-launch check).
+    vi.stubEnv("FREEHOLDER_PLAYGROUND", "1");
+    resetEnvForTests();
+    try {
+      const demo = await renderConfirm({ cart: basket.cart.id, t: basket.cart.token! });
+      expect(demo.html).not.toContain("Sign in to track this order");
+      expect(demo.html).toContain("Customer sign-in is off in this demo.");
+    } finally {
+      vi.unstubAllEnvs();
+      resetEnvForTests();
+    }
 
     // Another guest's token is refused, and so is none at all — both the
     // same plain 404 the services answer.

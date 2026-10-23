@@ -24,6 +24,7 @@ import { createAudience, setAudienceServices } from "@/core/scheduling/audiences
 import { availableSlots } from "@/core/scheduling/resolver-service";
 import { bookings } from "@/core/scheduling/schema";
 import { bookingByToken } from "@/core/scheduling/bookings";
+import { NO_POLICY } from "@/core/scheduling/policy";
 import { PLAYGROUND_BASELINE_MODULE, PLAYGROUND_FICTIONAL_BOOKING_EMAIL, PLAYGROUND_ROW_CAPS } from "@/core/demo/playground-policy";
 import { moduleSettings } from "@/core/settings/schema";
 import { chosenSlot } from "../../app/(public)/book/chosen";
@@ -140,6 +141,14 @@ describe.runIf(hasDatabase)("public customer surfaces",()=>{
     // The retry converges on the same reservation, and the link is a real confirmation.
     expect(await bookPublicService.call({...input,email:"ada@example.com"},ANONYMOUS)).toEqual(guest);
     expect((await bookingByToken.call({token:guest.manageToken!},ANONYMOUS))?.status).toBe("requested");
+    // No policy on the service: the booking page and the appointment page
+    // both say there is none, rather than one quoting a made-up policy and
+    // the other naming "No cancellation policy" (2026-10-23 pre-launch check).
+    expect((await publicBookingQuote.call({productId:input.productId,currency:input.currency,mode:input.mode,seats:input.seats},ANONYMOUS)).policy).toBeNull();
+    expect((await bookingByToken.call({token:guest.manageToken!},ANONYMOUS))?.policyName).toBeNull();
+    // A booking that stored the old fallback reads the same way.
+    await db().update(bookings).set({cancellationPolicy:NO_POLICY}).where(eq(bookings.id,guest.bookingId));
+    expect((await bookingByToken.call({token:guest.manageToken!},ANONYMOUS))?.policyName).toBeNull();
   });
   it("refuses a playground guest booking once the bookings surface is full (C1.38)",async()=>{
     const {input}=await bookingSelection();

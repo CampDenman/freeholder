@@ -17,6 +17,14 @@ export interface CollectionGridProduct {
   brand: string | null;
 }
 
+/** A card's lead picture (catalog.productCardImages), when it has one. */
+export interface CollectionGridImage {
+  src: string;
+  width: number | null;
+  height: number | null;
+  altText: string | null;
+}
+
 export interface CollectionGridLabels {
   /** Shown when the collection resolves but holds nothing visible. */
   empty: string;
@@ -51,6 +59,7 @@ export function CollectionGrid({
   purchases,
   formatMinor,
   buyLabels,
+  images,
 }: {
   products: CollectionGridProduct[];
   page: number;
@@ -67,6 +76,12 @@ export function CollectionGrid({
   purchases?: Record<string, AddToCartProduct>;
   formatMinor?: (minor: number) => string;
   buyLabels?: AddToCartLabels;
+  /**
+   * Lead pictures keyed by product slug. Every shelf passes them — the
+   * collection page, the showcase block and /products — so a product card
+   * looks the same wherever a shopper meets it.
+   */
+  images?: Record<string, CollectionGridImage>;
 }) {
   const hrefFor = pageHref ?? ((target: number) => `?page=${target}`);
   return (
@@ -81,6 +96,17 @@ export function CollectionGrid({
                 href={productHref(product)}
                 className="grid gap-1 font-semibold text-ink hover:text-accent"
               >
+                {images?.[product.slug] ? (
+                  <img
+                    src={images[product.slug]!.src}
+                    alt={images[product.slug]!.altText ?? ""}
+                    width={images[product.slug]!.width ?? undefined}
+                    height={images[product.slug]!.height ?? undefined}
+                    loading="lazy"
+                    decoding="async"
+                    className="mb-2 aspect-square w-full rounded-md object-cover"
+                  />
+                ) : null}
                 {product.name}
                 {product.subtitle ? (
                   <span className="text-sm font-normal text-ink-muted">{product.subtitle}</span>

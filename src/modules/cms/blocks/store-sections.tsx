@@ -26,6 +26,7 @@ import { fromPlainString, richBodySchema } from "./rich";
 import { renderRichDoc } from "./rich-render";
 import {
   CollectionGrid,
+  type CollectionGridImage,
   type CollectionGridProduct,
 } from "../../../../app/(public)/c/[slug]/CollectionGrid";
 import { addToCartLabels, type AddToCartProduct } from "../../../../app/(public)/buy/AddToCart";
@@ -89,6 +90,14 @@ async function purchasesFor(
   };
 }
 
+/** Lead pictures for a shelf, keyed by slug, as CollectionGrid takes them. */
+async function imagesFor(slugs: string[]): Promise<Record<string, CollectionGridImage>> {
+  if (slugs.length === 0) return {};
+  const { productCardImages } = await import("@/modules/catalog/merchandising");
+  const entries = await productCardImages.call({ slugs }, { kind: "anonymous" });
+  return Object.fromEntries(entries.map(({ slug, ...image }) => [slug, image]));
+}
+
 function shelfLabels(t: Translate) {
   return {
     empty: t("store.collection.empty"),
@@ -137,7 +146,8 @@ export const collectionShowcase = defineBlock({
           ctx.actor ?? { kind: "anonymous" },
         )
       : { purchases: {}, currency: null };
-    return { shelf, purchases, currency };
+    const images = await imagesFor(shelf.products.map((product) => product.slug));
+    return { shelf, purchases, currency, images };
   },
   render: ({ props, resolved, ctx }) => {
     const heading = props.heading ? (
@@ -161,6 +171,7 @@ export const collectionShowcase = defineBlock({
           purchases={resolved.purchases}
           formatMinor={(minor) => formatMoney(minor, resolved.currency ?? "USD", ctx.locale)}
           buyLabels={addToCartLabels(ctx.t)}
+          images={resolved.images}
         />
       ) : null;
     if (!ctx.identifyBlocks) {
@@ -249,7 +260,8 @@ export const productRow = defineBlock({
     const { purchases, currency } = props.showPrices
       ? await purchasesFor(ordered.map((product) => product.slug), actor)
       : { purchases: {}, currency: null };
-    return { products: ordered, purchases, currency };
+    const images = await imagesFor(ordered.map((product) => product.slug));
+    return { products: ordered, purchases, currency, images };
   },
   render: ({ props, resolved, ctx }) => {
     const heading = props.heading ? (
@@ -281,6 +293,7 @@ export const productRow = defineBlock({
           purchases={resolved.purchases}
           formatMinor={(minor) => formatMoney(minor, resolved.currency ?? "USD", ctx.locale)}
           buyLabels={addToCartLabels(ctx.t)}
+          images={resolved.images}
         />
       ) : null;
     if (!ctx.identifyBlocks) {
@@ -357,7 +370,8 @@ export const promoBand = defineBlock({
           ctx.actor ?? { kind: "anonymous" },
         )
       : { purchases: {}, currency: null };
-    return { shelf, purchases, currency };
+    const images = await imagesFor(shelf.products.map((product) => product.slug));
+    return { shelf, purchases, currency, images };
   },
   render: ({ props, resolved, ctx }) => {
     const onAccent = props.tone === "accent" || props.tone === "ink";
@@ -392,6 +406,7 @@ export const promoBand = defineBlock({
           purchases={resolved.purchases}
           formatMinor={(minor) => formatMoney(minor, resolved.currency ?? "USD", ctx.locale)}
           buyLabels={addToCartLabels(ctx.t)}
+          images={resolved.images}
         />
       ) : null;
     const inner = (
