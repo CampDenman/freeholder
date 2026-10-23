@@ -46,6 +46,10 @@ import {
   SERVICES,
 } from "../../seed/demo/content";
 import type { BlockNode } from "@/modules/cms/blocks/types";
+import { recentActivity } from "@/core/events/service";
+import { SEED_AUDIT_ACTOR } from "@/core/service";
+import { translator } from "@/core/i18n";
+import { collapseOwnerFeed, ownerActivityLine } from "../../app/(admin)/admin/describeAction";
 import { compute } from "@/modules/calculators/service";
 import { listNewsletters, listPublicIssues, listTemplates } from "@/modules/newsletters/service";
 import {
@@ -254,6 +258,36 @@ describe.runIf(hasDatabase)("installing the demo", { timeout: 120_000 }, () => {
       () => seedDemoIfRequested(),
     );
     expect(again).toEqual({ status: "already-populated" });
+  });
+
+  it("keeps the install out of the owner's feed and shows the business instead (2026-10-23)", async () => {
+    const outcome = await withEnvironment(
+      { NODE_ENV: "development", FREEHOLDER_SEED_DEMO: "busy", FREEHOLDER_PLAYGROUND: undefined },
+      () => seedDemoIfRequested(),
+    );
+    expect(outcome.status).toBe("installed");
+    // Still recorded: the full trail says the seed wrote these rows…
+    const all = await recentActivity.call({ limit: 100, include: "all" }, OWNER);
+    const seedRows = all.filter((row) => row.actor === SEED_AUDIT_ACTOR);
+    expect(seedRows.length).toBeGreaterThan(20);
+    expect(seedRows.some((row) => row.action.startsWith("cms."))).toBe(true);
+    expect(all.some((row) => row.actor === "system" && row.action.startsWith("cms."))).toBe(false);
+    // …but the owner's default feed has none of them, and reads as business.
+    const people = await recentActivity.call({ limit: 100, include: "people" }, OWNER);
+    expect(people.filter((row) => row.actor === SEED_AUDIT_ACTOR)).toEqual([]);
+    expect(people.filter((row) => row.action.startsWith("cms.") || row.action.startsWith("demo."))).toEqual([]);
+    const t = translator("en");
+    const feed = collapseOwnerFeed(
+      people.map((row) => ({ ...row, line: ownerActivityLine(row, t) })),
+      t,
+      { truncated: people.length >= 100 },
+    ).slice(0, 12);
+    expect(feed).toHaveLength(12);
+    expect(feed.map((row) => row.line).join("\n")).not.toMatch(/Freeholder updated/);
+    expect(feed.some((row) => /order|appointment|message|payment|invoice|form/i.test(row.line))).toBe(true);
+    // The read side marks the invented history, so the page says "(sample)".
+    expect(people.slice(0, 12).every((row) => row.sample)).toBe(true);
+    expect(all.filter((row) => row.actor === SEED_AUDIT_ACTOR).every((row) => !row.sample)).toBe(true);
   });
 
   it("counts a late busy layer as playground seed, not visitor rows", async () => {

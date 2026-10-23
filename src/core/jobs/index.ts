@@ -29,6 +29,7 @@ import {
   type JobRuntimeState,
 } from "@/core/jobs/health";
 import { jobIdempotencyKeys } from "@/core/jobs/schema";
+import { outsideSeeding } from "@/core/audit-origin";
 
 type JobTx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -522,7 +523,11 @@ async function ensureDeadLetterQueue(instance: PgBoss): Promise<void> {
 export async function startJobProducer(): Promise<PgBoss | undefined> {
   if (!producerEnabled()) return undefined;
   if (boss) return boss;
-  producerStarting ??= (async () => {
+  // The first enqueue may come from inside the demo seed (`runAsSeed`). The
+  // producer, its supervisor and schedule timers, error emitter and heartbeat
+  // interval live for the whole process, so they are created outside that
+  // scope: otherwise everything they later trigger would be marked as seed.
+  producerStarting ??= outsideSeeding(() => (async () => {
     const instance = new PgBoss({
       connectionString: databaseUrl(),
       schema: "pgboss",
@@ -545,7 +550,7 @@ export async function startJobProducer(): Promise<PgBoss | undefined> {
       await instance.stop({ graceful: false }).catch(() => undefined);
       throw error;
     }
-  })().catch((error) => {
+  })()).catch((error) => {
     producerStarting = undefined;
     throw error;
   });
@@ -717,7 +722,13 @@ function stateReader(instance: PgBoss, name: string, id: string) {
 }
 
 /** Start every registered handler. Safe to call more than once. */
-export async function startJobs(): Promise<PgBoss | undefined> {
+export function startJobs(): Promise<PgBoss | undefined> {
+  // Workers poll for the life of the process; like the producer, they never
+  // inherit a seeding scope from whoever started them.
+  return outsideSeeding(() => startWorkers());
+}
+
+async function startWorkers(): Promise<PgBoss | undefined> {
   const instance = await startJobProducer();
   if (!instance || !workersEnabled()) return instance;
 

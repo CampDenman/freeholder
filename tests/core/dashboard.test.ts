@@ -76,6 +76,34 @@ describe.runIf(hasDatabase)("the admin overview data", () => {
       expect(activity[0]!.actor).toBe(`user:${STAFF.userId}`);
     });
 
+    it("keeps returning each row's subject and diff alongside the sample flag (2026-10-23 review)", async () => {
+      const contact = await createContact.call({ name: "Ada" }, STAFF);
+      const [row] = await recentActivity.call({ limit: 1 }, STAFF);
+      expect(row).toMatchObject({
+        action: "contacts.create",
+        subjectType: "contact",
+        subjectId: contact.id,
+        sample: false,
+      });
+      expect((row as Record<string, unknown>).diff).toMatchObject({ name: "Ada" });
+    });
+
+    it("reads only a JSON true as sample, and never fails on another value (2026-10-23 review)", async () => {
+      await db().insert(auditLog).values([
+        { actor: "system", action: "test.trueSample", diff: { seeded: true }, at: new Date(Date.now() + 3_000) },
+        { actor: "system", action: "test.stringSample", diff: { seeded: "yes" }, at: new Date(Date.now() + 2_000) },
+        { actor: "system", action: "test.stringTrue", diff: { seeded: "true" }, at: new Date(Date.now() + 1_000) },
+        { actor: "system", action: "test.noFlag", diff: {}, at: new Date() },
+      ]);
+      const rows = await recentActivity.call({ limit: 4 }, STAFF);
+      expect(rows.map((row) => [row.action, row.sample])).toEqual([
+        ["test.trueSample", true],
+        ["test.stringSample", false],
+        ["test.stringTrue", false],
+        ["test.noFlag", false],
+      ]);
+    });
+
     it("honours the limit", async () => {
       for (let i = 0; i < 5; i += 1) {
         await createContact.call({ name: `Contact ${i}` }, STAFF);

@@ -5,10 +5,10 @@
 // log nobody can read does not keep it. This is the read side of the rows the
 // service wrapper has been writing since the spine landed.
 import { z } from "zod";
-import { desc, notInArray } from "drizzle-orm";
+import { and, desc, getTableColumns, ne, notInArray, sql } from "drizzle-orm";
 import { auditLog } from "@/core/events/schema";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineService } from "@/core/service";
+import { defineService, SEED_AUDIT_ACTOR } from "@/core/service";
 
 /**
  * Work that is never news to an owner even when it acts: editor presence
@@ -48,7 +48,8 @@ export const recentActivity = defineService({
     limit: z.number().int().min(1).max(100).default(20),
     /**
      * `people` leaves out HOUSEKEEPING_ACTIONS (scheduled sweeps, presence
-     * clean-up, signup recovery, demo entry): true, but meaningless in an
+     * clean-up, signup recovery, demo entry) and rows written while seeding
+     * (`SEED_AUDIT_ACTOR`, the demo install at boot): true, but meaningless in an
      * owner's "what changed". System-recorded business events such as a
      * webhook-applied payment stay. `all` is the full trail for diagnostics
      * and stays the default for API callers.
@@ -61,15 +62,27 @@ export const recentActivity = defineService({
       actor: z.string(),
       action: z.string(),
       at: timestamp,
+      /**
+       * Invented sample history (the busy demo writes it with
+       * `diff.seeded = true`), never something that happened on the site.
+       */
+      sample: z.boolean(),
     }),
   ),
   handler: (input, ctx) =>
     ctx.tx
-      .select()
+      .select({
+        // Every column the response has always carried (subject and diff
+        // included), plus the flag.
+        ...getTableColumns(auditLog),
+        // A jsonb comparison, not a cast: a stray `seeded: "yes"` is simply
+        // not sample, and can never make the cast throw and take the feed down.
+        sample: sql<boolean>`coalesce(${auditLog.diff} -> 'seeded' = 'true'::jsonb, false)`,
+      })
       .from(auditLog)
       .where(
         input.include === "people"
-          ? notInArray(auditLog.action, [...HOUSEKEEPING_ACTIONS])
+          ? and(notInArray(auditLog.action, [...HOUSEKEEPING_ACTIONS]), ne(auditLog.actor, SEED_AUDIT_ACTOR))
           : undefined,
       )
       .orderBy(desc(auditLog.at))

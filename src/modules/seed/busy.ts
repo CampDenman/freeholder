@@ -22,6 +22,7 @@ import { seedBusyBusiness, world } from "../../../seed/demo/busy";
 import { PAST_EVENT_SLUGS } from "../../../seed/demo/busy/calendar";
 import { events } from "@/modules/events/schema";
 import { syncEventPublicPage } from "@/modules/events/public-pages";
+import { demoSeedBusy } from "./boot";
 
 /** The assistant every staff-side record is attributed to. Marked demo (C12.16). */
 export const BUSY_STAFF_EMAIL = "sam.okafor@demo.freeholder.test";
@@ -46,7 +47,11 @@ export const installBusyDemo = defineService({
   name: "demo.installBusy",
   summary: "Add six months of sample customers, sales, bookings and traffic to the demo business.",
   kind: "mutation",
-  permission: "scoped",
+  // System only, and only on a deploy that asked for the busy demo: the layer
+  // writes months of backdated sample history — audit rows among them — and
+  // no person or agent may plant that in a real site's trail (2026-10-23
+  // review). The one-time sentinel below only stops a second run.
+  permission: "system",
   external: false,
   writeClass: "write",
   input: z.object({
@@ -57,6 +62,12 @@ export const installBusyDemo = defineService({
     counts: z.record(z.string(), z.record(z.string(), z.number().int())),
   }),
   handler: async (input, ctx) => {
+    if (!demoSeedBusy(env())) {
+      throw new ServiceError(
+        "permission",
+        "Sample business history installs only on a demo deploy (FREEHOLDER_SEED_DEMO=busy or the playground).",
+      );
+    }
     // Busy data only ever lands once: the sample assistant is the tell that
     // it already ran.
     const [{ n } = { n: 0 }] = await ctx.tx

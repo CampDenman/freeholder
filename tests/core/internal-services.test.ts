@@ -33,6 +33,9 @@ const INTERNAL = [
   "cms.purgeExpiredPages",
   "cms.resolvePageForRender",
   "collections.purgeExpired",
+  // The busy demo writes backdated sample history: only the demo boot may
+  // (2026-10-23 review), never a person or an agent with demo access.
+  "demo.installBusy",
   "forms.purgeExpired",
   "popups.purgeExpired",
   "segments.purgeExpired",

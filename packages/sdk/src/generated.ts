@@ -4388,7 +4388,7 @@ export interface ServiceCatalog {
   };
   "events.recentActivity": {
     input: { limit?: number; include?: "all" | "people" };
-    output: { id: string; actor: string; action: string; at: string; [key: string]: unknown }[];
+    output: { id: string; actor: string; action: string; at: string; sample: boolean; [key: string]: unknown }[];
   };
   "events.register": {
     input: { eventId: string; sessionId: string; ticketId?: string; email: string; name?: string; quantity?: number; submissionToken?: string };

@@ -33,7 +33,7 @@ export type AuthorRef = {
 };
 
 export function parseActor(actor: string): { kind: AuthorKind; id: string | null } {
-  if (actor === "system") return { kind: "system", id: null };
+  if (actor === "system" || actor.startsWith("system:")) return { kind: "system", id: null };
   if (actor === "anonymous") return { kind: "anonymous", id: null };
   if (actor.startsWith("agent:")) return { kind: "agent", id: actor.slice("agent:".length) };
   if (actor.startsWith("user:")) return { kind: "user", id: actor.slice("user:".length) };

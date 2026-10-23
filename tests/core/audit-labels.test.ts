@@ -7,8 +7,11 @@
 // rendered `cms.ensureDefaults` as "Cm — ensure defaults" because the label
 // was derived by stripping a trailing s from the module name.
 import { describe, expect, it } from "vitest";
-import { describeAction, OWNER_ACTIVITY_AREAS, OWNER_ACTIVITY_LABELS, OWNER_HIDDEN_ACTIONS, needsOwnLine, ownerActivityLine } from "../../app/(admin)/admin/describeAction";
+import { collapseOwnerFeed, describeAction, OWNER_ACTIVITY_AREAS, OWNER_ACTIVITY_LABELS, OWNER_HIDDEN_ACTIONS, needsOwnLine, ownerActivityLine } from "../../app/(admin)/admin/describeAction";
 import { catalogKeys, translator } from "@/core/i18n";
+import { actorLabel } from "../../app/(admin)/admin/actorLabel";
+import { SEED_AUDIT_ACTOR } from "@/core/service";
+import { parseActor } from "@/modules/cms/history";
 import { HOUSEKEEPING_ACTIONS } from "@/core/events/service";
 import { ensureDefaults } from "@/modules/cms/service";
 import { mergeContacts } from "@/core/contacts/service";
@@ -157,6 +160,74 @@ describe("audit log labels", () => {
         }
       }
     }
+  });
+
+  it("folds a run of the same line by the same actor into one row with a count (2026-10-23)", () => {
+    const t = translator("en");
+    const row = (id: number, actor: string, line: string) => ({ id: String(id), actor, line });
+    const folded = collapseOwnerFeed(
+      [
+        ...Array.from({ length: 15 }, (_, i) => row(i, "system", "Freeholder updated pages")),
+        row(20, "anonymous", "A visitor sent a form"),
+        row(21, "user:a", "Updated contacts"),
+        row(22, "user:b", "Updated contacts"),
+        row(23, "user:a", "Updated contacts"),
+        row(24, "user:a", "Updated contacts"),
+        row(25, "system", "Freeholder updated pages"),
+      ],
+      t,
+    );
+    expect(folded.map((entry) => [entry.line, entry.count, entry.id])).toEqual([
+      ["Freeholder updated pages ×15", 15, "0"],
+      ["A visitor sent a form", 1, "20"],
+      ["Updated contacts", 1, "21"],
+      // A different teammate breaks the run; the order of events is kept.
+      ["Updated contacts", 1, "22"],
+      ["Updated contacts ×2", 2, "23"],
+      ["Freeholder updated pages", 1, "25"],
+    ]);
+    expect(collapseOwnerFeed([], t)).toEqual([]);
+    // A hidden row between two identical lines is something else that
+    // happened: it breaks the run, and is itself left out (2026-10-23 review).
+    const hidden = { id: "h", actor: "system", line: null };
+    expect(
+      collapseOwnerFeed([row(1, "system", "Freeholder updated pages"), hidden, row(2, "system", "Freeholder updated pages")], t)
+        .map((entry) => [entry.line, entry.count]),
+    ).toEqual([["Freeholder updated pages", 1], ["Freeholder updated pages", 1]]);
+    // A run that reaches the end of a read that hit its limit may go on past
+    // it: "+" rather than a silent undercount…
+    const page = [row(1, "anonymous", "A visitor sent a form"), ...Array.from({ length: 99 }, (_, i) => row(10 + i, "system", "Freeholder updated pages"))];
+    expect(collapseOwnerFeed(page, t, { truncated: true }).map((entry) => entry.line)).toEqual([
+      "A visitor sent a form",
+      "Freeholder updated pages ×99+",
+    ]);
+    // …but not when the feed was read to its end, nor for a run the end
+    // does not reach.
+    expect(collapseOwnerFeed(page, t).map((entry) => entry.line)).toEqual(["A visitor sent a form", "Freeholder updated pages ×99"]);
+    expect(collapseOwnerFeed([...page, row(200, "anonymous", "A visitor sent a form")], t, { truncated: true }).map((entry) => entry.line)).toEqual([
+      "A visitor sent a form",
+      "Freeholder updated pages ×99",
+      // A single row at the limit is not a run and gets no suffix.
+      "A visitor sent a form",
+    ]);
+    // A hidden row as the last one read ends no visible run at the limit.
+    expect(collapseOwnerFeed([...page, hidden], t, { truncated: true }).map((entry) => entry.line)).toEqual([
+      "A visitor sent a form",
+      "Freeholder updated pages ×99",
+    ]);
+    expect(translator("en")("admin.activity.sample", { line: "A customer placed an order" })).toBe("A customer placed an order (sample)");
+    for (const locale of ["en", "es", "fr", "ar"]) {
+      expect(collapseOwnerFeed([row(1, "system", "x"), row(2, "system", "x")], translator(locale))[0]!.line).toBe("x ×2");
+      expect(catalogKeys(locale)).toContain("actor.seed");
+    }
+  });
+
+  it("names seeding as setup, never as a visitor (2026-10-23)", () => {
+    const t = translator("en");
+    expect(actorLabel(SEED_AUDIT_ACTOR, t)).toBe("Site setup");
+    expect(actorLabel("system", t)).toBe("The platform");
+    expect(ownerActivityLine({ action: "invoicing.createSchedule", actor: SEED_AUDIT_ACTOR }, t)).toBe("Freeholder updated invoices");
+    expect(parseActor(SEED_AUDIT_ACTOR)).toEqual({ kind: "system", id: null });
   });
 
   it("keeps history readable when the service is gone", () => {

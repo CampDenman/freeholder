@@ -369,7 +369,7 @@ export function ownerActivityLine(
   // work reads as "Freeholder updated…".
   if (entry.actor.startsWith("user:")) return t("admin.activity.teamUpdated", { area });
   if (entry.actor.startsWith("agent:")) return t("admin.activity.agentUpdated", { area });
-  if (entry.actor === "system") return t("admin.activity.platformUpdated", { area });
+  if (entry.actor === "system" || entry.actor.startsWith("system:")) return t("admin.activity.platformUpdated", { area });
   return t("admin.activity.visitorUpdated", { area });
 }
 
@@ -389,4 +389,53 @@ export function needsOwnLine(action: string): boolean {
     /grant|Grant|Payment|Refund|Payout|Dispute|Price|Balance|Credit|Charge|LateFee|GiftCard|Invoice|Secret|Feed/.test(verb) ||
     (module === "invoicing" && /^(issue|void|send|createDraft|cancel|apply|settle|fail|record|reconcile|submit|claim|begin|start|complete|confirm|revoke|adjust|assess)/.test(verb))
   );
+}
+
+/**
+ * Fold runs of the same owner line from the same actor into one row:
+ * "Freeholder updated pages ×15" instead of fifteen rows. A bulk edit, an
+ * import or a burst of platform work is one thing that happened, and the feed
+ * has twelve rows to say what else did (2026-10-23).
+ *
+ * `entries` is the raw feed in order, with `line: null` for rows the owner
+ * view hides. Only rows truly adjacent in it fold: a hidden row between two
+ * identical lines is something else that happened, so it breaks the run (and
+ * is then dropped). When the read stopped at its limit (`truncated`), a run
+ * that reaches the last row read may go on past it, so its count says "+"
+ * rather than undercounting silently. The row shown is the newest of its run.
+ */
+export function collapseOwnerFeed<Entry extends { actor: string; line: string | null }>(
+  entries: readonly Entry[],
+  t: Translate,
+  options: { truncated?: boolean } = {},
+): Array<Entry & { line: string; count: number }> {
+  const runs: Array<{ entry: Entry & { line: string }; count: number; reachesEnd: boolean }> = [];
+  let open: (typeof runs)[number] | null = null;
+  entries.forEach((entry, index) => {
+    const atEnd = index === entries.length - 1;
+    if (entry.line === null) {
+      open = null;
+      return;
+    }
+    if (open && open.entry.actor === entry.actor && open.entry.line === entry.line) {
+      open.count += 1;
+      open.reachesEnd = atEnd;
+      return;
+    }
+    open = { entry: entry as Entry & { line: string }, count: 1, reachesEnd: atEnd };
+    runs.push(open);
+  });
+  return runs.map(({ entry, count, reachesEnd }) => {
+    // A single row is not a run: it gets no count, "+" or otherwise.
+    const more = Boolean(options.truncated) && reachesEnd && count > 1;
+    return {
+      ...entry,
+      count,
+      line: more
+        ? t("admin.activity.repeatedMore", { line: entry.line, count })
+        : count > 1
+          ? t("admin.activity.repeated", { line: entry.line, count })
+          : entry.line,
+    };
+  });
 }

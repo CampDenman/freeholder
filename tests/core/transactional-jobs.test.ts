@@ -25,6 +25,7 @@ import {
   type EnqueuedJob,
 } from "@/core/jobs";
 import { getJobRuntimeEvidence } from "@/core/jobs/health";
+import { isSeeding, runAsSeed } from "@/core/audit-origin";
 import {
   backgroundJobsBriefingContribution,
   cancelJobRun,
@@ -211,7 +212,17 @@ describe.runIf(hasDatabase)("transactional background work", () => {
     },
   });
 
+  const seedScopeObserved: boolean[] = [];
+  const seedScope = defineJob({
+    name: "test.seedScope",
+    summary: "Report whether a job runs inside the seed's audit scope.",
+    handler: async () => {
+      seedScopeObserved.push(isSeeding());
+    },
+  });
+
   const testJobs = [
+    seedScope,
     transactional,
     retries,
     serial,
@@ -283,6 +294,33 @@ describe.runIf(hasDatabase)("transactional background work", () => {
     resetEnvForTests();
     await closeDb();
   });
+
+  it("never lets the job runtime inherit the seed's audit scope (2026-10-23)", async () => {
+    // A fresh process: the demo seed's first enqueue is what starts the
+    // producer, and boot may start workers before the scope has unwound.
+    await stopJobs();
+    seedScopeObserved.length = 0;
+    const receipt = await runAsSeed(async () => {
+      expect(isSeeding()).toBe(true);
+      const queued = await db().transaction((tx) => ctxlessEnqueue(tx, seedScope.name));
+      await startJobs();
+      expect(isSeeding()).toBe(true);
+      return queued;
+    });
+    await eventually(async () => (await getJob(seedScope.name, receipt.id))?.state === "completed");
+    // The job ran on a worker the seed started, and still outside the scope,
+    // so whatever it writes is the platform's own work, not seed.
+    expect(seedScopeObserved).toEqual([false]);
+
+    // Producer started by the seed's enqueue, workers mounted later outside
+    // it: the same answer.
+    await stopJobs();
+    seedScopeObserved.length = 0;
+    const later = await runAsSeed(() => db().transaction((tx) => ctxlessEnqueue(tx, seedScope.name)));
+    await startJobs();
+    await eventually(async () => (await getJob(seedScope.name, later.id))?.state === "completed");
+    expect(seedScopeObserved).toEqual([false]);
+  }, 30_000);
 
   it("commits the business call, idempotency claim and pg-boss row together", async () => {
     const rolledBack = await failure(

@@ -6,7 +6,7 @@ import { Users, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { contactStats } from "@/core/contacts/service";
 import { recentActivity } from "@/core/events/service";
 import { formatDateTime } from "@/core/i18n";
-import { describeAction, ownerActivityLine } from "./describeAction";
+import { collapseOwnerFeed, describeAction, ownerActivityLine } from "./describeAction";
 import { actorLabel } from "./actorLabel";
 import { chooseFirstWin } from "@/core/guidance/first-win";
 import { Callout, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
@@ -23,6 +23,9 @@ import { GuidancePanel } from "@/ui/GuidancePanel";
 import { adminGuidanceAction } from "../guidance-actions";
 
 export const dynamic = "force-dynamic";
+
+/** How many rows the owner feed reads before folding runs and keeping 12. */
+const OWNER_FEED_READ = 100;
 
 
 
@@ -43,7 +46,7 @@ export default async function AdminOverviewPage({
   const [business, stats, rawActivity, t, jobSummary, guidance] = await Promise.all([
     currentBusiness(),
     canViewContacts ? contactStats.call({}, actor) : Promise.resolve(null),
-    canViewEvents ? recentActivity.call({ limit: includeSystem ? 12 : 60, include: includeSystem ? "all" : "people" }, actor) : Promise.resolve(null),
+    canViewEvents ? recentActivity.call({ limit: includeSystem ? 12 : OWNER_FEED_READ, include: includeSystem ? "all" : "people" }, actor) : Promise.resolve(null),
     getT(),
     canViewPlatform ? getJobSummary.call({}, actor) : Promise.resolve(null),
     listGuidance.call({}, actor),
@@ -53,12 +56,19 @@ export default async function AdminOverviewPage({
     : null;
 
   // The owner's feed says each row as business news or leaves it to the full
-  // log; the full log keeps every row and its service summary.
-  const activity = rawActivity
-    ? rawActivity
-        .map((entry) => ({ ...entry, line: includeSystem ? describeAction(entry.action) : ownerActivityLine(entry, t) }))
-        .filter((entry): entry is typeof entry & { line: string } => entry.line !== null)
-        .slice(0, 12)
+  // log, and folds a run of the same line by the same actor into one row with
+  // a count; the full log keeps every row and its service summary.
+  // Invented sample history (the busy demo's) says so in both views.
+  const lineOf = (entry: NonNullable<typeof rawActivity>[number]): string | null => {
+    const line = includeSystem ? describeAction(entry.action) : ownerActivityLine(entry, t);
+    return line !== null && entry.sample ? t("admin.activity.sample", { line }) : line;
+  };
+  const lines = rawActivity ? rawActivity.map((entry) => ({ ...entry, line: lineOf(entry) })) : null;
+  const activity = lines
+    ? (includeSystem
+        ? lines.filter((entry): entry is typeof entry & { line: string } => entry.line !== null)
+        : collapseOwnerFeed(lines, t, { truncated: lines.length >= OWNER_FEED_READ })
+      ).slice(0, 12)
     : null;
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";

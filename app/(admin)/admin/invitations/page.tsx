@@ -31,7 +31,7 @@ export default async function InvitationsPage() {
       return t("actor.agent", { name: value.slice("agent:".length) });
     }
     if (value.startsWith("user:")) return t("actor.staff");
-    if (value === "system") return t("actor.system");
+    if (value === "system" || value.startsWith("system:")) return t("actor.system");
     return t("actor.visitor");
   };
 

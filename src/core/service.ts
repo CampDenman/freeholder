@@ -13,6 +13,7 @@
 // traffic through services, and §2 principle 12 requires one transaction per
 // multi-table mutation — so composition must not mean a second transaction on
 // a second connection.
+import { isSeeding, SEED_AUDIT_ACTOR } from "@/core/audit-origin";
 import type { z } from "zod";
 import { sql } from "drizzle-orm";
 import { env } from "@/core/env";
@@ -109,6 +110,13 @@ export class ServiceError extends Error {
     super(message);
     this.name = "ServiceError";
   }
+}
+
+export { runAsSeed, SEED_AUDIT_ACTOR } from "@/core/audit-origin";
+
+/** The audit_log actor for a call: `actorString`, or the seed marker. */
+export function auditActorString(actor: Actor): string {
+  return actor.kind === "system" && isSeeding() ? SEED_AUDIT_ACTOR : actorString(actor);
 }
 
 export function actorString(actor: Actor): string {
@@ -738,7 +746,7 @@ export function defineService<In extends z.ZodType, Out>(
 
         if (def.kind === "mutation" && (def.auditWhen?.(out) ?? true)) {
           await tx.insert(auditLog).values({
-            actor: actorString(actor),
+            actor: auditActorString(actor),
             action: def.name,
             subjectType: subject?.subjectType,
             subjectId: subject?.subjectId,
