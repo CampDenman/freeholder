@@ -7259,8 +7259,13 @@ equipment, classes and expertise without double-booking or duplicated records.
   (2026-02-31) counts as absent. A "day" is the business's day:
   `scheduling.slots` reads dates in each calendar's zone, so the day view,
   `catalog.bookService` and `catalog.moveMyBooking` ask the calendar days
-  either side and keep the instants the business dates to it
-  (`src/core/scheduling/business-day.ts`); before, a Vancouver business with
+  either side, cut to the business day's exact instants (or, for reserve
+  and move, the one chosen instant) by the new optional `notBefore`/
+  `notAfter` inputs of `scheduling.slots`, applied before the slot limit
+  counts and DST-correct via `zonedInstant`
+  (`src/core/scheduling/business-day.ts`). Filtering afterwards let the day
+  before use up the 500-slot limit: three pool calendars open any hour cut
+  the chosen day at 212 of 288 times; before, a Vancouver business with
   a UTC calendar never showed, and could not reserve, its evening times. The
   embed and the reschedule (`?move=`, searched with the booking excluded)
   render the same page. The resolver's `maxSlots` now caps each calendar and

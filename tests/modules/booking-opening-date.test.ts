@@ -8,9 +8,9 @@ import {
   openingDate,
   OPENING_CACHE_MS,
   resetOpeningDateCache,
-  type SlotQuery,
+  type DaySearch,
 } from "../../app/(public)/book/opening-date";
-import { isCalendarDate } from "@/core/scheduling/business-day";
+import { businessDayBounds, isCalendarDate } from "@/core/scheduling/business-day";
 import { users } from "@/core/auth/schema";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
@@ -105,7 +105,7 @@ describe("the /book page's wiring", () => {
   const MOVE = "00000000-0000-4000-8000-0000000000a3";
 
   function recorder(slots: { startsAt: Date }[] = []) {
-    const inputs: (SlotQuery & { from: string; to: string; limit: number })[] = [];
+    const inputs: DaySearch[] = [];
     return { inputs, search: async (input: (typeof inputs)[number]) => { inputs.push(input); return slots; } };
   }
 
@@ -140,8 +140,40 @@ describe("the /book page's wiring", () => {
     ];
     const { inputs, search } = recorder(slots);
     const day = await bookingDay({ requested: "2026-10-25", zone: "America/Vancouver", service, seats: 1, anonymous: true, search });
-    expect(inputs).toEqual([{ productId: service.productId, serviceOfferingId: service.offeringId, seats: 1, from: "2026-10-24", to: "2026-10-26", limit: 500 }]);
+    expect(inputs).toEqual([{
+      productId: service.productId, serviceOfferingId: service.offeringId, seats: 1,
+      from: "2026-10-24", to: "2026-10-26",
+      // Cut to the business day inside the service, before the limit counts.
+      notBefore: "2026-10-25T07:00:00.000Z", notAfter: "2026-10-26T06:59:59.999Z",
+      limit: 500,
+    }]);
     expect(day.slots.map((slot) => slot.startsAt.toISOString())).toEqual(["2026-10-25T07:00:00.000Z", "2026-10-26T03:00:00.000Z"]);
+  });
+});
+
+describe("a business day's bounds", () => {
+  it("is 24 hours on an ordinary day", () => {
+    expect(businessDayBounds("2026-10-25", "America/Vancouver")).toEqual({
+      notBefore: new Date("2026-10-25T07:00:00.000Z"),
+      notAfter: new Date("2026-10-26T06:59:59.999Z"),
+    });
+  });
+
+  it("is 25 hours on the day the clocks go back, and 23 on the day they go forward", () => {
+    const fallBack = businessDayBounds("2026-11-01", "America/Vancouver");
+    expect(fallBack).toEqual({ notBefore: new Date("2026-11-01T07:00:00.000Z"), notAfter: new Date("2026-11-02T07:59:59.999Z") });
+    expect(fallBack.notAfter.getTime() + 1 - fallBack.notBefore.getTime()).toBe(25 * 3_600_000);
+    const springForward = businessDayBounds("2026-03-08", "America/Vancouver");
+    expect(springForward).toEqual({ notBefore: new Date("2026-03-08T08:00:00.000Z"), notAfter: new Date("2026-03-09T06:59:59.999Z") });
+    expect(springForward.notAfter.getTime() + 1 - springForward.notBefore.getTime()).toBe(23 * 3_600_000);
+  });
+
+  it("dates every instant inside the bounds to that day, and none outside", () => {
+    const { notBefore, notAfter } = businessDayBounds("2026-11-01", "America/Vancouver");
+    const day = (instant: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Vancouver" }).format(instant);
+    expect([day(notBefore), day(notAfter)]).toEqual(["2026-11-01", "2026-11-01"]);
+    expect(day(new Date(notBefore.getTime() - 1))).toBe("2026-10-31");
+    expect(day(new Date(notAfter.getTime() + 1))).toBe("2026-11-02");
   });
 });
 
@@ -204,6 +236,32 @@ describe.runIf(hasDatabase)("the day /book opens on, against the slot service", 
     const day = await bookingDay({ requested: later, zone: "UTC", service: svc, seats: 1, anonymous: true, search, now });
     expect(day.date).toBe(later);
     expect(day.slots.every((slot) => utcDate(slot.startsAt) === later)).toBe(true);
+  });
+
+  it("shows every time of the chosen day for a pool of calendars open at any hour", async () => {
+    // Three pool calendars, any hour, fifteen-minute appointments every
+    // fifteen minutes: 96 starts a day each, 288 for the day. Asking the three
+    // calendar days around it with a limit of 500 once let the day before use
+    // up the limit and cut the chosen day at 212 with no error.
+    const now = new Date();
+    const chosen = utcDate(inDays(now, 5));
+    const product = await createProduct.call({ name: "Drop-in", slug: "drop-in", kind: "service" }, OWNER);
+    const offering = await upsertServiceOffering.call({ productId: product.id, durationMin: 15, locationType: "in_person", assignment: "pool" }, OWNER);
+    const members = [];
+    for (const name of ["Ana", "Ben", "Cy"]) {
+      const calendar = await createCalendar.call({ kind: "resource", name, timezone: "UTC" }, OWNER);
+      members.push({ calendarId: calendar.id, role: "primary" as const, priority: 0 });
+    }
+    await setServiceCalendars.call({ serviceOfferingId: offering.id, members }, OWNER);
+    const audience = await createAudience.call({ name: "Anyone, any time", who: "public", hours: "any" }, OWNER);
+    await setAudienceServices.call({ id: audience.id, serviceOfferingIds: [offering.id] }, OWNER);
+    const day = await bookingDay({
+      requested: chosen, zone: "UTC", service: { productId: product.id, offeringId: offering.id }, seats: 1, anonymous: true, now,
+      search: (input) => availableSlots.call({ ...input, granularityMin: 15 }, ANONYMOUS),
+    });
+    expect(day.slots).toHaveLength(288);
+    expect(day.slots.every((slot) => utcDate(slot.startsAt) === chosen)).toBe(true);
+    expect(day.slots.at(-1)!.startsAt.toISOString()).toBe(`${chosen}T23:45:00.000Z`);
   });
 
   it("agrees with the day view when the business and the calendar keep different zones", async () => {

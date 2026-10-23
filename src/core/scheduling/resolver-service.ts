@@ -107,6 +107,14 @@ export const availableSlots = defineService({
     granularityMin: z.number().int().min(5).max(240).optional(),
     limit: z.number().int().min(1).max(500).default(200),
     /**
+     * Only times starting at or after this instant, and at or before
+     * `notAfter`. Optional: `from`/`to` read dates in each calendar's zone,
+     * and these cut the answer to exact instants — one business day, say —
+     * before `limit` is counted (C6.19).
+     */
+    notBefore: z.iso.datetime().optional(),
+    notAfter: z.iso.datetime().optional(),
+    /**
      * The tokenised link a caller arrived by, if any (C6.05).
      *
      * Proof, not a claim: an unrecognised token falls back to whatever public
@@ -136,6 +144,11 @@ export const availableSlots = defineService({
         "validation",
         `Ask about at most ${MAX_RANGE_DAYS} days at a time.`,
       );
+    }
+    const notBefore = input.notBefore ? new Date(input.notBefore) : undefined;
+    const notAfter = input.notAfter ? new Date(input.notAfter) : undefined;
+    if (notBefore && notAfter && notAfter < notBefore) {
+      throw new ServiceError("validation", "That range ends before it begins.");
     }
     if (input.preferredCalendarId) {
       const [preferred] = await ctx.tx
@@ -193,6 +206,8 @@ export const availableSlots = defineService({
       preferredCalendarId: input.preferredCalendarId,
       seats: input.seats,
       maxSlots: input.limit,
+      notBefore,
+      notAfter,
       audienceHours:
         audience.hours === "custom"
           ? { mode: "custom", rules: audience.customHours }

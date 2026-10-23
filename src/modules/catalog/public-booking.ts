@@ -127,7 +127,7 @@ export const bookPublicService = defineService({
     // The business's day, asked as the calendar days around it: a calendar in
     // another zone keeps some of this day's times on its own neighbouring date.
     const { from, to } = aroundBusinessDay(day);
-    const find = async () => (await ctx.call(availableSlots, { productId: input.productId, serviceOfferingId: quote.offeringId, from, to, seats: input.seats, preferredCalendarId: input.calendarId, onlyPreferred: true, limit: 500 })).find(s=>s.calendarId===input.calendarId && s.startsAt.toISOString()===input.startsAt);
+    const find = async () => (await ctx.call(availableSlots, { productId: input.productId, serviceOfferingId: quote.offeringId, from, to, notBefore: input.startsAt, notAfter: input.startsAt, seats: input.seats, preferredCalendarId: input.calendarId, onlyPreferred: true, limit: 500 })).find(s=>s.calendarId===input.calendarId && s.startsAt.toISOString()===input.startsAt);
     const candidate = await find();
     if (!candidate) throw new ServiceError("conflict", "That time is no longer available. Choose another.");
     // All required calendars share a deterministic lock order. Re-read availability
@@ -169,7 +169,7 @@ export const moveMyBooking = defineService({
     const [old]=await ctx.tx.select().from(bookings).where(eq(bookings.id,input.id)).limit(1);
     const business=await ctx.call(getBusiness,{});
     const date=new Intl.DateTimeFormat("en-CA",{timeZone:business?.timezone??"UTC",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(input.startsAt));
-    const find=async()=>(await ctx.call(availableSlots,{productId:selection.productId,serviceOfferingId:selection.offeringId,...aroundBusinessDay(date),seats:selection.seats,preferredCalendarId:input.calendarId,onlyPreferred:true,excludeBookingId:input.id,limit:500})).find(s=>s.calendarId===input.calendarId&&s.startsAt.toISOString()===input.startsAt);
+    const find=async()=>(await ctx.call(availableSlots,{productId:selection.productId,serviceOfferingId:selection.offeringId,...aroundBusinessDay(date),notBefore:input.startsAt,notAfter:input.startsAt,seats:selection.seats,preferredCalendarId:input.calendarId,onlyPreferred:true,excludeBookingId:input.id,limit:500})).find(s=>s.calendarId===input.calendarId&&s.startsAt.toISOString()===input.startsAt);
     const candidate=await find();
     if(!candidate)throw new ServiceError("conflict","That time is no longer available.");
     const ids=[...new Set([old!.calendarId,...old!.secondaryCalendarIds,candidate.calendarId,...candidate.resourceCalendarIds])].sort();

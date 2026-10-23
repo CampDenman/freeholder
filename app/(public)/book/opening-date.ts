@@ -4,8 +4,8 @@
 // the times on it.
 import { addDays, periodKey, zonedDate } from "@/core/i18n/zoned";
 import {
-  aroundBusinessDay,
   businessDate,
+  businessDayQuery,
   isCalendarDate,
   onBusinessDay,
 } from "@/core/scheduling/business-day";
@@ -96,6 +96,9 @@ export interface SlotQuery {
   excludeBookingId?: string;
 }
 
+/** One ask of the slot service: a range of calendar dates, maybe cut to exact instants. */
+export type DaySearch = SlotQuery & { from: string; to: string; limit: number; notBefore?: string; notAfter?: string };
+
 /**
  * The page's wiring: the day to show and the times on it, from the one slot
  * service. A move (`?move=`) asks with the booking excluded, so its own time
@@ -109,7 +112,7 @@ export async function bookingDay<S extends { startsAt: Date }>(options: {
   move?: string;
   seller?: string;
   anonymous: boolean;
-  search: (input: SlotQuery & { from: string; to: string; limit: number }) => Promise<S[]>;
+  search: (input: DaySearch) => Promise<S[]>;
   now?: Date;
 }): Promise<{ date: string; slots: S[]; unavailable: boolean }> {
   const { service, zone, search } = options;
@@ -133,7 +136,9 @@ export async function bookingDay<S extends { startsAt: Date }>(options: {
   });
   if (!query) return { date, slots: [], unavailable: false };
   try {
-    const slots = await search({ ...query, ...aroundBusinessDay(date), limit: 500 });
+    // Bounded to the business day inside the service, so the neighbouring
+    // calendar dates it must also read never use up the limit.
+    const slots = await search({ ...query, ...businessDayQuery(date, zone), limit: 500 });
     return { date, slots: onBusinessDay(slots, date, zone), unavailable: false };
   } catch {
     return { date, slots: [], unavailable: true };

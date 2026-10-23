@@ -8,7 +8,7 @@
 // of that day's times on its previous or next date. So a business day is
 // asked as the calendar days either side of it and then cut back to the
 // instants the business's clock dates to it.
-import { addDays, periodKey, zonedDate } from "@/core/i18n/zoned";
+import { addDays, periodKey, zonedDate, zonedInstant } from "@/core/i18n/zoned";
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -36,6 +36,30 @@ export function aroundBusinessDay(date: string): { from: string; to: string } {
     from: periodKey(addDays(parts(date), -1), "day"),
     to: periodKey(addDays(parts(date), 1), "day"),
   };
+}
+
+/**
+ * The first and last instant of a business date, from the zone's own clock:
+ * 23 or 25 hours long on the days the clocks change, and starting after the
+ * gap in a zone that skips midnight. `notAfter` is inclusive, the millisecond
+ * before the next day begins.
+ */
+export function businessDayBounds(date: string, zone: string): { notBefore: Date; notAfter: Date } {
+  const notBefore = zonedInstant(zone, parts(date));
+  const next = zonedInstant(zone, addDays(parts(date), 1));
+  return { notBefore, notAfter: new Date(next.getTime() - 1) };
+}
+
+/**
+ * What to ask `scheduling.slots` for one business date: the calendar dates
+ * around it, cut to its exact instants before the slot limit is counted.
+ */
+export function businessDayQuery(
+  date: string,
+  zone: string,
+): { from: string; to: string; notBefore: string; notAfter: string } {
+  const { notBefore, notAfter } = businessDayBounds(date, zone);
+  return { ...aroundBusinessDay(date), notBefore: notBefore.toISOString(), notAfter: notAfter.toISOString() };
 }
 
 /** The business date an instant falls on. */

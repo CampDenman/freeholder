@@ -77,6 +77,15 @@ export interface SlotRequest {
   now?: Date;
   maxSlots?: number;
   /**
+   * Only starts in `[notBefore, notAfter]`, both inclusive, counted before
+   * `maxSlots`. `from`/`to` are dates in each calendar's own zone; these are
+   * instants, so a caller showing one business day across calendars in other
+   * zones asks for the dates around it and bounds it exactly here, without
+   * the neighbouring days using up the cap (C6.19).
+   */
+  notBefore?: Date;
+  notAfter?: Date;
+  /**
    * Hours imposed by the audience rather than by the calendar (C6.05).
    *
    * §41: bookability is a property of the audience, not of the calendar. A
@@ -469,6 +478,8 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
         // Lead time and horizon: no bookings in the next two hours, none more
         // than six months out.
         if (startsAt < earliest || startsAt > latest) continue;
+        if (request.notBefore && startsAt < request.notBefore) continue;
+        if (request.notAfter && startsAt > request.notAfter) continue;
 
         // The buffers are what is tested against existing work, not the
         // appointment itself, so a slot that would leave no travel time is

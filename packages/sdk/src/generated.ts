@@ -7019,7 +7019,7 @@ export interface ServiceCatalog {
     output: { id: string; email: string; role: string; lastLoginAt: string | null; [key: string]: unknown }[];
   };
   "scheduling.slots": {
-    input: { serviceOfferingId: string; productId: string; from: string; to: string; preferredCalendarId?: string; onlyPreferred?: boolean; excludeBookingId?: string; seats?: number; granularityMin?: number; limit?: number; audienceToken?: string };
+    input: { serviceOfferingId: string; productId: string; from: string; to: string; preferredCalendarId?: string; onlyPreferred?: boolean; excludeBookingId?: string; seats?: number; granularityMin?: number; limit?: number; notBefore?: string; notAfter?: string; audienceToken?: string };
     output: { startsAt: string; endsAt: string; calendarId: string; calendarName: string; resourceCalendarIds: string[]; seatsAvailable: number }[];
   };
   "scoring.advance": {
