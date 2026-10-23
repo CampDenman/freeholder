@@ -37,6 +37,8 @@ import { composeDocumentTitle } from "@/core/seo/meta";
 import { currentBusiness } from "@/core/settings/read";
 import { getModuleConfig } from "@/core/settings/service";
 import { catalogSettingsSchema, checkoutTermsHash } from "@/modules/catalog/checkout-policy";
+import { CHECKOUT_RETURN_KEY, fieldsFromQuery, type CheckoutField } from "@/modules/catalog/checkout-fields";
+import { decodeFormReturn, FORM_RETURN_COOKIE, returnedValues } from "@/core/http/public-form-return";
 import { getLocale, getT } from "../../i18n";
 import { loadShopperCart } from "../shopper-cart";
 import { recordPageView } from "../[[...slug]]/pageview";
@@ -104,6 +106,21 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
 
   const sent = query.sent === "1";
   const error = typeof query.error === "string" ? query.error : undefined;
+  // A refused submission comes back with what the shopper typed and the
+  // fields the refusal was about (src/modules/catalog/checkout-fields.ts).
+  const returned = (error
+    ? returnedValues(decodeFormReturn(cookieJar.get(FORM_RETURN_COOKIE)?.value), CHECKOUT_RETURN_KEY)
+    : undefined) ?? {};
+  const invalid = new Set<CheckoutField>(error ? fieldsFromQuery(query.fields) : []);
+  const fieldState = (field: CheckoutField, id: string) =>
+    invalid.has(field) ? { "aria-invalid": true as const, "aria-describedby": `${id}-error` } : {};
+  const fieldError = (field: CheckoutField, id: string) =>
+    invalid.has(field) ? (
+      <span id={`${id}-error`} className="text-xs font-semibold text-danger">
+        {t("store.checkout.fieldError")}
+      </span>
+    ) : null;
+  const valueOf = (field: CheckoutField, fallback = "") => returned[field] ?? fallback;
 
   const adapter = paymentAdapter();
   const paymentMode = !adapter.status.available || adapter.id === "none"
@@ -145,9 +162,11 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
                 type="email"
                 required
                 autoComplete="email"
-                defaultValue={email}
+                defaultValue={valueOf("email", email)}
                 className={inputClass}
+                {...fieldState("email", "checkout-email")}
               />
+              {fieldError("email", "checkout-email")}
               {env().FREEHOLDER_PLAYGROUND === "1" ? (
                 // C1.38: the demo places the order only for a made-up address.
                 <span className="text-xs">{t("store.checkout.playgroundEmailHint")}</span>
@@ -160,9 +179,11 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
                 name="name"
                 type="text"
                 autoComplete="name"
-                defaultValue={name}
+                defaultValue={valueOf("name", name)}
                 className={inputClass}
+                {...fieldState("name", "checkout-name")}
               />
+              {fieldError("name", "checkout-name")}
             </label>
           </fieldset>
 
@@ -178,8 +199,11 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
                   name="street1"
                   type="text"
                   autoComplete="address-line1"
+                  defaultValue={valueOf("street1")}
                   className={inputClass}
+                  {...fieldState("street1", "checkout-street1")}
                 />
+                {fieldError("street1", "checkout-street1")}
               </label>
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="grid gap-1 text-sm text-ink-muted">
@@ -189,8 +213,11 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
                     name="city"
                     type="text"
                     autoComplete="address-level2"
+                    defaultValue={valueOf("city")}
                     className={inputClass}
+                    {...fieldState("city", "checkout-city")}
                   />
+                  {fieldError("city", "checkout-city")}
                 </label>
                 <label className="grid gap-1 text-sm text-ink-muted">
                   {t("store.checkout.region")}
@@ -199,8 +226,11 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
                     name="region"
                     type="text"
                     autoComplete="address-level1"
+                    defaultValue={valueOf("region")}
                     className={inputClass}
+                    {...fieldState("region", "checkout-region")}
                   />
+                  {fieldError("region", "checkout-region")}
                 </label>
                 <label className="grid gap-1 text-sm text-ink-muted">
                   {t("store.checkout.postalCode")}
@@ -209,8 +239,11 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
                     name="postalCode"
                     type="text"
                     autoComplete="postal-code"
+                    defaultValue={valueOf("postalCode")}
                     className={inputClass}
+                    {...fieldState("postalCode", "checkout-postal")}
                   />
+                  {fieldError("postalCode", "checkout-postal")}
                 </label>
               </div>
               <label className="grid gap-1 text-sm text-ink-muted sm:max-w-40">
@@ -225,8 +258,11 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
                   maxLength={2}
                   pattern="[A-Za-z]{2}"
                   required
+                  defaultValue={valueOf("country", business?.country ?? "")}
                   className={inputClass}
+                  {...fieldState("country", "checkout-country")}
                 />
+                {fieldError("country", "checkout-country")}
               </label>
             </fieldset>
           ) : (
@@ -277,11 +313,15 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
           <label className="grid gap-1 text-sm text-ink-muted sm:max-w-64">
             {t("store.checkout.coupon")}
             <input
+              id="checkout-coupon"
               name="couponCode"
               type="text"
               autoComplete="off"
+              defaultValue={valueOf("couponCode")}
               className={inputClass}
+              {...fieldState("couponCode", "checkout-coupon")}
             />
+            {fieldError("couponCode", "checkout-coupon")}
           </label>
 
           {checkoutSettings.checkoutTerms ? (
@@ -351,6 +391,9 @@ function CheckoutError({ code, t }: { code: string; t: Awaited<ReturnType<typeof
     "expired",
     "terms",
     "address",
+    "delivery",
+    "coverage",
+    "coupon",
     "validation",
     "permission",
     "conflict",

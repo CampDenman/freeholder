@@ -145,9 +145,9 @@ export default async function CartPage({ searchParams }: { searchParams: Promise
                 ) : (
                   <span className="font-semibold text-ink">{line.productName}</span>
                 )}
-                <span className="text-sm text-ink-muted">
-                  {optionLabel ? optionLabel : line.sku}
-                </span>
+                {/* The variant's own name; a single-variant product has none,
+                    and its SKU (the product slug) is not for shoppers. */}
+                {optionLabel ? <span className="text-sm text-ink-muted">{optionLabel}</span> : null}
                 {!line.stock.available ? (
                   <span className="text-sm text-danger">{t("store.cart.unavailable")}</span>
                 ) : !line.priceAvailable ? (

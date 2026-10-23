@@ -968,6 +968,14 @@ export const CATALOG: SeedProduct[] = [
   },
 ];
 
+/** How the shop's physical products reach people (C5.18). */
+export const SHIPPING = {
+  zone: "Canada",
+  parcel: "Canada Post parcel",
+  parcelPrice: "12.00",
+  pickup: "Pick up at the Comox studio",
+};
+
 export const COLLECTIONS = [
   {
     slug: "prints",

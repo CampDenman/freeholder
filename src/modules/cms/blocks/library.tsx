@@ -32,7 +32,7 @@ import { fromPlainString, richBodySchema } from "./rich";
 import { renderRichDoc } from "./rich-render";
 import { sanitizeOwnerHtml } from "./html";
 import { selectAssignedVariants } from "../experiments";
-import { AddToCart } from "../../../../app/(public)/buy/AddToCart";
+import { AddToCart, addToCartLabels } from "../../../../app/(public)/buy/AddToCart";
 
 /* ------------------------------------------------------------------ text */
 
@@ -1050,12 +1050,7 @@ export const productDetail = defineBlock({
               formatMinor={(minor) =>
                 formatMoney(minor, resolved.purchase?.currency ?? "USD", ctx.locale)
               }
-              labels={{
-                add: ctx.t("store.buy.add"),
-                choose: ctx.t("store.buy.choose"),
-                unavailable: ctx.t("store.buy.unavailable"),
-                priceUnavailable: ctx.t("store.buy.priceUnavailable"),
-              }}
+              labels={addToCartLabels(ctx.t)}
             />
           </div>
         ) : null}

@@ -426,6 +426,9 @@ describe.runIf(hasDatabase)("the merchandising blocks against the catalog", { ti
     const multi = await htmlOf([{ id: "c1", type: "productCard", props: { slug: "coast-print" } }]);
     expect(multi).toContain("Coast print");
     expect(multi).toContain("From CA$20.00");
+    // One price line: AddToCart carries it on every shelf, cards included.
+    expect(multi.match(/From CA\$20\.00/g)).toHaveLength(1);
+    expect(multi).not.toContain("<details");
     expect(multi).toContain("Choose options");
     expect(multi).toContain("View details");
     // The single-variant card quotes the exact price with a direct button.

@@ -161,17 +161,25 @@ export function quoteMethods(input: {
   const packed = totals(input.items);
   if (packed.quantity === 0) return { needed: false, zoneId: null, quotes: [] };
   const zone = matchZone(input.destination, input.zones);
-  if (!zone) return { needed: true, zoneId: null, quotes: [] };
   const box = selectBox(input.items, input.boxes);
   const billableWeightG = Math.max(packed.weightG, packed.volumeWeightG) + (box?.tareWeightG ?? 0);
   const quotes: ShippingQuote[] = [];
-  for (const method of input.methods.filter((row) => row.zoneId === zone.id)) {
+  // Collecting from the owner's own counter does not depend on where the
+  // shopper lives, so a pickup method is offered from every zone, even when
+  // no zone reaches the address. Everything else is the matched zone's.
+  // A named location narrows pickup and local delivery to that location;
+  // without one (the storefront checkout) each method's own location stands.
+  // Before this, storefront pickup could never be quoted (2026-10-23 audit).
+  const eligible = input.methods.filter((row) =>
+    row.kind === "pickup" ? true : zone !== null && row.zoneId === zone.id,
+  );
+  for (const method of eligible) {
     let amount: number | null = null;
     if (method.kind === "pickup") {
-      if (!method.locationId || method.locationId !== input.locationId) continue;
+      if (!method.locationId || (input.locationId && method.locationId !== input.locationId)) continue;
       amount = 0;
     } else if (method.kind === "local_delivery") {
-      if (!method.locationId || method.locationId !== input.locationId) continue;
+      if (!method.locationId || (input.locationId && method.locationId !== input.locationId)) continue;
       amount = method.amountMinor ?? 0;
     } else if (method.kind === "free") {
       if (method.thresholdMinor == null || packed.subtotalMinor < method.thresholdMinor) continue;
@@ -201,5 +209,5 @@ export function quoteMethods(input: {
       boxId: box?.id ?? null,
     });
   }
-  return { needed: true, zoneId: zone.id, quotes };
+  return { needed: true, zoneId: zone?.id ?? null, quotes };
 }

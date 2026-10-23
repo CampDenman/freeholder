@@ -121,6 +121,16 @@ function cartesian<T>(groups: readonly (readonly T[])[]): T[][] {
   );
 }
 
+/**
+ * Whether a freshly generated variant of this product kind goes in a parcel.
+ * Downloads, services and passes never do; rentals and bundles start as
+ * shippable because they usually hold something physical, and the owner
+ * corrects any single variant with catalog.setVariantShipping.
+ */
+export function shipsByDefault(kind: string): boolean {
+  return kind !== "digital" && kind !== "service" && kind !== "pass";
+}
+
 async function productForUpdate(ctx: ServiceContext, id: string, version: number) {
   const [product] = await ctx.tx.select().from(products).where(eq(products.id, id)).for("update");
   if (!product) throw new ServiceError("not_found", "That product is not here.");
@@ -469,6 +479,12 @@ export const applyVariantMatrix = defineService({
             sku: combo.sku,
             status: "active",
             isDefault: false,
+            // A new variant ships only if its kind is a thing in a box. The
+            // column's default of true made every download, voucher and
+            // service ask the shopper for a postal address and a delivery
+            // method nobody could quote (2026-10-23 demo audit). An owner can
+            // still flip any variant with catalog.setVariantShipping.
+            requiresShipping: shipsByDefault(product.kind),
           })
           .returning()
           .catch((error: unknown) => {

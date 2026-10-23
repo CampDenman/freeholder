@@ -22,6 +22,7 @@ import {
   getOrCreateCart,
   getOrder,
   getProductVariants,
+  listOrders,
   payOrder,
   recordStockMovement,
   releaseOrderPaymentMilestone,
@@ -58,6 +59,20 @@ describe.runIf(hasDatabase)("catalog orders", { timeout: 30_000 }, () => {
     await expect(getOrder.call(input, key)).rejects.toMatchObject({ code: "permission" });
     expect((await getOrder.call(input, { ...key, scopes: ["catalog.getOrder"] })).order.shippingAddress).toEqual({ street: "Private street" });
     expect((await getOrder.call(input, { ...STAFF, grants: [{ module: "catalog", access: "view" }] })).order.id).toBe(order!.id);
+  });
+
+  it("lists each order with its customer's name and email, however many contacts exist", async () => {
+    // The workspace looked names up in the first 80 contacts and printed a
+    // raw UUID for the rest (2026-10-23 demo audit).
+    for (let index = 0; index < 85; index += 1) {
+      await createContact.call({ name: `Earlier ${String(index).padStart(2, "0")}`, email: `earlier-${index}@example.test` }, OWNER);
+    }
+    const buyer = await createContact.call({ name: "Ada Example", email: "ada@example.com" }, OWNER);
+    await db().insert(orders).values({ contactId: buyer.id, currency: "CAD" });
+    const [row] = await listOrders.call({}, OWNER);
+    expect(row).toMatchObject({ contactId: buyer.id, contactName: "Ada Example", contactEmail: "ada@example.com" });
+    // A customer reading their own orders gets the same projection.
+    expect((await listOrders.call({ contactId: buyer.id }, OWNER))[0]?.contactName).toBe("Ada Example");
   });
 
   async function sellable(slug: string, ship = false) {

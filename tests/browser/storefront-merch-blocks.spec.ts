@@ -271,11 +271,9 @@ test.describe("the merchandising blocks end to end (C2.24)", () => {
       const buyCard = page
         .getByRole("heading", { name: "Coast print" })
         .locator("xpath=ancestor::article[1]");
-      await expect(buyCard.getByText("Choose options")).toBeVisible();
-      await buyCard.locator("summary").click();
-      const smallRow = buyCard.locator("li", { hasText: "Size: Small" });
-      await expect(smallRow.getByText("Size: Small")).toBeVisible();
-      await smallRow.getByRole("button", { name: "Add to cart" }).click();
+      await expect(buyCard.getByRole("group", { name: "Choose options" })).toBeVisible();
+      await buyCard.getByRole("radio", { name: /Size: Small/ }).check();
+      await buyCard.getByRole("button", { name: "Add to cart" }).click();
       await expect(page).toHaveURL(/\/shop\?added=coast-print$/);
       await expect(page.getByText("1 item")).toBeVisible();
     });

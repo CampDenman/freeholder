@@ -169,12 +169,15 @@ test.describe("storefront shopper journey (C3.25 slice 3)", () => {
       await page.goto("/c/wall");
       await expect(page.getByRole("heading", { name: "The Wall" })).toBeVisible();
       const card = page.locator("li", { hasText: "Coast print" }).first();
-      await expect(card.getByText("Choose options")).toBeVisible();
-      await card.locator("summary").click();
-      const smallRow = card.locator("li", { hasText: "Size: Small" });
-      await expect(smallRow.getByText("Size: Small")).toBeVisible();
-      await smallRow.getByRole("button", { name: "Add to cart" }).click();
+      // The card quotes its price, and the picker and button are in view.
+      await expect(card.getByText("From CA$25.00")).toBeVisible();
+      await expect(card.getByRole("group", { name: "Choose options" })).toBeVisible();
+      await expect(card.getByRole("radio", { name: /Size: Small/ })).toBeChecked();
+      await card.getByRole("button", { name: "Add to cart" }).click();
       await expect(page).toHaveURL(/\/c\/wall\?added=coast-print$/);
+      // The shopper hears it, with the way to the cart.
+      await expect(page.getByRole("status").filter({ hasText: "Added to your cart." })).toBeVisible();
+      await expect(page.getByRole("link", { name: "View cart" })).toBeVisible();
       // The chrome widget counts the line from the cookie capability.
       await expect(page.getByText("1 item")).toBeVisible();
     });

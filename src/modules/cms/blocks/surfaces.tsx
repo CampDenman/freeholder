@@ -678,13 +678,7 @@ export const productCard = defineBlock({
           <a href={href}>{product.name}</a>
         </h2>
         {product.subtitle ? <p className="text-sm text-ink-muted">{product.subtitle}</p> : null}
-        {purchase && purchase.priceFromMinor !== null ? (
-          <p className="text-sm font-semibold text-ink">
-            {purchase.variants.length > 1
-              ? ctx.t("store.buy.from", { price: formatMinor(purchase.priceFromMinor) })
-              : formatMinor(purchase.priceFromMinor)}
-          </p>
-        ) : null}
+        {/* AddToCart carries the price line ("From …" with options). */}
         {purchase && purchase.variants.length > 0 ? (
           <AddToCart product={purchase} formatMinor={formatMinor} labels={addToCartLabels(ctx.t)} />
         ) : null}

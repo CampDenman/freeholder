@@ -52,6 +52,7 @@ import { PopupMount } from "@/modules/popups/mount";
 import { POPUP_TALLY_COOKIE } from "@/modules/popups/tally";
 import { MagicWand } from "@phosphor-icons/react/dist/ssr";
 import { loadShopperCartSnapshot } from "./shopper-cart";
+import { AddedNotice } from "./buy/AddedNotice";
 
 export const dynamic = "force-dynamic";
 
@@ -172,6 +173,15 @@ export default async function PublicLayout({
         className="mx-auto w-full flex-1 px-[var(--fh-gutter,1.5rem)] py-12"
         style={{ maxWidth: "var(--fh-measure, 48rem)" }}
       >
+        <AddedNotice
+          target={requestHeaders.get(REQUEST_TARGET_HEADER) ?? "/"}
+          cartHref={ctx.localizeHref?.("/cart") ?? "/cart"}
+          labels={{
+            added: t("store.buy.added"),
+            viewCart: t("store.buy.viewCart"),
+            failed: t("store.buy.addFailed"),
+          }}
+        />
         {children}
       </main>
 

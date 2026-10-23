@@ -299,11 +299,8 @@ test.describe("store-section composition on the canvas", () => {
       await expect(
         page.getByText("Dune print", { exact: true }).first(),
       ).toBeVisible();
-      // Variant prices live inside each card's options picker — open one and
-      // read the live quote through it.
-      await page.getByText("Choose options").first().click();
+      // Every card quotes its live variant prices in view.
       await expect(page.getByText("25.00").first()).toBeVisible();
-      await page.getByText("Choose options").nth(1).click();
       await expect(page.getByText("30.00").first()).toBeVisible();
       // The band's live shelf and its collection link.
       const bandShelf = page

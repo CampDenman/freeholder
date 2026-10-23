@@ -3,7 +3,6 @@
 // Order list (C5.22).
 
 import { ClipboardText, WarningCircle } from "@phosphor-icons/react/dist/ssr";
-import { listContacts } from "@/core/contacts/service";
 import { listOrders } from "@/modules/catalog/service";
 import { Callout, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
@@ -19,12 +18,7 @@ export default async function OrdersPage({
 }) {
   const actor = await requireStaffActor("catalog");
   const query = await searchParams;
-  const [rows, contacts, t] = await Promise.all([
-    listOrders.call({}, actor),
-    listContacts.call({ limit: 80 }, actor).catch(() => ({ rows: [] as Array<{ id: string; name: string }> })),
-    getT(),
-  ]);
-  const names = new Map(contacts.rows.map((row) => [row.id, row.name]));
+  const [rows, t] = await Promise.all([listOrders.call({}, actor), getT()]);
 
   return (
     <div className="grid gap-6">
@@ -51,7 +45,12 @@ export default async function OrdersPage({
                     {order.id.slice(0, 8)}
                   </a>
                   <Pill>{t(`catalog.orders.status.${order.status}`)}</Pill>
-                  <span>{names.get(order.contactId) ?? order.contactId}</span>
+                  <a href={`/admin/contacts/${order.contactId}`} className="hover:text-accent">
+                    {order.contactName || order.contactEmail || t("catalog.orders.unnamedCustomer")}
+                  </a>
+                  {order.contactName && order.contactEmail ? (
+                    <span className="text-ink-muted">{order.contactEmail}</span>
+                  ) : null}
                   <span className="ms-auto font-mono">{money(order.totalMinor, order.currency)}</span>
                 </li>
               ))}
