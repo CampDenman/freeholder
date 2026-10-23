@@ -10,11 +10,13 @@ import { createGmailMail } from "@/adapters/mail/gmail";
 import { createOutlookMail } from "@/adapters/mail/outlook";
 import type {
   MailAdapter,
+  MailPermission,
   MailProvider,
   OutboundEmail,
   SenderVerification,
+  TransactionalReason,
 } from "@/adapters/mail/types";
-import { MailAdapterError } from "@/adapters/mail/types";
+import { MailAdapterError, TRANSACTIONAL_REASONS } from "@/adapters/mail/types";
 import { users } from "@/core/auth/schema";
 import { db } from "@/core/db";
 import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy";
@@ -45,6 +47,7 @@ const senderProvider = z.enum([
   "resend",
   "postmark",
   "ses",
+  "paradise",
 ]);
 
 const mailProvider = z.enum([
@@ -55,6 +58,7 @@ const mailProvider = z.enum([
   "resend",
   "postmark",
   "ses",
+  "paradise",
   "none",
 ]);
 
@@ -69,6 +73,7 @@ const mailSenderRow = row({
     "resend",
     "postmark",
     "ses",
+    "paradise",
   ]),
   connectedAccountId: uuid.nullable(),
   email: z.string(),
@@ -128,7 +133,7 @@ const mailSuppressionRow = row({
 
 const mailConfiguration = z.object({
   transactional: z.object({
-    provider: z.enum(["smtp", "console", "gmail", "outlook"]),
+    provider: z.enum(["smtp", "console", "gmail", "outlook", "paradise"]),
     delivers: z.boolean(),
     missing: z.array(z.string()),
     fromAddress: z.string().nullable(),
@@ -141,7 +146,7 @@ const mailConfiguration = z.object({
     }),
   ),
   bulk: z.object({
-    provider: z.enum(["resend", "postmark", "ses", "none"]),
+    provider: z.enum(["resend", "postmark", "ses", "paradise", "none"]),
     sendConfigured: z.boolean(),
     feedbackConfigured: z.boolean(),
     missing: z.array(z.string()),
@@ -239,6 +244,12 @@ function assertSenderReady(sender: SenderRow): void {
       "Verify this bulk sender before using it. Until then no campaign can leave Freeholder.",
     );
   }
+  if (sender.provider === "paradise" && sender.verificationStatus !== "verified") {
+    throw new ServiceError(
+      "conflict",
+      "Verify this Paradise Modern sender before using it: its address must be on the site's verified sending domain.",
+    );
+  }
   if (sender.provider === "gmail" || sender.provider === "outlook") {
     if (
       !sender.connectedAccountId ||
@@ -277,13 +288,19 @@ function senderRoute(sender: SenderRow): {
   provider: MailProvider;
   delivers: boolean;
   kind: MailAdapter["kind"];
+  requiresPermission: boolean;
 } {
   assertSenderReady(sender);
   if (sender.provider === "gmail" || sender.provider === "outlook") {
-    return { provider: sender.provider, delivers: true, kind: "transactional" };
+    return { provider: sender.provider, delivers: true, kind: "transactional", requiresPermission: false };
   }
   const adapter = configuredAdapter(sender);
-  return { provider: adapter.id, delivers: adapter.delivers, kind: adapter.kind };
+  return {
+    provider: adapter.id,
+    delivers: adapter.delivers,
+    kind: adapter.kind,
+    requiresPermission: Boolean(adapter.requiresPermission),
+  };
 }
 
 /** Preflight the same route used by sendMail, without staging a message. */
@@ -341,6 +358,14 @@ export interface MailSendOptions {
   requireDelivery?: boolean;
   /** Bulk campaigns recheck this contact's consent immediately before I/O. */
   marketingContactId?: string;
+  /**
+   * Why a transactional message is being sent (C3.31). An adapter that
+   * `requiresPermission` receives it with the event behind the message — the
+   * idempotency key when there is one. Unset is `service_notification`.
+   */
+  transactionalReason?: TransactionalReason;
+  /** The event behind the message, when it is not the idempotency key. */
+  eventRef?: string;
 }
 
 export interface MailSendResult {
@@ -364,6 +389,9 @@ const stagedMessage = z
       "List-Unsubscribe-Post": z.literal("List-Unsubscribe=One-Click").optional(),
     }).strict().optional(),
     marketingContactId: uuid.optional(),
+    transactionalReason: z.enum(TRANSACTIONAL_REASONS).optional(),
+    /** The business event behind a transactional message. */
+    eventRef: z.string().min(1).max(1000).optional(),
   })
   .strict();
 type StagedMessage = z.output<typeof stagedMessage>;
@@ -422,7 +450,12 @@ export async function sendMail(
     ? senderRoute(sender)
     : (() => {
         const configured = providerForPurpose(purpose);
-        return { provider: configured.id, delivers: configured.delivers, kind: configured.kind };
+        return {
+          provider: configured.id,
+          delivers: configured.delivers,
+          kind: configured.kind,
+          requiresPermission: Boolean(configured.requiresPermission),
+        };
       })();
   if (purpose === "bulk" && route.kind === "transactional") {
     throw new ServiceError(
@@ -501,6 +534,14 @@ export async function sendMail(
 
   const finalMessage: StagedMessage = {
     ...prepared,
+    // Only a permission-checking route stores these (C3.31), so a rollback
+    // to the previous release can still read every other queued message.
+    ...(purpose === "transactional" && route.requiresPermission
+      ? stagedMessage.pick({ transactionalReason: true, eventRef: true }).parse({
+          transactionalReason: options.transactionalReason,
+          eventRef: options.eventRef ?? options.idempotencyKey,
+        })
+      : {}),
     from:
       prepared.from ??
       (sender
@@ -541,6 +582,8 @@ function safeDeliveryError(error: unknown): string {
 async function finishQueuedMail(
   deliveryId: string,
   values: Partial<typeof mailDeliveries.$inferInsert>,
+  /** Saved in the same transaction as the outcome (C3.31: a recorded grant). */
+  alsoRecord?: (tx: Tx) => Promise<void>,
 ): Promise<void> {
   const events: Array<{ id: string; eventName: string; payload: unknown }> = [];
   await db().transaction(async (tx) => {
@@ -549,6 +592,7 @@ async function finishQueuedMail(
       .set({ ...values, updatedAt: new Date() })
       .where(eq(mailDeliveries.id, deliveryId))
       .returning({ recipient: mailDeliveries.recipient });
+    if (alsoRecord) await alsoRecord(tx);
     await tx.delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
     if (delivery && (values.status === "suppressed" || values.status === "failed")) {
       const eventName = "mail.deliveryUpdated";
@@ -647,13 +691,39 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
         "The configured mail route changed after this message was queued.",
       );
     }
-    const result = await adapter.send({ ...message, deliveryId });
-    await finishQueuedMail(deliveryId, {
-      providerRef: result.providerRef,
-      status: adapter.delivers ? "submitted" : "failed",
-      submittedAt: adapter.delivers ? new Date() : null,
-      lastError: adapter.delivers ? null : "The configured adapter does not deliver.",
-    });
+    const { marketingContactId, transactionalReason, eventRef, ...outbound } = message;
+    // The permission basis is declared here, by the worker, never by the
+    // module that queued the message (C3.31).
+    const permission: MailPermission | undefined = !adapter.requiresPermission
+      ? undefined
+      : queued.delivery.purpose === "bulk"
+        ? {
+            purpose: "marketing",
+            evidence: marketingContactId
+              ? await (await import("@/core/mail/permission")).marketingEvidence(marketingContactId)
+              : null,
+          }
+        : {
+            purpose: "transactional",
+            reason: transactionalReason ?? "service_notification",
+            eventRef: eventRef ?? `mail-delivery:${deliveryId}`,
+          };
+    const result = await adapter.send({ ...outbound, deliveryId, ...(permission ? { permission } : {}) });
+    // A grant the carrier recorded is remembered with the send's outcome, in
+    // one transaction, so a later withdrawal reaches exactly this address and
+    // a contact never granted there is never withdrawn there.
+    const grant = result.grantRecorded;
+    const { rememberProviderGrant } = await import("@/core/mail/permission");
+    await finishQueuedMail(
+      deliveryId,
+      {
+        providerRef: result.providerRef,
+        status: adapter.delivers ? "submitted" : "failed",
+        submittedAt: adapter.delivers ? new Date() : null,
+        lastError: adapter.delivers ? null : "The configured adapter does not deliver.",
+      },
+      grant ? (tx) => rememberProviderGrant(tx, adapter.id, grant) : undefined,
+    );
     return { status: adapter.delivers ? "submitted" : "failed" };
   } catch (error) {
     const retryable =
@@ -715,6 +785,7 @@ export const mailStatus = defineService({
           "resend",
           "postmark",
           "ses",
+          "paradise",
         ]),
         email: z.string(),
         displayName: z.string().nullable(),
@@ -815,10 +886,10 @@ export const registerMailSender = defineService({
         `This deployment is configured for ${configured.id}, not ${input.provider}.`,
       );
     }
-    if (input.purpose === "bulk" && !["resend", "postmark", "ses"].includes(input.provider)) {
-      throw new ServiceError("validation", "Bulk mail requires Resend, Postmark, or Amazon SES.");
+    if (input.purpose === "bulk" && !["resend", "postmark", "ses", "paradise"].includes(input.provider)) {
+      throw new ServiceError("validation", "Bulk mail requires Resend, Postmark, Amazon SES, or Paradise Modern.");
     }
-    if (input.purpose === "transactional" && input.provider !== "smtp") {
+    if (input.purpose === "transactional" && input.provider !== "smtp" && input.provider !== "paradise") {
       throw new ServiceError("validation", "Connect Gmail or Microsoft through OAuth instead.");
     }
     const configuration = mailConfigurationStatus();
@@ -838,19 +909,30 @@ export const registerMailSender = defineService({
       .from(mailSenders)
       .where(and(eq(mailSenders.purpose, input.purpose), eq(mailSenders.isDefault, true)))
       .limit(1);
+    // A Paradise Modern sender is checked against the provider straight away,
+    // for either purpose; until the check passes it cannot send.
+    const requestId = input.provider === "paradise" ? randomUUID() : undefined;
     const [sender] = await ctx.tx
       .insert(mailSenders)
       .values({
         ...input,
-        verificationStatus: input.purpose === "transactional" ? "verified" : "pending",
+        // A transactional sender over SMTP is the owner's own transport; a
+        // provider sender (bulk, or Paradise Modern for either purpose) is
+        // checked against the provider before it can send.
+        verificationStatus:
+          input.purpose === "transactional" && input.provider !== "paradise" ? "verified" : "pending",
         verificationDetail:
           input.provider === "smtp"
             ? {
                 transportConfigured: true,
                 dnsOwnershipVerified: false,
               }
-            : {},
-        isDefault: !existingDefault && input.purpose === "transactional",
+            : requestId
+              ? { requestId }
+              : {},
+        // Only a verified sender can be the default; a Paradise Modern sender
+        // becomes eligible once its check passes (`mail.setDefaultSender`).
+        isDefault: !existingDefault && input.purpose === "transactional" && input.provider !== "paradise",
         createdBy: ctx.actor.kind === "user" ? ctx.actor.userId : null,
       })
       .onConflictDoUpdate({
@@ -864,6 +946,14 @@ export const registerMailSender = defineService({
       })
       .returning();
     ctx.setSubject("mail_sender", sender!.id);
+    const detail = sender!.verificationDetail as Record<string, unknown> | null;
+    if (requestId && detail?.requestId === requestId) {
+      await ctx.queueJob(
+        "core.verifyMailSender",
+        { senderId: sender!.id, requestId },
+        { idempotencyKey: `mail-sender-verification:${requestId}` },
+      );
+    }
     ctx.queueEvent("mail.senderRegistered", {
       id: sender!.id,
       purpose: sender!.purpose,
@@ -876,7 +966,7 @@ export const registerMailSender = defineService({
 
 export const verifyMailSender = defineService({
   name: "mail.verifySender",
-  summary: "Queue a check of whether a bulk sender identity is verified.",
+  summary: "Queue a check of whether a provider sender identity is verified.",
   kind: "mutation",
   permission: "scoped",
   stepUp: true,
@@ -886,10 +976,10 @@ export const verifyMailSender = defineService({
   handler: async (input, ctx) => {
     refuseAgent(ctx.actor, "verify");
     const sender = await getSender(ctx.tx, input.id);
-    if (sender.purpose !== "bulk") {
+    if (sender.purpose !== "bulk" && sender.provider !== "paradise") {
       throw new ServiceError("validation", "OAuth and SMTP senders do not use bulk identity verification.");
     }
-    const adapter = providerForPurpose("bulk");
+    const adapter = providerForPurpose(sender.purpose);
     if (adapter.id !== sender.provider || !adapter.verifySender) {
       throw new ServiceError("conflict", "That provider cannot verify this sender here.");
     }
@@ -1008,7 +1098,7 @@ export async function runMailSenderVerification(
     throw error;
   }
   if (
-    sender.purpose !== "bulk" ||
+    (sender.purpose !== "bulk" && sender.provider !== "paradise") ||
     sender.verificationStatus !== "pending" ||
     !sender.verificationDetail ||
     typeof sender.verificationDetail !== "object" ||
@@ -1016,7 +1106,7 @@ export async function runMailSenderVerification(
   ) {
     return { applied: false };
   }
-  const adapter = providerForPurpose("bulk");
+  const adapter = providerForPurpose(sender.purpose);
   if (adapter.id !== sender.provider || !adapter.verifySender) {
     return applyMailSenderVerification.call(
       {

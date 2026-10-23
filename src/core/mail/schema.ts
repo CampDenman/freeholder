@@ -22,6 +22,7 @@ import {
 import { users } from "@/core/auth/schema";
 import { connectedAccounts } from "@/core/connections/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import { consentRecords } from "@/core/privacy/schema";
 
 export const mailSenders = pgTable(
   "mail_senders",
@@ -37,6 +38,7 @@ export const mailSenders = pgTable(
         "resend",
         "postmark",
         "ses",
+        "paradise",
       ],
     }).notNull(),
     /** Required for personal OAuth senders; null for env-backed providers. */
@@ -82,7 +84,7 @@ export const mailSenders = pgTable(
     check("mail_senders_purpose_allowed", sql`${t.purpose} in ('transactional', 'bulk')`),
     check(
       "mail_senders_provider_allowed",
-      sql`${t.provider} in ('gmail', 'outlook', 'smtp', 'console', 'resend', 'postmark', 'ses')`,
+      sql`${t.provider} in ('gmail', 'outlook', 'smtp', 'console', 'resend', 'postmark', 'ses', 'paradise')`,
     ),
     check(
       "mail_senders_verification_allowed",
@@ -96,7 +98,7 @@ export const mailSenders = pgTable(
     check("mail_senders_email_bounded", sql`length(${t.email}) <= 320`),
     check(
       "mail_senders_provider_purpose",
-      sql`(${t.purpose} = 'transactional' and ${t.provider} in ('gmail', 'outlook', 'smtp', 'console')) or (${t.purpose} = 'bulk' and ${t.provider} in ('resend', 'postmark', 'ses'))`,
+      sql`(${t.purpose} = 'transactional' and ${t.provider} in ('gmail', 'outlook', 'smtp', 'console', 'paradise')) or (${t.purpose} = 'bulk' and ${t.provider} in ('resend', 'postmark', 'ses', 'paradise'))`,
     ),
     check(
       "mail_senders_connection_consistent",
@@ -171,6 +173,7 @@ export const mailDeliveries = pgTable(
         "resend",
         "postmark",
         "ses",
+        "paradise",
         "none",
       ],
     }).notNull(),
@@ -216,7 +219,7 @@ export const mailDeliveries = pgTable(
     check("mail_deliveries_purpose_allowed", sql`${t.purpose} in ('transactional', 'bulk')`),
     check(
       "mail_deliveries_provider_allowed",
-      sql`${t.provider} in ('gmail', 'outlook', 'smtp', 'console', 'resend', 'postmark', 'ses', 'none')`,
+      sql`${t.provider} in ('gmail', 'outlook', 'smtp', 'console', 'resend', 'postmark', 'ses', 'paradise', 'none')`,
     ),
     check(
       "mail_deliveries_status_allowed",
@@ -224,7 +227,7 @@ export const mailDeliveries = pgTable(
     ),
     check(
       "mail_deliveries_provider_purpose",
-      sql`(${t.purpose} = 'transactional' and ${t.provider} in ('gmail', 'outlook', 'smtp', 'console')) or (${t.purpose} = 'bulk' and ${t.provider} in ('resend', 'postmark', 'ses', 'none'))`,
+      sql`(${t.purpose} = 'transactional' and ${t.provider} in ('gmail', 'outlook', 'smtp', 'console', 'paradise')) or (${t.purpose} = 'bulk' and ${t.provider} in ('resend', 'postmark', 'ses', 'paradise', 'none'))`,
     ),
     check("mail_deliveries_recipient_lower", sql`${t.recipient} = lower(${t.recipient})`),
     check("mail_deliveries_recipient_bounded", sql`length(${t.recipient}) <= 320`),
@@ -355,5 +358,47 @@ export const mailSuppressions = pgTable(
       "mail_suppressions_release_consistent",
       sql`(${t.active} = true and ${t.releasedAt} is null) or (${t.active} = false and ${t.releasedAt} is not null)`,
     ),
+  ],
+);
+
+/**
+ * Marketing grants Freeholder has recorded at a permission-checking campaign
+ * carrier (C3.31). Only these are ever withdrawn there: a contact who denied,
+ * never opted in, or was never mailed through such a carrier has nothing to
+ * mirror. Keyed to the consent record the grant came from and the address it
+ * was recorded under, so a withdrawal reaches the address the carrier holds
+ * even after the contact's email has changed. Exported and erased with the
+ * contact (`mail.provider_grants`); finished rows age out under the
+ * `mail_provider_grants` retention kind.
+ */
+export const mailProviderGrants = pgTable(
+  "mail_provider_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider", { enum: ["paradise"] }).notNull(),
+    email: text("email").notNull(),
+    /**
+     * Null once the contact is gone: erasure detaches it on purpose, and
+     * deleting a contact sets it null through the consent record's cascade.
+     * A detached grant is withdrawn at the carrier and then deleted
+     * (`withdrawDetachedGrants`), never silently dropped.
+     */
+    consentRecordId: uuid("consent_record_id").references(() => consentRecords.id, {
+      onDelete: "set null",
+    }),
+    /** Set when an erasure detached this grant: the receipt waits on it. */
+    erasureRequestId: uuid("erasure_request_id"),
+    erasureJobId: uuid("erasure_job_id"),
+    withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+    /** A permanent refusal of the withdrawal, recorded once rather than retried forever. */
+    withdrawalError: text("withdrawal_error"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("mail_provider_grants_unique_idx").on(t.provider, t.email, t.consentRecordId),
+    index("mail_provider_grants_consent_idx").on(t.consentRecordId),
+    index("mail_provider_grants_detached_idx").on(t.id).where(sql`${t.consentRecordId} is null`),
+    check("mail_provider_grants_provider_allowed", sql`${t.provider} in ('paradise')`),
   ],
 );

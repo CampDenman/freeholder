@@ -4,6 +4,15 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { resetMailForTests } from "@/adapters/mail";
+import { setParadiseFetchForTests } from "@/adapters/paradise/http";
+import { contacts } from "@/core/contacts/schema";
+import { mirrorMarketingWithdrawal, rememberProviderGrant, withdrawDetachedGrants } from "@/core/mail/permission";
+import { PROVIDER_GRANTS_SCOPE } from "@/core/mail/privacy";
+import { completeErasureJob, contactPrivacySources } from "@/core/privacy/service";
+import { runDoctor } from "@/core/doctor";
+import { retentionSources } from "@/core/retention/registry";
+import { consentRecords } from "@/core/privacy/schema";
+import { MailAdapterError } from "@/adapters/mail/types";
 import { users } from "@/core/auth/schema";
 import { connectedAccounts, connectionCapabilities } from "@/core/connections/schema";
 import { db } from "@/core/db";
@@ -14,6 +23,7 @@ import {
   mailDeliveries,
   mailOutbox,
   mailProviderEvents,
+  mailProviderGrants,
   mailSenders,
   mailSuppressions,
 } from "@/core/mail/schema";
@@ -75,6 +85,7 @@ describe.runIf(hasDatabase)("mail services", () => {
     changedEnvironment.clear();
     resetEnvForTests();
     resetMailForTests();
+    setParadiseFetchForTests(undefined);
     vi.restoreAllMocks();
   });
 
@@ -285,6 +296,275 @@ describe.runIf(hasDatabase)("mail services", () => {
     expect(delivered).toMatchObject({ status: "failed", attempts: 1 });
     expect(log).toHaveBeenCalled();
     log.mockRestore();
+  });
+
+  it("declares the transactional reason and event to a permission-checking adapter (C3.31)", async () => {
+    environment({ MAIL_ADAPTER: "paradise", PARADISEMODERN_API_KEY: "site-key" });
+    const bodies: Array<Record<string, unknown>> = [];
+    setParadiseFetchForTests(async (_url, init) => {
+      bodies.push(JSON.parse(init.body as string) as Record<string, unknown>);
+      return new Response(JSON.stringify({ messageId: "provider-1" }), { status: 200 });
+    });
+    const queued = await db().transaction((tx) =>
+      sendMail(
+        tx,
+        { to: "person@example.test", subject: "Reset", text: "Your link." },
+        { idempotencyKey: "password-reset:abc", transactionalReason: "authentication" },
+      ),
+    );
+    // The widened constraint accepts the new provider on the delivery row.
+    expect(queued).toMatchObject({ provider: "paradise", delivers: true });
+    await expect(deliverQueuedMail(queued.id)).resolves.toEqual({ status: "submitted" });
+    expect(bodies[0]).toMatchObject({
+      to: "person@example.test",
+      permission: { purpose: "transactional", reason: "authentication", eventRef: "password-reset:abc" },
+      requestId: `freeholder:${queued.id}`,
+    });
+    // Staging fields never reach the provider as content.
+    expect(bodies[0]).not.toHaveProperty("transactionalReason");
+    expect(bodies[0]).not.toHaveProperty("marketingContactId");
+  });
+
+  it("mirrors a marketing withdrawal only for grants sent to the carrier, to the address they were sent under (C3.31)", async () => {
+    const [contact] = await db().insert(contacts).values({
+      name: "Reader",
+      email: "reader@example.test",
+    }).returning();
+    const [grant] = await db().insert(consentRecords).values({
+      contactId: contact!.id,
+      purpose: "marketing",
+      channel: "email",
+      state: "granted",
+      method: "double_opt_in",
+      actor: "system",
+    }).returning();
+    const urls: string[] = [];
+    const bodies: unknown[] = [];
+    const reply = () => new Response("{}", { status: 200 });
+    setParadiseFetchForTests(async (url, init) => {
+      urls.push(url);
+      bodies.push(JSON.parse(init.body as string));
+      return reply();
+    });
+    const withdrawal = { contactId: contact!.id, purpose: "marketing", channel: "email", state: "withdrawn" };
+    environment({
+      MAIL_BULK_ADAPTER: "resend",
+      MAIL_BULK_FROM: "news@example.test",
+      RESEND_API_KEY: "re_test",
+      PARADISEMODERN_API_KEY: undefined,
+    });
+    await rememberProviderGrant(db(), "paradise", { email: "Old@Example.test", evidenceRef: `freeholder-consent:${grant!.id}` });
+    // Without Paradise credentials there is no way to tell it; the grant
+    // stays open for later.
+    await mirrorMarketingWithdrawal(withdrawal);
+    expect(urls).toEqual([]);
+
+    environment({ PARADISEMODERN_API_KEY: "site-key" });
+    // A denial, another channel or a grant is not a withdrawal to mirror.
+    await mirrorMarketingWithdrawal({ ...withdrawal, state: "denied" });
+    await mirrorMarketingWithdrawal({ ...withdrawal, state: "granted" });
+    await mirrorMarketingWithdrawal({ ...withdrawal, channel: "sms" });
+    expect(urls).toEqual([]);
+
+    // The contact's email has changed since the grant: the carrier is told
+    // about the address it actually holds.
+    await db().update(contacts).set({ email: "new@example.test" }).where(eq(contacts.id, contact!.id));
+    await mirrorMarketingWithdrawal(withdrawal);
+    expect(urls).toEqual(["https://paradisemodern.com/api/site-self/email/consent/withdraw"]);
+    expect(bodies).toEqual([{ email: "old@example.test" }]);
+    // Mirrored once: a repeat finds nothing left to withdraw.
+    await mirrorMarketingWithdrawal(withdrawal);
+    expect(urls).toHaveLength(1);
+
+    // A contact never granted at the carrier has nothing to withdraw there.
+    const [stranger] = await db().insert(contacts).values({ name: "Stranger", email: "s@example.test" }).returning();
+    await mirrorMarketingWithdrawal({ ...withdrawal, contactId: stranger!.id });
+    expect(urls).toHaveLength(1);
+  });
+
+  it("records a permanent withdrawal refusal once, retries a transient one, and skips the playground (C3.31)", async () => {
+    const [contact] = await db().insert(contacts).values({ name: "Reader", email: "r2@example.test" }).returning();
+    const [grant] = await db().insert(consentRecords).values({
+      contactId: contact!.id,
+      purpose: "marketing",
+      channel: "email",
+      state: "granted",
+      method: "double_opt_in",
+      actor: "system",
+    }).returning();
+    await rememberProviderGrant(db(), "paradise", { email: "r2@example.test", evidenceRef: `freeholder-consent:${grant!.id}` });
+    let status = 503;
+    let calls = 0;
+    setParadiseFetchForTests(async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ code: "INVALID" }), { status });
+    });
+    const withdrawal = { contactId: contact!.id, purpose: "marketing", channel: "email", state: "withdrawn" };
+    environment({ MAIL_BULK_ADAPTER: "paradise", MAIL_BULK_FROM: "news@example.test", PARADISEMODERN_API_KEY: "site-key" });
+
+    await expect(mirrorMarketingWithdrawal(withdrawal)).rejects.toBeInstanceOf(MailAdapterError);
+    status = 400;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await expect(mirrorMarketingWithdrawal(withdrawal)).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledOnce();
+    const [row] = await db().select().from(mailProviderGrants).where(eq(mailProviderGrants.consentRecordId, grant!.id));
+    expect(row?.withdrawalError).toBeTruthy();
+    expect(row?.withdrawnAt).toBeNull();
+    // Recorded, not looped: the next delivery does not call again.
+    await mirrorMarketingWithdrawal(withdrawal);
+    expect(calls).toBe(2);
+
+    await db().update(mailProviderGrants).set({ withdrawalError: null });
+    environment({ FREEHOLDER_PLAYGROUND: "1" });
+    await expect(mirrorMarketingWithdrawal(withdrawal)).resolves.toBeUndefined();
+    expect(calls).toBe(2);
+  });
+
+  async function grantedReader(email: string) {
+    const [contact] = await db().insert(contacts).values({ name: "Reader", email }).returning();
+    const [grant] = await db().insert(consentRecords).values({
+      contactId: contact!.id,
+      purpose: "marketing",
+      channel: "email",
+      state: "granted",
+      method: "double_opt_in",
+      actor: "system",
+    }).returning();
+    await rememberProviderGrant(db(), "paradise", { email, evidenceRef: `freeholder-consent:${grant!.id}` });
+    return { contactId: contact!.id, consentRecordId: grant!.id };
+  }
+
+  function carrierCalls() {
+    const bodies: Array<{ email?: string }> = [];
+    setParadiseFetchForTests(async (_url, init) => {
+      bodies.push(JSON.parse(init.body as string) as { email?: string });
+      return new Response("{}", { status: 200 });
+    });
+    environment({ MAIL_BULK_ADAPTER: "paradise", MAIL_BULK_FROM: "news@example.test", PARADISEMODERN_API_KEY: "site-key" });
+    return bodies;
+  }
+
+  it("exports a contact's carrier grants and erases them only after the carrier is told (C3.31)", async () => {
+    const { contactId } = await grantedReader("erase-me@example.test");
+    const bodies = carrierCalls();
+    const source = contactPrivacySources().find((item) => item.scope === PROVIDER_GRANTS_SCOPE)!;
+    expect(source.tables).toEqual(["mail_provider_grants"]);
+
+    const exported = (await source.exportData(db() as never, contactId)) as Array<{ email: string }>;
+    expect(exported.map((row) => row.email)).toEqual(["erase-me@example.test"]);
+
+    const requestId = crypto.randomUUID();
+    const acknowledged = vi.spyOn(completeErasureJob, "call").mockResolvedValue({ ok: true });
+    const erased = await db().transaction((tx) => source.erase(tx as never, contactId, { requestId }));
+    expect(erased.pendingJobs).toHaveLength(1);
+    // Detached from the person at once; the address stays only for the job.
+    expect(await source.exportData(db() as never, contactId)).toEqual([]);
+    const queued = await (await startJobProducer())?.findJobs("core.withdrawProviderGrants");
+    const job = queued?.find((item) => item.id === erased.pendingJobs![0]);
+    expect(job).toBeTruthy();
+
+    // What the job does: tell the carrier, delete the row, then acknowledge.
+    await withdrawDetachedGrants((job!.data as { grantIds: string[] }).grantIds);
+    expect(bodies).toEqual([{ email: "erase-me@example.test" }]);
+    const left = await db().select().from(mailProviderGrants);
+    expect(left).toEqual([]);
+    expect(acknowledged).toHaveBeenCalledWith(
+      { requestId, scope: PROVIDER_GRANTS_SCOPE, jobId: erased.pendingJobs![0] },
+      { kind: "system" },
+    );
+  });
+
+  it("withdraws through Paradise credentials even after the campaign carrier changed (C3.31)", async () => {
+    const { contactId } = await grantedReader("switched@example.test");
+    const bodies = carrierCalls();
+    environment({ MAIL_BULK_ADAPTER: "resend", RESEND_API_KEY: "re_test" });
+    await db().delete(contacts).where(eq(contacts.id, contactId));
+    await expect(withdrawDetachedGrants()).resolves.toEqual({ removed: 1, waiting: 0 });
+    expect(bodies).toEqual([{ email: "switched@example.test" }]);
+  });
+
+  it("keeps detached grants, and the erasure pending, until Paradise credentials exist (C3.31)", async () => {
+    const { contactId } = await grantedReader("waiting@example.test");
+    const bodies = carrierCalls();
+    environment({ PARADISEMODERN_API_KEY: undefined, MAIL_BULK_ADAPTER: undefined });
+    const source = contactPrivacySources().find((item) => item.scope === PROVIDER_GRANTS_SCOPE)!;
+    const requestId = crypto.randomUUID();
+    const acknowledged = vi.spyOn(completeErasureJob, "call").mockResolvedValue({ ok: true });
+    const erased = await db().transaction((tx) => source.erase(tx as never, contactId, { requestId }));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(withdrawDetachedGrants()).resolves.toEqual({ removed: 0, waiting: 1 });
+    expect(await db().select().from(mailProviderGrants)).toHaveLength(1);
+    expect(acknowledged).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+    const report = await runDoctor();
+    const check = report.checks.find((item) => item.id === "mail.providerGrants");
+    expect(check?.verdict).toBe("warn");
+    expect(check?.remedy).toContain("PARADISEMODERN_API_KEY");
+
+    // Credentials back: the next sweep tells the carrier and finishes the erasure.
+    environment({ PARADISEMODERN_API_KEY: "site-key" });
+    await expect(withdrawDetachedGrants()).resolves.toEqual({ removed: 1, waiting: 0 });
+    expect(bodies).toEqual([{ email: "waiting@example.test" }]);
+    expect(acknowledged).toHaveBeenCalledWith(
+      { requestId, scope: PROVIDER_GRANTS_SCOPE, jobId: erased.pendingJobs![0] },
+      { kind: "system" },
+    );
+  });
+
+  it("touches nothing on the playground (C3.31)", async () => {
+    const { contactId } = await grantedReader("playground@example.test");
+    const bodies = carrierCalls();
+    await db().delete(contacts).where(eq(contacts.id, contactId));
+    environment({ FREEHOLDER_PLAYGROUND: "1" });
+    await expect(withdrawDetachedGrants()).resolves.toEqual({ removed: 0, waiting: 1 });
+    expect(bodies).toEqual([]);
+    expect(await db().select().from(mailProviderGrants)).toHaveLength(1);
+  });
+
+  it("withdraws a deleted contact's grants at the carrier before forgetting them (C3.31)", async () => {
+    const { contactId } = await grantedReader("deleted@example.test");
+    const bodies = carrierCalls();
+    // The consent record's cascade detaches the grant rather than dropping it.
+    await db().delete(contacts).where(eq(contacts.id, contactId));
+    const [detached] = await db().select().from(mailProviderGrants);
+    expect(detached?.consentRecordId).toBeNull();
+    expect(detached?.email).toBe("deleted@example.test");
+    await expect(withdrawDetachedGrants()).resolves.toEqual({ removed: 1, waiting: 0 });
+    expect(bodies).toEqual([{ email: "deleted@example.test" }]);
+    expect(await db().select().from(mailProviderGrants)).toEqual([]);
+  });
+
+  it("ages out only finished carrier grants (C3.31)", async () => {
+    await grantedReader("open@example.test");
+    const { consentRecordId } = await grantedReader("done@example.test");
+    const old = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
+    await db()
+      .update(mailProviderGrants)
+      .set({ withdrawnAt: old, updatedAt: old })
+      .where(eq(mailProviderGrants.consentRecordId, consentRecordId));
+    await db().update(mailProviderGrants).set({ updatedAt: old }).where(eq(mailProviderGrants.email, "open@example.test"));
+    const kind = retentionSources().find((source) => source.kind === "mail_provider_grants")!;
+    expect(kind.privacyScope).toBe(PROVIDER_GRANTS_SCOPE);
+    await expect(kind.purge({ cutoff: new Date(), exceptContactIds: [] })).resolves.toBe(1);
+    expect((await db().select().from(mailProviderGrants)).map((row) => row.email)).toEqual(["open@example.test"]);
+  });
+
+  it("verifies a Paradise Modern transactional sender before it can send (C3.31)", async () => {
+    environment({ MAIL_ADAPTER: "paradise", MAIL_FROM: "hello@example.test", PARADISEMODERN_API_KEY: "site-key" });
+    const sender = await registerMailSender.call(
+      { purpose: "transactional", provider: "paradise", email: "hello@example.test" },
+      OWNER,
+    );
+    expect(sender.verificationStatus).toBe("pending");
+    const detail = sender.verificationDetail as { requestId?: string };
+    expect(detail.requestId).toBeTruthy();
+    setParadiseFetchForTests(async () =>
+      new Response(JSON.stringify({ domain: "example.test", mailgunDomainStatus: "active" }), { status: 200 }),
+    );
+    await expect(runMailSenderVerification(sender.id, detail.requestId!)).resolves.toEqual({ applied: true });
+    const [verified] = await db().select().from(mailSenders).where(eq(mailSenders.id, sender.id));
+    expect(verified?.verificationStatus).toBe("verified");
   });
 
   it("refuses to reroute a queued message after deployment mail settings change", async () => {

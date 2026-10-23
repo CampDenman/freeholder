@@ -166,6 +166,7 @@ async function deliver(
   }, {
     requestedBy: "system",
     idempotencyKey: input.idempotencyKey,
+    transactionalReason: "account_notice",
   });
   return {
     adapter: result.provider,

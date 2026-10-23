@@ -240,7 +240,7 @@ export const replyToConversation = defineService({
         to: person.email,
         subject: thread.subject ?? "Re: your message",
         text: input.body,
-      });
+      }, { transactionalReason: "requested_reply", eventRef: `conversation:${thread.id}` });
     } else if (thread.replyChannel === "sms" || thread.replyChannel === "mms") {
       // C7.10's adapter. `messaging.sendSms` records the message itself, with
       // what the carrier charged, so this returns early rather than recording a

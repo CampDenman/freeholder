@@ -508,6 +508,7 @@ export async function sendDueInvoiceReminders(): Promise<{
             purpose: "transactional",
             // Stable per reminder row, so a retried job never sends twice.
             idempotencyKey: `invoice-reminder:${reminder.id}`,
+            transactionalReason: "account_notice",
           },
         ),
       );

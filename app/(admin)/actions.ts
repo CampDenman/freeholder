@@ -1453,7 +1453,7 @@ export async function registerMailSenderAction(
   const provider = field(form, "provider");
   if (
     (purpose !== "transactional" && purpose !== "bulk") ||
-    !["smtp", "resend", "postmark", "ses"].includes(provider)
+    !["smtp", "resend", "postmark", "ses", "paradise"].includes(provider)
   ) {
     return { error: "That configured mail sender is not available." };
   }
@@ -1461,7 +1461,7 @@ export async function registerMailSenderAction(
     await registerMailSender.call(
       {
         purpose,
-        provider: provider as "smtp" | "resend" | "postmark" | "ses",
+        provider: provider as "smtp" | "resend" | "postmark" | "ses" | "paradise",
         email: field(form, "email"),
         displayName: field(form, "displayName") || undefined,
         providerIdentity: field(form, "providerIdentity") || undefined,

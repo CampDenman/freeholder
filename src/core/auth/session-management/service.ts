@@ -272,6 +272,7 @@ export async function deliverPendingSecurityNotices(limit = 25): Promise<{
         }, {
           requestedBy: "system",
           idempotencyKey: `security-notice:${event.id}`,
+          transactionalReason: "account_notice",
         }),
       );
       if (!delivery.delivers) {

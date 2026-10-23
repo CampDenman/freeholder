@@ -74,6 +74,7 @@ export {
   mailOutbox,
   mailOauthStates,
   mailProviderEvents,
+  mailProviderGrants,
   mailSenders,
   mailSuppressions,
 } from "@/core/mail/schema";

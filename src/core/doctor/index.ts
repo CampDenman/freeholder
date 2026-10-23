@@ -673,6 +673,34 @@ async function checkSecurity(): Promise<Check[]> {
   return checks;
 }
 
+/**
+ * Marketing grants of deleted or erased contacts that Paradise Modern still
+ * holds (C3.31). Only reported when some are waiting; an erasure receipt
+ * stays pending until they are withdrawn.
+ */
+async function checkProviderGrants(): Promise<Check[]> {
+  let waiting: number;
+  try {
+    const { grantsAwaitingWithdrawal } = await import("@/core/mail/permission");
+    waiting = await grantsAwaitingWithdrawal();
+  } catch {
+    return [];
+  }
+  if (waiting === 0) return [];
+  const title = "Marketing grants awaiting withdrawal";
+  const detail = `${waiting} Paradise Modern marketing grant${waiting === 1 ? "" : "s"} of deleted or erased contacts ${waiting === 1 ? "has" : "have"} not been withdrawn there yet; any erasure waiting on ${waiting === 1 ? "it" : "them"} stays pending.`;
+  return [
+    env().PARADISEMODERN_API_KEY
+      ? ok("mail.providerGrants", title, `${detail} The next sweep, within ten minutes, finishes ${waiting === 1 ? "it" : "them"}.`)
+      : warn(
+          "mail.providerGrants",
+          title,
+          detail,
+          "Set PARADISEMODERN_API_KEY to the site's Paradise Modern key; the next sweep then withdraws them and completes the erasure.",
+        ),
+  ];
+}
+
 async function checkMalwareScanner(): Promise<Check> {
   const e = env();
   if (e.MALWARE_SCANNER !== "clamav") {
@@ -1177,6 +1205,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     await checkMalwareScanner(),
     await checkAltTextSuggester(),
     ...(await checkMail()),
+    ...(await checkProviderGrants()),
     await checkPayments(),
     ...(await checkNotificationChannels()),
     await checkJobs(),
