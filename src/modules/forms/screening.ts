@@ -20,13 +20,14 @@
 //   showed the provider notice, which is what the lead sink requires before
 //   copying anything.
 //
-// Fails closed: with no `SESSION_SECRET` no seal is ever issued. While a
-// provider is configured that holds every anonymous submission as unchecked,
-// and the lead sink copies nothing. A seal that is present but invalid is
-// held as unchecked too. A submission with no seal at all came through the
-// public API or MCP, not a site form: it is not screened by the provider
-// (the traps and the per-form rate limit in `forms.submit` still apply) and
-// it is never copied to the lead sink.
+// Screening covers anonymous submissions on every path. While a provider is
+// configured, an anonymous submission without a valid seal — posted straight
+// to the public API or MCP, a forged or stale seal, or any submission at all
+// when `SESSION_SECRET` is unset (no seal is ever issued then) — is held as
+// unchecked. Only authenticated callers (owner and staff sessions, API keys,
+// agents) are exempt from the seal. The traps and the per-form rate limit in
+// `forms.submit` apply to everyone. A submission without a seal is never
+// copied to the lead sink.
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { formScreening, type ScreeningOutcome } from "@/adapters/form-screening";
@@ -103,8 +104,9 @@ export function openScreening(
 }
 
 /**
- * The quarantine reason screening adds, if any. Only anonymous submissions
- * are screened: a signed-in person or an API key is not who it exists for.
+ * The quarantine reason screening adds, if any. Every anonymous submission
+ * is screened, on every path; a signed-in person, an API key or an agent is
+ * not who it exists for.
  */
 export function screeningReason(
   token: string | undefined,
@@ -113,10 +115,8 @@ export function screeningReason(
   actor: Actor,
 ): string | null {
   if (!formScreening() || actor.kind !== "anonymous") return null;
-  // No secret means no seal can be trusted, so nothing counts as checked.
-  if (!env().SESSION_SECRET) return UNCHECKED_REASON;
-  // No seal at all: the public API or MCP, not a site form (see above).
-  if (!token) return null;
+  // No seal, a seal that does not open, or no secret to open one with: the
+  // submission did not pass through screening, whatever path it took.
   const outcome = openScreening(token, slug, values);
   if (outcome === null) return UNCHECKED_REASON;
   if (outcome === "blocked") return BLOCKED_REASON;

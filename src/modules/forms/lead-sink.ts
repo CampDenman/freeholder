@@ -6,7 +6,8 @@
 // that passed quarantine, and which runs after the submission has committed.
 // Only submissions sealed by a site form are copied: those are the ones whose
 // sender saw the notice naming the provider. Owner entries, API and MCP
-// submissions are never copied.
+// submissions are never copied, and neither is a submission an owner later
+// rescues from the spam queue: rescue emits no `forms.submitted`.
 //
 // Every failure throws. The outbox retries with backoff and, after its last
 // attempt, dead-letters the delivery, which the owner sees under Jobs →

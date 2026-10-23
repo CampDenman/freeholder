@@ -5344,8 +5344,9 @@ deployments are portable, testable and incapable of silently forking the truth.
   the booking intake action seal before `forms.submit`
   (`sealSiteSubmission`), which only adds a reason. Traps and a per-client
   budget run first, so the provider is never asked about what they flag.
-  API and MCP submissions carry no seal: not screened by the provider, never
-  copied. The Paradise adapter sends `form_id`, `client_ip` and the longest
+  An anonymous submission without a valid seal (API, MCP, forged) is held
+  as unchecked while screening is on; authenticated callers are exempt; it
+  is never copied. A submission rescued from spam is not copied either. The Paradise adapter sends `form_id`, `client_ip` and the longest
   multi-line answer, nothing else, with a 4-second limit. Lead sink: core's
   `forms.submitted` listener `onFormSubmittedLeadSink` →
   `src/modules/forms/lead-sink.ts` copies only `received` submissions whose

@@ -546,7 +546,8 @@ export const submitForm = defineService({
      * The site form's seal (C3.33, C3.34): the screening outcome, which can
      * only add a reason to quarantine and never clear one a trap raised, and
      * proof the submission came through a form that showed the provider
-     * notice. Absent for the public API and MCP.
+     * notice. An anonymous submission without one is held as unchecked while
+     * screening is on, whichever path it took.
      */
     screening: z.string().max(300).optional(),
   }),

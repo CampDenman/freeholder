@@ -59,6 +59,9 @@ function configure(values: Partial<Record<(typeof NAMES)[number], string>>): voi
   resetEnvForTests();
 }
 
+/** An API key acting through the public API. */
+const API_KEY = { kind: "agent" as const, keyName: "crm-import", scopes: ["forms.submit"] };
+
 const PM = { PARADISEMODERN_API_KEY: "k", PARADISEMODERN_URL: "https://pm.example.test" };
 const SCREENING = { ...PM, FORM_SCREENING_PROVIDER: "paradise" };
 const SINK = { ...PM, LEAD_SINK_PROVIDER: "paradise" };
@@ -204,9 +207,11 @@ describe("the sealed verdict", () => {
     expect(screeningReason(unscreened, "contact", values, ANONYMOUS)).toBeNull();
     expect(screeningReason(blocked, "contact", values, ANONYMOUS)).toBe(BLOCKED_REASON);
     expect(screeningReason("v1.allow.1.forged", "contact", values, ANONYMOUS)).toBe(UNCHECKED_REASON);
-    // No seal at all is the public API or MCP: traps and rate limit only.
-    expect(screeningReason(undefined, "contact", values, ANONYMOUS)).toBeNull();
+    // No seal at all (an anonymous API or MCP call) is unchecked too.
+    expect(screeningReason(undefined, "contact", values, ANONYMOUS)).toBe(UNCHECKED_REASON);
+    // Authenticated callers are exempt from the seal.
     expect(screeningReason(blocked, "contact", values, OWNER)).toBeNull();
+    expect(screeningReason(undefined, "contact", values, API_KEY)).toBeNull();
   });
 });
 
@@ -362,9 +367,18 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     expect(openScreening(noAddress, "contact", values)).toBe("unavailable");
   });
 
-  it("does not hold an API or MCP submission as unchecked, and never copies it", async () => {
+  it("holds an anonymous API submission without a seal as unchecked", async () => {
     configure({ ...SCREENING, LEAD_SINK_PROVIDER: "paradise" });
-    const { submissionId } = await submitForm.call({ slug: "contact", values: answers() }, ANONYMOUS);
+    await submitForm.call({ slug: "contact", values: answers() }, ANONYMOUS);
+    const row = await only();
+    expect(row.status).toBe("spam");
+    expect(row.spamReasons).toEqual([UNCHECKED_REASON]);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("accepts an API-key submission without a seal, and never copies it", async () => {
+    configure({ ...SCREENING, LEAD_SINK_PROVIDER: "paradise" });
+    const { submissionId } = await submitForm.call({ slug: "contact", values: answers() }, API_KEY);
     expect((await only()).status).toBe("received");
     const payload = await submittedPayload();
     expect(payload.fromSiteForm).toBe(false);

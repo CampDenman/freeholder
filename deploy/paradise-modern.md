@@ -87,10 +87,12 @@ not enabled for the site or answering without a verdict seals "unavailable",
 and the traps decide alone. Fail-closed rules: without `SESSION_SECRET` no
 seal is ever issued, so while screening is on every anonymous submission is
 held as "was not checked by the site's spam screening"; a seal that is
-present but invalid is held the same way. A submission with no seal at all
-came through the public API or MCP rather than a site form: it is not sent to
-the provider and not held for that, and the traps and the per-form rate
-limit still apply. Signed-in people and API keys are not screened.
+present but invalid is held the same way. Screening covers anonymous
+submissions on every path: an anonymous call to `forms.submit` through the
+public API or MCP carries no seal, so while screening is on it is held as
+unchecked too, for the owner to review. Only authenticated callers — owner
+and staff sessions, API keys and agents — are exempt from the seal. The traps
+and the per-form rate limit apply to every caller.
 
 While it is on, every form shows a short notice under its fields naming the
 provider, what is sent and why, in every locale.
@@ -105,7 +107,9 @@ A switch of its own, off by default; screening never turns it on. After an
 accepted (never quarantined) submission from a site form — one that showed
 the notice below, proven by the same seal — has committed, an outbox listener
 copies it to `POST /api/collect/lead`. Owner entries and API or MCP
-submissions are never copied. **What is copied:** the name, email
+submissions are never copied. Nor is a submission an owner later rescues
+from the spam queue: rescuing it puts the person on the contact spine but
+does not copy it to the lead sink. **What is copied:** the name, email
 and phone answers (when the form has them), the longest prose answer, every
 non-empty answer keyed by its field label, the form's slug, the absolute
 address of the page it was sent from, and Freeholder's submission id so the
