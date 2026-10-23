@@ -10,9 +10,16 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import type SharpModule from "sharp";
+import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
+import { ready } from "@/core/runtime";
+import { updateBusiness } from "@/core/settings/service";
 import { assets } from "@/core/media/schema";
-import { rescanAsset } from "@/core/media/service";
+import {
+  backfillWatermarks,
+  registerStoredOriginal,
+  rescanAsset,
+} from "@/core/media/service";
 import {
   NOT_RASTER_IMAGE_REASON,
   NotRasterImageError,
@@ -23,7 +30,7 @@ import { buildWatermarked } from "@/core/media/watermark";
 import { cropStill, stillThumbnail } from "@/modules/social/render";
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import { resetMalwareScannerForTests } from "@/adapters/malware";
-import { closeDb, hasDatabase, STAFF, truncateSpine } from "../helpers/spine";
+import { closeDb, failure, hasDatabase, OWNER, STAFF, truncateSpine } from "../helpers/spine";
 
 const sharpInputs = vi.hoisted(() => [] as unknown[]);
 
@@ -70,6 +77,27 @@ describe("sniffing stored bytes", () => {
     expect(sniffRasterImage(Buffer.from(`﻿  ${Buffer.from(svg).toString()}`))).toBeUndefined();
     expect(sniffRasterImage(new Uint8Array(Buffer.from("%PDF-1.7")))).toBeUndefined();
     expect(sniffRasterImage(new Uint8Array())).toBeUndefined();
+  });
+});
+
+describe("polyglots are decided by their first bytes", () => {
+  it("loads a real PNG with SVG appended as a PNG", async () => {
+    const png = await raster("png");
+    const polyglot = new Uint8Array(Buffer.concat([Buffer.from(png), Buffer.from(svg)]));
+    expect(sniffRasterImage(polyglot)).toBe("image/png");
+    expect(await readImageFacts(polyglot)).toEqual({ width: 640, height: 480 });
+    // sharp picks its decoder from the same leading signature, so the
+    // trailing XML is never parsed as SVG.
+    expect((await sharp(Buffer.from(polyglot)).metadata()).format).toBe("png");
+  });
+
+  it("refuses an SVG with a PNG appended", async () => {
+    const png = await raster("png");
+    const polyglot = new Uint8Array(Buffer.concat([Buffer.from(svg), Buffer.from(png)]));
+    sharpInputs.length = 0;
+    expect(sniffRasterImage(polyglot)).toBeUndefined();
+    expect(await readImageFacts(polyglot)).toBeUndefined();
+    expect(sharpInputs).toHaveLength(0);
   });
 });
 
@@ -195,6 +223,74 @@ describe.runIf(hasDatabase)("rescanning a legacy library", () => {
     });
     // Neither altered nor deleted.
     expect(await storage().get(asset.storageKey)).toEqual(svg);
+  });
+
+  it("skips a legacy SVG in the watermark backfill without calling sharp", async () => {
+    await ready();
+    await updateBusiness.call(
+      { name: "Hearth & Pine", country: "CA", baseCurrency: "CAD", timezone: "America/Vancouver" },
+      OWNER,
+    );
+    const legacy = await stored(svg, "logo.png", "image/png");
+    sharpInputs.length = 0;
+    const result = await backfillWatermarks.call({ limit: 10 }, { kind: "system" });
+    expect(result).toEqual({ marked: 0, skipped: 1 });
+    expect(sharpInputs).toHaveLength(0);
+    const [after] = await db().select().from(assets).where(eq(assets.id, legacy.id));
+    expect((after!.variants as Record<string, unknown>).watermarked).toEqual({});
+    expect(await storage().get(legacy.storageKey)).toEqual(svg);
+  });
+
+  it("refuses to register a stored SVG labelled PNG", async () => {
+    const key = `staged/${randomUUID()}/logo.png`;
+    await storage().put(key, svg, "image/png");
+    sharpInputs.length = 0;
+    const refused = await failure(
+      registerStoredOriginal.call(
+        { key, filename: "logo.png", contentType: "image/png", bytes: svg.byteLength, source: "import" },
+        { kind: "system" },
+      ),
+    );
+    expect(refused.code).toBe("validation");
+    expect(sharpInputs).toHaveLength(0);
+  });
+
+  it("re-checks the stored bytes when they change after the signature check", async () => {
+    // The prefix read for validation says PNG; the body read for derivation
+    // is SVG — a swap between the two reads. The derivation step's own sniff
+    // refuses it before sharp sees it.
+    const png = await raster("png");
+    const key = `staged/${randomUUID()}/swap.png`;
+    await storage().put(key, svg, "image/png");
+    const readRange = vi
+      .spyOn(storage(), "readRange")
+      .mockResolvedValue(png.slice(0, Math.min(png.byteLength, 65_536)));
+    sharpInputs.length = 0;
+    try {
+      const refused = await failure(
+        registerStoredOriginal.call(
+          { key, filename: "swap.png", contentType: "image/png", bytes: svg.byteLength, source: "import" },
+          { kind: "system" },
+        ),
+      );
+      expect(refused.code).toBe("validation");
+      expect(refused.message).toContain("not a JPEG, PNG, GIF, WebP or AVIF image");
+      expect(sharpInputs).toHaveLength(0);
+    } finally {
+      readRange.mockRestore();
+    }
+  });
+
+  it("registers a stored PNG with renditions", async () => {
+    const png = await raster("png");
+    const key = `staged/${randomUUID()}/photo.png`;
+    await storage().put(key, png, "image/png");
+    const asset = await registerStoredOriginal.call(
+      { key, filename: "photo.png", contentType: "image/png", bytes: png.byteLength, source: "import" },
+      { kind: "system" },
+    );
+    expect(asset).toMatchObject({ kind: "image", width: 640, height: 480 });
+    expect((asset.variants as { webp?: unknown[] }).webp?.length).toBeGreaterThan(0);
   });
 
   it("still builds renditions for stored JPEG and PNG originals", async () => {

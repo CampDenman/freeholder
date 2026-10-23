@@ -3,7 +3,10 @@
 // Compose, review, schedule and publish (MASTER.md §33, C9.26).
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
+import { eq } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
+import { assets } from "@/core/media/schema";
+import { storage } from "@/adapters/storage";
 import { db } from "@/core/db";
 import { resetEnvForTests } from "@/core/env";
 import { ready } from "@/core/runtime";
@@ -242,6 +245,51 @@ describe.runIf(hasDatabase)("social composer", { timeout: 60_000 }, () => {
       status: "failed",
       lastError: "The publishing profile is unavailable or publishing is disabled.",
     });
+  });
+
+  it("refuses a stored SVG labelled PNG before rendering any original (C11.10)", async () => {
+    const profileId = await readyProfile();
+    async function stored(bytes: Uint8Array, filename: string) {
+      const key = `legacy/${filename}`;
+      const body = new Uint8Array(bytes.byteLength);
+      body.set(bytes);
+      await storage().put(key, body, "image/png");
+      const [asset] = await db()
+        .insert(assets)
+        .values({
+          kind: "image",
+          storageKey: key,
+          filename,
+          mime: "image/png",
+          legacyBytes: bytes.byteLength,
+          bytes: bytes.byteLength,
+          variants: {},
+          source: "migration",
+        })
+        .returning({ id: assets.id });
+      return asset!.id;
+    }
+    // The good PNG comes first, so a refusal found mid-loop would already
+    // have stored its crop and thumbnail as orphaned generated assets.
+    const good = await stored(png, "harbour.png");
+    const legacy = await stored(
+      Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>'),
+      "legacy-logo.png",
+    );
+    const pack = await composePackage.call(
+      { body: "Open Saturday.", assetIds: [good, legacy] },
+      OWNER,
+    );
+    const refused = await failure(
+      createVariants.call({ packageId: pack.id, profileIds: [profileId] }, OWNER),
+    );
+    expect(refused.code).toBe("validation");
+    expect(refused.message).toContain("legacy-logo.png");
+    const generated = await db()
+      .select({ id: assets.id })
+      .from(assets)
+      .where(eq(assets.source, "generated"));
+    expect(generated).toHaveLength(0);
   });
 
   it("composes an authored package without ingesting first", async () => {

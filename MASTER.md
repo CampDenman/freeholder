@@ -10743,7 +10743,22 @@ schema they inherit reads as a designed thing rather than an excavation.
   Regression: `tests/core/media-raster-guard.test.ts` wraps sharp and shows
   that it is never called on SVG bytes labelled `image/png`, while JPEG and
   PNG still render. The admin media page discards the rescan result, so
-  the reason is visible through the API/MCP/SDK only. Changeset
+  the reason is visible through the API/MCP/SDK only. Review follow-up the
+  same day: ffmpeg probed stored "video" bytes with no demuxer or protocol
+  limit, so an HLS/concat playlist under a video label could read local files
+  or fetch URLs. The only ffmpeg call site in src/ and app/, social
+  `clipVideo`, now refuses bytes `sniffVideo` does not identify as MP4,
+  QuickTime or WebM before any process starts. It then passes
+  `-protocol_whitelist file`, `-f mov|matroska` and, for mov,
+  `-enable_drefs 0` ahead of the single `-i` (`clipVideoArgs`).
+  `social.createVariants` checks every original before rendering or storing
+  any, so a refusal leaves no orphaned generated assets. Further regressions
+  cover `registerStoredOriginal` (including bytes swapped after the
+  signature read), the watermark backfill and PNG/SVG polyglots.
+  `tests/modules/social-render-ffmpeg.test.ts` replaces ffmpeg and asserts
+  the argv. `tests/modules/social-composer.test.ts` covers the end-to-end
+  refusal, and that test failed before the fix with two orphans. No ffmpeg
+  binary was available to run a real clip. Changeset
   `media-refuse-stored-svg.md`. Not independent review evidence.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,

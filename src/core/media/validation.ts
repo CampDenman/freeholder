@@ -208,6 +208,37 @@ export function sniffRasterImage(bytes: Uint8Array): string | undefined {
   return mime && RASTER_IMAGE_MIMES.has(mime) ? mime : undefined;
 }
 
+/** The video containers uploads accept; the only bytes ever handed to ffmpeg. */
+const VIDEO_MIMES: ReadonlySet<string> = new Set(
+  TYPES.filter((type) => type.kind === "video").map((type) => type.mime),
+);
+
+/**
+ * The allow-listed video container a stored original's bytes actually encode
+ * (MP4, QuickTime or WebM), or undefined for anything else.
+ *
+ * ffmpeg probes its input and follows what it finds: an HLS or concat
+ * playlist stored under a video label can make it open local files or fetch
+ * URLs. Every path that hands stored bytes to ffmpeg asks this first and then
+ * names the matching demuxer explicitly, so probing never decides (C11.10).
+ */
+export function sniffVideo(bytes: Uint8Array): string | undefined {
+  const mime = detectMediaMime(bytes.subarray(0, SIGNATURE_BYTES), "", "");
+  return mime && VIDEO_MIMES.has(mime) ? mime : undefined;
+}
+
+/** What the owner is told about a stored "video" whose bytes are not one. */
+export const NOT_ALLOWED_VIDEO_REASON =
+  "This file is not an MP4, QuickTime or WebM video, so it cannot be processed. The original is unchanged.";
+
+/** Thrown when a stored asset's bytes are not an allow-listed video container. */
+export class NotAllowedVideoError extends Error {
+  constructor(message = NOT_ALLOWED_VIDEO_REASON) {
+    super(message);
+    this.name = "NotAllowedVideoError";
+  }
+}
+
 /** What the owner is told about a stored "image" whose bytes are not raster. */
 export const NOT_RASTER_IMAGE_REASON =
   "This file is not a JPEG, PNG, GIF, WebP or AVIF image (for example, an SVG stored before SVG uploads were refused), so no resized copies were made. The original is unchanged.";

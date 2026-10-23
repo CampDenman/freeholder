@@ -11,7 +11,7 @@ import { socialAdapters } from "@/adapters/social";
 import { decryptSecret } from "@/core/connections/crypto";
 import { assets } from "@/core/media/schema";
 import { registerStoredOriginal } from "@/core/media/service";
-import { sniffRasterImage } from "@/core/media/validation";
+import { sniffRasterImage, sniffVideo } from "@/core/media/validation";
 import {
   defineOrchestratedService,
   defineService,
@@ -322,6 +322,28 @@ export const createVariants = defineOrchestratedService({
   output: listed(variantRow),
   handler: async (input, actor) => {
     const source = await createVariantsSource.call(input, actor);
+    // Read and check every original before rendering or storing anything, so
+    // a refusal leaves no renditions behind for the originals before it. The
+    // stored kind is a label: only allow-listed raster bytes reach sharp and
+    // only allow-listed video containers reach ffmpeg (C11.10).
+    const storedBytes = new Map<string, Uint8Array<ArrayBuffer>>();
+    for (const original of source.originals) {
+      const stored = await storage().get(original.storageKey);
+      if (!stored) continue;
+      if (original.kind === "image" && !sniffRasterImage(stored)) {
+        throw new ServiceError(
+          "validation",
+          `${original.filename} is not a JPEG, PNG, GIF, WebP or AVIF image, so it cannot be prepared for social accounts. Replace it with one of those formats.`,
+        );
+      }
+      if (original.kind === "video" && !sniffVideo(stored)) {
+        throw new ServiceError(
+          "validation",
+          `${original.filename} is not an MP4, QuickTime or WebM video, so it cannot be prepared for social accounts. Replace it with one of those formats.`,
+        );
+      }
+      storedBytes.set(original.id, stored);
+    }
     const variants = [];
     for (const profile of source.profiles) {
       const policy = policyFor(profile.provider);
@@ -330,20 +352,12 @@ export const createVariants = defineOrchestratedService({
       const assetIds: string[] = [];
       let generated = false;
       for (const original of source.originals) {
-        const stored = await storage().get(original.storageKey);
+        const stored = storedBytes.get(original.id);
         if (!stored) {
           assetIds.push(original.id);
           continue;
         }
         if (original.kind === "image") {
-          // The stored kind is a label; only allow-listed raster bytes are
-          // cropped. A legacy SVG is refused by name, not passed to sharp.
-          if (!sniffRasterImage(stored)) {
-            throw new ServiceError(
-              "validation",
-              `${original.filename} is not a JPEG, PNG, GIF, WebP or AVIF image, so it cannot be prepared for social accounts. Replace it with one of those formats.`,
-            );
-          }
           const crop = await cropStill(stored, policy.aspect, original.filename);
           generated = generated || crop.generated;
           assetIds.push(await storeRendition(crop.bytes, crop.mime, crop.filename));
