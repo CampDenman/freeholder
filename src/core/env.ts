@@ -299,6 +299,17 @@ const envSchema = z.object({
   /** `paradise`: purpose-bound Paradise Modern site credential (optional provider). */
   PARADISEMODERN_API_KEY: z.string().trim().min(1).optional(),
   PARADISEMODERN_URL: z.string().url().optional(),
+  /**
+   * The project Paradise's model gateway meters calls against, sent as
+   * `x-pm-project` by the builder and workforce when Paradise is the chosen
+   * gateway. Paradise refuses a gateway call naming no project it knows.
+   */
+  PARADISEMODERN_PROJECT: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .max(64)
+    .optional(),
   /** Visible, hard monthly cap for builder model usage. */
   BUILDER_MONTHLY_TOKEN_BUDGET: z.string().regex(/^\d+$/).default("250000"),
   /** Per-proposal output ceiling; the adapter never gets an open-ended call. */

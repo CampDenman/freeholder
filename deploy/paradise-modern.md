@@ -1,0 +1,75 @@
+# Paradise Modern as an optional provider
+
+Copyright (C) 2026 Tony Aly
+SPDX-License-Identifier: Apache-2.0
+
+Freeholder presents every outside service as a neutral category with
+swappable adapters (MASTER.md §12): payments (Stripe, PayPal, …), mail
+(SMTP, Gmail, Outlook, Resend, Postmark, SES), storage (any S3-compatible
+host), measurement, form screening, a lead sink and the agent/model gateway.
+Paradise Modern is one optional adapter in several of those categories,
+configured the same way as any other provider. A site that never chooses it
+never contacts it, and choosing it for one category never turns on another.
+
+This page documents only the public API contract Freeholder uses and the
+settings an operator sets.
+
+| Category | Choose Paradise with | MASTER.md |
+|---|---|---|
+| Transactional / bulk mail | `MAIL_ADAPTER=paradise`, `MAIL_BULK_ADAPTER=paradise` | C3.31 |
+| Measurement | `MEASUREMENT_PROVIDER=paradise` | C3.32 |
+| Form screening | `FORM_SCREENING_PROVIDER=paradise` | C3.33 |
+| Lead sink | `LEAD_SINK_PROVIDER=paradise` | C3.34 |
+| Agent / model gateway | `FREEHOLDER_AGENT=paradise`, or a `paradise` workforce connection | C4.05 |
+
+## Credentials and settings shared by every category
+
+```dotenv
+# The site's key. Server-side only: it is never sent to a browser.
+PARADISEMODERN_API_KEY=
+# Defaults to https://paradisemodern.com. A trailing /v1 is accepted.
+PARADISEMODERN_URL=
+# Model gateway only: the project gateway calls are metered against, sent as
+# x-pm-project. The gateway refuses a call naming no project it knows.
+PARADISEMODERN_PROJECT=
+```
+
+Keep the key in the host's private secret settings, like every other
+provider credential.
+
+Every server-to-server call goes through one helper
+(`src/adapters/paradise/http.ts`):
+
+- `PARADISEMODERN_URL` must be `https://` (plain `http://` is accepted only
+  for a loopback host, for tests and local development);
+- the key is sent as `x-api-key` to that origin and nowhere else — a path
+  can never name another host, and redirects are refused, not followed;
+- responses are size-bounded, and an error carries the HTTP status and the
+  provider's machine code, never the response body;
+- calls run outside service transactions (jobs, outbox listeners, or the
+  step before a submission's transaction), never inside one;
+- on a public playground (`FREEHOLDER_PLAYGROUND=1`) every call is refused
+  before any request, as mail, SMS and webhooks are.
+
+## Mail (C3.31)
+
+Not available in this release yet.
+
+## Measurement (C3.32)
+
+Not available in this release yet.
+
+## Form screening (C3.33)
+
+Not available in this release yet.
+
+## Lead sink (C3.34)
+
+Not available in this release yet.
+
+## Agent / model gateway
+
+`FREEHOLDER_AGENT=paradise` (or a `paradise` workforce connection) calls
+`POST /v1/chat/completions` with `x-api-key`, a `request_id`, and
+`x-pm-project` when `PARADISEMODERN_PROJECT` is set. No other gateway ever
+receives that header. See `deploy/agent-launch.md` and MASTER.md §37.

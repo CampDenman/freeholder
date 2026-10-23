@@ -16,6 +16,7 @@
 // (see ./aliases, applied where `FREEHOLDER_AGENT` and `adapters.agent` are
 // parsed) so existing configurations keep working.
 import { env } from "@/core/env";
+import { paradiseProjectHeaders } from "@/adapters/paradise/config";
 import type {
   AgentProposalRequest,
   AgentProposalResult,
@@ -72,11 +73,29 @@ export function builderGatewayTarget(provider: GatewayProvider): GatewayTarget {
   };
 }
 
-/** Request headers for one gateway call. */
+/**
+ * Request headers for one gateway call.
+ *
+ * Paradise authenticates with a per-site `x-api-key` and meters the call
+ * against `PARADISEMODERN_PROJECT` (it refuses a call naming no project it
+ * knows); OpenAI-compatible gateways take a bearer token and nothing else.
+ */
 export function gatewayAuthHeaders(provider: GatewayProvider, apiKey: string): Record<string, string> {
-  // Paradise authenticates with a per-site `x-api-key`; OpenAI-compatible
-  // gateways take a bearer token.
-  return provider === "paradise" ? { "x-api-key": apiKey } : { authorization: `Bearer ${apiKey}` };
+  return provider === "paradise"
+    ? { "x-api-key": apiKey, ...paradiseProjectHeaders() }
+    : { authorization: `Bearer ${apiKey}` };
+}
+
+/**
+ * The chat-completions endpoint under a configured base URL.
+ *
+ * Settings name the origin the `/v1/...` path is appended to, but owners
+ * paste the provider's documented base, which usually already ends in `/v1`;
+ * appending again produced `/v1/v1/chat/completions`. One trailing `/v1` is
+ * therefore treated as part of the path, not of the base.
+ */
+export function chatCompletionsUrl(baseUrl: string): string {
+  return `${baseUrl.trim().replace(/\/+$/, "").replace(/\/v1$/i, "")}/v1/chat/completions`;
 }
 
 function usage(value: {
@@ -111,9 +130,11 @@ export function gatewayBuilderAdapter(provider: GatewayProvider): BuilderAgentAd
       let response: Response;
       try {
         response = await (fetchImpl ?? fetch)(
-          `${target.baseUrl.replace(/\/+$/, "")}/v1/chat/completions`,
+          chatCompletionsUrl(target.baseUrl),
           {
             method: "POST",
+            // A redirect would carry the key to wherever it pointed.
+            redirect: "error",
             headers: {
               "content-type": "application/json",
               ...gatewayAuthHeaders(provider, target.apiKey),

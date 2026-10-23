@@ -6,7 +6,7 @@
 // provider), which speaks the same chat-completions wire format with its own
 // default host, auth header and correlation field. Raw HTTP like every other
 // adapter — the vendor boundary carries no vendor SDK.
-import { PARADISE_GATEWAY_DEFAULTS, gatewayAuthHeaders } from "./gateway";
+import { PARADISE_GATEWAY_DEFAULTS, chatCompletionsUrl, gatewayAuthHeaders } from "./gateway";
 import type {
   WorkforceAdapterId,
   WorkforceAgentAdapter,
@@ -110,9 +110,10 @@ export function openAiCompatibleWorkforceAdapter(options: {
       const timeout = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS);
       let response: Response;
       try {
-        const base = baseUrl.replace(/\/+$/, "");
-        response = await (fetchImpl ?? fetch)(`${base}/v1/chat/completions`, {
+        response = await (fetchImpl ?? fetch)(chatCompletionsUrl(baseUrl), {
           method: "POST",
+          // A redirect would carry the key to wherever it pointed.
+          redirect: "error",
           headers: {
             "content-type": "application/json",
             // Gateways authenticate like the §37 builder does; OpenAI itself
