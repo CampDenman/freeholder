@@ -6772,6 +6772,53 @@ payment, tax, inventory and reporting path, with no floating-point money.
   tax-exclusive zone the tax is its own line on the invoice the attendee
   lands on before paying. Regression: `tests/core/events.test.ts` ("taxes
   admission where the event happens…"); changeset `event-admission-tax.md`.
+  Audit follow-up 2026-10-23 (hands-on audit of demo.freeholder.ai):
+  **Repeated paid submit.** "Register and pay" reported
+  `failure=invalid` while the hold and its invoice existed: the
+  registration itself commits, but a second submit of the same form (a
+  double click, a retried request) met the one-live-registration rule and
+  answered `conflict`, so the last answer the visitor saw was a failure.
+  `events.register` now replays, bound to the submitter rather than the
+  email: the form carries a random one-time `submissionToken` minted in
+  the visitor's browser (`SubmissionTokenField`; never server-rendered,
+  because the playground lets a CDN share cookie-less CMS pages for a few
+  seconds, and a token in shared HTML would be one token for everyone
+  who loaded it). Its SHA-256 is stored on the registration
+  (`event_registrations.submission_token_hash`, never in any output). A
+  repeat with the same token, session, ticket and seat count within the
+  hold window gets the same registration back — a paid one with the same
+  invoice's payment page while it is issued, unpaid and its hold live,
+  never a second invoice. Any other duplicate is a plain `conflict`, and
+  the form answers it exactly like a full or closed session ("We couldn't
+  register that request… If you already registered, check your email."),
+  so someone who knows an attendee's email learns nothing and gets no
+  invoice. Without JavaScript the token is empty and a repeat is answered
+  that way too. Every public attempt, accepted or refused, also counts
+  toward a pre-transaction limit (40/hour per client, or per email when
+  the client has no address), so refusals cannot be probed for free. Every
+  refusal still rolls back the whole transaction (no contact,
+  registration or invoice written). Session time zones are validated on
+  write (`isTimezone`), and the date formatters fall back to UTC for a
+  stored zone Intl does not know rather than failing the page. **Public pages.** Event
+  pages were built from the landing template, so its placeholder intro
+  ("This page is a block tree…"), its "Get in touch" button and, per
+  preset, a products index or booking form appeared on every event page;
+  an event page is now `page.blank` (its title) plus the bound
+  `eventDetail`, and the landing copy itself no longer speaks to the
+  owner. Sessions read in their own zone and the visitor's locale
+  (`formatDateTimeRange`, "Sun, Nov 8, 4:00 – 6:00 PM PST") with the
+  start on `<time datetime>`; seats read "3 of 8 seats left" in all four
+  locales. **Past events.** `/events` listed published events whose public
+  page did not exist (the busy demo bulk-inserts its past events), so four
+  links answered 404. The list now includes only events with a live page —
+  the rule the sitemap already follows — files finished events under "Past
+  events" with their pages kept viewable and marked finished, and the busy
+  demo builds its past events' pages the way publish does. Existing event
+  pages pick up the new layout the next time the event is saved.
+  Regression: `tests/core/events.test.ts` (repeated paid and free
+  submits, refusal writes nothing, event page blocks, list/page/sitemap
+  consistency), `tests/core/events-public-render.test.ts`; changeset
+  `event-registration-and-pages.md`.
 
 #### Quotes, contracts, projects, and time
 - [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/

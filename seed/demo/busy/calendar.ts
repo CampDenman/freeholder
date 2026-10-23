@@ -117,6 +117,9 @@ const PAST_EVENTS = [
   },
 ] as const;
 
+/** The past events this layer creates; each still needs its public page. */
+export const PAST_EVENT_SLUGS: readonly string[] = PAST_EVENTS.map((event) => event.slug);
+
 const UPCOMING_EVENT_SLUGS = ["open-studio-print-sale", "golden-hour-workshop", "winter-portrait-day"];
 
 function hash(value: string): string {

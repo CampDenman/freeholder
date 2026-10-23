@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Events, sessions, tickets, waitlists, check-in (MASTER.md C6.11).
 
+import { createHash, timingSafeEqual } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isUniqueViolation } from "@/core/db";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineOrchestratedService, defineService, permits, ServiceError, type ServiceContext } from "@/core/service";
+import { defineOrchestratedService, defineService, permits, ServiceError, type Actor, type ServiceContext } from "@/core/service";
 import { anonymousClientKey, consumeAccepted, rateLimitKey } from "@/core/security/rate-limit";
+import { isTimezone } from "@/core/i18n/zoned";
 import { registerContactReference } from "@/core/contacts/service";
 import { listLocations } from "@/core/locations/service";
 import { resolveContact } from "@/core/contacts/service";
@@ -43,7 +45,8 @@ import {
 } from "@/core/onboarding/contract";
 import { requireDemoHandlerRun } from "@/core/demo/handler";
 import { renderEventIcs } from "./ics";
-import { syncEventPublicPage } from "./public-pages";
+import { EVENTS_INDEX_SLUG, syncEventPublicPage } from "./public-pages";
+import { pages } from "@/modules/cms/schema";
 import "./blocks";
 
 const id = z.string().uuid();
@@ -126,6 +129,9 @@ const eventRegistrationRow = row({
   holdExpiresAt: timestamp.nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
+  // Never leaves the service: it is what tells a repeat of one submit from
+  // someone else who knows the email.
+  submissionTokenHash: z.unknown().optional().transform(() => undefined),
 });
 
 registerContactReference({
@@ -464,13 +470,66 @@ export const listPublicEvents = defineService({
   kind: "query",
   permission: "public",
   input: z.object({}),
-  output: listed(eventRow),
-  handler: async (_input, ctx) =>
-    ctx.tx
+  output: listed(
+    eventRow.extend({
+      /** The first session still to finish, or null when none is ahead. */
+      nextStartsAt: timestamp.nullable(),
+      nextEndsAt: timestamp.nullable(),
+      nextTimezone: z.string().nullable(),
+      /** When the last session ended; set only once every session is over. */
+      endedAt: timestamp.nullable(),
+    }),
+  ),
+  handler: async (_input, ctx) => {
+    // Only events whose public page is live: the index must never link to a
+    // page that answers 404. An event published without one (inserted
+    // directly, or its page trashed) is not on the public site, so it is not
+    // on the public list either — the same rule the sitemap follows, since
+    // the sitemap is built from published pages.
+    const rows = await ctx.tx
       .select()
       .from(events)
-      .where(eq(events.status, "published"))
-      .orderBy(desc(events.publishedAt), asc(events.name)),
+      .where(
+        and(
+          eq(events.status, "published"),
+          sql`exists (
+            select 1 from ${pages}
+            where ${pages.slug} = ${`${EVENTS_INDEX_SLUG}/`}::text || ${events.slug}
+              and ${pages.status} = 'published'
+              and ${pages.trashedAt} is null
+          )`,
+        ),
+      )
+      .orderBy(desc(events.publishedAt), asc(events.name));
+    if (rows.length === 0) return [];
+    const sessions = await ctx.tx
+      .select()
+      .from(eventSessions)
+      .where(inArray(eventSessions.eventId, rows.map((event) => event.id)))
+      .orderBy(asc(eventSessions.startsAt));
+    const now = Date.now();
+    const listedRows = rows.map((event) => {
+      const own = sessions.filter((session) => session.eventId === event.id);
+      const next = own.find((session) => session.endsAt.getTime() > now) ?? null;
+      const last = own.at(-1);
+      return {
+        ...event,
+        nextStartsAt: next?.startsAt ?? null,
+        nextEndsAt: next?.endsAt ?? null,
+        nextTimezone: next?.timezone ?? null,
+        endedAt: !next && last ? own.reduce((latest, session) =>
+          session.endsAt > latest ? session.endsAt : latest, last.endsAt) : null,
+      };
+    });
+    // Upcoming soonest first, then undated, then past most recent first.
+    return listedRows.sort((a, b) => {
+      const rank = (row: (typeof listedRows)[number]) => (row.nextStartsAt ? 0 : row.endedAt ? 2 : 1);
+      if (rank(a) !== rank(b)) return rank(a) - rank(b);
+      if (a.nextStartsAt && b.nextStartsAt) return a.nextStartsAt.getTime() - b.nextStartsAt.getTime();
+      if (a.endedAt && b.endedAt) return b.endedAt.getTime() - a.endedAt.getTime();
+      return 0;
+    });
+  },
 });
 
 export const resolvePublicEvent = defineService({
@@ -711,7 +770,14 @@ export const addEventSession = defineService({
     eventId: id,
     startsAt: z.coerce.date(),
     endsAt: z.coerce.date(),
-    timezone: z.string().trim().min(1).max(80).default("UTC"),
+    // An unknown zone would make every page that formats the session throw.
+    timezone: z
+      .string()
+      .trim()
+      .min(1)
+      .max(80)
+      .refine(isTimezone, "Use an IANA time zone, such as America/Vancouver.")
+      .default("UTC"),
     capacity: z.number().int().min(0).max(100_000),
     waitlistEnabled: z.boolean().default(true),
   }),
@@ -758,12 +824,79 @@ const PUBLIC_SEATS_PER_REGISTRATION = 10;
 const PUBLIC_REGISTRATION_LIMIT = { limit: 10, windowSeconds: 60 * 60 } as const;
 /** Per client network address; looser, since honest people share addresses. */
 const PUBLIC_CLIENT_LIMIT = { limit: 30, windowSeconds: 60 * 60 } as const;
+/** Every public attempt, accepted or refused — what bounds probing. */
+const PUBLIC_ATTEMPT_LIMIT = { limit: 40, windowSeconds: 60 * 60 } as const;
+
+/**
+ * The earlier registration a repeated submit should return, or null when the
+ * repeat is a genuinely different ask (another ticket, another seat count) or
+ * the first one has left its hold window. A paid replay hands back the same
+ * invoice's payment page — never a second invoice — and only while that
+ * invoice is still issued, unpaid and its hold live.
+ */
+function submissionTokenHash(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/** Whether this submit carries the token the existing registration was made with. */
+function sameSubmission(existing: string | null, token: string | undefined): boolean {
+  if (!existing || !token) return false;
+  const a = Buffer.from(existing, "hex");
+  const b = Buffer.from(submissionTokenHash(token), "hex");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+async function replayRegistration(
+  ctx: ServiceContext,
+  existing: typeof eventRegistrations.$inferSelect,
+  input: { ticketId?: string; quantity: number; submissionToken?: string },
+): Promise<{ registration: typeof eventRegistrations.$inferSelect; paymentUrl: string | null } | null> {
+  // Bound to the submitter, not the email: only the same rendered form's
+  // token proves this is the person who made the registration. Anyone else
+  // who knows the address must never be handed its invoice link.
+  if (!sameSubmission(existing.submissionTokenHash, input.submissionToken)) return null;
+  if ((existing.ticketId ?? undefined) !== input.ticketId) return null;
+  if (existing.quantity !== input.quantity) return null;
+  const now = Date.now();
+  if (existing.createdAt.getTime() < now - REGISTRATION_HOLD_MS) return null;
+  if (existing.status === "confirmed" || existing.status === "waitlisted") {
+    // A free seat or a waitlist place: the same answer the first submit got.
+    return existing.invoiceId ? null : { registration: existing, paymentUrl: null };
+  }
+  if (existing.status !== "reserved" || !existing.invoiceId) return null;
+  if (!existing.holdExpiresAt || existing.holdExpiresAt.getTime() <= now) return null;
+  const [invoice] = await ctx.tx
+    .select()
+    .from(invoices)
+    .where(eq(invoices.id, existing.invoiceId))
+    .limit(1);
+  if (!invoice || invoice.paidMinor > 0 || !["sent", "viewed"].includes(invoice.status)) return null;
+  return {
+    registration: existing,
+    paymentUrl: `${siteOrigin()}${customerInvoicePath(invoice.id, invoiceAccessToken(invoice))}`,
+  };
+}
 
 export const registerForEvent = defineService({
   name: "events.register",
   summary: "Register a contact for a session, holding paid seats behind an issued invoice and waitlisting when the session is full.",
   kind: "mutation",
   permission: "public",
+  // Every public attempt counts, refused or not, before the transaction
+  // opens: a refusal rolls the in-transaction counters below back, and an
+  // uncounted refusal is free probing (2026-10-23 review). Keyed on the
+  // client when it has an address, else on the email being tried.
+  rateLimit: {
+    limit: PUBLIC_ATTEMPT_LIMIT.limit,
+    windowSeconds: PUBLIC_ATTEMPT_LIMIT.windowSeconds,
+    message: "That is a lot of registrations at once. Try again later.",
+    subject: (input: { email: string }, actor: Actor) =>
+      actor.kind !== "anonymous"
+        ? undefined
+        : actor.request?.trustedIp || actor.request?.ip
+          ? `attempt:${anonymousClientKey(actor)}`
+          : `attempt:email:${input.email.trim().toLowerCase()}`,
+  },
   input: z.object({
     eventId: id,
     sessionId: id,
@@ -771,6 +904,12 @@ export const registerForEvent = defineService({
     email: z.string().trim().email().toLowerCase(),
     name: z.string().trim().min(1).max(200).optional(),
     quantity: z.number().int().min(1).max(50).default(1),
+    /**
+     * A random one-time token the public form renders. A repeat of the same
+     * submit (double click, retried request) carrying it gets the same
+     * registration back; without it a duplicate is only "already registered".
+     */
+    submissionToken: z.string().min(16).max(128).optional(),
   }),
   output: z.object({
     registration: eventRegistrationRow,
@@ -841,7 +980,7 @@ export const registerForEvent = defineService({
     // One live registration per person per session: a second row would hold
     // two seats for one attendee, or waitlist them behind themselves.
     const [duplicate] = await ctx.tx
-      .select({ id: eventRegistrations.id })
+      .select()
       .from(eventRegistrations)
       .where(
         and(
@@ -852,6 +991,20 @@ export const registerForEvent = defineService({
       )
       .limit(1);
     if (duplicate) {
+      // A double-clicked button or a retried request is the same
+      // registration, not a second one and not a failure. The 2026-10-23
+      // audit watched a paid submit succeed while its twin came back
+      // "conflict", so the visitor was told it had failed with a seat and an
+      // invoice already held — and retrying looked like the only way on.
+      // Within the hold window the same submit (same form token) gets back
+      // what it made; anyone else with the email gets "already registered".
+      const replay = await replayRegistration(ctx, duplicate, input);
+      if (replay) {
+        ctx.setSubject("eventRegistration", duplicate.id);
+        return replay;
+      }
+      // Not a repeat of this submitter's own form: refused like a full or
+      // closed session, and the public form answers all of them alike.
       throw new ServiceError("conflict", "This email is already registered for that session.");
     }
     const taken = await occupied(ctx, session.id);
@@ -874,6 +1027,7 @@ export const registerForEvent = defineService({
         status: waitlisted ? "waitlisted" : paid ? "reserved" : "confirmed",
         quantity: input.quantity,
         holdExpiresAt,
+        submissionTokenHash: input.submissionToken ? submissionTokenHash(input.submissionToken) : null,
       })
       .returning();
     ctx.setSubject("eventRegistration", created!.id);

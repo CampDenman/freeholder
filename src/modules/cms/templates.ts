@@ -122,7 +122,7 @@ const COPY: Record<
   everything: {
     landingTitle: "Welcome",
     landingBody:
-      "This page is a block tree in your database. Rearranging it is a save, not a deploy.",
+      "Say who you are, what you make, and how people can reach you.",
     landingCta: "Get in touch",
     postTitle: "A new post",
     postBody: "Write the piece. The heading and this paragraph are only placeholders.",
@@ -136,7 +136,7 @@ const COPY: Record<
   custom: {
     landingTitle: "Welcome",
     landingBody:
-      "This page is a block tree in your database. Rearranging it is a save, not a deploy.",
+      "Say who you are, what you make, and how people can reach you.",
     landingCta: "Get in touch",
     postTitle: "A new post",
     postBody: "Write the piece. The heading and this paragraph are only placeholders.",

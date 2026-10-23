@@ -44,8 +44,13 @@ function templateKeyFor(entityType: LayoutEntityType): string {
       return "service.default";
     case "post":
       return "post.article";
-    case "location":
     case "event":
+      // An event page is its title over the live event block. The landing
+      // template brought a stranger's intro, a "Get in touch" button and,
+      // per preset, a products index or a booking form onto every event —
+      // the 2026-10-23 audit found its placeholder copy on each public one.
+      return "page.blank";
+    case "location":
     case "gallery":
     case "page":
       return "page.landing";

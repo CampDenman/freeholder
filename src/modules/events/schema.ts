@@ -138,6 +138,9 @@ export const eventRegistrations = pgTable(
     // and the hold lapses at hold_expires_at if it never does.
     invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
     holdExpiresAt: timestamp("hold_expires_at", { withTimezone: true }),
+    // SHA-256 of the one-time token the public form carried. A repeat submit
+    // is answered with this registration only when it carries the same token.
+    submissionTokenHash: text("submission_token_hash"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },

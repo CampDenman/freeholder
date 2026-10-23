@@ -62,6 +62,7 @@ export async function registerForEventAction(form: FormData): Promise<void> {
         email: text(form, "email"),
         name: text(form, "name") || undefined,
         quantity: Math.max(1, Math.min(50, Number(text(form, "quantity")) || 1)),
+        submissionToken: text(form, "submissionToken").slice(0, 128) || undefined,
       },
       await visitor(),
     );

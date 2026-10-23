@@ -156,8 +156,8 @@ test("a published class is findable, states its seats, and hands over a calendar
 
     // A sold-out session says zero. Silence would read as availability, which
     // is the reading that wastes somebody's trip.
-    await expect(visitorPage.getByText("0 / 2 seats")).toBeVisible();
-    await expect(visitorPage.getByText("6 / 6 seats")).toBeVisible();
+    await expect(visitorPage.getByText(/\b0 of 2 seats left/)).toBeVisible();
+    await expect(visitorPage.getByText(/\b6 of 6 seats left/)).toBeVisible();
 
     for (const theme of ["light", "dark"] as const) {
       await visitor.addCookies([{ name: THEME_COOKIE, value: theme, url: C11_BASE_URL }]);

@@ -10,7 +10,7 @@
 // transaction — so a failure leaves the plain demo intact rather than half a
 // business.
 import { z } from "zod";
-import { count, eq } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import { defineService, ServiceError } from "@/core/service";
 import { users } from "@/core/auth/schema";
 import { db } from "@/core/db";
@@ -19,6 +19,9 @@ import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy"
 import { businessProfile } from "@/core/settings/schema";
 import { BUSINESS } from "../../../seed/demo/content";
 import { seedBusyBusiness, world } from "../../../seed/demo/busy";
+import { PAST_EVENT_SLUGS } from "../../../seed/demo/busy/calendar";
+import { events } from "@/modules/events/schema";
+import { syncEventPublicPage } from "@/modules/events/public-pages";
 
 /** The assistant every staff-side record is attributed to. Marked demo (C12.16). */
 export const BUSY_STAFF_EMAIL = "sam.okafor@demo.freeholder.test";
@@ -78,6 +81,15 @@ export const installBusyDemo = defineService({
       staffUserId: staff!.id,
       liveReminders: playgroundBlocksExternalDelivery(env()),
     });
+    // The past events are bulk-inserted, so they arrive without the public
+    // page events.publish would have made. Without it the events list linked
+    // to four 404s (2026-10-23 audit); the page is built the same way publish
+    // builds it, so a finished event reads like any other.
+    const past = await ctx.tx
+      .select({ id: events.id })
+      .from(events)
+      .where(and(inArray(events.slug, [...PAST_EVENT_SLUGS]), eq(events.status, "published")));
+    for (const event of past) await syncEventPublicPage(ctx, event.id);
     ctx.queueEvent("demo.busyInstalled", { contacts: counts.crm?.contacts ?? 0 });
     return { counts };
   },
