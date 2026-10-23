@@ -32,11 +32,13 @@ import { forms, formSubmissions } from "./schema";
 import {
   emailFrom,
   fieldsSchema,
+  messageFrom,
   nameFrom,
   submissionSchema,
   type FormField,
 } from "./fields";
 import { HONEYPOT_FIELD, inspect, STAMP_FIELD } from "./antispam";
+import { screeningReason } from "./screening";
 import type { EventDeliveryContext } from "@/core/events";
 import { createNotification } from "@/core/notifications/service";
 import {
@@ -540,6 +542,11 @@ export const submitForm = defineService({
     /** Raw values as posted. Validated against the form's own fields below. */
     values: z.record(z.string(), z.unknown()),
     sourceUrl: z.string().max(2000).optional(),
+    /**
+     * The public form's sealed screening verdict (C3.33). It can only add a
+     * reason to quarantine; it can never clear one a trap raised.
+     */
+    screening: z.string().max(300).optional(),
   }),
   output: z.object({
     ok: z.literal(true),
@@ -566,6 +573,11 @@ export const submitForm = defineService({
     // field rules is still recorded as spam rather than as a validation error
     // an owner never sees.
     const verdict = inspect(input.values);
+    const screened = screeningReason(input.screening, input.slug, input.values, ctx.actor);
+    if (screened) {
+      verdict.reasons.push(screened);
+      verdict.suspected = true;
+    }
 
     const parsed = submissionSchema(fields).safeParse(input.values);
     if (!parsed.success) {
@@ -679,25 +691,6 @@ export const submitForm = defineService({
 });
 
 /* --------------------------------------------------------------- reviewing */
-
-/**
- * The words the person actually typed (C7.08).
- *
- * The longest text answer, because that is what a message field is: a contact
- * form's "how can we help" box is always the longest thing on it, and picking
- * by label would break the moment somebody renames it.
- */
-function messageFrom(fields: FormField[], data: Record<string, unknown>): string {
-  let longest = "";
-  for (const field of fields) {
-    if (field.kind !== "multiline" && field.kind !== "text") continue;
-    const value = data[field.key];
-    if (typeof value === "string" && value.trim().length > longest.length) {
-      longest = value.trim();
-    }
-  }
-  return longest;
-}
 
 /** Everything they answered, when none of it was prose. */
 function summarise(fields: FormField[], data: Record<string, unknown>): string {

@@ -240,3 +240,9 @@ export async function onAnyEvent(
     scoreForEvent(eventName, payload, context?.eventId),
   ]);
 }
+
+/** C3.34: copy an accepted form submission to the configured lead sink. */
+export async function onFormSubmittedLeadSink(payload: unknown): Promise<void> {
+  const { copySubmissionToLeadSink } = await import("@/modules/forms/lead-sink");
+  await copySubmissionToLeadSink(payload);
+}

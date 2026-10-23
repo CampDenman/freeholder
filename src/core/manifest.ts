@@ -18,7 +18,13 @@ export default defineModule({
     // webhook subscriptions and personal notification inboxes. It goes through the ordinary manifest
     // mechanism rather than a special case in boot, so the listener shows up
     // in the boot report like any other.
-    listens: { "*": "onAnyEvent" },
+    listens: {
+      "*": "onAnyEvent",
+      // C3.34: copy an accepted submission to the configured lead sink. Its
+      // own listener, so a provider outage retries this alone and never
+      // re-runs webhook fan-out; it returns at once while the category is off.
+      "forms.submitted": "onFormSubmittedLeadSink",
+    },
     emits: [
       "contact.created",
       "contact.merged",

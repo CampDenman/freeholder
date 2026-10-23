@@ -61,11 +61,54 @@ Not available in this release yet.
 
 ## Form screening (C3.33)
 
-Not available in this release yet.
+```dotenv
+FORM_SCREENING_PROVIDER=paradise
+```
+
+Freeholder's own honeypot and signed time trap run on every submission
+whatever is configured. With screening on, the public form action asks the
+provider about each anonymous submission *before* the submission's
+transaction opens, with a 4-second limit, by calling
+`POST /api/shield/assess`. **What is sent:** a form reference
+(`freeholder:<form slug>`), the visitor's IP address (the provider's API
+requires it) and the text of the submission's longest prose answer — the
+words being screened. No user agent, name, email, phone or other answer is
+sent. **Why:** to catch spam that gets past the traps.
+
+The answer reaches `forms.submit` sealed: an HMAC under `SESSION_SECRET`
+bound to the form and the exact answers, valid for 15 minutes. A "blocked"
+verdict adds the quarantine reason "was flagged by the site's spam
+screening"; it never removes a reason a trap raised, and quarantine keeps the
+submission for review rather than dropping it. A provider that is down, slow,
+not enabled for the site or answering without a verdict seals "unavailable",
+and the traps decide alone. Fail-closed rules: without `SESSION_SECRET` no
+seal is ever issued, and while screening is on an anonymous submission that
+arrives without a valid seal (for example straight through the public API)
+is held as "was not checked by the site's spam screening". Signed-in people
+and API keys are not screened.
+
+While it is on, every form shows a short notice under its fields naming the
+provider, what is sent and why, in every locale.
 
 ## Lead sink (C3.34)
 
-Not available in this release yet.
+```dotenv
+LEAD_SINK_PROVIDER=paradise
+```
+
+A switch of its own, off by default; screening never turns it on. After an
+accepted (never quarantined) submission has committed, an outbox listener
+copies it to `POST /api/collect/lead`. **What is copied:** the name, email
+and phone answers (when the form has them), the longest prose answer, every
+non-empty answer keyed by its field label, the form's slug, the absolute
+address of the page it was sent from, and Freeholder's submission id so the
+copy points back at the original. **Why:** so an owner who keeps enquiries in
+that CRM finds them there.
+
+The submission is always kept in Freeholder first. A transient failure
+(unreachable, HTTP 408, 429 or 5xx) is retried by the outbox with backoff; a
+permanent refusal is logged and not retried. While it is on, every form shows
+a notice naming the provider and listing what is copied, in every locale.
 
 ## Agent / model gateway
 

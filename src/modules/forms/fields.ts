@@ -163,3 +163,22 @@ export function nameFrom(
 
   return email ? (email.split("@")[0] ?? email) : "Form submission";
 }
+
+/**
+ * The words the person actually typed (C7.08).
+ *
+ * The longest text answer, because that is what a message field is: a contact
+ * form's "how can we help" box is always the longest thing on it, and picking
+ * by label would break the moment somebody renames it.
+ */
+export function messageFrom(fields: FormField[], data: Record<string, unknown>): string {
+  let longest = "";
+  for (const field of fields) {
+    if (field.kind !== "multiline" && field.kind !== "text") continue;
+    const value = data[field.key];
+    if (typeof value === "string" && value.trim().length > longest.length) {
+      longest = value.trim();
+    }
+  }
+  return longest;
+}

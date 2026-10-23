@@ -4454,7 +4454,7 @@ export interface ServiceCatalog {
     output: { received: number; spam: number };
   };
   "forms.submit": {
-    input: { slug: string; values: { [key: string]: unknown }; sourceUrl?: string };
+    input: { slug: string; values: { [key: string]: unknown }; sourceUrl?: string; screening?: string };
     output: { ok: true; submissionId: string; message: string };
   };
   "forms.update": {
