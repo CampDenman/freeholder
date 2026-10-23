@@ -50,13 +50,15 @@ export function measurementConfig(environment: MeasurementEnvironment): Measurem
 
 /**
  * Pages a measurement script never loads on, whatever the visitor chose:
- * admin, the member and account areas (messages, calls, member profiles and
- * feed, joining, order confirmations, the customer portal), setup and the
- * playground. The CSP's `'strict-dynamic'` lets a nonced script load others,
- * so the only safe way to keep a third party off a private page is not to
- * render its script there at all. A leading locale segment is ignored.
+ * admin; the member and account areas (messages, calls, member profiles,
+ * feed, community spaces, joining, order confirmations, the customer
+ * portal); every page where an address or payment is entered (checkout,
+ * cart, buying, booking, gifts, memberships); setup and the playground. The
+ * CSP's `'strict-dynamic'` lets a nonced script load others, so the only safe
+ * way to keep a third party off such a page is not to render its script there
+ * at all. A leading locale segment is ignored.
  */
-const EXCLUDED_PATHS = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:admin|portal|messages|call|m|feed|community|join|orders|account|setup|playground|member-files|member-blobs)(?:\/|$)/i;
+const EXCLUDED_PATHS = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:admin|portal|messages|call|m|feed|community|join|orders|account|checkout|cart|buy|book|gifts|memberships|setup|playground|member-files|member-blobs)(?:\/|$)/i;
 
 export function measurementPathAllowed(path: string): boolean {
   return !EXCLUDED_PATHS.test(path);

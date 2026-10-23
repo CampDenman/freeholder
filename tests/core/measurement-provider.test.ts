@@ -127,11 +127,11 @@ describe("which pages render the provider's scripts", () => {
 
   it("never renders them on the playground, admin, member, account or portal pages", () => {
     configured();
-    for (const path of ["/admin", "/admin/traffic", "/messages", "/messages/1", "/call/group/x", "/m/ada", "/feed", "/community", "/join", "/orders/confirm", "/portal", "/fr/messages", "/es/m/ada"]) {
+    for (const path of ["/admin", "/admin/traffic", "/messages", "/messages/1", "/call/group/x", "/m/ada", "/feed", "/community", "/join", "/orders/confirm", "/portal", "/fr/messages", "/es/m/ada", "/checkout", "/fr/checkout/pay", "/cart", "/es/cart", "/buy/print-1", "/ar/buy/x", "/book", "/book/session", "/fr/book/session", "/gifts", "/gifts/registry", "/es/gifts", "/memberships", "/fr/memberships/gold"]) {
       expect(measurementPathAllowed(path), path).toBe(false);
       expect(scripts("granted", path), path).toEqual([]);
     }
-    for (const path of ["/", "/contact", "/fr/contact", "/market", "/memberships", "/mentors"]) {
+    for (const path of ["/", "/contact", "/fr/contact", "/market", "/mentors", "/booking-tips", "/cartography", "/gift-guide"]) {
       expect(measurementPathAllowed(path), path).toBe(true);
     }
     environment({ FREEHOLDER_PLAYGROUND: "1" });

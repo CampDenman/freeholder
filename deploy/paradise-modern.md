@@ -89,8 +89,9 @@ it affects the saved enquiry.
 
 **Pages it never runs on**, whatever the visitor chose: admin, the member and
 account areas (`/messages`, `/call`, `/m`, `/feed`, `/community`, `/join`,
-`/orders`, `/account`), the customer portal, setup and the playground, with or
-without a locale prefix. The CSP's `'strict-dynamic'` would let a provider
+`/orders`, `/account`), every page where an address or payment is entered
+(`/checkout`, `/cart`, `/buy`, `/book`, `/gifts`, `/memberships`), the
+customer portal, setup and the playground, with or without a locale prefix. The CSP's `'strict-dynamic'` would let a provider
 script load others, so these pages never render it and never list the edge
 origin. The owner's **Collection disabled** policy is read from the database,
 which the Edge proxy cannot see: on the first page after it is chosen the

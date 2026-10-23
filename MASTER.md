@@ -5328,8 +5328,9 @@ deployments are portable, testable and incapable of silently forking the truth.
   database), `tests/core/analytics-consent.test.ts` (consent markup and its
   accessibility gate); changeset `measurement-provider.md`. Review fixes:
   email and phone leave only as SHA-256 hashes (`custom.identifierHashes`);
-  the consent text lists exactly what is sent; member, account, community and
-  portal pages never render the script or list the edge
+  the consent text lists exactly what is sent; member, account, community,
+  portal and checkout/cart/buy/book/gifts/memberships pages never render the
+  script or list the edge
   (`measurementPathAllowed`); a failure to plan a conversion never errors a
   saved enquiry (`tests/core/measurement-form-action.test.ts`). Unchecked: no
   real-browser run against a live edge host.)*
