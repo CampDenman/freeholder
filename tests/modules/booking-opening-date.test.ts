@@ -8,6 +8,7 @@ import {
   openingDate,
   OPENING_CACHE_MS,
   resetOpeningDateCache,
+  type SlotQuery,
 } from "../../app/(public)/book/opening-date";
 import { isCalendarDate } from "@/core/scheduling/business-day";
 import { users } from "@/core/auth/schema";
@@ -104,8 +105,8 @@ describe("the /book page's wiring", () => {
   const MOVE = "00000000-0000-4000-8000-0000000000a3";
 
   function recorder(slots: { startsAt: Date }[] = []) {
-    const inputs: Record<string, unknown>[] = [];
-    return { inputs, search: async (input: Record<string, unknown>) => { inputs.push(input); return slots; } };
+    const inputs: (SlotQuery & { from: string; to: string; limit: number })[] = [];
+    return { inputs, search: async (input: (typeof inputs)[number]) => { inputs.push(input); return slots; } };
   }
 
   it("asks with the moving booking excluded, and never caches a move", async () => {

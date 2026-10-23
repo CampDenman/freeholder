@@ -42,12 +42,12 @@ export default async function PublicBooking({ searchParams }: { searchParams: Pr
   // With no real ?date=, open on the business's first free day rather than on
   // UTC's today; the day's times are the business's day, whatever zone each
   // calendar keeps (C6.19).
-  const day = await bookingDay({requested:q.date,zone,service:selected,seats,move:moving?q.move:undefined,seller,anonymous:actor.kind==="anonymous",search:(input)=>availableSlots.call(input,actor)});
-  const date = day.date;
+  const shown = await bookingDay({requested:q.date,zone,service:selected,seats,move:moving?q.move:undefined,seller,anonymous:actor.kind==="anonymous",search:(input)=>availableSlots.call(input,actor)});
+  const date = shown.date;
   const profile = actor.kind === "user" ? await myProfile.call({},actor).catch(()=>null) : null;
   let quote: Awaited<ReturnType<typeof publicBookingQuote.call>> | null = null;
-  const slots = day.slots;
-  let unavailable = day.unavailable;
+  const slots = shown.slots;
+  let unavailable = shown.unavailable;
   if (selected && !moving) try {
     quote = await publicBookingQuote.call({productId:selected.productId,currency:catalog.currency,mode,seats},actor);
   } catch { unavailable=true; }
