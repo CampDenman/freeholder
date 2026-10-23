@@ -17,6 +17,8 @@ import { defineBlock } from "@/modules/cms/blocks/types";
 import { submitPublicForm } from "../../../app/(public)/form-actions";
 import { HONEYPOT_FIELD, issueStamp, STAMP_FIELD } from "./antispam";
 import { submissionSchema, type FormField } from "./fields";
+import { formScreening } from "@/adapters/form-screening";
+import { leadSink } from "@/adapters/lead-sink";
 import {
   failureFromQuery,
   failureMessageKey,
@@ -185,6 +187,8 @@ export function RenderedForm({
         />
       ))}
 
+      <ProviderNotice t={t} />
+
       <button
         type="submit"
         className="inline-flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-press"
@@ -345,4 +349,24 @@ function answerIssues(fields: FormField[], values: Record<string, string>): Reco
     if (key && !issues[key]) issues[key] = issue.message;
   }
   return issues;
+}
+
+/**
+ * The privacy notice for outside providers, at the point of collection
+ * (MASTER.md §12, C3.33, C3.34): while screening or a lead sink is on, the
+ * person filling the form is told the provider's name, exactly what is sent
+ * and why. Nothing renders while both categories are off.
+ */
+function ProviderNotice({ t }: { t: Translate }) {
+  const screening = formScreening();
+  const sink = leadSink();
+  if (!screening && !sink) return null;
+  return (
+    <div className="grid gap-1 text-xs text-ink-muted">
+      {screening ? (
+        <p>{t("forms.public.notice.screening", { provider: screening.displayName })}</p>
+      ) : null}
+      {sink ? <p>{t("forms.public.notice.leadSink", { provider: sink.displayName })}</p> : null}
+    </div>
+  );
 }

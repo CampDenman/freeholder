@@ -493,13 +493,28 @@ function fhReorderLevel(container, draftNodes, isRoot) {  if (!draftNodes || dra
         break;
       }
     }
-    // appendChild on an already-present node moves it, so walking the draft
+    // Only a level whose order actually changed is touched. The editor sends
+    // its draft as soon as the frame loads, often before React has hydrated
+    // it; moving blocks that were already in order pushed them past React's
+    // own boundary markers in the same parent, and React then rebuilt the
+    // whole frame (hydration error #418, 2026-10-23 demo audit).
+    var inOrder = true;
+    for (var o = 0; o < draftNodes.length; o++) {
+      if (domChildren[o] !== byId[draftNodes[o].id]) {
+        inOrder = false;
+        break;
+      }
+    }
+    // insertBefore on an already-present node moves it, so walking the draft
     // order re-sorts the level without recreating anything — the elements
     // keep their identity, which is what keeps focus and selection intact.
-    if (singleParent) {
+    // They are re-sorted in place, ahead of whatever followed the last block,
+    // rather than appended after every other node the parent holds.
+    if (singleParent && !inOrder) {
+      var anchor = domChildren[domChildren.length - 1].nextSibling;
       for (var k = 0; k < draftNodes.length; k++) {
         var el = byId[draftNodes[k].id];
-        if (el) parent.appendChild(el);
+        if (el && el !== anchor) parent.insertBefore(el, anchor);
       }
     }
   }

@@ -2658,8 +2658,8 @@ export interface ServiceCatalog {
     output: { tracked: false; available: true; quantity: number } | { tracked: true; available: boolean; backordered: boolean; restockAt: string | null; onHand: number; reserved: number; incoming: number; canPromise: number };
   };
   "catalog.bookService": {
-    input: { productId: string; currency: string; mode?: "full" | "deposit_balance"; seats?: number; calendarId: string; startsAt: string; termsHash: string; acceptedTerms: true; requestKey: string };
-    output: { bookingId: string; invoiceId: string | null };
+    input: { productId: string; currency: string; mode?: "full" | "deposit_balance"; seats?: number; calendarId: string; startsAt: string; termsHash: string; acceptedTerms: true; requestKey: string; email?: string; name?: string };
+    output: { bookingId: string; invoiceId: string | null; manageToken: string | null };
   };
   "catalog.bookableServices": {
     input: { sellerUserId?: string };
@@ -4454,7 +4454,7 @@ export interface ServiceCatalog {
     output: { received: number; spam: number };
   };
   "forms.submit": {
-    input: { slug: string; values: { [key: string]: unknown }; sourceUrl?: string };
+    input: { slug: string; values: { [key: string]: unknown }; sourceUrl?: string; screening?: string };
     output: { ok: true; submissionId: string; message: string };
   };
   "forms.update": {

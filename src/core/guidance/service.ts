@@ -219,7 +219,7 @@ async function guidanceViews(
         key: definition.key,
         version: definition.version,
         titleKey: definition.titleKey,
-        descriptionKey: definition.descriptionKey,
+        descriptionKey: flowDescriptionKey(definition, steps),
         audienceRoles: definition.audienceRoles,
         requiredCapabilities: definition.requiredCapabilities,
         audienceMatch: definition.audienceRoles.includes(actor.role),
@@ -295,7 +295,7 @@ async function guidanceViews(
       key: definition.key,
       version: definition.version,
       titleKey: definition.titleKey,
-      descriptionKey: definition.descriptionKey,
+      descriptionKey: flowDescriptionKey(definition, steps),
       audienceRoles: definition.audienceRoles,
       requiredCapabilities: definition.requiredCapabilities,
       audienceMatch: definition.audienceRoles.includes(actor.role),
@@ -311,6 +311,24 @@ async function guidanceViews(
     });
   }
   return views;
+}
+
+/** Shown instead of a flow's own description when some of its steps are hidden. */
+export const PARTIAL_FLOW_DESCRIPTION_KEY = "guidance.flow.partial.description";
+
+/**
+ * A flow's description names every step it defines ("publish a page, add
+ * reusable media and put a form into service"). When the person's role hides
+ * some of those steps, that sentence promises tasks the card does not list, so
+ * the card says plainly that it shows the steps open to them instead.
+ */
+export function flowDescriptionKey(
+  definition: GuidanceFlowDefinition,
+  visible: readonly GuidanceStepDefinition[],
+): string {
+  return visible.length < definition.steps.length
+    ? PARTIAL_FLOW_DESCRIPTION_KEY
+    : definition.descriptionKey;
 }
 
 function requireUser(actor: Actor): Extract<Actor, { kind: "user" }> {
