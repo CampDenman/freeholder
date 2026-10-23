@@ -37,8 +37,10 @@ export const linkAbuseReports = defineService({
   writeClass: "write",
   input: z.object({}),
   output: z.object({ linked: z.number().int(), suspended: z.number().int() }),
+  // A sweep that found nothing is not news; one that held an upload is.
+  auditWhen: (out: { linked: number; suspended: number }) => out.linked + out.suspended > 0,
   handler: async (_input, ctx) => {
-    const open = await ctx.tx.select().from(abuseReports).where(isNull(abuseReports.assetId)).orderBy(asc(abuseReports.detectedAt), asc(abuseReports.id)).limit(100);
+    const open =await ctx.tx.select().from(abuseReports).where(isNull(abuseReports.assetId)).orderBy(asc(abuseReports.detectedAt), asc(abuseReports.id)).limit(100);
     let linked = 0;
     let suspended = 0;
     for (const report of open) {

@@ -1667,6 +1667,66 @@ v2.
 - **F11** — `packages/cli/README.md`, `deploy/digitalocean-droplet/README.md`, changesets `.changeset/cli-launch.md` and `.changeset/cli-launch-hardening.md`.
 - **F12** — `packages/cli/scripts/copy-recipe.mjs` ships exactly the repository's `deploy/digitalocean-droplet/infra` recipe, asserted byte-for-byte in `tests/core/launch-cli.test.ts`.
 
+## C3.31 — Offer Paradise Modern as one more transactional and bulk mail adapter
+
+- **F01** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F02** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F03** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F04** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F05** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F06** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F07** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F08** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F09** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F10** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F11** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F12** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+
+## C3.32 — Add a measurement-provider category
+
+- **F01** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F02** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F03** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F04** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F05** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F06** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F07** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F08** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F09** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F10** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F11** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F12** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+
+## C3.33 — Add a form-screening category
+
+- **F01** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F02** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F03** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F04** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F05** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F06** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F07** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F08** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F09** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F10** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F11** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F12** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+
+## C3.34 — Add a lead-sink category
+
+- **F01** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F02** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F03** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F04** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F05** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F06** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F07** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F08** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F09** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F10** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F11** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+- **F12** — `deploy/paradise-modern.md`: Pending — the shared Paradise Modern request helper is covered by `tests/core/paradise-http.test.ts`; this category's adapter has not landed yet and no live acceptance against the provider has been run.
+
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/agents-board.test.ts`.

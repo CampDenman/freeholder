@@ -19,6 +19,7 @@ import { abuseReportQueue, linkAbuseReports, markAbuseReported } from "@/modules
 import { memberProfiles } from "@/modules/members/schema";
 import { abuseReports } from "@/core/media/abuse-schema";
 import { assets } from "@/core/media/schema";
+import { auditLog } from "@/core/events/schema";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, STAFF, truncateSpine } from "../helpers/spine";
 
 const RAE = CUSTOMER;
@@ -69,6 +70,11 @@ describe.runIf(hasDatabase)("known abuse imagery on upload (C12.30)", () => {
     expect(JSON.stringify(report)).not.toContain(Buffer.from(known).toString("base64").slice(0, 40));
 
     expect(await linkAbuseReports.call({}, { kind: "system" })).toEqual({ linked: 1, suspended: 1 });
+    // The sweep that acted is in the owner's log; a later one that found nothing is not.
+    const swept = () => db().select().from(auditLog).where(eq(auditLog.action, "members.linkAbuseReports"));
+    expect(await swept()).toHaveLength(1);
+    expect(await linkAbuseReports.call({}, { kind: "system" })).toEqual({ linked: 0, suspended: 0 });
+    expect(await swept()).toHaveLength(1);
     expect((await db().select({ status: memberProfiles.status }).from(memberProfiles).where(eq(memberProfiles.userId, RAE.userId)))[0]?.status).toBe("suspended");
 
     // Evidence cannot be deleted, or released by a later scan.
