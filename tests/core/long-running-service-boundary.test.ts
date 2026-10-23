@@ -72,6 +72,9 @@ const PROVIDER_FUNCTIONS = new Set([
   "fetchProviderIdentity",
   "getPinnedBytes",
   "openPullRequest",
+  // Paradise Modern as an optional provider (C3.31–C3.34): every category
+  // that uses it goes through this one bounded request.
+  "paradiseRequest",
   "providerContactsForSource",
 ]);
 
@@ -280,11 +283,12 @@ describe("long-running service transaction boundary", () => {
           defineService({ handler: async () => {
             await getPinnedBytes("https://example.test", {});
             await exchangeAuthorizationCode({ code: "single-use" });
+            await paradiseRequest("/api/shield/assess", { body: {} });
             return hidden(adapter);
           }});
         `,
       ),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     expect(
       findings(
         "fixture.ts",
