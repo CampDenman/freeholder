@@ -5,6 +5,7 @@
 // key (§17 — secrets live in the environment; the database stores the
 // indirection so the admin and doctor can talk about it).
 import { env } from "@/core/env";
+import { paradiseBaseUrl } from "@/adapters/paradise/config";
 import { anthropicWorkforceAdapter, ANTHROPIC_DEFAULT_MODEL } from "./workforce-anthropic";
 import { openAiCompatibleWorkforceAdapter } from "./workforce-openai";
 import {
@@ -76,6 +77,19 @@ export function sharesInstanceGateway(baseUrl: string | null | undefined): boole
   return Boolean(instance) && comparableUrl(baseUrl) === comparableUrl(instance ?? "");
 }
 
+export const PARADISE_OWN_CREDENTIAL =
+  "a credential of its own (its base URL is not the PARADISEMODERN_URL origin, so PARADISEMODERN_API_KEY is not sent there)";
+
+/** Whether a URL names the same origin as the configured Paradise Modern base. */
+export function sharesParadiseOrigin(baseUrl: string | null | undefined): boolean {
+  if (!baseUrl) return true;
+  try {
+    return new URL(baseUrl.trim()).origin === new URL(paradiseBaseUrl()).origin;
+  } catch {
+    return false;
+  }
+}
+
 export function workforceAdapter(
   connection: WorkforceConnectionConfig,
 ): WorkforceAgentAdapter {
@@ -92,6 +106,20 @@ export function workforceAdapter(
       baseUrl: connection.baseUrl,
       model: connection.model,
       missingCredential: GATEWAY_OWN_CREDENTIAL,
+    });
+  }
+  // The same rule for Paradise Modern: its site key and project header belong
+  // to the configured PARADISEMODERN_URL origin, and nowhere else.
+  const paradiseOwnHost = id === "paradise" && !sharesParadiseOrigin(connection.baseUrl);
+  if (paradiseOwnHost && !connection.credentialRef) {
+    return openAiCompatibleWorkforceAdapter({
+      id,
+      apiKey: undefined,
+      credentialRef: null,
+      baseUrl: connection.baseUrl,
+      model: connection.model,
+      missingCredential: PARADISE_OWN_CREDENTIAL,
+      ownHost: true,
     });
   }
   const ref = connection.credentialRef ?? DEFAULT_CREDENTIAL_REF[id];
@@ -112,6 +140,7 @@ export function workforceAdapter(
     // instance-wide one the builder reads too.
     baseUrl: connection.baseUrl ?? (id === "gateway" ? (env().AGENT_GATEWAY_URL ?? null) : null),
     model: connection.model,
+    ...(id === "paradise" ? { ownHost: paradiseOwnHost } : {}),
   });
 }
 

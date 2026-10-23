@@ -1698,6 +1698,40 @@ export interface MailAdapter {
 
 Same pattern for storage, calendar (2-way sync w/ webhook or polling fallback), sms, ai, **tax** (§4.12 — `quote(order) → TaxLine[]`, whose default implementation is the built-in engine; no Stripe Tax / Avalara / TaxJar adapter), **carrier** (`none` until a live-rate plugin exists), **accounting** (export shapes for QuickBooks, Xero and plain CSV — not an adapter family), and **agent** (§37). There is no FX adapter family. The `none/` implementations let every optional family be absent without null-checks scattered through modules.
 
+**Every outside service is a neutral category with swappable adapters**
+(owner decision, Tony Aly, 2026-10-22). Payments name Stripe, PayPal and the
+rest as adapters of one contract; mail names Gmail, Outlook, SMTP and the bulk
+carriers; storage takes any S3-compatible host. The same holds for the
+categories below, and for any category added later: settings, admin copy and
+visitor-facing text name the *category*, and the chosen provider is one
+interchangeable adapter in it, configured like Stripe — never presented as
+first-party, never preselected, and never contacted until an owner chooses it.
+
+| Category | Setting | Adapters | Item |
+|---|---|---|---|
+| Transactional / bulk mail | `MAIL_ADAPTER`, `MAIL_BULK_ADAPTER` | smtp, gmail, outlook, console · resend, postmark, ses · **paradise** | C3.31 |
+| Measurement (consented, third-party) | `MEASUREMENT_PROVIDER` | none (default) · **paradise** | C3.32 |
+| Form screening | `FORM_SCREENING_PROVIDER` | none (default; Freeholder's own honeypot and time trap always run) · **paradise** | C3.33 |
+| Lead sink | `LEAD_SINK_PROVIDER` | none (default) · **paradise** | C3.34 |
+| Agent / model gateway | `FREEHOLDER_AGENT`, workforce connections | gateway, anthropic, openai, local · **paradise** | C4.05 |
+
+Rules every category keeps. Provider I/O runs outside service transactions
+(screening before the submission's transaction, forwarding through the
+outbox). A category that changes what is collected from visitors — measurement
+— runs only on that visitor's explicit choice. A category that sends visitor
+data elsewhere — screening, lead sink, measurement — is disclosed in the site's
+privacy notice automatically while it is enabled: the provider's name, exactly
+what is sent and why. Screening can only *add* a reason to quarantine; it
+never drops a submission, and an unavailable provider falls back to
+Freeholder's own traps. Copying leads to an outside CRM is its own switch, off
+by default. A public playground (`FREEHOLDER_PLAYGROUND=1`) contacts no
+outside provider in any category. The Paradise Modern adapters share one
+bounded HTTP helper (`src/adapters/paradise/http.ts`): HTTPS only (loopback
+for tests), redirects refused, the site key sent to the configured origin and
+nowhere else; `deploy/paradise-modern.md` documents its public API contract
+and settings. Each adapter sends the minimum the provider's API requires,
+documented beside the category.
+
 ---
 
 ## 13. Setup Wizard (first boot)
@@ -4364,6 +4398,57 @@ project without silent telemetry, and ready to carry money.
   on a local production playground: product → cart (CA$28.00) → checkout
   refusal for a real-looking address → order confirmation → invoice with
   the offline payment option. Changeset `playground-checkout-fictional-email.md`.
+  Follow-up 2026-10-23 (demo booking and admin polish, live audit of
+  demo.freeholder.ai): /book listed times as plain text and its only action
+  was "Verify your email to reserve a time", which led to a portal sign-in the
+  playground cannot send. Times are now links (signed out) or per-time reserve
+  forms (verified); a signed-out visitor chooses a time first and the chosen
+  time rides through `/portal/login?returnTo=` (C6.19's verified identity is
+  unchanged, verification simply follows the choice). In playground mode only,
+  `catalog.bookService` (now `public`, classified in `PLAYGROUND_PUBLIC` with a
+  `bookings` row cap) accepts a reserved address (`isFictionalEmail`) as its
+  own proof, resolves the contact through `contacts.resolve`, and returns the
+  booking's `manageToken`, so the visitor lands on `/portal/appointments/<token>`;
+  a real-looking address is refused with nothing written; outside the
+  playground an anonymous caller is still refused and a typed address is
+  ignored. Slots show the calendar name only when several calendars have
+  openings, and zones read as `zoneLabel` ("Pacific Daylight Time
+  (Vancouver)") on /book and the appointment page. The demo inbox was empty
+  for visitors because the playground role lacked the `conversations` view
+  grant while §4.14 already threads form enquiries into conversations; the
+  grant is added. Consequence, accepted: every demo visitor shares one
+  playground role, so visitors can read each other's demo enquiries in that
+  inbox. The playground holds fictional data only, the public form and
+  booking pages say to use made-up details, and the hourly reset wipes it.
+  "What changed" now maps visitor/system actions, including provider-recorded
+  payments, refunds, payouts and disputes, to owner locale strings
+  (`OWNER_ACTIVITY_LABELS`); only a named list of visitor plumbing
+  (`OWNER_HIDDEN_ACTIONS`) moves to "Include background work", and any other
+  unmapped action still shows with its service summary. Guest bookings are
+  rate-limited per client network (`anonymousClientKey`), not per typed
+  address; a tampered `calendar`/`at` on /book is ignored (`chosenSlot`); `members.linkAbuseReports` gained `auditWhen`.
+  A first-win card whose steps a role cannot all see shows
+  `guidance.flow.partial.description` instead of describing hidden steps.
+  Regressions: `tests/modules/customer-surfaces.test.ts` (playground guest
+  booking, refusal, retry, token confirmation, row cap, per-client limit,
+  tampered chosen time; production still refuses),
+  `tests/core/playground.test.ts` (enquiry visible in the visitor's inbox),
+  `tests/core/audit-labels.test.ts`, `tests/core/i18n.test.ts` (`zoneLabel`),
+  `tests/core/guidance-definitions.test.ts`, `tests/modules/member-abuse.test.ts`;
+  `tests/browser/customer-surfaces.spec.ts` updated for choose-then-verify.
+  Editor presence and edit-lease heartbeats joined `HOUSEKEEPING_ACTIONS`.
+  Hydration error #418, reproduced in a local playground dev boot: on
+  /admin/voice-video the verify-connection form was nested inside the
+  settings form (moved after it); in the page editor the preview frame's
+  `fhReorderLevel` re-appended already-ordered blocks behind React's
+  boundary markers when the editor's first draft arrived before hydration
+  (now a no-op when the order matches, and an in-place re-sort otherwise;
+  `tests/core/editor-canvas-drag.test.ts`). Walked on a local playground
+  boot: /book time buttons → chosen time → real-looking address refused →
+  `ada@example.com` → appointment page "Pacific Daylight Time (Vancouver)";
+  contact enquiry visible in the visitor's inbox; "What changed" reads "A
+  visitor sent a form"; no hydration errors on either page after the fixes.
+  Changeset `demo-booking-and-admin-polish.md`.
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable
@@ -5257,6 +5342,61 @@ deployments are portable, testable and incapable of silently forking the truth.
   deletion failed. Regression tests in `tests/core/launch-cli.test.ts`;
   changeset `cli-launch-hardening.md`.)*
 
+- [ ] **C3.31** Offer Paradise Modern as one more transactional and bulk
+  mail adapter (`MAIL_ADAPTER=paradise`, `MAIL_BULK_ADAPTER=paradise`) beside
+  SMTP, Gmail, Outlook, Resend, Postmark and SES (§12; owner decision
+  2026-10-22): every message declares a permission basis — a transactional
+  reason with the event behind it, set by the delivery worker, or the
+  recipient's retained marketing opt-in — and a campaign with no opt-in the
+  provider can accept, or without the site's own one-click unsubscribe, is
+  refused before any request; consent the provider has not seen is recorded
+  from `consent_records` evidence (never imports, verbal or system records)
+  and the send retried as a distinct request; withdrawals mirrored through
+  the outbox; sender verification against the provider's sending domain; a
+  migration that only widens provider constraints. Open until a live send of
+  each kind against the provider.
+- [ ] **C3.32** Add a measurement-provider category (`MEASUREMENT_PROVIDER`,
+  default `none`) with Paradise Modern as its first adapter (§12, C1.18):
+  the provider's scripts load, and the CSP opens its edge origin, only for a
+  visitor whose explicit choice is "allow" (`fh_ac=granted`) under a policy
+  that collects — the opt-out default's implied state never qualifies; the
+  consent control names the category and the provider; an accepted form
+  submission from such a visitor sends one server-side `lead` conversion,
+  deduplicated by the submission's id, with nothing about the visitor stored
+  to send it. Open until verified in a real browser against a live edge host.
+- [ ] **C3.33** Add a form-screening category (`FORM_SCREENING_PROVIDER`,
+  default `none`) with Paradise Modern as its first adapter (§12, §36):
+  screening runs whenever a provider is configured (a security purpose), on
+  anonymous public submissions only, outside the submission transaction with
+  a 4-second limit; its verdict reaches `forms.submit` sealed (HMAC bound to
+  the form and the exact answers; no seal is ever issued when
+  `SESSION_SECRET` is unset) and can only add a quarantine reason beside the
+  honeypot and time trap, never drop one; an unavailable provider falls back
+  to those traps; the request carries only what the provider's API requires
+  plus the text it screens; the site's privacy notice names the provider,
+  what is sent and why while it is enabled, in every locale. Open until a
+  live assessment against the provider.
+- [ ] **C3.34** Add a lead-sink category (`LEAD_SINK_PROVIDER`, default
+  `none`) with Paradise Modern as its first adapter (§12): a separate switch
+  from screening, off by default; accepted (never quarantined) submissions
+  are copied after commit by an outbox listener that retries transient
+  failures and logs permanent refusals; the submission is always kept in
+  Freeholder; the privacy notice names the provider, what is copied and why
+  while it is enabled, in every locale. Open until a live lead copy against
+  the provider.
+  *(Progress 2026-10-23, C3.31–C3.34 together: these four items replace the
+  Paradise Modern parts of PR #529 under the owner's 2026-10-22 decision
+  that every outside service is a neutral category and Paradise Modern one
+  optional adapter in it; #529's model-gateway half was superseded by #571.
+  Foundation landed first: `src/adapters/paradise/config.ts` and
+  `src/adapters/paradise/http.ts` — HTTPS only (loopback for tests),
+  `redirect: "error"`, the site key only to the configured origin, every
+  call refused in the public playground — with `paradiseRequest` registered
+  as provider I/O in `tests/core/long-running-service-boundary.test.ts`;
+  coverage `tests/core/paradise-http.test.ts`; operator guide
+  `deploy/paradise-modern.md`. No box is checked: no live acceptance against
+  the provider has been run.)*
+
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
 #### Workforce completion
@@ -5330,6 +5470,14 @@ deployments are portable, testable and incapable of silently forking the truth.
   `tests/core/agents-workforce-adapter.test.ts` (gateway wire shape, no
   guessed host, key scoping, legacy env and stored-row aliases, doctor),
   `src/core/config.test.ts`, changeset `neutral-provider-names.md`.
+  *(Audit follow-up 2026-10-23: the builder and workforce now send
+  `x-pm-project` (`PARADISEMODERN_PROJECT`) when Paradise is the gateway —
+  Paradise refuses a call naming no project it knows — and never to any
+  other gateway; a base URL ending in `/v1` no longer produces
+  `/v1/v1/chat/completions` for any gateway; gateway calls refuse redirects
+  so a key never follows one. Carried over from PR #529. Regression tests in
+  `tests/core/agents-workforce-adapter.test.ts`; changeset
+  `gateway-project-header.md`.)*
 - [x] **C4.06** Enforce per-run/task/agent/period budgets before every step;
   build spend ledger, estimates, alerts and owner-readable reporting.
   (`src/core/agents/pricing.ts` prices a turn in integer cents with bigint

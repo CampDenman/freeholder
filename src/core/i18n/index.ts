@@ -303,6 +303,28 @@ export function formatDateTimeShort(utc: Date, timezone: string, locale: string 
     .format(utc);
 }
 
+/**
+ * A time zone as a visitor says it — "Pacific Daylight Time (Vancouver)" —
+ * rather than its IANA id. Named for the instant shown, so daylight saving
+ * reads correctly; an id the runtime does not know is shown as given.
+ */
+export function zoneLabel(
+  timezone: string,
+  locale: string = DEFAULT_LOCALE,
+  at: Date = new Date(),
+): string {
+  let name: string;
+  try {
+    name = new Intl.DateTimeFormat(locale, { timeZone: timezone, timeZoneName: "long" })
+      .formatToParts(at)
+      .find((part) => part.type === "timeZoneName")?.value ?? timezone;
+  } catch {
+    return timezone;
+  }
+  const city = timezone.includes("/") ? timezone.split("/").at(-1)!.replace(/_/g, " ") : "";
+  return city && !name.includes(city) ? `${name} (${city})` : name;
+}
+
 /** Store UTC, display in an explicit timezone (§4.9 timezone discipline). */
 export function formatDateTime(
   utc: Date,

@@ -2658,8 +2658,8 @@ export interface ServiceCatalog {
     output: { tracked: false; available: true; quantity: number } | { tracked: true; available: boolean; backordered: boolean; restockAt: string | null; onHand: number; reserved: number; incoming: number; canPromise: number };
   };
   "catalog.bookService": {
-    input: { productId: string; currency: string; mode?: "full" | "deposit_balance"; seats?: number; calendarId: string; startsAt: string; termsHash: string; acceptedTerms: true; requestKey: string };
-    output: { bookingId: string; invoiceId: string | null };
+    input: { productId: string; currency: string; mode?: "full" | "deposit_balance"; seats?: number; calendarId: string; startsAt: string; termsHash: string; acceptedTerms: true; requestKey: string; email?: string; name?: string };
+    output: { bookingId: string; invoiceId: string | null; manageToken: string | null };
   };
   "catalog.bookableServices": {
     input: { sellerUserId?: string };

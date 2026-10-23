@@ -26,6 +26,12 @@ import { defineService } from "@/core/service";
 export const HOUSEKEEPING_ACTIONS = [
   "playground.enter",
   "cms.expireStalePresence",
+  // Opening the page editor heartbeats presence and an edit lease every few
+  // seconds; the edit itself is the news (2026-10-23 demo audit).
+  "cms.heartbeatPresence",
+  "cms.leavePresence",
+  "cms.touchEditLease",
+  "cms.releaseEditLease",
   "media.expireCaptureSessions",
   "galleries.expireSessions",
   "ads.rollUpStats",
