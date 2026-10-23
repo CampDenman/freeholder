@@ -48,6 +48,17 @@ every script element they create. The configured host remains in the policy as
 a fallback for older CSP implementations, while `strict-dynamic` browsers
 authorize the nonce rather than trusting an entire host.
 
+## Measurement provider
+
+When a measurement provider is configured (`MEASUREMENT_PROVIDER`, C3.32), its
+edge origin (for Paradise Modern, `PARADISEMODERN_EDGE_URL`) is added to
+`script-src`, `connect-src` and `img-src` for public pages, only when the
+browser carries the explicit analytics choice `fh_ac=granted`. Admin pages
+never receive it, and neither the opt-out default's implied state nor `fh_tc`
+opens it. The public layout applies the owner's collection policy before
+rendering the nonced scripts. See
+[`paradise-modern.md`](paradise-modern.md#measurement-c332).
+
 ## Violation reports
 
 Browsers send legacy CSP reports and Reporting API batches to

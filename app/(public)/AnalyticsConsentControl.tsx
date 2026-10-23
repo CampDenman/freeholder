@@ -41,14 +41,24 @@ export function AnalyticsConsentControl({
   retentionDays,
   returnTo,
   t,
+  measurement = null,
 }: {
   policy: AnalyticsConsentPolicy;
   state: AnalyticsConsentState | null;
   retentionDays: number;
   returnTo: string;
   t: Translate;
+  /**
+   * C3.32: the owner also uses a measurement provider, which only an explicit
+   * "allow" switches on. The choice then names the category and the
+   * provider, and an opt-out visitor gets a way to give that permission.
+   */
+  measurement?: { provider: string } | null;
 }) {
   if (policy === "disabled") return null;
+  const measurementNote = measurement
+    ? t("analytics.consent.measurementExplanation", { provider: measurement.provider })
+    : null;
   const needsChoice = policy === "opt_in" && state !== "granted" && state !== "denied";
   if (needsChoice) {
     return (
@@ -61,9 +71,15 @@ export function AnalyticsConsentControl({
           <p className="mt-1 text-sm text-ink-muted">
             {t("analytics.consent.explanation", { days: retentionDays })}
           </p>
+          {measurementNote ? <p className="mt-1 text-sm text-ink-muted">{measurementNote}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          <ChoiceForm decision="grant" returnTo={returnTo} label={t("analytics.consent.allow")} primary />
+          <ChoiceForm
+            decision="grant"
+            returnTo={returnTo}
+            label={t(measurement ? "analytics.consent.allowWithMeasurement" : "analytics.consent.allow")}
+            primary
+          />
           <ChoiceForm decision="deny" returnTo={returnTo} label={t("analytics.consent.decline")} />
         </div>
       </aside>
@@ -82,6 +98,17 @@ export function AnalyticsConsentControl({
         <p className="text-xs text-ink-muted">
           {t("analytics.consent.explanation", { days: retentionDays })}
         </p>
+        {measurementNote ? <p className="text-xs text-ink-muted">{measurementNote}</p> : null}
+        {measurement && enabled && state !== "granted" ? (
+          // The opt-out default's implied state never switches measurement
+          // on; this is the explicit permission it needs.
+          <ChoiceForm
+            decision="grant"
+            returnTo={returnTo}
+            label={t("analytics.consent.allowWithMeasurement")}
+            primary
+          />
+        ) : null}
         <ChoiceForm
           decision={enabled ? "deny" : "grant"}
           returnTo={returnTo}

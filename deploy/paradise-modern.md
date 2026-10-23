@@ -57,7 +57,46 @@ Not available in this release yet.
 
 ## Measurement (C3.32)
 
-Not available in this release yet.
+```dotenv
+MEASUREMENT_PROVIDER=paradise
+PARADISEMODERN_SITE_ID=…                 # the site's public id at the provider
+PARADISEMODERN_EDGE_URL=https://edge.example.com   # the site's own edge host, one https origin
+```
+
+The provider's `track.js` (`/sdk/track.js?site=<id>`) and `capi.js`
+(`/capi.js?site=<id>`) load from the edge host, nonced, and the CSP adds that
+origin (`script-src`, `connect-src`, `img-src`; never on admin pages), only for
+a visitor who explicitly chose **Allow analytics and measurement**
+(`fh_ac=granted`). The privacy-first opt-out default's implied state is never
+enough, **Collection disabled** turns measurement off, and the public
+playground never loads it. While it is on, the privacy choice names the
+category and the provider and explains what allowing it means; the opt-out
+panel offers that explicit choice. Choose **Explicit opt-in** under **Traffic
+→ Collection and retention** to ask every visitor up front.
+
+For a visitor who allowed it, an accepted (not quarantined) form submission
+also sends one `lead` event to `POST /api/capi/{site}/event` after the
+visitor's response has been sent, deduplicated by the event id
+`freeholder-form:<submission id>`. **What is sent:** SHA-256 hashes of the
+enquiry's email (trimmed, lowercased) and phone (digits only) answers when the
+form has them, sent as `custom.identifierHashes` (`em`, `ph`) — never the
+plain values; the visitor's IP address and browser user agent; the page
+address; the click IDs the provider's script stored on the site's own domain
+(recognised keys only); and the submission id. Freeholder stores none of the
+address, user agent or click IDs it forwards. This is best effort: a failed
+conversion is not retried, and neither a failure to send nor a failure to plan
+it affects the saved enquiry.
+
+**Pages it never runs on**, whatever the visitor chose: admin, the member and
+account areas (`/messages`, `/call`, `/m`, `/feed`, `/community`, `/join`,
+`/orders`, `/account`), every page where an address or payment is entered
+(`/checkout`, `/cart`, `/buy`, `/book`, `/gifts`, `/memberships`), the
+customer portal, setup and the playground, with or without a locale prefix. The CSP's `'strict-dynamic'` would let a provider
+script load others, so these pages never render it and never list the edge
+origin. The owner's **Collection disabled** policy is read from the database,
+which the Edge proxy cannot see: on the first page after it is chosen the
+visitor's consent cookie is rewritten to "disabled", and until then the layout
+renders no provider script.
 
 ## Form screening (C3.33)
 

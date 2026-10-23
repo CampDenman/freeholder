@@ -15,6 +15,7 @@
 // no hydration boundary — which is what §5 and the SEO gate both rest on.
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
+import { after } from "next/server";
 import { submitForm } from "@/modules/forms/service";
 import { HONEYPOT_FIELD, STAMP_FIELD } from "@/modules/forms/antispam";
 import { sealSiteSubmission } from "@/modules/forms/screening";
@@ -28,6 +29,8 @@ import { PATH_HEADER } from "@/core/http/headers";
 import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
+import { leadConversionTask } from "@/modules/analytics/measurement";
+import { ANALYTICS_CONSENT_COOKIE } from "@/modules/analytics/visitor";
 import { getLocale } from "../i18n";
 
 /**
@@ -75,8 +78,9 @@ export async function submitPublicForm(form: FormData): Promise<void> {
   const screening = await sealSiteSubmission({ slug, values, request: actor.request });
 
   const jar = await cookies();
+  let submitted: { submissionId: string };
   try {
-    await submitForm.call(
+    submitted = await submitForm.call(
       { slug, values, sourceUrl: path, ...(screening ? { screening } : {}) },
       actor,
     );
@@ -104,5 +108,21 @@ export async function submitPublicForm(form: FormData): Promise<void> {
   }
 
   jar.delete(FORM_RETURN_COOKIE);
+  // C3.32: one lead conversion for the chosen measurement provider, only for
+  // a visitor who explicitly allowed measurement, sent after the response.
+  // Attribution is best effort: the enquiry is already saved, so nothing here
+  // may turn a successful submission into an error page.
+  try {
+    const conversion = await leadConversionTask({
+      submissionId: submitted.submissionId,
+      consentCookie: jar.get(ANALYTICS_CONSENT_COOKIE)?.value,
+      readCookie: (name) => jar.get(name)?.value,
+      request: requestMetadataFromHeaders(requestHeaders),
+      path,
+    });
+    if (conversion) after(conversion);
+  } catch {
+    // Measurement unavailable; the visitor still sees "sent".
+  }
   redirect(`${path}?sent=${encodeURIComponent(slug)}`);
 }
