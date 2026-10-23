@@ -23,6 +23,7 @@ import { ready } from "@/core/runtime";
 import { createCalendar } from "@/core/scheduling/service";
 import {
   cancellationOutcome,
+  isNoPolicy,
   mayReschedule,
   noShowOutcome,
   termsFrom,
@@ -135,6 +136,16 @@ describe("what a cancellation costs", () => {
     });
     expect(termsFrom(null)).toEqual(NO_POLICY);
     expect(out).toMatchObject({ free: true, feeMinor: 0, refundDueMinor: 2_000 });
+  });
+
+  it("tells the stored fallback from an owner's same-named policy (2026-10-23 review)", () => {
+    expect(isNoPolicy(NO_POLICY)).toBe(true);
+    expect(isNoPolicy(termsFrom({ ...NO_POLICY }))).toBe(true);
+    // Same name, free to cancel, but only two moves: a real policy.
+    expect(isNoPolicy({ ...NO_POLICY, rescheduleLimit: 2 })).toBe(false);
+    expect(isNoPolicy({ ...NO_POLICY, feeType: "fixed", feeValue: 2_500 })).toBe(false);
+    expect(isNoPolicy({ ...NO_POLICY, freeUntilHours: 24 })).toBe(false);
+    expect(isNoPolicy({ ...NO_POLICY, noShowFeeMinor: 1_000 })).toBe(false);
   });
 
   it("refuses a move once the limit is reached, and once it is too late", () => {

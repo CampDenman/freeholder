@@ -7,6 +7,7 @@ import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import { assets } from "@/core/media/schema";
+import { renderableImage } from "@/core/media/service";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import {
   ATTRIBUTE_KINDS,
@@ -482,6 +483,70 @@ export const productHeroImage = defineService({
   },
 });
 
+/**
+ * The lead picture of each listed product, for a shelf of cards (2026-10-23
+ * pre-launch check: /products listed names only while product pages had
+ * pictures). Same visibility and order as `productHeroImage`, answered for a
+ * whole page of slugs in one query; a product without a ready image is left
+ * out, so its card renders text only.
+ */
+export const productCardImages = defineService({
+  name: "catalog.productCardImages",
+  summary: "The lead image of each of several publicly visible products.",
+  kind: "query",
+  permission: "public",
+  input: z.object({ slugs: z.array(z.string().trim().min(1).max(200)).max(200) }),
+  output: listed(
+    z.object({
+      slug: z.string(),
+      src: z.string(),
+      width: z.number().int().nullable(),
+      height: z.number().int().nullable(),
+      altText: z.string().nullable(),
+    }),
+  ),
+  handler: async (input, ctx) => {
+    if (input.slugs.length === 0) return [];
+    const rows = await ctx.tx
+      .selectDistinctOn([products.id], {
+        slug: products.slug,
+        storageKey: assets.storageKey,
+        mime: assets.mime,
+        variants: assets.variants,
+        width: assets.width,
+        height: assets.height,
+        altText: assets.altText,
+        focalX: assets.focalX,
+        focalY: assets.focalY,
+      })
+      .from(productMedia)
+      .innerJoin(products, eq(products.id, productMedia.productId))
+      .innerJoin(assets, eq(assets.id, productMedia.assetId))
+      .where(
+        and(
+          inArray(products.slug, input.slugs),
+          eq(products.status, "active"),
+          eq(products.visibility, "public"),
+          inArray(productMedia.role, ["hero", "gallery"]),
+          sql`${productMedia.variantId} is null`,
+          eq(assets.status, "ready"),
+          eq(assets.kind, "image"),
+          eq(assets.isPrivate, false),
+        ),
+      )
+      .orderBy(products.id, sql`case when ${productMedia.role} = 'hero' then 0 else 1 end`, asc(productMedia.position));
+    // One query: the asset columns ride along, so no per-product lookup. The
+    // WHERE clause above is the visibility rule (active public products;
+    // ready, non-private images), so rows go straight to URL building.
+    return Promise.all(
+      rows.map(async ({ slug, ...asset }) => {
+        const image = await renderableImage(asset);
+        return { slug, src: image.src, width: image.width, height: image.height, altText: image.altText };
+      }),
+    );
+  },
+});
+
 export const attachProductMedia = defineService({
   name: "catalog.attachProductMedia",
   summary: "Attach a ready library asset to a product or one of its variants.",
@@ -556,6 +621,7 @@ export const detachProductMedia = defineService({
 
 export default [
   productHeroImage,
+  productCardImages,
   listAttributeDefinitions,
   createAttributeDefinition,
   listProductAttributes,

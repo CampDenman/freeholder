@@ -7,7 +7,7 @@
 // rendered `cms.ensureDefaults` as "Cm — ensure defaults" because the label
 // was derived by stripping a trailing s from the module name.
 import { describe, expect, it } from "vitest";
-import { describeAction, OWNER_ACTIVITY_LABELS, OWNER_HIDDEN_ACTIONS, ownerActivityLine } from "../../app/(admin)/admin/describeAction";
+import { describeAction, OWNER_ACTIVITY_AREAS, OWNER_ACTIVITY_LABELS, OWNER_HIDDEN_ACTIONS, needsOwnLine, ownerActivityLine } from "../../app/(admin)/admin/describeAction";
 import { catalogKeys, translator } from "@/core/i18n";
 import { HOUSEKEEPING_ACTIONS } from "@/core/events/service";
 import { ensureDefaults } from "@/modules/cms/service";
@@ -44,10 +44,10 @@ describe("audit log labels", () => {
     // …but money the platform records is shown by default, mapped or not…
     expect(ownerActivityLine({ action: "invoicing.processPaymentProviderEvents", actor: "system" }, t)).toBe("The payment provider updated a payment");
     expect(ownerActivityLine({ action: "members.reversePayouts", actor: "system" }, t)).toBe("A payout was reversed");
-    expect(ownerActivityLine({ action: "invoicing.reconcileProviderPayout", actor: "system" }, t)).toBe(describeAction("invoicing.reconcileProviderPayout"));
+    expect(ownerActivityLine({ action: "invoicing.reconcileProviderPayout", actor: "system" }, t)).toBe("A payout was recorded");
     for (const action of OWNER_HIDDEN_ACTIONS) expect(OWNER_ACTIVITY_LABELS[action], action).toBeUndefined();
-    // …and what the team did keeps its own words.
-    expect(ownerActivityLine({ action: "contacts.merge", actor: "user:00000000-0000-4000-8000-000000000001" }, t)).toBe(mergeContacts.def.summary);
+    // …and what the team did says where, without the service's jargon.
+    expect(ownerActivityLine({ action: "contacts.merge", actor: "user:00000000-0000-4000-8000-000000000001" }, t)).toBe("Updated contacts");
     // Every mapped label is a real, translated string in every locale.
     for (const locale of ["en", "es", "fr", "ar"]) {
       for (const key of new Set(Object.values(OWNER_ACTIVITY_LABELS))) {
@@ -58,8 +58,104 @@ describe("audit log labels", () => {
     for (const action of ["cms.heartbeatPresence", "cms.leavePresence", "cms.touchEditLease", "cms.releaseEditLease"]) {
       expect(HOUSEKEEPING_ACTIONS as readonly string[]).toContain(action);
     }
+    for (const key of [...new Set(Object.values(OWNER_ACTIVITY_AREAS)), "admin.activity.area.site", "admin.activity.teamUpdated", "admin.activity.platformUpdated"]) {
+      for (const locale of ["en", "es", "fr", "ar"]) expect(catalogKeys(locale), `${locale}: ${key}`).toContain(key);
+    }
     for (const action of [...Object.keys(OWNER_ACTIVITY_LABELS), "cms.heartbeatPresence", "cms.touchEditLease"]) {
       expect(listServices().has(action), `${action} is a registered service`).toBe(true);
+    }
+  });
+
+  it("never shows an owner a raw service summary in the default feed (2026-10-23 pre-launch check)", async () => {
+    await ready();
+    // The four lines the demo's "What changed" printed verbatim.
+    const en = translator("en");
+    expect(ownerActivityLine({ action: "invoicing.issue", actor: "system" }, en)).toBe("An invoice was issued");
+    expect(ownerActivityLine({ action: "invoicing.createDraft", actor: "system" }, en)).toBe("An invoice draft was started");
+    expect(ownerActivityLine({ action: "invoicing.viewCustomerInvoice", actor: "anonymous" }, en)).toBe("A customer opened an invoice");
+    expect(ownerActivityLine({ action: "conversations.record", actor: "system" }, en)).toBe("A message came in");
+    expect(ownerActivityLine({ action: "conversations.reply", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("A reply was sent");
+    // Unmapped: a generic line naming the area, never the code name.
+    expect(ownerActivityLine({ action: "invoicing.createSchedule", actor: "system" }, en)).toBe("Freeholder updated invoices");
+    expect(ownerActivityLine({ action: "proof.somethingNew", actor: "system" }, en)).toBe("Freeholder updated your site");
+    // …said by who did it: only the platform itself is "Freeholder".
+    expect(ownerActivityLine({ action: "invoicing.createSchedule", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("Updated invoices");
+    expect(ownerActivityLine({ action: "invoicing.createSchedule", actor: "agent:Inbox triager" }, en)).toBe("An API key or agent updated invoices");
+    expect(ownerActivityLine({ action: "invoicing.createSchedule", actor: "anonymous" }, en)).toBe("A visitor updated invoices");
+    // Money, sign-in, keys and grants each say what they are (2026-10-23 review).
+    expect(ownerActivityLine({ action: "apikeys.create", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("An API key was created");
+    expect(ownerActivityLine({ action: "apikeys.revoke", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("An API key was revoked");
+    expect(ownerActivityLine({ action: "auth.changePassword", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("A password was changed");
+    expect(ownerActivityLine({ action: "connections.grantToAgent", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("An agent was given use of a connected account");
+    expect(ownerActivityLine({ action: "entitlements.grant", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("A contact was given access");
+    expect(ownerActivityLine({ action: "invoicing.createCreditNote", actor: "system" }, en)).toBe("A credit note was drafted");
+    expect(ownerActivityLine({ action: "invoicing.voidCreditNote", actor: "system" }, en)).toBe("A credit note was voided");
+    expect(ownerActivityLine({ action: "invoicing.cancelRefund", actor: "system" }, en)).toBe("A refund was cancelled");
+    expect(ownerActivityLine({ action: "invoicing.refundCustomerBalancePayment", actor: "system" }, en)).toBe("A refund was updated");
+    expect(ownerActivityLine({ action: "catalog.setPriceListEntry", actor: "system" }, en)).toBe("Prices were changed");
+    expect(ownerActivityLine({ action: "catalog.setPriceRule", actor: "system" }, en)).toBe("A service's payment options were changed");
+    // Subscriptions, invitations, webhooks, connections, tax, quotes and
+    // contracts too (2026-10-23 re-review).
+    const lines: Record<string, string> = {
+      "subscriptions.cancel": "A subscription was cancelled",
+      "subscriptions.changePlan": "A subscriber changed plans",
+      "subscriptions.subscribe": "A subscription was started",
+      "subscriptions.pause": "A subscription was paused",
+      "subscriptions.resume": "A subscription was resumed",
+      "subscriptions.cancelMine": "A subscription was cancelled",
+      "subscriptions.changeMine": "A subscriber changed plans",
+      "invitations.create": "A teammate was invited",
+      "invitations.accept": "A teammate accepted an invitation",
+      "invitations.revoke": "An invitation was withdrawn",
+      "invitations.resend": "An invitation was sent again",
+      "connections.revokeFromAgent": "An agent lost use of a connected account",
+      "connections.rotateCredentials": "Stored account credentials were re-encrypted",
+      "webhooks.create": "A webhook was added",
+      "webhooks.update": "A webhook was changed",
+      "webhooks.rotateEndpoint": "A webhook was moved to a new address with a new secret",
+      "mail.beginOAuth": "Someone started connecting an outside account",
+      "mail.completeOAuth": "An outside account was connected",
+      "social.completeOAuth": "An outside account was connected",
+      "signupContactImports.applyOAuthCompletion": "An outside account was connected",
+      "invoicing.setTaxRegistration": "A tax registration was updated",
+      "invoicing.addTaxRate": "Tax settings were changed",
+      "invoicing.setTaxExemption": "A customer's tax exemption was recorded",
+      "quotes.convert": "A quote was turned into a job",
+      "quotes.send": "A quote was sent",
+      "contracts.void": "A contract was withdrawn",
+    };
+    for (const [action, line] of Object.entries(lines)) {
+      expect(ownerActivityLine({ action, actor: "system" }, en), action).toBe(line);
+    }
+    for (const name of ["subscriptions.renewDue", "invitations.create", "webhooks.test", "mail.claimOAuthCompletion", "connections.rotateCredentials", "invoicing.createTaxZone", "quotes.convert", "contracts.void", "galleries.revokeGuest"]) {
+      expect(needsOwnLine(name), name).toBe(true);
+    }
+    // Every registered mutation in those classes has its own line, so none
+    // can fall through to "updated {area}".
+    const unmapped = [...listServices()]
+      .filter(([name, service]) => service.def.kind === "mutation" && needsOwnLine(name))
+      .map(([name]) => name)
+      .filter((name) => !OWNER_ACTIVITY_LABELS[name]);
+    expect(unmapped).toEqual([]);
+    for (const name of ["apikeys.create", "auth.login", "invoicing.cancelRefund", "members.resolveDispute", "catalog.removePriceRule", "entitlements.grant"]) {
+      expect(needsOwnLine(name), name).toBe(true);
+    }
+    // Every registered service, in every locale: hidden, or a translated line
+    // that is neither its summary, a missing catalog key nor its code name.
+    for (const locale of ["en", "es", "fr", "ar"]) {
+      const t = translator(locale);
+      for (const [name, service] of listServices()) {
+        for (const actor of ["system", "anonymous", "user:00000000-0000-4000-8000-000000000001"]) {
+          const line = ownerActivityLine({ action: name, actor }, t);
+          if (line === null) {
+            expect(OWNER_HIDDEN_ACTIONS.has(name), name).toBe(true);
+            continue;
+          }
+          expect(line, `${locale} ${name}`).not.toBe(service.def.summary);
+          expect(line, `${locale} ${name}`).not.toMatch(/admin\.activity\./);
+          expect(line, `${locale} ${name}`).not.toContain(name);
+        }
+      }
     }
   });
 

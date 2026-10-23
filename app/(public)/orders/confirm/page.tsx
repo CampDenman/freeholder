@@ -23,6 +23,7 @@ import { localePath, localizeCustomerHref } from "@/core/i18n/customer";
 import { siteOrigin } from "@/core/seo/origin";
 import { composeDocumentTitle } from "@/core/seo/meta";
 import { currentBusiness } from "@/core/settings/read";
+import { env } from "@/core/env";
 import { getLocale, getT } from "../../../i18n";
 
 export const dynamic = "force-dynamic";
@@ -161,12 +162,18 @@ export default async function OrderConfirmPage({
           {t("store.confirm.nextLegend")}
         </h2>
         <p className="text-sm text-ink-muted">{t("store.confirm.nextSteps")}</p>
-        <a
-          href={localize("/portal")}
-          className="text-sm text-accent underline-offset-2 hover:underline"
-        >
-          {t("store.confirm.portal")}
-        </a>
+        {/* The playground turns customer sign-in off, so it says where the
+            portal would be instead of linking to a door that will not open. */}
+        {env().FREEHOLDER_PLAYGROUND === "1" ? (
+          <p className="text-sm text-ink-muted">{t("store.confirm.portalPlayground")}</p>
+        ) : (
+          <a
+            href={localize("/portal")}
+            className="text-sm text-accent underline-offset-2 hover:underline"
+          >
+            {t("store.confirm.portal")}
+          </a>
+        )}
       </section>
     </div>
   );

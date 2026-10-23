@@ -33,7 +33,8 @@ import {
   recordOfflinePayment,
   recordOfflineRefund,
 } from "@/modules/invoicing/payment-provider-service";
-import { beginCustomerCheckout } from "@/modules/invoicing/customer-service";
+import { beginCustomerCheckout, getCustomerInvoice } from "@/modules/invoicing/customer-service";
+import { invoiceAccessToken } from "@/modules/invoicing/customer-tokens";
 import { invoices } from "@/modules/invoicing/schema";
 import { addTaxRate, createTaxZone, setTaxRegistration } from "@/modules/invoicing/tax-service";
 import { createLocationService } from "@/core/locations/service";
@@ -337,7 +338,18 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
       return invoice!;
     };
     // At the business, or at a saved location: taxed there.
-    expect(await invoiceFor({})).toMatchObject({ subtotalMinor: 6_500, taxMinor: 325, totalMinor: 6_825 });
+    const atBusiness = await invoiceFor({});
+    expect(atBusiness).toMatchObject({ subtotalMinor: 6_500, taxMinor: 325, totalMinor: 6_825 });
+    // The customer's copy lists the admission at its pre-tax amount, so the
+    // lines add up to the subtotal printed under them and the tax is shown
+    // once (2026-10-23 pre-launch check: the line read CA$106.40 above a
+    // CA$95.00 subtotal and CA$11.40 tax).
+    const customerCopy = await getCustomerInvoice.call({ id: atBusiness.id, token: invoiceAccessToken(atBusiness) }, ANONYMOUS);
+    expect(customerCopy.lines.map((line) => line.amountMinor)).toEqual([6_500]);
+    expect(customerCopy.lines.reduce((sum, line) => sum + line.amountMinor, 0))
+      .toBe(customerCopy.subtotalMinor);
+    expect(customerCopy.subtotalMinor - customerCopy.discountMinor + customerCopy.shippingMinor + customerCopy.taxMinor)
+      .toBe(customerCopy.totalMinor);
     expect(await invoiceFor({ venueLocationId: studio.id })).toMatchObject({ taxMinor: 325, totalMinor: 6_825 });
     // A venue typed as free text cannot be placed in a jurisdiction: it is
     // taxed as if held at the business, and the invoice says so.

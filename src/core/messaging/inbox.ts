@@ -456,6 +456,20 @@ export const bulkConversations = defineService({
 });
 
 /**
+ * A teammate's name for the inbox. Accounts carry only an email, so the name
+ * is their linked contact's when they have one, else the address's local
+ * part read as words ("sam.okafor" → "Sam Okafor"). The inbox printed the raw
+ * address (2026-10-23 pre-launch check); the address still shows on hover.
+ */
+export function teammateName(contactName: string | null, email: string): string {
+  if (contactName?.trim()) return contactName.trim();
+  const local = email.split("@")[0] ?? email;
+  const words = local.split(/[._+-]+/).filter(Boolean);
+  if (words.length === 0) return email;
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
+/**
  * The one unified inbox (C7.09).
  *
  * Search is over what was actually said and who said it, because those are the
@@ -484,6 +498,8 @@ export const searchInbox = defineService({
       contactName: z.string().nullable(),
       contactEmail: z.string().nullable(),
       assigneeEmail: z.string().nullable(),
+      /** The teammate as people say it; see `teammateName`. */
+      assigneeName: z.string().nullable(),
       preview: z.string().nullable(),
       /** A site chat whose email nobody verified (C11.10). */
       unverified: z.boolean(),
@@ -517,6 +533,9 @@ export const searchInbox = defineService({
         contactName: contacts.name,
         contactEmail: contacts.email,
         assigneeEmail: users.email,
+        assigneeContactName: sql<string | null>`(
+          select c.name from contacts c where c.user_id = ${users.id} limit 1
+        )`,
         // The last thing said, so a list of threads reads as a list of things
         // rather than a list of names.
         preview: sql<string | null>`(
@@ -532,11 +551,12 @@ export const searchInbox = defineService({
       .orderBy(desc(conversations.updatedAt))
       .limit(input.limit);
 
-    return rows.map(({ thread, contactName, contactEmail, assigneeEmail, preview }) => ({
+    return rows.map(({ thread, contactName, contactEmail, assigneeEmail, assigneeContactName, preview }) => ({
       ...thread,
       contactName,
       contactEmail,
       assigneeEmail,
+      assigneeName: assigneeEmail ? teammateName(assigneeContactName, assigneeEmail) : null,
       preview,
       unverified: Boolean(thread.threadKey?.startsWith(UNVERIFIED_CHAT_PREFIX)),
     }));

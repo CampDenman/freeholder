@@ -18,6 +18,8 @@ import { invoiceAccessToken, paymentReturnToken, validInvoiceToken, validPayment
 import { createDraftInvoice, getInvoice, issueInvoice, markInvoiceOverdue, voidInvoice } from "@/modules/invoicing/invoice-service";
 import { recordOfflinePayment } from "@/modules/invoicing/payment-provider-service";
 import { invoices, payments } from "@/modules/invoicing/schema";
+import { addTaxRate, createTaxZone, setTaxRegistration } from "@/modules/invoicing/tax-service";
+import { invoiceLineAmounts } from "../../app/(admin)/admin/invoices/format";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const ANON = { kind: "anonymous" } as const;
@@ -123,6 +125,63 @@ describe.runIf(hasDatabase)("customer invoices", () => {
     const body = decryptMailOutbox(outbox!.encryptedMessage, sent.deliveryId);
     expect(body).toContain(`/portal/invoices/${invoice.id}?token=${token}`);
     expect(await failure(sendInvoice.call(input, CUSTOMER))).toMatchObject({ code: "permission" });
+  });
+
+  // 2026-10-23 review: each printed line must agree with the subtotal printed
+  // beneath it, with or without a discount, in either kind of tax zone.
+  async function zone(pricesIncludeTax: boolean) {
+    const created = await createTaxZone.call(
+      { name: "Canada", country: "CA", regions: [], postalPatterns: [], basis: "destination", pricesIncludeTax, roundingScope: "invoice", roundingMode: "half_up" },
+      OWNER,
+    );
+    await setTaxRegistration.call({ zoneId: created.id, number: "123456789RT0001", status: "active" }, OWNER);
+    await addTaxRate.call({ zoneId: created.id, name: "HST", jurisdiction: "Canada", ratePpm: 130_000, appliesToShipping: false }, OWNER);
+  }
+  async function issued(key: string, line: { unitAmountMinor: number; quantityMicros: number; discountMinor?: number }, taxed: boolean) {
+    const contact = await createContact.call({ name: "Rae Buyer", email: `${key}@example.test` }, OWNER);
+    const draft = await createDraftInvoice.call({ contactId: contact.id, currency: "CAD", idempotencyKey: key,
+      lines: [{ description: "Prints", ...line }],
+      tax: taxed
+        ? { mode: "calculate", origin: { country: "CA" }, destination: { country: "CA" } }
+        : { mode: "not_applicable", reason: "No tax on this test transaction." },
+    }, OWNER);
+    const { invoice } = await issueInvoice.call({ id: draft.invoice.id }, OWNER);
+    const customer = await getCustomerInvoice.call({ id: invoice.id, token: invoiceAccessToken(invoice) }, ANON);
+    const owner = await getInvoice.call({ id: invoice.id }, OWNER);
+    return { customer, ownerLines: owner.lines };
+  }
+  function addsUp(customer: Awaited<ReturnType<typeof getCustomerInvoice.call>>) {
+    expect(customer.lines.reduce((sum, line) => sum + line.amountMinor, 0)).toBe(customer.subtotalMinor);
+    expect(customer.subtotalMinor - customer.discountMinor + customer.shippingMinor + customer.taxMinor).toBe(customer.totalMinor);
+  }
+
+  it("prints a discounted line at its pre-discount amount, with the discount on its own row", async () => {
+    const { customer, ownerLines } = await issued("discounted", { unitAmountMinor: 5_000, quantityMicros: 2_000_000, discountMinor: 1_000 }, false);
+    expect(customer).toMatchObject({ subtotalMinor: 10_000, discountMinor: 1_000, totalMinor: 9_000 });
+    expect(customer.lines.map((line) => line.amountMinor)).toEqual([10_000]);
+    addsUp(customer);
+    // The admin detail: 2 × 50.00 = 100.00, no separate pre-tax figure, the
+    // line discount on its own.
+    expect(invoiceLineAmounts(ownerLines[0]!)).toEqual({ grossMinor: 10_000, beforeTaxMinor: null, discountMinor: 1_000 });
+  });
+
+  it("prints a tax-exclusive line whose arithmetic holds", async () => {
+    await zone(false);
+    const { customer, ownerLines } = await issued("exclusive", { unitAmountMinor: 10_000, quantityMicros: 1_000_000 }, true);
+    expect(customer).toMatchObject({ subtotalMinor: 10_000, taxMinor: 1_300, totalMinor: 11_300 });
+    expect(customer.lines.map((line) => line.amountMinor)).toEqual([10_000]);
+    addsUp(customer);
+    expect(invoiceLineAmounts(ownerLines[0]!)).toEqual({ grossMinor: 10_000, beforeTaxMinor: null, discountMinor: null });
+  });
+
+  it("prints a tax-inclusive line as entered, with its pre-tax amount labelled apart", async () => {
+    await zone(true);
+    const { customer, ownerLines } = await issued("inclusive", { unitAmountMinor: 11_300, quantityMicros: 1_000_000 }, true);
+    expect(customer).toMatchObject({ subtotalMinor: 10_000, taxMinor: 1_300, totalMinor: 11_300 });
+    expect(customer.lines.map((line) => line.amountMinor)).toEqual([10_000]);
+    addsUp(customer);
+    // "1 × 113.00 = 113.00", then "Before tax: 100.00" — never "1 × 113.00 = 100.00".
+    expect(invoiceLineAmounts(ownerLines[0]!)).toEqual({ grossMinor: 11_300, beforeTaxMinor: 10_000, discountMinor: null });
   });
 
   it("shows offline instructions without pretending money was received", async () => {

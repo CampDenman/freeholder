@@ -141,11 +141,13 @@ export default async function MyAppointmentPage({
 
         {/* The terms are named where somebody can see them before acting, not
             only in the confirmation email they have long since deleted. */}
-        {booking.policyName ? (
-          <p className="max-w-prose text-sm text-ink-muted">
-            {t("myBooking.terms", { name: booking.policyName })}
-          </p>
-        ) : null}
+        {/* Without a policy it says so in the booking page's own words, so
+            the two pages never disagree about whether one applies. */}
+        <p className="max-w-prose text-sm text-ink-muted">
+          {booking.policyName
+            ? t("myBooking.terms", { name: booking.policyName })
+            : t("publicBooking.noPolicy")}
+        </p>
 
         {booking.mayReschedule ? (
           <Card>

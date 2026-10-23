@@ -1841,34 +1841,48 @@ export const resolveImage = defineService({
       try { await ctx.call(privateAssetDownloadAccess, {}); }
       catch (error) { if (error instanceof ServiceError && error.code === "permission") return null; throw error; }
     }
-
-    const store = storage();
-    const variants = asset.variants as VariantSet;
-    const sources: ResolvedSource[] = [];
-    // publicRenditions, not Object.entries: a watermarked rendition is stored
-    // on the same row and must never become a source on a public page.
-    for (const [format, renditions] of publicRenditions(variants)) {
-      const entries = await Promise.all(
-        renditions.map(async (r) => `${await store.url(r.key)} ${r.width}w`),
-      );
-      sources.push({
-        format,
-        srcset: entries.join(", "),
-        type: `image/${format}`,
-      });
-    }
-
-    return {
-      src: await store.url(asset.storageKey, { contentType: asset.mime }),
-      sources,
-      width: asset.width,
-      height: asset.height,
-      altText: asset.altText,
-      focalX: asset.focalX,
-      focalY: asset.focalY,
-    };
+    return renderableImage(asset);
   },
 });
+
+/**
+ * The URLs and dimensions of an image row the caller has already read and
+ * already decided may be shown — `resolveImage` after its visibility checks,
+ * or a batched public query (`catalog.productCardImages`) whose own WHERE
+ * clause keeps to ready, non-private images. No database access.
+ */
+export async function renderableImage(
+  asset: Pick<
+    typeof assets.$inferSelect,
+    "storageKey" | "mime" | "variants" | "width" | "height" | "altText" | "focalX" | "focalY"
+  >,
+): Promise<ResolvedImage> {
+  const store = storage();
+  const variants = asset.variants as VariantSet;
+  const sources: ResolvedSource[] = [];
+  // publicRenditions, not Object.entries: a watermarked rendition is stored
+  // on the same row and must never become a source on a public page.
+  for (const [format, renditions] of publicRenditions(variants)) {
+    const entries = await Promise.all(
+      renditions.map(async (r) => `${await store.url(r.key)} ${r.width}w`),
+    );
+    sources.push({
+      format,
+      srcset: entries.join(", "),
+      type: `image/${format}`,
+    });
+  }
+
+  return {
+    src: await store.url(asset.storageKey, { contentType: asset.mime }),
+    sources,
+    width: asset.width,
+    height: asset.height,
+    altText: asset.altText,
+    focalX: asset.focalX,
+    focalY: asset.focalY,
+  };
+}
 
 export interface ResolvedAsset {
   id: string;

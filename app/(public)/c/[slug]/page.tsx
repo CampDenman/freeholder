@@ -23,6 +23,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { browseProducts, purchaseOptions } from "@/modules/catalog/service";
+import { productCardImages } from "@/modules/catalog/merchandising";
 import {
   breadcrumbJsonLd,
   collectionPageJsonLd,
@@ -206,16 +207,15 @@ export default async function PublicCollectionPage({
   // Slice 3: the shelf is shoppable. One batched purchase projection covers
   // exactly the page's products, so cards can price options and offer the
   // picker without a second question to the catalog.
-  const purchases = products.length
-    ? Object.fromEntries(
-        (
-          await purchaseOptions.call(
-            { slugs: products.map((product) => product.slug) },
-            ANONYMOUS,
-          )
-        ).map((entry) => [entry.slug, entry]),
-      )
-    : {};
+  const slugs = products.map((product) => product.slug);
+  const [purchaseEntries, imageEntries] = products.length
+    ? await Promise.all([
+        purchaseOptions.call({ slugs }, ANONYMOUS),
+        productCardImages.call({ slugs }, ANONYMOUS),
+      ])
+    : [[], []];
+  const purchases = Object.fromEntries(purchaseEntries.map((entry) => [entry.slug, entry]));
+  const images = Object.fromEntries(imageEntries.map(({ slug, ...image }) => [slug, image]));
 
   const origin = siteOrigin();
   const defaultLocale = business?.defaultLocale ?? "en";
@@ -328,6 +328,7 @@ export default async function PublicCollectionPage({
               purchases={purchases}
               formatMinor={formatMinor}
               buyLabels={addToCartLabels(t)}
+              images={images}
             />
           </div>
         </div>

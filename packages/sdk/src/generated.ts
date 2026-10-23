@@ -372,6 +372,7 @@ export const SERVICE_NAMES = [
   "catalog.packFulfillment",
   "catalog.payOrder",
   "catalog.placePurchaseOrder",
+  "catalog.productCardImages",
   "catalog.productHeroImage",
   "catalog.publicBookingQuote",
   "catalog.publishProduct",
@@ -3021,6 +3022,10 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { id: string; supplierId: string; locationId: string; status: "draft" | "ordered" | "partial" | "received" | "cancelled"; currency: string; expectedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "catalog.productCardImages": {
+    input: { slugs: string[] };
+    output: { slug: string; src: string; width: number | null; height: number | null; altText: string | null }[];
+  };
   "catalog.productHeroImage": {
     input: { slug: string };
     output: { assetId: string | null };
@@ -4135,7 +4140,7 @@ export interface ServiceCatalog {
   };
   "conversations.search": {
     input: { status?: "open" | "snoozed" | "closed"; openOnly?: boolean; assigneeUserId?: string; unassigned?: boolean; channel?: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; unreadOnly?: boolean; q?: string; limit?: number };
-    output: { id: string; contactId: string; subject: string | null; replyChannel: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; status: "open" | "snoozed" | "closed"; snoozedUntil: string | null; assigneeUserId: string | null; unread: boolean; assistantEscalatedAt: string | null; assistantEscalationReason: string | null; assistantEscalationResolvedAt: string | null; messageCount: number; lastInboundAt: string | null; lastOutboundAt: string | null; updatedAt: string; contactName: string | null; contactEmail: string | null; assigneeEmail: string | null; preview: string | null; unverified: boolean; [key: string]: unknown }[];
+    output: { id: string; contactId: string; subject: string | null; replyChannel: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; status: "open" | "snoozed" | "closed"; snoozedUntil: string | null; assigneeUserId: string | null; unread: boolean; assistantEscalatedAt: string | null; assistantEscalationReason: string | null; assistantEscalationResolvedAt: string | null; messageCount: number; lastInboundAt: string | null; lastOutboundAt: string | null; updatedAt: string; contactName: string | null; contactEmail: string | null; assigneeEmail: string | null; assigneeName: string | null; preview: string | null; unverified: boolean; [key: string]: unknown }[];
   };
   "conversations.setStatus": {
     input: { id: string; status: "open" | "closed" };
@@ -4843,7 +4848,7 @@ export interface ServiceCatalog {
   };
   "invoicing.customerInvoice": {
     input: { id: string; token?: string };
-    output: { id: string; number: string; status: string; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; totalMinor: number }[]; saveMethodRequired: boolean; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable"; nextPaymentMinor: number | null; awaitingRelease: boolean };
+    output: { id: string; number: string; status: string; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; amountMinor: number; totalMinor: number }[]; saveMethodRequired: boolean; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable"; nextPaymentMinor: number | null; awaitingRelease: boolean };
   };
   "invoicing.customerInvoiceLink": {
     input: { id: string };
@@ -8127,6 +8132,7 @@ export interface FreeholderApi {
     packFulfillment: (input: ServiceCatalog["catalog.packFulfillment"]["input"]) => Promise<ServiceCatalog["catalog.packFulfillment"]["output"]>;
     payOrder: (input: ServiceCatalog["catalog.payOrder"]["input"]) => Promise<ServiceCatalog["catalog.payOrder"]["output"]>;
     placePurchaseOrder: (input: ServiceCatalog["catalog.placePurchaseOrder"]["input"]) => Promise<ServiceCatalog["catalog.placePurchaseOrder"]["output"]>;
+    productCardImages: (input: ServiceCatalog["catalog.productCardImages"]["input"]) => Promise<ServiceCatalog["catalog.productCardImages"]["output"]>;
     productHeroImage: (input: ServiceCatalog["catalog.productHeroImage"]["input"]) => Promise<ServiceCatalog["catalog.productHeroImage"]["output"]>;
     publicBookingQuote: (input: ServiceCatalog["catalog.publicBookingQuote"]["input"]) => Promise<ServiceCatalog["catalog.publicBookingQuote"]["output"]>;
     publishProduct: (input: ServiceCatalog["catalog.publishProduct"]["input"]) => Promise<ServiceCatalog["catalog.publishProduct"]["output"]>;

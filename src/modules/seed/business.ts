@@ -64,7 +64,7 @@ export async function installDemoBusiness(
   ctx: ServiceContext,
   input: { assets: Record<string, string>; locationId: string },
 ): Promise<{ products: number; services: number; events: number }> {
-  const { CATALOG, COLLECTIONS, SERVICES, STUDIO_AVAILABILITY, EVENTS, SHARE_OFF, BUSINESS } = demo;
+  const { CATALOG, COLLECTIONS, SERVICES, STUDIO_AVAILABILITY, EVENTS, SHARE_OFF, SHARE_COMPACT, SHARE_COMPACT_CHANNELS, BUSINESS } = demo;
 
   // Tax first: activation refuses a product without an active tax category,
   // and the category comes with the province's starter. Collection is turned
@@ -324,6 +324,14 @@ export async function installDemoBusiness(
       path: `/${path}`,
       locale: BUSINESS.defaultLocale,
       shareable: false,
+    });
+  }
+  for (const path of SHARE_COMPACT) {
+    await ctx.callAsSystem(saveTarget, {
+      path: `/${path}`,
+      locale: BUSINESS.defaultLocale,
+      shareable: true,
+      channels: [...SHARE_COMPACT_CHANNELS],
     });
   }
 

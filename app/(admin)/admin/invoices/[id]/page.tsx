@@ -25,7 +25,7 @@ import { scheduleRemindersAction } from "../../../recurring-actions";
 import { listInvoiceReminders } from "@/modules/invoicing/recurring-service";
 import { getPaymentPlan } from "@/modules/invoicing/advanced-money-service";
 import { requireStaffActor } from "../../guard";
-import { formatPpm, invoiceTone, money, quantityFromMicros } from "../format";
+import { formatPpm, invoiceLineAmounts, invoiceTone, money, quantityFromMicros } from "../format";
 import { domainOrNull } from "../../../read-helpers";
 
 export const dynamic = "force-dynamic";
@@ -145,14 +145,27 @@ export default async function InvoiceDetailPage({
         <CardHeader title={t("invoices.lines.title")} />
         <CardBody>
           <ul className="grid list-none gap-3 p-0">
-            {bundle.lines.map((line) => (
-              <li key={line.id} className="border-b border-rule pb-3 last:border-0">
-                <p className="font-medium">{line.description}</p>
-                <p className="mt-1 font-mono text-xs text-ink-muted">
-                  {quantityFromMicros(line.quantityMicros)} × {money(line.unitAmountMinor, invoice.currency)} = {money(line.totalMinor, invoice.currency)}
-                </p>
-              </li>
-            ))}
+            {bundle.lines.map((line) => {
+              const amounts = invoiceLineAmounts(line);
+              return (
+                <li key={line.id} className="border-b border-rule pb-3 last:border-0">
+                  <p className="font-medium">{line.description}</p>
+                  <p className="mt-1 font-mono text-xs text-ink-muted">
+                    {quantityFromMicros(line.quantityMicros)} × {money(line.unitAmountMinor, invoice.currency)} = {money(amounts.grossMinor, invoice.currency)}
+                  </p>
+                  {amounts.beforeTaxMinor !== null ? (
+                    <p className="mt-1 font-mono text-xs text-ink-muted">
+                      {t("invoices.lines.beforeTax", { amount: money(amounts.beforeTaxMinor, invoice.currency) })}
+                    </p>
+                  ) : null}
+                  {amounts.discountMinor !== null ? (
+                    <p className="mt-1 font-mono text-xs text-ink-muted">
+                      {t("invoices.lines.discount", { amount: money(amounts.discountMinor, invoice.currency) })}
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         </CardBody>
       </Card>

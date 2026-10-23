@@ -26,7 +26,7 @@ import { listPublicEvents } from "@/modules/events/service";
 import { targetFor } from "@/modules/share/service";
 import { mergeContacts } from "@/core/contacts/service";
 import { recordOfflinePayment } from "@/modules/invoicing/payment-provider-service";
-import { CATALOG, EVENTS, NAV_LINKS, SERVICES, SHIPPING } from "../../seed/demo/content";
+import { CATALOG, EVENTS, LOCATION, NAV_LINKS, SERVICES, SHIPPING } from "../../seed/demo/content";
 import { people, random, studioParts, studioTime, world } from "../../seed/demo/busy/world";
 import { AREAS } from "../../seed/demo/busy";
 import { PAST_EVENT_SLUGS } from "../../seed/demo/busy/calendar";
@@ -279,6 +279,13 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
     expect(
       (await targetFor.call({ path: `/products/${CATALOG[0]!.slug}`, locale: "en" }, ANONYMOUS)).shareable,
     ).toBe(true);
+    // Products and events keep a small share option, not all ten channels
+    // (2026-10-23 pre-launch check).
+    for (const path of [`/products/${CATALOG[0]!.slug}`, `/products/${SERVICES[0]!.slug}`, `/events/${EVENTS[0]!.slug}`]) {
+      const target = await targetFor.call({ path, locale: "en" }, ANONYMOUS);
+      expect(target.shareable, path).toBe(true);
+      expect(target.channels, path).toEqual(["link", "native", "email"]);
+    }
   });
 
   it("has one contact per email and the promised volume", async () => {
@@ -433,6 +440,9 @@ describe.runIf(hasDatabase)("the installed busy demo", { timeout: 240_000 }, () 
     );
     // Cheapest first: pickup, then the parcel rate.
     expect(quoted.quotes.map((quote) => quote.name)).toEqual([SHIPPING.pickup, SHIPPING.parcel]);
+    // Pickup is at the studio's real address (2026-10-23 pre-launch check:
+    // it said Comox while the studio's address is in Courtenay).
+    expect(SHIPPING.pickup).toContain(LOCATION.city);
     const parcel = quoted.quotes.find((quote) => quote.name === SHIPPING.parcel)!;
 
     vi.stubEnv("FREEHOLDER_PLAYGROUND", "1");

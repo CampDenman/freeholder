@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C6.19: public discovery and verified, retry-safe customer reservations.
-import { cancellationTerms, termsFrom } from "@/core/scheduling/policy";
+import { cancellationTerms, NO_POLICY, termsFrom, type CancellationTerms } from "@/core/scheduling/policy";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -22,6 +22,18 @@ import { sellerCanSell } from "./market";
 import { bookingTerms, getServiceOffering, listPriceRules, quoteServicePayment } from "./offerings";
 
 const selection = z.object({ productId: z.uuid(), currency: z.string().length(3), mode: z.enum(["full", "deposit_balance"]).default("full"), seats: z.number().int().min(1).max(100).default(1) });
+/**
+ * The fingerprint a booking page carries back with its reservation. It covers
+ * the terms in force, which without a policy are still `NO_POLICY`: hashing
+ * those rather than `null` keeps the value a page computed before 2026-10-23
+ * (when no policy was quoted as `NO_POLICY`) valid, so a page open across that
+ * deploy does not fail once with "the price or terms changed".
+ */
+export function bookingTermsHash(fields: { productId: string; offeringId: string; durationMin: number; capacity: number; offeringUpdatedAt: Date; price: number; due: number; currency: string; mode: string; seats: number; policy: CancellationTerms | null }): string {
+  const { policy, ...rest } = fields;
+  return createHash("sha256").update(JSON.stringify({ ...rest, policy: policy ?? NO_POLICY })).digest("hex");
+}
+
 const quoteOut = z.object({ productId: z.uuid(), offeringId: z.uuid(), name: z.string(), durationMin: z.number().int(), capacity: z.number().int(), currency: z.string(), totalMinor: z.number().int(), dueNowMinor: z.number().int(), balanceMinor: z.number().int(), mode: z.enum(["full", "deposit_balance"]), termsHash: z.string(), policy: cancellationTerms.nullable() });
 
 export const publicBookingQuote = defineService({
@@ -34,8 +46,13 @@ export const publicBookingQuote = defineService({
     if (!offering) throw new ServiceError("not_found", "That service is not bookable.");
     const price = await ctx.call(quoteServicePayment, { ...input, quantity: input.seats });
     if (!price.available) throw new ServiceError("conflict", "That service cannot be priced in this currency.");
-    const policy = termsFrom(await ctx.call(bookingTerms, { serviceOfferingId: offering.id }));
-    const hash = createHash("sha256").update(JSON.stringify({ productId: product.id, offeringId: offering.id, durationMin: offering.durationMin, capacity: offering.capacity, offeringUpdatedAt: offering.updatedAt, price: price.priceMinor, due: price.dueNowMinor, currency: input.currency, mode: input.mode, seats: input.seats, policy })).digest("hex");
+    // No policy attached is quoted as none, not as a made-up one: the booking
+    // page and the appointment page then say the same thing (2026-10-23
+    // pre-launch check: "Cancellation and rescheduling policy" on one, "No
+    // cancellation policy" on the other). Cancelling still runs on NO_POLICY.
+    const attached = await ctx.call(bookingTerms, { serviceOfferingId: offering.id });
+    const policy = attached ? termsFrom(attached) : null;
+    const hash = bookingTermsHash({ productId: product.id, offeringId: offering.id, durationMin: offering.durationMin, capacity: offering.capacity, offeringUpdatedAt: offering.updatedAt, price: price.priceMinor, due: price.dueNowMinor, currency: input.currency, mode: input.mode, seats: input.seats, policy });
     return { productId: product.id, offeringId: offering.id, name: product.name, durationMin: offering.durationMin, capacity: offering.capacity, currency: input.currency, totalMinor: price.priceMinor, dueNowMinor: price.dueNowMinor, balanceMinor: price.priceMinor-price.dueNowMinor, mode: input.mode, termsHash: hash, policy };
   },
 });

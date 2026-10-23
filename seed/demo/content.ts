@@ -973,7 +973,7 @@ export const SHIPPING = {
   zone: "Canada",
   parcel: "Canada Post parcel",
   parcelPrice: "12.00",
-  pickup: "Pick up at the Comox studio",
+  pickup: "Pick up at the Courtenay studio",
 };
 
 export const COLLECTIONS = [
@@ -1093,4 +1093,18 @@ export const SHARE_OFF = [
   "events",
   "c/prints",
   "c/gifts",
+];
+
+/**
+ * Products and events keep a share option (§34), but a small one: copy the
+ * link, the device's own share sheet, or email. All ten channels under every
+ * product and event read as a buttons plugin (2026-10-23 pre-launch check).
+ * Set through the same owner control, so an owner can widen it again.
+ */
+export const SHARE_COMPACT_CHANNELS = ["link", "native", "email"] as const;
+
+export const SHARE_COMPACT = [
+  ...CATALOG.map((product) => `products/${product.slug}`),
+  ...SERVICES.map((service) => `products/${service.slug}`),
+  ...EVENTS.map((event) => `events/${event.slug}`),
 ];
