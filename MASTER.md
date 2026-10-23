@@ -6598,6 +6598,37 @@ payment, tax, inventory and reporting path, with no floating-point money.
   tax-exclusive zone the tax is its own line on the invoice the attendee
   lands on before paying. Regression: `tests/core/events.test.ts` ("taxes
   admission where the event happens…"); changeset `event-admission-tax.md`.
+  Audit follow-up 2026-10-23 (hands-on audit of demo.freeholder.ai):
+  **Repeated paid submit.** "Register and pay" reported
+  `failure=invalid` while the hold and its invoice existed: the
+  registration itself commits, but a second submit of the same form (a
+  double click, a retried request) met the one-live-registration rule and
+  answered `conflict`, so the last answer the visitor saw was a failure.
+  `events.register` now replays: the same person, session, ticket and seat
+  count within the hold window gets the same registration back — a paid
+  one with the same invoice's payment page while it is issued, unpaid and
+  its hold live, never a second invoice. Any other repeat is still a
+  conflict, and every refusal still rolls back the whole transaction
+  (no contact, registration or invoice written). **Public pages.** Event
+  pages were built from the landing template, so its placeholder intro
+  ("This page is a block tree…"), its "Get in touch" button and, per
+  preset, a products index or booking form appeared on every event page;
+  an event page is now `page.blank` (its title) plus the bound
+  `eventDetail`, and the landing copy itself no longer speaks to the
+  owner. Sessions read in their own zone and the visitor's locale
+  (`formatDateTimeRange`, "Sun, Nov 8, 4:00 – 6:00 PM PST") with the
+  start on `<time datetime>`; seats read "3 of 8 seats left" in all four
+  locales. **Past events.** `/events` listed published events whose public
+  page did not exist (the busy demo bulk-inserts its past events), so four
+  links answered 404. The list now includes only events with a live page —
+  the rule the sitemap already follows — files finished events under "Past
+  events" with their pages kept viewable and marked finished, and the busy
+  demo builds its past events' pages the way publish does. Existing event
+  pages pick up the new layout the next time the event is saved.
+  Regression: `tests/core/events.test.ts` (repeated paid and free
+  submits, refusal writes nothing, event page blocks, list/page/sitemap
+  consistency), `tests/core/events-public-render.test.ts`; changeset
+  `event-registration-and-pages.md`.
 
 #### Quotes, contracts, projects, and time
 - [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/

@@ -100,7 +100,7 @@ export function defaultHome(business: {
         props: {
           body:
             business.tagline ??
-            "This page is a block tree in your database. Rearranging it is a save, not a deploy.",
+            "Say who you are, what you make, and how people can reach you.",
           align: "start",
           measure: true,
         },

@@ -272,6 +272,34 @@ export function moneyDecimal(
   return `${sign}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 
+const RANGE_PARTS: Intl.DateTimeFormatOptions = {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZoneName: "short",
+};
+
+/**
+ * A start–end span as a visitor reads it, in the zone it happens in: "Sun,
+ * Nov 8, 4:00 – 6:00 PM PST". `formatRange` drops what the two ends share,
+ * so a same-day span names its day once and a span past midnight names both.
+ */
+export function formatDateTimeRange(
+  start: Date,
+  end: Date,
+  timezone: string,
+  locale: string = DEFAULT_LOCALE,
+): string {
+  return new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: timezone }).formatRange(start, end);
+}
+
+/** One instant in the same reading, for a picker option or a list line. */
+export function formatDateTimeShort(utc: Date, timezone: string, locale: string = DEFAULT_LOCALE): string {
+  return new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: timezone }).format(utc);
+}
+
 /** Store UTC, display in an explicit timezone (§4.9 timezone discipline). */
 export function formatDateTime(
   utc: Date,
