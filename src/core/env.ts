@@ -172,7 +172,7 @@ const envSchema = z.object({
    * instance can walk a password reset with no account anywhere, and says
    * loudly in production that nothing is arriving.
    */
-  MAIL_ADAPTER: z.enum(["smtp", "console", "gmail", "outlook"]).optional(),
+  MAIL_ADAPTER: z.enum(["smtp", "console", "gmail", "outlook", "paradise"]).optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.string().optional(),
   SMTP_USER: z.string().optional(),
@@ -205,9 +205,19 @@ const envSchema = z.object({
 
   /** Bulk mail is separate so personal Gmail/Outlook can never broadcast. */
   MAIL_BULK_ADAPTER: z
-    .enum(["resend", "postmark", "ses", "none"])
+    .enum(["resend", "postmark", "ses", "paradise", "none"])
     .optional(),
   MAIL_BULK_FROM: z.string().optional(),
+  /**
+   * The subscription topic campaign mail is sent under when Paradise Modern
+   * is the bulk adapter (C3.31). Freeholder records one marketing-email
+   * consent per contact, so one topic is the honest mapping.
+   */
+  PARADISEMODERN_MAIL_TOPIC: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9][a-z0-9._-]{0,199}$/)
+    .optional(),
   RESEND_API_KEY: z.string().optional(),
   RESEND_WEBHOOK_SECRET: z.string().optional(),
   POSTMARK_SERVER_TOKEN: z.string().optional(),

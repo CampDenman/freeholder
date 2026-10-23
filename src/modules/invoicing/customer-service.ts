@@ -154,7 +154,7 @@ export const sendInvoice = defineService({
     const delivery = await sendMail(ctx.tx, {
       to: contact.email, subject: t("customerInvoice.emailSubject", { number: invoice.number }),
       text: `${t("customerInvoice.emailBody", { number: invoice.number, amount: formatMoney(dueNow, invoice.currency, locale) })}\n\n${link}\n\n${t("customerInvoice.privateLink")}`,
-    }, { requestedBy: actorString(ctx.actor), idempotencyKey: `invoice:${invoice.id}:${input.idempotencyKey}` });
+    }, { requestedBy: actorString(ctx.actor), idempotencyKey: `invoice:${invoice.id}:${input.idempotencyKey}`, transactionalReason: "account_notice" });
     ctx.setSubject("invoice", invoice.id);
     await ctx.emitTimeline({ contactId: invoice.contactId, eventType: "invoice.emailQueued", subjectType: "invoice", subjectId: invoice.id, payload: { deliveryId: delivery.id } });
     return { deliveryId: delivery.id, delivers: delivery.delivers };

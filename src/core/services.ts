@@ -246,3 +246,9 @@ export async function onFormSubmittedLeadSink(payload: unknown): Promise<void> {
   const { copySubmissionToLeadSink } = await import("@/modules/forms/lead-sink");
   await copySubmissionToLeadSink(payload);
 }
+
+/** C3.31: mirror a marketing-email withdrawal to the campaign carrier. */
+export async function onMailConsentChanged(payload: unknown): Promise<void> {
+  const { mirrorMarketingWithdrawal } = await import("@/core/mail/permission");
+  await mirrorMarketingWithdrawal(payload);
+}

@@ -24,6 +24,11 @@ export default defineModule({
       // own listener, so a provider outage retries this alone and never
       // re-runs webhook fan-out; it returns at once while the category is off.
       "forms.submitted": "onFormSubmittedLeadSink",
+      // C3.31: a campaign carrier that keeps its own consent ledger hears
+      // about withdrawals. Its own listener, so a provider outage retries
+      // this alone and never re-runs webhook fan-out; it returns at once
+      // unless the configured carrier records withdrawals.
+      "contact.consentChanged": "onMailConsentChanged",
     },
     emits: [
       "contact.created",

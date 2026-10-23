@@ -576,7 +576,12 @@ export const subscribeToNewsletter = defineService({
       to: input.email,
       subject: `Confirm ${newsletter.name}`,
       text: `Confirm your subscription to ${newsletter.name}: ${confirmUrl}`,
-    }, { requireDelivery: true });
+    }, {
+      requireDelivery: true,
+      // The double opt-in challenge itself: the person asked for this link.
+      transactionalReason: "authentication",
+      eventRef: `newsletter-subscription:${saved!.id}`,
+    });
     ctx.setSubject("newsletterSubscription", saved!.id);
     ctx.queueEvent("newsletters.subscribed", {
       subscriptionId: saved!.id,

@@ -53,7 +53,59 @@ Every server-to-server call goes through one helper
 
 ## Mail (C3.31)
 
-Not available in this release yet.
+```dotenv
+MAIL_ADAPTER=paradise                        # account mail
+MAIL_FROM="Business <hello@example.com>"     # optional; the provider's noreply@ otherwise
+MAIL_BULK_ADAPTER=paradise                   # campaigns
+MAIL_BULK_FROM="Business <news@example.com>"
+PARADISEMODERN_MAIL_TOPIC=newsletter         # default "newsletter"
+```
+
+The addresses must be on the site's sending domain at the provider, and that
+domain must be active there. Register the exact `MAIL_BULK_FROM` in **Admin →
+Settings → Mail** and run **Verify**: Freeholder reads the site's domain and
+its status (`GET /api/site-self/me`) and verifies only an address on that
+domain.
+
+Messages go to `POST /api/site-self/email/send` with `to`, `subject`, `text`,
+optional `html`, `from`/`fromName`, `replyTo`, the site's
+`listUnsubscribe`/`listUnsubscribePost` on campaign mail, a `requestId`
+(`freeholder:<delivery id>`, the provider's idempotency key) and a
+`permission` declaration set by the delivery worker, not by the module that
+queued the message:
+
+- **Account mail** declares a reason — `authentication` (password reset,
+  magic link, newsletter confirmation link), `account_notice` (invoices,
+  reminders, invitations, security notices), `requested_reply` (an inbox
+  reply), otherwise `service_notification` — and the business event behind it
+  (the delivery's idempotency key or a named reference).
+- **Campaign mail** is `marketing` under `PARADISEMODERN_MAIL_TOPIC`. A
+  recipient with no current Freeholder marketing-email consent, or whose
+  consent was recorded by a method the provider cannot accept as direct
+  permission (import, verbal, system), is refused before any request.
+  Campaign mail must carry the site's own one-click `List-Unsubscribe`;
+  without it the send is refused rather than letting the provider add its own
+  unsubscribe footer.
+
+When the provider answers `EMAIL_CONSENT_REQUIRED` because it has not yet seen
+a recipient's opt-in (for example, a subscriber who confirmed before this was
+switched on), the adapter records it once with
+`POST /api/site-self/email/consent` from the retained `consent_records` row —
+its method, time, source page, terms version, wording when it was kept, the
+IP address the opt-in came from when one was recorded, and `freeholder-consent:<id>` as the
+evidence reference — and sends again under a new `requestId`. Freeholder never
+synthesizes consent: no record, no send. Withdrawals (unsubscribe, preference
+change) are mirrored to `POST /api/site-self/email/consent/withdraw` with the
+address only, through the outbox, and retried while the provider is
+unreachable. The delivery worker also rechecks consent immediately before
+every campaign send, so a withdrawal stops the next message even before the
+mirror lands.
+
+**Feedback.** The provider applies bounces, complaints and its own unsubscribe
+withdrawals before every send and offers no delivery-event webhook, so
+Freeholder's suppression list does not learn about a bounce there. There is no
+webhook URL to configure for this adapter. An empty prepaid balance (HTTP 402)
+is retried until the job's retry ceiling.
 
 ## Measurement (C3.32)
 

@@ -78,7 +78,20 @@ configured. It does not prove domain ownership, SPF, DKIM, DMARC or inbox
 placement; use **Send test** to your own account and confirm those records with
 the mailbox provider.
 
+### Paradise Modern
+
+`MAIL_ADAPTER=paradise` sends account mail through Paradise Modern, one
+optional provider, with `PARADISEMODERN_API_KEY`. Every message declares its
+reason and the event behind it; see
+[`paradise-modern.md`](paradise-modern.md#mail-c331).
+
 ## Broadcast carriers
+
+`MAIL_BULK_ADAPTER=paradise` is the Paradise Modern carrier. It sends only to
+recipients with a recorded marketing opt-in it can accept, keeps the site's own
+one-click unsubscribe, and has no feedback webhook: the provider applies
+bounces and complaints itself. See
+[`paradise-modern.md`](paradise-modern.md#mail-c331).
 
 Set `MAIL_BULK_ADAPTER` to `resend`, `postmark` or `ses`, set
 `MAIL_BULK_FROM`, and provide the selected carrier's existing credentials from

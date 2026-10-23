@@ -143,6 +143,7 @@ export const requestCustomerMagicLink = defineService({
       }, {
         requestedBy: actorString(ctx.actor),
         idempotencyKey: `customer-magic-link:${created.id}`,
+        transactionalReason: "authentication",
       });
     } catch {
       // The public service must not reveal that only an existing address

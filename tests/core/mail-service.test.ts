@@ -4,6 +4,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { resetMailForTests } from "@/adapters/mail";
+import { setParadiseFetchForTests } from "@/adapters/paradise/http";
+import { contacts } from "@/core/contacts/schema";
+import { mirrorMarketingWithdrawal } from "@/core/mail/permission";
 import { users } from "@/core/auth/schema";
 import { connectedAccounts, connectionCapabilities } from "@/core/connections/schema";
 import { db } from "@/core/db";
@@ -75,6 +78,7 @@ describe.runIf(hasDatabase)("mail services", () => {
     changedEnvironment.clear();
     resetEnvForTests();
     resetMailForTests();
+    setParadiseFetchForTests(undefined);
     vi.restoreAllMocks();
   });
 
@@ -285,6 +289,61 @@ describe.runIf(hasDatabase)("mail services", () => {
     expect(delivered).toMatchObject({ status: "failed", attempts: 1 });
     expect(log).toHaveBeenCalled();
     log.mockRestore();
+  });
+
+  it("declares the transactional reason and event to a permission-checking adapter (C3.31)", async () => {
+    environment({ MAIL_ADAPTER: "paradise", PARADISEMODERN_API_KEY: "site-key" });
+    const bodies: Array<Record<string, unknown>> = [];
+    setParadiseFetchForTests(async (_url, init) => {
+      bodies.push(JSON.parse(init.body as string) as Record<string, unknown>);
+      return new Response(JSON.stringify({ messageId: "provider-1" }), { status: 200 });
+    });
+    const queued = await db().transaction((tx) =>
+      sendMail(
+        tx,
+        { to: "person@example.test", subject: "Reset", text: "Your link." },
+        { idempotencyKey: "password-reset:abc", transactionalReason: "authentication" },
+      ),
+    );
+    // The widened constraint accepts the new provider on the delivery row.
+    expect(queued).toMatchObject({ provider: "paradise", delivers: true });
+    await expect(deliverQueuedMail(queued.id)).resolves.toEqual({ status: "submitted" });
+    expect(bodies[0]).toMatchObject({
+      to: "person@example.test",
+      permission: { purpose: "transactional", reason: "authentication", eventRef: "password-reset:abc" },
+      requestId: `freeholder:${queued.id}`,
+    });
+    // Staging fields never reach the provider as content.
+    expect(bodies[0]).not.toHaveProperty("transactionalReason");
+    expect(bodies[0]).not.toHaveProperty("marketingContactId");
+  });
+
+  it("mirrors a marketing withdrawal only to a carrier that keeps a consent ledger (C3.31)", async () => {
+    const [contact] = await db().insert(contacts).values({
+      name: "Reader",
+      email: "reader@example.test",
+    }).returning();
+    const urls: string[] = [];
+    setParadiseFetchForTests(async (url) => {
+      urls.push(url);
+      return new Response("{}", { status: 200 });
+    });
+    const withdrawal = { contactId: contact!.id, purpose: "marketing", channel: "email", state: "withdrawn" };
+    environment({
+      MAIL_BULK_ADAPTER: "resend",
+      MAIL_BULK_FROM: "news@example.test",
+      RESEND_API_KEY: "re_test",
+      PARADISEMODERN_API_KEY: "site-key",
+    });
+    await mirrorMarketingWithdrawal(withdrawal);
+    expect(urls).toEqual([]);
+
+    environment({ MAIL_BULK_ADAPTER: "paradise" });
+    await mirrorMarketingWithdrawal({ ...withdrawal, state: "granted" });
+    await mirrorMarketingWithdrawal({ ...withdrawal, channel: "sms" });
+    expect(urls).toEqual([]);
+    await mirrorMarketingWithdrawal(withdrawal);
+    expect(urls).toEqual(["https://paradisemodern.com/api/site-self/email/consent/withdraw"]);
   });
 
   it("refuses to reroute a queued message after deployment mail settings change", async () => {
