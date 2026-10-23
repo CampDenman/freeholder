@@ -227,8 +227,27 @@ effect there.
 
 ## Deployment
 
-This is a pull request, not a deployment. The new image is published by the
-normal workflow after it merges. The last freeholder.ai deployment recorded
-in this repository is revision `5af2cf0c`, from 17 October 2026
-(`deploy/release-notes-2026-10-17.md`). That revision predates #549, #578 and
-this update. Any later redeploy will be recorded in its own release notes.
+This update is not deployed yet. The Node.js 22.23.4 image is published
+by the normal workflow after this change merges. It will then be deployed,
+and that deployment will be recorded in a follow-up note.
+
+The operator's deploy logs record the following state of the live sites.
+This repository had not recorded these deployments before.
+
+- **2026-10-23:** freeholder.ai and demo.freeholder.ai were both deployed at
+  main revision `b1cabb427405c2f0758de1e6b3f5abf88085abe9`, image
+
+  `ghcr.io/campdenman/freeholder@sha256:34840fcae5bab5fd18c862f842aff0ec8d6c46985aa1335adefd02fac618529a`.
+
+  Both deployments passed signed-provenance verification and readiness.
+  Earlier deployments the same day were at `48b2da44` and `fb7a67df`.
+- **Next.js fixes:** both sites already include #549 (Next.js 16.4.2) and
+  #578 (image optimizer off).
+- **Edge refusal:** Caddy on both servers has refused `/_next/image*` since
+  2026-10-22. That was added on the servers before this update put the
+  refusal in the recipes.
+
+As of this note, neither site was exposed to the Next.js October
+advisories. Both sites still run Node.js 22.23.2 until this update is
+deployed. The previous recorded deployment is in
+`deploy/release-notes-2026-10-17.md`.
