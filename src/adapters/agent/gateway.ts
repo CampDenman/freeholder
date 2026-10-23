@@ -16,7 +16,8 @@
 // (see ./aliases, applied where `FREEHOLDER_AGENT` and `adapters.agent` are
 // parsed) so existing configurations keep working.
 import { env } from "@/core/env";
-import { paradiseProjectHeaders } from "@/adapters/paradise/config";
+import { PARADISE_DEFAULT_URL, paradiseBaseUrl, paradiseProjectHeaders } from "@/adapters/paradise/config";
+import { paradiseUrl } from "@/adapters/paradise/http";
 import type {
   AgentProposalRequest,
   AgentProposalResult,
@@ -32,7 +33,7 @@ export function setBuilderAgentFetchForTests(next: FetchLike | undefined): void 
 
 /** Paradise Modern's gateway defaults; used only when that provider is chosen. */
 export const PARADISE_GATEWAY_DEFAULTS = {
-  baseUrl: "https://paradisemodern.com",
+  baseUrl: PARADISE_DEFAULT_URL,
   model: "pm-brain:quality",
   credentialRef: "PARADISEMODERN_API_KEY",
 } as const;
@@ -53,7 +54,7 @@ export function builderGatewayTarget(provider: GatewayProvider): GatewayTarget {
     const apiKey = current.PARADISEMODERN_API_KEY;
     return {
       apiKey,
-      baseUrl: current.PARADISEMODERN_URL ?? PARADISE_GATEWAY_DEFAULTS.baseUrl,
+      baseUrl: paradiseBaseUrl(current.PARADISEMODERN_URL),
       model: PARADISE_GATEWAY_DEFAULTS.model,
       missing: apiKey ? [] : ["PARADISEMODERN_API_KEY"],
     };
@@ -80,10 +81,15 @@ export function builderGatewayTarget(provider: GatewayProvider): GatewayTarget {
  * against `PARADISEMODERN_PROJECT` (it refuses a call naming no project it
  * knows); OpenAI-compatible gateways take a bearer token and nothing else.
  */
-export function gatewayAuthHeaders(provider: GatewayProvider, apiKey: string): Record<string, string> {
-  return provider === "paradise"
-    ? { "x-api-key": apiKey, ...paradiseProjectHeaders() }
-    : { authorization: `Bearer ${apiKey}` };
+export function gatewayAuthHeaders(
+  provider: GatewayProvider,
+  apiKey: string,
+  options: { project?: boolean } = {},
+): Record<string, string> {
+  if (provider !== "paradise") return { authorization: `Bearer ${apiKey}` };
+  // The project names this site's Paradise account; it goes to the configured
+  // PARADISEMODERN_URL origin only, never to a connection's own host.
+  return { "x-api-key": apiKey, ...(options.project === false ? {} : paradiseProjectHeaders()) };
 }
 
 /**
@@ -96,6 +102,16 @@ export function gatewayAuthHeaders(provider: GatewayProvider, apiKey: string): R
  */
 export function chatCompletionsUrl(baseUrl: string): string {
   return `${baseUrl.trim().replace(/\/+$/, "").replace(/\/v1$/i, "")}/v1/chat/completions`;
+}
+
+/**
+ * The chat-completions endpoint at the configured Paradise Modern origin,
+ * through the same rule every other Paradise call obeys: `https://` only
+ * (loopback excepted), no credentials or query in the base, and a path that
+ * cannot leave that origin. Throws a plain refusal otherwise.
+ */
+export function paradiseChatCompletionsUrl(baseUrl: string): string {
+  return paradiseUrl(paradiseBaseUrl(baseUrl), "/v1/chat/completions");
 }
 
 function usage(value: {
@@ -130,7 +146,9 @@ export function gatewayBuilderAdapter(provider: GatewayProvider): BuilderAgentAd
       let response: Response;
       try {
         response = await (fetchImpl ?? fetch)(
-          chatCompletionsUrl(target.baseUrl),
+          provider === "paradise"
+            ? paradiseChatCompletionsUrl(target.baseUrl)
+            : chatCompletionsUrl(target.baseUrl),
           {
             method: "POST",
             // A redirect would carry the key to wherever it pointed.

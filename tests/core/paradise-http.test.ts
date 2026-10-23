@@ -11,7 +11,7 @@ import {
   setParadiseFetchForTests,
 } from "@/adapters/paradise/http";
 import { paradiseBaseUrl } from "@/adapters/paradise/config";
-import { resetEnvForTests } from "@/core/env";
+import { env, resetEnvForTests } from "@/core/env";
 
 const NAMES = ["PARADISEMODERN_API_KEY", "PARADISEMODERN_URL", "FREEHOLDER_PLAYGROUND"] as const;
 const prior = Object.fromEntries(NAMES.map((name) => [name, process.env[name]]));
@@ -59,12 +59,71 @@ describe("paradiseRequest", () => {
   });
 
   it("never sends the key over plain HTTP to a non-loopback host", async () => {
+    // Refused when the setting is read, and again by the URL rule itself.
     process.env.PARADISEMODERN_URL = "http://api.example.test";
     resetEnvForTests();
-    const error = await refusal(paradiseRequest("/api/site-self/me"));
-    expect(error.code).toBe("insecure_url");
-    expect(error.retryable).toBe(false);
+    expect(() => env()).toThrow(/PARADISEMODERN_URL/);
+    process.env.PARADISEMODERN_URL = "http://127.0.0.1:4010";
+    resetEnvForTests();
+    expect(env().PARADISEMODERN_URL).toBe("http://127.0.0.1:4010");
+    let error: unknown;
+    try {
+      paradiseUrl("http://api.example.test", "/api/site-self/me");
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(ParadiseRequestError);
+    expect((error as ParadiseRequestError).code).toBe("insecure_url");
     expect(calls).toHaveLength(0);
+  });
+
+  it("gives up after its time limit and reports it as retryable", async () => {
+    setParadiseFetchForTests(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")));
+        }),
+    );
+    const started = Date.now();
+    const error = await refusal(paradiseRequest("/api/x", { timeoutMs: 50 }));
+    expect(error.code).toBe("unreachable");
+    expect(error.retryable).toBe(true);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  it("reads at most 256 KiB of a body, even one with no content-length", async () => {
+    const big = JSON.stringify({ allow: true, pad: "x".repeat(300 * 1024) });
+    setParadiseFetchForTests(async () => {
+      const bytes = new TextEncoder().encode(big);
+      let sent = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (sent >= bytes.length) return controller.close();
+          controller.enqueue(bytes.subarray(sent, sent + 16 * 1024));
+          sent += 16 * 1024;
+        },
+      });
+      return new Response(stream, { status: 200 });
+    });
+    const { body } = await paradiseRequest<Record<string, unknown>>("/api/x");
+    expect(body).toEqual({});
+
+    setParadiseFetchForTests(async () => new Response(JSON.stringify({ allow: true }), { status: 200 }));
+    expect((await paradiseRequest<Record<string, unknown>>("/api/x")).body).toEqual({ allow: true });
+  });
+
+  it("accepts project ids issued before the lowercase-slug convention", () => {
+    process.env.PARADISEMODERN_PROJECT = "Legacy_Site-01";
+    resetEnvForTests();
+    try {
+      expect(env().PARADISEMODERN_PROJECT).toBe("Legacy_Site-01");
+      process.env.PARADISEMODERN_PROJECT = "bad id";
+      resetEnvForTests();
+      expect(() => env()).toThrow(/PARADISEMODERN_PROJECT/);
+    } finally {
+      delete process.env.PARADISEMODERN_PROJECT;
+      resetEnvForTests();
+    }
   });
 
   it("allows plain HTTP on loopback only, for tests and local development", () => {

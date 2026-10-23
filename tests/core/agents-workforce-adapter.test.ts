@@ -546,6 +546,59 @@ describe("workforce adapter selection", () => {
     }
   });
 
+  it("sends the Paradise key and project only to the PARADISEMODERN_URL origin", async () => {
+    const names = ["PARADISEMODERN_API_KEY", "PARADISEMODERN_URL", "PARADISEMODERN_PROJECT", "TEST_OWN_PM_KEY"] as const;
+    const before = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+    process.env.PARADISEMODERN_API_KEY = "instance-pm-key";
+    process.env.PARADISEMODERN_URL = "https://pm.example.test/v1";
+    process.env.PARADISEMODERN_PROJECT = "example-site";
+    process.env.TEST_OWN_PM_KEY = "own-key";
+    resetEnvForTests();
+    const seen: Array<{ url: string; headers: Record<string, string> }> = [];
+    setWorkforceOpenAiFetchForTests(async (url, init) => {
+      seen.push({ url, headers: init.headers as Record<string, string> });
+      return jsonResponse({ choices: [{ finish_reason: "stop", message: { content: "Done." } }] });
+    });
+    try {
+      // No base URL: the configured origin, not a hardcoded default.
+      const instance = workforceAdapter({ adapter: "paradise", model: null, credentialRef: null, baseUrl: null });
+      await instance.turn(turnRequest({ model: "pm-brain:quality" }));
+      expect(seen[0]?.url).toBe("https://pm.example.test/v1/chat/completions");
+      expect(seen[0]?.headers["x-api-key"]).toBe("instance-pm-key");
+      expect(seen[0]?.headers["x-pm-project"]).toBe("example-site");
+
+      // Another host without its own credential never borrows the site key.
+      const borrowing = workforceAdapter({
+        adapter: "paradise",
+        model: null,
+        credentialRef: null,
+        baseUrl: "https://elsewhere.example.test",
+      });
+      expect(borrowing.configured).toBe(false);
+      await expect(borrowing.turn(turnRequest())).rejects.toThrow(/credential of its own/);
+      expect(seen).toHaveLength(1);
+
+      // With its own credential it gets that key, and never the project.
+      const own = workforceAdapter({
+        adapter: "paradise",
+        model: null,
+        credentialRef: "TEST_OWN_PM_KEY",
+        baseUrl: "https://elsewhere.example.test",
+      });
+      await own.turn(turnRequest({ model: "pm-brain:quality" }));
+      expect(seen[1]?.url).toBe("https://elsewhere.example.test/v1/chat/completions");
+      expect(seen[1]?.headers["x-api-key"]).toBe("own-key");
+      expect(seen[1]?.headers["x-pm-project"]).toBeUndefined();
+      expect(JSON.stringify(seen[1])).not.toContain("instance-pm-key");
+    } finally {
+      for (const name of names) {
+        if (before[name] === undefined) delete process.env[name];
+        else process.env[name] = before[name];
+      }
+      resetEnvForTests();
+    }
+  });
+
   it("names the missing variable when unconfigured", async () => {
     delete process.env.TEST_WORKFORCE_MISSING;
     const adapter = workforceAdapter({

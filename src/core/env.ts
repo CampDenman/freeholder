@@ -298,16 +298,29 @@ const envSchema = z.object({
   AGENT_GATEWAY_MODEL: z.string().trim().min(1).max(200).optional(),
   /** `paradise`: purpose-bound Paradise Modern site credential (optional provider). */
   PARADISEMODERN_API_KEY: z.string().trim().min(1).optional(),
-  PARADISEMODERN_URL: z.string().url().optional(),
+  /** `https://` only, or `http://` on a loopback host for tests and local work. */
+  PARADISEMODERN_URL: z
+    .string()
+    .url()
+    .refine((value) => {
+      const url = new URL(value);
+      return (
+        url.protocol === "https:" ||
+        (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+      );
+    }, "must be an https:// address (http:// only for localhost)")
+    .optional(),
   /**
    * The project Paradise's model gateway meters calls against, sent as
    * `x-pm-project` by the builder and workforce when Paradise is the chosen
    * gateway. Paradise refuses a gateway call naming no project it knows.
    */
+  // Sent exactly as written: Paradise issued ids before its lowercase-slug
+  // convention, so uppercase letters and underscores are accepted too.
   PARADISEMODERN_PROJECT: z
     .string()
     .trim()
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/)
     .max(64)
     .optional(),
   /** Visible, hard monthly cap for builder model usage. */

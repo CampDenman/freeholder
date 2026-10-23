@@ -71,5 +71,11 @@ Not available in this release yet.
 
 `FREEHOLDER_AGENT=paradise` (or a `paradise` workforce connection) calls
 `POST /v1/chat/completions` with `x-api-key`, a `request_id`, and
-`x-pm-project` when `PARADISEMODERN_PROJECT` is set. No other gateway ever
-receives that header. See `deploy/agent-launch.md` and MASTER.md §37.
+`x-pm-project` when `PARADISEMODERN_PROJECT` is set, at the
+`PARADISEMODERN_URL` origin (the provider's default host when unset). No
+other gateway ever receives that header. A `paradise` workforce connection
+whose base URL names a different origin must name a credential of its own;
+it never receives `PARADISEMODERN_API_KEY` or the project header.
+`PARADISEMODERN_URL` is validated at boot: `https://` only, `http://` only
+for a loopback host. Project ids are sent exactly as written; letters, digits,
+`-` and `_` are accepted. See `deploy/agent-launch.md` and MASTER.md §37.

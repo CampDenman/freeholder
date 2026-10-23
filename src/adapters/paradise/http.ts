@@ -80,11 +80,41 @@ export function paradiseUrl(baseUrl: string, path: string): string {
   return target.href;
 }
 
-async function boundedJson(response: Response): Promise<unknown> {
+/**
+ * At most MAX_RESPONSE_BYTES of the body, read as a stream: a response with
+ * no (or a false) content-length is cut off at the cap rather than buffered
+ * whole. Over the cap, or unreadable, it is treated as an empty body.
+ */
+async function boundedText(response: Response): Promise<string> {
   const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) return {};
-  const raw = await response.text().catch(() => "");
-  if (!raw || raw.length > MAX_RESPONSE_BYTES) return {};
+  if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) {
+    await response.body?.cancel().catch(() => undefined);
+    return "";
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        return "";
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return "";
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function boundedJson(response: Response): Promise<unknown> {
+  const raw = await boundedText(response);
+  if (!raw) return {};
   try {
     return JSON.parse(raw) as unknown;
   } catch {
