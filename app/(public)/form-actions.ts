@@ -17,6 +17,7 @@ import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { submitForm } from "@/modules/forms/service";
 import { HONEYPOT_FIELD, STAMP_FIELD } from "@/modules/forms/antispam";
+import { sealSiteSubmission } from "@/modules/forms/screening";
 import {
   encodeFormReturn,
   FORM_RETURN_COOKIE,
@@ -67,11 +68,17 @@ export async function submitPublicForm(form: FormData): Promise<void> {
     values[key] = value === "on" ? true : value;
   }
 
+  // C3.33/C3.34: the site form's seal, with the screening provider's answer
+  // when one is configured, before the submission's transaction opens. A
+  // provider that is down seals "unavailable" and the traps decide alone.
+  const actor = await visitor();
+  const screening = await sealSiteSubmission({ slug, values, request: actor.request });
+
   const jar = await cookies();
   try {
     await submitForm.call(
-      { slug, values, sourceUrl: path },
-      await visitor(),
+      { slug, values, sourceUrl: path, ...(screening ? { screening } : {}) },
+      actor,
     );
   } catch (error) {
     // A coarse reason, never the service's text: "check your answers", "wait

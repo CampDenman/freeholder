@@ -8048,5 +8048,7 @@
   "public.failure.kept": "Your answers are still in the form below.",
   "playground.fictionalHint": "Public demo: use made-up details, not your own.",
   "store.checkout.error.playgroundEmail": "In the public demo, check out with a made-up address such as you@example.com. The demo sends no email, so that address stands in for the usual sign-in link.",
-  "store.checkout.playgroundEmailHint": "Public demo: use a made-up address ending in @example.com — the order is placed without an email check."
+  "store.checkout.playgroundEmailHint": "Public demo: use a made-up address ending in @example.com — the order is placed without an email check.",
+  "forms.public.notice.screening": "To catch spam, the text of your message and your IP address are sent to {provider}, this site's spam-screening service. A message it flags is held for review, never discarded.",
+  "forms.public.notice.leadSink": "A copy of what you send here, including your name, email address, phone number, every answer and the address of this page, is also sent to {provider}, where this business keeps its enquiries."
 }

@@ -8048,5 +8048,7 @@
   "public.failure.kept": "Vos réponses sont toujours dans le formulaire ci-dessous.",
   "playground.fictionalHint": "Démo publique : utilisez des informations fictives, pas les vôtres.",
   "store.checkout.error.playgroundEmail": "Dans la démo publique, passez commande avec une adresse fictive comme vous@example.com. La démo n’envoie aucun e-mail : cette adresse remplace le lien de connexion habituel.",
-  "store.checkout.playgroundEmailHint": "Démo publique : utilisez une adresse fictive se terminant par @example.com — la commande est passée sans vérification par e-mail."
+  "store.checkout.playgroundEmailHint": "Démo publique : utilisez une adresse fictive se terminant par @example.com — la commande est passée sans vérification par e-mail.",
+  "forms.public.notice.screening": "Pour détecter le spam, le texte de votre message et votre adresse IP sont envoyés à {provider}, le service anti-spam de ce site. Un message signalé est mis en attente de vérification, jamais supprimé.",
+  "forms.public.notice.leadSink": "Une copie de ce que vous envoyez ici, y compris votre nom, votre adresse e-mail, votre téléphone, chaque réponse et l'adresse de cette page, est aussi envoyée à {provider}, où cette entreprise conserve ses demandes."
 }

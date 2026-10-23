@@ -5384,6 +5384,32 @@ deployments are portable, testable and incapable of silently forking the truth.
   Freeholder; the privacy notice names the provider, what is copied and why
   while it is enabled, in every locale. Open until a live lead copy against
   the provider.
+  *(Progress 2026-10-23, C3.33 and C3.34: the categories are
+  `src/adapters/form-screening/` and `src/adapters/lead-sink/` (contracts in
+  `types.ts`, Paradise Modern in `paradise.ts`), chosen by
+  `FORM_SCREENING_PROVIDER` and `LEAD_SINK_PROVIDER`. Screening:
+  `src/modules/forms/screening.ts` seals the verdict (HMAC under
+  `SESSION_SECRET` over the form and the exact answers, 15-minute life; no
+  seal without the secret, and an anonymous submission without a valid seal
+  is held as unchecked while a provider is on); the public form action and
+  the booking intake action seal before `forms.submit`
+  (`sealSiteSubmission`), which only adds a reason. Traps and a per-client
+  budget run first, so the provider is never asked about what they flag.
+  An anonymous submission without a valid seal (API, MCP, forged) is held
+  as unchecked while screening is on; authenticated callers are exempt; it
+  is never copied. A submission rescued from spam is not copied either. The Paradise adapter sends `form_id`, `client_ip` and the longest
+  multi-line answer, nothing else, with a 4-second limit. Lead sink: core's
+  `forms.submitted` listener `onFormSubmittedLeadSink` →
+  `src/modules/forms/lead-sink.ts` copies only `received` submissions whose
+  event says `fromSiteForm`, and throws on every failure so the outbox
+  retries and then dead-letters it for replay.
+  The notice under every form (`ProviderNotice` in
+  `src/modules/forms/block.tsx`, `forms.public.notice.*` in four locales)
+  names the provider, what is sent and why while either is on. Evidence:
+  `tests/core/form-screening-lead-sink.test.ts`,
+  `tests/core/form-intake-screening.test.ts`; operator contract
+  `deploy/paradise-modern.md`; changeset `form-screening-lead-sink.md`.
+  Unchecked: no live assessment or lead copy against the provider.)*
   *(Progress 2026-10-23, C3.31–C3.34 together: these four items replace the
   Paradise Modern parts of PR #529 under the owner's 2026-10-22 decision
   that every outside service is a neutral category and Paradise Modern one

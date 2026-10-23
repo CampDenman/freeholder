@@ -75,6 +75,12 @@ const PROVIDER_FUNCTIONS = new Set([
   // Paradise Modern as an optional provider (C3.31–C3.34): every category
   // that uses it goes through this one bounded request.
   "paradiseRequest",
+  // The provider-facing steps built on it, so none of them can be moved into
+  // a service handler either.
+  "assessWithParadise",
+  "sealSiteSubmission",
+  "sendLeadToParadise",
+  "copySubmissionToLeadSink",
   "providerContactsForSource",
 ]);
 

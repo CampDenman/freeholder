@@ -8048,5 +8048,7 @@
   "public.failure.kept": "Tus respuestas siguen en el formulario de abajo.",
   "playground.fictionalHint": "Demostración pública: usa datos inventados, no los tuyos.",
   "store.checkout.error.playgroundEmail": "En la demostración pública, finaliza la compra con una dirección inventada como tu@example.com. La demostración no envía correos, así que esa dirección sustituye al enlace de acceso habitual.",
-  "store.checkout.playgroundEmailHint": "Demostración pública: usa una dirección inventada que termine en @example.com; el pedido se realiza sin comprobación por correo."
+  "store.checkout.playgroundEmailHint": "Demostración pública: usa una dirección inventada que termine en @example.com; el pedido se realiza sin comprobación por correo.",
+  "forms.public.notice.screening": "Para detectar spam, el texto de tu mensaje y tu dirección IP se envían a {provider}, el servicio antispam de este sitio. Un mensaje marcado queda retenido para revisión; nunca se descarta.",
+  "forms.public.notice.leadSink": "Una copia de lo que envíes aquí, incluidos tu nombre, correo electrónico, teléfono, cada respuesta y la dirección de esta página, también se envía a {provider}, donde este negocio guarda sus consultas."
 }
