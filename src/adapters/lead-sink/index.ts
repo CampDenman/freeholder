@@ -12,7 +12,7 @@ import { env } from "@/core/env";
 import { sendLeadToParadise } from "./paradise";
 import type { LeadSinkAdapter } from "./types";
 
-export { LeadSinkRetryableError, type LeadCopy, type LeadSinkAdapter } from "./types";
+export type { LeadCopy, LeadSinkAdapter } from "./types";
 
 export { LEAD_SINK_PROVIDERS, type LeadSinkProviderId } from "./types";
 

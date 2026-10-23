@@ -20,21 +20,14 @@ export interface LeadCopy {
   pageUrl?: string;
 }
 
-/** A refusal the outbox should retry (the provider was down or busy). */
-export class LeadSinkRetryableError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "LeadSinkRetryableError";
-  }
-}
-
 export interface LeadSinkAdapter {
   readonly id: Exclude<LeadSinkProviderId, "none">;
   /** Named in the privacy notice beside the form. */
   readonly displayName: string;
   /**
-   * Provider I/O — outbox listeners only. Throws `LeadSinkRetryableError`
-   * for a transient failure; any other throw is a permanent refusal.
+   * Provider I/O — outbox listeners only. Throws on any failure, with a
+   * message that carries no answer from the lead; the outbox retries and
+   * finally dead-letters the delivery for the owner to replay.
    */
   send(lead: LeadCopy): Promise<void>;
 }

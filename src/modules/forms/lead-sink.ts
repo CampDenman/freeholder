@@ -4,11 +4,16 @@
 //
 // An outbox listener on `forms.submitted`, which only fires for submissions
 // that passed quarantine, and which runs after the submission has committed.
-// A transient failure throws so the outbox retries it with backoff; a
-// permanent refusal is logged and not retried forever. The submission itself
-// is already kept here either way.
+// Only submissions sealed by a site form are copied: those are the ones whose
+// sender saw the notice naming the provider. Owner entries, API and MCP
+// submissions are never copied.
+//
+// Every failure throws. The outbox retries with backoff and, after its last
+// attempt, dead-letters the delivery, which the owner sees under Jobs →
+// Outbox and can replay once the cause is fixed. A lead is never dropped
+// silently, and the submission itself is already kept here either way.
 import { eq } from "drizzle-orm";
-import { leadSink, LeadSinkRetryableError, type LeadCopy } from "@/adapters/lead-sink";
+import { leadSink, type LeadCopy } from "@/adapters/lead-sink";
 import { db } from "@/core/db";
 import { env } from "@/core/env";
 import { emailFrom, messageFrom, nameFrom, type FormField } from "./fields";
@@ -53,8 +58,8 @@ export function leadCopy(
 export async function copySubmissionToLeadSink(payload: unknown): Promise<void> {
   const sink = leadSink();
   if (!sink) return;
-  const { submissionId } = (payload ?? {}) as { submissionId?: string };
-  if (!submissionId) return;
+  const { submissionId, fromSiteForm } = (payload ?? {}) as { submissionId?: string; fromSiteForm?: boolean };
+  if (!submissionId || fromSiteForm !== true) return;
   const [row] = await db()
     .select({ submission: formSubmissions, form: forms })
     .from(formSubmissions)
@@ -74,11 +79,11 @@ export async function copySubmissionToLeadSink(payload: unknown): Promise<void> 
   try {
     await sink.send(lead);
   } catch (error) {
-    if (error instanceof LeadSinkRetryableError) throw error;
-    console.warn(
-      `[forms] ${sink.displayName} did not accept the copy of submission ${submissionId} (${
+    // The message carries a status and a code, never the visitor's answers.
+    throw new Error(
+      `${sink.displayName} did not accept the copy of form submission ${submissionId}: ${
         error instanceof Error ? error.message : "refused"
-      }); the submission is kept here.`,
+      } The submission is kept in Freeholder; replay this delivery once the cause is fixed.`,
     );
   }
 }

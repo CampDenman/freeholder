@@ -1,32 +1,53 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Form screening, sealed (C3.33, MASTER.md §12, §36).
+// Form screening, sealed (C3.33, MASTER.md §12, §36), and the site-form seal
+// the lead sink relies on (C3.34).
 //
-// A screening provider is asked *before* the submission's transaction opens
-// (provider I/O never runs inside one), so the public form action asks first
-// and hands `forms.submit` a sealed verdict. The seal is an HMAC under
-// `SESSION_SECRET`, bound to the form and to these exact answers: a caller
-// that skips the form cannot invent "allow", and cannot reuse a verdict
-// issued for somebody else's words.
+// The site's own form surfaces (the page form block and the booking intake
+// form) call `sealSiteSubmission` before `forms.submit`. When a screening
+// provider is configured it is asked first, outside any transaction, but only
+// after Freeholder's own traps and a per-client budget have had their say: a
+// submission the honeypot or time trap already flags, or a client over its
+// budget, never reaches the provider. The outcome travels to `forms.submit`
+// sealed with an HMAC under `SESSION_SECRET`, bound to the form and to these
+// exact answers, so it cannot be invented or moved to other words.
 //
-// The verdict can only *add* a quarantine reason beside the honeypot and time
-// trap, never drop one, and quarantine still stores the submission for the
-// owner to review. Fails closed: with no `SESSION_SECRET` no seal is ever
-// issued, so while a provider is configured an anonymous submission without a
-// valid seal is quarantined as unchecked rather than trusted. A provider that
-// is down, slow or refusing seals "unavailable", and the traps decide alone.
+// The seal does two jobs:
+// - screening: a "blocked" outcome adds one quarantine reason beside the
+//   honeypot and time trap. Nothing here can remove a reason, and quarantine
+//   keeps the submission for review rather than dropping it.
+// - provenance: a valid seal proves the submission came through a form that
+//   showed the provider notice, which is what the lead sink requires before
+//   copying anything.
+//
+// Fails closed: with no `SESSION_SECRET` no seal is ever issued. While a
+// provider is configured that holds every anonymous submission as unchecked,
+// and the lead sink copies nothing. A seal that is present but invalid is
+// held as unchecked too. A submission with no seal at all came through the
+// public API or MCP, not a site form: it is not screened by the provider
+// (the traps and the per-form rate limit in `forms.submit` still apply) and
+// it is never copied to the lead sink.
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { formScreening, type ScreeningOutcome } from "@/adapters/form-screening";
+import { leadSink } from "@/adapters/lead-sink";
 import { db } from "@/core/db";
 import { env } from "@/core/env";
+import { clientNetwork, consume } from "@/core/security/rate-limit";
 import type { Actor, RequestMetadata } from "@/core/service";
-import { messageFrom, type FormField } from "./fields";
+import { inspect } from "./antispam";
+import type { FormField } from "./fields";
 import { forms } from "./schema";
 
 const SEAL_VERSION = "v1";
 /** Long enough for a slow submit, short enough that a seal is not a credential. */
 const SEAL_TTL_MS = 15 * 60 * 1000;
+/** Provider calls one client may cause per form, matching `forms.submit`'s own limit. */
+const SCREENING_BUDGET = { limit: 30, windowSeconds: 10 * 60 };
+
+/** What a seal can carry: a provider outcome, or "not asked". */
+export type SealedOutcome = ScreeningOutcome | "unscreened";
+const OUTCOMES = new Set<SealedOutcome>(["allow", "blocked", "unavailable", "unscreened"]);
 
 export const UNCHECKED_REASON = "was not checked by the site's spam screening";
 export const BLOCKED_REASON = "was flagged by the site's spam screening";
@@ -47,9 +68,9 @@ function signature(secret: string, parts: string[]): string {
     .digest("base64url");
 }
 
-/** A seal for this verdict, or undefined when the site has no secret to sign with. */
+/** A seal for this outcome, or undefined when the site has no secret to sign with. */
 export function sealScreening(
-  outcome: ScreeningOutcome,
+  outcome: SealedOutcome,
   slug: string,
   values: Record<string, unknown>,
   now = new Date(),
@@ -67,25 +88,23 @@ export function openScreening(
   slug: string,
   values: Record<string, unknown>,
   now = new Date(),
-): ScreeningOutcome | null {
+): SealedOutcome | null {
   const secret = env().SESSION_SECRET;
   if (!token || !secret) return null;
   const [version, outcome, issued, sig] = token.split(".");
   if (version !== SEAL_VERSION || !sig || !issued) return null;
-  if (outcome !== "allow" && outcome !== "blocked" && outcome !== "unavailable") return null;
+  if (!outcome || !OUTCOMES.has(outcome as SealedOutcome)) return null;
   const age = now.getTime() - Number(issued);
   if (!Number.isFinite(age) || age < -60_000 || age > SEAL_TTL_MS) return null;
   const expected = Buffer.from(signature(secret, [version, outcome, issued, slug, answersDigest(values)]));
   const provided = Buffer.from(sig);
   if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) return null;
-  return outcome;
+  return outcome as SealedOutcome;
 }
 
 /**
- * The quarantine reason screening adds, if any.
- *
- * Only anonymous submissions are screened: the category exists for them, and
- * a signed-in person or a scoped API key is not that.
+ * The quarantine reason screening adds, if any. Only anonymous submissions
+ * are screened: a signed-in person or an API key is not who it exists for.
  */
 export function screeningReason(
   token: string | undefined,
@@ -94,6 +113,10 @@ export function screeningReason(
   actor: Actor,
 ): string | null {
   if (!formScreening() || actor.kind !== "anonymous") return null;
+  // No secret means no seal can be trusted, so nothing counts as checked.
+  if (!env().SESSION_SECRET) return UNCHECKED_REASON;
+  // No seal at all: the public API or MCP, not a site form (see above).
+  if (!token) return null;
   const outcome = openScreening(token, slug, values);
   if (outcome === null) return UNCHECKED_REASON;
   if (outcome === "blocked") return BLOCKED_REASON;
@@ -101,32 +124,60 @@ export function screeningReason(
 }
 
 /**
- * Ask the configured provider about one anonymous public submission, before
- * it is recorded. Undefined when the category is off or the form is unknown
- * (`forms.submit` then refuses or quarantines on its own terms).
+ * The text a screening provider examines: the longest multi-line answer, the
+ * form's message box. A form without one sends nothing, rather than a name
+ * or an address in its place.
  */
-export async function screenPublicSubmission(input: {
+export function screenedText(fields: FormField[], values: Record<string, unknown>): string {
+  let longest = "";
+  for (const field of fields) {
+    if (field.kind !== "multiline") continue;
+    const value = values[field.key];
+    if (typeof value === "string" && value.trim().length > longest.length) longest = value.trim();
+  }
+  return longest;
+}
+
+/**
+ * The seal a site form hands `forms.submit`, or undefined when neither
+ * screening nor a lead sink is configured (nothing then needs one).
+ */
+export async function sealSiteSubmission(input: {
   slug: string;
   values: Record<string, unknown>;
   request: RequestMetadata | undefined;
 }): Promise<string | undefined> {
   const adapter = formScreening();
-  if (!adapter) return undefined;
+  if (!adapter && !leadSink()) return undefined;
+  if (!adapter) return sealScreening("unscreened", input.slug, input.values);
+  return sealScreening(await screenOutcome(adapter, input), input.slug, input.values);
+}
+
+async function screenOutcome(
+  adapter: NonNullable<ReturnType<typeof formScreening>>,
+  input: { slug: string; values: Record<string, unknown>; request: RequestMetadata | undefined },
+): Promise<SealedOutcome> {
+  // Freeholder's own traps first: what they already flag is quarantined
+  // anyway, and needs no outside opinion.
+  if (inspect(input.values).suspected) return "unscreened";
+  const clientIp = input.request?.trustedIp ?? input.request?.ip;
+  // The provider's API requires the address; without one there is nothing
+  // to ask, and the traps decide alone.
+  if (!clientIp) return "unavailable";
   const [form] = await db()
-    .select({ fields: forms.fields })
+    .select({ id: forms.id, fields: forms.fields })
     .from(forms)
     .where(and(eq(forms.slug, input.slug), isNull(forms.trashedAt)))
     .limit(1);
-  if (!form) return undefined;
-  const clientIp = input.request?.trustedIp ?? input.request?.ip;
-  // The provider's API requires the address; without one there is nothing to
-  // ask, and the traps decide alone.
-  const outcome: ScreeningOutcome = clientIp
-    ? await adapter.assess({
-        formRef: `freeholder:${input.slug}`,
-        clientIp,
-        message: messageFrom(form.fields as FormField[], input.values),
-      })
-    : "unavailable";
-  return sealScreening(outcome, input.slug, input.values);
+  if (!form) return "unscreened";
+  // A client past its budget never reaches the provider; `forms.submit`
+  // refuses the submission with its own limit.
+  const network = createHash("sha256").update(clientNetwork(clientIp)).digest("hex");
+  const budget = await consume(`forms.screen:${form.id}:${network}`, SCREENING_BUDGET);
+  if (!budget.allowed) return "unscreened";
+  return adapter.assess({
+    formRef: `freeholder:${input.slug}`,
+    clientIp,
+    message: screenedText(form.fields as FormField[], input.values),
+  });
 }

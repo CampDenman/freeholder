@@ -38,7 +38,7 @@ import {
   type FormField,
 } from "./fields";
 import { HONEYPOT_FIELD, inspect, STAMP_FIELD } from "./antispam";
-import { screeningReason } from "./screening";
+import { openScreening, screeningReason } from "./screening";
 import type { EventDeliveryContext } from "@/core/events";
 import { createNotification } from "@/core/notifications/service";
 import {
@@ -543,8 +543,10 @@ export const submitForm = defineService({
     values: z.record(z.string(), z.unknown()),
     sourceUrl: z.string().max(2000).optional(),
     /**
-     * The public form's sealed screening verdict (C3.33). It can only add a
-     * reason to quarantine; it can never clear one a trap raised.
+     * The site form's seal (C3.33, C3.34): the screening outcome, which can
+     * only add a reason to quarantine and never clear one a trap raised, and
+     * proof the submission came through a form that showed the provider
+     * notice. Absent for the public API and MCP.
      */
     screening: z.string().max(300).optional(),
   }),
@@ -679,6 +681,9 @@ export const submitForm = defineService({
         formId: form.id,
         submissionId: submission!.id,
         contactId,
+        // C3.34: only a submission sealed by a site form (which showed the
+        // provider notice) may be copied to a lead sink.
+        fromSiteForm: openScreening(input.screening, input.slug, input.values) !== null,
       });
     }
 

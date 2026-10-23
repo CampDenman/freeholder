@@ -97,12 +97,12 @@ export async function submitIntakeAction(form: FormData): Promise<void> {
 
   try {
     const { submitForm } = await import("@/modules/forms/service");
-    const { screenPublicSubmission } = await import("@/modules/forms/screening");
+    const { sealSiteSubmission } = await import("@/modules/forms/screening");
     const { attachIntakeByToken } = await import("@/core/scheduling/requirements");
-    // The same form as on a page, so the same screening (C3.33): without a
-    // sealed verdict an anonymous submission would be held as unchecked.
+    // The same form as on a page, with the same notice, so the same seal
+    // (C3.33, C3.34): screening when it is on, and provenance for a lead sink.
     const request = requestMetadataFromHeaders(await headers());
-    const screening = await screenPublicSubmission({ slug, values, request });
+    const screening = await sealSiteSubmission({ slug, values, request });
     const submitted = await submitForm.call(
       { slug, values, sourceUrl: `${here}/intake`, ...(screening ? { screening } : {}) },
       { kind: "anonymous", request },
