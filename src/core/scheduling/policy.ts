@@ -58,15 +58,17 @@ export const NO_POLICY: CancellationTerms = {
 /**
  * Whether stored terms are the `NO_POLICY` fallback rather than a policy an
  * owner wrote. Public bookings stored the fallback until 2026-10-23; it is
- * recognised by its name and by charging nothing, so an owner's own policy
- * that happens to share the name but charges a fee still counts as a policy.
+ * recognised by its name, by charging nothing and by its free window and
+ * reschedule limit, so an owner's own policy that shares the name but charges
+ * a fee or limits moves still counts as a policy.
  */
 export function isNoPolicy(terms: CancellationTerms): boolean {
   return (
     terms.name === NO_POLICY.name &&
     terms.feeType === "none" &&
     terms.noShowFeeMinor === 0 &&
-    terms.freeUntilHours === NO_POLICY.freeUntilHours
+    terms.freeUntilHours === NO_POLICY.freeUntilHours &&
+    terms.rescheduleLimit === NO_POLICY.rescheduleLimit
   );
 }
 

@@ -76,12 +76,12 @@ describe("audit log labels", () => {
     expect(ownerActivityLine({ action: "conversations.record", actor: "system" }, en)).toBe("A message came in");
     expect(ownerActivityLine({ action: "conversations.reply", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("A reply was sent");
     // Unmapped: a generic line naming the area, never the code name.
-    expect(ownerActivityLine({ action: "invoicing.addTaxRate", actor: "system" }, en)).toBe("Freeholder updated invoices");
+    expect(ownerActivityLine({ action: "invoicing.createSchedule", actor: "system" }, en)).toBe("Freeholder updated invoices");
     expect(ownerActivityLine({ action: "proof.somethingNew", actor: "system" }, en)).toBe("Freeholder updated your site");
     // …said by who did it: only the platform itself is "Freeholder".
-    expect(ownerActivityLine({ action: "invoicing.addTaxRate", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("Updated invoices");
-    expect(ownerActivityLine({ action: "invoicing.addTaxRate", actor: "agent:Inbox triager" }, en)).toBe("An API key or agent updated invoices");
-    expect(ownerActivityLine({ action: "invoicing.addTaxRate", actor: "anonymous" }, en)).toBe("A visitor updated invoices");
+    expect(ownerActivityLine({ action: "invoicing.createSchedule", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("Updated invoices");
+    expect(ownerActivityLine({ action: "invoicing.createSchedule", actor: "agent:Inbox triager" }, en)).toBe("An API key or agent updated invoices");
+    expect(ownerActivityLine({ action: "invoicing.createSchedule", actor: "anonymous" }, en)).toBe("A visitor updated invoices");
     // Money, sign-in, keys and grants each say what they are (2026-10-23 review).
     expect(ownerActivityLine({ action: "apikeys.create", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("An API key was created");
     expect(ownerActivityLine({ action: "apikeys.revoke", actor: "user:00000000-0000-4000-8000-000000000001" }, en)).toBe("An API key was revoked");
@@ -94,6 +94,42 @@ describe("audit log labels", () => {
     expect(ownerActivityLine({ action: "invoicing.refundCustomerBalancePayment", actor: "system" }, en)).toBe("A refund was updated");
     expect(ownerActivityLine({ action: "catalog.setPriceListEntry", actor: "system" }, en)).toBe("Prices were changed");
     expect(ownerActivityLine({ action: "catalog.setPriceRule", actor: "system" }, en)).toBe("A service's payment options were changed");
+    // Subscriptions, invitations, webhooks, connections, tax, quotes and
+    // contracts too (2026-10-23 re-review).
+    const lines: Record<string, string> = {
+      "subscriptions.cancel": "A subscription was cancelled",
+      "subscriptions.changePlan": "A subscriber changed plans",
+      "subscriptions.subscribe": "A subscription was started",
+      "subscriptions.pause": "A subscription was paused",
+      "subscriptions.resume": "A subscription was resumed",
+      "subscriptions.cancelMine": "A subscription was cancelled",
+      "subscriptions.changeMine": "A subscriber changed plans",
+      "invitations.create": "A teammate was invited",
+      "invitations.accept": "A teammate accepted an invitation",
+      "invitations.revoke": "An invitation was withdrawn",
+      "invitations.resend": "An invitation was sent again",
+      "connections.revokeFromAgent": "An agent lost use of a connected account",
+      "connections.rotateCredentials": "Stored account credentials were re-encrypted",
+      "webhooks.create": "A webhook was added",
+      "webhooks.update": "A webhook was changed",
+      "webhooks.rotateEndpoint": "A webhook was moved to a new address with a new secret",
+      "mail.beginOAuth": "Someone started connecting an outside account",
+      "mail.completeOAuth": "An outside account was connected",
+      "social.completeOAuth": "An outside account was connected",
+      "signupContactImports.applyOAuthCompletion": "An outside account was connected",
+      "invoicing.setTaxRegistration": "A tax registration was updated",
+      "invoicing.addTaxRate": "Tax settings were changed",
+      "invoicing.setTaxExemption": "A customer's tax exemption was recorded",
+      "quotes.convert": "A quote was turned into a job",
+      "quotes.send": "A quote was sent",
+      "contracts.void": "A contract was withdrawn",
+    };
+    for (const [action, line] of Object.entries(lines)) {
+      expect(ownerActivityLine({ action, actor: "system" }, en), action).toBe(line);
+    }
+    for (const name of ["subscriptions.renewDue", "invitations.create", "webhooks.test", "mail.claimOAuthCompletion", "connections.rotateCredentials", "invoicing.createTaxZone", "quotes.convert", "contracts.void", "galleries.revokeGuest"]) {
+      expect(needsOwnLine(name), name).toBe(true);
+    }
     // Every registered mutation in those classes has its own line, so none
     // can fall through to "updated {area}".
     const unmapped = [...listServices()]

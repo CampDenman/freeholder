@@ -4465,7 +4465,10 @@ project without silent telemetry, and ready to carry money.
   classes and every registered mutation in them has its own label (credit
   notes, price lists and rules, refunds cancelled, payment attempts,
   balances, payout details, disputes, sign-in and factor changes, keys,
-  roles, agent and contact grants). Payment, refund, dispute and payout rows
+  roles, agent and contact grants, and — after re-review — subscriptions,
+  invitations, webhooks, OAuth account connections, credential rotation,
+  tax settings, registrations and exemptions, revoked links and access,
+  quote send/convert and contract void). Payment, refund, dispute and payout rows
   stay visible by default; the summary stays in the full log. Demo copy: pickup
   is "at the Courtenay studio" (the studio's address); the order
   confirmation replaces "Sign in to track this order in your portal" with a
@@ -7233,7 +7236,8 @@ equipment, classes and expertise without double-booking or duplicated records.
   attached (cancelling still runs on `NO_POLICY`), and both pages print the
   same "No cancellation policy applies…" line; a booking that stored the
   old fallback reads the same way (`policyName` null, recognised
-  structurally by `isNoPolicy`). `bookingTermsHash` hashes `NO_POLICY` for
+  structurally by `isNoPolicy`: name, no fee, no no-show fee, free window
+  and reschedule limit all match the fallback; `tests/core/waitlists-and-policy.test.ts`). `bookingTermsHash` hashes `NO_POLICY` for
   the no-policy case, so the terms hash is byte-identical to the one pages
   computed before the change and a page open across the deploy still
   books. Regression:
