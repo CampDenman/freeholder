@@ -4,6 +4,11 @@
 # to this droplet before it can be issued a certificate.
 {$FREEHOLDER_DOMAIN} {
 	encode zstd gzip
+	# C11.10: Next's image optimizer is off (images.unoptimized); refuse its
+	# endpoint at the edge too, so a regression in either layer alone cannot
+	# expose it (GHSA-2464-fhr4-w9xw). Caddy path matching ignores case.
+	@nextImage path /_next/image /_next/image/*
+	respond @nextImage 404
 	# C11.10: the connecting address, overwritten on every request so a
 	# client cannot supply its own. The app trusts it only because
 	# TRUSTED_CLIENT_IP_HEADER names it and the app port is not published.

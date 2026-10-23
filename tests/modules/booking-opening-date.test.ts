@@ -23,8 +23,8 @@ import { createProduct, upsertServiceOffering } from "@/modules/catalog/service"
 import { ANONYMOUS, closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const none = async () => undefined;
-// 05:30 UTC on the 23rd is 22:30 on the 22nd in Vancouver.
-const VANCOUVER_EVENING = new Date("2026-10-23T05:30:00.000Z");
+// 05:30 UTC on the 23rd is 22:30 on the 22nd in Los Angeles.
+const PACIFIC_EVENING = new Date("2026-10-23T05:30:00.000Z");
 // 12:30 UTC on the 23rd is 01:30 on the 24th in Auckland.
 const AUCKLAND_NIGHT = new Date("2026-10-23T12:30:00.000Z");
 
@@ -32,8 +32,8 @@ describe("the day /book opens on", () => {
   beforeEach(() => resetOpeningDateCache());
 
   it("is the business's today in a zone behind UTC, not UTC's tomorrow", async () => {
-    expect(await openingDate({ zone: "America/Vancouver", firstSlot: none, now: VANCOUVER_EVENING })).toBe("2026-10-22");
-    expect(await openingDate({ zone: "America/Vancouver", now: VANCOUVER_EVENING })).toBe("2026-10-22");
+    expect(await openingDate({ zone: "America/Los_Angeles", firstSlot: none, now: PACIFIC_EVENING })).toBe("2026-10-22");
+    expect(await openingDate({ zone: "America/Los_Angeles", now: PACIFIC_EVENING })).toBe("2026-10-22");
   });
 
   it("is the business's today in a zone ahead of UTC, not UTC's yesterday", async () => {
@@ -42,20 +42,20 @@ describe("the day /book opens on", () => {
 
   it("looks at a week first and widens to the whole window only when it is empty", async () => {
     const asked: [string, string][] = [];
-    await openingDate({ zone: "America/Vancouver", now: VANCOUVER_EVENING, firstSlot: async (from, to) => { asked.push([from, to]); return undefined; } });
+    await openingDate({ zone: "America/Los_Angeles", now: PACIFIC_EVENING, firstSlot: async (from, to) => { asked.push([from, to]); return undefined; } });
     // From the day before today: a calendar behind the business holds the
     // start of the business's today on its own yesterday.
     expect(asked).toEqual([["2026-10-21", "2026-10-28"], ["2026-10-21", "2026-12-20"]]);
 
     asked.length = 0;
-    await openingDate({ zone: "America/Vancouver", now: VANCOUVER_EVENING, firstSlot: async (from, to) => { asked.push([from, to]); return { startsAt: new Date("2026-10-25T17:00:00Z") }; } });
+    await openingDate({ zone: "America/Los_Angeles", now: PACIFIC_EVENING, firstSlot: async (from, to) => { asked.push([from, to]); return { startsAt: new Date("2026-10-25T17:00:00Z") }; } });
     expect(asked).toEqual([["2026-10-21", "2026-10-28"]]);
   });
 
   it("dates the first free time in the business's zone", async () => {
-    // 03:00 UTC on the 26th is still the evening of the 25th in Vancouver.
+    // 03:00 UTC on the 26th is still the evening of the 25th in Los Angeles.
     const first = async () => ({ startsAt: new Date("2026-10-26T03:00:00.000Z") });
-    expect(await openingDate({ zone: "America/Vancouver", firstSlot: first, now: VANCOUVER_EVENING })).toBe("2026-10-25");
+    expect(await openingDate({ zone: "America/Los_Angeles", firstSlot: first, now: PACIFIC_EVENING })).toBe("2026-10-25");
   });
 
   it("falls back to today when nothing is free in the window, or the search fails", async () => {
@@ -72,7 +72,7 @@ describe("the day /book opens on", () => {
   it("always respects a real explicit date, without searching", async () => {
     let searched = 0;
     const first = async () => { searched += 1; return { startsAt: new Date("2026-10-30T17:00:00.000Z") }; };
-    expect(await openingDate({ requested: "2026-11-05", zone: "America/Vancouver", firstSlot: first })).toBe("2026-11-05");
+    expect(await openingDate({ requested: "2026-11-05", zone: "America/Los_Angeles", firstSlot: first })).toBe("2026-11-05");
     expect(searched).toBe(0);
     // Not a date, or a date that does not exist: treated as absent.
     for (const requested of ["next tuesday", "2026-02-31", "2026-13-01", "2026-00-10"]) {
@@ -86,8 +86,8 @@ describe("the day /book opens on", () => {
   it("reuses an answer for a minute, per question, and then asks again", async () => {
     let asks = 0;
     const counted = async () => { asks += 1; return undefined; };
-    const at = (ms: number) => new Date(VANCOUVER_EVENING.getTime() + ms);
-    const ask = (cacheKey: string, ms = 0) => openingDate({ zone: "America/Vancouver", firstSlot: counted, now: at(ms), cacheKey });
+    const at = (ms: number) => new Date(PACIFIC_EVENING.getTime() + ms);
+    const ask = (cacheKey: string, ms = 0) => openingDate({ zone: "America/Los_Angeles", firstSlot: counted, now: at(ms), cacheKey });
     await ask("svc|seats:1");
     expect(asks).toBe(2); // a fully booked service: week, then window
     await ask("svc|seats:1", OPENING_CACHE_MS - 1);
@@ -112,7 +112,7 @@ describe("the /book page's wiring", () => {
   it("asks with the moving booking excluded, and never caches a move", async () => {
     const { inputs, search } = recorder();
     for (let i = 0; i < 2; i++) {
-      await bookingDay({ zone: "America/Vancouver", service, seats: 2, move: MOVE, anonymous: false, search, now: VANCOUVER_EVENING });
+      await bookingDay({ zone: "America/Los_Angeles", service, seats: 2, move: MOVE, anonymous: false, search, now: PACIFIC_EVENING });
     }
     // Week, window and the day view, twice over: nothing reused.
     expect(inputs).toHaveLength(6);
@@ -123,23 +123,23 @@ describe("the /book page's wiring", () => {
 
   it("caches an anonymous visitor's opening date, but not a signed-in customer's", async () => {
     const anonymous = recorder();
-    for (let i = 0; i < 2; i++) await bookingDay({ zone: "UTC", service, seats: 1, anonymous: true, search: anonymous.search, now: VANCOUVER_EVENING });
+    for (let i = 0; i < 2; i++) await bookingDay({ zone: "UTC", service, seats: 1, anonymous: true, search: anonymous.search, now: PACIFIC_EVENING });
     expect(anonymous.inputs.filter((input) => input.limit === 1)).toHaveLength(2);
     expect(anonymous.inputs.every((input) => !("excludeBookingId" in input))).toBe(true);
     const signedIn = recorder();
-    for (let i = 0; i < 2; i++) await bookingDay({ zone: "UTC", service, seats: 1, anonymous: false, search: signedIn.search, now: VANCOUVER_EVENING });
+    for (let i = 0; i < 2; i++) await bookingDay({ zone: "UTC", service, seats: 1, anonymous: false, search: signedIn.search, now: PACIFIC_EVENING });
     expect(signedIn.inputs.filter((input) => input.limit === 1)).toHaveLength(4);
   });
 
   it("shows the business's day: asks the calendar days around it and keeps only its own times", async () => {
     const slots = [
-      { startsAt: new Date("2026-10-25T06:30:00Z") }, // 24th, 23:30 in Vancouver
+      { startsAt: new Date("2026-10-25T06:30:00Z") }, // 24th, 23:30 in Los Angeles
       { startsAt: new Date("2026-10-25T07:00:00Z") }, // 25th, 00:00
       { startsAt: new Date("2026-10-26T03:00:00Z") }, // 25th, 20:00
       { startsAt: new Date("2026-10-26T07:00:00Z") }, // 26th, 00:00
     ];
     const { inputs, search } = recorder(slots);
-    const day = await bookingDay({ requested: "2026-10-25", zone: "America/Vancouver", service, seats: 1, anonymous: true, search });
+    const day = await bookingDay({ requested: "2026-10-25", zone: "America/Los_Angeles", service, seats: 1, anonymous: true, search });
     expect(inputs).toEqual([{
       productId: service.productId, serviceOfferingId: service.offeringId, seats: 1,
       from: "2026-10-24", to: "2026-10-26",
@@ -153,24 +153,24 @@ describe("the /book page's wiring", () => {
 
 describe("a business day's bounds", () => {
   it("is 24 hours on an ordinary day", () => {
-    expect(businessDayBounds("2026-10-25", "America/Vancouver")).toEqual({
+    expect(businessDayBounds("2026-10-25", "America/Los_Angeles")).toEqual({
       notBefore: new Date("2026-10-25T07:00:00.000Z"),
       notAfter: new Date("2026-10-26T06:59:59.999Z"),
     });
   });
 
   it("is 25 hours on the day the clocks go back, and 23 on the day they go forward", () => {
-    const fallBack = businessDayBounds("2026-11-01", "America/Vancouver");
+    const fallBack = businessDayBounds("2026-11-01", "America/Los_Angeles");
     expect(fallBack).toEqual({ notBefore: new Date("2026-11-01T07:00:00.000Z"), notAfter: new Date("2026-11-02T07:59:59.999Z") });
     expect(fallBack.notAfter.getTime() + 1 - fallBack.notBefore.getTime()).toBe(25 * 3_600_000);
-    const springForward = businessDayBounds("2026-03-08", "America/Vancouver");
+    const springForward = businessDayBounds("2026-03-08", "America/Los_Angeles");
     expect(springForward).toEqual({ notBefore: new Date("2026-03-08T08:00:00.000Z"), notAfter: new Date("2026-03-09T06:59:59.999Z") });
     expect(springForward.notAfter.getTime() + 1 - springForward.notBefore.getTime()).toBe(23 * 3_600_000);
   });
 
   it("dates every instant inside the bounds to that day, and none outside", () => {
-    const { notBefore, notAfter } = businessDayBounds("2026-11-01", "America/Vancouver");
-    const day = (instant: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Vancouver" }).format(instant);
+    const { notBefore, notAfter } = businessDayBounds("2026-11-01", "America/Los_Angeles");
+    const day = (instant: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(instant);
     expect([day(notBefore), day(notAfter)]).toEqual(["2026-11-01", "2026-11-01"]);
     expect(day(new Date(notBefore.getTime() - 1))).toBe("2026-10-31");
     expect(day(new Date(notAfter.getTime() + 1))).toBe("2026-11-02");

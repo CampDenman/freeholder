@@ -16,6 +16,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { installDemo } from "@/modules/seed/service";
 import { installBusyDemo } from "@/modules/seed/busy";
+import { demoStudioTime } from "@/modules/seed/business";
 import { demoSeedBusy, demoSeedMode } from "@/modules/seed/boot";
 import { getSection, searchPublishedPages } from "@/modules/cms/service";
 import { HEADER_KEY, NAV_KEY } from "@/modules/cms/defaults";
@@ -50,6 +51,21 @@ async function rows<T>(query: ReturnType<typeof sql>): Promise<T[]> {
   return (await db().execute(query)) as unknown as T[];
 }
 
+describe("the plain demo's event times", () => {
+  it("lands on the zone's wall clock and its own date, summer and winter", () => {
+    // Summer in Vancouver is UTC-7 under every tz data version.
+    expect(demoStudioTime(new Date("2026-07-14T20:00:00Z"), 0, 9, "America/Vancouver").toISOString())
+      .toBe("2026-07-14T16:00:00.000Z");
+    // Winter in a zone whose rules did not change in 2026: UTC-8.
+    expect(demoStudioTime(new Date("2026-12-01T20:00:00Z"), 9, 9, "America/Los_Angeles").toISOString())
+      .toBe("2026-12-10T17:00:00.000Z");
+    // A Los Angeles evening is already tomorrow in UTC; the date is the
+    // zone's own, where the seed used to take the UTC one.
+    expect(demoStudioTime(new Date("2026-12-02T05:30:00Z"), 0, 9, "America/Los_Angeles").toISOString())
+      .toBe("2026-12-01T17:00:00.000Z");
+  });
+});
+
 describe("the busy world, before anything installs it", () => {
   it("is deterministic for a given clock and fictional by construction", () => {
     const now = new Date("2026-10-22T19:00:00.000Z");
@@ -76,10 +92,13 @@ describe("the busy world, before anything installs it", () => {
   });
 
   it("puts studio hours on the studio's clock, summer and winter", () => {
-    // 9 am in Vancouver is 16:00 UTC under daylight time and 17:00 UTC after
-    // the November switch; a fixed offset gets one of them wrong.
+    // 9 am in Vancouver in July is 16:00 UTC under every tz data version:
+    // British Columbia's 2026 rule kept the summer offset, UTC-7.
     expect(studioTime(new Date("2026-07-14T20:00:00Z"), 9).toISOString()).toBe("2026-07-14T16:00:00.000Z");
-    expect(studioTime(new Date("2026-11-10T20:00:00Z"), 9).toISOString()).toBe("2026-11-10T17:00:00.000Z");
+    // Its winter offset is what the 2026 rule changed (UTC-8 before tzdb
+    // 2026b, UTC-7 after), so winter is checked on the studio's own clock;
+    // the winter UTC arithmetic is pinned in a stable zone below.
+    expect(studioParts(studioTime(new Date("2027-01-12T20:00:00Z"), 9))).toMatchObject({ day: 12, hour: 9, minute: 0 });
     // A Pacific evening is already tomorrow in UTC; the studio's date is not.
     const evening = new Date("2026-07-15T04:30:00Z");
     expect(studioParts(evening)).toMatchObject({ day: 14, hour: 21 });

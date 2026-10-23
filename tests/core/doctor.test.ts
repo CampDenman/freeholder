@@ -255,10 +255,12 @@ describe("comparing the two copies of the tz database", () => {
   });
 
   it("names both versions and the first instant they disagree on", async () => {
-    // The CI finding: Postgres had America/Vancouver on UTC-07:00 in December
-    // while Node's 2026a said UTC-08:00.
+    // The CI finding was Vancouver: Postgres already had British Columbia's
+    // permanent UTC-07:00 in December while Node's 2026a still said UTC-08:00.
+    // Los Angeles keeps the -08:00 winter, so this probe disagrees with Node
+    // whichever tz data Node ships; Vancouver's answer depends on the version.
     const check = await checkTimezoneData(
-      "America/Vancouver",
+      "America/Los_Angeles",
       probe((instants) => instants.map(() => -420)),
       new Date("2026-12-09T23:30:00Z"),
       "2026a",
@@ -269,7 +271,7 @@ describe("comparing the two copies of the tz database", () => {
     expect(check.message).toEqual({
       key: "doctor.timeZone.disagree",
       params: {
-        zone: "America/Vancouver",
+        zone: "America/Los_Angeles",
         at: "2026-12-09T23:30:00.000Z",
         nodeOffset: "UTC-08:00",
         postgresOffset: "UTC-07:00",

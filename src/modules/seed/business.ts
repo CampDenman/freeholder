@@ -9,6 +9,7 @@
 // the path to a sellable product (a tax setup, a category, variants, a price
 // list, stock) was never walked end to end. Walking it here keeps it walkable.
 import type { ServiceContext } from "@/core/service";
+import { zonedDate, zonedInstant } from "@/core/i18n/zoned";
 import { installTaxTemplate, setTaxRegistration } from "@/modules/invoicing/tax-service";
 import {
   activateProduct,
@@ -44,6 +45,7 @@ import type { BlockNode } from "@/modules/cms/blocks/types";
 import * as demo from "../../../seed/demo/content";
 
 const DAY = 86_400_000;
+const BUSINESS_TIMEZONE = demo.BUSINESS.timezone;
 
 function describe(text: string, prefix: string): BlockNode[] {
   return text.split("\n\n").map((body, index) => ({
@@ -53,11 +55,20 @@ function describe(text: string, prefix: string): BlockNode[] {
   }));
 }
 
-/** A date `days` from now at `hour` o'clock studio time (Pacific, UTC−7/8). */
+/**
+ * `hour` o'clock on `timezone`'s wall clock, on that zone's local date `days`
+ * after `now`. The offset comes from the zone's rules rather than a constant:
+ * British Columbia left UTC−8 winters behind in 2026, and a hard-coded
+ * offset is right under only one version of the tz data. (Before 2026-10-23
+ * this took the UTC date, which is already tomorrow on a Pacific evening.)
+ */
+export function demoStudioTime(now: Date, days: number, hour: number, timezone: string): Date {
+  const date = zonedDate(new Date(now.getTime() + days * DAY), timezone);
+  return zonedInstant(timezone, { ...date, hour });
+}
+
 function studioTime(days: number, hour: number): Date {
-  const date = new Date(Date.now() + days * DAY);
-  date.setUTCHours(hour + 7, 0, 0, 0);
-  return date;
+  return demoStudioTime(new Date(), days, hour, BUSINESS_TIMEZONE);
 }
 
 export async function installDemoBusiness(

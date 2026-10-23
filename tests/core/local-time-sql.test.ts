@@ -69,7 +69,7 @@ describe("no query asks Postgres for a local time", () => {
 
   it("hands buckets to SQL as instants, with no zone in the query text", () => {
     const buckets = localBuckets(
-      "America/Vancouver",
+      "America/Los_Angeles",
       new Date("2026-12-09T08:00:00Z"),
       new Date("2026-12-10T08:00:00Z"),
       "day",
@@ -77,7 +77,7 @@ describe("no query asks Postgres for a local time", () => {
     const query = new PgDialect().sqlToQuery(
       sql`select ${bucketKey(sql.raw("at"), buckets)} from t where ${inBuckets(sql.raw("at"), buckets)}`,
     );
-    expect(query.sql).not.toMatch(/time zone|Vancouver/i);
+    expect(query.sql).not.toMatch(/time zone|Los_Angeles/i);
     // A binary search over start instants, not a join over ranges.
     expect(query.sql).toContain("width_bucket");
     expect(query.params).toEqual([
@@ -118,7 +118,7 @@ describe.runIf(hasDatabase)("every database session runs in UTC", () => {
     // Even a session deliberately set elsewhere cannot move a bucket: the
     // query compares instants with instants.
     const buckets = localBuckets(
-      "America/Vancouver",
+      "America/Los_Angeles",
       new Date("2026-12-09T08:00:00Z"),
       new Date("2026-12-11T08:00:00Z"),
       "day",

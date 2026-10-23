@@ -19,9 +19,19 @@ describe("zoneLabel()", () => {
   it("names a zone the way a visitor says it, for the instant shown (2026-10-23 demo audit)", () => {
     const summer = new Date("2026-07-01T18:00:00Z");
     const winter = new Date("2026-12-01T18:00:00Z");
-    expect(zoneLabel("America/Vancouver", "en", summer)).toBe("Pacific Daylight Time (Vancouver)");
-    expect(zoneLabel("America/Vancouver", "en", winter)).toBe("Pacific Standard Time (Vancouver)");
+    // The generic name, so the label is right whether or not the runtime's tz
+    // data has British Columbia's 2026 permanent UTC-7: ICU 78.3 calls a
+    // Vancouver December "Pacific Daylight Time", and its generic name there
+    // carries ICU's own "(Canada)", which the city replaces.
+    for (const at of [summer, winter]) {
+      expect(zoneLabel("America/Vancouver", "en", at)).toBe("Pacific Time (Vancouver)");
+      expect(zoneLabel("America/Los_Angeles", "en", at)).toBe("Pacific Time (Los Angeles)");
+      expect(zoneLabel("Europe/Berlin", "en", at)).toBe("Central European Time (Berlin)");
+    }
     expect(zoneLabel("America/Vancouver", "fr", summer)).not.toContain("America/");
+    // An Etc/ id is an offset, not a place: no "(GMT+5)" beside "GMT-05:00".
+    expect(zoneLabel("Etc/GMT+5", "en", summer)).toBe("GMT-05:00");
+    expect(zoneLabel("Etc/UTC", "en", summer)).toBe("Coordinated Universal Time");
     expect(zoneLabel("UTC", "en", summer)).toBe("Coordinated Universal Time");
     // An id the runtime does not know is shown as given rather than thrown.
     expect(zoneLabel("Not/AZone", "en", summer)).toBe("Not/AZone");

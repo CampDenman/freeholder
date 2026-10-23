@@ -4412,8 +4412,8 @@ project without silent telemetry, and ready to carry money.
   a real-looking address is refused with nothing written; outside the
   playground an anonymous caller is still refused and a typed address is
   ignored. Slots show the calendar name only when several calendars have
-  openings, and zones read as `zoneLabel` ("Pacific Daylight Time
-  (Vancouver)") on /book and the appointment page. The demo inbox was empty
+  openings, and zones read as `zoneLabel` ("Pacific Time (Vancouver)", the
+  generic name since 2026-10-23) on /book and the appointment page. The demo inbox was empty
   for visitors because the playground role lacked the `conversations` view
   grant while §4.14 already threads form enquiries into conversations; the
   grant is added. Consequence, accepted: every demo visitor shares one
@@ -10760,6 +10760,18 @@ schema they inherit reads as a designed thing rather than an excavation.
   refusal, and that test failed before the fix with two orphans. No ffmpeg
   binary was available to run a real clip. Changeset
   `media-refuse-stored-svg.md`. Not independent review evidence.
+  Runtime advisories 2026-10-23: every Dockerfile stage pins
+  `node:22.23.4-bookworm-slim` by index digest, and `.node-version` follows.
+  That is the 21 Oct Node.js security release, with its compiled-in block
+  on the eight compromised eMudhra intermediates and NSS 3.131.1. The image
+  sets no `NODE_USE_SYSTEM_CA`/`NODE_EXTRA_CA_CERTS` and ships no Debian
+  `ca-certificates`. The droplet, host-updater and playground Caddy recipes
+  now refuse `/_next/image` before proxying, behind `images.unoptimized`
+  (#578). Next 16.4.2 (#549) already carries the 14 Oct Next.js fixes.
+  Replit's `nodejs-22`/`stable-25_05` runtime cannot pin a patch release and
+  stays an open residual. Evidence: `tests/core/runtime-version-integrity.test.ts`,
+  `tests/core/deploy-recipe.test.ts`; notes `deploy/release-notes-2026-10-23.md`;
+  changeset `node-22-23-4-october-2026-advisories.md`. Not independent review.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.
