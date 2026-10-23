@@ -5692,6 +5692,7 @@
   "events.endsAt": "تنتهي",
   "events.name": "الاسم",
   "events.publish": "نشر",
+  "events.register.already": "هذا البريد مسجّل بالفعل في هذه الجلسة. راجع بريدك الإلكتروني للاطلاع على التفاصيل.",
   "events.register.email": "البريد الإلكتروني",
   "events.register.error": "تعذّر إتمام هذا التسجيل. تحقق من البيانات وحاول مرة أخرى.",
   "events.register.free": "مجاني",

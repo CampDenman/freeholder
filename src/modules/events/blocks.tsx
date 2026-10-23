@@ -7,6 +7,13 @@ import { env } from "@/core/env";
 import { failureFromQuery, failureMessageKey } from "@/core/http/public-form-return";
 import { registerForEventAction } from "../../../app/(public)/event-actions";
 
+/** A fresh unguessable token for one rendered registration form. */
+function submissionToken(): string {
+  const bytes = new Uint8Array(24);
+  globalThis.crypto.getRandomValues(bytes);
+  return Buffer.from(bytes).toString("base64url");
+}
+
 export const eventsIndex = defineBlock({
   type: "eventsIndex",
   labelKey: "cms.block.eventsIndex",
@@ -102,6 +109,7 @@ export const eventDetail = defineBlock({
 
     const registered = ctx.query?.eventRegistered === resolved.slug;
     const waitlisted = ctx.query?.eventWaitlisted === resolved.slug;
+    const already = ctx.query?.eventAlreadyRegistered === resolved.slug;
     const failed = ctx.query?.eventError === resolved.slug;
     const formId = `event-${resolved.id}`;
 
@@ -157,11 +165,20 @@ export const eventDetail = defineBlock({
             {ctx.t("events.register.waitlisted")}
           </p>
         ) : null}
+        {already ? (
+          <p role="status" className="max-w-prose rounded-md border border-rule px-4 py-3 text-sm text-ink">
+            {ctx.t("events.register.already")}
+          </p>
+        ) : null}
 
         {open && !registered && !waitlisted ? (
           <form action={registerForEventAction} className="grid max-w-prose gap-4">
             <input type="hidden" name="eventId" value={resolved.id} />
             <input type="hidden" name="eventSlug" value={resolved.slug} />
+            {/* One per render (the public layout is dynamic): a double click
+                or retry of this form repeats its token and gets the same
+                registration back; another browser with the same email does not. */}
+            <input type="hidden" name="submissionToken" value={submissionToken()} />
             {futureSessions.length === 1 ? (
               <input type="hidden" name="sessionId" value={futureSessions[0]!.id} />
             ) : (

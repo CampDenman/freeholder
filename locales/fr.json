@@ -2784,6 +2784,7 @@
   "events.price": "Prix (unités mineures)",
   "events.publicPath": "/events/{slug}",
   "events.publish": "Publier",
+  "events.register.already": "Cette adresse est déjà inscrite à cette séance. Consultez vos courriels pour les détails.",
   "events.register.email": "Courriel",
   "events.register.error": "Cette inscription n'a pas pu être complétée. Vérifiez les informations et réessayez.",
   "events.register.free": "Gratuit",

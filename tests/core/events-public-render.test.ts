@@ -96,6 +96,27 @@ describe("public event page", () => {
     expect(html).not.toContain("<form");
     expect(html).not.toContain("seats left");
   });
+
+  it("gives each rendered form its own submission token", () => {
+    const token = (html: string) => /name="submissionToken" value="([A-Za-z0-9_-]{32})"/.exec(html)?.[1];
+    const first = token(draw(eventDetail, event()));
+    const second = token(draw(eventDetail, event()));
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    expect(first).not.toBe(second);
+  });
+
+  it("says plainly when the email is already registered, with no invoice link", () => {
+    const html = renderToStaticMarkup(
+      eventDetail.render({
+        props: {},
+        resolved: event(),
+        ctx: { ...ctx, query: { eventAlreadyRegistered: "golden-hour-workshop" } },
+      } as never) as never,
+    );
+    expect(html).toContain("already registered for this session");
+    expect(html).not.toContain("/portal/invoices/");
+  });
 });
 
 describe("public events list", () => {

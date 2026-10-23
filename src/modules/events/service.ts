@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Events, sessions, tickets, waitlists, check-in (MASTER.md C6.11).
 
+import { createHash, timingSafeEqual } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isUniqueViolation } from "@/core/db";
@@ -127,6 +128,9 @@ const eventRegistrationRow = row({
   holdExpiresAt: timestamp.nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
+  // Never leaves the service: it is what tells a repeat of one submit from
+  // someone else who knows the email.
+  submissionTokenHash: z.unknown().optional().transform(() => undefined),
 });
 
 registerContactReference({
@@ -820,11 +824,38 @@ const PUBLIC_CLIENT_LIMIT = { limit: 30, windowSeconds: 60 * 60 } as const;
  * invoice's payment page — never a second invoice — and only while that
  * invoice is still issued, unpaid and its hold live.
  */
+/**
+ * A duplicate that is not a repeat of the visitor's own submit. Refused like
+ * any conflict (nothing is written), but the public form can say so plainly —
+ * "already registered, check your email" — without handing over the invoice.
+ */
+export class AlreadyRegisteredError extends ServiceError {
+  constructor() {
+    super("conflict", "This email is already registered for that session.");
+  }
+}
+
+function submissionTokenHash(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/** Whether this submit carries the token the existing registration was made with. */
+function sameSubmission(existing: string | null, token: string | undefined): boolean {
+  if (!existing || !token) return false;
+  const a = Buffer.from(existing, "hex");
+  const b = Buffer.from(submissionTokenHash(token), "hex");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 async function replayRegistration(
   ctx: ServiceContext,
   existing: typeof eventRegistrations.$inferSelect,
-  input: { ticketId?: string; quantity: number },
+  input: { ticketId?: string; quantity: number; submissionToken?: string },
 ): Promise<{ registration: typeof eventRegistrations.$inferSelect; paymentUrl: string | null } | null> {
+  // Bound to the submitter, not the email: only the same rendered form's
+  // token proves this is the person who made the registration. Anyone else
+  // who knows the address must never be handed its invoice link.
+  if (!sameSubmission(existing.submissionTokenHash, input.submissionToken)) return null;
   if ((existing.ticketId ?? undefined) !== input.ticketId) return null;
   if (existing.quantity !== input.quantity) return null;
   const now = Date.now();
@@ -859,6 +890,12 @@ export const registerForEvent = defineService({
     email: z.string().trim().email().toLowerCase(),
     name: z.string().trim().min(1).max(200).optional(),
     quantity: z.number().int().min(1).max(50).default(1),
+    /**
+     * A random one-time token the public form renders. A repeat of the same
+     * submit (double click, retried request) carrying it gets the same
+     * registration back; without it a duplicate is only "already registered".
+     */
+    submissionToken: z.string().min(16).max(128).optional(),
   }),
   output: z.object({
     registration: eventRegistrationRow,
@@ -945,13 +982,14 @@ export const registerForEvent = defineService({
       // audit watched a paid submit succeed while its twin came back
       // "conflict", so the visitor was told it had failed with a seat and an
       // invoice already held — and retrying looked like the only way on.
-      // Within the hold window the same ask gets back what it made.
+      // Within the hold window the same submit (same form token) gets back
+      // what it made; anyone else with the email gets "already registered".
       const replay = await replayRegistration(ctx, duplicate, input);
       if (replay) {
         ctx.setSubject("eventRegistration", duplicate.id);
         return replay;
       }
-      throw new ServiceError("conflict", "This email is already registered for that session.");
+      throw new AlreadyRegisteredError();
     }
     const taken = await occupied(ctx, session.id);
     const remaining = session.capacity - taken;
@@ -973,6 +1011,7 @@ export const registerForEvent = defineService({
         status: waitlisted ? "waitlisted" : paid ? "reserved" : "confirmed",
         quantity: input.quantity,
         holdExpiresAt,
+        submissionTokenHash: input.submissionToken ? submissionTokenHash(input.submissionToken) : null,
       })
       .returning();
     ctx.setSubject("eventRegistration", created!.id);

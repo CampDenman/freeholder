@@ -2784,6 +2784,7 @@
   "events.price": "Precio (unidades menores)",
   "events.publicPath": "/events/{slug}",
   "events.publish": "Publicar",
+  "events.register.already": "Este correo ya está inscrito en esta sesión. Revisa tu correo para ver los detalles.",
   "events.register.email": "Correo electrónico",
   "events.register.error": "No se pudo completar esa inscripción. Revisa los datos e inténtalo de nuevo.",
   "events.register.free": "Gratis",

@@ -6604,11 +6604,19 @@ payment, tax, inventory and reporting path, with no floating-point money.
   registration itself commits, but a second submit of the same form (a
   double click, a retried request) met the one-live-registration rule and
   answered `conflict`, so the last answer the visitor saw was a failure.
-  `events.register` now replays: the same person, session, ticket and seat
-  count within the hold window gets the same registration back — a paid
-  one with the same invoice's payment page while it is issued, unpaid and
-  its hold live, never a second invoice. Any other repeat is still a
-  conflict, and every refusal still rolls back the whole transaction
+  `events.register` now replays, bound to the submitter rather than the
+  email: each rendered form carries a random one-time `submissionToken`
+  whose SHA-256 is stored on the registration
+  (`event_registrations.submission_token_hash`, never in any output). A
+  repeat with the same token, session, ticket and seat count within the
+  hold window gets the same registration back — a paid one with the same
+  invoice's payment page while it is issued, unpaid and its hold live,
+  never a second invoice. A same-email submit without the matching token
+  is refused with `AlreadyRegisteredError` (a `conflict`) and the form
+  says only "already registered — check your email", with no invoice link,
+  playground included; so someone who knows an attendee's email cannot
+  open their invoice. That message does confirm the email is registered
+  for the session. Every refusal still rolls back the whole transaction
   (no contact, registration or invoice written). **Public pages.** Event
   pages were built from the landing template, so its placeholder intro
   ("This page is a block tree…"), its "Get in touch" button and, per

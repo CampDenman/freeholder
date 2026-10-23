@@ -4,8 +4,10 @@
 
 C6.11: Event registration and event pages are fixed. Pressing "Register and pay"
 twice no longer tells the visitor their registration failed while their seat
-and invoice were already held: a repeat of the same registration now takes
-them to the same invoice, and never creates a second one. Event pages no
+and invoice were already held: repeating the same submit from the same form now takes
+them to the same invoice, and never creates a second one. Someone else who
+enters the same email is told it is already registered and to check their
+email, and never sees the invoice. Event pages no
 longer show the builder's placeholder text, a "Get in touch" button or other
 landing-page blocks; they show the event's title and details. Session times
 read in the event's own time zone and the visitor's language (for example

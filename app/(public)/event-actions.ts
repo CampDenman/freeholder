@@ -11,7 +11,7 @@
 // held reservation until that invoice settles.
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { registerForEvent } from "@/modules/events/service";
+import { AlreadyRegisteredError, registerForEvent } from "@/modules/events/service";
 import { PATH_HEADER } from "@/core/http/headers";
 import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { currentBusiness } from "@/core/settings/read";
@@ -62,12 +62,19 @@ export async function registerForEventAction(form: FormData): Promise<void> {
         email: text(form, "email"),
         name: text(form, "name") || undefined,
         quantity: Math.max(1, Math.min(50, Number(text(form, "quantity")) || 1)),
+        submissionToken: text(form, "submissionToken").slice(0, 128) || undefined,
       },
       await visitor(),
     );
   } catch (error) {
     // redirect() throws to do its work; let Next's own signals through.
     if (error && typeof error === "object" && "digest" in error) throw error;
+    // Someone already holds this email's place and this is not a repeat of
+    // their own submit: say so, point at their inbox, and hand over nothing —
+    // no invoice link, in the playground or anywhere else.
+    if (error instanceof AlreadyRegisteredError) {
+      redirect(`${path}${join}eventAlreadyRegistered=${encodeURIComponent(slug)}`);
+    }
     // The visitor sees a code; the audit log keeps the real reason. A public
     // form that explains *why* it refused is telling a script how to get past
     // it — full, duplicate and closed all read the same ("invalid"). Only the

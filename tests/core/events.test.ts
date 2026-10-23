@@ -20,6 +20,7 @@ import {
   listPublicEvents,
   onInvoiceRefunded,
   publishEvent,
+  AlreadyRegisteredError,
   registerForEvent,
   resolvePublicEvent,
 } from "@/modules/events/service";
@@ -624,9 +625,17 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
 
   it("answers a repeated paid submit with the same hold and invoice, not a failure or a second invoice", async () => {
     // 2026-10-23 audit: a double submit of "Register and pay" created the hold
-    // and invoice, then the twin request reported failure=invalid.
+    // and invoice, then the twin request reported failure=invalid. The same
+    // rendered form repeats its token, so the repeat is recognised.
     const { event, session, ticket } = await paidClass(8);
-    const input = { eventId: event.id, sessionId: session.id, ticketId: ticket.id, email: "ada@example.test", name: "Ada Example" };
+    const input = {
+      eventId: event.id,
+      sessionId: session.id,
+      ticketId: ticket.id,
+      email: "ada@example.test",
+      name: "Ada Example",
+      submissionToken: "form-token-ada-0123456789",
+    };
     const [first, second] = await Promise.all([
       registerForEvent.call(input, ANONYMOUS),
       registerForEvent.call(input, ANONYMOUS),
@@ -634,6 +643,8 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     expect(second.registration.id).toBe(first.registration.id);
     expect(second.paymentUrl).toBe(first.paymentUrl);
     expect(first.paymentUrl).toContain(`/portal/invoices/${first.registration.invoiceId}?token=`);
+    // The token's hash is the service's own business.
+    expect(first.registration).not.toHaveProperty("submissionTokenHash", expect.anything());
     const third = await registerForEvent.call(input, ANONYMOUS);
     expect(third.registration.id).toBe(first.registration.id);
 
@@ -652,9 +663,35 @@ describe.runIf(hasDatabase)("paid event admission (C6.11)", { timeout: 30_000 },
     expect(await failure(registerForEvent.call(input, ANONYMOUS))).toMatchObject({ code: "conflict" });
   });
 
+  it("never hands a paid registration's invoice to someone who only knows the email", async () => {
+    const { event, session, ticket } = await paidClass(8);
+    const base = { eventId: event.id, sessionId: session.id, ticketId: ticket.id, email: "victim@example.test" };
+    const first = await registerForEvent.call(
+      { ...base, name: "Real Person", submissionToken: "the-victims-own-form-token" },
+      ANONYMOUS,
+    );
+    expect(first.paymentUrl).toBeTruthy();
+    // Another browser: a different form token, or none at all.
+    for (const attempt of [{ ...base, submissionToken: "a-strangers-form-token-xx" }, base]) {
+      const refused = await failure(registerForEvent.call(attempt, ANONYMOUS));
+      expect(refused).toBeInstanceOf(AlreadyRegisteredError);
+      expect(refused.code).toBe("conflict");
+      expect(JSON.stringify(refused)).not.toContain("/portal/invoices/");
+      expect(refused.message).not.toContain("/portal/invoices/");
+    }
+    expect(await db().select().from(invoices).where(eq(invoices.sourceId, first.registration.id))).toHaveLength(1);
+    expect(await db().select().from(eventRegistrations).where(eq(eventRegistrations.sessionId, session.id))).toHaveLength(1);
+  });
+
   it("answers a repeated free submit with the same confirmed seat", async () => {
     const { event, session, ticket } = await paidClass(4, 0);
-    const input = { eventId: event.id, sessionId: session.id, ticketId: ticket.id, email: "free@example.test" };
+    const input = {
+      eventId: event.id,
+      sessionId: session.id,
+      ticketId: ticket.id,
+      email: "free@example.test",
+      submissionToken: "form-token-free-0123456789",
+    };
     const first = await registerForEvent.call(input, ANONYMOUS);
     const again = await registerForEvent.call(input, ANONYMOUS);
     expect(again).toMatchObject({ paymentUrl: null, registration: { id: first.registration.id, status: "confirmed" } });
