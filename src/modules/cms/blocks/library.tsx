@@ -897,6 +897,54 @@ async function purchaseOptionsOf(slug: string, actor: Actor | undefined) {
   return entry ?? null;
 }
 
+/** The product's lead image, resolved for the public page. */
+async function productPicture(slug: string) {
+  const { productHeroImage } = await import("@/modules/catalog/merchandising");
+  const { assetId } = await productHeroImage.call({ slug }, { kind: "anonymous" });
+  if (!assetId) return null;
+  const { resolveImage } = await import("@/core/media/service");
+  return resolveImage.call({ id: assetId }, { kind: "anonymous" });
+}
+
+/**
+ * The words of a product description, as plain paragraphs.
+ *
+ * The description is a block tree written in the product editor; its text
+ * and headings are what a shopper reads. Other block kinds in it are left to
+ * the page around the product rather than half-rendered here.
+ */
+function plainText(node: unknown): string {
+  if (!node || typeof node !== "object") return "";
+  const value = node as { text?: unknown; children?: unknown };
+  if (typeof value.text === "string") return value.text;
+  return Array.isArray(value.children) ? value.children.map(plainText).join("") : "";
+}
+
+function descriptionParagraphs(description: unknown): Array<{ text: string; heading: boolean }> {
+  const out: Array<{ text: string; heading: boolean }> = [];
+  const walk = (nodes: unknown) => {
+    if (!Array.isArray(nodes)) return;
+    for (const node of nodes as Array<{ type?: string; props?: Record<string, unknown>; children?: unknown }>) {
+      if (node.type === "heading" && typeof node.props?.text === "string" && node.props.text.trim()) {
+        out.push({ text: node.props.text.trim(), heading: true });
+      } else if (node.type === "text" && typeof node.props?.body === "string") {
+        for (const paragraph of node.props.body.split(/\n{2,}/)) {
+          if (paragraph.trim()) out.push({ text: paragraph.trim(), heading: false });
+        }
+      } else if (node.type === "text" && Array.isArray(node.props?.body)) {
+        // Rich text: one entry per top-level paragraph or heading node.
+        for (const rich of node.props.body as Array<{ type?: string; children?: unknown }>) {
+          const text = plainText(rich).trim();
+          if (text) out.push({ text, heading: rich.type === "heading" });
+        }
+      }
+      walk(node.children);
+    }
+  };
+  walk(description);
+  return out.slice(0, 40);
+}
+
 export const productDetail = defineBlock({
   type: "productDetail",
   labelKey: "cms.block.productDetail",
@@ -945,16 +993,53 @@ export const productDetail = defineBlock({
       // A buy panel is never the reason a product page fails.
       purchase = null;
     }
-    return { product, projects, purchase };
+    // The product's own picture and words (C1.38). A product page that showed
+    // only its subtitle and a buy button left everything an owner wrote in
+    // the product editor — and every picture they attached — off the page.
+    let picture: Awaited<ReturnType<typeof productPicture>> = null;
+    try {
+      picture = await productPicture(props.slug);
+    } catch {
+      picture = null;
+    }
+    return { product, projects, purchase, picture, paragraphs: descriptionParagraphs(product.description) };
   },
   render: ({ resolved, ctx }) => {
     if (!resolved) return null;
     return (
       <div className="grid gap-6">
+        {resolved.picture ? (
+          <picture>
+            {resolved.picture.sources.map((source) => (
+              <source key={source.format} srcSet={source.srcset} type={source.type} />
+            ))}
+            <img
+              src={resolved.picture.src}
+              alt={resolved.picture.altText ?? ""}
+              width={resolved.picture.width ?? undefined}
+              height={resolved.picture.height ?? undefined}
+              decoding="async"
+              className="h-auto w-full max-w-full rounded-lg"
+            />
+          </picture>
+        ) : null}
         <div className="grid gap-3">
           {resolved.product.subtitle ? <p className="text-lg text-ink-muted">{resolved.product.subtitle}</p> : null}
           {resolved.product.brand ? <p className="text-sm text-ink-muted">{resolved.product.brand}</p> : null}
         </div>
+        {resolved.paragraphs.length ? (
+          <div className="grid max-w-prose gap-3 text-ink">
+            {resolved.paragraphs.map((paragraph, index) =>
+              paragraph.heading ? (
+                <h2 key={index} className="text-xl font-bold tracking-tight text-ink">
+                  {paragraph.text}
+                </h2>
+              ) : (
+                <p key={index}>{paragraph.text}</p>
+              ),
+            )}
+          </div>
+        ) : null}
         {resolved.purchase && resolved.purchase.variants.length > 0 ? (
           // On the canvas (identifyBlocks) the buy chrome renders inert: the
           // preview must show exactly what ships, but a form that submitted

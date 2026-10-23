@@ -22,6 +22,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { readdir } from "node:fs/promises";
 import { env } from "@/core/env";
 import { db } from "@/core/db";
+import { isTimezone } from "@/core/i18n/zoned";
 import { PLATFORM_VERSION } from "@/core/platform";
 import { updateCheckEnabled, updateFeedUrl } from "@/core/update/check";
 import { activeReleaseKeys } from "@/core/update/keys";
@@ -40,6 +41,11 @@ export interface Check {
   detail: string;
   /** What to do about it. Present whenever the verdict is not ok. */
   remedy?: string;
+  /**
+   * The same finding as a catalog key and its values, so the admin screen can
+   * show it in the owner's language. The English above stays for the CLI.
+   */
+  message?: { key: string; params: Record<string, string> };
 }
 
 export interface DoctorReport {
@@ -1120,10 +1126,53 @@ async function checkUpdateSeams(): Promise<Check[]> {
  * somebody works down, and one adapter's timeout should not interleave its
  * error with another's.
  */
+/**
+ * Postgres's own reading of the business's zone (§4.9). The offset is the
+ * difference between the local and the UTC wall reading of the same instant,
+ * so it does not depend on the session's TimeZone either.
+ */
+async function checkZoneData(): Promise<Check[]> {
+  if (!env().DATABASE_URL) return [];
+  try {
+    const { businessProfile } = await import("@/core/settings/schema");
+    const [business] = await db()
+      .select({ timezone: businessProfile.timezone })
+      .from(businessProfile)
+      .limit(1);
+    const timezone = business?.timezone ?? "UTC";
+    if (timezone === "UTC") return [];
+    const { checkTimezoneData, unknownZoneCheck } = await import("./timezone");
+    if (!isTimezone(timezone)) return [unknownZoneCheck(timezone)];
+    return [
+      await checkTimezoneData(timezone, {
+        async offsets(instants, zone) {
+          const rows = await db().execute<{ minutes: number }>(sql`
+            select (extract(epoch from (probe.at at time zone ${zone}) - (probe.at at time zone 'UTC')) / 60)::int as minutes
+            from unnest(${`{${instants.map((each) => each.toISOString()).join(",")}}`}::timestamptz[])
+              with ordinality as probe(at, n)
+            order by probe.n
+          `);
+          return rows.map((each) => Number(each.minutes));
+        },
+        async version() {
+          const [row] = await db().execute<{ version: string }>(
+            sql`select current_setting('server_version') as version`,
+          );
+          return row?.version ?? "unknown";
+        },
+      }),
+    ];
+  } catch {
+    // No business yet, or the table is not there: nothing to compare.
+    return [];
+  }
+}
+
 export async function runDoctor(): Promise<DoctorReport> {
   const checks: Check[] = [
     ...(await checkEnvironment()),
     ...(await checkDatabase()),
+    ...(await checkZoneData()),
     await checkStorage(),
     await checkMalwareScanner(),
     await checkAltTextSuggester(),

@@ -772,6 +772,7 @@ changes an instance silently.
 - **Money is never auto-converted at charge time.** A variant is either priced in a currency (PriceListEntry) or unavailable in it. There is no FX-rate table and no `adapters/fx` family: display conversion stays off (§8). Invoices, payments, and refunds stay in their original currency forever.
 - **Customer-facing everything follows `Contact.preferred_locale`:** portal, quotes, invoices, contracts, booking reminders, marketing emails. A quote sent to a French client renders in French with EUR prices if priced; the admin sees it in the owner's locale.
 - **Timezone discipline:** store UTC; bookings render in *both* business and contact timezone on every customer surface (the #1 no-show cause is timezone confusion).
+- **Local-time math lives in Node; SQL sees UTC instants** (2026-10-22). Postgres and Node each ship their own tz database and they are updated on different schedules, so a query that buckets with `AT TIME ZONE` and a page that renders with `Intl` can disagree by an hour. Every "which local day, week or month" question — availability, opening hours, report and analytics buckets, export periods, reminders, "today" — is answered by `src/core/i18n/zoned.ts` (`zonedInstant`, `localBuckets`, `localPeriodOf`; skipped local times resolve after the gap, repeated ones to the earlier instant unless a caller asks for the later) and handed to SQL as UTC boundaries (`src/core/db/buckets.ts`). Every database session is pinned to `TimeZone=UTC`, so any `date_trunc`/`::date` left in SQL is a UTC question by construction. `tests/core/local-time-sql.test.ts` fails the build on `AT TIME ZONE`, `current_date` or `localtimestamp` in shipped code; doctor's `time.zoneData` check warns when Postgres's tz data disagrees with Node's for the business's zone.
 - **Tax follows location, not locale:** tax zones key off business location + customer country (see §4.10).
 - **AI-assisted translation** (BYO key) can machine-draft `EntityTranslation` rows flagged `status=machine` for owner review — never silently published.
 
@@ -3906,6 +3907,13 @@ reading chat logs.
   `tests/core/analytics-governance-migration.test.ts`; 1,040-test full suite;
   changeset `analytics-governance.md`; operator guide
   `deploy/analytics-governance.md` **F04** `/admin/traffic` consent and retention. **F05** `analytics.track`/`identify`/`overview`/`exportAnonymized`/`webVitals` at `/api/v1/analytics.*`, MCP `analytics_*`; public beacons are `/api/analytics/consent` and `/api/analytics/vitals`. **F07** `tests/core/analytics.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/analytics-governance.md`. **F12** `tests/core/analytics.test.ts` is the composition proof.)
+  Audit follow-up 2026-10-22: the traffic chart (`analytics.daily`) and the
+  anonymized export bucketed days with `at time zone` in SQL. They now group
+  by day boundaries computed in Node (§4.9: local-time math lives in Node; SQL
+  sees UTC instants), and refuse a zone `Intl` does not know. Regression:
+  "days are the business's days" in `tests/core/analytics.test.ts` (a 22:00Z
+  view in a `+05:00` zone counts on the next local day in both); changeset
+  `single-source-local-time.md`.
 - [x] **C1.19** Add a Content Security Policy compatible with editor preview,
   uploads and explicitly consented third-party creatives; report violations.
   (per-request nonce and strict-dynamic document policy; same-origin preview
@@ -4011,6 +4019,11 @@ reading chat logs.
   default, opt-out, explicit production request, pristine guard and restart
   idempotence; 88-file/1,085-test Vitest suite; production build; changeset
   `seeded-development-home.md` **F04** setup wizard demo install, not a new admin screen. **F05** `demo.install` and `seed.installPreset` at `/api/v1/demo.install` and `/api/v1/seed.installPreset`, MCP `demo_install`/`seed_installPreset`. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `seeded-development-home.md` landed with the rest of the spine.)
+  Audit follow-up 2026-10-22: the fresh demo now also installs a sellable
+  shop, bookable services and upcoming events through the owner's services,
+  and `FREEHOLDER_SEED_DEMO=busy` adds the six-month sample business (see
+  C1.38); `tests/core/seed-demo.test.ts` covers the larger published set;
+  changeset `busy-demo-business.md`.
 - [x] **C1.25** Build resumable, role/capability-derived onboarding for owner,
   administrator, editor, bookkeeper, service provider and customer, with
   first-win tasks, contextual relaunch, skip/reset, progress and forbidden-
@@ -4173,6 +4186,64 @@ project without silent telemetry, and ready to carry money.
 
 - [x] **C1.38** Provide a public, disposable shared playground on a separate database and network: restricted visitor sessions, prominent reset/privacy notice, blocked privileged operations and external delivery, hourly reset, bounded resources, and a live demo entry link. Prove content edits, denied sensitive actions, reset recovery, and separation from the production instance.
   (Checked 2026-09-27. The isolated playground base (own compose project, database container and internal-only networks; synthetic visitor entry; mutation allow-list policy) is hardened to the full contract. **Restricted visitor sessions:** `src/core/demo/playground.ts` issues sessions only for the synthetic, passwordless `visitor@playground.invalid` principal in the grant-less `playground` role with a one-hour expiry; `tests/core/playground.test.ts` proves the resolved session's grants stay inside `PLAYGROUND_MANAGE`/`PLAYGROUND_VIEW` with manage only on content modules, that no credential flow (`auth.login`) can start from it, and that role creation, staff invitations, host updates, mail test sends, uploads, SMS, payment and settings mutations are refused *server-side* with `permission` — the refusal lives in `authorizeInput` (`src/core/service.ts`), so the admin UI, REST API and MCP hit the same wall, and the test calls the services directly as the playground principal. **Reset/privacy notice:** the root-layout banner (`app/layout.tsx`, key `playground.banner`) rides every playground surface and the `/playground` entry page (`app/playground/page.tsx`, key `playground.limits`) states the hourly reset and the no-personal-information rule, in all four locale catalogs; the demo also serves `Disallow: /` robots. **Blocked external delivery:** `playgroundBlocksExternalDelivery` (`src/core/demo/playground-policy.ts`) fails closed at the three live choke points — `deliverQueuedMail` (`src/core/mail/service.ts`), `messaging.sendSms` (`src/core/messaging/sms.ts`) and the webhook sweep (`src/core/webhooks/deliver.ts`) — so background jobs running as `system` (reminders, compliance replies, queued webhooks) cannot send mail/SMS/webhooks even though the mutation allow-list never covered them; the same test proves each refusal carries the playground reason while a playground-off control takes the ordinary path, and the container gate proves blocked egress on the built image. **Hourly reset:** `deploy/docker-selfhost/playground/reset.sh` recreates the disposable project and is driven hourly by `freeholder-playground-reset.timer`; `tests/core/playground.test.ts` ("playground separation and reset recovery") simulates that cycle (fresh database + migrate + the same boot phases `instrumentation.node.ts` runs) and proves reset recovery: the old visitor session no longer validates, visitor pages are gone, the sample site is reinstalled to the same page count, and a new visitor can edit again. **Bounded resources:** uploads are refused outright (allow-list), all visitor mutations share a 300-per-minute ceiling (`enforceRateLimit`, `src/core/service.ts`), and per-surface row caps (`PLAYGROUND_ROW_CAPS` + `enforcePlaygroundRowCap`) bound pages, sections, forms, contacts, products, notes and tasks; the exact bound (299 further mutations after entry, then refusal; contacts capped at the declared limit while pages still accept edits) is asserted in `tests/core/playground.test.ts`. **Separation:** the playground is its own compose project with its own database container, tmpfs volumes and internal-only networks (`deploy/docker-selfhost/playground/compose.yml`), and the same file proves it on a live cluster: a production-shaped database and a playground database on distinct `DATABASE_URL`s, the playground flag failing closed ("disposable database") against real accounts, the synthetic pair the only users the playground database ever holds, and visitor sessions/content never appearing in the production database. **Live demo entry link:** `FREEHOLDER_PLAYGROUND_URL` renders the "Try the live demo" banner link on a main site (`app/layout.tsx`). **Browser proof:** `tests/browser/playground.spec.ts` (config `playwright.playground.config.ts`, `pnpm test:playground`) drives Chromium through entry, the notice, a real editor edit + publish, three privileged API denials as the visitor (staff invitation, mail test send, upload staging — each 403 with the playground message), the reset (session dead → `/playground` redirect, visitor page 404, reseeded sample back, re-entry and editing restored); CI's `scripts/playground-gate.sh` proves boot, sign-in, editor render and blocked egress on the built container. **F04** entry page + root banner: `app/playground/page.tsx`, `app/layout.tsx`. **F05** one refusal across every projection via the service choke point `src/core/service.ts`; container entry exercised over HTTP by `scripts/playground-gate.sh`. **F07** threat model and bounds: `src/core/demo/playground-policy.ts`, `tests/core/playground.test.ts`. **F09** hourly reset job `deploy/docker-selfhost/playground/reset.sh` + `freeholder-playground-reset.timer`, recovery proof in the same file. **F12** the browser journey composes entry → edit → publish → denial → reset → re-entry: `tests/browser/playground.spec.ts`.)
+  Audit follow-up 2026-10-22 (hands-on audit of demo.freeholder.ai): the
+  playground was empty where evaluators look and its menu read "Locations".
+  **Menu:** `cms.ensureDefaults` moved a header menu into a nav section that
+  already held the platform's `/locations` link and discarded the header's
+  links — on any site, not only the demo; it now merges them
+  (`mergeNavLinks`, `src/modules/cms/chrome-nav.ts`), and the demo seeds its
+  menu into the Navigation section. **Shop/booking/events:** the plain demo
+  now walks the owner path end to end through services
+  (`src/modules/seed/business.ts`): BC tax starter with collection active,
+  standard category, print-size variants, CAD retail price list, stock,
+  hero images, two collections, three service products with offerings, a
+  studio calendar with weekly hours and a public booking audience, and
+  three upcoming events (one free, two paid); product pages now render the
+  product's picture and description (`productDetail`, public
+  `catalog.productHeroImage`). **Busy business:** `demo.installBusy`
+  (`src/modules/seed/busy.ts`, `seed/demo/busy/*`) adds six months of
+  deterministic, clock-relative sample business in one bulk transaction —
+  220 @example.com contacts (fr-CA included) with notes, tasks, look-alike
+  duplicates and timelines; ~85 invoices across statuses with balanced
+  payments, refunds and plans; quotes, signed agreements, gift cards,
+  coupons, subscriptions; ~130 bookings and past/upcoming event
+  registrations; journal posts, galleries, reviews, sent newsletter issues
+  with consented recipients, enquiries; inbox threads; ~20k first-party
+  analytics events with seasonality; members, automations with runs and
+  pending approvals; attributed audit history. On in the playground and
+  with `FREEHOLDER_SEED_DEMO=busy`; plain development stays site-only.
+  Measured locally: plain demo 13–41 s (image renditions dominate, now
+  1200 px), busy layer ~2 s, database 55 MB. **Polish:** generated coastal
+  illustrations replace the gradient placeholders (`seed/demo/illustrations.ts`,
+  original, described alt text); titles no longer double the brand
+  (`composeDocumentTitle`); `/book` and `/memberships` carry description,
+  canonical and branded title (`app/(public)/utility-metadata.ts`); `/search`
+  searches page titles/summaries via public `cms.searchPublishedPages`
+  (never bodies); the share bar is off on the demo's non-content pages
+  through owner share settings. Evidence: `tests/core/seed-demo-busy.test.ts`
+  (determinism, unique lowercase emails, ledger balances, no double-booked
+  calendars, seats within capacity, no future-dated history, consent before
+  send, timing and size budget), `tests/core/seed-demo.test.ts`,
+  `tests/core/cms-chrome.test.ts`, `tests/core/seo-surface.test.ts`,
+  `tests/core/playground.test.ts`; changeset `busy-demo-business.md`. Open:
+  the playground mutation allow-list and admin visibility (separate work)
+  still refuse anonymous cart/checkout/booking and hide sales, inbox and
+  calendar screens from the visitor; checkout's email proof cannot complete
+  while playground mail is blocked.
+  Review follow-up 2026-10-22: the nav merge keeps an owner-arranged order
+  and appends new links (header links lead only over platform-added index
+  links), de-duplicating on normalised hrefs; busy dates use the studio's
+  zone (`studioTime`, DST-correct) and history never lands after the seed
+  clock; a boot that stopped between the plain and busy installs finishes
+  the busy layer on restart (demo business only); invoices are numbered once
+  by issue date (`seed/demo/busy/ledger.ts`); the pending approvals quote
+  real seeded overdue invoices; title de-duplication matches the brand as a
+  whole word at the start or end; seeded future reminders stay unsent
+  outside the playground. Tests now run `contacts.merge` and
+  `invoicing.recordOfflinePayment` on seeded rows, seed under pinned Pacific
+  evening and winter clocks, and hold the busy layer to 30 s and the
+  database to 150 MB (`tests/core/seed-demo-busy.test.ts`, 20 tests;
+  `seed-demo.test.ts` 17; `cms-chrome.test.ts` 7; `seo-surface.test.ts` 12).
   Capacity follow-up 2026-10-21 (demo.freeholder.ai shares production's
   4 GB / 2 vCPU droplet): the recipe had no restart policy, so an
   out-of-memory kill left the demo down until the next reset. It also had
@@ -4882,6 +4953,28 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   and Replit storage and verifies target byte length plus SHA-256. Both are
   exercised in CI; contracts in `tests/core/portability.test.ts` and transfer
   behavior in `tests/core/media-transfer.test.ts`. **F04** N/A — adapter conformance tests, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/portability.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/portability.test.ts` is the composition proof.)
+  Recovery integrity follow-up (2026-10-21): retain original asset SHA-256 in
+  object inventories and check known digests before copying, including legacy
+  asset-only manifests and dry runs. Reject duplicate object keys and malformed
+  or conflicting digests in preflight. Variants without recorded hashes retain
+  source-to-target verification. Synthetic regressions are component evidence;
+  production transfers, backup freshness and production recovery acceptance
+  remain open.
+  Transport follow-up rejects dot-path/NUL/empty keys across the entire manifest
+  before store access, requires HTTPS (explicit loopback HTTP fixtures only), and
+  refuses GET/PUT redirects. Actual signed request tests preserve literal percent
+  keys in path/virtual addressing. Cloud ACLs, live transfers, production backup
+  freshness and production recovery acceptance remain open.
+  Overwrite/transport follow-up (2026-10-22): the transfer never overwrites a
+  target object. Identical bytes (full-body SHA-256, not ETags) are skipped and
+  counted; a different object at the key stops the run naming it, with dry runs
+  reporting would-skip/would-refuse. HTTPS stays the default; plain HTTP to a
+  non-loopback endpoint needs `--allow-insecure-http` or
+  `MEDIA_TRANSFER_ALLOW_INSECURE_HTTP=true` and warns. Regressions in
+  `tests/core/media-transfer.test.ts` and
+  `tests/core/media-transfer-transport.test.ts`; changeset
+  `media-migration-checksums`. Live provider transfers and production recovery
+  acceptance remain open.
 - [x] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
   (Platform and packages are `0.2.0-beta.3`; SDK `PLATFORM_VERSION` is stamped from
@@ -8033,6 +8126,36 @@ customer has one secure, comprehensible home for the relationship.
   cannot rot into a question the report will not answer.
   Admin at `/admin/reports`, with the definitions printed under the figures.
   Migration `0138_report_views.sql`; `tests/modules/reporting.test.ts`. **F04** `/admin/reports`. **F05** `reports.revenue`/`revenueBy`/`funnel`/`cohort`/`saveView`/`listViews` at `/api/v1/reports.*`, MCP `reports_*`. **F07** `tests/modules/reporting.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/reporting.test.ts` is the composition proof.)
+  Audit follow-up 2026-10-22: CI showed a seeded booking at 15:30–16:15
+  America/Vancouver per Node reading as 16:30–17:15 per Postgres 16 — the two
+  tz databases disagreed about the zone's December offset. Revenue months and
+  cohort months were bucketed with `date_trunc(... at time zone ...)`, so a
+  payment near midnight could land in a different month from the one the page
+  printed. Both now join paid instants to month boundaries computed in Node
+  (`localBuckets`, `bucketKey`) and the query names no zone; the rule is
+  normative in §4.9 ("local-time math lives in Node; SQL sees UTC instants").
+  An unknown zone is now refused as a validation error. Regression:
+  `tests/modules/reporting.test.ts` (a `+05:00` zone, which Node reads as
+  five hours ahead and Postgres as five behind, files a 22:00Z payment in the
+  next local month for revenue and cohorts), `tests/core/local-time-sql.test.ts`,
+  `tests/core/zoned.test.ts` and `tests/core/doctor.test.ts`; changeset
+  `single-source-local-time.md`. Writing the DST tests (Vancouver, London,
+  Sydney, Tokyo) found that `zonedInstant` resolved a skipped local time to
+  the instant *before* the gap in zones east of UTC; it now takes the later
+  instant everywhere, and a repeated hour resolves to the earlier instant
+  unless the caller asks for the later. Review follow-ups the same day:
+  `/admin/reports` never passed the business's zone, so its months were UTC
+  months — it now does; a stored zone `Intl` does not know (profiles were not
+  validated, and Postgres accepted names Node refuses) makes the reports and
+  traffic screens count in UTC with a visible warning instead of failing,
+  doctor warns about it, and `settings.updateBusiness`/`patchBusiness` now
+  refuse one (`tests/core/settings.test.ts`). Buckets reach SQL as a
+  `width_bucket` over start instants rather than a join over ranges, so a
+  two-year daily chart is a binary search per row, not a nested loop; and
+  `zoneOffsetMs` keeps one `Intl.DateTimeFormat` per zone, bringing 730 day
+  buckets from an estimated ~320 ms to ~10 ms (bounded in `tests/core/zoned.test.ts`, with
+  Santiago and Havana midnight transitions). No `paid_at` index was added:
+  the window filter was already a sequential scan before this change.
 
 #### Referral, loyalty, subscriptions, and paywalls
 - [x] **C9.09** Build first-party attribution touches, codes, invitations,
@@ -8886,6 +9009,17 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   delivery's outcome on every row and an overdue export said out loud at the
   top. Migration `0158_scheduled_exports.sql`;
   `tests/modules/reporting-exports.test.ts`. **F04** `/admin/reports/exports`. **F05** `reports.saveExport`/`runExport`/`listExports`/`downloadExport`/`deliverScheduledExports` at `/api/v1/reports.*`, MCP `reports_*`. **F07** `tests/modules/reporting-exports.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/reporting-exports.test.ts` is the composition proof.)
+  Audit follow-up 2026-10-22: the last completed week, month or quarter was
+  computed by Postgres (`date_trunc` in the named zone), so a database whose
+  tz data lagged Node's would send the accountant a file starting an hour off
+  the dates printed in it. `periodsFor` now computes the boundaries in Node
+  from the same zone data the pages render with (§4.9); weeks still start
+  Monday and quarters on January, April, July and October, as `date_trunc`
+  did. Regression: "the period an export covers" in
+  `tests/modules/reporting-exports.test.ts` (pinned clocks across the spring
+  change in Vancouver, a Sydney quarter, and the `+05:00` disagreement that
+  the old query answered with October instead of November); changeset
+  `single-source-local-time.md`.
 - [x] **C9.33** Build the automatic subscription billing modes — `provider`
   (Stripe/PayPal schedules and their webhook reconciliation) and `platform`
   (off-session charges against a stored payment method) — and plan changes with

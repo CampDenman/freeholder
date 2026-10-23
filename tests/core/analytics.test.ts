@@ -13,7 +13,7 @@
 // a first-party replacement that quietly rebuilt the same surveillance would
 // be worse than the thing it replaced. So what is *not* stored is asserted as
 // carefully as what is.
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { contacts } from "@/core/contacts/schema";
@@ -27,6 +27,7 @@ import {
   campaignFromQuery,
   classificationCandidates,
   correctClassification,
+  dailyViews,
   contactActivity,
   exportAnonymizedAnalytics,
   identify,
@@ -656,5 +657,49 @@ describe.runIf(hasDatabase)("analytics governance and quality", () => {
     ]);
     expect(artifact.content).not.toMatch(/export-v[123]|anonId|sessionId|contactId/);
     expect(artifact.sha256).toMatch(/^[a-f0-9]{64}$/);
+  });
+});
+
+describe.runIf(hasDatabase)("days are the business's days, as the site counts them (§4.9)", () => {
+  // "+05:00" is five hours ahead to Node and five hours behind to Postgres
+  // (POSIX sign convention): a real, deterministic disagreement between the
+  // two zone sources, standing in for a database whose tz data lags. A view at
+  // 22:00 UTC on 9 December is 03:00 on the 10th in the business's zone as
+  // the site renders it; the old `at time zone` query filed it on the 9th.
+  const ZONE = "+05:00";
+  const viewedAt = new Date("2026-12-09T22:00:00Z");
+
+  beforeEach(async () => {
+    await truncateSpine();
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-12-12T00:00:00Z") });
+    await db().insert(analyticsEvents).values(
+      [1, 2, 3].map((n) => ({
+        anonId: `zoned-v${n}`,
+        sessionId: `zoned-v${n}-s1`,
+        name: "page.viewed",
+        path: "/",
+        at: viewedAt,
+      })),
+    );
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("charts a view on the day the site would print", async () => {
+    const days = await dailyViews.call({ days: 7, includeBots: false, timezone: ZONE }, OWNER);
+    expect(days).toEqual([{ day: "2026-12-10", views: 3, visitors: 3 }]);
+  });
+
+  it("exports a view on the day the site would print", async () => {
+    const artifact = await exportAnonymizedAnalytics.call({ days: 7, timezone: ZONE }, OWNER);
+    const content = JSON.parse(artifact.content) as { daily: Array<{ day: string; views: number }> };
+    expect(content.daily.map((each) => [each.day, each.views])).toEqual([["2026-12-10", 3]]);
+  });
+
+  it("refuses a zone the site cannot render", async () => {
+    expect(
+      await failure(dailyViews.call({ days: 7, timezone: "Mars/Olympus_Mons" }, OWNER)),
+    ).toMatchObject({ code: "validation" });
   });
 });

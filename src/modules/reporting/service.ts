@@ -29,11 +29,27 @@ import {
   revenueSourcesFor,
   type RevenueWindow,
 } from "@/core/reporting/dimensions";
+import { bucketKey, inBuckets } from "@/core/db/buckets";
+import {
+  addPeriods,
+  isTimezone,
+  localBuckets,
+  monthsBetween,
+  periodKey,
+  startOfPeriod,
+  zonedDate,
+} from "@/core/i18n/zoned";
 import exportServices from "./export-service";
 import { REPORT_KEYS, reportViews } from "./schema";
 
 const days = z.number().int().min(1).max(1095).default(90);
-const timezone = z.string().trim().min(1).max(100).default("UTC");
+const timezone = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .refine(isTimezone, "That is not a time zone this site knows.")
+  .default("UTC");
 
 /** Half-open, like every other window in the platform: `from` ≤ at < `to`. */
 function windowOf(count: number): RevenueWindow {
@@ -75,18 +91,19 @@ export const revenueReport = defineService({
     // in one and not the other produces SQL Postgres will not accept.
     //
     // Bucketed in the business's timezone, like the traffic chart: an owner
-    // closing their books for March means their March.
+    // closing their books for March means their March. The month boundaries
+    // are computed in Node and handed over as instants (§4.9): Postgres's own
+    // tz data may disagree with what the page renders.
+    const months = localBuckets(input.timezone, window.from, window.to, "month");
     const result = await ctx.tx.execute(sql`
-      select to_char(
-               date_trunc('month', ${invoices.paidAt} at time zone ${input.timezone}),
-               'YYYY-MM'
-             ) as month,
+      select ${bucketKey(invoices.paidAt, months)} as month,
              ${invoices.currency} as currency,
              coalesce(sum(${invoices.paidMinor}), 0)::bigint as paid_minor,
              coalesce(sum(${invoices.refundedMinor}), 0)::bigint as refunded_minor,
              count(*)::int as invoice_count
       from ${invoices}
       where ${invoices.paidAt} is not null
+        and ${inBuckets(invoices.paidAt, months)}
         and ${invoices.paidAt} >= ${window.from.toISOString()}::timestamptz
         and ${invoices.paidAt} < ${window.to.toISOString()}::timestamptz
       group by 1, 2
@@ -275,44 +292,69 @@ export const cohortReport = defineService({
     // became a contact: somebody on the list for two years who buys today is
     // this month's new customer, and treating them as an old one would credit
     // a month that earned nothing.
+    const eligible = sql`${invoices.paidAt} is not null
+          and ${invoices.contactId} is not null
+          ${audience ? sql`and ${invoices.contactId} in ${audience}` : sql``}`;
+
+    // Months are the business's months, computed in Node and handed to the
+    // query as instants (§4.9) — first the span the payments cover, then one
+    // bucket per local month across it.
+    const [span] = (await ctx.tx.execute(sql`
+      select min(${invoices.paidAt}) as first_at, max(${invoices.paidAt}) as last_at
+      from ${invoices}
+      where ${eligible}
+    `)) as unknown as Array<{ first_at: string | Date | null; last_at: string | Date | null }>;
+    if (!span?.first_at || !span.last_at) return { cohorts: [] };
+    const now = new Date();
+    const lastAt = new Date(span.last_at);
+    const months = localBuckets(
+      input.timezone,
+      new Date(span.first_at),
+      new Date(Math.max(now.getTime(), lastAt.getTime() + 1)),
+      "month",
+    );
+    const earliestCohort = periodKey(
+      addPeriods(startOfPeriod(zonedDate(now, input.timezone), "month"), "month", -(input.months - 1)),
+      "month",
+    );
+
     const result = await ctx.tx.execute(sql`
       with paid as (
         select ${invoices.contactId} as contact_id,
                ${invoices.currency} as currency,
                (${invoices.paidMinor} - ${invoices.refundedMinor}) as net,
-               date_trunc('month', ${invoices.paidAt} at time zone ${input.timezone}) as month
+               ${bucketKey(invoices.paidAt, months)} as month
         from ${invoices}
-        where ${invoices.paidAt} is not null
-          and ${invoices.contactId} is not null
-          ${audience ? sql`and ${invoices.contactId} in ${audience}` : sql``}
+        where ${eligible}
+          and ${inBuckets(invoices.paidAt, months)}
       ),
       first_payment as (
         select contact_id, currency, min(month) as cohort
         from paid
         group by contact_id, currency
       )
-      select to_char(f.cohort, 'YYYY-MM') as cohort,
+      select f.cohort as cohort,
              p.currency as currency,
-             (extract(year from age(p.month, f.cohort)) * 12
-               + extract(month from age(p.month, f.cohort)))::int as months_since,
+             p.month as month,
              sum(p.net)::bigint as amount_minor,
              count(distinct p.contact_id)::int as customers
       from paid p
       join first_payment f
         on f.contact_id = p.contact_id and f.currency = p.currency
-      where f.cohort >= date_trunc('month', now() at time zone ${input.timezone})
-            - make_interval(months => ${input.months - 1})
+      where f.cohort >= ${earliestCohort}
       group by 1, 2, 3
       order by 1, 2, 3
     `);
 
-    const rows = result as unknown as Array<{
-      cohort: string;
-      currency: string;
-      months_since: number;
-      amount_minor: string | number;
-      customers: number;
-    }>;
+    const rows = (
+      result as unknown as Array<{
+        cohort: string;
+        currency: string;
+        month: string;
+        amount_minor: string | number;
+        customers: number;
+      }>
+    ).map((each) => ({ ...each, months_since: monthsBetween(each.cohort, each.month) }));
 
     const grouped = new Map<
       string,

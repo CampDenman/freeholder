@@ -66,6 +66,47 @@ export async function markPlaygroundBaseline(): Promise<void> {
     .onConflictDoNothing({ target: moduleSettings.module });
 }
 
+/**
+ * Run late seed work and count its rows as baseline (C1.38).
+ *
+ * The busy demo layer can finish on a restart after the plain demo (see
+ * seedDemoIfRequested). When the baseline was already recorded, the rows it
+ * adds are still seed, so they are added to the stored baseline rather than
+ * eating the visitors' headroom. Without a stored baseline this is just the
+ * work: the boot records the baseline afterwards.
+ */
+export async function extendPlaygroundBaseline<T>(work: () => Promise<T>): Promise<T> {
+  if (env().FREEHOLDER_PLAYGROUND !== "1") return work();
+  const [stored] = await db()
+    .select({ config: moduleSettings.config })
+    .from(moduleSettings)
+    .where(eq(moduleSettings.module, PLAYGROUND_BASELINE_MODULE))
+    .limit(1);
+  if (!stored) return work();
+  const countAll = async () => {
+    const counts: Record<string, number> = {};
+    for (const table of playgroundCappedTables()) {
+      const [row] = await db().execute<{ count: number }>(
+        sql`select count(*)::int as count from ${sql.identifier(table)}`,
+      );
+      counts[table] = Number(row?.count ?? 0);
+    }
+    return counts;
+  };
+  const before = await countAll();
+  const result = await work();
+  const after = await countAll();
+  const baseline = { ...((stored.config as { baseline?: Record<string, number> }).baseline ?? {}) };
+  for (const table of Object.keys(after)) {
+    baseline[table] = (baseline[table] ?? 0) + Math.max(0, after[table]! - (before[table] ?? 0));
+  }
+  await db()
+    .update(moduleSettings)
+    .set({ config: { baseline } })
+    .where(eq(moduleSettings.module, PLAYGROUND_BASELINE_MODULE));
+  return result;
+}
+
 export const enterPlayground = defineService({
   name: "playground.enter",
   summary: "Enter a disposable public demo with restricted content-editing access.",

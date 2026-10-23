@@ -28,6 +28,8 @@ import {
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { db } from "@/core/db";
+import { bucketKey, inBuckets } from "@/core/db/buckets";
+import { isTimezone, localBuckets } from "@/core/i18n/zoned";
 import { getModuleConfig } from "@/core/settings/service";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -449,6 +451,13 @@ export const identify = defineService({
 /* ------------------------------------------------------------------ reading */
 
 const since = z.number().int().min(1).max(365).default(30);
+/** The zone days are counted in. Named the way `Intl` knows it, because Node draws the day boundaries (§4.9). */
+const zone = z
+  .string()
+  .min(1)
+  .max(100)
+  .refine(isTimezone, "That is not a time zone this site knows.")
+  .default("UTC");
 
 /**
  * Whether a query counts programs as well as people.
@@ -625,7 +634,7 @@ export const dailyViews = defineService({
   summary: "Views and visitors per day, for the chart.",
   kind: "query",
   permission: "scoped",
-  input: z.object({ days: since, includeBots, timezone: z.string().default("UTC") }),
+  input: z.object({ days: since, includeBots, timezone: zone }),
   output: listed(
     row({
       day: z.string(),
@@ -636,24 +645,29 @@ export const dailyViews = defineService({
   handler: async (input, ctx) => {
     // Bucketed in the *business's* timezone, not UTC. An owner in Vancouver
     // looking at "yesterday" means their yesterday, and a chart that disagrees
-    // with the calendar on the wall is a chart nobody trusts.
-    const rows = await ctx.tx
-      .select({
-        day: sql<string>`to_char(date_trunc('day', ${analyticsEvents.at} at time zone ${input.timezone}), 'YYYY-MM-DD')`,
-        views: count(),
-        visitors: countDistinct(analyticsEvents.anonId),
-      })
-      .from(analyticsEvents)
-      .where(
-        and(
-          eq(analyticsEvents.name, "page.viewed"),
-          gte(analyticsEvents.at, new Date(Date.now() - input.days * 86_400_000)),
-          humansOnly(input.includeBots),
-        ),
-      )
-      .groupBy(sql`1`)
-      .orderBy(sql`1`);
-    return rows;
+    // with the calendar on the wall is a chart nobody trusts. The day
+    // boundaries come from Node (§4.9) so they match the dates the page prints.
+    const now = new Date();
+    const from = new Date(now.getTime() - input.days * 86_400_000);
+    const humans = humansOnly(input.includeBots);
+    const days = localBuckets(input.timezone, from, now, "day");
+    const rows = (await ctx.tx.execute(sql`
+      select ${bucketKey(analyticsEvents.at, days)} as day,
+             count(*)::int as views,
+             count(distinct ${analyticsEvents.anonId})::int as visitors
+      from ${analyticsEvents}
+      where ${analyticsEvents.name} = 'page.viewed'
+        and ${inBuckets(analyticsEvents.at, days)}
+        and ${analyticsEvents.at} >= ${from.toISOString()}::timestamptz
+        ${humans ? sql`and ${humans}` : sql``}
+      group by 1
+      order by 1
+    `)) as unknown as Array<{ day: string; views: number; visitors: number }>;
+    return rows.map((each) => ({
+      day: each.day,
+      views: Number(each.views),
+      visitors: Number(each.visitors),
+    }));
   },
 });
 
@@ -1030,7 +1044,7 @@ export const exportAnonymizedAnalytics = defineService({
   permission: "scoped",
   input: z.object({
     days: z.number().int().min(1).max(730).default(90),
-    timezone: z.string().min(1).max(100).default("UTC"),
+    timezone: zone,
     includeBots,
   }),
   output: z.object({
@@ -1040,38 +1054,41 @@ export const exportAnonymizedAnalytics = defineService({
     sha256: z.string(),
   }),
   handler: async (input, ctx) => {
-    const from = new Date(Date.now() - input.days * 86_400_000);
-    const day = sql<string>`to_char(
-      date_trunc('day', ${analyticsEvents.at} at time zone ${input.timezone}),
-      'YYYY-MM-DD'
-    )`;
+    const now = new Date();
+    const from = new Date(now.getTime() - input.days * 86_400_000);
     const pageVisitors = sql<number>`count(distinct ${analyticsEvents.anonId})
       filter (where ${analyticsEvents.name} = 'page.viewed')`;
     const effective = effectiveVisitorKind;
-    const dailyRows = await ctx.tx
-      .select({
-        day,
-        views: sql<number>`count(*) filter (where ${analyticsEvents.name} = 'page.viewed')`,
-        visitors: pageVisitors,
-        sessions: sql<number>`count(distinct ${analyticsEvents.sessionId})
-          filter (where ${analyticsEvents.name} = 'page.viewed')`,
-        conversions: sql<number>`count(*) filter (
-          where ${analyticsEvents.name} = 'form.submitted'
-        )`,
-        automated: sql<number>`count(*) filter (
-          where ${analyticsEvents.name} = 'page.viewed' and ${effective} <> 'human'
-        )`,
-      })
-      .from(analyticsEvents)
-      .where(and(
-        gte(analyticsEvents.at, from),
-        input.includeBots ? undefined : humansOnly(false),
-      ))
-      .groupBy(sql`1`)
-      // A date with fewer than three visitors is omitted rather than exporting
-      // a row that is effectively one person's browsing receipt.
-      .having(gte(pageVisitors, 3))
-      .orderBy(sql`1`);
+    const humans = input.includeBots ? undefined : humansOnly(false);
+    // Days are the business's days, bounded in Node (§4.9).
+    const days = localBuckets(input.timezone, from, now, "day");
+    const dailyRows = (await ctx.tx.execute(sql`
+      select ${bucketKey(analyticsEvents.at, days)} as day,
+             count(*) filter (where ${analyticsEvents.name} = 'page.viewed')::int as views,
+             ${pageVisitors}::int as visitors,
+             count(distinct ${analyticsEvents.sessionId})
+               filter (where ${analyticsEvents.name} = 'page.viewed')::int as sessions,
+             count(*) filter (where ${analyticsEvents.name} = 'form.submitted')::int as conversions,
+             count(*) filter (
+               where ${analyticsEvents.name} = 'page.viewed' and ${effective} <> 'human'
+             )::int as automated
+      from ${analyticsEvents}
+      where ${inBuckets(analyticsEvents.at, days)}
+        and ${analyticsEvents.at} >= ${from.toISOString()}::timestamptz
+        ${humans ? sql`and ${humans}` : sql``}
+      group by 1
+      -- A date with fewer than three visitors is omitted rather than exporting
+      -- a row that is effectively one person's browsing receipt.
+      having ${pageVisitors} >= 3
+      order by 1
+    `)) as unknown as Array<{
+      day: string;
+      views: number;
+      visitors: number;
+      sessions: number;
+      conversions: number;
+      automated: number;
+    }>;
     const daily = dailyRows.map((row) => ({
       ...row,
       views: Number(row.views),

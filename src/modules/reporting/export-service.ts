@@ -34,6 +34,13 @@ import { mailDeliveries } from "@/core/mail/schema";
 import { sendMail } from "@/core/mail/service";
 import { actorString, defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { getBusiness } from "@/core/settings/service";
+import {
+  addPeriods,
+  startOfPeriod,
+  zonedDate,
+  zonedInstant,
+  type LocalPeriod,
+} from "@/core/i18n/zoned";
 import { invoiceLines, invoices } from "@/modules/invoicing/schema";
 import {
   EXPORT_BASES,
@@ -154,54 +161,34 @@ export interface PeriodBounds {
 }
 
 const UNITS = {
-  previous_week: { unit: "week", step: "1 week" },
-  previous_month: { unit: "month", step: "1 month" },
-  previous_quarter: { unit: "quarter", step: "3 months" },
-} as const;
+  previous_week: "week",
+  previous_month: "month",
+  previous_quarter: "quarter",
+} as const satisfies Record<string, LocalPeriod>;
 
 /**
  * The most recently *completed* period, in the business's own timezone.
  *
- * Computed by Postgres rather than in JavaScript, like every other bucketed
- * figure in this module: an owner closing their books for March means their
- * March, and `date_trunc` in a named zone is the one thing that gets the hour
- * clocks changed right without a table of rules.
+ * Computed in Node from the same `Intl` zone data every page renders with
+ * (§4.9: local-time math lives in Node; SQL sees UTC instants). An owner
+ * closing their books for March means their March, and a Postgres whose tz
+ * data disagreed with Node's would hand the accountant a file that starts an
+ * hour off the dates printed on it.
  *
  * Only ever the last completed period — never a backfill. Switching a schedule
  * on should produce last month's file, not fourteen of them.
  */
-async function periodsFor(
-  ctx: ServiceContext,
+export function periodsFor(
   wanted: ReadonlyArray<{ period: keyof typeof UNITS; timezone: string }>,
-): Promise<Map<string, PeriodBounds>> {
+  now: Date = new Date(),
+): Map<string, PeriodBounds> {
   const found = new Map<string, PeriodBounds>();
-  if (wanted.length === 0) return found;
-  const distinct = new Map<string, { period: keyof typeof UNITS; timezone: string }>();
-  for (const each of wanted) distinct.set(`${each.period}:${each.timezone}`, each);
-
-  const values = sql.join(
-    [...distinct.values()].map(
-      (each) =>
-        sql`(${each.period}::text, ${UNITS[each.period].unit}::text, ${each.timezone}::text, ${UNITS[each.period].step}::interval)`,
-    ),
-    sql`, `,
-  );
-  const result = await ctx.tx.execute(sql`
-    select v.period,
-           v.tz,
-           (date_trunc(v.unit, (now() at time zone v.tz)) - v.step) at time zone v.tz as period_from,
-           (date_trunc(v.unit, (now() at time zone v.tz))) at time zone v.tz as period_to
-    from (values ${values}) as v(period, unit, tz, step)
-  `);
-  for (const each of result as unknown as Array<{
-    period: string;
-    tz: string;
-    period_from: string | Date;
-    period_to: string | Date;
-  }>) {
-    found.set(`${each.period}:${each.tz}`, {
-      from: new Date(each.period_from),
-      to: new Date(each.period_to),
+  for (const each of wanted) {
+    const unit = UNITS[each.period];
+    const current = startOfPeriod(zonedDate(now, each.timezone), unit);
+    found.set(`${each.period}:${each.timezone}`, {
+      from: zonedInstant(each.timezone, addPeriods(current, unit, -1)),
+      to: zonedInstant(each.timezone, current),
     });
   }
   return found;
@@ -542,7 +529,7 @@ export const listExports = defineService({
       .limit(100);
     if (definitions.length === 0) return [];
 
-    const bounds = await periodsFor(ctx, definitions);
+    const bounds = periodsFor(definitions);
     const runs = await ctx.tx
       .select()
       .from(exportRuns)
@@ -604,7 +591,7 @@ export const runExport = defineService({
       .where(eq(exportDefinitions.id, input.id));
     if (!definition) throw new ServiceError("not_found", "There is no such export.");
 
-    const bounds = await periodsFor(ctx, [definition]);
+    const bounds = periodsFor([definition]);
     const period = bounds.get(`${definition.period}:${definition.timezone}`)!;
 
     // The period is the run's identity (see the schema). Asking again for a

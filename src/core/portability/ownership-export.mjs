@@ -317,6 +317,7 @@ function variantKeys(variants) {
 }
 
 export function buildMediaManifest(assetRows, objectRows) {
+  const originals = new Map(assetRows.map((row) => [row.storage_key, row]));
   const objects = objectRows.map((row) => ({
     key: row.key,
     assetId: row.asset_id,
@@ -325,6 +326,8 @@ export function buildMediaManifest(assetRows, objectRows) {
     state: row.state,
     bytes: row.bytes,
     contentType: row.content_type,
+    ...(originals.get(row.key)?.id === row.asset_id && originals.get(row.key)?.checksum_sha256 != null
+      ? { checksumSha256: originals.get(row.key).checksum_sha256 } : {}),
   }));
   const inventoryKeys = new Set(objects.map((item) => item.key));
   const expectedKeys = new Set();

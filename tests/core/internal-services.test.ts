@@ -263,6 +263,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "invoicing.customerPaymentSource",
   "invoicing.applyCustomerPayment",
   "demo.installApply",
+  // C1.38: the busy demo layer runs as the system after the plain demo.
+  "demo.installBusy",
   "demo.installGuard",
   "connections.applyCalendarOAuthCompletion",
   "connections.applyMailReadOAuthCompletion",

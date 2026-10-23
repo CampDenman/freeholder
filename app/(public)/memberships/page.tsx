@@ -8,12 +8,16 @@ import { actorFromToken } from "@/core/http/actor";
 import { formatMoney } from "@/core/i18n";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { currentBusiness } from "@/core/settings/read";
+import { utilityPageMetadata } from "../utility-metadata";
 import { myMembershipPaymentMethods, publicMembershipPlans } from "@/modules/subscriptions/public-signup";
 import { Button, Callout, Field, Select } from "@/ui/primitives";
 import { getLocale, getT } from "../../i18n";
 import { joinMembershipAction } from "./actions";
 export const dynamic = "force-dynamic";
-export async function generateMetadata(): Promise<Metadata> { return {title:(await getT())("memberships.title")}; }
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return utilityPageMetadata({ path: "memberships", title: t("memberships.title"), description: t("memberships.intro"), index: true });
+}
 export default async function Memberships({searchParams}:{searchParams:Promise<{error?:string;setup?:string}>}) {
   const [t,locale,business,jar,q] = await Promise.all([getT(),getLocale(),currentBusiness(),cookies(),searchParams]);
   const actor=await actorFromToken(jar.get(SESSION_COOKIE)?.value);

@@ -658,7 +658,7 @@ describe.runIf(hasDatabase)("playground separation and reset recovery", () => {
     await dropDatabase("playground_sep_play_c138");
     await dropDatabase("playground_sep_reset_c138");
     await closeSpineDb();
-  });
+  }, 120_000);
 
   it("runs on its own database and never converts or sees production data", async () => {
     vi.stubEnv("FREEHOLDER_PLAYGROUND", "1");
@@ -701,7 +701,7 @@ describe.runIf(hasDatabase)("playground separation and reset recovery", () => {
     expect(
       await db().transaction((tx) => validateSession(tx, visitor.token)),
     ).toBeUndefined();
-  }, 60_000);
+  }, 180_000);
 
   it("hourly reset recovers a clean, signed-out, reseeded playground", async () => {
     vi.stubEnv("FREEHOLDER_PLAYGROUND", "1");
@@ -745,5 +745,8 @@ describe.runIf(hasDatabase)("playground separation and reset recovery", () => {
     const after = await visitorOn(resetUrl);
     const page = await createPage.call({ slug: "after-reset", title: "After reset" }, after.actor);
     expect((await getPage.call({ id: page.id }, after.actor))?.title).toBe("After reset");
-  }, 90_000);
+    // The playground seeds the busy business too (C1.38), and it comes back
+    // after the reset like everything else.
+    expect(reseeded.status === "installed" && reseeded.busy?.crm?.contacts).toBeGreaterThanOrEqual(150);
+  }, 300_000);
 });
