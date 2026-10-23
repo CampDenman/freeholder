@@ -22,6 +22,7 @@ import {
 import { users } from "@/core/auth/schema";
 import { connectedAccounts } from "@/core/connections/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import { consentRecords } from "@/core/privacy/schema";
 
 export const mailSenders = pgTable(
   "mail_senders",
@@ -357,5 +358,35 @@ export const mailSuppressions = pgTable(
       "mail_suppressions_release_consistent",
       sql`(${t.active} = true and ${t.releasedAt} is null) or (${t.active} = false and ${t.releasedAt} is not null)`,
     ),
+  ],
+);
+
+/**
+ * Marketing grants Freeholder has recorded at a permission-checking campaign
+ * carrier (C3.31). Only these are ever withdrawn there: a contact who denied,
+ * never opted in, or was never mailed through such a carrier has nothing to
+ * mirror. Keyed to the consent record the grant came from and the address it
+ * was recorded under, so a withdrawal reaches the address the carrier holds
+ * even after the contact's email has changed.
+ */
+export const mailProviderGrants = pgTable(
+  "mail_provider_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider", { enum: ["paradise"] }).notNull(),
+    email: text("email").notNull(),
+    consentRecordId: uuid("consent_record_id")
+      .notNull()
+      .references(() => consentRecords.id, { onDelete: "cascade" }),
+    withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+    /** A permanent refusal of the withdrawal, recorded once rather than retried forever. */
+    withdrawalError: text("withdrawal_error"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("mail_provider_grants_unique_idx").on(t.provider, t.email, t.consentRecordId),
+    index("mail_provider_grants_consent_idx").on(t.consentRecordId),
+    check("mail_provider_grants_provider_allowed", sql`${t.provider} in ('paradise')`),
   ],
 );

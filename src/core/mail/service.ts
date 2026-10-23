@@ -244,6 +244,12 @@ function assertSenderReady(sender: SenderRow): void {
       "Verify this bulk sender before using it. Until then no campaign can leave Freeholder.",
     );
   }
+  if (sender.provider === "paradise" && sender.verificationStatus !== "verified") {
+    throw new ServiceError(
+      "conflict",
+      "Verify this Paradise Modern sender before using it: its address must be on the site's verified sending domain.",
+    );
+  }
   if (sender.provider === "gmail" || sender.provider === "outlook") {
     if (
       !sender.connectedAccountId ||
@@ -700,6 +706,11 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
             eventRef: eventRef ?? `mail-delivery:${deliveryId}`,
           };
     const result = await adapter.send({ ...outbound, deliveryId, ...(permission ? { permission } : {}) });
+    if (result.grantRecorded) {
+      // Remembered so a later withdrawal is mirrored to exactly this address,
+      // and so a contact never granted there is never withdrawn there.
+      await (await import("@/core/mail/permission")).rememberProviderGrant(adapter.id, result.grantRecorded);
+    }
     await finishQueuedMail(deliveryId, {
       providerRef: result.providerRef,
       status: adapter.delivers ? "submitted" : "failed",
@@ -891,19 +902,30 @@ export const registerMailSender = defineService({
       .from(mailSenders)
       .where(and(eq(mailSenders.purpose, input.purpose), eq(mailSenders.isDefault, true)))
       .limit(1);
+    // A Paradise Modern sender is checked against the provider straight away,
+    // for either purpose; until the check passes it cannot send.
+    const requestId = input.provider === "paradise" ? randomUUID() : undefined;
     const [sender] = await ctx.tx
       .insert(mailSenders)
       .values({
         ...input,
-        verificationStatus: input.purpose === "transactional" ? "verified" : "pending",
+        // A transactional sender over SMTP is the owner's own transport; a
+        // provider sender (bulk, or Paradise Modern for either purpose) is
+        // checked against the provider before it can send.
+        verificationStatus:
+          input.purpose === "transactional" && input.provider !== "paradise" ? "verified" : "pending",
         verificationDetail:
-          input.provider === "smtp" || (input.provider === "paradise" && input.purpose === "transactional")
+          input.provider === "smtp"
             ? {
                 transportConfigured: true,
                 dnsOwnershipVerified: false,
               }
-            : {},
-        isDefault: !existingDefault && input.purpose === "transactional",
+            : requestId
+              ? { requestId }
+              : {},
+        // Only a verified sender can be the default; a Paradise Modern sender
+        // becomes eligible once its check passes (`mail.setDefaultSender`).
+        isDefault: !existingDefault && input.purpose === "transactional" && input.provider !== "paradise",
         createdBy: ctx.actor.kind === "user" ? ctx.actor.userId : null,
       })
       .onConflictDoUpdate({
@@ -917,6 +939,14 @@ export const registerMailSender = defineService({
       })
       .returning();
     ctx.setSubject("mail_sender", sender!.id);
+    const detail = sender!.verificationDetail as Record<string, unknown> | null;
+    if (requestId && detail?.requestId === requestId) {
+      await ctx.queueJob(
+        "core.verifyMailSender",
+        { senderId: sender!.id, requestId },
+        { idempotencyKey: `mail-sender-verification:${requestId}` },
+      );
+    }
     ctx.queueEvent("mail.senderRegistered", {
       id: sender!.id,
       purpose: sender!.purpose,
@@ -929,7 +959,7 @@ export const registerMailSender = defineService({
 
 export const verifyMailSender = defineService({
   name: "mail.verifySender",
-  summary: "Queue a check of whether a bulk sender identity is verified.",
+  summary: "Queue a check of whether a provider sender identity is verified.",
   kind: "mutation",
   permission: "scoped",
   stepUp: true,
@@ -939,10 +969,10 @@ export const verifyMailSender = defineService({
   handler: async (input, ctx) => {
     refuseAgent(ctx.actor, "verify");
     const sender = await getSender(ctx.tx, input.id);
-    if (sender.purpose !== "bulk") {
+    if (sender.purpose !== "bulk" && sender.provider !== "paradise") {
       throw new ServiceError("validation", "OAuth and SMTP senders do not use bulk identity verification.");
     }
-    const adapter = providerForPurpose("bulk");
+    const adapter = providerForPurpose(sender.purpose);
     if (adapter.id !== sender.provider || !adapter.verifySender) {
       throw new ServiceError("conflict", "That provider cannot verify this sender here.");
     }
@@ -1061,7 +1091,7 @@ export async function runMailSenderVerification(
     throw error;
   }
   if (
-    sender.purpose !== "bulk" ||
+    (sender.purpose !== "bulk" && sender.provider !== "paradise") ||
     sender.verificationStatus !== "pending" ||
     !sender.verificationDetail ||
     typeof sender.verificationDetail !== "object" ||
@@ -1069,7 +1099,7 @@ export async function runMailSenderVerification(
   ) {
     return { applied: false };
   }
-  const adapter = providerForPurpose("bulk");
+  const adapter = providerForPurpose(sender.purpose);
   if (adapter.id !== sender.provider || !adapter.verifySender) {
     return applyMailSenderVerification.call(
       {

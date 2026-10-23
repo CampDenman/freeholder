@@ -162,7 +162,11 @@ describe("Paradise Modern campaign mail", () => {
     );
     await expect(
       createParadiseMail({ kind: "bulk", topic: "newsletter" }).send(CAMPAIGN),
-    ).resolves.toEqual({ providerRef: "mg-3" });
+    ).resolves.toEqual({
+      providerRef: "mg-3",
+      // Reported so the worker remembers the grant for a later withdrawal.
+      grantRecorded: { email: "reader@example.test", evidenceRef: EVIDENCE.evidenceRef },
+    });
     expect(calls.map((call) => call.url.replace("https://paradisemodern.com", ""))).toEqual([
       "/api/site-self/email/send",
       "/api/site-self/email/consent",
@@ -273,6 +277,14 @@ describe("consent evidence for a permission-checking provider", () => {
     expect(evidence?.method).toBe("unchecked_checkbox");
     expect(evidence?.statement).toContain("Freeholder consent record");
     expect(evidence).not.toHaveProperty("recipientIp");
+  });
+
+  it("names the page only, never its query string or fragment", () => {
+    const evidence = consentEvidenceFromRecord(
+      { ...base, sourceUrl: "https://auroracoast.test/newsletter?email=a%40b.test&token=secret#confirm" },
+      "https://auroracoast.test",
+    );
+    expect(evidence?.source).toBe("https://auroracoast.test/newsletter");
   });
 
   it("refuses methods a provider cannot accept as direct permission", () => {

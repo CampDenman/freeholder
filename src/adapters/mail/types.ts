@@ -92,7 +92,15 @@ export interface MailAdapter {
    * person waiting for the email has no way to tell.
    */
   readonly delivers: boolean;
-  send(message: OutboundEmail): Promise<{ providerRef: string }>;
+  send(message: OutboundEmail): Promise<{
+    providerRef: string;
+    /**
+     * A permission-checking carrier reports the grant it recorded while
+     * sending (C3.31), so the worker can remember it and a later withdrawal
+     * is mirrored to exactly that address.
+     */
+    grantRecorded?: { email: string; evidenceRef: string };
+  }>;
   /**
    * The provider checks a declared permission basis on every message
    * (C3.31), so the delivery worker attaches `OutboundEmail.permission`.

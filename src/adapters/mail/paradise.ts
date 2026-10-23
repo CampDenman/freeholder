@@ -76,6 +76,15 @@ function asMailError(error: unknown): MailAdapterError {
   return new MailAdapterError(error.message, error.retryable, error.status || undefined, code);
 }
 
+/**
+ * The sending domain's status from the provider's site profile. The wire
+ * field is named after the provider's own carrier; that name stays here.
+ */
+function sendingDomainStatus(body: Record<string, unknown>): string | null {
+  const raw = body["mailgunDomainStatus"];
+  return typeof raw === "string" && /^[a-z_]{1,40}$/.test(raw) ? raw : null;
+}
+
 function wirePermission(permission: MailPermission, topic: string) {
   return permission.purpose === "marketing"
     ? { purpose: "marketing" as const, topic }
@@ -152,6 +161,7 @@ export function createParadiseMail(options: ParadiseMailOptions): MailAdapter {
       }
 
       let response;
+      let grantRecorded: { email: string; evidenceRef: string } | undefined;
       try {
         response = await submit(message, permission, "first");
       } catch (error) {
@@ -174,6 +184,7 @@ export function createParadiseMail(options: ParadiseMailOptions): MailAdapter {
               ...permission.evidence,
             },
           });
+          grantRecorded = { email: message.to, evidenceRef: permission.evidence.evidenceRef };
           response = await submit(message, permission, "consented");
         } catch (retryError) {
           throw asMailError(retryError);
@@ -183,7 +194,7 @@ export function createParadiseMail(options: ParadiseMailOptions): MailAdapter {
       if (!ref) {
         throw new MailAdapterError("Paradise Modern accepted the request without a message id.");
       }
-      return { providerRef: ref };
+      return { providerRef: ref, ...(grantRecorded ? { grantRecorded } : {}) };
     },
     async recordWithdrawal(email) {
       try {
@@ -195,19 +206,14 @@ export function createParadiseMail(options: ParadiseMailOptions): MailAdapter {
     async verifySender(sender) {
       let me;
       try {
-        me = await paradiseRequest<{ domain?: string; mailgunDomainStatus?: string }>(
-          "/api/site-self/me",
-          { method: "GET" },
-        );
+        me = await paradiseRequest<Record<string, unknown>>("/api/site-self/me", { method: "GET" });
       } catch (error) {
         throw asMailError(error);
       }
       const domain = typeof me.body.domain === "string" ? me.body.domain.toLowerCase() : "";
       const senderDomain = sender.email.split("@")[1]?.toLowerCase() ?? "";
-      const status = typeof me.body.mailgunDomainStatus === "string" &&
-        /^[a-z_]{1,40}$/.test(me.body.mailgunDomainStatus)
-        ? me.body.mailgunDomainStatus
-        : "unknown";
+      const domainStatus = sendingDomainStatus(me.body);
+      const status = domainStatus ?? "unknown";
       if (!domain || senderDomain !== domain) {
         return {
           status: "failed",

@@ -62,10 +62,13 @@ PARADISEMODERN_MAIL_TOPIC=newsletter         # default "newsletter"
 ```
 
 The addresses must be on the site's sending domain at the provider, and that
-domain must be active there. Register the exact `MAIL_BULK_FROM` in **Admin →
-Settings → Mail** and run **Verify**: Freeholder reads the site's domain and
-its status (`GET /api/site-self/me`) and verifies only an address on that
-domain.
+domain must be active there. Register the exact `MAIL_FROM` or
+`MAIL_BULK_FROM` in **Admin → Settings → Mail**: Freeholder reads the site's
+domain and its status (`GET /api/site-self/me`) and verifies only an address
+on that domain, for account mail as well as campaigns. Registering an
+account-mail sender queues the check at once; a campaign sender is checked
+with **Verify**. A registered Paradise Modern sender cannot send, or become
+the default, until it is verified.
 
 Messages go to `POST /api/site-self/email/send` with `to`, `subject`, `text`,
 optional `html`, `from`/`fromName`, `replyTo`, the site's
@@ -93,11 +96,19 @@ switched on), the adapter records it once with
 `POST /api/site-self/email/consent` from the retained `consent_records` row —
 its method, time, source page, terms version, wording when it was kept, the
 IP address the opt-in came from when one was recorded, and `freeholder-consent:<id>` as the
-evidence reference — and sends again under a new `requestId`. Freeholder never
-synthesizes consent: no record, no send. Withdrawals (unsubscribe, preference
-change) are mirrored to `POST /api/site-self/email/consent/withdraw` with the
-address only, through the outbox, and retried while the provider is
-unreachable. The delivery worker also rechecks consent immediately before
+evidence reference; the source page is sent without its query string or
+fragment — and sends again under a new `requestId`. Freeholder remembers each
+grant it recorded there (`mail_provider_grants`) and the address it was
+recorded under. Freeholder never synthesizes consent: no record, no send.
+
+A withdrawal (unsubscribe, preference change) is mirrored to
+`POST /api/site-self/email/consent/withdraw` only for those remembered grants,
+with the grant's address — so a contact whose email has changed since is
+withdrawn where the provider holds them, and a denial or a contact never
+granted there sends nothing. It runs through the outbox and is retried while
+the provider is unreachable; a permanent refusal is recorded on the grant and
+logged once rather than retried into a dead letter; the public playground
+skips it. The delivery worker also rechecks consent immediately before
 every campaign send, so a withdrawal stops the next message even before the
 mirror lands.
 
