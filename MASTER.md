@@ -7243,6 +7243,21 @@ equipment, classes and expertise without double-booking or duplicated records.
   books. Regression:
   `tests/modules/customer-surfaces.test.ts`. Changeset
   `demo-prelaunch-polish.md`.
+  Pre-launch check 2026-10-23 (opening date): with no `?date=`, /book
+  opened on `new Date().toISOString().slice(0,10)` — UTC's today, so every
+  evening in Pacific time it opened on tomorrow — and on a day with nothing
+  free it led with "No times available on this date". The page now computes
+  today in the business zone (`zonedDate`/`addDays`/`periodKey` from
+  `src/core/i18n/zoned.ts`) and opens on the first day with a free time in a
+  60-day window, from one ranged `scheduling.slots` call with `limit: 1`
+  (`app/(public)/book/opening-date.ts`); with nothing free it opens on today
+  with the existing message, and an explicit `?date=` always wins. The embed
+  and the reschedule (`?move=`) flow render the same page and inherit it.
+  The resolver's `maxSlots` now caps each calendar and trims the sorted
+  answer, rather than returning as soon as the first calendar filled it,
+  which could hide a later calendar's earlier time. Regression:
+  `tests/modules/booking-opening-date.test.ts`, `tests/core/resolver.test.ts`.
+  Changeset `booking-opening-date.md`.
 
 ### 43.12 C7 — Working CRM, messaging, inbox, and human operations
 

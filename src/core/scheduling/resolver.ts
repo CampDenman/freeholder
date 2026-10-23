@@ -455,9 +455,15 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
       timezone: member.timezone,
     });
 
+    // The cap is per calendar, and the answer is trimmed only once every
+    // calendar has had its turn: returning as soon as the first calendar
+    // filled it would hide a second calendar's earlier time, and "the first
+    // day anything is free" (/book's opening date) would land too late.
+    let mine = 0;
     for (const window of windows) {
+      if (mine >= maxSlots) break;
       for (const startsAt of startsIn(window, request.durationMin, granularity)) {
-        if (found.length >= maxSlots) return found;
+        if (mine >= maxSlots) break;
         const endsAt = new Date(startsAt.getTime() + request.durationMin * 60_000);
 
         // Lead time and horizon: no bookings in the next two hours, none more
@@ -513,6 +519,7 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
             ? capacity - seatsHeld(heldByCalendar.get(member.calendarId) ?? [], guarded)
             : 1,
         });
+        mine += 1;
       }
     }
   }
@@ -524,15 +531,17 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
     return dedupeByStart(
       found.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()),
       load,
-    );
+    ).slice(0, maxSlots);
   }
 
-  return found.sort(
-    (a, b) =>
-      a.startsAt.getTime() - b.startsAt.getTime() ||
-      candidates.findIndex((member) => member.calendarId === a.calendarId) -
-        candidates.findIndex((member) => member.calendarId === b.calendarId),
-  );
+  return found
+    .sort(
+      (a, b) =>
+        a.startsAt.getTime() - b.startsAt.getTime() ||
+        candidates.findIndex((member) => member.calendarId === a.calendarId) -
+          candidates.findIndex((member) => member.calendarId === b.calendarId),
+    )
+    .slice(0, maxSlots);
 }
 
 /**

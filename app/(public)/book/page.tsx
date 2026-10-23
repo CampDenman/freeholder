@@ -18,6 +18,7 @@ import { Button, Callout, Field, Input, Select, cx } from "@/ui/primitives";
 import { getLocale, getT } from "../../i18n";
 import { bookServiceAction, moveBookingAction } from "./actions";
 import { chosenSlot } from "./chosen";
+import { openingDate } from "./opening-date";
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -35,16 +36,19 @@ export default async function PublicBooking({ searchParams }: { searchParams: Pr
   const moving = q.move && actor.kind === "user" ? await myBookingSelection.call({id:q.move},actor).catch(()=>null) : null;
   if (q.move && actor.kind === "user" && !moving) notFound();
   const selected = catalog.services.find(s=>s.productId===(moving?.productId??q.service)) ?? catalog.services[0];
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(q.date ?? "") ? q.date! : new Date().toISOString().slice(0,10);
   const mode = selected?.modes.find(m=>m===q.mode) ?? selected?.modes[0] ?? "full";
   const seats = Math.min(100,Math.max(1,moving?.seats??(Math.floor(Number(q.seats))||1)));
+  const zone = business?.timezone ?? "UTC";
+  const slotQuery = selected ? {productId:selected.productId,serviceOfferingId:selected.offeringId,seats,excludeBookingId:moving?q.move:undefined} : null;
+  // With no ?date=, open on the business's first free day rather than on UTC's today.
+  const date = await openingDate(q.date, zone, slotQuery ? async (from,to)=>(await availableSlots.call({...slotQuery,from,to,limit:1},actor))[0] : undefined);
   const profile = actor.kind === "user" ? await myProfile.call({},actor).catch(()=>null) : null;
   let quote: Awaited<ReturnType<typeof publicBookingQuote.call>> | null = null;
   let slots: Awaited<ReturnType<typeof availableSlots.call>> = [];
   let unavailable = false;
   if (selected) try {
     if (!moving) quote = await publicBookingQuote.call({productId:selected.productId,currency:catalog.currency,mode,seats},actor);
-    slots = await availableSlots.call({productId:selected.productId,serviceOfferingId:selected.offeringId,from:date,to:date,seats,excludeBookingId:moving?q.move:undefined,limit:500},actor);
+    slots = await availableSlots.call({...slotQuery!,from:date,to:date,limit:500},actor);
   } catch { unavailable=true; }
   const search = (extra: Record<string,string> = {}) => new URLSearchParams({service:selected?.productId??"",date,mode,seats:String(seats),...(q.move?{move:q.move}:{}),...(seller?{seller}:{}),...extra});
   // A time is chosen before anybody is asked to prove an email (C6.19): the
@@ -53,7 +57,6 @@ export default async function PublicBooking({ searchParams }: { searchParams: Pr
   const choice = chosen ? {calendar:chosen.calendarId,at:chosen.startsAt.toISOString()} : undefined;
   const returnTo = `/book?${search(choice)}`;
   const requestKey = randomUUID();
-  const zone = business?.timezone ?? "UTC";
   const verified = Boolean(profile || moving);
   // C1.38: the public demo sends no mail, so it reserves for a made-up address instead.
   const playground = env().FREEHOLDER_PLAYGROUND === "1" && !verified;

@@ -371,6 +371,26 @@ describe.runIf(hasDatabase)("the availability resolver", { timeout: 60_000 }, ()
     expect(found.some((slot) => slot.calendarId === sam.id)).toBe(true);
   });
 
+  it("keeps the earliest times when a limit cuts across several calendars", async () => {
+    // Kim sorts first but only works afternoons. Stopping once Kim filled the
+    // limit hid Sam's morning, and /book's first free day (C6.19) asks with a
+    // limit of one.
+    const kim = await therapist("Kim");
+    const sam = await therapist("Sam");
+    await setAvailability.call(
+      { calendarId: kim.id, rules: [{ weekday: 1, starts: "14:00", ends: "17:00", kind: "bookable" }] },
+      OWNER,
+    );
+    await serves([
+      { calendarId: kim.id, role: "primary" },
+      { calendarId: sam.id, role: "primary" },
+    ]);
+    const two = await slots({ assignment: "pool", maxSlots: 2 });
+    expect(times(two)).toEqual(["09:00", "10:00"]);
+    expect(two.every((slot) => slot.calendarId === sam.id)).toBe(true);
+    expect(times(await slots({ assignment: "round_robin", maxSlots: 1 }))).toEqual(["09:00"]);
+  });
+
   it("offers only the named person when the service names one", async () => {
     const sam = await therapist("Sam");
     const kim = await therapist("Kim");
