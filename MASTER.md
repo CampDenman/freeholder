@@ -10727,6 +10727,39 @@ schema they inherit reads as a designed thing rather than an excavation.
   finding from that day's four reviews to its repair PR (#559–#565) and lists
   the open residuals. The review packet points to it. It is agent evidence,
   not independent review.
+  Defence in depth 2026-10-23 (stored SVG and librsvg, GHSA-2464-fhr4-w9xw /
+  CVE-2026-96889; sharp 0.35.5 is already locked): uploads have refused SVG
+  since #70, but stored assets reached sharp on their stored kind alone.
+  `sniffRasterImage` (`src/core/media/validation.ts`) reuses the upload
+  signature table and admits only JPEG, PNG, GIF, WebP and AVIF bytes;
+  stored mime type and extension are ignored. It now gates `readImageFacts`,
+  `buildRenditions`, `buildWatermarked` and the watermark logo, the derivation
+  step shared by uploads and `registerStoredOriginal`, `media.rescan`, the watermark
+  backfill and social `cropStill`/`stillThumbnail`/`createVariants`.
+  `media.rescan` skips a non-raster "image" with `renditionsSkipped` in its
+  result, keeps its scan result and leaves the original unaltered. Storage I/O
+  stays in the orchestrator, outside `applyRescan`. The internal seed and
+  text-watermark SVGs are repository/escaped content and are unchanged.
+  Regression: `tests/core/media-raster-guard.test.ts` wraps sharp and shows
+  that it is never called on SVG bytes labelled `image/png`, while JPEG and
+  PNG still render. The admin media page discards the rescan result, so
+  the reason is visible through the API/MCP/SDK only. Review follow-up the
+  same day: ffmpeg probed stored "video" bytes with no demuxer or protocol
+  limit, so an HLS/concat playlist under a video label could read local files
+  or fetch URLs. The only ffmpeg call site in src/ and app/, social
+  `clipVideo`, now refuses bytes `sniffVideo` does not identify as MP4,
+  QuickTime or WebM before any process starts. It then passes
+  `-protocol_whitelist file`, `-f mov|matroska` and, for mov,
+  `-enable_drefs 0` ahead of the single `-i` (`clipVideoArgs`).
+  `social.createVariants` checks every original before rendering or storing
+  any, so a refusal leaves no orphaned generated assets. Further regressions
+  cover `registerStoredOriginal` (including bytes swapped after the
+  signature read), the watermark backfill and PNG/SVG polyglots.
+  `tests/modules/social-render-ffmpeg.test.ts` replaces ffmpeg and asserts
+  the argv. `tests/modules/social-composer.test.ts` covers the end-to-end
+  refusal, and that test failed before the fix with two orphans. No ffmpeg
+  binary was available to run a real clip. Changeset
+  `media-refuse-stored-svg.md`. Not independent review evidence.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.

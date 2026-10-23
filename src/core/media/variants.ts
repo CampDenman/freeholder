@@ -9,6 +9,7 @@
 // a 4000px photograph from a camera gets sensible renditions without knowing
 // what a rendition is.
 import sharp from "sharp";
+import { NotRasterImageError, sniffRasterImage } from "./validation";
 
 /**
  * The ladder. Wide enough at the top for a full-bleed hero on a dense display,
@@ -112,6 +113,9 @@ export function isRasterImage(mime: string): boolean {
 export async function readImageFacts(
   bytes: Uint8Array<ArrayBuffer>,
 ): Promise<ImageFacts | undefined> {
+  // The stored mime type and kind are labels; the bytes decide. SVG or any
+  // other non-raster content never reaches sharp (C11.10).
+  if (!sniffRasterImage(bytes)) return undefined;
   try {
     const meta = await sharp(bytes).metadata();
     if (!meta.width || !meta.height) return undefined;
@@ -143,6 +147,9 @@ export async function buildRenditions(
   facts: ImageFacts,
   keyFor: (format: VariantFormat, width: number) => string,
 ): Promise<BuiltRendition[]> {
+  // Callers read facts first, which already refuses non-raster bytes; this
+  // keeps the resizer safe on its own if a caller ever skips that step.
+  if (!sniffRasterImage(original)) throw new NotRasterImageError();
   // `<=`, not `<`: an original sitting exactly on one of these widths is the
   // case where that rendition matters most, and a strict comparison skipped it,
   // so the largest variant came out one step below the original and full-width

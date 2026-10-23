@@ -13,6 +13,7 @@
 // watermark without anybody configuring one.
 import sharp from "sharp";
 import type { BuiltRendition, ImageFacts, VariantFormat } from "./variants";
+import { sniffRasterImage } from "./validation";
 
 /**
  * WebP only, and only at viewing sizes. A watermarked rendition exists to be
@@ -83,6 +84,9 @@ async function logoMark(
   logo: Uint8Array<ArrayBuffer>,
   width: number,
 ): Promise<Buffer | undefined> {
+  // The logo is a stored asset and may predate the SVG upload refusal; a
+  // non-raster logo falls back to the text mark rather than reaching sharp.
+  if (!sniffRasterImage(logo)) return undefined;
   try {
     const raster = await sharp(logo)
       .resize({ width: Math.max(48, Math.round(width * 0.5)), withoutEnlargement: false })
@@ -124,6 +128,8 @@ export async function buildWatermarked(
   mark: WatermarkMark,
   keyFor: (format: VariantFormat, width: number) => string,
 ): Promise<BuiltRendition[]> {
+  // A stored original that is not an allow-listed raster is never marked.
+  if (!sniffRasterImage(original)) return [];
   const targets = WIDTHS.filter((width) => width < facts.width);
   if (targets.length === 0) targets.push(facts.width as (typeof WIDTHS)[number]);
 
