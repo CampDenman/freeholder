@@ -283,24 +283,23 @@ jobs:
           for i in $(seq 1 30); do curl -fs http://127.0.0.1:7880/ > /dev/null && exit 0; sleep 1; done
           cat "$RUNNER_TEMP/livekit.log"; exit 1
       - run: pnpm build
-      # The apt half of --with-deps has stalled for 20+ minutes on hosted
-      # runners. Killing an attempt from outside left its apt-get holding the
-      # dpkg lock, so every retry failed at once. apt now bounds and retries
-      # its own downloads and waits for the lock instead.
+      # The apt half of --with-deps has stalled for 15-26 minutes on hosted
+      # runners while trickling data, so neither apt's own timeouts nor a
+      # retry loop rescued the job. Give apt a bounded try; the browsers then
+      # come from Playwright's CDN, and the runner image already carries the
+      # system libraries Chromium needs.
       - name: Bound apt network waits
         run: |
-          printf '%s\n' 'Acquire::Retries "5";' 'Acquire::http::Timeout "30";' \
-            'Acquire::https::Timeout "30";' 'DPkg::Lock::Timeout "300";' |
+          printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' \
+            'Acquire::https::Timeout "30";' 'DPkg::Lock::Timeout "120";' |
             sudo tee /etc/apt/apt.conf.d/99-ci-network > /dev/null
-      - name: Install Playwright browsers and system dependencies
-        timeout-minutes: 15
-        run: |
-          for attempt in 1 2 3; do
-            pnpm exec playwright install --with-deps chromium firefox && exit 0
-            echo "Playwright install attempt $attempt failed; retrying."
-            sleep 15
-          done
-          exit 1
+      - name: Install browser system dependencies (best effort)
+        timeout-minutes: 6
+        continue-on-error: true
+        run: pnpm exec playwright install-deps chromium firefox
+      - name: Install Playwright browsers
+        timeout-minutes: 8
+        run: pnpm exec playwright install chromium firefox
       - run: pnpm test:browser --shard=${{ matrix.shard }}
 
   deployment:
