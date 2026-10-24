@@ -1,0 +1,2903 @@
+{
+  "capturedAt": "2026-10-24T01:46:28.497Z",
+  "commit": "128e48d5aefa0391f2ebde92f42f732e8e71c333",
+  "shots": [
+    {
+      "route": "/book",
+      "url": "/book",
+      "role": "customer",
+      "title": "Book an appointment · Aurora Coast Photography",
+      "slug": "journey-01-booking-choose-time",
+      "files": [
+        "journey-01-booking-choose-time--desktop--light.webp",
+        "journey-01-booking-choose-time--desktop--dark.webp",
+        "journey-01-booking-choose-time--mobile--light.webp",
+        "journey-01-booking-choose-time--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/records/[section]/[id]",
+      "url": "/portal/records/bookings/b8ff22d5-ba67-4007-91c7-01db1ed7a517",
+      "role": "customer",
+      "title": "Your account — Aurora Coast Photography",
+      "slug": "journey-02-booking-confirmed",
+      "files": [
+        "journey-02-booking-confirmed--desktop--light.webp",
+        "journey-02-booking-confirmed--desktop--dark.webp",
+        "journey-02-booking-confirmed--mobile--light.webp",
+        "journey-02-booking-confirmed--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/invoices/[id]",
+      "url": "/portal/invoices/e3406fb1-ac17-4f45-bb83-4de7ba0e01ce",
+      "role": "customer",
+      "title": "Invoices",
+      "slug": "journey-03-pay-booking-invoice",
+      "files": [
+        "journey-03-pay-booking-invoice--desktop--light.webp",
+        "journey-03-pay-booking-invoice--desktop--dark.webp",
+        "journey-03-pay-booking-invoice--mobile--light.webp",
+        "journey-03-pay-booking-invoice--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/invoices/[id]",
+      "url": "/portal/invoices/bd3d8dac-44d1-44da-b77c-67d62af3aa06",
+      "role": "customer",
+      "title": "Invoices",
+      "slug": "journey-04-pay-membership-invoice",
+      "files": [
+        "journey-04-pay-membership-invoice--desktop--light.webp",
+        "journey-04-pay-membership-invoice--desktop--dark.webp",
+        "journey-04-pay-membership-invoice--mobile--light.webp",
+        "journey-04-pay-membership-invoice--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/",
+      "url": "/",
+      "role": "public",
+      "title": "Aurora Coast Photography",
+      "slug": "home",
+      "files": [
+        "home--desktop--light.webp",
+        "home--desktop--dark.webp",
+        "home--mobile--light.webp",
+        "home--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/access",
+      "url": "/admin/access",
+      "role": "owner",
+      "title": "Access — Aurora Coast Photography",
+      "slug": "admin-access",
+      "files": [
+        "admin-access--desktop--light.webp",
+        "admin-access--desktop--dark.webp",
+        "admin-access--mobile--light.webp",
+        "admin-access--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/ads",
+      "url": "/admin/ads",
+      "role": "owner",
+      "title": "Ads — Aurora Coast Photography",
+      "slug": "admin-ads",
+      "files": [
+        "admin-ads--desktop--light.webp",
+        "admin-ads--desktop--dark.webp",
+        "admin-ads--mobile--light.webp",
+        "admin-ads--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/agreements",
+      "url": "/admin/agreements",
+      "role": "owner",
+      "title": "Agreements — Aurora Coast Photography",
+      "slug": "admin-agreements",
+      "files": [
+        "admin-agreements--desktop--light.webp",
+        "admin-agreements--desktop--dark.webp",
+        "admin-agreements--mobile--light.webp",
+        "admin-agreements--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/appointments",
+      "url": "/admin/appointments",
+      "role": "owner",
+      "title": "Appointments — Aurora Coast Photography",
+      "slug": "admin-appointments",
+      "files": [
+        "admin-appointments--desktop--light.webp",
+        "admin-appointments--desktop--dark.webp",
+        "admin-appointments--mobile--light.webp",
+        "admin-appointments--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/assessments/new",
+      "url": "/admin/assessments/new",
+      "role": "owner",
+      "title": "Assessments — Aurora Coast Photography",
+      "slug": "admin-assessments-new",
+      "files": [
+        "admin-assessments-new--desktop--light.webp",
+        "admin-assessments-new--desktop--dark.webp",
+        "admin-assessments-new--mobile--light.webp",
+        "admin-assessments-new--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/assessments",
+      "url": "/admin/assessments",
+      "role": "owner",
+      "title": "Assessments — Aurora Coast Photography",
+      "slug": "admin-assessments",
+      "files": [
+        "admin-assessments--desktop--light.webp",
+        "admin-assessments--desktop--dark.webp",
+        "admin-assessments--mobile--light.webp",
+        "admin-assessments--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/assistant",
+      "url": "/admin/assistant",
+      "role": "owner",
+      "title": "Assistant — Aurora Coast Photography",
+      "slug": "admin-assistant",
+      "files": [
+        "admin-assistant--desktop--light.webp",
+        "admin-assistant--desktop--dark.webp",
+        "admin-assistant--mobile--light.webp",
+        "admin-assistant--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/automations",
+      "url": "/admin/automations",
+      "role": "owner",
+      "title": "Automations — Aurora Coast Photography",
+      "slug": "admin-automations",
+      "files": [
+        "admin-automations--desktop--light.webp",
+        "admin-automations--desktop--dark.webp",
+        "admin-automations--mobile--light.webp",
+        "admin-automations--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/blog",
+      "url": "/admin/blog",
+      "role": "owner",
+      "title": "Admin — Aurora Coast Photography",
+      "slug": "admin-blog",
+      "files": [
+        "admin-blog--desktop--light.webp",
+        "admin-blog--desktop--dark.webp",
+        "admin-blog--mobile--light.webp",
+        "admin-blog--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/briefing",
+      "url": "/admin/briefing",
+      "role": "owner",
+      "title": "Briefing — Aurora Coast Photography",
+      "slug": "admin-briefing",
+      "files": [
+        "admin-briefing--desktop--light.webp",
+        "admin-briefing--desktop--dark.webp",
+        "admin-briefing--mobile--light.webp",
+        "admin-briefing--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/builder",
+      "url": "/admin/builder",
+      "role": "owner",
+      "title": "Builder — Aurora Coast Photography",
+      "slug": "admin-builder",
+      "files": [
+        "admin-builder--desktop--light.webp",
+        "admin-builder--desktop--dark.webp",
+        "admin-builder--mobile--light.webp",
+        "admin-builder--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/calculators/new",
+      "url": "/admin/calculators/new",
+      "role": "owner",
+      "title": "Calculators — Aurora Coast Photography",
+      "slug": "admin-calculators-new",
+      "files": [
+        "admin-calculators-new--desktop--light.webp",
+        "admin-calculators-new--desktop--dark.webp",
+        "admin-calculators-new--mobile--light.webp",
+        "admin-calculators-new--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/calculators",
+      "url": "/admin/calculators",
+      "role": "owner",
+      "title": "Calculators — Aurora Coast Photography",
+      "slug": "admin-calculators",
+      "files": [
+        "admin-calculators--desktop--light.webp",
+        "admin-calculators--desktop--dark.webp",
+        "admin-calculators--mobile--light.webp",
+        "admin-calculators--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/calendar",
+      "url": "/admin/calendar",
+      "role": "owner",
+      "title": "Calendar — Aurora Coast Photography",
+      "slug": "admin-calendar",
+      "files": [
+        "admin-calendar--desktop--light.webp",
+        "admin-calendar--desktop--dark.webp",
+        "admin-calendar--mobile--light.webp",
+        "admin-calendar--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/calendars/audiences",
+      "url": "/admin/calendars/audiences",
+      "role": "owner",
+      "title": "Calendars — Aurora Coast Photography",
+      "slug": "admin-calendars-audiences",
+      "files": [
+        "admin-calendars-audiences--desktop--light.webp",
+        "admin-calendars-audiences--desktop--dark.webp",
+        "admin-calendars-audiences--mobile--light.webp",
+        "admin-calendars-audiences--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/calendars",
+      "url": "/admin/calendars",
+      "role": "owner",
+      "title": "Calendars — Aurora Coast Photography",
+      "slug": "admin-calendars",
+      "files": [
+        "admin-calendars--desktop--light.webp",
+        "admin-calendars--desktop--dark.webp",
+        "admin-calendars--mobile--light.webp",
+        "admin-calendars--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/calendars/waitlist",
+      "url": "/admin/calendars/waitlist",
+      "role": "owner",
+      "title": "Calendars — Aurora Coast Photography",
+      "slug": "admin-calendars-waitlist",
+      "files": [
+        "admin-calendars-waitlist--desktop--light.webp",
+        "admin-calendars-waitlist--desktop--dark.webp",
+        "admin-calendars-waitlist--mobile--light.webp",
+        "admin-calendars-waitlist--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/carts",
+      "url": "/admin/carts",
+      "role": "owner",
+      "title": "Carts — Aurora Coast Photography",
+      "slug": "admin-carts",
+      "files": [
+        "admin-carts--desktop--light.webp",
+        "admin-carts--desktop--dark.webp",
+        "admin-carts--mobile--light.webp",
+        "admin-carts--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/collections",
+      "url": "/admin/collections",
+      "role": "owner",
+      "title": "Collections — Aurora Coast Photography",
+      "slug": "admin-collections",
+      "files": [
+        "admin-collections--desktop--light.webp",
+        "admin-collections--desktop--dark.webp",
+        "admin-collections--mobile--light.webp",
+        "admin-collections--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/community",
+      "url": "/admin/community",
+      "role": "owner",
+      "title": "Community — Aurora Coast Photography",
+      "slug": "admin-community",
+      "files": [
+        "admin-community--desktop--light.webp",
+        "admin-community--desktop--dark.webp",
+        "admin-community--mobile--light.webp",
+        "admin-community--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/connect",
+      "url": "/admin/connect",
+      "role": "owner",
+      "title": "Admin — Aurora Coast Photography",
+      "slug": "admin-connect",
+      "files": [
+        "admin-connect--desktop--light.webp",
+        "admin-connect--desktop--dark.webp",
+        "admin-connect--mobile--light.webp",
+        "admin-connect--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/contacts/duplicates",
+      "url": "/admin/contacts/duplicates",
+      "role": "owner",
+      "title": "Contacts — Aurora Coast Photography",
+      "slug": "admin-contacts-duplicates",
+      "files": [
+        "admin-contacts-duplicates--desktop--light.webp",
+        "admin-contacts-duplicates--desktop--dark.webp",
+        "admin-contacts-duplicates--mobile--light.webp",
+        "admin-contacts-duplicates--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/contacts/fields",
+      "url": "/admin/contacts/fields",
+      "role": "owner",
+      "title": "Contacts — Aurora Coast Photography",
+      "slug": "admin-contacts-fields",
+      "files": [
+        "admin-contacts-fields--desktop--light.webp",
+        "admin-contacts-fields--desktop--dark.webp",
+        "admin-contacts-fields--mobile--light.webp",
+        "admin-contacts-fields--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/contacts/new",
+      "url": "/admin/contacts/new",
+      "role": "owner",
+      "title": "Contacts — Aurora Coast Photography",
+      "slug": "admin-contacts-new",
+      "files": [
+        "admin-contacts-new--desktop--light.webp",
+        "admin-contacts-new--desktop--dark.webp",
+        "admin-contacts-new--mobile--light.webp",
+        "admin-contacts-new--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/contacts/organizations/new",
+      "url": "/admin/contacts/organizations/new",
+      "role": "owner",
+      "title": "Contacts — Aurora Coast Photography",
+      "slug": "admin-contacts-organizations-new",
+      "files": [
+        "admin-contacts-organizations-new--desktop--light.webp",
+        "admin-contacts-organizations-new--desktop--dark.webp",
+        "admin-contacts-organizations-new--mobile--light.webp",
+        "admin-contacts-organizations-new--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/contacts/organizations",
+      "url": "/admin/contacts/organizations",
+      "role": "owner",
+      "title": "Contacts — Aurora Coast Photography",
+      "slug": "admin-contacts-organizations",
+      "files": [
+        "admin-contacts-organizations--desktop--light.webp",
+        "admin-contacts-organizations--desktop--dark.webp",
+        "admin-contacts-organizations--mobile--light.webp",
+        "admin-contacts-organizations--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/contacts",
+      "url": "/admin/contacts",
+      "role": "owner",
+      "title": "Contacts — Aurora Coast Photography",
+      "slug": "admin-contacts",
+      "files": [
+        "admin-contacts--desktop--light.webp",
+        "admin-contacts--desktop--dark.webp",
+        "admin-contacts--mobile--light.webp",
+        "admin-contacts--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/contacts/privacy",
+      "url": "/admin/contacts/privacy",
+      "role": "owner",
+      "title": "Privacy desk",
+      "slug": "admin-contacts-privacy",
+      "files": [
+        "admin-contacts-privacy--desktop--light.webp",
+        "admin-contacts-privacy--desktop--dark.webp",
+        "admin-contacts-privacy--mobile--light.webp",
+        "admin-contacts-privacy--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/contribute",
+      "url": "/admin/contribute",
+      "role": "owner",
+      "title": "Contribute — Aurora Coast Photography",
+      "slug": "admin-contribute",
+      "files": [
+        "admin-contribute--desktop--light.webp",
+        "admin-contribute--desktop--dark.webp",
+        "admin-contribute--mobile--light.webp",
+        "admin-contribute--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/demos",
+      "url": "/admin/demos",
+      "role": "owner",
+      "title": "Demo scenarios — Aurora Coast Photography",
+      "slug": "admin-demos",
+      "files": [
+        "admin-demos--desktop--light.webp",
+        "admin-demos--desktop--dark.webp",
+        "admin-demos--mobile--light.webp",
+        "admin-demos--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/design",
+      "url": "/admin/design",
+      "role": "owner",
+      "title": "Design — Aurora Coast Photography",
+      "slug": "admin-design",
+      "files": [
+        "admin-design--desktop--light.webp",
+        "admin-design--desktop--dark.webp",
+        "admin-design--mobile--light.webp",
+        "admin-design--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/documents",
+      "url": "/admin/documents",
+      "role": "owner",
+      "title": "Documents — Aurora Coast Photography",
+      "slug": "admin-documents",
+      "files": [
+        "admin-documents--desktop--light.webp",
+        "admin-documents--desktop--dark.webp",
+        "admin-documents--mobile--light.webp",
+        "admin-documents--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/events",
+      "url": "/admin/events",
+      "role": "owner",
+      "title": "Events — Aurora Coast Photography",
+      "slug": "admin-events",
+      "files": [
+        "admin-events--desktop--light.webp",
+        "admin-events--desktop--dark.webp",
+        "admin-events--mobile--light.webp",
+        "admin-events--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/experiments",
+      "url": "/admin/experiments",
+      "role": "owner",
+      "title": "Experiments — Aurora Coast Photography",
+      "slug": "admin-experiments",
+      "files": [
+        "admin-experiments--desktop--light.webp",
+        "admin-experiments--desktop--dark.webp",
+        "admin-experiments--mobile--light.webp",
+        "admin-experiments--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/facts",
+      "url": "/admin/facts",
+      "role": "owner",
+      "title": "Published figures — Aurora Coast Photography",
+      "slug": "admin-facts",
+      "files": [
+        "admin-facts--desktop--light.webp",
+        "admin-facts--desktop--dark.webp",
+        "admin-facts--mobile--light.webp",
+        "admin-facts--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/forms/new",
+      "url": "/admin/forms/new",
+      "role": "owner",
+      "title": "Forms — Aurora Coast Photography",
+      "slug": "admin-forms-new",
+      "files": [
+        "admin-forms-new--desktop--light.webp",
+        "admin-forms-new--desktop--dark.webp",
+        "admin-forms-new--mobile--light.webp",
+        "admin-forms-new--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/forms",
+      "url": "/admin/forms",
+      "role": "owner",
+      "title": "Forms — Aurora Coast Photography",
+      "slug": "admin-forms",
+      "files": [
+        "admin-forms--desktop--light.webp",
+        "admin-forms--desktop--dark.webp",
+        "admin-forms--mobile--light.webp",
+        "admin-forms--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/fulfillment",
+      "url": "/admin/fulfillment",
+      "role": "owner",
+      "title": "Fulfillment — Aurora Coast Photography",
+      "slug": "admin-fulfillment",
+      "files": [
+        "admin-fulfillment--desktop--light.webp",
+        "admin-fulfillment--desktop--dark.webp",
+        "admin-fulfillment--mobile--light.webp",
+        "admin-fulfillment--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/galleries",
+      "url": "/admin/galleries",
+      "role": "owner",
+      "title": "Galleries — Aurora Coast Photography",
+      "slug": "admin-galleries",
+      "files": [
+        "admin-galleries--desktop--light.webp",
+        "admin-galleries--desktop--dark.webp",
+        "admin-galleries--mobile--light.webp",
+        "admin-galleries--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/gifts",
+      "url": "/admin/gifts",
+      "role": "owner",
+      "title": "Gift registries — Aurora Coast Photography",
+      "slug": "admin-gifts",
+      "files": [
+        "admin-gifts--desktop--light.webp",
+        "admin-gifts--desktop--dark.webp",
+        "admin-gifts--mobile--light.webp",
+        "admin-gifts--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/guidance",
+      "url": "/admin/guidance",
+      "role": "owner",
+      "title": "Guides for your work — Aurora Coast Photography",
+      "slug": "admin-guidance",
+      "files": [
+        "admin-guidance--desktop--light.webp",
+        "admin-guidance--desktop--dark.webp",
+        "admin-guidance--mobile--light.webp",
+        "admin-guidance--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/health",
+      "url": "/admin/health",
+      "role": "owner",
+      "title": "Health — Aurora Coast Photography",
+      "slug": "admin-health",
+      "files": [
+        "admin-health--desktop--light.webp",
+        "admin-health--desktop--dark.webp",
+        "admin-health--mobile--light.webp",
+        "admin-health--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/hire",
+      "url": "/admin/hire",
+      "role": "owner",
+      "title": "Hire — Aurora Coast Photography",
+      "slug": "admin-hire",
+      "files": [
+        "admin-hire--desktop--light.webp",
+        "admin-hire--desktop--dark.webp",
+        "admin-hire--mobile--light.webp",
+        "admin-hire--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/imports/contacts",
+      "url": "/admin/imports/contacts",
+      "role": "owner",
+      "title": "Import studio — Aurora Coast Photography",
+      "slug": "admin-imports-contacts",
+      "files": [
+        "admin-imports-contacts--desktop--light.webp",
+        "admin-imports-contacts--desktop--dark.webp",
+        "admin-imports-contacts--mobile--light.webp",
+        "admin-imports-contacts--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/imports",
+      "url": "/admin/imports",
+      "role": "owner",
+      "title": "Import studio — Aurora Coast Photography",
+      "slug": "admin-imports",
+      "files": [
+        "admin-imports--desktop--light.webp",
+        "admin-imports--desktop--dark.webp",
+        "admin-imports--mobile--light.webp",
+        "admin-imports--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/inbox",
+      "url": "/admin/inbox",
+      "role": "owner",
+      "title": "Inbox — Aurora Coast Photography",
+      "slug": "admin-inbox",
+      "files": [
+        "admin-inbox--desktop--light.webp",
+        "admin-inbox--desktop--dark.webp",
+        "admin-inbox--mobile--light.webp",
+        "admin-inbox--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/inventory",
+      "url": "/admin/inventory",
+      "role": "owner",
+      "title": "Inventory — Aurora Coast Photography",
+      "slug": "admin-inventory",
+      "files": [
+        "admin-inventory--desktop--light.webp",
+        "admin-inventory--desktop--dark.webp",
+        "admin-inventory--mobile--light.webp",
+        "admin-inventory--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/invitations",
+      "url": "/admin/invitations",
+      "role": "owner",
+      "title": "Invitations — Aurora Coast Photography",
+      "slug": "admin-invitations",
+      "files": [
+        "admin-invitations--desktop--light.webp",
+        "admin-invitations--desktop--dark.webp",
+        "admin-invitations--mobile--light.webp",
+        "admin-invitations--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/invoices/new",
+      "url": "/admin/invoices/new",
+      "role": "owner",
+      "title": "Invoices — Aurora Coast Photography",
+      "slug": "admin-invoices-new",
+      "files": [
+        "admin-invoices-new--desktop--light.webp",
+        "admin-invoices-new--desktop--dark.webp",
+        "admin-invoices-new--mobile--light.webp",
+        "admin-invoices-new--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/invoices",
+      "url": "/admin/invoices",
+      "role": "owner",
+      "title": "Invoices — Aurora Coast Photography",
+      "slug": "admin-invoices",
+      "files": [
+        "admin-invoices--desktop--light.webp",
+        "admin-invoices--desktop--dark.webp",
+        "admin-invoices--mobile--light.webp",
+        "admin-invoices--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/invoices/recurring",
+      "url": "/admin/invoices/recurring",
+      "role": "owner",
+      "title": "Invoices — Aurora Coast Photography",
+      "slug": "admin-invoices-recurring",
+      "files": [
+        "admin-invoices-recurring--desktop--light.webp",
+        "admin-invoices-recurring--desktop--dark.webp",
+        "admin-invoices-recurring--mobile--light.webp",
+        "admin-invoices-recurring--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/invoices/tax",
+      "url": "/admin/invoices/tax",
+      "role": "owner",
+      "title": "Invoices — Aurora Coast Photography",
+      "slug": "admin-invoices-tax",
+      "files": [
+        "admin-invoices-tax--desktop--light.webp",
+        "admin-invoices-tax--desktop--dark.webp",
+        "admin-invoices-tax--mobile--light.webp",
+        "admin-invoices-tax--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/jobs/outbox",
+      "url": "/admin/jobs/outbox",
+      "role": "owner",
+      "title": "Event delivery",
+      "slug": "admin-jobs-outbox",
+      "files": [
+        "admin-jobs-outbox--desktop--light.webp",
+        "admin-jobs-outbox--desktop--dark.webp",
+        "admin-jobs-outbox--mobile--light.webp",
+        "admin-jobs-outbox--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/jobs",
+      "url": "/admin/jobs",
+      "role": "owner",
+      "title": "Background work",
+      "slug": "admin-jobs",
+      "files": [
+        "admin-jobs--desktop--light.webp",
+        "admin-jobs--desktop--dark.webp",
+        "admin-jobs--mobile--light.webp",
+        "admin-jobs--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/locations",
+      "url": "/admin/locations",
+      "role": "owner",
+      "title": "Locations — Aurora Coast Photography",
+      "slug": "admin-locations",
+      "files": [
+        "admin-locations--desktop--light.webp",
+        "admin-locations--desktop--dark.webp",
+        "admin-locations--mobile--light.webp",
+        "admin-locations--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/loyalty",
+      "url": "/admin/loyalty",
+      "role": "owner",
+      "title": "Loyalty — Aurora Coast Photography",
+      "slug": "admin-loyalty",
+      "files": [
+        "admin-loyalty--desktop--light.webp",
+        "admin-loyalty--desktop--dark.webp",
+        "admin-loyalty--mobile--light.webp",
+        "admin-loyalty--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/marketplace",
+      "url": "/admin/marketplace",
+      "role": "owner",
+      "title": "Marketplace channels — Aurora Coast Photography",
+      "slug": "admin-marketplace",
+      "files": [
+        "admin-marketplace--desktop--light.webp",
+        "admin-marketplace--desktop--dark.webp",
+        "admin-marketplace--mobile--light.webp",
+        "admin-marketplace--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/media",
+      "url": "/admin/media",
+      "role": "owner",
+      "title": "Media — Aurora Coast Photography",
+      "slug": "admin-media",
+      "files": [
+        "admin-media--desktop--light.webp",
+        "admin-media--desktop--dark.webp",
+        "admin-media--mobile--light.webp",
+        "admin-media--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/media/record",
+      "url": "/admin/media/record",
+      "role": "owner",
+      "title": "Media — Aurora Coast Photography",
+      "slug": "admin-media-record",
+      "files": [
+        "admin-media-record--desktop--light.webp",
+        "admin-media-record--desktop--dark.webp",
+        "admin-media-record--mobile--light.webp",
+        "admin-media-record--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/members",
+      "url": "/admin/members",
+      "role": "owner",
+      "title": "Members — Aurora Coast Photography",
+      "slug": "admin-members",
+      "files": [
+        "admin-members--desktop--light.webp",
+        "admin-members--desktop--dark.webp",
+        "admin-members--mobile--light.webp",
+        "admin-members--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/messaging",
+      "url": "/admin/messaging",
+      "role": "owner",
+      "title": "Text messaging — Aurora Coast Photography",
+      "slug": "admin-messaging",
+      "files": [
+        "admin-messaging--desktop--light.webp",
+        "admin-messaging--desktop--dark.webp",
+        "admin-messaging--mobile--light.webp",
+        "admin-messaging--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/newsletters/broadcasts",
+      "url": "/admin/newsletters/broadcasts",
+      "role": "owner",
+      "title": "Newsletters — Aurora Coast Photography",
+      "slug": "admin-newsletters-broadcasts",
+      "files": [
+        "admin-newsletters-broadcasts--desktop--light.webp",
+        "admin-newsletters-broadcasts--desktop--dark.webp",
+        "admin-newsletters-broadcasts--mobile--light.webp",
+        "admin-newsletters-broadcasts--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/newsletters",
+      "url": "/admin/newsletters",
+      "role": "owner",
+      "title": "Newsletters — Aurora Coast Photography",
+      "slug": "admin-newsletters",
+      "files": [
+        "admin-newsletters--desktop--light.webp",
+        "admin-newsletters--desktop--dark.webp",
+        "admin-newsletters--mobile--light.webp",
+        "admin-newsletters--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/newsletters/templates",
+      "url": "/admin/newsletters/templates",
+      "role": "owner",
+      "title": "Newsletters — Aurora Coast Photography",
+      "slug": "admin-newsletters-templates",
+      "files": [
+        "admin-newsletters-templates--desktop--light.webp",
+        "admin-newsletters-templates--desktop--dark.webp",
+        "admin-newsletters-templates--mobile--light.webp",
+        "admin-newsletters-templates--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/notifications",
+      "url": "/admin/notifications",
+      "role": "owner",
+      "title": "Notifications — Aurora Coast Photography",
+      "slug": "admin-notifications",
+      "files": [
+        "admin-notifications--desktop--light.webp",
+        "admin-notifications--desktop--dark.webp",
+        "admin-notifications--mobile--light.webp",
+        "admin-notifications--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/orders",
+      "url": "/admin/orders",
+      "role": "owner",
+      "title": "Orders — Aurora Coast Photography",
+      "slug": "admin-orders",
+      "files": [
+        "admin-orders--desktop--light.webp",
+        "admin-orders--desktop--dark.webp",
+        "admin-orders--mobile--light.webp",
+        "admin-orders--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin",
+      "url": "/admin",
+      "role": "owner",
+      "title": "Overview — Aurora Coast Photography",
+      "slug": "admin",
+      "files": [
+        "admin--desktop--light.webp",
+        "admin--desktop--dark.webp",
+        "admin--mobile--light.webp",
+        "admin--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/pages/new",
+      "url": "/admin/pages/new",
+      "role": "owner",
+      "title": "Pages — Aurora Coast Photography",
+      "slug": "admin-pages-new",
+      "files": [
+        "admin-pages-new--desktop--light.webp",
+        "admin-pages-new--desktop--dark.webp",
+        "admin-pages-new--mobile--light.webp",
+        "admin-pages-new--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/pages",
+      "url": "/admin/pages",
+      "role": "owner",
+      "title": "Pages — Aurora Coast Photography",
+      "slug": "admin-pages",
+      "files": [
+        "admin-pages--desktop--light.webp",
+        "admin-pages--desktop--dark.webp",
+        "admin-pages--mobile--light.webp",
+        "admin-pages--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/payments",
+      "url": "/admin/payments",
+      "role": "owner",
+      "title": "Payments — Aurora Coast Photography",
+      "slug": "admin-payments",
+      "files": [
+        "admin-payments--desktop--light.webp",
+        "admin-payments--desktop--dark.webp",
+        "admin-payments--mobile--light.webp",
+        "admin-payments--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/paywalls",
+      "url": "/admin/paywalls",
+      "role": "owner",
+      "title": "Paywalls — Aurora Coast Photography",
+      "slug": "admin-paywalls",
+      "files": [
+        "admin-paywalls--desktop--light.webp",
+        "admin-paywalls--desktop--dark.webp",
+        "admin-paywalls--mobile--light.webp",
+        "admin-paywalls--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/pipeline",
+      "url": "/admin/pipeline",
+      "role": "owner",
+      "title": "Pipeline — Aurora Coast Photography",
+      "slug": "admin-pipeline",
+      "files": [
+        "admin-pipeline--desktop--light.webp",
+        "admin-pipeline--desktop--dark.webp",
+        "admin-pipeline--mobile--light.webp",
+        "admin-pipeline--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/plugins",
+      "url": "/admin/plugins",
+      "role": "owner",
+      "title": "Plugins — Aurora Coast Photography",
+      "slug": "admin-plugins",
+      "files": [
+        "admin-plugins--desktop--light.webp",
+        "admin-plugins--desktop--dark.webp",
+        "admin-plugins--mobile--light.webp",
+        "admin-plugins--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/popups",
+      "url": "/admin/popups",
+      "role": "owner",
+      "title": "Popups — Aurora Coast Photography",
+      "slug": "admin-popups",
+      "files": [
+        "admin-popups--desktop--light.webp",
+        "admin-popups--desktop--dark.webp",
+        "admin-popups--mobile--light.webp",
+        "admin-popups--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/pos",
+      "url": "/admin/pos",
+      "role": "owner",
+      "title": "In person — Aurora Coast Photography",
+      "slug": "admin-pos",
+      "files": [
+        "admin-pos--desktop--light.webp",
+        "admin-pos--desktop--dark.webp",
+        "admin-pos--mobile--light.webp",
+        "admin-pos--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/price-lists",
+      "url": "/admin/price-lists",
+      "role": "owner",
+      "title": "Price lists — Aurora Coast Photography",
+      "slug": "admin-price-lists",
+      "files": [
+        "admin-price-lists--desktop--light.webp",
+        "admin-price-lists--desktop--dark.webp",
+        "admin-price-lists--mobile--light.webp",
+        "admin-price-lists--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/print-on-demand",
+      "url": "/admin/print-on-demand",
+      "role": "owner",
+      "title": "Print on demand — Aurora Coast Photography",
+      "slug": "admin-print-on-demand",
+      "files": [
+        "admin-print-on-demand--desktop--light.webp",
+        "admin-print-on-demand--desktop--dark.webp",
+        "admin-print-on-demand--mobile--light.webp",
+        "admin-print-on-demand--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/procurement",
+      "url": "/admin/procurement",
+      "role": "owner",
+      "title": "Procurement — Aurora Coast Photography",
+      "slug": "admin-procurement",
+      "files": [
+        "admin-procurement--desktop--light.webp",
+        "admin-procurement--desktop--dark.webp",
+        "admin-procurement--mobile--light.webp",
+        "admin-procurement--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/products/new",
+      "url": "/admin/products/new",
+      "role": "owner",
+      "title": "Products — Aurora Coast Photography",
+      "slug": "admin-products-new",
+      "files": [
+        "admin-products-new--desktop--light.webp",
+        "admin-products-new--desktop--dark.webp",
+        "admin-products-new--mobile--light.webp",
+        "admin-products-new--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/products",
+      "url": "/admin/products",
+      "role": "owner",
+      "title": "Products — Aurora Coast Photography",
+      "slug": "admin-products",
+      "files": [
+        "admin-products--desktop--light.webp",
+        "admin-products--desktop--dark.webp",
+        "admin-products--mobile--light.webp",
+        "admin-products--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/projects/collections",
+      "url": "/admin/projects/collections",
+      "role": "owner",
+      "title": "Projects — Aurora Coast Photography",
+      "slug": "admin-projects-collections",
+      "files": [
+        "admin-projects-collections--desktop--light.webp",
+        "admin-projects-collections--desktop--dark.webp",
+        "admin-projects-collections--mobile--light.webp",
+        "admin-projects-collections--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/projects",
+      "url": "/admin/projects",
+      "role": "owner",
+      "title": "Projects — Aurora Coast Photography",
+      "slug": "admin-projects",
+      "files": [
+        "admin-projects--desktop--light.webp",
+        "admin-projects--desktop--dark.webp",
+        "admin-projects--mobile--light.webp",
+        "admin-projects--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/promotions",
+      "url": "/admin/promotions",
+      "role": "owner",
+      "title": "Promotions — Aurora Coast Photography",
+      "slug": "admin-promotions",
+      "files": [
+        "admin-promotions--desktop--light.webp",
+        "admin-promotions--desktop--dark.webp",
+        "admin-promotions--mobile--light.webp",
+        "admin-promotions--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/quotes",
+      "url": "/admin/quotes",
+      "role": "owner",
+      "title": "Quotes — Aurora Coast Photography",
+      "slug": "admin-quotes",
+      "files": [
+        "admin-quotes--desktop--light.webp",
+        "admin-quotes--desktop--dark.webp",
+        "admin-quotes--mobile--light.webp",
+        "admin-quotes--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/redirects",
+      "url": "/admin/redirects",
+      "role": "owner",
+      "title": "Redirects — Aurora Coast Photography",
+      "slug": "admin-redirects",
+      "files": [
+        "admin-redirects--desktop--light.webp",
+        "admin-redirects--desktop--dark.webp",
+        "admin-redirects--mobile--light.webp",
+        "admin-redirects--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/referrals",
+      "url": "/admin/referrals",
+      "role": "owner",
+      "title": "Referrals — Aurora Coast Photography",
+      "slug": "admin-referrals",
+      "files": [
+        "admin-referrals--desktop--light.webp",
+        "admin-referrals--desktop--dark.webp",
+        "admin-referrals--mobile--light.webp",
+        "admin-referrals--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/reports/exports",
+      "url": "/admin/reports/exports",
+      "role": "owner",
+      "title": "Reports — Aurora Coast Photography",
+      "slug": "admin-reports-exports",
+      "files": [
+        "admin-reports-exports--desktop--light.webp",
+        "admin-reports-exports--desktop--dark.webp",
+        "admin-reports-exports--mobile--light.webp",
+        "admin-reports-exports--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/reports",
+      "url": "/admin/reports",
+      "role": "owner",
+      "title": "Reports — Aurora Coast Photography",
+      "slug": "admin-reports",
+      "files": [
+        "admin-reports--desktop--light.webp",
+        "admin-reports--desktop--dark.webp",
+        "admin-reports--mobile--light.webp",
+        "admin-reports--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/retention",
+      "url": "/admin/retention",
+      "role": "owner",
+      "title": "Retention — Aurora Coast Photography",
+      "slug": "admin-retention",
+      "files": [
+        "admin-retention--desktop--light.webp",
+        "admin-retention--desktop--dark.webp",
+        "admin-retention--mobile--light.webp",
+        "admin-retention--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/returns",
+      "url": "/admin/returns",
+      "role": "owner",
+      "title": "Returns — Aurora Coast Photography",
+      "slug": "admin-returns",
+      "files": [
+        "admin-returns--desktop--light.webp",
+        "admin-returns--desktop--dark.webp",
+        "admin-returns--mobile--light.webp",
+        "admin-returns--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/reviews",
+      "url": "/admin/reviews",
+      "role": "owner",
+      "title": "Reviews — Aurora Coast Photography",
+      "slug": "admin-reviews",
+      "files": [
+        "admin-reviews--desktop--light.webp",
+        "admin-reviews--desktop--dark.webp",
+        "admin-reviews--mobile--light.webp",
+        "admin-reviews--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/roles",
+      "url": "/admin/roles",
+      "role": "owner",
+      "title": "Roles — Aurora Coast Photography",
+      "slug": "admin-roles",
+      "files": [
+        "admin-roles--desktop--light.webp",
+        "admin-roles--desktop--dark.webp",
+        "admin-roles--mobile--light.webp",
+        "admin-roles--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/scoring",
+      "url": "/admin/scoring",
+      "role": "owner",
+      "title": "Scoring — Aurora Coast Photography",
+      "slug": "admin-scoring",
+      "files": [
+        "admin-scoring--desktop--light.webp",
+        "admin-scoring--desktop--dark.webp",
+        "admin-scoring--mobile--light.webp",
+        "admin-scoring--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/search",
+      "url": "/admin/search",
+      "role": "owner",
+      "title": "Search — Aurora Coast Photography",
+      "slug": "admin-search",
+      "files": [
+        "admin-search--desktop--light.webp",
+        "admin-search--desktop--dark.webp",
+        "admin-search--mobile--light.webp",
+        "admin-search--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/sections",
+      "url": "/admin/sections",
+      "role": "owner",
+      "title": "Header & footer — Aurora Coast Photography",
+      "slug": "admin-sections",
+      "files": [
+        "admin-sections--desktop--light.webp",
+        "admin-sections--desktop--dark.webp",
+        "admin-sections--mobile--light.webp",
+        "admin-sections--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/segments",
+      "url": "/admin/segments",
+      "role": "owner",
+      "title": "Groups of people — Aurora Coast Photography",
+      "slug": "admin-segments",
+      "files": [
+        "admin-segments--desktop--light.webp",
+        "admin-segments--desktop--dark.webp",
+        "admin-segments--mobile--light.webp",
+        "admin-segments--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/settings",
+      "url": "/admin/settings",
+      "role": "owner",
+      "title": "Settings — Aurora Coast Photography",
+      "slug": "admin-settings",
+      "files": [
+        "admin-settings--desktop--light.webp",
+        "admin-settings--desktop--dark.webp",
+        "admin-settings--mobile--light.webp",
+        "admin-settings--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/sharing",
+      "url": "/admin/sharing",
+      "role": "owner",
+      "title": "Sharing — Aurora Coast Photography",
+      "slug": "admin-sharing",
+      "files": [
+        "admin-sharing--desktop--light.webp",
+        "admin-sharing--desktop--dark.webp",
+        "admin-sharing--mobile--light.webp",
+        "admin-sharing--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/shipping",
+      "url": "/admin/shipping",
+      "role": "owner",
+      "title": "Shipping — Aurora Coast Photography",
+      "slug": "admin-shipping",
+      "files": [
+        "admin-shipping--desktop--light.webp",
+        "admin-shipping--desktop--dark.webp",
+        "admin-shipping--mobile--light.webp",
+        "admin-shipping--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/social",
+      "url": "/admin/social",
+      "role": "owner",
+      "title": "Social — Aurora Coast Photography",
+      "slug": "admin-social",
+      "files": [
+        "admin-social--desktop--light.webp",
+        "admin-social--desktop--dark.webp",
+        "admin-social--mobile--light.webp",
+        "admin-social--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/subscriptions",
+      "url": "/admin/subscriptions",
+      "role": "owner",
+      "title": "Memberships — Aurora Coast Photography",
+      "slug": "admin-subscriptions",
+      "files": [
+        "admin-subscriptions--desktop--light.webp",
+        "admin-subscriptions--desktop--dark.webp",
+        "admin-subscriptions--mobile--light.webp",
+        "admin-subscriptions--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/tasks",
+      "url": "/admin/tasks",
+      "role": "owner",
+      "title": "Tasks — Aurora Coast Photography",
+      "slug": "admin-tasks",
+      "files": [
+        "admin-tasks--desktop--light.webp",
+        "admin-tasks--desktop--dark.webp",
+        "admin-tasks--mobile--light.webp",
+        "admin-tasks--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/templates",
+      "url": "/admin/templates",
+      "role": "owner",
+      "title": "Templates — Aurora Coast Photography",
+      "slug": "admin-templates",
+      "files": [
+        "admin-templates--desktop--light.webp",
+        "admin-templates--desktop--dark.webp",
+        "admin-templates--mobile--light.webp",
+        "admin-templates--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/time",
+      "url": "/admin/time",
+      "role": "owner",
+      "title": "Time — Aurora Coast Photography",
+      "slug": "admin-time",
+      "files": [
+        "admin-time--desktop--light.webp",
+        "admin-time--desktop--dark.webp",
+        "admin-time--mobile--light.webp",
+        "admin-time--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/traffic/funnel",
+      "url": "/admin/traffic/funnel",
+      "role": "owner",
+      "title": "Traffic — Aurora Coast Photography",
+      "slug": "admin-traffic-funnel",
+      "files": [
+        "admin-traffic-funnel--desktop--light.webp",
+        "admin-traffic-funnel--desktop--dark.webp",
+        "admin-traffic-funnel--mobile--light.webp",
+        "admin-traffic-funnel--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/traffic",
+      "url": "/admin/traffic",
+      "role": "owner",
+      "title": "Traffic — Aurora Coast Photography",
+      "slug": "admin-traffic",
+      "files": [
+        "admin-traffic--desktop--light.webp",
+        "admin-traffic--desktop--dark.webp",
+        "admin-traffic--mobile--light.webp",
+        "admin-traffic--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/translations",
+      "url": "/admin/translations",
+      "role": "owner",
+      "title": "Translations — Aurora Coast Photography",
+      "slug": "admin-translations",
+      "files": [
+        "admin-translations--desktop--light.webp",
+        "admin-translations--desktop--dark.webp",
+        "admin-translations--mobile--light.webp",
+        "admin-translations--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/trash",
+      "url": "/admin/trash",
+      "role": "owner",
+      "title": "Admin — Aurora Coast Photography",
+      "slug": "admin-trash",
+      "files": [
+        "admin-trash--desktop--light.webp",
+        "admin-trash--desktop--dark.webp",
+        "admin-trash--mobile--light.webp",
+        "admin-trash--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/updates",
+      "url": "/admin/updates",
+      "role": "owner",
+      "title": "Updates",
+      "slug": "admin-updates",
+      "files": [
+        "admin-updates--desktop--light.webp",
+        "admin-updates--desktop--dark.webp",
+        "admin-updates--mobile--light.webp",
+        "admin-updates--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/voice-video",
+      "url": "/admin/voice-video",
+      "role": "owner",
+      "title": "Voice and video — Aurora Coast Photography",
+      "slug": "admin-voice-video",
+      "files": [
+        "admin-voice-video--desktop--light.webp",
+        "admin-voice-video--desktop--dark.webp",
+        "admin-voice-video--mobile--light.webp",
+        "admin-voice-video--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/work/approvals",
+      "url": "/admin/work/approvals",
+      "role": "owner",
+      "title": "Work board — Aurora Coast Photography",
+      "slug": "admin-work-approvals",
+      "files": [
+        "admin-work-approvals--desktop--light.webp",
+        "admin-work-approvals--desktop--dark.webp",
+        "admin-work-approvals--mobile--light.webp",
+        "admin-work-approvals--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/work",
+      "url": "/admin/work",
+      "role": "owner",
+      "title": "Work board — Aurora Coast Photography",
+      "slug": "admin-work",
+      "files": [
+        "admin-work--desktop--light.webp",
+        "admin-work--desktop--dark.webp",
+        "admin-work--mobile--light.webp",
+        "admin-work--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/work/playbooks",
+      "url": "/admin/work/playbooks",
+      "role": "owner",
+      "title": "Work board — Aurora Coast Photography",
+      "slug": "admin-work-playbooks",
+      "files": [
+        "admin-work-playbooks--desktop--light.webp",
+        "admin-work-playbooks--desktop--dark.webp",
+        "admin-work-playbooks--mobile--light.webp",
+        "admin-work-playbooks--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/work/spend",
+      "url": "/admin/work/spend",
+      "role": "owner",
+      "title": "Work board — Aurora Coast Photography",
+      "slug": "admin-work-spend",
+      "files": [
+        "admin-work-spend--desktop--light.webp",
+        "admin-work-spend--desktop--dark.webp",
+        "admin-work-spend--mobile--light.webp",
+        "admin-work-spend--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/forgot",
+      "url": "/forgot",
+      "role": "public",
+      "title": "Aurora Coast Photography",
+      "slug": "forgot",
+      "files": [
+        "forgot--desktop--light.webp",
+        "forgot--desktop--dark.webp",
+        "forgot--mobile--light.webp",
+        "forgot--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/login",
+      "url": "/login",
+      "role": "public",
+      "title": "Sign in — Freeholder",
+      "slug": "login",
+      "files": [
+        "login--desktop--light.webp",
+        "login--desktop--dark.webp",
+        "login--mobile--light.webp",
+        "login--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/book",
+      "url": "/book",
+      "role": "public",
+      "title": "Book an appointment · Aurora Coast Photography",
+      "slug": "book",
+      "files": [
+        "book--desktop--light.webp",
+        "book--desktop--dark.webp",
+        "book--mobile--light.webp",
+        "book--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/cart",
+      "url": "/cart",
+      "role": "public",
+      "title": "Your cart · Aurora Coast Photography",
+      "slug": "cart",
+      "files": [
+        "cart--desktop--light.webp",
+        "cart--desktop--dark.webp",
+        "cart--mobile--light.webp",
+        "cart--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/contribute",
+      "url": "/contribute",
+      "role": "public",
+      "title": "Talk to Freeholder",
+      "slug": "contribute",
+      "files": [
+        "contribute--desktop--light.webp",
+        "contribute--desktop--dark.webp",
+        "contribute--mobile--light.webp",
+        "contribute--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/feed",
+      "url": "/feed",
+      "role": "public",
+      "title": "Feed",
+      "slug": "feed",
+      "files": [
+        "feed--desktop--light.webp",
+        "feed--desktop--dark.webp",
+        "feed--mobile--light.webp",
+        "feed--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/join",
+      "url": "/join",
+      "role": "public",
+      "title": "Join",
+      "slug": "join",
+      "files": [
+        "join--desktop--light.webp",
+        "join--desktop--dark.webp",
+        "join--mobile--light.webp",
+        "join--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/market",
+      "url": "/market",
+      "role": "public",
+      "title": "Market",
+      "slug": "market",
+      "files": [
+        "market--desktop--light.webp",
+        "market--desktop--dark.webp",
+        "market--mobile--light.webp",
+        "market--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/market/policy",
+      "url": "/market/policy",
+      "role": "public",
+      "title": "What you can’t sell here",
+      "slug": "market-policy",
+      "files": [
+        "market-policy--desktop--light.webp",
+        "market-policy--desktop--dark.webp",
+        "market-policy--mobile--light.webp",
+        "market-policy--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/memberships",
+      "url": "/memberships",
+      "role": "public",
+      "title": "Memberships · Aurora Coast Photography",
+      "slug": "memberships",
+      "files": [
+        "memberships--desktop--light.webp",
+        "memberships--desktop--dark.webp",
+        "memberships--mobile--light.webp",
+        "memberships--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/messages",
+      "url": "/messages",
+      "role": "public",
+      "title": "Messages",
+      "slug": "messages",
+      "files": [
+        "messages--desktop--light.webp",
+        "messages--desktop--dark.webp",
+        "messages--mobile--light.webp",
+        "messages--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/search",
+      "url": "/search",
+      "role": "public",
+      "title": "Search · Aurora Coast Photography",
+      "slug": "search",
+      "files": [
+        "search--desktop--light.webp",
+        "search--desktop--dark.webp",
+        "search--mobile--light.webp",
+        "search--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/embed/booking",
+      "url": "/embed/booking",
+      "role": "public",
+      "title": "Book an appointment · Aurora Coast Photography",
+      "slug": "embed-booking",
+      "files": [
+        "embed-booking--desktop--light.webp",
+        "embed-booking--desktop--dark.webp",
+        "embed-booking--mobile--light.webp",
+        "embed-booking--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/embed/reviews",
+      "url": "/embed/reviews",
+      "role": "public",
+      "title": "Aurora Coast Photography",
+      "slug": "embed-reviews",
+      "files": [
+        "embed-reviews--desktop--light.webp",
+        "embed-reviews--desktop--dark.webp",
+        "embed-reviews--mobile--light.webp",
+        "embed-reviews--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/connections",
+      "url": "/portal/connections",
+      "role": "customer",
+      "title": "Connections",
+      "slug": "portal-connections",
+      "files": [
+        "portal-connections--desktop--light.webp",
+        "portal-connections--desktop--dark.webp",
+        "portal-connections--mobile--light.webp",
+        "portal-connections--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/listings",
+      "url": "/portal/listings",
+      "role": "customer",
+      "title": "My listings",
+      "slug": "portal-listings",
+      "files": [
+        "portal-listings--desktop--light.webp",
+        "portal-listings--desktop--dark.webp",
+        "portal-listings--mobile--light.webp",
+        "portal-listings--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/member",
+      "url": "/portal/member",
+      "role": "customer",
+      "title": "Member profile",
+      "slug": "portal-member",
+      "files": [
+        "portal-member--desktop--light.webp",
+        "portal-member--desktop--dark.webp",
+        "portal-member--mobile--light.webp",
+        "portal-member--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/notifications",
+      "url": "/portal/notifications",
+      "role": "customer",
+      "title": "Notifications",
+      "slug": "portal-notifications",
+      "files": [
+        "portal-notifications--desktop--light.webp",
+        "portal-notifications--desktop--dark.webp",
+        "portal-notifications--mobile--light.webp",
+        "portal-notifications--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal",
+      "url": "/portal",
+      "role": "customer",
+      "title": "Your account — Aurora Coast Photography",
+      "slug": "portal",
+      "files": [
+        "portal--desktop--light.webp",
+        "portal--desktop--dark.webp",
+        "portal--mobile--light.webp",
+        "portal--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/payouts",
+      "url": "/portal/payouts",
+      "role": "customer",
+      "title": "Payouts",
+      "slug": "portal-payouts",
+      "files": [
+        "portal-payouts--desktop--light.webp",
+        "portal-payouts--desktop--dark.webp",
+        "portal-payouts--mobile--light.webp",
+        "portal-payouts--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/profile",
+      "url": "/portal/profile",
+      "role": "customer",
+      "title": "Your account — Aurora Coast Photography",
+      "slug": "portal-profile",
+      "files": [
+        "portal-profile--desktop--light.webp",
+        "portal-profile--desktop--dark.webp",
+        "portal-profile--mobile--light.webp",
+        "portal-profile--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/purchases",
+      "url": "/portal/purchases",
+      "role": "customer",
+      "title": "Purchases",
+      "slug": "portal-purchases",
+      "files": [
+        "portal-purchases--desktop--light.webp",
+        "portal-purchases--desktop--dark.webp",
+        "portal-purchases--mobile--light.webp",
+        "portal-purchases--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/sales",
+      "url": "/portal/sales",
+      "role": "customer",
+      "title": "Sales",
+      "slug": "portal-sales",
+      "files": [
+        "portal-sales--desktop--light.webp",
+        "portal-sales--desktop--dark.webp",
+        "portal-sales--mobile--light.webp",
+        "portal-sales--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/appointments/moved",
+      "url": "/portal/appointments/moved",
+      "role": "customer",
+      "title": "Your appointment has moved",
+      "slug": "portal-appointments-moved",
+      "files": [
+        "portal-appointments-moved--desktop--light.webp",
+        "portal-appointments-moved--desktop--dark.webp",
+        "portal-appointments-moved--mobile--light.webp",
+        "portal-appointments-moved--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/contact-import",
+      "url": "/portal/contact-import",
+      "role": "customer",
+      "title": "Aurora Coast Photography",
+      "slug": "portal-contact-import",
+      "files": [
+        "portal-contact-import--desktop--light.webp",
+        "portal-contact-import--desktop--dark.webp",
+        "portal-contact-import--mobile--light.webp",
+        "portal-contact-import--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/login",
+      "url": "/portal/login",
+      "role": "public",
+      "title": "Customer sign-in — Aurora Coast Photography",
+      "slug": "portal-login",
+      "files": [
+        "portal-login--desktop--light.webp",
+        "portal-login--desktop--dark.webp",
+        "portal-login--mobile--light.webp",
+        "portal-login--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/privacy",
+      "url": "/portal/privacy",
+      "role": "customer",
+      "title": "Privacy centre",
+      "slug": "portal-privacy",
+      "files": [
+        "portal-privacy--desktop--light.webp",
+        "portal-privacy--desktop--dark.webp",
+        "portal-privacy--mobile--light.webp",
+        "portal-privacy--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/quotes/accepted",
+      "url": "/portal/quotes/accepted",
+      "role": "customer",
+      "title": "Accepted — thank you",
+      "slug": "portal-quotes-accepted",
+      "files": [
+        "portal-quotes-accepted--desktop--light.webp",
+        "portal-quotes-accepted--desktop--dark.webp",
+        "portal-quotes-accepted--mobile--light.webp",
+        "portal-quotes-accepted--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/registry",
+      "url": "/portal/registry",
+      "role": "customer",
+      "title": "Aurora Coast Photography",
+      "slug": "portal-registry",
+      "files": [
+        "portal-registry--desktop--light.webp",
+        "portal-registry--desktop--dark.webp",
+        "portal-registry--mobile--light.webp",
+        "portal-registry--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/appointments/[id]",
+      "url": "/admin/appointments/b8ff22d5-ba67-4007-91c7-01db1ed7a517",
+      "role": "owner",
+      "title": "Appointments — Aurora Coast Photography",
+      "slug": "admin-appointments-b8ff22d5-ba67-4007-91c7-01db1ed7a517",
+      "files": [
+        "admin-appointments-b8ff22d5-ba67-4007-91c7-01db1ed7a517--desktop--light.webp",
+        "admin-appointments-b8ff22d5-ba67-4007-91c7-01db1ed7a517--desktop--dark.webp",
+        "admin-appointments-b8ff22d5-ba67-4007-91c7-01db1ed7a517--mobile--light.webp",
+        "admin-appointments-b8ff22d5-ba67-4007-91c7-01db1ed7a517--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/calculators/[id]",
+      "url": "/admin/calculators/a1e9525d-01b2-4c78-b6e7-2e867cbe3260",
+      "role": "owner",
+      "title": "Calculators — Aurora Coast Photography",
+      "slug": "admin-calculators-a1e9525d-01b2-4c78-b6e7-2e867cbe3260",
+      "files": [
+        "admin-calculators-a1e9525d-01b2-4c78-b6e7-2e867cbe3260--desktop--light.webp",
+        "admin-calculators-a1e9525d-01b2-4c78-b6e7-2e867cbe3260--desktop--dark.webp",
+        "admin-calculators-a1e9525d-01b2-4c78-b6e7-2e867cbe3260--mobile--light.webp",
+        "admin-calculators-a1e9525d-01b2-4c78-b6e7-2e867cbe3260--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/calendars/[id]",
+      "url": "/admin/calendars/e9aeeabb-3790-4474-a8b4-7bd03e44b60a",
+      "role": "owner",
+      "title": "Calendars — Aurora Coast Photography",
+      "slug": "admin-calendars-e9aeeabb-3790-4474-a8b4-7bd03e44b60a",
+      "files": [
+        "admin-calendars-e9aeeabb-3790-4474-a8b4-7bd03e44b60a--desktop--light.webp",
+        "admin-calendars-e9aeeabb-3790-4474-a8b4-7bd03e44b60a--desktop--dark.webp",
+        "admin-calendars-e9aeeabb-3790-4474-a8b4-7bd03e44b60a--mobile--light.webp",
+        "admin-calendars-e9aeeabb-3790-4474-a8b4-7bd03e44b60a--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/collections/[id]",
+      "url": "/admin/collections/4cfaf366-644e-498e-a6d8-9de2915457d4",
+      "role": "owner",
+      "title": "Collections — Aurora Coast Photography",
+      "slug": "admin-collections-4cfaf366-644e-498e-a6d8-9de2915457d4",
+      "files": [
+        "admin-collections-4cfaf366-644e-498e-a6d8-9de2915457d4--desktop--light.webp",
+        "admin-collections-4cfaf366-644e-498e-a6d8-9de2915457d4--desktop--dark.webp",
+        "admin-collections-4cfaf366-644e-498e-a6d8-9de2915457d4--mobile--light.webp",
+        "admin-collections-4cfaf366-644e-498e-a6d8-9de2915457d4--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/contacts/[id]",
+      "url": "/admin/contacts/9268c4dc-7553-4a69-8a65-831f160ddcc5",
+      "role": "owner",
+      "title": "Contacts — Aurora Coast Photography",
+      "slug": "admin-contacts-9268c4dc-7553-4a69-8a65-831f160ddcc5",
+      "files": [
+        "admin-contacts-9268c4dc-7553-4a69-8a65-831f160ddcc5--desktop--light.webp",
+        "admin-contacts-9268c4dc-7553-4a69-8a65-831f160ddcc5--desktop--dark.webp",
+        "admin-contacts-9268c4dc-7553-4a69-8a65-831f160ddcc5--mobile--light.webp",
+        "admin-contacts-9268c4dc-7553-4a69-8a65-831f160ddcc5--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/events/[id]",
+      "url": "/admin/events/124a25e0-f8ef-4ecd-ad9a-1936f3d55869",
+      "role": "owner",
+      "title": "Events — Aurora Coast Photography",
+      "slug": "admin-events-124a25e0-f8ef-4ecd-ad9a-1936f3d55869",
+      "files": [
+        "admin-events-124a25e0-f8ef-4ecd-ad9a-1936f3d55869--desktop--light.webp",
+        "admin-events-124a25e0-f8ef-4ecd-ad9a-1936f3d55869--desktop--dark.webp",
+        "admin-events-124a25e0-f8ef-4ecd-ad9a-1936f3d55869--mobile--light.webp",
+        "admin-events-124a25e0-f8ef-4ecd-ad9a-1936f3d55869--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/facts/[key]",
+      "url": "/admin/facts/price.wedding-extra-hour",
+      "role": "owner",
+      "title": "Published figures — Aurora Coast Photography",
+      "slug": "admin-facts-price-wedding-extra-hour",
+      "files": [
+        "admin-facts-price-wedding-extra-hour--desktop--light.webp",
+        "admin-facts-price-wedding-extra-hour--desktop--dark.webp",
+        "admin-facts-price-wedding-extra-hour--mobile--light.webp",
+        "admin-facts-price-wedding-extra-hour--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/forms/[id]",
+      "url": "/admin/forms/84113f62-eaad-4d10-a128-9dd48e2eddc0",
+      "role": "owner",
+      "title": "Forms — Aurora Coast Photography",
+      "slug": "admin-forms-84113f62-eaad-4d10-a128-9dd48e2eddc0",
+      "files": [
+        "admin-forms-84113f62-eaad-4d10-a128-9dd48e2eddc0--desktop--light.webp",
+        "admin-forms-84113f62-eaad-4d10-a128-9dd48e2eddc0--desktop--dark.webp",
+        "admin-forms-84113f62-eaad-4d10-a128-9dd48e2eddc0--mobile--light.webp",
+        "admin-forms-84113f62-eaad-4d10-a128-9dd48e2eddc0--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/invoices/[id]",
+      "url": "/admin/invoices/bd3d8dac-44d1-44da-b77c-67d62af3aa06",
+      "role": "owner",
+      "title": "Invoices — Aurora Coast Photography",
+      "slug": "admin-invoices-bd3d8dac-44d1-44da-b77c-67d62af3aa06",
+      "files": [
+        "admin-invoices-bd3d8dac-44d1-44da-b77c-67d62af3aa06--desktop--light.webp",
+        "admin-invoices-bd3d8dac-44d1-44da-b77c-67d62af3aa06--desktop--dark.webp",
+        "admin-invoices-bd3d8dac-44d1-44da-b77c-67d62af3aa06--mobile--light.webp",
+        "admin-invoices-bd3d8dac-44d1-44da-b77c-67d62af3aa06--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/locations/[id]",
+      "url": "/admin/locations/new",
+      "role": "owner",
+      "title": "Locations — Aurora Coast Photography",
+      "slug": "admin-locations-new",
+      "files": [
+        "admin-locations-new--desktop--light.webp",
+        "admin-locations-new--desktop--dark.webp",
+        "admin-locations-new--mobile--light.webp",
+        "admin-locations-new--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/newsletters/[id]",
+      "url": "/admin/newsletters/673f85db-7400-4102-8301-daf42650d88e",
+      "role": "owner",
+      "title": "Newsletters — Aurora Coast Photography",
+      "slug": "admin-newsletters-673f85db-7400-4102-8301-daf42650d88e",
+      "files": [
+        "admin-newsletters-673f85db-7400-4102-8301-daf42650d88e--desktop--light.webp",
+        "admin-newsletters-673f85db-7400-4102-8301-daf42650d88e--desktop--dark.webp",
+        "admin-newsletters-673f85db-7400-4102-8301-daf42650d88e--mobile--light.webp",
+        "admin-newsletters-673f85db-7400-4102-8301-daf42650d88e--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/pages/[id]",
+      "url": "/admin/pages/f06d0067-3666-4acb-908c-e7634174f18e",
+      "role": "owner",
+      "title": "Pages — Aurora Coast Photography",
+      "slug": "admin-pages-f06d0067-3666-4acb-908c-e7634174f18e",
+      "files": [
+        "admin-pages-f06d0067-3666-4acb-908c-e7634174f18e--desktop--light.webp",
+        "admin-pages-f06d0067-3666-4acb-908c-e7634174f18e--desktop--dark.webp",
+        "admin-pages-f06d0067-3666-4acb-908c-e7634174f18e--mobile--light.webp",
+        "admin-pages-f06d0067-3666-4acb-908c-e7634174f18e--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/products/[id]",
+      "url": "/admin/products/3ecd11ab-b368-430a-984b-45cb2c167c54",
+      "role": "owner",
+      "title": "Products — Aurora Coast Photography",
+      "slug": "admin-products-3ecd11ab-b368-430a-984b-45cb2c167c54",
+      "files": [
+        "admin-products-3ecd11ab-b368-430a-984b-45cb2c167c54--desktop--light.webp",
+        "admin-products-3ecd11ab-b368-430a-984b-45cb2c167c54--desktop--dark.webp",
+        "admin-products-3ecd11ab-b368-430a-984b-45cb2c167c54--mobile--light.webp",
+        "admin-products-3ecd11ab-b368-430a-984b-45cb2c167c54--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/sections/[key]",
+      "url": "/admin/sections/announcement",
+      "role": "owner",
+      "title": "Header & footer — Aurora Coast Photography",
+      "slug": "admin-sections-announcement",
+      "files": [
+        "admin-sections-announcement--desktop--light.webp",
+        "admin-sections-announcement--desktop--dark.webp",
+        "admin-sections-announcement--mobile--light.webp",
+        "admin-sections-announcement--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/templates/[key]",
+      "url": "/admin/templates/email.booking-confirm",
+      "role": "owner",
+      "title": "Templates — Aurora Coast Photography",
+      "slug": "admin-templates-email-booking-confirm",
+      "files": [
+        "admin-templates-email-booking-confirm--desktop--light.webp",
+        "admin-templates-email-booking-confirm--desktop--dark.webp",
+        "admin-templates-email-booking-confirm--mobile--light.webp",
+        "admin-templates-email-booking-confirm--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/admin/translations/[locale]/[id]",
+      "url": "/admin/translations/fr-CA/f06d0067-3666-4acb-908c-e7634174f18e",
+      "role": "owner",
+      "title": "Translations — Aurora Coast Photography",
+      "slug": "admin-translations-fr-CA-f06d0067-3666-4acb-908c-e7634174f18e",
+      "files": [
+        "admin-translations-fr-CA-f06d0067-3666-4acb-908c-e7634174f18e--desktop--light.webp",
+        "admin-translations-fr-CA-f06d0067-3666-4acb-908c-e7634174f18e--desktop--dark.webp",
+        "admin-translations-fr-CA-f06d0067-3666-4acb-908c-e7634174f18e--mobile--light.webp",
+        "admin-translations-fr-CA-f06d0067-3666-4acb-908c-e7634174f18e--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/c/[slug]",
+      "url": "/c/gifts",
+      "role": "public",
+      "title": "Gifts · Aurora Coast Photography",
+      "slug": "c-gifts",
+      "files": [
+        "c-gifts--desktop--light.webp",
+        "c-gifts--desktop--dark.webp",
+        "c-gifts--mobile--light.webp",
+        "c-gifts--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/[section]",
+      "url": "/portal/subscriptions",
+      "role": "customer",
+      "title": "Memberships",
+      "slug": "portal-subscriptions",
+      "files": [
+        "portal-subscriptions--desktop--light.webp",
+        "portal-subscriptions--desktop--dark.webp",
+        "portal-subscriptions--mobile--light.webp",
+        "portal-subscriptions--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/subscriptions/[id]",
+      "url": "/portal/subscriptions/028d199a-cf57-4cfc-b1c0-aa5e6cc40ca1",
+      "role": "customer",
+      "title": "Your account — Aurora Coast Photography",
+      "slug": "portal-subscriptions-028d199a-cf57-4cfc-b1c0-aa5e6cc40ca1",
+      "files": [
+        "portal-subscriptions-028d199a-cf57-4cfc-b1c0-aa5e6cc40ca1--desktop--light.webp",
+        "portal-subscriptions-028d199a-cf57-4cfc-b1c0-aa5e6cc40ca1--desktop--dark.webp",
+        "portal-subscriptions-028d199a-cf57-4cfc-b1c0-aa5e6cc40ca1--mobile--light.webp",
+        "portal-subscriptions-028d199a-cf57-4cfc-b1c0-aa5e6cc40ca1--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/portal/invoices/[id]",
+      "url": "/portal/invoices/bd3d8dac-44d1-44da-b77c-67d62af3aa06",
+      "role": "customer",
+      "title": "Invoices",
+      "slug": "portal-invoices-bd3d8dac-44d1-44da-b77c-67d62af3aa06",
+      "files": [
+        "portal-invoices-bd3d8dac-44d1-44da-b77c-67d62af3aa06--desktop--light.webp",
+        "portal-invoices-bd3d8dac-44d1-44da-b77c-67d62af3aa06--desktop--dark.webp",
+        "portal-invoices-bd3d8dac-44d1-44da-b77c-67d62af3aa06--mobile--light.webp",
+        "portal-invoices-bd3d8dac-44d1-44da-b77c-67d62af3aa06--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/services",
+      "role": "public",
+      "title": "Photography services and pricing · Aurora Coast Photography",
+      "slug": "services",
+      "files": [
+        "services--desktop--light.webp",
+        "services--desktop--dark.webp",
+        "services--mobile--light.webp",
+        "services--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/products",
+      "role": "public",
+      "title": "Products · Aurora Coast Photography",
+      "slug": "products",
+      "files": [
+        "products--desktop--light.webp",
+        "products--desktop--dark.webp",
+        "products--mobile--light.webp",
+        "products--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/events",
+      "role": "public",
+      "title": "Events · Aurora Coast Photography",
+      "slug": "events",
+      "files": [
+        "events--desktop--light.webp",
+        "events--desktop--dark.webp",
+        "events--mobile--light.webp",
+        "events--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/blog",
+      "role": "public",
+      "title": "Studio journal · Aurora Coast Photography",
+      "slug": "blog",
+      "files": [
+        "blog--desktop--light.webp",
+        "blog--desktop--dark.webp",
+        "blog--mobile--light.webp",
+        "blog--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/about",
+      "role": "public",
+      "title": "About Aurora Coast Photography",
+      "slug": "about",
+      "files": [
+        "about--desktop--light.webp",
+        "about--desktop--dark.webp",
+        "about--mobile--light.webp",
+        "about--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/contact",
+      "role": "public",
+      "title": "Contact Aurora Coast Photography",
+      "slug": "contact",
+      "files": [
+        "contact--desktop--light.webp",
+        "contact--desktop--dark.webp",
+        "contact--mobile--light.webp",
+        "contact--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/locations",
+      "role": "public",
+      "title": "Locations · Aurora Coast Photography",
+      "slug": "locations",
+      "files": [
+        "locations--desktop--light.webp",
+        "locations--desktop--dark.webp",
+        "locations--mobile--light.webp",
+        "locations--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/services/weddings",
+      "role": "public",
+      "title": "Wedding photography, Vancouver Island",
+      "slug": "services-weddings",
+      "files": [
+        "services-weddings--desktop--light.webp",
+        "services-weddings--desktop--dark.webp",
+        "services-weddings--mobile--light.webp",
+        "services-weddings--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/services/portraits",
+      "role": "public",
+      "title": "Portrait sessions on the coast · Aurora Coast Photography",
+      "slug": "services-portraits",
+      "files": [
+        "services-portraits--desktop--light.webp",
+        "services-portraits--desktop--dark.webp",
+        "services-portraits--mobile--light.webp",
+        "services-portraits--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/planning",
+      "role": "public",
+      "title": "Plan a photography budget · Aurora Coast Photography",
+      "slug": "planning",
+      "files": [
+        "planning--desktop--light.webp",
+        "planning--desktop--dark.webp",
+        "planning--mobile--light.webp",
+        "planning--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/newsletters",
+      "role": "public",
+      "title": "Studio newsletters · Aurora Coast Photography",
+      "slug": "newsletters",
+      "files": [
+        "newsletters--desktop--light.webp",
+        "newsletters--desktop--dark.webp",
+        "newsletters--mobile--light.webp",
+        "newsletters--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA",
+      "role": "public",
+      "title": "Aurora Coast Photographie",
+      "slug": "fr-CA",
+      "files": [
+        "fr-CA--desktop--light.webp",
+        "fr-CA--desktop--dark.webp",
+        "fr-CA--mobile--light.webp",
+        "fr-CA--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/locations/courtenay",
+      "role": "public",
+      "title": "Courtenay · Aurora Coast Photography",
+      "slug": "locations-courtenay",
+      "files": [
+        "locations-courtenay--desktop--light.webp",
+        "locations-courtenay--desktop--dark.webp",
+        "locations-courtenay--mobile--light.webp",
+        "locations-courtenay--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA/book",
+      "role": "public",
+      "title": "Réserver un rendez-vous · Aurora Coast Photography",
+      "slug": "fr-CA-book",
+      "files": [
+        "fr-CA-book--desktop--light.webp",
+        "fr-CA-book--desktop--dark.webp",
+        "fr-CA-book--mobile--light.webp",
+        "fr-CA-book--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA/cart",
+      "role": "public",
+      "title": "Votre panier · Aurora Coast Photography",
+      "slug": "fr-CA-cart",
+      "files": [
+        "fr-CA-cart--desktop--light.webp",
+        "fr-CA-cart--desktop--dark.webp",
+        "fr-CA-cart--mobile--light.webp",
+        "fr-CA-cart--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA/contribute",
+      "role": "public",
+      "title": "Parler à Freeholder",
+      "slug": "fr-CA-contribute",
+      "files": [
+        "fr-CA-contribute--desktop--light.webp",
+        "fr-CA-contribute--desktop--dark.webp",
+        "fr-CA-contribute--mobile--light.webp",
+        "fr-CA-contribute--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA/feed",
+      "role": "public",
+      "title": "Fil",
+      "slug": "fr-CA-feed",
+      "files": [
+        "fr-CA-feed--desktop--light.webp",
+        "fr-CA-feed--desktop--dark.webp",
+        "fr-CA-feed--mobile--light.webp",
+        "fr-CA-feed--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA/join",
+      "role": "public",
+      "title": "Rejoindre",
+      "slug": "fr-CA-join",
+      "files": [
+        "fr-CA-join--desktop--light.webp",
+        "fr-CA-join--desktop--dark.webp",
+        "fr-CA-join--mobile--light.webp",
+        "fr-CA-join--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA/market",
+      "role": "public",
+      "title": "Marché",
+      "slug": "fr-CA-market",
+      "files": [
+        "fr-CA-market--desktop--light.webp",
+        "fr-CA-market--desktop--dark.webp",
+        "fr-CA-market--mobile--light.webp",
+        "fr-CA-market--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA/market/policy",
+      "role": "public",
+      "title": "Ce qui est interdit à la vente",
+      "slug": "fr-CA-market-policy",
+      "files": [
+        "fr-CA-market-policy--desktop--light.webp",
+        "fr-CA-market-policy--desktop--dark.webp",
+        "fr-CA-market-policy--mobile--light.webp",
+        "fr-CA-market-policy--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA/memberships",
+      "role": "public",
+      "title": "Abonnements · Aurora Coast Photography",
+      "slug": "fr-CA-memberships",
+      "files": [
+        "fr-CA-memberships--desktop--light.webp",
+        "fr-CA-memberships--desktop--dark.webp",
+        "fr-CA-memberships--mobile--light.webp",
+        "fr-CA-memberships--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA/messages",
+      "role": "public",
+      "title": "Messages",
+      "slug": "fr-CA-messages",
+      "files": [
+        "fr-CA-messages--desktop--light.webp",
+        "fr-CA-messages--desktop--dark.webp",
+        "fr-CA-messages--mobile--light.webp",
+        "fr-CA-messages--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/products/coastal-calendar-2027",
+      "role": "public",
+      "title": "Coastal Calendar 2027 · Aurora Coast Photography",
+      "slug": "products-coastal-calendar-2027",
+      "files": [
+        "products-coastal-calendar-2027--desktop--light.webp",
+        "products-coastal-calendar-2027--desktop--dark.webp",
+        "products-coastal-calendar-2027--mobile--light.webp",
+        "products-coastal-calendar-2027--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/products/driftwood-dawn-print",
+      "role": "public",
+      "title": "Driftwood Dawn · Aurora Coast Photography",
+      "slug": "products-driftwood-dawn-print",
+      "files": [
+        "products-driftwood-dawn-print--desktop--light.webp",
+        "products-driftwood-dawn-print--desktop--dark.webp",
+        "products-driftwood-dawn-print--mobile--light.webp",
+        "products-driftwood-dawn-print--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/products/aurora-coast-gift-card",
+      "role": "public",
+      "title": "Gift card · Aurora Coast Photography",
+      "slug": "products-aurora-coast-gift-card",
+      "files": [
+        "products-aurora-coast-gift-card--desktop--light.webp",
+        "products-aurora-coast-gift-card--desktop--dark.webp",
+        "products-aurora-coast-gift-card--mobile--light.webp",
+        "products-aurora-coast-gift-card--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/products/headland-low-tide-print",
+      "role": "public",
+      "title": "Headland at Low Tide · Aurora Coast Photography",
+      "slug": "products-headland-low-tide-print",
+      "files": [
+        "products-headland-low-tide-print--desktop--light.webp",
+        "products-headland-low-tide-print--desktop--dark.webp",
+        "products-headland-low-tide-print--mobile--light.webp",
+        "products-headland-low-tide-print--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/products/headshot-session",
+      "role": "public",
+      "title": "Headshot session · Aurora Coast Photography",
+      "slug": "products-headshot-session",
+      "files": [
+        "products-headshot-session--desktop--light.webp",
+        "products-headshot-session--desktop--dark.webp",
+        "products-headshot-session--mobile--light.webp",
+        "products-headshot-session--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/products/mini-session",
+      "role": "public",
+      "title": "Mini session · Aurora Coast Photography",
+      "slug": "products-mini-session",
+      "files": [
+        "products-mini-session--desktop--light.webp",
+        "products-mini-session--desktop--dark.webp",
+        "products-mini-session--mobile--light.webp",
+        "products-mini-session--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/products/portrait-session",
+      "role": "public",
+      "title": "Portrait session · Aurora Coast Photography",
+      "slug": "products-portrait-session",
+      "files": [
+        "products-portrait-session--desktop--light.webp",
+        "products-portrait-session--desktop--dark.webp",
+        "products-portrait-session--mobile--light.webp",
+        "products-portrait-session--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/products/portrait-session-voucher",
+      "role": "public",
+      "title": "Portrait session voucher · Aurora Coast Photography",
+      "slug": "products-portrait-session-voucher",
+      "files": [
+        "products-portrait-session-voucher--desktop--light.webp",
+        "products-portrait-session-voucher--desktop--dark.webp",
+        "products-portrait-session-voucher--mobile--light.webp",
+        "products-portrait-session-voucher--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/products/strait-in-fog-print",
+      "role": "public",
+      "title": "Strait in Fog · Aurora Coast Photography",
+      "slug": "products-strait-in-fog-print",
+      "files": [
+        "products-strait-in-fog-print--desktop--light.webp",
+        "products-strait-in-fog-print--desktop--dark.webp",
+        "products-strait-in-fog-print--mobile--light.webp",
+        "products-strait-in-fog-print--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA/search",
+      "role": "public",
+      "title": "Recherche · Aurora Coast Photography",
+      "slug": "fr-CA-search",
+      "files": [
+        "fr-CA-search--desktop--light.webp",
+        "fr-CA-search--desktop--dark.webp",
+        "fr-CA-search--mobile--light.webp",
+        "fr-CA-search--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA/portal/login",
+      "role": "public",
+      "title": "Connexion client — Aurora Coast Photography",
+      "slug": "fr-CA-portal-login",
+      "files": [
+        "fr-CA-portal-login--desktop--light.webp",
+        "fr-CA-portal-login--desktop--dark.webp",
+        "fr-CA-portal-login--mobile--light.webp",
+        "fr-CA-portal-login--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/newsletters/first-light",
+      "role": "public",
+      "title": "First light on the coast · Aurora Coast Photography",
+      "slug": "newsletters-first-light",
+      "files": [
+        "newsletters-first-light--desktop--light.webp",
+        "newsletters-first-light--desktop--dark.webp",
+        "newsletters-first-light--mobile--light.webp",
+        "newsletters-first-light--mobile--dark.webp"
+      ]
+    },
+    {
+      "route": "/[[...slug]]",
+      "url": "/fr-CA/c/gifts",
+      "role": "public",
+      "title": "Gifts · Aurora Coast Photography",
+      "slug": "fr-CA-c-gifts",
+      "files": [
+        "fr-CA-c-gifts--desktop--light.webp",
+        "fr-CA-c-gifts--desktop--dark.webp",
+        "fr-CA-c-gifts--mobile--light.webp",
+        "fr-CA-c-gifts--mobile--dark.webp"
+      ]
+    }
+  ],
+  "skipped": [
+    {
+      "route": "/admin/unavailable",
+      "reason": "redirects to /admin"
+    },
+    {
+      "route": "/security",
+      "reason": "redirects to /login"
+    },
+    {
+      "route": "/checkout",
+      "reason": "redirects to /cart"
+    },
+    {
+      "route": "/memberships/trial-return",
+      "reason": "HTTP 404"
+    },
+    {
+      "route": "/orders/confirm",
+      "reason": "HTTP 404"
+    },
+    {
+      "route": "/report",
+      "reason": "HTTP 404"
+    },
+    {
+      "route": "/admin/agreements/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/assessments/[id]/edit",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/assessments/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/automations/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/builder/proposals/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/carts/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/contacts/organizations/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/contacts/privacy/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/contribute/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/documents/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/forms/[id]/edit",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/galleries/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/imports/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/imports/contacts/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/inbox/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/jobs/[name]/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/jobs/outbox/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/newsletters/broadcasts/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/orders/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/popups/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/projects/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/projects/collections/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/quotes/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/subscriptions/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/admin/work/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/preview/page/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/preview/popup/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/preview/product/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/preview/project/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/preview/section/[key]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/preview/share/[token]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/preview/template/[key]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/call/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/call/group/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/community/[slug]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/gifts/[slug]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/m/[handle]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/messages/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/p/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/tags/[tag]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/capture/[token]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/embed/gallery/[slug]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/embed/newsletter/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/g/[slug]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/gift/[token]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/portal/messages/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/portal/purchases/[orderId]/[sellerId]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/portal/records/[section]/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/portal/sales/[orderId]/[sellerId]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/portal/agreements/[token]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/portal/appointments/[token]/intake",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/portal/appointments/[token]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/portal/contact-import/[id]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/portal/invoices/confirmation/[token]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/portal/quotes/[token]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/portal/quotes/partner/[token]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/registry/[token]",
+      "reason": "no link to a record of this kind in the demo"
+    },
+    {
+      "route": "/[[...slug]]",
+      "reason": "HTTP 404"
+    }
+  ]
+}
