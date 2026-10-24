@@ -9,17 +9,16 @@ import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
+import { and, eq } from "drizzle-orm";
 import { API_BASE } from "@/core/api/dispatch";
 import { db } from "@/core/db";
 import { users, totpFactors } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
-import { taxRates, taxRegistrations, taxZones } from "@/modules/invoicing/schema";
+import { taxCategories } from "@/modules/invoicing/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { THEME_COOKIE } from "@/core/design/theme";
 import { CSRF_COOKIE, CSRF_HEADER, issueCsrfToken } from "@/core/http/csrf";
-import { calendars, calendarMemberships, availabilityRules } from "@/core/scheduling/schema";
-import { bookingAudiences, bookingAudienceServices } from "@/core/scheduling/audience-schema";
-import { cancellationPolicies, priceListEntries, priceLists, productVariants, products, serviceOfferings, priceRules } from "@/modules/catalog/schema";
+import { cancellationPolicies, priceListEntries, priceLists, productVariants, products, serviceOfferings } from "@/modules/catalog/schema";
 import { plans } from "@/modules/subscriptions/schema";
 import { C11_BASE_URL, C11_OWNER } from "./owner-session";
 import { resetBrowserDatabase } from "./database";
@@ -120,13 +119,25 @@ async function installDemo(ownerToken: string): Promise<void> {
 }
 
 /**
- * A believable small business for the screens people will see: three session
- * times on a weekday in the business's own time zone, a real cancellation
- * policy, GST on the invoice and a client list with more than one person.
+ * A believable small business for the screens people will see. `demo.install`
+ * already seeds Aurora Coast's shop, services, studio calendar, public
+ * audience, CAD retail price list and BC GST/PST registration (C1.38), so the
+ * fixture reuses those by slug and name and adds only what the demo leaves
+ * out: a cancellation policy on the portrait session, a membership plan, a
+ * signed-in customer and a client list with more than one person. Inserting
+ * its own copies used to collide with the seed (products_slug_idx) and would
+ * have put a second calendar, audience, price list and tax zone on screen.
  */
 async function fixture() {
+  // Fourteen days out, on a weekday the studio calendar has hours for.
   const day=new Date();day.setUTCDate(day.getUTCDate()+14);
+  while(day.getUTCDay()===0||day.getUTCDay()===6)day.setUTCDate(day.getUTCDate()+1);
   const date=day.toISOString().slice(0,10);
+  const one=<T>(rows:T[],what:string):T=>{if(!rows[0])throw new Error(`The demo seed no longer provides ${what}.`);return rows[0];};
+  const service=one(await db().select({id:products.id}).from(products).where(eq(products.slug,"portrait-session")),"the portrait-session service");
+  const offering=one(await db().select({id:serviceOfferings.id}).from(serviceOfferings).where(eq(serviceOfferings.productId,service.id)),"an offering for the portrait session");
+  const retail=one(await db().select({id:priceLists.id}).from(priceLists).where(and(eq(priceLists.name,"CAD retail"),eq(priceLists.currency,"CAD"))),"the CAD retail price list");
+  const standard=one(await db().select({id:taxCategories.id}).from(taxCategories).where(eq(taxCategories.code,"standard")),"the standard tax category");
   const [customer]=await db().insert(users).values({email:"maya.chen@example.test",role:"customer"}).returning();
   await db().insert(contacts).values({email:customer!.email,name:"Maya Chen",userId:customer!.id,lifecycleStage:"customer",source:"booking"});
   await db().insert(contacts).values([
@@ -139,23 +150,13 @@ async function fixture() {
     {email:"ben.kowalski@example.test",name:"Ben Kowalski",lifecycleStage:"lead",source:"contact-form"},
   ]);
   const session=await db().transaction(tx=>createSession(tx,customer!.id));
-  const [service, membership]=await db().insert(products).values([{name:"Portrait session",slug:"portrait-session",kind:"service",status:"active",publishedAt:new Date()},{name:"Community membership",slug:"community-membership",kind:"digital",status:"active",publishedAt:new Date()}]).returning();
-  const variants=await db().insert(productVariants).values([service!,membership!].map(p=>({productId:p.id,sku:randomUUID(),combinationKey:"default",isDefault:true}))).returning();
-  const [priceList]=await db().insert(priceLists).values({name:"Public prices",currency:"CAD",active:true}).returning();
-  await db().insert(priceListEntries).values([{priceListId:priceList!.id,variantId:variants[0]!.id,amountMinor:25000},{priceListId:priceList!.id,variantId:variants[1]!.id,amountMinor:2000}]);
   const [policy]=await db().insert(cancellationPolicies).values({name:"48-hour notice",freeUntilHours:48,feeType:"percent",feeValue:500000,rescheduleLimit:2}).returning();
-  const [offering]=await db().insert(serviceOfferings).values({productId:service!.id,durationMin:60,locationType:"in_person",cancellationPolicyId:policy!.id}).returning();
-  await db().insert(priceRules).values({productId:service!.id,mode:"full"});
-  const [calendar]=await db().insert(calendars).values({kind:"person",userId:C11_OWNER.userId,name:"Portrait sessions",slug:"portrait-sessions",timezone:"America/Vancouver",minNoticeMin:0}).returning();
-  await db().insert(availabilityRules).values(["10:00","13:00","15:00"].map(starts=>({calendarId:calendar!.id,weekday:day.getUTCDay(),starts,ends:`${Number(starts.slice(0,2))+1}:00`,kind:"bookable" as const})));
-  await db().insert(calendarMemberships).values({calendarId:calendar!.id,serviceOfferingId:offering!.id,role:"primary"});
-  const [audience]=await db().insert(bookingAudiences).values({name:"Public",slug:"public",who:"public",hours:"calendar",minNoticeMin:0}).returning();
-  await db().insert(bookingAudienceServices).values({audienceId:audience!.id,serviceOfferingId:offering!.id});
+  await db().update(serviceOfferings).set({cancellationPolicyId:policy!.id}).where(eq(serviceOfferings.id,offering.id));
+  const [membership]=await db().insert(products).values({name:"Community membership",slug:"community-membership",kind:"digital",status:"active",taxCategoryId:standard.id,publishedAt:new Date()}).returning();
+  const [variant]=await db().insert(productVariants).values({productId:membership!.id,sku:randomUUID(),combinationKey:"default",isDefault:true}).returning();
+  await db().insert(priceListEntries).values({priceListId:retail.id,variantId:variant!.id,amountMinor:2000});
   await db().insert(plans).values({productId:membership!.id,name:"Community membership",status:"active",billingMode:"manual",interval:"month"});
-  const [zone]=await db().insert(taxZones).values({name:"Canada",country:"CA",basis:"origin"}).returning();
-  await db().insert(taxRates).values({zoneId:zone!.id,name:"GST",jurisdiction:"CA",ratePpm:50000});
-  await db().insert(taxRegistrations).values({zoneId:zone!.id,number:"123456789 RT0001",status:"active"});
-  return {date,serviceId:service!.id,customerId:customer!.id,token:session.token};
+  return {date,serviceId:service.id,customerId:customer!.id,token:session.token};
 }
 
 test.describe("living screenshots", () => {
