@@ -216,6 +216,11 @@ describe("short zone names in event times", () => {
       weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
       timeZoneName: "short", timeZone,
     }).formatRange(start, end);
+  const shortBefore = (at: Date, timeZone: string, locale: string) =>
+    new Intl.DateTimeFormat(locale, {
+      weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+      timeZoneName: "short", timeZone,
+    }).format(at);
 
   it("names Pacific zones PT in summer and winter, Vancouver included", () => {
     for (const [start, end] of [summer, winter]) {
@@ -238,10 +243,16 @@ describe("short zone names in event times", () => {
     }
   });
 
-  it("keeps every other short name exactly as before", () => {
+  it("keeps every other short name exactly as before, byte for byte", () => {
+    // Byte for byte: V8's format() writes a plain space before AM/PM where its
+    // parts keep U+202F, so nothing may be rebuilt from parts unless swapped.
+    const unchanged = ["Europe/Berlin", "UTC", "America/Sao_Paulo", "America/Adak", "Pacific/Honolulu"];
     for (const [start, end] of [summer, winter]) {
       for (const locale of ["en-US", "en-GB", "fr"]) {
-        expect(formatDateTimeRange(start, end, "Europe/Berlin", locale)).toBe(asBefore(start, end, "Europe/Berlin", locale));
+        for (const zone of unchanged) {
+          expect(formatDateTimeRange(start, end, zone, locale)).toBe(asBefore(start, end, zone, locale));
+          expect(formatDateTimeShort(start, zone, locale)).toBe(shortBefore(start, zone, locale));
+        }
       }
       expect(formatDateTimeRange(start, end, "Europe/Berlin", "en-US")).not.toMatch(/Germany/);
       expect(formatDateTimeRange(start, end, "Europe/Berlin", "fr")).not.toMatch(/Allemagne/);
@@ -251,6 +262,32 @@ describe("short zone names in event times", () => {
     expect(formatDateTimeRange(...winter, "Europe/Berlin", "en-US")).toMatch(/\sGMT\+1$/);
     // A spelled-out American generic ("São Paulo Time") keeps the offset too.
     expect(formatDateTimeRange(...winter, "America/Sao_Paulo", "en-US")).toBe(asBefore(...winter, "America/Sao_Paulo", "en-US"));
+  });
+
+  it("swaps only the zone name, keeping format()'s own spacing", () => {
+    // A zone whose rules did not change, so the abbreviation it replaces is
+    // known under every tz data version.
+    expect(formatDateTimeShort(winter[0], "America/Los_Angeles", "en-US"))
+      .toBe(shortBefore(winter[0], "America/Los_Angeles", "en-US").replace(/PST$/, "PT"));
+    expect(formatDateTimeRange(...summer, "America/New_York", "en-US"))
+      .toBe(asBefore(...summer, "America/New_York", "en-US").replace(/EDT$/, "ET"));
+  });
+
+  it("reads an alias the same as the zone it names", () => {
+    for (const [alias, zone] of [["US/Pacific", "America/Los_Angeles"], ["Canada/Pacific", "America/Vancouver"], ["Canada/Mountain", "America/Edmonton"]]) {
+      for (const [start, end] of [summer, winter]) {
+        expect(formatDateTimeRange(start, end, alias!, "en-US")).toBe(formatDateTimeRange(start, end, zone!, "en-US"));
+        expect(formatDateTimeShort(start, alias!, "en-US")).toBe(formatDateTimeShort(start, zone!, "en-US"));
+      }
+    }
+    expect(formatDateTimeShort(winter[0], "Canada/Pacific", "en-US")).toMatch(/ PT$/);
+  });
+
+  it("swaps only the listed generic names", () => {
+    // ICU's generic name for Adak is "HAT", which few readers know.
+    expect(formatDateTimeShort(winter[0], "America/Adak", "en-US")).not.toMatch(/HAT/);
+    expect(formatDateTimeShort(summer[0], "America/Anchorage", "en-US")).toMatch(/ AKT$/);
+    expect(formatDateTimeShort(summer[0], "America/Halifax", "en-US")).toMatch(/ AT$/);
   });
 
   it("falls back to the short name where there is no generic one", () => {

@@ -283,40 +283,65 @@ const RANGE_PARTS: Intl.DateTimeFormatOptions = {
 };
 
 /**
- * A North American zone's short generic abbreviation — "PT", "MT", "CT",
- * "ET", "AT", "AKT" — in place of its standard/daylight one, or undefined to
- * keep the short name as ICU gives it. Those abbreviations encode a daylight
- * rule, and Canada's rules changed in 2026: with tz data 2026e, ICU 78.3
- * calls a December in Vancouver "PDT", in Edmonton "MDT" and in Winnipeg
- * "CDT". The generic one is right under any rule. ICU adds its region to
- * some ("PT (Canada)"), which is dropped. Only a real abbreviation is used
- * (two to five capitals); a spelled-out generic ("Germany Time"), an offset
- * ("GMT+0") or nothing keeps the short name. Elsewhere the short name stays
- * exactly as it was, so Europe keeps "CET"/"CEST" and "GMT+1".
+ * The generic abbreviations a visitor reads in place of a standard/daylight
+ * one: Pacific, Mountain, Central, Eastern, Atlantic and Alaska time. They are
+ * the North American names people actually write. Standard/daylight
+ * abbreviations encode a daylight rule, and Canada's rules changed in 2026:
+ * with tz data 2026e, ICU 78.3 calls a December in Vancouver "PDT", in
+ * Edmonton "MDT" and in Winnipeg "CDT". These generic names are right under
+ * any rule. The list is explicit rather than "any short capitals": ICU also
+ * has generic names such as "HAT" (Adak) that few readers know, and en-GB's
+ * "CET" would replace a summer "CEST" that Europeans expect. Newfoundland has
+ * no short generic name in ICU, and Hawaii's is already "HST", so neither is
+ * listed. Every zone whose generic name is not on the list keeps exactly the
+ * short name it had (CET/CEST, GMT+1, UTC, HST).
  */
+const GENERIC_ABBREVIATIONS = new Set(["PT", "MT", "CT", "ET", "AT", "AKT"]);
+
 function genericAbbreviation(locale: string, timezone: string, at: Date): string | undefined {
-  if (!timezone.startsWith("America/")) return undefined;
   const generic = new Intl.DateTimeFormat(locale, { timeZone: timezone, timeZoneName: "shortGeneric" })
     .formatToParts(at)
     .find((part) => part.type === "timeZoneName")?.value;
+  // ICU adds its region to some ("PT (Canada)"); the abbreviation is the name.
   const cleaned = generic?.replace(/\s*\([^()]*\)$/, "");
-  return cleaned && /^[A-Z]{2,5}$/.test(cleaned) ? cleaned : undefined;
+  return cleaned && GENERIC_ABBREVIATIONS.has(cleaned) ? cleaned : undefined;
 }
 
+/**
+ * `text` is what `format()`/`formatRange()` returned, and it is returned
+ * unchanged unless a zone name is swapped. Swapping edits that string rather
+ * than rebuilding it from parts, because V8's `format()` writes a plain space
+ * before AM/PM where its parts keep U+202F, and the output must stay the same
+ * bytes as before everywhere else.
+ */
 function withZoneName(
+  text: string,
   parts: Array<Intl.DateTimeFormatPart & { source?: string }>,
   locale: string,
   timezone: string,
   start: Date,
   end: Date,
 ): string {
-  return parts
-    .map((part) =>
-      part.type === "timeZoneName"
-        ? genericAbbreviation(locale, timezone, part.source === "endRange" ? end : start) ?? part.value
-        : part.value,
-    )
-    .join("");
+  const swaps = new Map<string, string>();
+  for (const part of parts) {
+    if (part.type !== "timeZoneName") continue;
+    const generic = genericAbbreviation(locale, timezone, part.source === "endRange" ? end : start);
+    if (generic && generic !== part.value) swaps.set(part.value, generic);
+  }
+  let swapped = text;
+  for (const [short, generic] of swaps) {
+    const escaped = short.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    swapped = swapped.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "gu"), generic);
+  }
+  return swapped;
+}
+
+/** The zone a formatter should use: renderable, with aliases resolved. */
+function formattingZone(timezone: string): string {
+  const zone = renderableTimezone(timezone).timezone;
+  // US/Pacific and Canada/Pacific name America/Los_Angeles and
+  // America/Vancouver; resolve them so an alias reads the same as its zone.
+  return new Intl.DateTimeFormat("en", { timeZone: zone }).resolvedOptions().timeZone;
 }
 
 /**
@@ -330,16 +355,16 @@ export function formatDateTimeRange(
   timezone: string,
   locale: string = DEFAULT_LOCALE,
 ): string {
-  const zone = renderableTimezone(timezone).timezone;
+  const zone = formattingZone(timezone);
   const format = new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: zone });
-  return withZoneName(format.formatRangeToParts(start, end), locale, zone, start, end);
+  return withZoneName(format.formatRange(start, end), format.formatRangeToParts(start, end), locale, zone, start, end);
 }
 
 /** One instant in the same reading, for a picker option or a list line. */
 export function formatDateTimeShort(utc: Date, timezone: string, locale: string = DEFAULT_LOCALE): string {
-  const zone = renderableTimezone(timezone).timezone;
+  const zone = formattingZone(timezone);
   const format = new Intl.DateTimeFormat(locale, { ...RANGE_PARTS, timeZone: zone });
-  return withZoneName(format.formatToParts(utc), locale, zone, utc, utc);
+  return withZoneName(format.format(utc), format.formatToParts(utc), locale, zone, utc, utc);
 }
 
 /**
