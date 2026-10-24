@@ -374,12 +374,34 @@ run on Replit until the runtime is updated.
 
 ## Deployment
 
-This update is not deployed yet. The Node.js 22.23.4 image is published
-by the normal workflow after this change merges. It will then be deployed,
-and that deployment will be recorded in a follow-up note.
+This update is deployed. Both sites ran Node.js 22.23.2 until the
+2026-10-24 entries below.
 
-The operator's deploy logs record the following state of the live sites.
-This repository had not recorded these deployments before.
+- **2026-10-24 00:20 UTC:** freeholder.ai and demo.freeholder.ai were
+  deployed at main revision `e1d7339e8d518505239c5c8e3cf5210817b5d93d` (#594),
+  image
+
+  `ghcr.io/campdenman/freeholder@sha256:8384e3628b67445a9b40714be515e99235f52ce8bf1e21f31f5d94a6edf25282`.
+
+  Both deployments passed signed-provenance verification and readiness. Inside
+  both running containers, `node` reported `v22.23.4` with tz data `2026e`.
+  `America/Vancouver` reported UTC−7 for 2026-12-01 and `America/Los_Angeles`
+  reported UTC−8. `/_next/image` returned 404 on both sites.
+- **2026-10-24 01:09 UTC:** both sites were deployed again at
+  `c3215f6334d704edec7b83763905d5e1f24e4437`, image
+
+  `ghcr.io/campdenman/freeholder@sha256:a19b3f57e3ea162f9cc1fd08fc623e59c443d39d620b70b7c09781ab4b4839af`.
+
+  This adds #597 (North American event times read PT, MT, CT or ET) and #598
+  (a screenshots test fixture only). Both deployments passed provenance
+  verification and readiness, and the demo's event list reads "PM PT".
+
+Between #593 and #594, main also gained #595 (stored non-raster bytes never
+reach sharp, and stored video is checked before ffmpeg) and #596 (zod 4.6.7
+for GHSA-mrhx-c7xc-m3w5). Both are in the images above.
+
+Before this update, the operator's deploy logs record the following state of
+the live sites. This repository had not recorded these deployments before.
 
 - **2026-10-23:** freeholder.ai and demo.freeholder.ai were both deployed at
   main revision `b1cabb427405c2f0758de1e6b3f5abf88085abe9`, image
@@ -394,7 +416,6 @@ This repository had not recorded these deployments before.
   2026-10-22. That was added on the servers before this update put the
   refusal in the recipes.
 
-As of this note, neither site was exposed to the Next.js October
-advisories. Both sites still run Node.js 22.23.2 until this update is
-deployed. The previous recorded deployment is in
+At no point were the live sites exposed to the Next.js October advisories.
+The previous recorded deployment is in
 `deploy/release-notes-2026-10-17.md`.
