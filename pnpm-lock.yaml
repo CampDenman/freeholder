@@ -24,7 +24,7 @@ importers:
     dependencies:
       '@formatjs/icu-messageformat-parser':
         specifier: ^3.5.21
-        version: 3.5.21
+        version: 3.5.22
       '@freeholder/plugin-kit':
         specifier: workspace:*
         version: link:packages/plugin-kit
@@ -678,9 +678,6 @@ packages:
 
   '@formatjs/fast-memoize@3.1.7':
     resolution: {integrity: sha512-zXfhLpvA6T7+efdt9JLbBwZ00tT7NsBMDVnDu8rpHeNNv8KfRZAMo2gkG0k9lK/Nzc//3kJ9pImsfuJxk3KhUA==}
-
-  '@formatjs/icu-messageformat-parser@3.5.21':
-    resolution: {integrity: sha512-Vnl7IOSyMRaP4Pjv48etkT2nlcIwzh4QWIa3hewzGlZZPBbft+TbMir4MijpDViOLN/1hvkGC10oYMuilsG+fw==}
 
   '@formatjs/icu-messageformat-parser@3.5.22':
     resolution: {integrity: sha512-YuwN+dDKgssfuYwtOyGQD0CSn7K46g9cv1Fp0VgKpjZDDFvv8b8crzP990IcJhRPWHhKzCGsbUSJVIguyyFA5A==}
@@ -3272,10 +3269,6 @@ snapshots:
       '@noble/hashes': 2.4.0
 
   '@formatjs/fast-memoize@3.1.7': {}
-
-  '@formatjs/icu-messageformat-parser@3.5.21':
-    dependencies:
-      '@formatjs/icu-skeleton-parser': 2.1.12
 
   '@formatjs/icu-messageformat-parser@3.5.22':
     dependencies:
