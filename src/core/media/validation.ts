@@ -189,8 +189,17 @@ export function detectMediaMime(
     }
   }
 
-  const declared = canonicalMime(declaredMime);
   const extension = extname(filename).toLowerCase();
+  // Text has no signature, so its type comes from the declaration and the
+  // extension together. Browsers often declare nothing, or a generic
+  // octet-stream, for text files they do not know (.md on Linux, C3.39):
+  // then the extension alone names the text type, and the bytes must still
+  // look like text.
+  const named = canonicalMime(declaredMime);
+  const declared =
+    named === "" || named === "application/octet-stream"
+      ? TYPE_BY_EXTENSION.get(extension)?.mime ?? named
+      : named;
   if (
     ["text/plain", "text/csv", "application/json", "model/gltf+json"].includes(declared) &&
     TYPE_BY_EXTENSION.get(extension)?.mime === declared &&

@@ -10,9 +10,13 @@ const text = new TextEncoder().encode("# Show notes\n\n## Chapters\n\n- 00:00 We
 
 describe("Markdown uploads", () => {
   it("accepts .md declared as text/markdown or text/x-markdown", () => {
-    for (const declaredMime of ["text/markdown", "text/x-markdown", "text/markdown; charset=utf-8"]) {
+    for (const declaredMime of ["text/markdown", "text/x-markdown", "text/markdown; charset=utf-8", "", "application/octet-stream"]) {
       expect(validateMediaFile({ filename: "show-notes.md", declaredMime, bytes: text.byteLength, prefix: text }).kind).toBe("doc");
     }
+  });
+
+  it("never lets a missing declaration turn a non-text extension into text", () => {
+    expect(() => validateMediaFile({ filename: "notes.exe", declaredMime: "", bytes: text.byteLength, prefix: text })).toThrow(MediaValidationError);
   });
 
   it("still refuses a binary that calls itself Markdown", () => {
