@@ -241,6 +241,14 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-project
+      # The runner image's newer pg_dump/pg_restore emit settings (for example
+      # transaction_timeout) that the PostgreSQL 16 service rejects. Rehearse
+      # with the client that matches the server, as an operator would.
+      - name: PostgreSQL 16 client to match the server
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-16
+          echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
       - run: pnpm ownership:drill
 
   browser:
