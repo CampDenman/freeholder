@@ -16,6 +16,7 @@ import { currentBusiness } from "@/core/settings/read";
 import { listModules } from "@/core/settings/service";
 import { hasModuleAccess, type Actor } from "@/core/service";
 import { mailStatus } from "@/core/mail/service";
+import { previewMailActive } from "@/core/mail/preview";
 import { MailSettingsCard } from "./MailSettingsCard";
 import { ready } from "@/core/runtime";
 import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
@@ -194,6 +195,9 @@ export default async function AdminSettingsPage({
         }}
       />
 
+      {mailAccess && previewMailActive() ? (
+        <a className="text-sm font-medium text-accent underline" href="/admin/mail">{t("mail.preview.link")}</a>
+      ) : null}
       {mailAccess ? (
         <MailSettingsCard
           {...mailAccess}
@@ -281,6 +285,7 @@ export default async function AdminSettingsPage({
               complained: t("mail.delivery.complained"),
               failed: t("mail.delivery.failed"),
               suppressed: t("mail.delivery.suppressed"),
+              held: t("mail.delivery.held"),
             },
             suppressionReasons: {
               hard_bounce: t("mail.suppression.hardBounce"),

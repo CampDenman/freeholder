@@ -32,6 +32,12 @@ import {
 } from "@/core/mail/schema";
 import { oauthAccessTokenOutsideTransaction } from "@/core/mail/oauth";
 import { decryptMailOutbox, encryptMailOutbox } from "@/core/mail/outbox-crypto";
+import {
+  PREVIEW_BULK_REFUSAL,
+  previewMailActive,
+  previewMailHold,
+  previewMailServices,
+} from "@/core/mail/preview";
 import { dispatchNow, enqueue } from "@/core/events/outbox";
 import {
   defineService,
@@ -105,7 +111,9 @@ const mailDeliveryRow = row({
     "complained",
     "failed",
     "suppressed",
+    "held",
   ]),
+  holdReason: z.enum(["recipient", "cap", "no_adapter"]).nullable(),
   providerRef: z.string().nullable(),
   idempotencyKey: z.string().nullable(),
   requestedBy: z.string(),
@@ -161,6 +169,8 @@ const mailSendResult = z.object({
   providerRef: z.string().nullable(),
   delivers: z.boolean(),
   duplicate: z.boolean(),
+  /** C3.36: a private preview held it in its outbox instead of delivering. */
+  held: z.boolean().optional(),
 });
 
 type Purpose = "transactional" | "bulk";
@@ -311,6 +321,14 @@ export async function assertMailReady(tx: Tx, purpose: Purpose): Promise<void> {
   // before any provider is contacted. Campaign sending stays an owner flow
   // the playground refuses.
   if (purpose === "transactional" && playgroundBlocksExternalDelivery(env())) return;
+  // C3.36: a private preview accepts transactional mail the same way. What
+  // it cannot deliver it holds in the preview outbox (see sendMail), so a
+  // sign-in link is never refused for lack of a public domain. Campaigns are
+  // refused on a preview whatever is configured.
+  if (previewMailActive()) {
+    if (purpose === "bulk") throw new ServiceError("conflict", PREVIEW_BULK_REFUSAL);
+    return;
+  }
   const sender = await defaultSender(tx, purpose);
   if (!sender && purpose === "bulk") {
     throw new ServiceError("conflict", "Choose and verify a default bulk sender before sending a campaign.");
@@ -374,6 +392,8 @@ export interface MailSendResult {
   providerRef: string | null;
   delivers: boolean;
   duplicate: boolean;
+  /** C3.36: a private preview held it in its outbox instead of delivering. */
+  held?: boolean;
 }
 
 const stagedMessage = z
@@ -415,6 +435,8 @@ export async function sendMail(
   options: MailSendOptions = {},
 ): Promise<MailSendResult> {
   const purpose = options.purpose ?? "transactional";
+  const preview = previewMailActive();
+  if (preview && purpose === "bulk") throw new ServiceError("conflict", PREVIEW_BULK_REFUSAL);
   const prepared = stagedMessage.parse({ ...message, to: message.to, marketingContactId: options.marketingContactId });
   const recipient = prepared.to;
   const [suppressed] = await tx
@@ -465,12 +487,15 @@ export async function sendMail(
   }
   // C1.38: in the playground the queue itself is the sink (see
   // assertMailReady); delivery fails closed in deliverQueuedMail.
-  if (options.requireDelivery && !route.delivers && !(purpose === "transactional" && playgroundBlocksExternalDelivery(env()))) {
+  // C3.36: on a private preview the outbox is the sink for whatever cannot
+  // be delivered, so a missing adapter holds the message instead.
+  if (options.requireDelivery && !route.delivers && !preview && !(purpose === "transactional" && playgroundBlocksExternalDelivery(env()))) {
     throw new ServiceError(
       "conflict",
       "This instance has no delivering mail adapter. Connect a mailbox or configure SMTP.",
     );
   }
+  const holdReason = preview ? await previewMailHold(tx, recipient, route.delivers) : null;
 
   const deliveryId = randomUUID();
   let inserted: { id: string } | undefined;
@@ -486,6 +511,7 @@ export async function sendMail(
         subject: prepared.subject,
         idempotencyKey: options.idempotencyKey,
         requestedBy: options.requestedBy ?? "system",
+        ...(holdReason ? { status: "held" as const, holdReason } : {}),
       })
       .onConflictDoNothing()
       .returning({ id: mailDeliveries.id });
@@ -510,8 +536,10 @@ export async function sendMail(
         delivers:
           providerDelivers(existing.provider) &&
           existing.status !== "failed" &&
-          existing.status !== "suppressed",
+          existing.status !== "suppressed" &&
+          existing.status !== "held",
         duplicate: true,
+        ...(existing.status === "held" ? { held: true } : {}),
       };
     }
   } else {
@@ -525,6 +553,7 @@ export async function sendMail(
         recipient,
         subject: prepared.subject,
         requestedBy: options.requestedBy ?? "system",
+        ...(holdReason ? { status: "held" as const, holdReason } : {}),
       })
       .returning({ id: mailDeliveries.id });
   }
@@ -558,6 +587,18 @@ export async function sendMail(
     deliveryId: inserted.id,
     encryptedMessage: encryptMailOutbox(serialized, inserted.id),
   });
+  if (holdReason) {
+    // Held, never sent: the body stays encrypted in the outbox for the owner
+    // to read in the admin, and no delivery job exists to send it.
+    return {
+      id: inserted.id,
+      provider: route.provider,
+      providerRef: null,
+      delivers: false,
+      duplicate: false,
+      held: true,
+    };
+  }
   await enqueueJob(
     tx,
     "core.deliverMail",
@@ -605,7 +646,7 @@ async function finishQueuedMail(
 
 /** Snapshot, provider call, apply: no database transaction spans the call. */
 export async function deliverQueuedMail(deliveryId: string): Promise<{
-  status: "missing" | "submitted" | "failed" | "suppressed";
+  status: "missing" | "submitted" | "failed" | "suppressed" | "held";
 }> {
   const [queued] = await db()
     .select({
@@ -617,6 +658,9 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
     .where(eq(mailOutbox.deliveryId, deliveryId))
     .limit(1);
   if (!queued) return { status: "missing" };
+  // C3.36: a held preview message is never sent, and its body is kept for
+  // the owner, so a stray job for it must leave the outbox row alone.
+  if (queued.delivery.status === "held") return { status: "held" };
   if (!["queued", "failed"].includes(queued.delivery.status)) {
     await db().delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
     return { status: "missing" };
@@ -751,6 +795,7 @@ export async function pruneExpiredMailOutbox(): Promise<number> {
       .where(sql`${mailOutbox.createdAt} < now() - interval '30 days'`)
       .returning({ deliveryId: mailOutbox.deliveryId });
     if (rows.length > 0) {
+      const ids = rows.map((row) => row.deliveryId);
       await tx
         .update(mailDeliveries)
         .set({
@@ -758,7 +803,16 @@ export async function pruneExpiredMailOutbox(): Promise<number> {
           lastError: "Queued mail expired before it could be delivered.",
           updatedAt: new Date(),
         })
-        .where(inArray(mailDeliveries.id, rows.map((row) => row.deliveryId)));
+        .where(and(inArray(mailDeliveries.id, ids), sql`${mailDeliveries.status} <> 'held'`));
+      // C3.36: a held preview message stays held, so the owner still sees
+      // that it existed; only its body is gone.
+      await tx
+        .update(mailDeliveries)
+        .set({
+          lastError: "This held preview message expired after 30 days and its body was removed.",
+          updatedAt: new Date(),
+        })
+        .where(and(inArray(mailDeliveries.id, ids), eq(mailDeliveries.status, "held")));
     }
     return rows;
   });
@@ -1505,4 +1559,5 @@ export default [
   testMailSender,
   releaseMailSuppression,
   recordMailProviderEvent,
+  ...previewMailServices,
 ];

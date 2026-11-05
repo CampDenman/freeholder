@@ -492,6 +492,32 @@ const envSchema = z.object({
   FREEHOLDER_LAUNCH_SPEC: z.string().startsWith("/").optional(),
 
   /**
+   * C3.36: on a private preview, the owner addresses that may receive the
+   * preview's transactional mail, comma-separated. Contacts of the site may
+   * receive it too; everything else is held in the preview outbox
+   * (src/core/mail/preview.ts). Ignored when FREEHOLDER_PREVIEW_KEY is unset.
+   */
+  FREEHOLDER_PREVIEW_MAIL_ALLOW: z
+    .string()
+    .max(4_000)
+    .refine(
+      (value) =>
+        value
+          .split(",")
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+          .every((entry) => z.email().safeParse(entry).success),
+      "Every entry must be an email address, separated by commas.",
+    )
+    .optional(),
+
+  /**
+   * C3.36: how many messages a private preview may deliver in any rolling 24
+   * hours. Further messages are held in the preview outbox. Default 100.
+   */
+  FREEHOLDER_PREVIEW_MAIL_DAILY_CAP: z.coerce.number().int().min(0).max(10_000).optional(),
+
+  /**
    * Whether this process runs background jobs.
    *
    * On by default wherever a database is configured, because §18's Tier-1

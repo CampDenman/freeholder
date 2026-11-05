@@ -1,5 +1,5 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
-# Launch template and private preview (C3.35)
+# Launch template and private preview (C3.35, C3.36)
 
 A launch spec turns an empty Freeholder instance into a working one-offer
 site. Private preview mode keeps that site visible to signed links only, so
@@ -90,6 +90,42 @@ FREEHOLDER_PREVIEW_KEY=… node scripts/preview-link.mjs --url https://preview-h
 Opening the link exchanges the token for an HttpOnly cookie and lands on the
 site. A link lasts at most 30 days. Rotating the key revokes every link at
 once.
+
+## Preview mail (C3.36)
+
+A preview has no public domain, but its customers still need sign-in links
+and its owner still needs notifications. While `FREEHOLDER_PREVIEW_KEY` is
+set, transactional mail follows a preview policy:
+
+| Setting | Meaning |
+|---|---|
+| `FREEHOLDER_PREVIEW_MAIL_ALLOW` | Owner addresses that may receive preview mail, comma-separated. |
+| `FREEHOLDER_PREVIEW_MAIL_DAILY_CAP` | Messages the preview may deliver in any rolling 24 hours. Default `100`. |
+
+- A message is **delivered** only when its recipient is on the allow-list or
+  is already a contact of this site, a delivering mail adapter is configured
+  (`MAIL_ADAPTER`, or a verified default sender), and the daily cap has room.
+  Paradise Modern is the intended adapter (`deploy/paradise-modern.md`). The
+  site is unreachable without the signed link, so every contact on a preview
+  arrived through the preview itself or was entered by the owner.
+- Every other message is **held**, and so is every message while no adapter
+  delivers. A held message is never sent: its delivery row says `held` with
+  the reason (`recipient`, `cap` or `no_adapter`) and its body stays
+  encrypted in the outbox for 30 days.
+- The owner reads held mail at **Admin → Mail** (`/admin/mail`, linked from
+  Settings while the site is a preview). Opening a message shows its text with
+  links you can follow, so you can try a customer's sign-in yourself. Listing
+  needs mail view access (`mail.listHeld`). Opening needs mail manage access
+  (`mail.openHeld`), is written to the audit log, and is refused to API keys
+  and MCP clients because the body can be a sign-in credential. Customers and
+  the public never see a held message.
+- Campaign and bulk mail are refused on a preview with a clear message.
+
+Customer sign-in therefore works on a preview with no adapter at all. The
+link is held, and the owner opens it from the outbox. To test real delivery,
+configure the adapter and put your own address on the allow-list. When you
+publish and unset `FREEHOLDER_PREVIEW_KEY`, mail returns to the ordinary
+rules. Messages held during the preview stay listed until they expire.
 
 ## Publishing
 
