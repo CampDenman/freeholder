@@ -16,7 +16,7 @@
 // Without JavaScript nothing uploads; the hint under the label says so, and a
 // required question is refused by the server with its usual message.
 import { useEffect, useRef, useState } from "react";
-import { uploadMediaFile } from "../../../app/(admin)/admin/media/upload-client";
+import { uploadMediaFileWithFacts } from "../../../app/(admin)/admin/media/upload-client";
 
 export interface FileFieldCopy {
   /** "Uploading… {percent}%" */
@@ -111,7 +111,7 @@ export function FileField({
     controller.current = abort;
     setState({ kind: "uploading", percent: 0 });
     try {
-      const result = await uploadMediaFile(file, {
+      const result = await uploadMediaFileWithFacts(file, {}, {
         signal: abort.signal,
         purpose: "form",
         onProgress: (percent) => setState({ kind: "uploading", percent }),

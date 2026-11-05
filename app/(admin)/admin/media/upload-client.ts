@@ -292,7 +292,19 @@ export async function uploadMediaFile(
   file: File,
   options: UploadOptions,
 ): Promise<UploadResult> {
-  const metadata = await mediaFacts(file);
+  return uploadMediaFileWithFacts(file, await mediaFacts(file), options);
+}
+
+/**
+ * The same pipeline with facts the caller already has, or none. A public form
+ * upload (C3.38) sends none: the server reads what it needs from the bytes,
+ * and a visitor's file is never loaded into a media element on the page.
+ */
+export async function uploadMediaFileWithFacts(
+  file: File,
+  metadata: MediaFacts,
+  options: UploadOptions,
+): Promise<UploadResult> {
   const reservation = await reservationFor(file, metadata, options);
   options.onReservation?.(reservation.id);
   let assetId =
