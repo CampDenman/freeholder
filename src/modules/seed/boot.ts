@@ -140,3 +140,37 @@ export async function seedDemoIfRequested(): Promise<DemoSeedOutcome> {
     throw error;
   }
 }
+
+export type LaunchSeedOutcome =
+  | { status: "skipped" }
+  | { status: "already-populated" }
+  | { status: "installed"; business: string; pages: string[]; callRequest: boolean; brandApplied: boolean };
+
+/**
+ * Install the launch spec named by FREEHOLDER_LAUNCH_SPEC (C3.35), once, into
+ * an empty site. A restart of an installed site is not a fault; an invalid
+ * spec or any other failure is, for the same reason as the demo: an operator
+ * who asked for a launched site must not get a setup placeholder instead.
+ */
+export async function seedLaunchIfRequested(): Promise<LaunchSeedOutcome> {
+  const path = env().FREEHOLDER_LAUNCH_SPEC;
+  if (!path) return { status: "skipped" };
+  const { installLaunch, readLaunchSpec } = await import("./launch");
+  const spec = await readLaunchSpec(path);
+  const started = Date.now();
+  try {
+    const result = await runAsSeed(() => installLaunch.call(spec, { kind: "system" }));
+    console.log(
+      `[freeholder] launch spec installed: ${result.pages.length} pages, call requests ${result.callRequest ? "on" : "off"}, in ${Date.now() - started} ms`,
+    );
+    return { status: "installed", business: result.business, pages: result.pages, callRequest: result.callRequest, brandApplied: result.brandApplied };
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === "conflict" && error.message.includes("already has pages")) {
+      console.log("[freeholder] launch spec not installed: the site already has pages");
+      return { status: "already-populated" };
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[freeholder] launch spec installation failed: ${message}`);
+    throw error;
+  }
+}

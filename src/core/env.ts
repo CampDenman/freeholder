@@ -477,6 +477,21 @@ const envSchema = z.object({
   FREEHOLDER_SEED_DEMO: z.enum(["0", "1", "busy"]).optional(),
 
   /**
+   * C3.35: private preview. A key of 32+ characters turns the whole public
+   * surface into a signed-link preview (src/core/preview/private-preview.ts):
+   * noindex everywhere, robots disallow, no IndexNow pings. Unset on a
+   * published site.
+   */
+  FREEHOLDER_PREVIEW_KEY: z.string().min(32).optional(),
+
+  /**
+   * C3.35: absolute path of a launch spec JSON file, installed once at boot
+   * into an empty instance (src/modules/seed/launch.ts). Like
+   * FREEHOLDER_SEED_DEMO, it is read at startup only and has no route.
+   */
+  FREEHOLDER_LAUNCH_SPEC: z.string().startsWith("/").optional(),
+
+  /**
    * Whether this process runs background jobs.
    *
    * On by default wherever a database is configured, because §18's Tier-1

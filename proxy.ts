@@ -52,6 +52,16 @@ import {
   PLAYGROUND_SHARED_CACHE_CONTROL,
   playgroundSharedCacheable,
 } from "@/core/demo/playground-cache";
+import {
+  PREVIEW_ACCESS_PATH,
+  PREVIEW_COOKIE,
+  PREVIEW_REQUIRED_HTML,
+  PREVIEW_ROBOTS_HEADER,
+  previewEnabled,
+  previewGated,
+  previewLandingPath,
+  verifyPreviewToken,
+} from "@/core/preview/private-preview";
 
 /** `/sitemap-fr-CA.xml` or `/sitemap-en-2.xml` when a locale map is split. */
 const LOCALE_SITEMAP =
@@ -126,6 +136,14 @@ export function proxy(request: NextRequest): NextResponse {
   const headers = new Headers(request.headers);
   const path = request.nextUrl.pathname;
   const playground = env().FREEHOLDER_PLAYGROUND === "1";
+  // C3.35: a private preview answers only to a signed link, before any other
+  // routing, and says noindex on everything it serves.
+  const previewKey = env().FREEHOLDER_PREVIEW_KEY;
+  const preview = previewEnabled(previewKey);
+  if (preview) {
+    const refused = privatePreview(request, path, previewKey);
+    if (refused) return refused;
+  }
   headers.set(PATH_HEADER, path);
   headers.set(REQUEST_TARGET_HEADER, `${path}${request.nextUrl.search}`);
   const policy = requestPolicy(request, path);
@@ -136,6 +154,7 @@ export function proxy(request: NextRequest): NextResponse {
     headers.set("content-security-policy", policy.value);
   }
   const finalize = (response: NextResponse): NextResponse => {
+    if (preview) response.headers.set("X-Robots-Tag", PREVIEW_ROBOTS_HEADER);
     if (policy) {
       response.headers.set("Content-Security-Policy", policy.value);
       response.headers.set("Reporting-Endpoints", reportingEndpointsHeader());
@@ -208,6 +227,54 @@ export function proxy(request: NextRequest): NextResponse {
     headers,
     (forwarded) => NextResponse.next({ request: { headers: forwarded } }),
   ));
+}
+
+/**
+ * The private-preview gate (C3.35). Exchanges a signed link for a cookie at
+ * /preview-access, and refuses any gated path without a current cookie.
+ * Returns null when the request may continue.
+ */
+function privatePreview(request: NextRequest, path: string, key: string): NextResponse | null {
+  const now = Math.floor(Date.now() / 1000);
+  const refuse = () =>
+    new NextResponse(PREVIEW_REQUIRED_HTML, {
+      status: 401,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "x-robots-tag": PREVIEW_ROBOTS_HEADER,
+        "referrer-policy": "no-referrer",
+      },
+    });
+  if (path === PREVIEW_ACCESS_PATH) {
+    const token = request.nextUrl.searchParams.get("t");
+    const expires = verifyPreviewToken(key, token, now);
+    if (!expires || !token) return refuse();
+    // A relative Location: behind a reverse proxy the request URL names the
+    // internal host, and the browser resolves this against the one it used.
+    const response = new NextResponse(null, {
+      status: 303,
+      headers: {
+        location: previewLandingPath(request.nextUrl.searchParams.get("next")),
+        "cache-control": "no-store",
+        "x-robots-tag": PREVIEW_ROBOTS_HEADER,
+        // The token is in this URL; never hand it to the next page's referrer.
+        "referrer-policy": "no-referrer",
+      },
+    });
+    response.cookies.set(PREVIEW_COOKIE, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure:
+        request.nextUrl.protocol === "https:" ||
+        request.headers.get("x-forwarded-proto") === "https",
+      maxAge: expires - now,
+    });
+    return response;
+  }
+  if (!previewGated(path, request.headers.has("authorization"))) return null;
+  return verifyPreviewToken(key, request.cookies.get(PREVIEW_COOKIE)?.value, now) ? null : refuse();
 }
 
 function originOf(value: string | undefined): string | undefined {

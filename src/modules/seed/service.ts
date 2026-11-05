@@ -38,8 +38,9 @@ import * as demo from "../../../seed/demo/content";
 import { installPreset } from "./preset-install";
 import { installDemoBusiness } from "./business";
 import { installBusyDemo } from "./busy";
+import { installLaunch } from "./launch";
 
-export { installPreset, installBusyDemo };
+export { installPreset, installBusyDemo, installLaunch };
 
 const installDemoGuard = defineService({
   name: "demo.installGuard",
@@ -303,4 +304,4 @@ export const installDemo = defineOrchestratedService({
   },
 });
 
-export default [installDemo, installDemoGuard, installDemoApply, installPreset, installBusyDemo];
+export default [installDemo, installDemoGuard, installDemoApply, installPreset, installBusyDemo, installLaunch];
