@@ -24,7 +24,7 @@ import { readFile } from "node:fs/promises";
 import { count } from "drizzle-orm";
 import { z } from "zod";
 import { defineService, listServices, ServiceError } from "@/core/service";
-import { completeSetup, updateBusiness } from "@/core/settings/service";
+import { completeSetup, setModuleEnabled, updateBusiness } from "@/core/settings/service";
 import { updateDesign } from "@/core/design/service";
 import { pages } from "@/modules/cms/schema";
 import {
@@ -138,7 +138,16 @@ export const launchSpecSchema = z
     contact: z.object({ intro: line(600), seoDescription: line(160) }).strict(),
     about: z.object({ body: z.array(line(1200)).min(1).max(6), seoDescription: line(160) }).strict(),
     /** Version 2: customers sign up and sign in, and follow their requests in My Account. */
-    accounts: z.object({ enabled: z.boolean() }).strict().optional(),
+    accounts: z
+      .object({
+        enabled: z.boolean(),
+        /** Keep the member network (profiles, connections, listings, payouts, sales) in My Account. */
+        members: z.boolean().default(false),
+        /** Keep the shop's own customer pages (purchases, gift lists) in My Account. */
+        shop: z.boolean().default(false),
+      })
+      .strict()
+      .optional(),
     /** Version 2: the onboarding questionnaire on /start, an intake that opens a project (C3.37). */
     intake: z
       .object({
@@ -530,6 +539,14 @@ export const installLaunch = defineService({
         : await ctx.callAsSystem(createPage, { slug: page.slug, title: page.title, blocks: page.blocks, seo: page.seo });
       await ctx.callAsSystem(publishPage, { id: row.id, published: true });
       installed.push(page.slug);
+    }
+
+    // C3.39: My Account shows only what this business does with its
+    // customers. The member network and shop pages stay off unless the spec
+    // asks for them; the owner can turn either back on in Settings.
+    if (spec.version === 2 && spec.accounts?.enabled) {
+      if (!spec.accounts.members) await ctx.callAsSystem(setModuleEnabled, { module: "members", enabled: false });
+      if (!spec.accounts.shop) await ctx.callAsSystem(setModuleEnabled, { module: "catalog", enabled: false });
     }
 
     await ctx.callAsSystem(completeSetup, {});

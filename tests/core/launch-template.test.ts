@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { installLaunch, launchNav, launchPages, launchSpecSchema, type LaunchSpec } from "@/modules/seed/launch";
 import { getSection, resolvePage } from "@/modules/cms/service";
-import { getBusiness } from "@/core/settings/service";
+import { getBusiness, portalAreas } from "@/core/settings/service";
 import { submitForm } from "@/modules/forms/service";
 import { HEADER_KEY } from "@/modules/cms/defaults";
 import type { BlockNode } from "@/modules/cms/blocks/types";
@@ -173,5 +173,25 @@ describe.runIf(hasDatabase)("installing a version 2 spec", { timeout: 120_000 },
     expect(result.intakeForms).toContain("onboarding");
     const page = await resolvePage.call({ slug: "start" }, ANONYMOUS);
     expect(page).not.toBeNull();
+    // My Account shows only what this business does: no member network or shop pages.
+    expect(await portalAreas.call({}, ANONYMOUS)).toEqual({ members: false, shop: false });
+  });
+});
+
+describe("My Account navigation (C3.39)", () => {
+  it("lists only the business's own areas when the member network and shop are off", async () => {
+    const { portalNavLinks } = await import("@/core/portal/nav");
+    const off = portalNavLinks([{ key: "projects", count: 1 }, { key: "quotes", count: 0 }], { members: false, shop: false }).map((l) => l.path);
+    expect(off).toEqual(["/portal", "/portal/projects", "/portal/notifications", "/portal/profile", "/portal/privacy"]);
+    const on = portalNavLinks([], { members: true, shop: true }).map((l) => l.path);
+    expect(on).toContain("/portal/listings");
+    expect(on).toContain("/portal/purchases");
+  });
+
+  it("shows stored instants and dates in the business's time zone", async () => {
+    const { formatCustomerValue } = await import("@/core/i18n");
+    expect(formatCustomerValue("2026-11-06T05:14:00.000Z", "America/Los_Angeles", "en")).toBe("Nov 5, 2026, 9:14 PM");
+    expect(formatCustomerValue("2026-11-05", "America/Los_Angeles", "en")).toBe("Nov 5, 2026");
+    expect(formatCustomerValue("Show notes", "America/Los_Angeles", "en")).toBe("Show notes");
   });
 });
