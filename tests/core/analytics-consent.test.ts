@@ -32,6 +32,7 @@ import {
   OWNER,
   truncateSpine,
 } from "../helpers/spine";
+import { siteOrigin } from "@/core/seo/origin";
 
 function forwarded(response: Response, name: string): string | null {
   return response.headers.get(`x-middleware-request-${name}`);
@@ -287,6 +288,7 @@ describe.runIf(hasDatabase)("the policy-aware consent endpoint", () => {
       },
     ));
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("https://example.test/");
+    // The site's own origin, whatever host the request arrived on.
+    expect(response.headers.get("location")).toBe(`${siteOrigin()}/`);
   });
 });

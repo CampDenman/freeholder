@@ -4,6 +4,7 @@
 // it. Mail scanners may follow links, but they do not submit the confirmation.
 import { CUSTOMER_MAGIC_COOKIE } from "@/core/auth/magic-links/service";
 import { localePath } from "@/core/i18n/customer";
+import { originFor } from "@/core/seo/origin";
 
 const LANGUAGE_TAG = /^[a-z]{2}(?:-[A-Za-z]{2,4})?$/;
 
@@ -14,9 +15,11 @@ export function GET(request: Request): Response {
   const configured = incoming.searchParams.get("default") ?? "en";
   const fallback = LANGUAGE_TAG.test(configured) ? configured : "en";
   const locale = LANGUAGE_TAG.test(asked) ? asked : fallback;
+  // The configured origin, not the request URL: behind a reverse proxy the
+  // request names the app's internal address (C3.39 rehearsal).
   const target = new URL(
     localePath("portal/magic/confirm", locale, fallback),
-    request.url,
+    originFor(request),
   );
   const cookiePath = localePath("portal", locale, fallback);
   const response = new Response(null, {

@@ -9,6 +9,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/core/env";
 import { THIRD_PARTY_CREATIVE_CONSENT_COOKIE } from "@/core/http/csp";
 import { readBoundedText, RequestBodyError } from "@/core/http/body";
+import { originFor } from "@/core/seo/origin";
 
 const MAX_AGE = 60 * 60 * 24 * 365;
 
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const returnTo = safeReturnTo(form.get("returnTo"));
-  const response = NextResponse.redirect(new URL(returnTo, request.url), 303);
+  const response = NextResponse.redirect(new URL(returnTo, originFor(request)), 303);
   response.cookies.set(THIRD_PARTY_CREATIVE_CONSENT_COOKIE, state, {
     httpOnly: true,
     sameSite: "lax",

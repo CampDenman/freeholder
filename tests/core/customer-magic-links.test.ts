@@ -12,6 +12,7 @@ import {
   requestCustomerMagicLink,
 } from "@/core/auth/magic-links/service";
 import { actorFromToken } from "@/core/http/actor";
+import { siteOrigin } from "@/core/seo/origin";
 import { contacts, customerMagicLinks, timelineEvents } from "@/core/contacts/schema";
 import { mergeContacts } from "@/core/contacts/service";
 import { db } from "@/core/db";
@@ -42,11 +43,12 @@ describe("the customer magic-link browser handoff", () => {
   it("stages a credential without consuming it on GET", () => {
     const token = "scanner-safe-customer-magic-token";
     const response = stageMagicLink(
-      new Request(`https://freeholder.example/portal/magic?token=${token}`),
+      // The request arrives on the app's internal address; the redirect uses the site's own.
+      new Request(`http://0.0.0.0:3000/portal/magic?token=${token}`),
     );
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(
-      "https://freeholder.example/portal/magic/confirm",
+      `${siteOrigin()}/portal/magic/confirm`,
     );
     const cookie = response.headers.get("set-cookie") ?? "";
     expect(cookie).toContain("freeholder_customer_magic=");
@@ -59,10 +61,10 @@ describe("the customer magic-link browser handoff", () => {
 
   it("preserves a non-default locale through the scanner-safe confirmation", () => {
     const response = stageMagicLink(new Request(
-      "https://freeholder.example/fr/portal/magic?token=scanner-safe-customer-magic-token&locale=fr&default=en",
+      "http://0.0.0.0:3000/fr/portal/magic?token=scanner-safe-customer-magic-token&locale=fr&default=en",
     ));
     expect(response.headers.get("location")).toBe(
-      "https://freeholder.example/fr/portal/magic/confirm",
+      `${siteOrigin()}/fr/portal/magic/confirm`,
     );
     expect(response.headers.get("set-cookie")).toContain("Path=/fr/portal");
   });

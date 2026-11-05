@@ -12,6 +12,7 @@ import {
   RequestBodyError,
 } from "@/core/http/body";
 import { PROXY_UPLOAD_LIMIT } from "@/core/media/validation";
+import { originFor } from "@/core/seo/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -56,5 +57,5 @@ export async function POST(request: Request) {
     );
     uploaded.push(result.session.id);
   }
-  return NextResponse.redirect(new URL(`/capture/${sessionToken}`, request.url), 303);
+  return NextResponse.redirect(new URL(`/capture/${sessionToken}`, originFor(request)), 303);
 }

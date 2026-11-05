@@ -18,6 +18,7 @@ import {
   type AnalyticsConsentState,
 } from "@/modules/analytics/visitor";
 import { readBoundedText, RequestBodyError } from "@/core/http/body";
+import { originFor } from "@/core/seo/origin";
 
 type Decision = "sync" | "grant" | "deny";
 
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   );
   const state = resolvedState(decision, settings.consentPolicy, current);
   const response = redirect
-    ? NextResponse.redirect(new URL(returnTo, request.url), 303)
+    ? NextResponse.redirect(new URL(returnTo, originFor(request)), 303)
     : NextResponse.json({ state, enabled: analyticsIdentifiersAllowed(state) });
   const secure = request.nextUrl.protocol === "https:";
 
