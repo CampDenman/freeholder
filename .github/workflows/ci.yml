@@ -241,6 +241,24 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-project
+      # ubuntu-latest became Ubuntu 26.04 (2026-10-25): its newer pg_dump and
+      # pg_restore emit settings (for example transaction_timeout) that the
+      # PostgreSQL 16 service rejects, and it packages no 16 client. Rehearse
+      # with the client that matches the server, from the service's own
+      # pinned image, as an operator restoring this server would.
+      - name: PostgreSQL 16 client to match the server
+        run: |
+          bin="$RUNNER_TEMP/pg16-client"
+          mkdir -p "$bin"
+          for tool in pg_dump pg_restore; do
+            cat > "$bin/$tool" <<EOF
+          #!/bin/sh
+          exec docker run --rm --network host --user "\$(id -u):\$(id -g)" -v /tmp:/tmp -v "$RUNNER_TEMP:$RUNNER_TEMP" postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94 $tool "\$@"
+          EOF
+            chmod +x "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/pg_dump" --version
       - run: pnpm ownership:drill
 
   browser:

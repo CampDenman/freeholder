@@ -29,6 +29,9 @@ overrides:
   # lockfile disagree with package.json and fails --frozen-lockfile in CI.
   # GHSA-wq5f-xc86-pv6w: patched bundled librsvg in sharp 0.35.5.
   sharp: "^0.35.5"
+  # GHSA-g3hv-75wg-m249: globparts amplification DoS. Reached only through
+  # eslint's config array (development tooling); no 10.x fix exists.
+  minimatch: ">=11.0.1 <12"
   # GHSA-pqg4-j6r4-53mv: quote() command injection through launch-editor.
   shell-quote: ">=1.11.0 <2"
   # GHSA-r28c-9q8g-f849 and GHSA-fxqj-rqcc-2cmp: sourceMappingURL path
