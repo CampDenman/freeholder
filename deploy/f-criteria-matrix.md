@@ -1742,6 +1742,66 @@ v2.
 - **F11** — `deploy/launch-template.md`, `.env.example`, `seed/launch/example.json`, changeset `.changeset/launch-template-private-preview.md`.
 - **F12** — `tests/core/launch-template.test.ts` composes spec → `launch.install` → published pages → `forms.submit`; `tests/core/private-preview.test.ts` composes operator link (`scripts/preview-link.mjs`) → proxy exchange → cookie → served page.
 
+## C3.36 — Preview mail
+
+- **F01** — N/A — not yet built; this row is completed with the C3.36 change.
+- **F02** — `src/core/mail/service.ts`: Pending — the recipient policy, outbox and cap land in the mail service.
+- **F03** — N/A — not yet built; this row is completed with the C3.36 change.
+- **F04** — N/A — not yet built; this row is completed with the C3.36 change.
+- **F05** — `src/core/mail/permission.ts`: Pending — who a preview may write to.
+- **F06** — N/A — not yet built; this row is completed with the C3.36 change.
+- **F07** — N/A — not yet built; this row is completed with the C3.36 change.
+- **F08** — N/A — not yet built; this row is completed with the C3.36 change.
+- **F09** — N/A — not yet built; this row is completed with the C3.36 change.
+- **F10** — N/A — not yet built; this row is completed with the C3.36 change.
+- **F11** — `deploy/launch-template.md`: Pending — operator settings for preview mail.
+- **F12** — N/A — not yet built; this row is completed with the C3.36 change.
+
+## C3.37 — Service intake and delivery
+
+- **F01** — N/A — not yet built; this row is completed with the C3.37 change.
+- **F02** — `src/modules/projects/service.ts`: Pending — intake projects and the Deliver action.
+- **F03** — `src/modules/forms/service.ts`: Pending — intake submissions resolve the contact before opening a project.
+- **F04** — `src/modules/projects/portal.ts`: Pending — the customer's New, In progress and Delivered view.
+- **F05** — N/A — not yet built; this row is completed with the C3.37 change.
+- **F06** — N/A — not yet built; this row is completed with the C3.37 change.
+- **F07** — N/A — not yet built; this row is completed with the C3.37 change.
+- **F08** — N/A — not yet built; this row is completed with the C3.37 change.
+- **F09** — N/A — not yet built; this row is completed with the C3.37 change.
+- **F10** — N/A — not yet built; this row is completed with the C3.37 change.
+- **F11** — `deploy/launch-template.md`: Pending — owner guide for delivery.
+- **F12** — N/A — not yet built; this row is completed with the C3.37 change.
+
+## C3.38 — File fields in forms
+
+- **F01** — N/A — not yet built; this row is completed with the C3.38 change.
+- **F02** — `src/modules/forms/fields.ts`: Pending — the file field kind and its limits.
+- **F03** — N/A — not yet built; this row is completed with the C3.38 change.
+- **F04** — N/A — not yet built; this row is completed with the C3.38 change.
+- **F05** — `src/core/media/validation.ts`: Pending — content sniffing and size limits reused for form files.
+- **F06** — N/A — not yet built; this row is completed with the C3.38 change.
+- **F07** — N/A — not yet built; this row is completed with the C3.38 change.
+- **F08** — N/A — not yet built; this row is completed with the C3.38 change.
+- **F09** — N/A — not yet built; this row is completed with the C3.38 change.
+- **F10** — N/A — not yet built; this row is completed with the C3.38 change.
+- **F11** — `deploy/launch-template.md`: Pending — what an intake upload accepts.
+- **F12** — N/A — not yet built; this row is completed with the C3.38 change.
+
+## C3.39 — Launch spec version 2 for a working preview
+
+- **F01** — N/A — not yet built; this row is completed with the C3.39 change.
+- **F02** — `src/modules/seed/launch.ts`: Pending — version 2 spec fields and install.
+- **F03** — N/A — not yet built; this row is completed with the C3.39 change.
+- **F04** — N/A — not yet built; this row is completed with the C3.39 change.
+- **F05** — N/A — not yet built; this row is completed with the C3.39 change.
+- **F06** — N/A — not yet built; this row is completed with the C3.39 change.
+- **F07** — N/A — not yet built; this row is completed with the C3.39 change.
+- **F08** — N/A — not yet built; this row is completed with the C3.39 change.
+- **F09** — N/A — not yet built; this row is completed with the C3.39 change.
+- **F10** — N/A — not yet built; this row is completed with the C3.39 change.
+- **F11** — `deploy/launch-template.md`: Pending — version 2 spec reference.
+- **F12** — N/A — not yet built; this row is completed with the C3.39 change.
+
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/agents-board.test.ts`.
