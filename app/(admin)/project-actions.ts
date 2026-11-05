@@ -13,6 +13,7 @@ import {
   addTask,
   attachFile,
   createProject,
+  deliverProject,
   linkToProject,
   removeTask,
   setOutcome,
@@ -112,6 +113,41 @@ export async function updateProjectAction(form: FormData): Promise<void> {
   }
   revalidatePath(`${PROJECTS}/${id}`);
   redirect(`${PROJECTS}/${id}?saved=details`);
+}
+
+/** "Start work" (C3.37): the project moves to In progress for its customer. */
+export async function startProjectAction(form: FormData): Promise<void> {
+  const id = text(form, "id");
+  try {
+    await updateProject.call({ id, status: "active" }, await actor());
+  } catch (error) {
+    refused(error, `${PROJECTS}/${id}`, "That project could not be started.");
+  }
+  revalidatePath(`${PROJECTS}/${id}`);
+  redirect(`${PROJECTS}/${id}?saved=started`);
+}
+
+/**
+ * Deliver (C3.37). The file, the share, completion and the customer's notice
+ * are all `projects.deliver`, the same service the API and MCP call.
+ */
+export async function deliverProjectAction(form: FormData): Promise<void> {
+  const id = text(form, "id");
+  try {
+    await deliverProject.call(
+      {
+        projectId: id,
+        assetId: text(form, "assetId") || null,
+        note: text(form, "note") || null,
+        contactId: text(form, "contactId") || null,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, `${PROJECTS}/${id}`, "That could not be delivered. Nothing has changed.");
+  }
+  revalidatePath(`${PROJECTS}/${id}`);
+  redirect(`${PROJECTS}/${id}?saved=delivered`);
 }
 
 export async function saveProjectBlocksAction(

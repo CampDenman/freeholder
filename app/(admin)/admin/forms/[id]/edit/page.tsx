@@ -78,6 +78,7 @@ export default async function EditFormPage({
           successMessage: form.successMessage ?? "",
           destination: form.destination,
           notify: (form.notify ?? []).join(", "),
+          intake: form.intake?.projectTitle ?? "",
           status: form.status,
           fields,
         }}

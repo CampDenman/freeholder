@@ -1,0 +1,4 @@
+---
+"freeholder": minor
+---
+A form can now be an intake. Give it a project title in the form builder (for example "Website audit for {name}") and every accepted submission opens a project for the person who sent it; spam opens nothing, and a rescued submission opens its project once. A launched one-offer site makes its offer request an intake automatically. On the project page, **Start work** moves it to In progress, and **Deliver** takes a file from your media library and/or a note: the file becomes a document shared with that customer's sign-in, the project is marked Delivered and the customer is told it is ready. In My Account the customer sees their projects as New, In progress or Delivered, reads your note and downloads the file through their own session; nobody else can. Delivery is the same `projects.deliver` service in the admin, the API and MCP, with the same permissions and audit trail.

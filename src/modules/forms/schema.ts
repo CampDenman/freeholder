@@ -18,6 +18,11 @@ import {
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import { contacts } from "@/core/contacts/schema";
 
+/** What an intake form opens (C3.37). Validated by `intakeSchema` in service.ts. */
+export interface FormIntake {
+  projectTitle: string;
+}
+
 export const forms = pgTable(
   "forms",
   {
@@ -49,6 +54,14 @@ export const forms = pgTable(
     status: text("status", { enum: ["active", "closed"] })
       .notNull()
       .default("active"),
+    /**
+     * Set = an intake form (C3.37): each accepted submission opens a project
+     * for the person who sent it, titled from `projectTitle` (`{name}` and
+     * any other field key are filled from the answers). Null is an ordinary
+     * form. Kept as a small document because it is configuration of the
+     * form, not a fact about any one submission.
+     */
+    intake: jsonb("intake").$type<FormIntake | null>(),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },

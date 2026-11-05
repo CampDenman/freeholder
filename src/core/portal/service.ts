@@ -128,6 +128,7 @@ const portalRecord = row({
   id: z.string(),
   title: z.string(),
   status: z.string().nullable(),
+  statusKey: z.string().nullish(),
   at: z.date().nullable(),
   href: z.string().nullable(),
   amountMinor: z.number().int().nullish(),

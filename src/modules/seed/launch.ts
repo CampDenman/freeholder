@@ -23,7 +23,7 @@
 import { readFile } from "node:fs/promises";
 import { count } from "drizzle-orm";
 import { z } from "zod";
-import { defineService, ServiceError } from "@/core/service";
+import { defineService, listServices, ServiceError } from "@/core/service";
 import { completeSetup, updateBusiness } from "@/core/settings/service";
 import { updateDesign } from "@/core/design/service";
 import { pages } from "@/modules/cms/schema";
@@ -265,6 +265,18 @@ export function launchNav(spec: LaunchSpec) {
   return links;
 }
 
+/**
+ * The offer request is an intake (C3.37): each accepted request opens a
+ * project for the person who sent it, which the owner works and delivers and
+ * the customer follows in My Account. Only where the projects module is
+ * installed; without it the form is an ordinary enquiry, as before. The spec
+ * itself is unchanged, so every version 1 spec installs exactly as it did.
+ */
+function offerIntake(spec: LaunchSpec) {
+  if (!listServices().has("projects.openFromIntake")) return undefined;
+  return { projectTitle: `${spec.offer.name} for {name}`.slice(0, 200) };
+}
+
 const LAUNCH_FORM_DEFINITIONS = (spec: LaunchSpec) => [
   ...(spec.intro
     ? [
@@ -298,6 +310,7 @@ const LAUNCH_FORM_DEFINITIONS = (spec: LaunchSpec) => [
     name: `${spec.offer.name} request`.slice(0, 120),
     submitLabel: "Send request",
     successMessage: "Thank you. Your request is saved. Nothing has been charged; the owner will reply by email.",
+    intake: offerIntake(spec),
     fields: [
       { key: "name", label: "Your name", kind: "text" as const, required: true },
       { key: "email", label: "Email", kind: "email" as const, required: true },
@@ -322,6 +335,8 @@ export const installLaunch = defineService({
     business: z.string(),
     pages: z.array(z.string()),
     forms: z.array(z.string()),
+    /** Forms whose accepted submissions open a project (C3.37). */
+    intakeForms: z.array(z.string()),
     callRequest: z.boolean(),
     brandApplied: z.boolean(),
   }),
@@ -410,6 +425,7 @@ export const installLaunch = defineService({
       business: business.name,
       pages: installed,
       forms: forms.map((form) => form.slug),
+      intakeForms: forms.filter((form) => "intake" in form && form.intake).map((form) => form.slug),
       callRequest: Boolean(spec.intro),
       brandApplied,
     };

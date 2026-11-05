@@ -16,7 +16,7 @@ import { createHash } from "node:crypto";
 import { clientNetwork, consumeAccepted } from "@/core/security/rate-limit";
 import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineService, getService, ServiceError } from "@/core/service";
+import { defineService, getService, listServices, ServiceError, type ServiceContext } from "@/core/service";
 import { env } from "@/core/env";
 import { PLAYGROUND_SUBMISSION_BYTES } from "@/core/demo/playground-policy";
 import { isUniqueViolation } from "@/core/db";
@@ -129,6 +129,36 @@ const slug = z
   .max(80)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lower-case words separated by hyphens.");
 
+/**
+ * What an intake form opens (C3.37). `projectTitle` may name answers in
+ * braces — `{name}`, `{company}`, any field key — and `{form}` for the form's
+ * own name; an unknown name is left as written.
+ */
+export const intakeSchema = z
+  .object({ projectTitle: z.string().trim().min(1).max(200) })
+  .strict();
+
+/** The service intake hands each accepted submission to. Owned by projects. */
+const INTAKE_SERVICE = "projects.openFromIntake";
+
+/**
+ * An intake needs somewhere to open the project and somebody to open it for.
+ * Checked on every write, so a form cannot be left marked as an intake that
+ * would silently open nothing.
+ */
+function requireIntakeReady(form: { intake: unknown; destination: string }): void {
+  if (!form.intake) return;
+  if (!listServices().has(INTAKE_SERVICE)) {
+    throw new ServiceError("validation", "An intake form needs the projects module, which is not installed.");
+  }
+  if (form.destination !== "contact") {
+    throw new ServiceError(
+      "validation",
+      "An intake form opens a project for the person who sent it, so it has to put them on your contact list.",
+    );
+  }
+}
+
 const formRow = row({
   id: uuid,
   slug: z.string(),
@@ -139,6 +169,7 @@ const formRow = row({
   destination: z.enum(["contact", "none"]),
   notify: listed(z.string()),
   status: z.enum(["active", "closed"]),
+  intake: intakeSchema.nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -198,6 +229,7 @@ export const listForms = defineService({
       status: z.enum(["active", "closed"]),
       destination: z.enum(["contact", "none"]),
       fields: z.unknown(),
+      intake: intakeSchema.nullable(),
       updatedAt: timestamp,
       submissions: z.coerce.number().int(),
     }),
@@ -211,6 +243,7 @@ export const listForms = defineService({
         status: forms.status,
         destination: forms.destination,
         fields: forms.fields,
+        intake: forms.intake,
         updatedAt: forms.updatedAt,
         submissions: count(formSubmissions.id),
       })
@@ -319,9 +352,12 @@ export const createForm = defineService({
     successMessage: z.string().max(300).optional(),
     destination: z.enum(["contact", "none"]).default("contact"),
     notify: z.array(z.string().email()).default([]),
+    /** Mark it as an intake (C3.37): each accepted submission opens a project. */
+    intake: intakeSchema.nullish(),
   }),
   output: formRow,
   handler: async (input, ctx) => {
+    requireIntakeReady({ intake: input.intake ?? null, destination: input.destination });
     const [form] = await ctx.tx
       .insert(forms)
       .values(input)
@@ -355,6 +391,8 @@ export const updateForm = defineService({
     destination: z.enum(["contact", "none"]).optional(),
     notify: z.array(z.string().email()).optional(),
     status: z.enum(["active", "closed"]).optional(),
+    /** An intake's project title, or null to make it an ordinary form again. */
+    intake: intakeSchema.nullish(),
   }),
   output: formRow,
   handler: async (input, ctx) => {
@@ -368,6 +406,9 @@ export const updateForm = defineService({
       .where(and(eq(forms.id, id), isNull(forms.trashedAt)))
       .returning();
     if (!form) throw new ServiceError("not_found", "That form is gone.");
+    // After the write, so the check sees the form as it now stands; a refusal
+    // rolls the whole change back.
+    requireIntakeReady(form);
     ctx.setSubject("form", form.id);
     ctx.queueEvent("forms.updated", { formId: form.id, slug: form.slug });
     return form;
@@ -677,6 +718,9 @@ export const submitForm = defineService({
           // worse than no thread.
           body: messageFrom(fields, data) || summarise(fields, data),
         });
+        // C3.37: an intake opens the work in the same transaction, so a
+        // submission and its project commit together or not at all.
+        await openIntakeProject(ctx, form, submission!.id, contactId, data);
       }
       ctx.queueEvent("forms.submitted", {
         formId: form.id,
@@ -715,6 +759,51 @@ function summarise(fields: FormField[], data: Record<string, unknown>): string {
     })
     .filter((line): line is string => line !== null);
   return lines.join("\n") || "(no answers)";
+}
+
+/** An intake's project title, with `{key}` filled from the answers. */
+export function intakeTitle(
+  template: string,
+  form: { name: string; fields: FormField[] },
+  data: Record<string, unknown>,
+): string {
+  const keys = new Set(form.fields.map((field) => field.key));
+  const filled = template.replace(/\{([a-zA-Z0-9_]+)\}/g, (whole, key: string) => {
+    if (key === "form") return form.name;
+    if (!keys.has(key)) return whole;
+    const value = data[key];
+    return typeof value === "string" || typeof value === "number" ? String(value) : "";
+  });
+  // One line, at most a project title long. Answers can hold newlines.
+  const title = filled.replace(/\s+/g, " ").trim().slice(0, 200).trim();
+  return title || form.name.slice(0, 200);
+}
+
+/**
+ * Open the project an intake submission asks for (C3.37), in the caller's
+ * transaction. Elevated, because the sender is usually anonymous and opening
+ * the work is a consequence of what they were allowed to do, not a
+ * permission of theirs. Idempotent per submission: projects finds the one it
+ * already opened. A form whose projects module has since been switched off
+ * keeps the submission and opens nothing.
+ */
+async function openIntakeProject(
+  ctx: ServiceContext,
+  form: { id: string; name: string; slug: string; fields: unknown; intake: unknown },
+  submissionId: string,
+  contactId: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const intake = intakeSchema.safeParse(form.intake);
+  if (!intake.success || !listServices().has(INTAKE_SERVICE)) return;
+  const fields = form.fields as FormField[];
+  await ctx.callAsSystem(getService(INTAKE_SERVICE), {
+    submissionId,
+    contactId,
+    title: intakeTitle(intake.data.projectTitle, { name: form.name, fields }, data),
+    summary: summarise(fields, data).slice(0, 5_000),
+    label: form.name.slice(0, 200),
+  });
 }
 
 export const listSubmissions = defineService({
@@ -766,7 +855,8 @@ export const reviewSubmission = defineService({
       .select()
       .from(formSubmissions)
       .where(eq(formSubmissions.id, input.id))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!before) throw new ServiceError("not_found", "That submission is gone.");
 
     const [form] = await ctx.tx
@@ -803,6 +893,12 @@ export const reviewSubmission = defineService({
       .set({ status: input.status, contactId })
       .where(eq(formSubmissions.id, input.id))
       .returning();
+
+    // A rescued intake opens its project exactly as an unflagged one would
+    // have; one already opened is found again rather than opened twice.
+    if (rescuing && contactId && form) {
+      await openIntakeProject(ctx, form, before.id, contactId, before.data as Record<string, unknown>);
+    }
 
     ctx.setSubject("form_submission", input.id);
     return row!;

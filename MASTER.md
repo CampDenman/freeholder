@@ -5609,6 +5609,25 @@ deployments are portable, testable and incapable of silently forking the truth.
   who downloads it from My Account. The services, receipts and permissions
   are the admin's own. Open until a hosted preview shows a delivered file in
   a customer's portal.
+  *(Progress 2026-11-05: `forms.intake` (`{ projectTitle }`, migration
+  `0058_service_intake_delivery`) marks an intake; `forms.submit` and a spam
+  rescue open the project in the submission's transaction through
+  `projects.openFromIntake` (system-only, idempotent per submission via its
+  `form_submission` link and an advisory lock). `projects.deliver` (scoped:
+  admin, API and MCP alike) refuses a project with no contact, a changed
+  contact, a cancelled project and non-staff callers; it composes
+  `documents.save`/`addVersion`/`share` (login share for the contact),
+  completes the project, stores `projects.delivery_note`, and notifies the
+  contact (`projects.delivered`), replaying a repeat without a second
+  document or notice. The portal's projects room maps statuses through
+  `PortalRecord.statusKey` (`portal.project.status.*`, four locales) and
+  lists delivered files as `/portal/files/[id]` links. Admin: Deliver and
+  Start work on `/admin/projects/[id]`; "Open a project titled" in the form
+  builder. `launch.install` makes `offer-request` an intake (`intakeForms`);
+  version 1 specs are unchanged. Evidence
+  `tests/core/service-intake-delivery.test.ts`; guide
+  `deploy/launch-template.md`; changeset `service-intake-delivery.md`.
+  Unchecked: no hosted preview has shown a delivered file yet.)*
 - [ ] **C3.38** File fields in forms: a `file` field kind with an accepted
   media kind (audio, document, image) and a size limit at or below the media
   limit for that kind. It uploads through the existing resumable media upload

@@ -33,6 +33,7 @@ export default async function NewFormPage() {
           successMessage: "",
           destination: "contact",
           notify: "",
+          intake: "",
           status: "active",
           // One question to start from, because an empty builder is a screen
           // that does not say what it is for.

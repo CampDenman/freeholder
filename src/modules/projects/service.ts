@@ -30,7 +30,8 @@ import {
 import { pages } from "@/modules/cms/schema";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { isUniqueViolation } from "@/core/db";
-import { defineService, getService, permits, ServiceError, type Actor } from "@/core/service";
+import { defineService, getService, listServices, permits, ServiceError, type Actor } from "@/core/service";
+import { assets } from "@/core/media/schema";
 // The checklist is the platform's one task list (C7.02), not a second one.
 // C6.15 shipped `project_tasks` before that table existed; these services keep
 // their names and their shape and write through core, so a project's list and
@@ -106,6 +107,7 @@ const projectRow = row({
   occurredOn: z.string().nullable(),
   completedAt: timestamp.nullable(),
   notes: z.string().nullable(),
+  deliveryNote: z.string().nullable(),
   blocks: z.unknown(),
   coverAssetId: uuid.nullable(),
   featured: z.boolean(),
@@ -700,7 +702,7 @@ export const listProjects = defineService({
         title: project.title, slug: project.slug, summary: project.summary, status: project.status,
         ownerUserId: null, locationId: project.locationId, serviceProductIds: project.serviceProductIds,
         startedOn: project.startedOn, occurredOn: project.occurredOn, completedAt: project.completedAt,
-        notes: null, blocks: [], coverAssetId: null, featured: project.featured, seo: {},
+        notes: null, deliveryNote: project.deliveryNote, blocks: [], coverAssetId: null, featured: project.featured, seo: {},
         publicationStatus: project.publicationStatus, publishedAt: project.publishedAt,
         publicPageId: project.publicPageId, version: project.version,
         createdAt: project.createdAt, updatedAt: project.updatedAt,
@@ -773,6 +775,319 @@ export const getProject = defineService({
       files,
       testimonials,
     };
+  },
+});
+
+/* ------------------------------------------------- intake and delivery */
+
+/**
+ * Open the project an intake form submission asks for (C3.37).
+ *
+ * Reached only by composition: `forms.submit` (and a spam rescue) calls it
+ * with `ctx.callAsSystem` in the submission's own transaction, so the
+ * submission and its project commit together. Idempotent per submission —
+ * the `form_submission` link is the record that this one already opened its
+ * work — and serialised on that submission, so a double rescue cannot open
+ * two.
+ */
+export const openFromIntake = defineService({
+  name: "projects.openFromIntake",
+  summary: "Open the project an intake form submission asks for.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({
+    submissionId: id,
+    contactId: id,
+    title: z.string().trim().min(1).max(200),
+    summary: z.string().trim().max(5_000).nullish(),
+    /** What to call the submission on the project, e.g. the form's name. */
+    label: z.string().trim().max(200).nullish(),
+  }),
+  output: row({ projectId: uuid, opened: z.boolean() }),
+  handler: async (input, ctx) => {
+    await ctx.tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${`project-intake:${input.submissionId}`}))`,
+    );
+    const [existing] = await ctx.tx
+      .select({ projectId: projectLinks.projectId })
+      .from(projectLinks)
+      .where(and(eq(projectLinks.kind, "form_submission"), eq(projectLinks.targetId, input.submissionId)))
+      .limit(1);
+    if (existing) {
+      ctx.setSubject("project", existing.projectId);
+      return { projectId: existing.projectId, opened: false };
+    }
+    const [contact] = await ctx.tx
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(eq(contacts.id, input.contactId))
+      .limit(1);
+    if (!contact) throw new ServiceError("not_found", "No such contact.");
+
+    // Intake titles repeat ("Website audit for Sam"), so the address carries
+    // the submission. Checked rather than caught: a unique violation would
+    // abort the submission's transaction, not just this insert.
+    const base = slugify(input.title).slice(0, 80).replace(/-+$/, "") || "project";
+    const short = `${base}-${input.submissionId.slice(0, 8)}`;
+    const [taken] = await ctx.tx
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.slug, short))
+      .limit(1);
+    const slug = taken ? `${base}-${input.submissionId.replace(/-/g, "")}` : short;
+
+    const [created] = await ctx.tx
+      .insert(projects)
+      .values({
+        title: input.title,
+        slug,
+        contactId: input.contactId,
+        summary: input.summary || null,
+        status: "enquiry",
+      })
+      .returning();
+    await ctx.tx.insert(projectLinks).values({
+      projectId: created!.id,
+      kind: "form_submission",
+      targetId: input.submissionId,
+      label: input.label ?? null,
+    });
+    await ctx.emitTimeline({
+      contactId: input.contactId,
+      eventType: "project.created",
+      subjectType: "project",
+      subjectId: created!.id,
+      payload: { title: created!.title, intake: true },
+    });
+    ctx.setSubject("project", created!.id);
+    ctx.queueEvent("project.created", {
+      id: created!.id,
+      contactId: input.contactId,
+      submissionId: input.submissionId,
+    });
+    return { projectId: created!.id, opened: true };
+  },
+});
+
+const DOCUMENT_SERVICES = [
+  "documents.save",
+  "documents.addVersion",
+  "documents.share",
+  "documents.list",
+  "documents.versions",
+  "documents.shares",
+] as const;
+
+type DeliveredDocument = { id: string; status: string };
+type DeliveredVersion = { id: string; assetId: string };
+type StandingShare = {
+  contactId: string | null;
+  access: string;
+  downloadPolicy: string;
+  revokedAt: Date | null;
+  expiresAt: Date | null;
+};
+
+/**
+ * Deliver the work (C3.37): the owner's file becomes a document for the
+ * project's own contact, shared to their sign-in so they download it from My
+ * Account, the project completes, and the customer is told.
+ *
+ * One transaction. The documents services are composed by elevation, because
+ * delivering is the authorised act here and the document it writes is pinned
+ * to this project's contact; their own audit rows still record each step.
+ * Notification fanout is queued work, never mail sent from here.
+ *
+ * Idempotent where retries happen: the same file on the same project finds
+ * the document it already made, and a repeat that changes nothing (same
+ * file or note, already complete) writes nothing and tells nobody again.
+ */
+export const deliverProject = defineService({
+  name: "projects.deliver",
+  summary: "Deliver a project: share the file with its customer, complete it and tell them.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  input: z
+    .object({
+      projectId: id,
+      /** A file from the media library, delivered as a document version. */
+      assetId: id.nullish(),
+      /** What the customer reads with it, or instead of a file. */
+      note: z.string().trim().min(1).max(4_000).nullish(),
+      /**
+       * Who the caller expects to receive it. Refused when the project is for
+       * somebody else, so a page left open while the project was reassigned
+       * cannot deliver to the wrong person.
+       */
+      contactId: id.nullish(),
+    })
+    .refine((value) => Boolean(value.assetId || value.note), {
+      message: "Choose a file or write a note to deliver.",
+      path: ["assetId"],
+    }),
+  output: row({
+    project: projectRow,
+    documentId: uuid.nullable(),
+    /** True when this repeated a delivery already made, and changed nothing. */
+    replayed: z.boolean(),
+  }),
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to deliver projects.");
+    }
+    const [project] = await ctx.tx
+      .select()
+      .from(projects)
+      .where(eq(projects.id, input.projectId))
+      .limit(1)
+      .for("update");
+    if (!project) throw new ServiceError("not_found", "That project is not here.");
+    if (!project.contactId) {
+      throw new ServiceError("conflict", "This project has no customer to deliver to. Choose who it is for first.");
+    }
+    if (input.contactId && input.contactId !== project.contactId) {
+      throw new ServiceError(
+        "conflict",
+        "This project is now for somebody else. Reload the page and check who it is for before delivering.",
+      );
+    }
+    if (project.status === "cancelled") {
+      throw new ServiceError("conflict", "This project was cancelled. Reopen it before delivering.");
+    }
+    const contactId = project.contactId;
+
+    let documentId: string | null = null;
+    let versionId: string | null = null;
+    let fileIsNew = false;
+    if (input.assetId) {
+      if (DOCUMENT_SERVICES.some((name) => !listServices().has(name))) {
+        throw new ServiceError("validation", "Delivering a file needs the documents module, which is not installed.");
+      }
+      const [asset] = await ctx.tx
+        .select({ id: assets.id, filename: assets.filename })
+        .from(assets)
+        .where(eq(assets.id, input.assetId))
+        .limit(1);
+      if (!asset) throw new ServiceError("not_found", "There is no such file. Upload it in Media first.");
+
+      const delivered = (await ctx.callAsSystem(getService("documents.list"), {
+        subjectType: "project",
+        subjectId: project.id,
+        contactId,
+        limit: 200,
+      })) as DeliveredDocument[];
+      for (const document of delivered) {
+        if (document.status === "archived") continue;
+        const history = (await ctx.callAsSystem(getService("documents.versions"), {
+          documentId: document.id,
+        })) as DeliveredVersion[];
+        const same = history.find((version) => version.assetId === asset.id);
+        if (same) {
+          documentId = document.id;
+          versionId = same.id;
+          break;
+        }
+      }
+      if (!documentId) {
+        const document = (await ctx.callAsSystem(getService("documents.save"), {
+          title: asset.filename.slice(0, 200) || project.title,
+          description: input.note ?? null,
+          subjectType: "project",
+          subjectId: project.id,
+          contactId,
+        })) as { id: string };
+        // addVersion refuses a file that is not ready or failed its scan, and
+        // makes the bytes private: from here they leave only through a share.
+        const version = (await ctx.callAsSystem(getService("documents.addVersion"), {
+          documentId: document.id,
+          assetId: asset.id,
+          note: input.note ?? null,
+        })) as { id: string };
+        documentId = document.id;
+        versionId = version.id;
+        fileIsNew = true;
+      }
+      const standing = (await ctx.callAsSystem(getService("documents.shares"), {
+        documentId,
+      })) as StandingShare[];
+      const now = Date.now();
+      const live = standing.some(
+        (entry) =>
+          entry.contactId === contactId &&
+          entry.access === "login" &&
+          entry.downloadPolicy === "download" &&
+          !entry.revokedAt &&
+          (!entry.expiresAt || entry.expiresAt.getTime() > now),
+      );
+      if (!live) {
+        await ctx.callAsSystem(getService("documents.share"), {
+          documentId,
+          contactId,
+          access: "login",
+          downloadPolicy: "download",
+        });
+        fileIsNew = true;
+      }
+    }
+
+    const completing = project.status !== "complete";
+    const noteIsNew = Boolean(input.note) && input.note !== project.deliveryNote;
+    ctx.setSubject("project", project.id);
+    if (!completing && !fileIsNew && !noteIsNew) {
+      // A double click, a retried request: everything it asks for is
+      // already true, so nothing is written and nobody is told twice.
+      return { project, documentId, replayed: true };
+    }
+
+    const [updated] = await ctx.tx
+      .update(projects)
+      .set({
+        status: "complete",
+        ...(completing ? { completedAt: new Date() } : {}),
+        ...(input.note ? { deliveryNote: input.note } : {}),
+        version: project.version + 1,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(projects.id, project.id))
+      .returning();
+
+    if (completing) {
+      await ctx.emitTimeline({
+        contactId,
+        eventType: "project.completed",
+        subjectType: "project",
+        subjectId: project.id,
+        payload: { title: updated!.title },
+      });
+    }
+    await ctx.emitTimeline({
+      contactId,
+      eventType: "project.delivered",
+      subjectType: "project",
+      subjectId: project.id,
+      payload: { title: updated!.title, documentId },
+    });
+    await ctx.callAsSystem(getService("notifications.create"), {
+      recipient: { kind: "contact", id: contactId },
+      topic: "projects.delivered",
+      titleKey: "notifications.projectDelivered.title",
+      bodyKey: input.note
+        ? "notifications.projectDelivered.bodyWithNote"
+        : "notifications.projectDelivered.body",
+      messageParams: {
+        project: updated!.clientDisplayName ?? updated!.title,
+        ...(input.note ? { note: input.note } : {}),
+      },
+      href: `/portal/records/projects/${project.id}`,
+      idempotencyKey: `project-delivered:${project.id}:${versionId ?? "note"}:${updated!.version}`,
+    });
+    if (completing) {
+      ctx.queueEvent("project.completed", { id: project.id, contactId });
+    }
+    ctx.queueEvent("project.delivered", { id: project.id, contactId, documentId });
+    return { project: updated!, documentId, replayed: false };
   },
 });
 
@@ -922,6 +1237,7 @@ registerContactPrivacySource({
         // as surely as their contact record is.
         clientDisplayName: null,
         notes: null,
+        deliveryNote: null,
         // The consent ledger is not cleared here, for the reason
         // `consent_records` is on the retention opt-out list: it is immutable
         // evidence under a legal/audit hold. The work goes offline, which is
@@ -1052,4 +1368,6 @@ export default [
   listProjects,
   getProject,
   projectsForSubject,
+  openFromIntake,
+  deliverProject,
 ];

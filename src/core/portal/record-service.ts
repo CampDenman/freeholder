@@ -16,11 +16,11 @@ async function owned(ctx: ServiceContext, asked: z.infer<typeof input>) {
 }
 export const myRecord = defineService({
   name: "portal.myRecord", summary: "Open one of your own customer records without a bearer link.", kind: "query", permission: "authenticated", input,
-  output: z.object({ id:z.uuid(), title:z.string(),status:z.string().nullable(),at:z.date().nullable(),amountMinor:z.number().int().nullable(),currency:z.string().nullable(),fields:z.array(z.object({labelKey:z.string(),value:z.string()})),lines:z.array(z.object({description:z.string(),amountMinor:z.number().int().optional(),currency:z.string().optional()})),links:z.array(z.object({labelKey:z.string(),href:z.string().startsWith("/")})),actions:z.array(z.enum(["accept","decline","cancel","download"])) }),
+  output: z.object({ id:z.uuid(), title:z.string(),status:z.string().nullable(),statusKey:z.string().nullable(),at:z.date().nullable(),amountMinor:z.number().int().nullable(),currency:z.string().nullable(),fields:z.array(z.object({labelKey:z.string(),value:z.string()})),lines:z.array(z.object({description:z.string(),amountMinor:z.number().int().optional(),currency:z.string().optional()})),links:z.array(z.object({labelKey:z.string(),href:z.string().startsWith("/"),params:z.record(z.string(),z.string()).optional()})),actions:z.array(z.enum(["accept","decline","cancel","download"])) }),
   handler: async (asked,ctx) => {
     const {contact,section,record} = await owned(ctx,asked);
     const details = section.detail ? await section.detail(ctx,contact.id,asked.id) : {};
-    return {id:record.id,title:record.title,status:record.status,at:record.at,amountMinor:record.amountMinor??null,currency:record.currency??null,fields:details.fields??[],lines:details.lines??[],links:details.links??[],actions:details.actions??[]};
+    return {id:record.id,title:record.title,status:record.status,statusKey:record.statusKey??null,at:record.at,amountMinor:record.amountMinor??null,currency:record.currency??null,fields:details.fields??[],lines:details.lines??[],links:details.links??[],actions:details.actions??[]};
   },
 });
 export const actOnMyRecord = defineService({

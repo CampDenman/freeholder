@@ -37,6 +37,12 @@ export type PortalRecord = {
   title: string;
   /** A stable state token the room's copy maps to words. */
   status: string | null;
+  /**
+   * The catalog key for that state in the customer's words, when the room
+   * names it differently from the owner (C3.37: a project's `enquiry` reads
+   * "New"). Absent, the token is shown as it is.
+   */
+  statusKey?: string | null;
   /** Null where a record genuinely has no date yet — a draft, an unsent quote. */
   at: Date | null;
   /**
@@ -67,7 +73,8 @@ export type PortalSection = {
   detail?: (ctx: ServiceContext, contactId: string, id: string) => Promise<{
     fields?: { labelKey: string; value: string }[];
     lines?: { description: string; amountMinor?: number; currency?: string }[];
-    links?: { labelKey: string; href: string }[];
+    /** `params` fill the label's placeholders, e.g. a file's name. */
+    links?: { labelKey: string; href: string; params?: Record<string, string> }[];
     actions?: ("accept" | "decline" | "cancel" | "download")[];
   }>;
   act?: (ctx: ServiceContext, contactId: string, id: string, input: { action: string; name?: string; reason?: string }) => Promise<{ href?: string }>;
