@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copy for the form builder, resolved on the server (§15.3).
 import type { Translate } from "@/core/i18n";
-import { FIELD_KINDS } from "@/modules/forms/fields";
+import { FIELD_KINDS, FILE_FIELD_KINDS, fileFieldCeilingMb } from "@/modules/forms/fields";
 import type { BuilderLabels, KindOption } from "./FieldBuilder";
 
 export function builderLabels(t: Translate, isNew: boolean): BuilderLabels {
@@ -45,6 +45,16 @@ export function builderLabels(t: Translate, isNew: boolean): BuilderLabels {
     save: t("common.saveChanges"),
     pending: t("common.saving"),
     saved: t("admin.settings.saved"),
+    accept: t("forms.builder.accept"),
+    maxMb: t("forms.builder.maxMb"),
+    maxMbHint: t("forms.builder.maxMbHint", { mb: "{mb}" }),
+    fileKinds: FILE_FIELD_KINDS.map((kind) => ({
+      value: kind,
+      label: t(`forms.file.kind.${kind}`),
+    })),
+    fileCeilings: Object.fromEntries(
+      FILE_FIELD_KINDS.map((kind) => [kind, fileFieldCeilingMb([kind])]),
+    ),
   };
 }
 

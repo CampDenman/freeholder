@@ -27,6 +27,8 @@ vi.mock("next/navigation", () => ({
 vi.mock("next/server", () => ({ after: (task: () => Promise<void>) => state.after.push(task) }));
 vi.mock("@/modules/forms/service", () => ({
   submitForm: { call: async () => ({ ok: true, submissionId: "00000000-0000-4000-8000-000000000009", message: "ok" }) },
+  // C3.38: the action reads the form to learn whether it has a file question.
+  getForm: { call: async () => ({ fields: [{ key: "message", kind: "multiline" }] }) },
 }));
 vi.mock("@/core/settings/read", () => ({ currentBusiness: async () => null }));
 vi.mock("../../app/i18n", () => ({ getLocale: async () => "en" }));

@@ -5,10 +5,11 @@
 // The queue is the point. A spam filter that deletes is a filter an owner
 // cannot audit, and the day it is wrong they never learn what they missed —
 // so everything is kept, flagged, and rescuable in one click.
-import { ArrowLeft, User, Warning } from "@phosphor-icons/react/dist/ssr";
+import { ArrowLeft, Paperclip, User, Warning } from "@phosphor-icons/react/dist/ssr";
 import { notFound } from "next/navigation";
 import { formatDateTime } from "@/core/i18n";
-import { listForms, listSubmissions } from "@/modules/forms/service";
+import { listForms, listSubmissionFiles, listSubmissions } from "@/modules/forms/service";
+import { isFileAnswer } from "@/modules/forms/fields";
 import { currentBusiness } from "@/core/settings/read";
 import { Card, Pill } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
@@ -36,6 +37,47 @@ function answerText(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${Math.round((bytes / 1024 / 1024) * 10) / 10} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/** A file answer: its name, its size, and the owner-only download. */
+function FileAnswerLink({
+  href,
+  filename,
+  size,
+  label,
+  gone,
+}: {
+  href: string | undefined;
+  filename: string;
+  size: string;
+  label: string;
+  gone: string;
+}) {
+  // No link means the attachment was erased; the name stays as the record.
+  if (!href) {
+    return (
+      <span>
+        {filename} <span className="text-ink-muted">({gone})</span>
+      </span>
+    );
+  }
+  return (
+    <a
+      href={`/admin/forms/files/${href}`}
+      className="inline-flex items-center gap-1.5 font-medium text-accent"
+    >
+      <Paperclip size={14} weight="bold" aria-hidden="true" />
+      <span>
+        {label}: {filename}
+      </span>
+      <span className="text-xs text-ink-muted">({size})</span>
+    </a>
+  );
+}
+
 export default async function FormSubmissionsPage({
   params,
   searchParams,
@@ -57,6 +99,14 @@ export default async function FormSubmissionsPage({
 
   const form = forms.find((row) => row.id === id);
   if (!form) notFound();
+  // C3.38: a file answer opens through its attachment, never a public URL.
+  const attached = await listSubmissionFiles.call(
+    { submissionIds: submissions.map((submission) => submission.id) },
+    actor,
+  );
+  const fileLink = new Map(
+    attached.map((file) => [`${file.submissionId}:${file.fieldKey}`, file.id]),
+  );
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
@@ -180,7 +230,17 @@ export default async function FormSubmissionsPage({
                               {field.label}
                             </dt>
                             <dd className="whitespace-pre-wrap text-sm text-ink">
-                              {answerText(value)}
+                              {isFileAnswer(value) ? (
+                                <FileAnswerLink
+                                  href={fileLink.get(`${submission.id}:${field.key}`)}
+                                  filename={value.filename}
+                                  size={formatBytes(value.bytes)}
+                                  label={t("forms.file.open")}
+                                  gone={t("forms.file.gone")}
+                                />
+                              ) : (
+                                answerText(value)
+                              )}
                             </dd>
                           </div>
                         );

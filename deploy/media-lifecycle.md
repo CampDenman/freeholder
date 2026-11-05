@@ -63,6 +63,34 @@ watermark/download policy and consent. Consent withdrawal blocks those routes
 as well. Keep object storage private; application checks cannot revoke
 previously delivered copies or existing signed URLs.
 
+## Form file uploads (C3.38)
+
+A form question of kind `file` takes one file of the kinds it accepts —
+`audio`, `doc` or `image`, one or a list — up to its `maxMb`, which may not
+exceed the media limit of any accepted kind (image 25 MB, document 100 MB,
+audio 500 MB; a list takes the smallest). Local and Replit storage move every
+file through the 25 MB application proxy, so a larger answer needs
+S3-compatible storage with the CORS above.
+
+Only a signed-in customer can answer a file question. The browser reserves
+the upload with provenance `purpose: "form"`, which makes the asset private
+from the moment it exists: no public media URL serves it, and the public
+resolvers return nothing for it. A signed-out visitor sees "Sign in to
+upload" with a link to the portal sign-in instead of a file input; the
+upload itself needs JavaScript, and the question says so. The form posts
+only the asset id. `forms.submit` refuses an anonymous answer, someone
+else's upload, a library (non-form) upload, a file still processing or not
+cleared by the scanner, a sniffed kind the question does not accept, a file
+over its limit, and a file already attached to a submission (migration
+`0059_form_submission_files.sql`'s unique asset index).
+
+The owner opens an attached file from the form's submissions screen
+(`/admin/forms/files/<attachment>`), which streams it as a no-store
+download for staff with access to forms. The file is part of the contact's
+data: the `forms.submissions` privacy source exports each attachment's
+facts beside the answers, and erasure trashes the asset with an immediate
+purge date so the media purge removes the bytes.
+
 ## Malware scanner
 
 Structural validation always runs. With no antivirus engine, assets record

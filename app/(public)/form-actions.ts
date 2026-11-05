@@ -16,7 +16,9 @@
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { after } from "next/server";
-import { submitForm } from "@/modules/forms/service";
+import { getForm, submitForm } from "@/modules/forms/service";
+import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { actorFromToken } from "@/core/http/actor";
 import { HONEYPOT_FIELD, STAMP_FIELD } from "@/modules/forms/antispam";
 import { sealSiteSubmission } from "@/modules/forms/screening";
 import {
@@ -40,6 +42,21 @@ import { getLocale } from "../i18n";
  */
 async function visitor() {
   return { kind: "anonymous" as const, request: requestMetadataFromHeaders(await headers()) };
+}
+
+/**
+ * C3.38: a form with a file question is answered as the signed-in person, so
+ * `forms.submit` can check that each file is their own upload. Every other
+ * form keeps answering as a signed-out visitor, exactly as before.
+ */
+async function submitter(slug: string) {
+  const anonymous = await visitor();
+  if (!slug) return anonymous;
+  const form = await getForm.call({ slug }, { kind: "anonymous" }).catch(() => null);
+  const fields = Array.isArray(form?.fields) ? (form.fields as Array<{ kind?: unknown }>) : [];
+  if (!fields.some((field) => field.kind === "file")) return anonymous;
+  const session = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+  return session.kind === "user" ? { ...session, request: anonymous.request } : anonymous;
 }
 
 /**
@@ -74,7 +91,7 @@ export async function submitPublicForm(form: FormData): Promise<void> {
   // C3.33/C3.34: the site form's seal, with the screening provider's answer
   // when one is configured, before the submission's transaction opens. A
   // provider that is down seals "unavailable" and the traps decide alone.
-  const actor = await visitor();
+  const actor = await submitter(slug);
   const screening = await sealSiteSubmission({ slug, values, request: actor.request });
 
   const jar = await cookies();

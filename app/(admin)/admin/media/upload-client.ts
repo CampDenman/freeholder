@@ -104,8 +104,10 @@ async function mediaFacts(file: File): Promise<MediaFacts> {
   }
 }
 
-export function resumeKey(file: File): string {
-  return `freeholder.media.upload:${file.name}:${file.size}:${file.lastModified}`;
+export function resumeKey(file: File, purpose?: string): string {
+  // A form upload and a library upload of the same file are different
+  // reservations: resuming one as the other would change who may see it.
+  return `freeholder.media.upload:${purpose ? `${purpose}:` : ""}${file.name}:${file.size}:${file.lastModified}`;
 }
 
 function readResume(key: string): string | null {
@@ -136,6 +138,8 @@ export interface UploadOptions {
   onReservation?: (uploadId: string) => void;
   captureToken?: string;
   captureSessionId?: string;
+  /** C3.38: `form` reserves a private upload only its uploader may attach. */
+  purpose?: "form";
   failedMessage?: string;
 }
 
@@ -150,7 +154,7 @@ async function reservationFor(
   metadata: MediaFacts,
   options: UploadOptions,
 ): Promise<UploadReservation> {
-  const key = resumeKey(file);
+  const key = resumeKey(file, options.purpose);
   const saved = readResume(key);
   if (saved) {
     try {
@@ -182,6 +186,7 @@ async function reservationFor(
           file.lastModified > 0 ? new Date(file.lastModified).toISOString() : undefined,
         captureToken: options.captureToken,
         captureSessionId: options.captureSessionId,
+        purpose: options.purpose,
       },
     }),
   });
@@ -300,7 +305,7 @@ export async function uploadMediaFile(
     );
     assetId = status.assetId ?? null;
   }
-  writeResume(resumeKey(file), null);
+  writeResume(resumeKey(file, options.purpose), null);
   return { uploadId: reservation.id, assetId };
 }
 

@@ -32,6 +32,9 @@ export interface BuilderField {
   placeholder?: string;
   help?: string;
   options?: string[];
+  /** For a file question (C3.38): the media kinds it takes, and its limit. */
+  accept?: string[];
+  maxMb?: number;
   /** Locked once an answer has been stored under it — see below. */
   established: boolean;
 }
@@ -75,6 +78,13 @@ export interface BuilderLabels {
   save: string;
   pending: string;
   saved: string;
+  accept: string;
+  maxMb: string;
+  /** "At most {mb} MB" for the chosen kinds. */
+  maxMbHint: string;
+  fileKinds: KindOption[];
+  /** The largest maxMb per file kind, in MB. */
+  fileCeilings: Record<string, number>;
 }
 
 export interface KindOption {
@@ -83,6 +93,7 @@ export interface KindOption {
 }
 
 const NEEDS_OPTIONS = new Set(["select"]);
+const FILE = "file";
 
 /**
  * The form builder (MASTER.md §4.6).
@@ -175,6 +186,10 @@ export function FieldBuilder({
             fields.map(({ established: _established, ...field }) => ({
               ...field,
               options: NEEDS_OPTIONS.has(field.kind) ? field.options ?? [] : undefined,
+              // Only a file question carries these; the schema refuses them
+              // anywhere else, so switching kind must not leave them behind.
+              accept: field.kind === FILE ? field.accept ?? [] : undefined,
+              maxMb: field.kind === FILE ? field.maxMb : undefined,
             })),
           )} />
 
@@ -316,6 +331,57 @@ export function FieldBuilder({
                   </Field>
                 ) : null}
 
+                {field.kind === FILE ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <fieldset className="grid gap-2 border-0 p-0">
+                      <legend className="text-sm font-medium text-ink">{labels.accept}</legend>
+                      <div className="flex flex-wrap gap-4">
+                        {labels.fileKinds.map((kind) => (
+                          <label
+                            key={kind.value}
+                            className="flex items-center gap-2 text-sm text-ink-muted"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={(field.accept ?? []).includes(kind.value)}
+                              onChange={(event) =>
+                                update(index, {
+                                  accept: event.target.checked
+                                    ? [...(field.accept ?? []), kind.value]
+                                    : (field.accept ?? []).filter((one) => one !== kind.value),
+                                })
+                              }
+                              className="size-4 accent-[var(--color-accent)]"
+                            />
+                            {kind.label}
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                    <Field
+                      label={labels.maxMb}
+                      htmlFor={`max-mb-${index}`}
+                      hint={labels.maxMbHint.replace(
+                        "{mb}",
+                        String(ceilingFor(field.accept ?? [], labels.fileCeilings)),
+                      )}
+                    >
+                      <Input
+                        id={`max-mb-${index}`}
+                        type="number"
+                        min={1}
+                        max={ceilingFor(field.accept ?? [], labels.fileCeilings)}
+                        value={field.maxMb ?? ""}
+                        onChange={(event) =>
+                          update(index, {
+                            maxMb: event.target.value ? Number(event.target.value) : undefined,
+                          })
+                        }
+                      />
+                    </Field>
+                  </div>
+                ) : null}
+
                 <div className="flex flex-wrap items-center gap-4">
                   <label className="flex items-center gap-2 text-sm text-ink-muted">
                     <input
@@ -413,4 +479,10 @@ export function FieldBuilder({
       </Card>
     </form>
   );
+}
+
+/** The tightest media limit among the chosen kinds; every kind when none is. */
+function ceilingFor(accept: string[], ceilings: Record<string, number>): number {
+  const kinds = accept.length ? accept : Object.keys(ceilings);
+  return Math.min(...kinds.map((kind) => ceilings[kind] ?? Infinity));
 }
