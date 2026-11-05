@@ -5668,6 +5668,12 @@ deployments are portable, testable and incapable of silently forking the truth.
   It builds on C3.35–C3.38, and version 1 specs keep installing unchanged.
   Open until a hosted preview built from a version 2 spec completes sign-up,
   intake, owner delivery and the customer's download.
+  *(Progress 2026-11-05: `launchSpecSchema` takes version 1 or 2;
+  version 2 adds `accounts`, `intake` and `payments` and installs `/start`
+  (account step, `onboarding` intake form, payment step), "My account" and
+  "Get started" in the navigation. Example `seed/launch/example-v2.json`;
+  evidence `tests/core/launch-template.test.ts`; guide
+  `deploy/launch-template.md`.)*
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

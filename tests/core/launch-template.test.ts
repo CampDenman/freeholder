@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { installLaunch, launchNav, launchPages, launchSpecSchema, type LaunchSpec } from "@/modules/seed/launch";
 import { getSection, resolvePage } from "@/modules/cms/service";
-import { getBusiness } from "@/core/settings/service";
+import { getBusiness, portalAreas } from "@/core/settings/service";
 import { submitForm } from "@/modules/forms/service";
 import { HEADER_KEY } from "@/modules/cms/defaults";
 import type { BlockNode } from "@/modules/cms/blocks/types";
@@ -122,5 +122,76 @@ describe.runIf(hasDatabase)("installing a launch spec", { timeout: 120_000 }, ()
     await installLaunch.call(spec(), { kind: "system" });
     const refused = await failure(installLaunch.call(spec(), OWNER));
     expect(refused.code).toBe("conflict");
+  });
+});
+
+describe("launch spec version 2 (C3.39)", () => {
+  const V2 = JSON.parse(readFileSync(join(__dirname, "../../seed/launch/example-v2.json"), "utf8")) as Record<string, unknown>;
+  const v2 = (): LaunchSpec => launchSpecSchema.parse(V2);
+
+  it("accepts the documented example and keeps version 1 strict", () => {
+    expect(v2().intake?.fields.some((f) => f.kind === "file")).toBe(true);
+    expect(launchSpecSchema.safeParse({ ...(EXAMPLE as object), intake: V2.intake }).success).toBe(false);
+    const { payments: _payments, ...noPayments } = V2;
+    expect(launchSpecSchema.safeParse(noPayments).success).toBe(false);
+  });
+
+  it("refuses a file question without what it accepts, and a choice without options", () => {
+    const bad = (field: Record<string, unknown>) => launchSpecSchema.safeParse({ ...V2, intake: { ...(V2.intake as object), fields: [field] } }).success;
+    expect(bad({ key: "f", label: "F", kind: "file" })).toBe(false);
+    expect(bad({ key: "c", label: "C", kind: "select" })).toBe(false);
+    expect(bad({ key: "email", label: "E", kind: "text" })).toBe(false);
+  });
+
+  it("adds /start with the onboarding form and the payment step, and My account in the nav", () => {
+    const spec = v2();
+    const start = launchPages(spec).find((page) => page.slug === "start")!;
+    const text = JSON.stringify(start.blocks);
+    expect(text).toContain("\"formSlug\":\"onboarding\"");
+    expect(text).toContain("Test payments are not connected yet");
+    expect(text).toContain("/portal/login");
+    const nav = launchNav(spec).map((link) => link.href);
+    expect(nav).toContain("/start");
+    expect(nav).toContain("/portal");
+    // The test-mode note is the payment step's, not every page's.
+    for (const page of launchPages(spec).filter((p) => p.slug !== "start")) {
+      expect(JSON.stringify(page.blocks)).not.toContain("Test payments are not connected yet");
+    }
+  });
+});
+
+describe.runIf(hasDatabase)("installing a version 2 spec", { timeout: 120_000 }, () => {
+  beforeEach(async () => {
+    await truncateSpine();
+  });
+
+  it("installs an onboarding intake with a file question", async () => {
+    const V2 = JSON.parse(readFileSync(join(__dirname, "../../seed/launch/example-v2.json"), "utf8")) as unknown;
+    const result = await installLaunch.call(launchSpecSchema.parse(V2), { kind: "system" });
+    expect(result.pages).toContain("start");
+    expect(result.forms).toContain("onboarding");
+    expect(result.intakeForms).toContain("onboarding");
+    const page = await resolvePage.call({ slug: "start" }, ANONYMOUS);
+    expect(page).not.toBeNull();
+    // My Account shows only what this business does: no member network or shop pages.
+    expect(await portalAreas.call({}, ANONYMOUS)).toEqual({ members: false, shop: false });
+  });
+});
+
+describe("My Account navigation (C3.39)", () => {
+  it("lists only the business's own areas when the member network and shop are off", async () => {
+    const { portalNavLinks } = await import("@/core/portal/nav");
+    const off = portalNavLinks([{ key: "projects", count: 1 }, { key: "quotes", count: 0 }], { members: false, shop: false }).map((l) => l.path);
+    expect(off).toEqual(["/portal", "/portal/projects", "/portal/notifications", "/portal/profile", "/portal/privacy"]);
+    const on = portalNavLinks([], { members: true, shop: true }).map((l) => l.path);
+    expect(on).toContain("/portal/listings");
+    expect(on).toContain("/portal/purchases");
+  });
+
+  it("shows stored instants and dates in the business's time zone", async () => {
+    const { formatCustomerValue } = await import("@/core/i18n");
+    expect(formatCustomerValue("2026-11-06T05:14:00.000Z", "America/Los_Angeles", "en")).toBe("Nov 5, 2026, 9:14 PM");
+    expect(formatCustomerValue("2026-11-05", "America/Los_Angeles", "en")).toBe("Nov 5, 2026");
+    expect(formatCustomerValue("Show notes", "America/Los_Angeles", "en")).toBe("Show notes");
   });
 });

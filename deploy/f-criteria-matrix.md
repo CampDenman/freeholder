@@ -1789,18 +1789,18 @@ v2.
 
 ## C3.39 — Launch spec version 2 for a working preview
 
-- **F01** — N/A — not yet built; this row is completed with the C3.39 change.
-- **F02** — `src/modules/seed/launch.ts`: Pending — version 2 spec fields and install.
-- **F03** — N/A — not yet built; this row is completed with the C3.39 change.
-- **F04** — N/A — not yet built; this row is completed with the C3.39 change.
-- **F05** — N/A — not yet built; this row is completed with the C3.39 change.
-- **F06** — N/A — not yet built; this row is completed with the C3.39 change.
-- **F07** — N/A — not yet built; this row is completed with the C3.39 change.
-- **F08** — N/A — not yet built; this row is completed with the C3.39 change.
-- **F09** — N/A — not yet built; this row is completed with the C3.39 change.
-- **F10** — N/A — not yet built; this row is completed with the C3.39 change.
-- **F11** — `deploy/launch-template.md`: Pending — version 2 spec reference.
-- **F12** — N/A — not yet built; this row is completed with the C3.39 change.
+- **F01** — N/A — no schema change: a version 2 spec writes through existing services (forms with the C3.37 intake and C3.38 file fields, CMS pages and chrome).
+- **F02** — `src/modules/seed/launch.ts` — `launchSpecSchema` takes version 1 or 2; a version 2 spec must state accounts, intake and payments, and version 1 must not; covered in `tests/core/launch-template.test.ts`.
+- **F03** — `src/modules/seed/launch.ts` — the onboarding form asks for name and email first and is an intake, so `forms.submit` resolves the contact and opens their project.
+- **F04** — N/A — no new admin screen: the onboarding form, its submissions and the projects it opens use the existing forms, projects and portal screens.
+- **F05** — `src/modules/seed/launch.ts` — file questions inherit C3.38's signed-in-only uploads; `/start` sends visitors to sign in first.
+- **F06** — N/A — page copy comes from the spec in the business's own words.
+- **F07** — `tests/core/launch-template.test.ts`: Pending — version rules, file and choice question checks, the payment note only on the payment step. No hosted preview checked yet.
+- **F08** — `tests/core/launch-template.test.ts`: Pending — installing a version 2 spec on real PostgreSQL opens the onboarding intake. No hosted preview checked yet.
+- **F09** — N/A — a launched site's records are ordinary forms, projects and documents, covered by the existing export and erasure.
+- **F10** — N/A — installing is one transaction at boot; nothing runs per request.
+- **F11** — `deploy/launch-template.md`, `seed/launch/example-v2.json`, changeset `.changeset/launch-spec-v2.md`.
+- **F12** — `tests/core/launch-template.test.ts` composes a version 2 spec → `launch.install` → `/start` page and onboarding intake form.
 
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 

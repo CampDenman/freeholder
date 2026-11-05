@@ -13,7 +13,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { formatMoney } from "@/core/i18n";
+import { formatDateTime, formatMoney } from "@/core/i18n";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { myRecords } from "@/core/portal/service";
@@ -104,7 +104,7 @@ export default async function PortalRoom({
                 ) : null}
                 {record.at ? (
                   <time dateTime={record.at.toISOString()}>
-                    {record.at.toLocaleDateString(locale)}
+                    {formatDateTime(record.at, business?.timezone ?? "UTC", locale)}
                   </time>
                 ) : null}
               </p>

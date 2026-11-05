@@ -99,13 +99,13 @@ export default async function ProjectPage({
       getT(),
       domainOrNull(getProject.call({ id }, actor)),
       searchParams,
-      domainOrNull(listAssets.call({ kind: "image", limit: 500 }, actor)),
+      domainOrNull(listAssets.call({ kind: "image", limit: 100 }, actor)),
       domainOrNull(listProducts.call({ kind: "service", limit: 500 }, actor)),
       domainOrNull(listContacts.call({ limit: 500 }, actor)),
       domainOrNull(listProducts.call({ status: "active", limit: 500 }, actor)),
       domainOrNull(listCollections.call({}, actor)),
       // Any ready file can be a deliverable: a report, a recording, artwork.
-      domainOrNull(listAssets.call({ limit: 500 }, actor)),
+      domainOrNull(listAssets.call({ limit: 100 }, actor)),
     ]);
   if (!project) notFound();
   const seo = project.seo;

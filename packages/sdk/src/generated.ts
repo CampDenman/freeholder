@@ -1410,6 +1410,7 @@ export const SERVICE_NAMES = [
   "settings.getModuleConfig",
   "settings.listModules",
   "settings.patchBusiness",
+  "settings.portalAreas",
   "settings.resetDesign",
   "settings.saveSetupBusiness",
   "settings.setModuleConfig",
@@ -5105,7 +5106,7 @@ export interface ServiceCatalog {
     output: { id: string; invoiceId: string; number: string | null; sequenceKey: string; idempotencyKey: string; requestHash: string; status: "draft" | "issued" | "void"; currency: string; reason: string; subtotalMinor: number; taxMinor: number; totalMinor: number; issuedAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "launch.install": {
-    input: { format: "freeholder-launch-spec"; version: 1; generator: string; business: { name: string; tagline: string; schemaType?: string; country?: string; baseCurrency?: string; timezone?: string }; brand?: { paper?: string; ink?: string; accent?: string }; status: { banner: string; summary: string; ready: string[]; planned: string[] }; home: { headline: string; promise: string; problem: string[]; steps: string[]; switchReasons?: string[]; seoDescription: string }; offer: { slug: string; name: string; summary: string; price: string; cadence: "one_time" | "monthly"; priceLabel: string; forWho: string; includes: string[]; faq?: { question: string; answer: string }[]; seoDescription: string }; intro?: { name: string; summary: string; durationMin: number }; contact: { intro: string; seoDescription: string }; about: { body: string[]; seoDescription: string } };
+    input: { format: "freeholder-launch-spec"; version: 1 | 2; generator: string; business: { name: string; tagline: string; schemaType?: string; country?: string; baseCurrency?: string; timezone?: string }; brand?: { paper?: string; ink?: string; accent?: string }; status: { banner: string; summary: string; ready: string[]; planned: string[] }; home: { headline: string; promise: string; problem: string[]; steps: string[]; switchReasons?: string[]; seoDescription: string }; offer: { slug: string; name: string; summary: string; price: string; cadence: "one_time" | "monthly"; priceLabel: string; forWho: string; includes: string[]; faq?: { question: string; answer: string }[]; seoDescription: string }; intro?: { name: string; summary: string; durationMin: number }; contact: { intro: string; seoDescription: string }; about: { body: string[]; seoDescription: string }; accounts?: { enabled: boolean; members?: boolean; shop?: boolean }; intake?: { title: string; intro: string; projectTitle: string; fields: { key: string; label: string; kind: "text" | "email" | "multiline" | "select" | "file"; required?: boolean; help?: string; options?: string[]; accept?: ("audio" | "doc" | "image")[]; maxMb?: number }[] }; payments?: { mode: "test"; note: string } };
     output: { business: string; pages: string[]; forms: string[]; intakeForms: string[]; callRequest: boolean; brandApplied: boolean };
   };
   "locations.checkCoverage": {
@@ -7179,6 +7180,10 @@ export interface ServiceCatalog {
   "settings.patchBusiness": {
     input: { name?: string; tagline?: string; schemaType?: string; country?: string; defaultLocale?: string; enabledLocales?: string[]; baseCurrency?: string; timezone?: string; units?: "metric" | "imperial"; firstDayOfWeek?: number };
     output: { id: number; name: string; tagline: string | null; schemaType: string; country: string; defaultLocale: string; enabledLocales: string[]; baseCurrency: string; timezone: string; units: "metric" | "imperial"; firstDayOfWeek: number; setupCompletedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "settings.portalAreas": {
+    input: Record<string, never>;
+    output: { members: boolean; shop: boolean };
   };
   "settings.resetDesign": {
     input: Record<string, never>;
@@ -9318,6 +9323,7 @@ export interface FreeholderApi {
     getModuleConfig: (input: ServiceCatalog["settings.getModuleConfig"]["input"]) => Promise<ServiceCatalog["settings.getModuleConfig"]["output"]>;
     listModules: (input?: ServiceCatalog["settings.listModules"]["input"]) => Promise<ServiceCatalog["settings.listModules"]["output"]>;
     patchBusiness: (input?: ServiceCatalog["settings.patchBusiness"]["input"]) => Promise<ServiceCatalog["settings.patchBusiness"]["output"]>;
+    portalAreas: (input?: ServiceCatalog["settings.portalAreas"]["input"]) => Promise<ServiceCatalog["settings.portalAreas"]["output"]>;
     resetDesign: (input?: ServiceCatalog["settings.resetDesign"]["input"]) => Promise<ServiceCatalog["settings.resetDesign"]["output"]>;
     saveSetupBusiness: (input: ServiceCatalog["settings.saveSetupBusiness"]["input"]) => Promise<ServiceCatalog["settings.saveSetupBusiness"]["output"]>;
     setModuleConfig: (input: ServiceCatalog["settings.setModuleConfig"]["input"]) => Promise<ServiceCatalog["settings.setModuleConfig"]["output"]>;

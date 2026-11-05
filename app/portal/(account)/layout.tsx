@@ -13,6 +13,8 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
+import { portalAreas } from "@/core/settings/service";
+import { portalNavLinks } from "@/core/portal/nav";
 import { myRecords } from "@/core/portal/service";
 import { getLocale, getT } from "../../i18n";
 import { localizeCustomerHref } from "@/core/i18n/customer";
@@ -56,22 +58,9 @@ export default async function PortalLayout({
     ? await myRecords.call({ limit: 1 }, actor).catch(() => [])
     : [];
 
-  const links = [
-    { path: "/portal", label: t("portal.nav.home") },
-    ...rooms
-      .filter((room) => room.count > 0)
-      .map((room) => ({ path: `/portal/${room.key}`, label: t(`portal.room.${room.key}`) })),
-    { path: "/portal/registry", label: t("portal.nav.registry") },
-    { path: "/portal/member", label: t("portal.nav.member") },
-    { path: "/portal/connections", label: t("portal.nav.connections") },
-    { path: "/portal/notifications", label: t("portal.nav.notifications") },
-    { path: "/portal/listings", label: t("portal.nav.listings") },
-    { path: "/portal/payouts", label: t("portal.nav.payouts") },
-    { path: "/portal/sales", label: t("portal.nav.sales") },
-    { path: "/portal/purchases", label: t("portal.nav.purchases") },
-    { path: "/portal/profile", label: t("portal.nav.profile") },
-    { path: "/portal/privacy", label: t("portal.nav.privacy") },
-  ];
+  // C3.39: the member network and shop pages only where the business uses them.
+  const areas = await portalAreas.call({}, { kind: "anonymous" }).catch(() => ({ members: true, shop: true }));
+  const links = portalNavLinks(rooms, areas).map((link) => ({ path: link.path, label: t(link.labelKey) }));
 
   return (
     <div className="min-h-screen bg-canvas text-ink">

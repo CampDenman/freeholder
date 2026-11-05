@@ -404,6 +404,23 @@ export function zoneLabel(
   return `${name.replace(/\s*\([^()]*\)$/, "")} (${city})`;
 }
 
+/**
+ * A stored value as a customer reads it (C3.39): an ISO instant becomes
+ * "Nov 5, 2026, 9:14 PM" in the business's time zone, an ISO date becomes
+ * "Nov 5, 2026", and anything else is returned unchanged.
+ */
+export function formatCustomerValue(value: string, timezone: string, locale: string = DEFAULT_LOCALE): string {
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    const at = new Date(value);
+    if (!Number.isNaN(at.getTime())) return formatDateTime(at, timezone, locale);
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const at = new Date(`${value}T12:00:00Z`);
+    if (!Number.isNaN(at.getTime())) return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(at);
+  }
+  return value;
+}
+
 /** Store UTC, display in an explicit timezone (§4.9 timezone discipline). */
 export function formatDateTime(
   utc: Date,

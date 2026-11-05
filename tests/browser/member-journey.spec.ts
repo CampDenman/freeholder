@@ -122,9 +122,14 @@ test.describe("the whole member journey (C12.17)", () => {
     await sam.goto("/messages?to=rae");
     await sam.locator("#message-body").fill("Hi Rae, could you do a portrait session?");
     await sam.getByRole("button", { name: "Send" }).click();
-    await rae.goto("/messages");
-    await rae.getByRole("link", { name: /Sam Ito/ }).first().click();
-    await expect(rae.getByText("Hi Rae, could you do a portrait session?")).toBeVisible();
+    // The send is saved before Rae looks: on a loaded CI runner Rae's page
+    // could otherwise load the thread before the message was committed.
+    await expect(sam.getByText("Hi Rae, could you do a portrait session?")).toBeVisible({ timeout: 15000 });
+    await expect(async () => {
+      await rae.goto("/messages");
+      await rae.getByRole("link", { name: /Sam Ito/ }).first().click();
+      await expect(rae.getByText("Hi Rae, could you do a portrait session?")).toBeVisible({ timeout: 3000 });
+    }).toPass({ timeout: 30000 });
 
     // 4. Call each other. Both sides here run in Chromium; the test below
     //    proves a call between Chromium and Firefox.

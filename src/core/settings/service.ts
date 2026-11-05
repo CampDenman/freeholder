@@ -393,7 +393,31 @@ export const setModuleEnabled = defineService({
   },
 });
 
+/**
+ * Which customer areas My Account offers (C3.39). The member network
+ * (profile, connections, listings, payouts, sales) and the shop's own pages
+ * (purchases, gift lists) appear unless the owner turned that module off —
+ * a launched one-offer site turns both off, so a customer sees only what the
+ * business actually does with them. Public: it names areas, nobody's data.
+ */
+export const portalAreas = defineService({
+  name: "settings.portalAreas",
+  summary: "Which optional customer areas My Account shows.",
+  kind: "query",
+  permission: "public",
+  input: z.object({}),
+  output: z.object({ members: z.boolean(), shop: z.boolean() }),
+  handler: async (_input, ctx) => {
+    const rows = await ctx.tx
+      .select({ module: moduleSettings.module, enabled: moduleSettings.enabled })
+      .from(moduleSettings);
+    const off = new Set(rows.filter((row) => row.enabled === false).map((row) => row.module));
+    return { members: !off.has("members"), shop: !off.has("catalog") };
+  },
+});
+
 export default [
+  portalAreas,
   setModuleConfig,
   getModuleConfig,
   getBusiness,
