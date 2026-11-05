@@ -316,7 +316,6 @@ export const installLaunch = defineService({
   // Owner rather than staff, as demo.install: it rewrites the business
   // profile. `system` reaches it at boot when FREEHOLDER_LAUNCH_SPEC is set.
   permission: "scoped",
-  external: false,
   writeClass: "write",
   input: launchSpecSchema,
   output: z.object({

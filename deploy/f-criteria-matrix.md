@@ -1727,6 +1727,21 @@ v2.
 - **F11** — `deploy/paradise-modern.md` (what is copied, why, failure handling), `.env.example`, changeset `.changeset/form-screening-lead-sink.md`.
 - **F12** — `tests/core/form-screening-lead-sink.test.ts` composes site form seal → `forms.submit` → `forms.submitted` → `copySubmissionToLeadSink` → provider request.
 
+## C3.35 — Ship a launch template and a private preview mode
+
+- **F01** — N/A — no schema change: a launch spec writes through existing services (business profile, design tokens, forms, CMS pages and chrome), and private preview keeps no state beyond a signed cookie.
+- **F02** — `src/modules/seed/launch.ts` — `launch.install` validates the spec, refuses a site with pages and installs in one transaction; covered in `tests/core/launch-template.test.ts`.
+- **F03** — `src/modules/seed/launch.ts` — the offer-request, contact and call-request forms submit through `forms.submit`, which resolves the person onto the contact spine; covered in `tests/core/launch-template.test.ts`.
+- **F04** — N/A — no new admin screen: the installed pages, forms and submissions are edited and reviewed in the existing CMS and forms screens; the gate's refusal page is `PREVIEW_REQUIRED_HTML` in `src/core/preview/private-preview.ts`.
+- **F05** — `proxy.ts` — without a current signed cookie every public path answers 401, while admin, sign-in, setup and health stay open and an API request carrying its own `Authorization` is left to the API; covered in `tests/core/private-preview.test.ts`.
+- **F06** — N/A — page copy comes from the spec in the business's own words; the refusal page is a fixed operator notice with no business content.
+- **F07** — `tests/core/private-preview.test.ts`: Pending — tampered, expired, other-key and over-30-day tokens refused, same-site landing only, HttpOnly cookie, noindex on every response, robots disallow, sitemap refused. No hosted preview checked yet.
+- **F08** — `tests/core/launch-template.test.ts`: Pending — §5 shape of the installed pages, required status copy, reserved slugs refused, install on real PostgreSQL. No hosted preview checked yet.
+- **F09** — N/A — a launched site is an ordinary site: its pages, forms and submissions are covered by the existing export and erasure.
+- **F10** — `src/core/preview/private-preview.ts` — the gate is one synchronous HMAC per request at the edge; installing is one transaction at boot.
+- **F11** — `deploy/launch-template.md`, `.env.example`, `seed/launch/example.json`, changeset `.changeset/launch-template-private-preview.md`.
+- **F12** — `tests/core/launch-template.test.ts` composes spec → `launch.install` → published pages → `forms.submit`; `tests/core/private-preview.test.ts` composes operator link (`scripts/preview-link.mjs`) → proxy exchange → cookie → served page.
+
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/agents-board.test.ts`.
