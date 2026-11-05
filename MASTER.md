@@ -5601,6 +5601,18 @@ deployments are portable, testable and incapable of silently forking the truth.
   preview outbox the owner reads in the admin. Campaign and bulk mail are
   refused on a preview. Open until a sign-in link is delivered on a hosted
   preview.
+  *(Progress 2026-11-05: `src/core/mail/preview.ts` holds the policy and the
+  owner's `mail.listHeld` / audited `mail.openHeld` (mail manage, never an
+  API key); `sendMail`, `assertMailReady`, `deliverQueuedMail` and
+  `pruneExpiredMailOutbox` in `src/core/mail/service.ts` apply it; a held
+  message is a `held` delivery with a `hold_reason` and its encrypted body
+  kept in `mail_outbox` (`db/migrations/0060_mail_preview_outbox.sql`).
+  Recipients: `FREEHOLDER_PREVIEW_MAIL_ALLOW` or an existing contact; cap
+  `FREEHOLDER_PREVIEW_MAIL_DAILY_CAP` (default 100 per rolling 24 hours).
+  Outbox screen `app/(admin)/admin/mail/page.tsx`; operator guide
+  `deploy/launch-template.md` ("Preview mail"); evidence
+  `tests/core/preview-mail.test.ts`; changeset `preview-mail.md`. No sign-in
+  link has been delivered on a hosted preview yet.)*
 - [ ] **C3.37** Service intake and delivery: a form marked as an intake opens
   a project for the person who sent it. In the portal it reads New,
   In progress or Delivered (`enquiry`/`active`/`complete`). The owner's

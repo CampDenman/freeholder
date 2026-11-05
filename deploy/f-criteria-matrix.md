@@ -1744,18 +1744,18 @@ v2.
 
 ## C3.36 — Preview mail
 
-- **F01** — N/A — not yet built; this row is completed with the C3.36 change.
-- **F02** — `src/core/mail/service.ts`: Pending — the recipient policy, outbox and cap land in the mail service.
-- **F03** — N/A — not yet built; this row is completed with the C3.36 change.
-- **F04** — N/A — not yet built; this row is completed with the C3.36 change.
-- **F05** — `src/core/mail/permission.ts`: Pending — who a preview may write to.
-- **F06** — N/A — not yet built; this row is completed with the C3.36 change.
-- **F07** — N/A — not yet built; this row is completed with the C3.36 change.
-- **F08** — N/A — not yet built; this row is completed with the C3.36 change.
-- **F09** — N/A — not yet built; this row is completed with the C3.36 change.
-- **F10** — N/A — not yet built; this row is completed with the C3.36 change.
-- **F11** — `deploy/launch-template.md`: Pending — operator settings for preview mail.
-- **F12** — N/A — not yet built; this row is completed with the C3.36 change.
+- **F01** — `db/migrations/0060_mail_preview_outbox.sql` — `mail_deliveries.status` widens to `held` (re-added `NOT VALID`, then validated) and gains a nullable `hold_reason` (`recipient`, `cap`, `no_adapter`); additive, so the previous release still reads every pre-existing row (`src/core/mail/schema.ts`).
+- **F02** — `src/core/mail/service.ts` — `sendMail` asks `previewMailHold` (`src/core/mail/preview.ts`) inside the staging transaction and stages a held message without a delivery job; `assertMailReady` passes transactional mail and refuses bulk on a preview; `deliverQueuedMail` never touches a held row; covered in `tests/core/preview-mail.test.ts`.
+- **F03** — `src/core/mail/preview.ts` — "may receive preview mail" reads the contact spine (`contacts.email`), never a mail-private list of customers; `portal.requestSignIn` still resolves the customer through `contacts.resolve` before the link is staged; covered in `tests/core/preview-mail.test.ts`.
+- **F04** — `app/(admin)/admin/mail/page.tsx` — the preview outbox lists held messages with their reason, the cap and the allow-list, and `app/(admin)/admin/mail/HeldMailReader.tsx` opens one on request (plain text, links clickable); linked from Settings while the site is a preview (`app/(admin)/admin/settings/page.tsx`). Light/dark tokens only.
+- **F05** — `src/core/mail/preview.ts` — `mail.listHeld` needs mail view, `mail.openHeld` needs mail manage, writes an audit row, and is `agentCallable: false`, so no API key or MCP client can read a held sign-in link; anonymous and customer actors are refused; covered in `tests/core/preview-mail.test.ts`.
+- **F06** — `locales/en.json`, `locales/es.json`, `locales/fr.json`, `locales/ar.json` — `mail.preview.*` and `mail.delivery.held` in all four catalogs; `tests/core/locale-quality.test.ts`.
+- **F07** — `tests/core/preview-mail.test.ts`: Pending — allowed (owner allow-list, contact) versus held (stranger) recipients, the rolling cap, held while no adapter delivers, held messages never queued or lost, owner-only reading, bulk refused, behaviour unchanged without `FREEHOLDER_PREVIEW_KEY`. No sign-in link delivered on a hosted preview yet.
+- **F08** — `tests/core/preview-mail.test.ts`: Pending — the delivering route is SMTP to an unresolvable host and no delivery job runs, so no provider is contacted. No live delivery through Paradise Modern on a hosted preview yet.
+- **F09** — `src/core/mail/service.ts` — a held body lives only in the encrypted `mail_outbox` and `pruneExpiredMailOutbox` removes it after 30 days, keeping the held row (`readable: false`); covered in `tests/core/preview-mail.test.ts`.
+- **F10** — `src/core/mail/preview.ts` — one indexed contact lookup and one counted query under a transaction-scoped advisory lock per preview message; nothing runs when `FREEHOLDER_PREVIEW_KEY` is unset.
+- **F11** — `deploy/launch-template.md` ("Preview mail"), `.env.example`, changeset `.changeset/preview-mail.md`.
+- **F12** — `tests/core/preview-mail.test.ts` composes anonymous `portal.requestSignIn` → `requestCustomerMagicLink` → `sendMail` (held) → `mail.listHeld` → audited `mail.openHeld` returning the sign-in link.
 
 ## C3.37 — Service intake and delivery
 

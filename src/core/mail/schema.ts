@@ -188,10 +188,16 @@ export const mailDeliveries = pgTable(
         "complained",
         "failed",
         "suppressed",
+        "held",
       ],
     })
       .notNull()
       .default("queued"),
+    /**
+     * C3.36: why a private preview held this message in its outbox instead
+     * of delivering it. Set exactly when `status` is `held`.
+     */
+    holdReason: text("hold_reason", { enum: ["recipient", "cap", "no_adapter"] }),
     providerRef: text("provider_ref"),
     /** Stable caller key. Null for one-off sends that cannot be retried safely. */
     idempotencyKey: text("idempotency_key"),
@@ -223,7 +229,11 @@ export const mailDeliveries = pgTable(
     ),
     check(
       "mail_deliveries_status_allowed",
-      sql`${t.status} in ('queued', 'submitted', 'delivered', 'bounced', 'complained', 'failed', 'suppressed')`,
+      sql`${t.status} in ('queued', 'submitted', 'delivered', 'bounced', 'complained', 'failed', 'suppressed', 'held')`,
+    ),
+    check(
+      "mail_deliveries_hold_reason_allowed",
+      sql`${t.holdReason} is null or ${t.holdReason} in ('recipient', 'cap', 'no_adapter')`,
     ),
     check(
       "mail_deliveries_provider_purpose",
@@ -240,7 +250,10 @@ export const mailDeliveries = pgTable(
   ],
 );
 
-/** Encrypted body staged only while a delivery is queued or retryable. */
+/**
+ * Encrypted body staged only while a delivery is queued or retryable, or (C3.36)
+ * while a private preview holds it for the owner to read.
+ */
 export const mailOutbox = pgTable(
   "mail_outbox",
   {

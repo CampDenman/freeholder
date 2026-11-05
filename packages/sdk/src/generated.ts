@@ -922,6 +922,8 @@ export const SERVICE_NAMES = [
   "loyalty.tiers",
   "mail.beginOAuth",
   "mail.completeOAuth",
+  "mail.listHeld",
+  "mail.openHeld",
   "mail.readiness",
   "mail.registerSender",
   "mail.releaseSuppression",
@@ -5226,6 +5228,14 @@ export interface ServiceCatalog {
     input: { provider: "google" | "microsoft"; state: string; code: string };
     output: { senderId: string; email: string; returnTo: string };
   };
+  "mail.listHeld": {
+    input: { limit?: number };
+    output: { preview: boolean; allowList: string[]; dailyCap: number; sentLast24Hours: number; held: { id: string; recipient: string; subject: string; reason: "recipient" | "cap" | "no_adapter"; requestedBy: string; createdAt: string; readable: boolean }[] };
+  };
+  "mail.openHeld": {
+    input: { id: string };
+    output: { id: string; recipient: string; subject: string; reason: "recipient" | "cap" | "no_adapter"; text: string; createdAt: string };
+  };
   "mail.readiness": {
     input: Record<string, never>;
     output: { transactional: boolean; bulk: boolean };
@@ -5244,11 +5254,11 @@ export interface ServiceCatalog {
   };
   "mail.status": {
     input: { limit?: number };
-    output: { configuration: { transactional: { provider: "smtp" | "console" | "gmail" | "outlook" | "paradise"; delivers: boolean; missing: string[]; fromAddress: string | null }; oauth: { provider: "google" | "microsoft"; configured: boolean; missing: string[] }[]; bulk: { provider: "resend" | "postmark" | "ses" | "paradise" | "none"; sendConfigured: boolean; feedbackConfigured: boolean; missing: string[]; webhookPath: string | null; fromAddress: string | null } }; senders: { id: string; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "paradise"; email: string; displayName: string | null; verificationStatus: "pending" | "verified" | "failed"; status: "active" | "paused" | "needs_attention"; isDefault: boolean; lastVerifiedAt: string | null; lastError: string | null; verificationDetail: unknown; createdAt: string; accountStatus: ("active" | "needs_reconnect" | "revoked") | null; capabilityEnabled: boolean | null; [key: string]: unknown }[]; deliveries: { id: string; senderId: string | null; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "paradise" | "none"; recipient: string; subject: string; status: "queued" | "submitted" | "delivered" | "bounced" | "complained" | "failed" | "suppressed"; providerRef: string | null; idempotencyKey: string | null; requestedBy: string; attempts: number; lastError: string | null; submittedAt: string | null; deliveredAt: string | null; providerStatusAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; suppressions: { email: string; reason: "hard_bounce" | "complaint" | "provider" | "manual"; provider: "resend" | "postmark" | "ses" | "manual"; sourceEventId: string | null; detail: string | null; active: boolean; releasedAt: string | null; releasedBy: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[] };
+    output: { configuration: { transactional: { provider: "smtp" | "console" | "gmail" | "outlook" | "paradise"; delivers: boolean; missing: string[]; fromAddress: string | null }; oauth: { provider: "google" | "microsoft"; configured: boolean; missing: string[] }[]; bulk: { provider: "resend" | "postmark" | "ses" | "paradise" | "none"; sendConfigured: boolean; feedbackConfigured: boolean; missing: string[]; webhookPath: string | null; fromAddress: string | null } }; senders: { id: string; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "paradise"; email: string; displayName: string | null; verificationStatus: "pending" | "verified" | "failed"; status: "active" | "paused" | "needs_attention"; isDefault: boolean; lastVerifiedAt: string | null; lastError: string | null; verificationDetail: unknown; createdAt: string; accountStatus: ("active" | "needs_reconnect" | "revoked") | null; capabilityEnabled: boolean | null; [key: string]: unknown }[]; deliveries: { id: string; senderId: string | null; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "paradise" | "none"; recipient: string; subject: string; status: "queued" | "submitted" | "delivered" | "bounced" | "complained" | "failed" | "suppressed" | "held"; holdReason: ("recipient" | "cap" | "no_adapter") | null; providerRef: string | null; idempotencyKey: string | null; requestedBy: string; attempts: number; lastError: string | null; submittedAt: string | null; deliveredAt: string | null; providerStatusAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; suppressions: { email: string; reason: "hard_bounce" | "complaint" | "provider" | "manual"; provider: "resend" | "postmark" | "ses" | "manual"; sourceEventId: string | null; detail: string | null; active: boolean; releasedAt: string | null; releasedBy: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[] };
   };
   "mail.testSend": {
     input: { id: string };
-    output: { id: string; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "paradise" | "none"; providerRef: string | null; delivers: boolean; duplicate: boolean };
+    output: { id: string; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "paradise" | "none"; providerRef: string | null; delivers: boolean; duplicate: boolean; held?: boolean };
   };
   "mail.updateSender": {
     input: { id: string; status: "active" | "paused" };
@@ -8758,6 +8768,8 @@ export interface FreeholderApi {
   mail: {
     beginOAuth: (input: ServiceCatalog["mail.beginOAuth"]["input"]) => Promise<ServiceCatalog["mail.beginOAuth"]["output"]>;
     completeOAuth: (input: ServiceCatalog["mail.completeOAuth"]["input"]) => Promise<ServiceCatalog["mail.completeOAuth"]["output"]>;
+    listHeld: (input?: ServiceCatalog["mail.listHeld"]["input"]) => Promise<ServiceCatalog["mail.listHeld"]["output"]>;
+    openHeld: (input: ServiceCatalog["mail.openHeld"]["input"]) => Promise<ServiceCatalog["mail.openHeld"]["output"]>;
     readiness: (input?: ServiceCatalog["mail.readiness"]["input"]) => Promise<ServiceCatalog["mail.readiness"]["output"]>;
     registerSender: (input: ServiceCatalog["mail.registerSender"]["input"]) => Promise<ServiceCatalog["mail.registerSender"]["output"]>;
     releaseSuppression: (input: ServiceCatalog["mail.releaseSuppression"]["input"]) => Promise<ServiceCatalog["mail.releaseSuppression"]["output"]>;
