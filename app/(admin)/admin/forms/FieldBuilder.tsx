@@ -51,6 +51,8 @@ export interface BuilderLabels {
   destinationHint: string;
   notify: string;
   notifyHint: string;
+  intake: string;
+  intakeHint: string;
   status: string;
   active: string;
   closed: string;
@@ -107,6 +109,7 @@ export function FieldBuilder({
     successMessage: string;
     destination: string;
     notify: string;
+    intake: string;
     status: string;
     fields: BuilderField[];
   };
@@ -398,6 +401,9 @@ export function FieldBuilder({
               <Input id="form-notify" name="notify" defaultValue={initial.notify} />
             </Field>
           </div>
+          <Field label={labels.intake} htmlFor="form-intake" hint={labels.intakeHint}>
+            <Input id="form-intake" name="intakeTitle" maxLength={200} defaultValue={initial.intake} />
+          </Field>
         </CardBody>
         <CardFooter>
           <Button type="submit" disabled={pending}>

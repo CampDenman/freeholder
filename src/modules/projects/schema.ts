@@ -105,6 +105,12 @@ export const projects = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
     /** The owner's own notes. Never shown to the client (C8.01 publishes blocks). */
     notes: text("notes"),
+    /**
+     * The owner's written note on the latest delivery (C3.37). Unlike
+     * `notes`, this one is *for* the client: My Account shows it beside the
+     * delivered files.
+     */
+    deliveryNote: text("delivery_note"),
     /** Owner-authored case-study copy. A CMS snapshot is made only on publish. */
     blocks: jsonb("blocks").$type<BlockNode[]>().notNull().default([]),
     coverAssetId: uuid("cover_asset_id").references(() => assets.id, {

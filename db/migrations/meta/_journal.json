@@ -407,6 +407,13 @@
       "when": 1793310000037,
       "tag": "0057_paradise_mail_provider",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1793310000038,
+      "tag": "0058_service_intake_delivery",
+      "breakpoints": true
     }
   ]
 }

@@ -21,6 +21,8 @@ export function builderLabels(t: Translate, isNew: boolean): BuilderLabels {
     destinationHint: t("forms.builder.destinationHint"),
     notify: t("forms.builder.notify"),
     notifyHint: t("forms.builder.notifyHint"),
+    intake: t("forms.builder.intake"),
+    intakeHint: t("forms.builder.intakeHint"),
     status: t("forms.builder.status"),
     active: t("forms.builder.active"),
     closed: t("forms.builder.closed"),

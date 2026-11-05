@@ -23,6 +23,7 @@ import {
   addTaskAction,
   addTestimonialAction,
   attachProjectFileAction,
+  deliverProjectAction,
   detachProjectFileAction,
   linkAction,
   projectConsentAction,
@@ -31,6 +32,7 @@ import {
   removeTaskAction,
   setOutcomeAction,
   setTaskStatusAction,
+  startProjectAction,
   unlinkAction,
   testimonialStatusAction,
   updateCaseStudySettingsAction,
@@ -92,7 +94,7 @@ export default async function ProjectPage({
   const consentHistory = await mediaConsentHistory
     .call({ subjectKind: "project", subjectId: id }, actor)
     .catch(() => []);
-  const [t, project, query, library, services, people, allProducts, publishedCollections] =
+  const [t, project, query, library, services, people, allProducts, publishedCollections, deliverables] =
     await Promise.all([
       getT(),
       domainOrNull(getProject.call({ id }, actor)),
@@ -102,6 +104,8 @@ export default async function ProjectPage({
       domainOrNull(listContacts.call({ limit: 500 }, actor)),
       domainOrNull(listProducts.call({ status: "active", limit: 500 }, actor)),
       domainOrNull(listCollections.call({}, actor)),
+      // Any ready file can be a deliverable: a report, a recording, artwork.
+      domainOrNull(listAssets.call({ limit: 500 }, actor)),
     ]);
   if (!project) notFound();
   const seo = project.seo;
@@ -137,6 +141,61 @@ export default async function ProjectPage({
           {query.error.includes(" ") ? query.error : t("projects.failed")}
         </p>
       ) : null}
+
+      <Card>
+        <CardHeader title={t("projects.deliver.title")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("projects.deliver.hint")}</p>
+          {["enquiry", "quoted", "on_hold"].includes(project.status) ? (
+            <form action={startProjectAction}>
+              <input type="hidden" name="id" value={project.id} />
+              <Button type="submit" variant="quiet">{t("projects.deliver.start")}</Button>
+            </form>
+          ) : null}
+          {project.deliveryNote ? (
+            <div className="grid max-w-prose gap-1 text-sm">
+              <span className="font-semibold">{t("projects.deliver.lastNote")}</span>
+              <p className="whitespace-pre-wrap text-ink-muted">{project.deliveryNote}</p>
+            </div>
+          ) : null}
+          {!project.contactId ? (
+            <p className="max-w-prose text-sm text-warning">{t("projects.deliver.noContact")}</p>
+          ) : project.status === "cancelled" ? (
+            <p className="max-w-prose text-sm text-ink-muted">{t("projects.deliver.cancelled")}</p>
+          ) : (
+            <form action={deliverProjectAction} className="grid max-w-prose gap-3">
+              <input type="hidden" name="id" value={project.id} />
+              <input type="hidden" name="contactId" value={project.contactId} />
+              <label className="grid gap-1 text-sm">
+                <span className="text-ink-muted">{t("projects.deliver.file")}</span>
+                <select name="assetId" defaultValue="" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
+                  <option value="">{t("projects.deliver.noFile")}</option>
+                  {(deliverables?.rows ?? []).map((asset) => (
+                    <option key={asset.id} value={asset.id}>{asset.filename}</option>
+                  ))}
+                </select>
+                <span className="text-xs text-ink-muted">
+                  {t("projects.deliver.fileHint")}{" "}
+                  <a href="/admin/media" className="underline">{t("projects.deliver.openMedia")}</a>
+                </span>
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span className="text-ink-muted">{t("projects.deliver.note")}</span>
+                <textarea
+                  name="note"
+                  rows={3}
+                  maxLength={4000}
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
+                />
+              </label>
+              <p className="text-sm text-ink-muted">
+                {t("projects.deliver.recipient", { name: project.contactName ?? project.clientDisplayName ?? "" })}
+              </p>
+              <div><Button type="submit">{t("projects.deliver.submit")}</Button></div>
+            </form>
+          )}
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader title={t("projects.caseStudy.publishTitle")} />

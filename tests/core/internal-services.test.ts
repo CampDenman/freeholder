@@ -43,6 +43,9 @@ const INTERNAL = [
   // C8.16: a permission with an end date does not announce its own expiry,
   // so work already public is taken down on nobody's behalf.
   "projects.sweepLapsedConsent",
+  // C3.37: an intake submission opens its project in the submission's own
+  // transaction, by composition from forms; it is never a door of its own.
+  "projects.openFromIntake",
   "ads.rollUpStats",
   // C11.10: the sandboxed creative document reads its markup through this.
   "ads.creativeTag",

@@ -36,6 +36,37 @@ Install it in one of two ways:
 
 The installer refuses a site that already has pages.
 
+## Intake and delivery (C3.37)
+
+The `offer-request` form is installed as an **intake** whenever the projects
+module is installed (`launch.install` reports it in `intakeForms`). The spec
+does not change, so every version 1 spec installs as before.
+
+- **Intake.** Each accepted submission of an intake form opens a project for
+  the person who sent it, in the same transaction: status `enquiry`, linked
+  to the submission, its summary the answers. Suspected spam opens nothing;
+  rescuing it from the spam queue opens its project once. Any form can be an
+  intake: set "Open a project titled" in the form builder, or `intake:
+  { projectTitle }` on `forms.create` / `forms.update`. `{name}`, any other
+  field key and `{form}` are filled from the submission.
+- **Working it.** On `/admin/projects/<id>`, **Start work** moves the project
+  to `active`. **Deliver** takes a file from the media library (upload it in
+  Media first) and/or a note. The file becomes a document for the project's
+  contact with that file as its version, shared to their sign-in; the project
+  completes and the customer is notified. Delivering the same file again
+  changes nothing and notifies nobody twice. A project with no contact, or one
+  reassigned since the page was opened, is refused.
+- **The customer's view.** In My Account → Projects the customer reads New,
+  In progress or Delivered (`enquiry`, `active`, `complete`; quoted, on hold
+  and cancelled have their own words). The project page shows the delivery
+  note and a download link for each delivered file, served by
+  `/portal/files/<document>` only to that customer's session.
+- **Agents.** `projects.deliver` is the same service over the API and MCP; an
+  agent credential needs the `projects.deliver` (or `projects.*`) scope.
+
+Customers reach My Account through the portal sign-in at `/portal/login`.
+On a private preview, sign-in links depend on preview mail (C3.36).
+
 ## Private preview mode
 
 Set `FREEHOLDER_PREVIEW_KEY` to an independent random value of at least 32

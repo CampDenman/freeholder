@@ -1759,18 +1759,18 @@ v2.
 
 ## C3.37 — Service intake and delivery
 
-- **F01** — N/A — not yet built; this row is completed with the C3.37 change.
-- **F02** — `src/modules/projects/service.ts`: Pending — intake projects and the Deliver action.
-- **F03** — `src/modules/forms/service.ts`: Pending — intake submissions resolve the contact before opening a project.
-- **F04** — `src/modules/projects/portal.ts`: Pending — the customer's New, In progress and Delivered view.
-- **F05** — N/A — not yet built; this row is completed with the C3.37 change.
-- **F06** — N/A — not yet built; this row is completed with the C3.37 change.
-- **F07** — N/A — not yet built; this row is completed with the C3.37 change.
-- **F08** — N/A — not yet built; this row is completed with the C3.37 change.
-- **F09** — N/A — not yet built; this row is completed with the C3.37 change.
-- **F10** — N/A — not yet built; this row is completed with the C3.37 change.
-- **F11** — `deploy/launch-template.md`: Pending — owner guide for delivery.
-- **F12** — N/A — not yet built; this row is completed with the C3.37 change.
+- **F01** — `db/migrations/0058_service_intake_delivery.sql` — nullable `forms.intake` (jsonb) and `projects.delivery_note`; one project per submission is held by the existing `project_links` `form_submission` link plus a per-submission advisory lock in `projects.openFromIntake`.
+- **F02** — `src/modules/projects/service.ts` — `projects.openFromIntake` (system-only, idempotent per submission) and `projects.deliver` (typed input/output, contact and status refusals, one transaction, replay without side effects); covered in `tests/core/service-intake-delivery.test.ts`.
+- **F03** — `src/modules/forms/service.ts` — an intake opens its project only after `contacts.resolve` has put the sender on the spine, for accepted submissions only; `projects.deliver` writes the timeline (`project.completed`, `project.delivered`), the outbox events and a contact notification; covered in `tests/core/service-intake-delivery.test.ts`.
+- **F04** — `src/modules/projects/portal.ts` — the customer's New, In progress and Delivered view with the delivery note and download links; owner Deliver and Start work on `app/(admin)/admin/projects/[id]/page.tsx`, intake title in `app/(admin)/admin/forms/FieldBuilder.tsx`.
+- **F05** — `packages/sdk/src/generated.ts` — `projects.deliver` is in the generated SDK, OpenAPI and MCP catalog with the same scoped permission; an agent needs the `projects.deliver` scope (`tests/core/service-intake-delivery.test.ts`).
+- **F06** — `locales/en.json` — `portal.project.*`, `projects.deliver.*`, `notifications.projectDelivered.*` and the builder's intake copy in all four catalogs; colours are semantic tokens only.
+- **F07** — `tests/core/service-intake-delivery.test.ts`: Pending — spam opens nothing, a rescue opens once, another customer cannot download or open the project, customers, anonymous callers and unscoped agents are refused, a reassigned or contactless project is refused. No hosted preview checked yet.
+- **F08** — `tests/core/service-intake-delivery.test.ts`: Pending — intake, spam, idempotency, portal labels, delivery and download, permission refusals and the launch template on real PostgreSQL. No browser run on a hosted preview yet.
+- **F09** — N/A — projects, documents and notifications keep their existing export, erasure (the delivery note is cleared with the other client fields) and merge repointing; no new job.
+- **F10** — `src/modules/seed/launch.ts` — a launched site's offer request is an intake by default, so the working flow needs no setup.
+- **F11** — `deploy/launch-template.md` (intake and delivery section), changeset `.changeset/service-intake-delivery.md`.
+- **F12** — `tests/core/service-intake-delivery.test.ts` composes `launch.install` → `forms.submit` → project → `projects.update` → `projects.deliver` → portal record → `documents.myDownload`.
 
 ## C3.38 — File fields in forms
 

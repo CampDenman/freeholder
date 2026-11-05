@@ -25,6 +25,7 @@ export default defineModule({
     emits: [
       "project.created",
       "project.completed",
+      "project.delivered",
       "project.published",
       "project.unpublished",
       "projects.consentLapsed",

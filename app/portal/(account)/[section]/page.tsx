@@ -97,7 +97,11 @@ export default async function PortalRoom({
                 ) : null}
               </div>
               <p className="mt-1 text-sm text-ink-muted">
-                {record.status ? <span className="me-2">{record.status}</span> : null}
+                {record.status ? (
+                  <span className="me-2">
+                    {record.statusKey ? t(record.statusKey) : record.status}
+                  </span>
+                ) : null}
                 {record.at ? (
                   <time dateTime={record.at.toISOString()}>
                     {record.at.toLocaleDateString(locale)}

@@ -72,6 +72,8 @@ export async function saveFormAction(
     successMessage: text(form, "successMessage") || undefined,
     destination: text(form, "destination") === "none" ? ("none" as const) : ("contact" as const),
     notify,
+    // C3.37: a project title makes it an intake; an empty one, an ordinary form.
+    intake: text(form, "intakeTitle") ? { projectTitle: text(form, "intakeTitle") } : null,
   };
 
   const id = text(form, "id");
