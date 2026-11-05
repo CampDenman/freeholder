@@ -5591,6 +5591,38 @@ deployments are portable, testable and incapable of silently forking the truth.
   changeset `launch-template-private-preview.md`. A free intro call is a
   request form, not a calendar booking: the booking flow prices every
   bookable service, and a zero price is refused.)*
+- [ ] **C3.36** Preview mail: on a private preview (`FREEHOLDER_PREVIEW_KEY`)
+  transactional mail (sign-in links, notifications) works without a public
+  domain, but reaches only people the preview already involves: the owner's
+  addresses in `FREEHOLDER_PREVIEW_MAIL_ALLOW`, and contacts who signed up or
+  wrote in through the preview itself. It goes through the configured
+  delivering adapter (Paradise Modern by default) under a preview-wide daily
+  cap. Anything else, or anything while no adapter delivers, is held in a
+  preview outbox the owner reads in the admin. Campaign and bulk mail are
+  refused on a preview. Open until a sign-in link is delivered on a hosted
+  preview.
+- [ ] **C3.37** Service intake and delivery: a form marked as an intake opens
+  a project for the person who sent it. In the portal it reads New,
+  In progress or Delivered (`enquiry`/`active`/`complete`). The owner's
+  **Deliver** action on a project attaches a deliverable file as a document
+  shared with that contact, completes the project and notifies the customer,
+  who downloads it from My Account. The services, receipts and permissions
+  are the admin's own. Open until a hosted preview shows a delivered file in
+  a customer's portal.
+- [ ] **C3.38** File fields in forms: a `file` field kind with an accepted
+  media kind (audio, document, image) and a size limit at or below the media
+  limit for that kind. It uploads through the existing resumable media upload
+  API with content sniffing, is attached to the submission, the contact and
+  (for an intake) the project, and the owner can open it. Anonymous visitors
+  are asked to sign in before uploading. Open until a hosted preview accepts
+  an upload and refuses a wrong type and an oversize file.
+- [ ] **C3.39** Launch spec version 2 for a working preview. It adds customer
+  accounts in the navigation (sign in, My Account), an onboarding intake
+  form with optional file fields on `/start`, intake on offer requests, and
+  payment-step copy that names test mode without a site-wide "not open" banner.
+  It builds on C3.35–C3.38, and version 1 specs keep installing unchanged.
+  Open until a hosted preview built from a version 2 spec completes sign-up,
+  intake, owner delivery and the customer's download.
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
