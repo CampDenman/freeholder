@@ -144,6 +144,12 @@ const provenanceSchema = z
     note: z.string().trim().max(500).optional(),
     captureToken: z.string().trim().min(16).max(128).optional(),
     captureSessionId: z.string().uuid().optional(),
+    /**
+     * C3.38: `form` is a file somebody uploads as a form answer. It is private
+     * from the moment it exists — never served from a public URL, readable by
+     * library staff — and only the person who uploaded it can attach it.
+     */
+    purpose: z.enum(["form"]).optional(),
   })
   .default({});
 const mediaMetadataSchema = z
@@ -586,6 +592,8 @@ async function insertPreparedAsset(
       provenance: input.provenance,
       source: input.source,
       uploadedBy: actorString(ctx.actor),
+      // C3.38: a form answer is the submitter's private file from the start.
+      isPrivate: input.provenance.purpose === "form",
       ...scan,
     })
     .returning();
@@ -734,10 +742,15 @@ const applyStoredOriginal = defineService({
     ) {
       await checkCaptureUpload(ctx.tx, ctx.actor, input.provenance);
     }
+    let provenance = input.provenance;
     if (input.uploadId) {
       const session = await lockedUploadSession(ctx.tx, input.uploadId);
       if (!session) throw new ServiceError("not_found", "That upload is not here.");
       requireUploadAccess(ctx.actor, session.uploadedBy);
+      // The reservation decides what the file is for: the proxy body cannot
+      // turn a private form upload into a public library file, or back.
+      const reserved = (session.provenance ?? {}) as { purpose?: "form" };
+      provenance = { ...provenance, purpose: reserved.purpose };
       if (session.state === "complete" && session.assetId) {
         const [asset] = await ctx.tx
           .select()
@@ -765,7 +778,7 @@ const applyStoredOriginal = defineService({
         key: input.key,
         altText: input.altText,
         source: input.source,
-        provenance: safeProvenance(ctx, input.source, input.provenance, input.method),
+        provenance: safeProvenance(ctx, input.source, provenance, input.method),
         metadata: input.metadata,
         scan: input.scan,
         checksumSha256: input.checksumSha256,

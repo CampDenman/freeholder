@@ -8,10 +8,11 @@
 // two can never disagree.
 //
 // Deliberately a small set. Every field kind here maps to an input a browser
-// renders natively, with a keyboard that suits it on a phone — a date picker
-// or a file upload would each bring a week of accessibility work, and neither
-// is what a lead-capture form is for.
+// renders natively, with a keyboard that suits it on a phone. `file` (C3.38)
+// is the one that needs more than the browser: the file goes through the
+// media upload API first, and the answer is the private asset it became.
 import { z } from "zod";
+import { MEDIA_LIMITS } from "@/core/media/validation";
 
 export const FIELD_KINDS = [
   "text",
@@ -21,9 +22,54 @@ export const FIELD_KINDS = [
   "select",
   "checkbox",
   "number",
+  "file",
 ] as const;
 
 export type FieldKind = (typeof FIELD_KINDS)[number];
+
+/** The media kinds a file field may ask for (C3.38). Video is not offered. */
+export const FILE_FIELD_KINDS = ["audio", "doc", "image"] as const;
+export type FileFieldKind = (typeof FILE_FIELD_KINDS)[number];
+
+const MB = 1024 * 1024;
+
+/** The largest `maxMb` a file field accepting these kinds may set. */
+export function fileFieldCeilingMb(accept: readonly FileFieldKind[]): number {
+  return Math.min(...accept.map((kind) => Math.floor(MEDIA_LIMITS[kind] / MB)));
+}
+
+/** A file field's accepted kinds, as a list whether it was written as one or many. */
+export function acceptedKinds(field: Pick<FormField, "accept">): FileFieldKind[] {
+  const accept = field.accept;
+  if (!accept) return [];
+  return Array.isArray(accept) ? [...new Set(accept)] : [accept];
+}
+
+/** A file field's size limit in bytes: its own `maxMb`, or the media ceiling. */
+export function fileFieldMaxBytes(field: Pick<FormField, "accept" | "maxMb">): number {
+  const ceiling = fileFieldCeilingMb(acceptedKinds(field));
+  return Math.min(field.maxMb ?? ceiling, ceiling) * MB;
+}
+
+/**
+ * What a file field stores as its answer: the private asset and the facts an
+ * owner needs to recognise it, never a URL (C3.38).
+ */
+export interface FileAnswer {
+  assetId: string;
+  filename: string;
+  bytes: number;
+  mime: string;
+}
+
+export function isFileAnswer(value: unknown): value is FileAnswer {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      typeof (value as FileAnswer).assetId === "string" &&
+      typeof (value as FileAnswer).filename === "string",
+  );
+}
 
 export const fieldSchema = z.object({
   /** Stable key the answer is stored under. Never shown to a visitor. */
@@ -40,6 +86,12 @@ export const fieldSchema = z.object({
   /** For `select`. Ignored by every other kind. */
   options: z.array(z.string().min(1).max(120)).optional(),
   maxLength: z.number().int().positive().max(5000).optional(),
+  /** For `file`: one media kind, or a list of them. */
+  accept: z
+    .union([z.enum(FILE_FIELD_KINDS), z.array(z.enum(FILE_FIELD_KINDS)).min(1).max(3)])
+    .optional(),
+  /** For `file`: at most the media limit of every accepted kind. */
+  maxMb: z.number().int().positive().optional(),
 });
 
 export type FormField = z.output<typeof fieldSchema>;
@@ -73,6 +125,25 @@ export const fieldsSchema = z
         ctx.addIssue({
           code: "custom",
           message: `The field "${field.key}" is a dropdown with no options.`,
+        });
+      }
+      if (field.kind === "file") {
+        const accept = acceptedKinds(field);
+        if (accept.length === 0) {
+          ctx.addIssue({
+            code: "custom",
+            message: `The file field "${field.key}" needs the kinds of file it accepts: audio, document or image.`,
+          });
+        } else if (field.maxMb !== undefined && field.maxMb > fileFieldCeilingMb(accept)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `The file field "${field.key}" allows at most ${fileFieldCeilingMb(accept)} MB for ${accept.join(", ")} files.`,
+          });
+        }
+      } else if (field.accept !== undefined || field.maxMb !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: `Only a file field takes accepted kinds and a size limit; "${field.key}" is not one.`,
         });
       }
     }
@@ -109,6 +180,19 @@ function answerSchema(field: FormField): z.ZodType {
           message: `Choose one of the options for ${field.label}.`,
         }),
       );
+    case "file": {
+      // The answer as posted is the id of an asset the browser uploaded; the
+      // service turns it into a FileAnswer after checking whose it is. An
+      // empty value is no file, so an optional field may be left alone.
+      const id = z
+        .string({ message: `${field.label} is required.` })
+        .trim()
+        .uuid(`Upload ${field.label} again; the file did not arrive.`);
+      return z.preprocess(
+        (value) => (value === "" || value === null ? undefined : value),
+        field.required ? id : id.optional(),
+      );
+    }
     default: {
       let schema = z.string().trim().max(field.maxLength ?? 2000);
       if (field.required) schema = schema.min(1, `${field.label} is required.`);

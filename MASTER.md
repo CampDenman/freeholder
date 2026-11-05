@@ -5635,6 +5635,20 @@ deployments are portable, testable and incapable of silently forking the truth.
   (for an intake) the project, and the owner can open it. Anonymous visitors
   are asked to sign in before uploading. Open until a hosted preview accepts
   an upload and refuses a wrong type and an oversize file.
+  *(Progress 2026-11-05: `src/modules/forms/fields.ts` (`file` kind, `accept`
+  and `maxMb` within `MEDIA_LIMITS`), `src/modules/forms/service.ts`
+  (`forms.submit` file checks, `forms.openSubmissionFile`,
+  `forms.listSubmissionFiles`, privacy export and erasure),
+  `src/modules/forms/FileField.tsx` and `src/modules/forms/block.tsx`,
+  `src/core/media/service.ts` (`provenance.purpose: "form"` makes the asset
+  private at creation), `app/(admin)/admin/forms/files/[id]/route.ts`;
+  migration `0059_form_submission_files.sql`; operator notes
+  `deploy/media-lifecycle.md`; evidence `tests/modules/form-file-fields.test.ts`;
+  changeset `form-file-fields.md`. Uploads are bound to a signed-in customer
+  session only: the capture-token upload links are owner-issued capabilities
+  for a media capture session, so no per-render anonymous grant was added.
+  Not yet done: attaching the file to an intake's project (with C3.37) and
+  the hosted-preview acceptance.)*
 - [ ] **C3.39** Launch spec version 2 for a working preview. It adds customer
   accounts in the navigation (sign in, My Account), an onboarding intake
   form with optional file fields on `/start`, intake on offer requests, and

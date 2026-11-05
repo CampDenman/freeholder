@@ -80,6 +80,17 @@ const TYPES: readonly FileType[] = [
   { mime: "model/vnd.usdz+zip", kind: "doc", extensions: [".usdz"] },
 ] as const;
 
+/**
+ * An `<input type="file" accept>` value for these kinds: every MIME type and
+ * extension the sniffing below would accept for them (C3.38). Advisory — the
+ * server sniffs the bytes regardless — but it keeps a phone's picker honest.
+ */
+export function acceptAttribute(kinds: readonly MediaKind[]): string {
+  return TYPES.filter((type) => kinds.includes(type.kind))
+    .flatMap((type) => [type.mime, ...type.extensions])
+    .join(",");
+}
+
 const TYPE_BY_MIME = new Map(TYPES.map((type) => [type.mime, type]));
 const TYPE_BY_EXTENSION = new Map(
   TYPES.flatMap((type) => type.extensions.map((extension) => [extension, type] as const)),

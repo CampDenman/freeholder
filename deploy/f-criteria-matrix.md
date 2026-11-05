@@ -1774,18 +1774,18 @@ v2.
 
 ## C3.38 — File fields in forms
 
-- **F01** — N/A — not yet built; this row is completed with the C3.38 change.
-- **F02** — `src/modules/forms/fields.ts`: Pending — the file field kind and its limits.
-- **F03** — N/A — not yet built; this row is completed with the C3.38 change.
-- **F04** — N/A — not yet built; this row is completed with the C3.38 change.
-- **F05** — `src/core/media/validation.ts`: Pending — content sniffing and size limits reused for form files.
-- **F06** — N/A — not yet built; this row is completed with the C3.38 change.
-- **F07** — N/A — not yet built; this row is completed with the C3.38 change.
-- **F08** — N/A — not yet built; this row is completed with the C3.38 change.
-- **F09** — N/A — not yet built; this row is completed with the C3.38 change.
-- **F10** — N/A — not yet built; this row is completed with the C3.38 change.
-- **F11** — `deploy/launch-template.md`: Pending — what an intake upload accepts.
-- **F12** — N/A — not yet built; this row is completed with the C3.38 change.
+- **F01** — `db/migrations/0059_form_submission_files.sql` — `form_submission_files` links a submission and field to the private asset; the unique asset index refuses reuse and the (submission, field) index keeps one file per question; schema in `src/modules/forms/schema.ts`.
+- **F02** — `src/modules/forms/service.ts` — `forms.submit` checks each file answer (own form upload, ready and cleared, sniffed kind in `accept`, within `maxMb`, unattached) inside its transaction with the assets locked; `forms.openSubmissionFile` and `forms.listSubmissionFiles` are staff-scoped; field configs are refused by `fieldsSchema` in `src/modules/forms/fields.ts`; covered in `tests/modules/form-file-fields.test.ts`.
+- **F03** — `src/modules/forms/service.ts` — the submission resolves its contact as before (or, with no email question, the signed-in customer's own contact), so the file reaches the timeline, conversation and merge through its submission; no new contact column.
+- **F04** — `src/modules/forms/block.tsx` and `src/modules/forms/FileField.tsx` — the public question with upload progress, failure, remove and "Sign in to upload" states; `app/(admin)/admin/forms/[id]/page.tsx` links each file and `app/(admin)/admin/forms/files/[id]/route.ts` serves it to staff; the builder sets accepted kinds and the limit in `app/(admin)/admin/forms/FieldBuilder.tsx`.
+- **F05** — `src/core/media/service.ts` — the existing resumable upload API takes `provenance.purpose: "form"`, so HTTP, SDK (`packages/sdk/src/generated.ts`) and MCP callers upload and submit through the same services and permissions as the form.
+- **F06** — `locales/en.json` — every new string in en, fr, es and ar; the file input is labelled, its limits and status are announced through `aria-describedby` and a polite live region, and validity messages use the browser's own constraint validation; colours are existing semantic tokens. Browser accessibility run on a hosted preview: Pending.
+- **F07** — `tests/modules/form-file-fields.test.ts`: Pending — anonymous answers, other people's and library uploads, wrong sniffed kind, oversize and reuse refused; form uploads private from creation and unreadable to the public. No hosted preview checked yet.
+- **F08** — `tests/modules/form-file-fields.test.ts`: Pending — field config validation, accepted upload, wrong type, oversize, anonymous, another user's asset, owner-only open and export on real PostgreSQL. Browser E2E against a hosted preview not yet run.
+- **F09** — `src/modules/forms/service.ts` — the `forms.submissions` privacy source covers `form_submission_files`: export lists each file's facts, erasure trashes the asset for immediate purge and removes the link; covered in `tests/modules/form-file-fields.test.ts`.
+- **F10** — N/A — no setup step: a file question is added in the existing form builder, and a form without one behaves exactly as before.
+- **F11** — `deploy/media-lifecycle.md` (limits, sign-in, privacy, owner access), changeset `.changeset/form-file-fields.md`.
+- **F12** — `tests/modules/form-file-fields.test.ts` composes customer upload (`media.upload`) → `forms.submit` → staff `forms.openSubmissionFile` → `forms.submissions` export and erasure.
 
 ## C3.39 — Launch spec version 2 for a working preview
 

@@ -16,7 +16,14 @@ import { env } from "@/core/env";
 import { defineBlock } from "@/modules/cms/blocks/types";
 import { submitPublicForm } from "../../../app/(public)/form-actions";
 import { HONEYPOT_FIELD, issueStamp, STAMP_FIELD } from "./antispam";
-import { submissionSchema, type FormField } from "./fields";
+import {
+  acceptedKinds,
+  fileFieldMaxBytes,
+  submissionSchema,
+  type FormField,
+} from "./fields";
+import { FileField } from "./FileField";
+import { acceptAttribute } from "@/core/media/validation";
 import { formScreening } from "@/adapters/form-screening";
 import { leadSink } from "@/adapters/lead-sink";
 import {
@@ -34,6 +41,13 @@ export interface Resolved {
   submitLabel: string | null;
   successMessage: string | null;
   stamp: string;
+  /**
+   * C3.38: whether this visitor can upload a file answer — a signed-in
+   * session. Absent or false shows "Sign in to upload" on file questions.
+   */
+  canUpload?: boolean;
+  /** Where "Sign in to upload" goes; the portal sign-in by default. */
+  signInHref?: string;
 }
 
 export const formBlock = defineBlock({
@@ -45,7 +59,7 @@ export const formBlock = defineBlock({
     formSlug: z.string().min(1),
   }),
   starter: () => ({ formSlug: "contact" }),
-  resolve: async (props): Promise<Resolved | null> => {
+  resolve: async (props, ctx): Promise<Resolved | null> => {
     // Imported lazily so the block library does not drag the forms module into
     // every bundle that only needs a heading.
     const { getForm } = await import("./service");
@@ -64,6 +78,8 @@ export const formBlock = defineBlock({
       // built and the answer arriving, so a stamp reused across renders would
       // measure nothing.
       stamp: issueStamp(),
+      canUpload: ctx.actor?.kind === "user",
+      signInHref: `/portal/login?returnTo=${encodeURIComponent(ctx.path)}`,
     };
   },
   render: ({ resolved, ctx }) => {
@@ -184,6 +200,8 @@ export function RenderedForm({
           t={t}
           value={values?.[field.key]}
           error={fieldErrors[field.key]}
+          canUpload={form.canUpload ?? false}
+          signInHref={form.signInHref ?? "/portal/login"}
         />
       ))}
 
@@ -205,13 +223,29 @@ function Field({
   t,
   value,
   error,
+  canUpload = false,
+  signInHref = "/portal/login",
 }: {
   slug: string;
   field: FormField;
   t: Translate;
   value?: string;
   error?: string;
+  canUpload?: boolean;
+  signInHref?: string;
 }) {
+  if (field.kind === "file") {
+    return (
+      <FileQuestion
+        slug={slug}
+        field={field}
+        t={t}
+        error={error}
+        canUpload={canUpload}
+        signInHref={signInHref}
+      />
+    );
+  }
   const id = `${slug}-${field.key}`;
   const describedBy = [field.help ? `${id}-help` : null, error ? `${id}-error` : null]
     .filter(Boolean)
@@ -319,6 +353,104 @@ function Field({
   );
 }
 
+/**
+ * A file question (C3.38). Uploading needs a signed-in session, because the
+ * file is private and must be provably the sender's own; a visitor who is not
+ * signed in is told so and pointed at the sign-in, and the rest of the form
+ * still works for them.
+ */
+function FileQuestion({
+  slug,
+  field,
+  t,
+  error,
+  canUpload,
+  signInHref,
+}: {
+  slug: string;
+  field: FormField;
+  t: Translate;
+  error?: string;
+  canUpload: boolean;
+  signInHref: string;
+}) {
+  const id = `${slug}-${field.key}`;
+  const kinds = acceptedKinds(field);
+  const maxBytes = fileFieldMaxBytes(field);
+  const kindList = kinds.map((kind) => t(`forms.file.kind.${kind}`)).join(", ");
+  const limit = t("forms.file.limit", {
+    kinds: kindList,
+    mb: Math.floor(maxBytes / 1024 / 1024),
+  });
+  const hintId = `${id}-hint`;
+  const describedBy = [hintId, field.help ? `${id}-help` : null, error ? `${id}-error` : null]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <div className="grid gap-1.5">
+      {canUpload ? (
+        <label htmlFor={id} className="text-sm font-medium text-ink">
+          {field.label}
+          {field.required ? (
+            <span aria-hidden="true" className="text-ink-muted">
+              {" *"}
+            </span>
+          ) : null}
+        </label>
+      ) : (
+        <p id={id} className="text-sm font-medium text-ink">
+          {field.label}
+          {field.required ? (
+            <span aria-hidden="true" className="text-ink-muted">
+              {" *"}
+            </span>
+          ) : null}
+        </p>
+      )}
+      <p id={hintId} className="text-xs text-ink-muted">
+        {limit} {canUpload ? t("forms.file.needsScript") : null}
+      </p>
+      {canUpload ? (
+        <FileField
+          id={id}
+          name={field.key}
+          required={field.required}
+          accept={acceptAttribute(kinds)}
+          maxBytes={maxBytes}
+          describedBy={describedBy}
+          invalid={error ? true : undefined}
+          copy={{
+            uploading: t("forms.file.uploading", { percent: "{percent}" }),
+            uploaded: t("forms.file.uploaded", { filename: "{filename}" }),
+            failed: t("forms.file.failed", { message: "{message}" }),
+            tooLarge: t("forms.file.tooLarge", { mb: "{mb}" }),
+            wrongType: t("forms.file.wrongType", { kinds: kindList }),
+            wait: t("forms.file.wait"),
+            remove: t("forms.file.remove"),
+          }}
+        />
+      ) : (
+        <p className="text-sm text-ink">
+          <a href={signInHref} className="font-semibold text-accent underline">
+            {t("forms.file.signIn")}
+          </a>{" "}
+          <span className="text-ink-muted">{t("forms.file.signInWhy")}</span>
+        </p>
+      )}
+      {field.help ? (
+        <p id={`${id}-help`} className="text-xs text-ink-muted">
+          {field.help}
+        </p>
+      ) : null}
+      {error ? (
+        <p id={`${id}-error`} className="text-xs text-danger">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function inputType(kind: FormField["kind"]): string {
   if (kind === "email") return "email";
   if (kind === "tel") return "tel";
@@ -341,7 +473,9 @@ function answerIssues(fields: FormField[], values: Record<string, string>): Reco
     // The action posts a ticked box as `true` and an unticked one not at all.
     answers[field.key] = field.kind === "checkbox" ? (value === "on" || value === "true" ? true : undefined) : value;
   }
-  const parsed = submissionSchema(fields).safeParse(answers);
+  // A file is chosen again after a refusal, so its question is left to the
+  // banner rather than re-checked against an upload that is gone.
+  const parsed = submissionSchema(fields.filter((field) => field.kind !== "file")).safeParse(answers);
   if (parsed.success) return {};
   const issues: Record<string, string> = {};
   for (const issue of parsed.error.issues) {

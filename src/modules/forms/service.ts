@@ -16,7 +16,14 @@ import { createHash } from "node:crypto";
 import { clientNetwork, consumeAccepted } from "@/core/security/rate-limit";
 import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineService, getService, listServices, ServiceError, type ServiceContext } from "@/core/service";
+import {
+  actorString,
+  defineService,
+  getService,
+  listServices,
+  ServiceError,
+  type ServiceContext,
+} from "@/core/service";
 import { env } from "@/core/env";
 import { PLAYGROUND_SUBMISSION_BYTES } from "@/core/demo/playground-policy";
 import { isUniqueViolation } from "@/core/db";
@@ -28,13 +35,19 @@ import { db } from "@/core/db";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { withoutHoldCascade } from "@/core/retention/holds";
 import { makeTrashServices } from "@/core/trash";
-import { forms, formSubmissions } from "./schema";
+import { forms, formSubmissionFiles, formSubmissions } from "./schema";
+import { assets } from "@/core/media/schema";
+import { contacts } from "@/core/contacts/schema";
 import {
+  acceptedKinds,
   emailFrom,
   fieldsSchema,
+  fileFieldMaxBytes,
+  isFileAnswer,
   messageFrom,
   nameFrom,
   submissionSchema,
+  type FileAnswer,
   type FormField,
 } from "./fields";
 import { HONEYPOT_FIELD, inspect, STAMP_FIELD } from "./antispam";
@@ -105,20 +118,57 @@ registerContactReference({
 
 registerContactPrivacySource({
   scope: "forms.submissions",
-  tables: ["form_submissions"],
-  exportData: (tx, contactId) =>
-    tx
+  tables: ["form_submissions", "form_submission_files"],
+  // C3.38: a file somebody uploaded with a form is theirs as much as what they
+  // typed, so the export lists it beside the answers and erasure removes it.
+  exportData: async (tx, contactId) => ({
+    submissions: await tx
       .select()
       .from(formSubmissions)
       .where(eq(formSubmissions.contactId, contactId))
       .orderBy(formSubmissions.createdAt),
+    files: await tx
+      .select({
+        submissionId: formSubmissionFiles.submissionId,
+        fieldKey: formSubmissionFiles.fieldKey,
+        assetId: formSubmissionFiles.assetId,
+        filename: assets.filename,
+        mime: assets.mime,
+        bytes: assets.bytes,
+        checksumSha256: assets.checksumSha256,
+        uploadedAt: assets.createdAt,
+      })
+      .from(formSubmissionFiles)
+      .innerJoin(formSubmissions, eq(formSubmissions.id, formSubmissionFiles.submissionId))
+      .innerJoin(assets, eq(assets.id, formSubmissionFiles.assetId))
+      .where(eq(formSubmissions.contactId, contactId))
+      .orderBy(formSubmissionFiles.createdAt),
+  }),
   erase: async (tx, contactId) => {
+    // The files first, while the submission still says whose they are. The
+    // asset is trashed with an immediate purge date, so the media purge
+    // removes the bytes from storage on its next pass; the link goes now.
+    const files = await tx
+      .select({ id: formSubmissionFiles.id, assetId: formSubmissionFiles.assetId })
+      .from(formSubmissionFiles)
+      .innerJoin(formSubmissions, eq(formSubmissions.id, formSubmissionFiles.submissionId))
+      .where(eq(formSubmissions.contactId, contactId));
+    if (files.length) {
+      const now = new Date();
+      await tx
+        .update(assets)
+        .set({ status: "trashed", deletedAt: now, purgeAfter: now, updatedAt: now })
+        .where(inArray(assets.id, files.map((file) => file.assetId)));
+      await tx
+        .delete(formSubmissionFiles)
+        .where(inArray(formSubmissionFiles.id, files.map((file) => file.id)));
+    }
     const rows = await tx
       .update(formSubmissions)
       .set({ data: {}, sourceUrl: null, spamReasons: [] })
       .where(eq(formSubmissions.contactId, contactId))
       .returning({ id: formSubmissions.id });
-    return { affected: rows.length };
+    return { affected: rows.length + files.length };
   },
 });
 
@@ -566,6 +616,186 @@ export const verifyDemoForms = defineService({
 
 /* ---------------------------------------------------------------- submitting */
 
+const MB = 1024 * 1024;
+
+/**
+ * Turn each file field's posted asset id into a checked FileAnswer (C3.38).
+ *
+ * The id is only a claim. The asset has to be a form upload by this very
+ * submitter — a signed-in customer's session; an anonymous visitor has no
+ * upload to claim — finished and cleared, of a sniffed kind the field accepts,
+ * within its size limit, and not attached to anything yet. The rows are
+ * locked so two submissions cannot both claim one file; the unique index on
+ * the link is the backstop.
+ */
+async function claimFileAnswers(
+  ctx: ServiceContext,
+  fields: FormField[],
+  data: Record<string, unknown>,
+): Promise<Array<{ fieldKey: string; assetId: string }>> {
+  const posted = fields.filter(
+    (field) => field.kind === "file" && typeof data[field.key] === "string",
+  );
+  if (posted.length === 0) return [];
+  requireUploader(ctx, fields, data);
+  const ids = posted.map((field) => data[field.key] as string);
+  if (new Set(ids).size !== ids.length) {
+    throw new ServiceError("validation", "Upload a separate file for each question.");
+  }
+  const rows = await ctx.tx
+    .select()
+    .from(assets)
+    .where(inArray(assets.id, ids))
+    .for("update");
+  const taken = await ctx.tx
+    .select({ assetId: formSubmissionFiles.assetId })
+    .from(formSubmissionFiles)
+    .where(inArray(formSubmissionFiles.assetId, ids));
+  const uploader = actorString(ctx.actor);
+  const claimed: Array<{ fieldKey: string; assetId: string }> = [];
+  for (const field of posted) {
+    const id = data[field.key] as string;
+    const asset = rows.find((row) => row.id === id);
+    const purpose = (asset?.provenance as { purpose?: string } | undefined)?.purpose;
+    // Someone else's file and no file at all read the same: the id is not
+    // evidence that a file exists, and must not become a way to probe for one.
+    if (
+      !asset ||
+      purpose !== "form" ||
+      (ctx.actor.kind === "user" && asset.uploadedBy !== uploader) ||
+      asset.status === "trashed"
+    ) {
+      throw new ServiceError("validation", `Upload ${field.label} again; that file is not yours to attach.`);
+    }
+    if (taken.some((row) => row.assetId === id)) {
+      throw new ServiceError("conflict", `That file is already attached to another submission. Upload ${field.label} again.`);
+    }
+    if (
+      asset.status !== "ready" ||
+      (asset.scanStatus !== "clean" && asset.scanStatus !== "not_configured")
+    ) {
+      throw new ServiceError("validation", `${field.label} has not finished processing or did not pass the file check.`);
+    }
+    const accept = acceptedKinds(field);
+    if (asset.kind === "video" || !accept.includes(asset.kind)) {
+      throw new ServiceError(
+        "validation",
+        `${field.label} must be ${accept.map(kindName).join(" or ")}; that file is ${kindName(asset.kind)}.`,
+      );
+    }
+    const limit = fileFieldMaxBytes(field);
+    if (asset.bytes > limit) {
+      throw new ServiceError(
+        "validation",
+        `${field.label} must be ${Math.floor(limit / MB)} MB or smaller; that file is ${Math.ceil(asset.bytes / MB)} MB.`,
+      );
+    }
+    const answer: FileAnswer = {
+      assetId: asset.id,
+      filename: asset.filename,
+      bytes: asset.bytes,
+      mime: asset.mime,
+    };
+    data[field.key] = answer;
+    claimed.push({ fieldKey: field.key, assetId: asset.id });
+  }
+  return claimed;
+}
+
+/**
+ * Only a signed-in person (or trusted platform composition) answers a file
+ * question: an anonymous visitor has no upload of their own to attach. A form
+ * whose file questions are all optional still takes an anonymous answer that
+ * leaves them empty.
+ */
+function requireUploader(
+  ctx: ServiceContext,
+  fields: FormField[],
+  values: Record<string, unknown>,
+): void {
+  if (ctx.actor.kind === "user" || ctx.actor.kind === "system") return;
+  const needed = fields.some(
+    (field) =>
+      field.kind === "file" &&
+      (field.required || (values[field.key] !== undefined && values[field.key] !== "")),
+  );
+  if (needed) {
+    throw new ServiceError("permission", "Sign in to upload a file with this form.");
+  }
+}
+
+function kindName(kind: string): string {
+  if (kind === "doc") return "a document";
+  if (kind === "audio") return "an audio file";
+  if (kind === "image") return "an image";
+  return "a video";
+}
+
+/**
+ * The owner opens a file somebody sent with a form (C3.38).
+ *
+ * Staff-only by its grant, keyed by the attachment rather than the asset, so
+ * the only files reachable here are ones a submission holds — and the caller
+ * gets a storage key to stream from a no-store, attachment-only response, never
+ * a public URL.
+ */
+export const openSubmissionFile = defineService({
+  name: "forms.openSubmissionFile",
+  summary: "Open a file attached to a form submission.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ id: z.string().uuid() }),
+  output: row({
+    storageKey: z.string(),
+    filename: z.string(),
+    mime: z.string(),
+    bytes: z.number(),
+  }).nullable(),
+  handler: async (input, ctx) => {
+    const [file] = await ctx.tx
+      .select({
+        storageKey: assets.storageKey,
+        filename: assets.filename,
+        mime: assets.mime,
+        bytes: assets.bytes,
+      })
+      .from(formSubmissionFiles)
+      .innerJoin(assets, eq(assets.id, formSubmissionFiles.assetId))
+      .where(and(eq(formSubmissionFiles.id, input.id), eq(assets.status, "ready")))
+      .limit(1);
+    return file ?? null;
+  },
+});
+
+/** The attachments of these submissions, for the admin to link. */
+export const listSubmissionFiles = defineService({
+  name: "forms.listSubmissionFiles",
+  summary: "Files attached to form submissions.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ submissionIds: z.array(z.string().uuid()).max(200) }),
+  output: listed(
+    row({
+      id: uuid,
+      submissionId: uuid,
+      fieldKey: z.string(),
+      assetId: uuid,
+    }),
+  ),
+  handler: (input, ctx) =>
+    input.submissionIds.length === 0
+      ? Promise.resolve([])
+      : ctx.tx
+          .select({
+            id: formSubmissionFiles.id,
+            submissionId: formSubmissionFiles.submissionId,
+            fieldKey: formSubmissionFiles.fieldKey,
+            assetId: formSubmissionFiles.assetId,
+          })
+          .from(formSubmissionFiles)
+          .where(inArray(formSubmissionFiles.submissionId, input.submissionIds)),
+});
+
 /**
  * The most one public submission may carry, all answers together, as UTF-8
  * JSON. Generous on purpose: a few long answers in Arabic or CJK script run
@@ -623,6 +853,9 @@ export const submitForm = defineService({
       verdict.suspected = true;
     }
 
+    // C3.38: a file question needs a signed-in submitter before anything else
+    // is said about the answers — "sign in" is the one thing that helps.
+    requireUploader(ctx, fields, input.values);
     const parsed = submissionSchema(fields).safeParse(input.values);
     if (!parsed.success) {
       // A real person seeing a real message about their own answer. Only the
@@ -634,6 +867,7 @@ export const submitForm = defineService({
       );
     }
     const data = parsed.data as Record<string, unknown>;
+    const files = await claimFileAnswers(ctx, fields, data);
     // A ceiling on the whole submission, not just each field: a form may ask
     // for many long answers, and every submission is copied into the
     // conversation thread as well. The playground's shared disk gets a
@@ -674,6 +908,16 @@ export const submitForm = defineService({
         source: `form:${form.slug}`,
       });
       contactId = resolved.contact.id;
+    } else if (form.destination === "contact" && files.length && ctx.actor.kind === "user" && !verdict.suspected) {
+      // A form that asks for a file but not an email still belongs to the
+      // person who uploaded it: the signed-in customer's own contact, so the
+      // file is in their export and their erasure (C3.38).
+      const [own] = await ctx.tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(eq(contacts.userId, ctx.actor.userId))
+        .limit(1);
+      contactId = own?.id ?? null;
     }
 
     const [submission] = await ctx.tx
@@ -689,6 +933,25 @@ export const submitForm = defineService({
       .returning();
 
     ctx.setSubject("form_submission", submission!.id);
+    if (files.length) {
+      await ctx.tx
+        .insert(formSubmissionFiles)
+        .values(
+          files.map((file) => ({
+            submissionId: submission!.id,
+            fieldKey: file.fieldKey,
+            assetId: file.assetId,
+          })),
+        )
+        .catch((error: unknown) => {
+          // Two submissions racing for one upload: the index decides, and the
+          // loser is told plainly rather than sharing somebody's file.
+          if (isUniqueViolation(error)) {
+            throw new ServiceError("conflict", "That file is already attached to another submission. Upload it again.");
+          }
+          throw error;
+        });
+    }
 
     // Suspected spam gets no timeline entry and no event: an owner's CRM
     // should not fill with noise, and an automation should not fire on it.
@@ -754,7 +1017,9 @@ function summarise(fields: FormField[], data: Record<string, unknown>): string {
           ? String(value)
           : Array.isArray(value)
             ? value.filter((one) => typeof one === "string").join(", ")
-            : "";
+            : isFileAnswer(value)
+              ? value.filename
+              : "";
       return written === "" ? null : `${field.label}: ${written}`;
     })
     .filter((line): line is string => line !== null);
@@ -964,6 +1229,8 @@ export async function onFormSubmitted(
     .map((field) => {
       const value = data[field.key];
       if (value === undefined || value === "") return null;
+      // A file is named, never linked: the owner opens it in the admin.
+      if (isFileAnswer(value)) return `${field.label}: ${value.filename} (attached)`;
       return `${field.label}: ${typeof value === "string" ? value : JSON.stringify(value)}`;
     })
     .filter((line): line is string => line !== null);
@@ -1015,6 +1282,8 @@ export default [
   verifyDemoForms,
   submitForm,
   listSubmissions,
+  listSubmissionFiles,
+  openSubmissionFile,
   reviewSubmission,
   submissionCounts,
 ];

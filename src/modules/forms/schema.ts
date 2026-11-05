@@ -17,6 +17,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import { contacts } from "@/core/contacts/schema";
+import { assets } from "@/core/media/schema";
 
 /** What an intake form opens (C3.37). Validated by `intakeSchema` in service.ts. */
 export interface FormIntake {
@@ -106,5 +107,38 @@ export const formSubmissions = pgTable(
     index("form_submissions_form_idx").on(t.formId, t.createdAt),
     index("form_submissions_contact_idx").on(t.contactId),
     index("form_submissions_status_idx").on(t.status),
+  ],
+);
+
+/**
+ * A file answer's link to the private asset it became (C3.38).
+ *
+ * The answer itself lives in `form_submissions.data` as {assetId, filename,
+ * bytes, mime}; this row is what makes it *one* attachment. The unique asset
+ * index is the reuse refusal — a file uploaded for one submission cannot be
+ * attached to a second, by the same person or anyone else — and it is how
+ * the owner opens the file from the submission without a public URL.
+ *
+ * No contact column: the person is the submission's contact, so a merge or an
+ * erasure reaches these rows through their submission.
+ */
+export const formSubmissionFiles = pgTable(
+  "form_submission_files",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => formSubmissions.id, { onDelete: "cascade" }),
+    fieldKey: text("field_key").notNull(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("form_submission_files_asset_idx").on(t.assetId),
+    uniqueIndex("form_submission_files_field_idx").on(t.submissionId, t.fieldKey),
   ],
 );

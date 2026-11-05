@@ -54,6 +54,8 @@ export default async function EditFormPage({
     placeholder: field.placeholder,
     help: field.help,
     options: field.options,
+    accept: field.accept === undefined ? undefined : ([] as string[]).concat(field.accept),
+    maxMb: field.maxMb,
     established: established.has(field.key),
   }));
 
