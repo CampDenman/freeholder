@@ -5565,6 +5565,32 @@ deployments are portable, testable and incapable of silently forking the truth.
   coverage `tests/core/paradise-http.test.ts`; operator guide
   `deploy/paradise-modern.md`. No box is checked: no live acceptance against
   the provider has been run.)*
+- [ ] **C3.35** Ship a launch template and a private preview mode, so a
+  planning tool or agent can turn an approved business plan into a working
+  one-offer site in minutes without publishing it. A launch spec
+  (`format: "freeholder-launch-spec"`, version 1: business, brand tokens,
+  required status copy, one priced offer, contact and an optional intro-call
+  request) installs once into an empty site through ordinary services
+  (`launch.install`, or `FREEHOLDER_LAUNCH_SPEC` at boot like the demo): SSR
+  pages within §5, an offer page with its price and a request form, contact
+  and call-request forms on the contact spine, and the status copy in the
+  announcement bar of every page and on `/status`. `FREEHOLDER_PREVIEW_KEY`
+  keeps every public surface (pages, media, OG, llms.txt, sitemap, the
+  anonymous API) behind a signed, expiring `/preview-access` link exchanged
+  for an HttpOnly cookie; every response carries `X-Robots-Tag: noindex`,
+  robots.txt disallows everything, and IndexNow never pings. Admin, sign-in,
+  setup and `/api/health` stay open so the owner can claim the site. Open
+  until a preview built from a real plan is served from a hosted instance and
+  checked through the signed link, with an unauthenticated request refused.
+  *(Progress 2026-11-05: `src/modules/seed/launch.ts`,
+  `src/core/preview/private-preview.ts`, `src/core/preview/route-gate.ts`,
+  `proxy.ts`, `app/robots.txt/route.ts`, `app/sitemap.xml/route.ts`,
+  `src/core/seo/indexnow.ts`; example spec `seed/launch/example.json`;
+  operator guide `deploy/launch-template.md`; evidence
+  `tests/core/launch-template.test.ts`, `tests/core/private-preview.test.ts`;
+  changeset `launch-template-private-preview.md`. A free intro call is a
+  request form, not a calendar booking: the booking flow prices every
+  bookable service, and a zero price is refused.)*
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

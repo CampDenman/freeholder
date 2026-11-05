@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { env } from "@/core/env";
 import { siteOrigin } from "@/core/seo/origin";
 import { absoluteUrl } from "@/core/seo/meta";
+import { previewEnabled } from "@/core/preview/private-preview";
 
 export const INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow";
 export const INDEXNOW_BATCH = 10_000;
@@ -52,7 +53,8 @@ export async function submitIndexNow(
   urls: string[],
   options: { origin?: string; fetchImpl?: typeof fetch } = {},
 ): Promise<{ submitted: number; skipped: boolean; batches: number }> {
-  if (playgroundBlocksExternalDelivery(env())) {
+  // C3.35: a private preview must never announce its URLs to a search engine.
+  if (playgroundBlocksExternalDelivery(env()) || previewEnabled(env().FREEHOLDER_PREVIEW_KEY)) {
     return { submitted: 0, skipped: true, batches: 0 };
   }
   const origin = options.origin ?? siteOrigin();
@@ -103,7 +105,13 @@ export async function queueIndexNow(
   idempotencyKey: string,
   origin = siteOrigin(),
 ): Promise<void> {
-  if (playgroundBlocksExternalDelivery(env()) || !isIndexablePublicHost(origin)) return;
+  if (
+    playgroundBlocksExternalDelivery(env()) ||
+    previewEnabled(env().FREEHOLDER_PREVIEW_KEY) ||
+    !isIndexablePublicHost(origin)
+  ) {
+    return;
+  }
   const urls = [...new Set(slugs.map((slug) => absoluteUrl(origin, slug)))];
   if (urls.length === 0) return;
   await ctx.queueJob("seo.submitIndexNow", { urls }, { idempotencyKey });
