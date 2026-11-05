@@ -102,6 +102,8 @@ const MIME_ALIASES: Record<string, string> = {
   "audio/wave": "audio/wav",
   "application/x-pdf": "application/pdf",
   "text/x-markdown": "text/plain",
+  // RFC 7763 registers text/markdown, which browsers send for .md (C3.39).
+  "text/markdown": "text/plain",
 };
 
 function canonicalMime(value: string): string {
