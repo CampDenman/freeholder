@@ -1260,6 +1260,7 @@ export const SERVICE_NAMES = [
   "projects.attachFile",
   "projects.create",
   "projects.createCollection",
+  "projects.deliver",
   "projects.detachFile",
   "projects.forSubject",
   "projects.get",
@@ -4411,11 +4412,11 @@ export interface ServiceCatalog {
   };
   "forms.byId": {
     input: { id: string };
-    output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; notify: string[]; status: "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
+    output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; notify: string[]; status: "active" | "closed"; intake: { projectTitle: string } | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
   };
   "forms.create": {
-    input: { slug: string; name: string; fields?: { key: string; label: string; kind: "text" | "email" | "tel" | "multiline" | "select" | "checkbox" | "number" | "file"; required?: boolean; placeholder?: string; help?: string; options?: string[]; maxLength?: number; accept?: ("audio" | "doc" | "image") | ("audio" | "doc" | "image")[]; maxMb?: number }[]; submitLabel?: string; successMessage?: string; destination?: "contact" | "none"; notify?: string[] };
-    output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; notify: string[]; status: "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+    input: { slug: string; name: string; fields?: { key: string; label: string; kind: "text" | "email" | "tel" | "multiline" | "select" | "checkbox" | "number" | "file"; required?: boolean; placeholder?: string; help?: string; options?: string[]; maxLength?: number; accept?: ("audio" | "doc" | "image") | ("audio" | "doc" | "image")[]; maxMb?: number }[]; submitLabel?: string; successMessage?: string; destination?: "contact" | "none"; notify?: string[]; intake?: { projectTitle: string } | null };
+    output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; notify: string[]; status: "active" | "closed"; intake: { projectTitle: string } | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "forms.delete": {
     input: { id: string };
@@ -4427,7 +4428,7 @@ export interface ServiceCatalog {
   };
   "forms.list": {
     input: { trashedOnly?: boolean };
-    output: { id: string; slug: string; name: string; status: "active" | "closed"; destination: "contact" | "none"; fields: unknown; updatedAt: string; submissions: number; [key: string]: unknown }[];
+    output: { id: string; slug: string; name: string; status: "active" | "closed"; destination: "contact" | "none"; fields: unknown; intake: { projectTitle: string } | null; updatedAt: string; submissions: number; [key: string]: unknown }[];
   };
   "forms.listSubmissionFiles": {
     input: { submissionIds: string[] };
@@ -4459,7 +4460,7 @@ export interface ServiceCatalog {
   };
   "forms.restore": {
     input: { id: string };
-    output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; notify: string[]; status: "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+    output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; notify: string[]; status: "active" | "closed"; intake: { projectTitle: string } | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "forms.reviewSubmission": {
     input: { id: string; status: "received" | "spam" };
@@ -4474,8 +4475,8 @@ export interface ServiceCatalog {
     output: { ok: true; submissionId: string; message: string };
   };
   "forms.update": {
-    input: { id: string; name?: string; fields?: { key: string; label: string; kind: "text" | "email" | "tel" | "multiline" | "select" | "checkbox" | "number" | "file"; required?: boolean; placeholder?: string; help?: string; options?: string[]; maxLength?: number; accept?: ("audio" | "doc" | "image") | ("audio" | "doc" | "image")[]; maxMb?: number }[]; submitLabel?: string | null; successMessage?: string | null; destination?: "contact" | "none"; notify?: string[]; status?: "active" | "closed" };
-    output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; notify: string[]; status: "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+    input: { id: string; name?: string; fields?: { key: string; label: string; kind: "text" | "email" | "tel" | "multiline" | "select" | "checkbox" | "number" | "file"; required?: boolean; placeholder?: string; help?: string; options?: string[]; maxLength?: number; accept?: ("audio" | "doc" | "image") | ("audio" | "doc" | "image")[]; maxMb?: number }[]; submitLabel?: string | null; successMessage?: string | null; destination?: "contact" | "none"; notify?: string[]; status?: "active" | "closed"; intake?: { projectTitle: string } | null };
+    output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; notify: string[]; status: "active" | "closed"; intake: { projectTitle: string } | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "forms.verifyDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
@@ -5103,7 +5104,7 @@ export interface ServiceCatalog {
   };
   "launch.install": {
     input: { format: "freeholder-launch-spec"; version: 1; generator: string; business: { name: string; tagline: string; schemaType?: string; country?: string; baseCurrency?: string; timezone?: string }; brand?: { paper?: string; ink?: string; accent?: string }; status: { banner: string; summary: string; ready: string[]; planned: string[] }; home: { headline: string; promise: string; problem: string[]; steps: string[]; switchReasons?: string[]; seoDescription: string }; offer: { slug: string; name: string; summary: string; price: string; cadence: "one_time" | "monthly"; priceLabel: string; forWho: string; includes: string[]; faq?: { question: string; answer: string }[]; seoDescription: string }; intro?: { name: string; summary: string; durationMin: number }; contact: { intro: string; seoDescription: string }; about: { body: string[]; seoDescription: string } };
-    output: { business: string; pages: string[]; forms: string[]; callRequest: boolean; brandApplied: boolean };
+    output: { business: string; pages: string[]; forms: string[]; intakeForms: string[]; callRequest: boolean; brandApplied: boolean };
   };
   "locations.checkCoverage": {
     input: { postalCode: string; locationId?: string };
@@ -6463,11 +6464,11 @@ export interface ServiceCatalog {
   };
   "portal.myRecord": {
     input: { section: string; id: string };
-    output: { id: string; title: string; status: string | null; at: string | null; amountMinor: number | null; currency: string | null; fields: { labelKey: string; value: string }[]; lines: { description: string; amountMinor?: number; currency?: string }[]; links: { labelKey: string; href: string }[]; actions: ("accept" | "decline" | "cancel" | "download")[] };
+    output: { id: string; title: string; status: string | null; statusKey: string | null; at: string | null; amountMinor: number | null; currency: string | null; fields: { labelKey: string; value: string }[]; lines: { description: string; amountMinor?: number; currency?: string }[]; links: { labelKey: string; href: string; params?: { [key: string]: string } }[]; actions: ("accept" | "decline" | "cancel" | "download")[] };
   };
   "portal.myRecords": {
     input: { section?: string; limit?: number };
-    output: { key: string; count: number; records: { id: string; title: string; status: string | null; at: string | null; href: string | null; amountMinor?: number | null; currency?: string | null; [key: string]: unknown }[]; failed: boolean; [key: string]: unknown }[];
+    output: { key: string; count: number; records: { id: string; title: string; status: string | null; statusKey?: string | null; at: string | null; href: string | null; amountMinor?: number | null; currency?: string | null; [key: string]: unknown }[]; failed: boolean; [key: string]: unknown }[];
   };
   "portal.requestSignIn": {
     input: { email: string; name?: string; locale?: string };
@@ -6571,11 +6572,15 @@ export interface ServiceCatalog {
   };
   "projects.create": {
     input: { title: string; slug?: string; contactId?: string | null; clientDisplayName?: string | null; summary?: string | null; ownerUserId?: string | null; locationId?: string | null; serviceProductIds?: string[]; startedOn?: string | null; notes?: string | null };
-    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; [key: string]: unknown };
+    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; deliveryNote: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; [key: string]: unknown };
   };
   "projects.createCollection": {
     input: { name: string; slug?: string; kind: "portfolio" | "service" | "industry" | "season"; description?: string | null; coverAssetId?: string | null; position?: number };
     output: { id: string; name: string; slug: string; kind: "portfolio" | "service" | "industry" | "season"; description: string | null; coverAssetId: string | null; position: number; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; [key: string]: unknown };
+  };
+  "projects.deliver": {
+    input: { projectId: string; assetId?: string | null; note?: string | null; contactId?: string | null };
+    output: { project: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; deliveryNote: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; [key: string]: unknown }; documentId: string | null; replayed: boolean; [key: string]: unknown };
   };
   "projects.detachFile": {
     input: { id: string };
@@ -6587,7 +6592,7 @@ export interface ServiceCatalog {
   };
   "projects.get": {
     input: { id: string };
-    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; contactName: string | null; links: { id: string; projectId: string; kind: "quote" | "contract" | "booking" | "invoice" | "rental" | "form_submission"; targetId: string; label: string | null; [key: string]: unknown }[]; tasks: { id: string; projectId: string; title: string; status: "open" | "doing" | "blocked" | "done" | "cancelled"; assigneeUserId: string | null; dueOn: string | null; position: number; doneAt: string | null; [key: string]: unknown }[]; outcomes: { id: string; projectId: string; label: string; value: string; unit: string | null; method: string | null; position: number; [key: string]: unknown }[]; files: { id: string; projectId: string; assetId: string; role: "hero" | "gallery" | "before" | "after" | "series" | "process" | "detail" | "document"; pairKey: string | null; seriesKey: string | null; capturedAt: string | null; caption: string | null; position: number; [key: string]: unknown }[]; testimonials: { id: string; projectId: string; contactId: string; displayName: string; role: string | null; body: string; rating: number | null; assetId: string | null; consentGivenAt: string; consentMethod: "contract" | "email" | "written" | "verbal" | "other"; consentNote: string | null; status: "draft" | "published" | "withdrawn"; displayLocations: string[]; [key: string]: unknown }[]; [key: string]: unknown } | null;
+    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; deliveryNote: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; contactName: string | null; links: { id: string; projectId: string; kind: "quote" | "contract" | "booking" | "invoice" | "rental" | "form_submission"; targetId: string; label: string | null; [key: string]: unknown }[]; tasks: { id: string; projectId: string; title: string; status: "open" | "doing" | "blocked" | "done" | "cancelled"; assigneeUserId: string | null; dueOn: string | null; position: number; doneAt: string | null; [key: string]: unknown }[]; outcomes: { id: string; projectId: string; label: string; value: string; unit: string | null; method: string | null; position: number; [key: string]: unknown }[]; files: { id: string; projectId: string; assetId: string; role: "hero" | "gallery" | "before" | "after" | "series" | "process" | "detail" | "document"; pairKey: string | null; seriesKey: string | null; capturedAt: string | null; caption: string | null; position: number; [key: string]: unknown }[]; testimonials: { id: string; projectId: string; contactId: string; displayName: string; role: string | null; body: string; rating: number | null; assetId: string | null; consentGivenAt: string; consentMethod: "contract" | "email" | "written" | "verbal" | "other"; consentNote: string | null; status: "draft" | "published" | "withdrawn"; displayLocations: string[]; [key: string]: unknown }[]; [key: string]: unknown } | null;
   };
   "projects.getCollection": {
     input: { id: string };
@@ -6599,7 +6604,7 @@ export interface ServiceCatalog {
   };
   "projects.list": {
     input: { status?: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; contactId?: string; limit?: number };
-    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; contactName: string | null; openTasks: number; [key: string]: unknown }[];
+    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; deliveryNote: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; contactName: string | null; openTasks: number; [key: string]: unknown }[];
   };
   "projects.listCollections": {
     input: Record<string, never>;
@@ -6675,7 +6680,7 @@ export interface ServiceCatalog {
   };
   "projects.update": {
     input: { id: string; title?: string; summary?: string | null; clientDisplayName?: string | null; status?: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId?: string | null; locationId?: string | null; serviceProductIds?: string[]; startedOn?: string | null; occurredOn?: string | null; notes?: string | null };
-    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; [key: string]: unknown };
+    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; deliveryNote: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; [key: string]: unknown };
   };
   "projects.updateCaseStudySettings": {
     input: { id: string; coverAssetId?: string | null; featured: boolean; seo: { title?: string; description?: string } };
@@ -9121,6 +9126,7 @@ export interface FreeholderApi {
     attachFile: (input: ServiceCatalog["projects.attachFile"]["input"]) => Promise<ServiceCatalog["projects.attachFile"]["output"]>;
     create: (input: ServiceCatalog["projects.create"]["input"]) => Promise<ServiceCatalog["projects.create"]["output"]>;
     createCollection: (input: ServiceCatalog["projects.createCollection"]["input"]) => Promise<ServiceCatalog["projects.createCollection"]["output"]>;
+    deliver: (input: ServiceCatalog["projects.deliver"]["input"]) => Promise<ServiceCatalog["projects.deliver"]["output"]>;
     detachFile: (input: ServiceCatalog["projects.detachFile"]["input"]) => Promise<ServiceCatalog["projects.detachFile"]["output"]>;
     forSubject: (input: ServiceCatalog["projects.forSubject"]["input"]) => Promise<ServiceCatalog["projects.forSubject"]["output"]>;
     get: (input: ServiceCatalog["projects.get"]["input"]) => Promise<ServiceCatalog["projects.get"]["output"]>;
