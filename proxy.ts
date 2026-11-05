@@ -250,12 +250,13 @@ function privatePreview(request: NextRequest, path: string, key: string): NextRe
     const token = request.nextUrl.searchParams.get("t");
     const expires = verifyPreviewToken(key, token, now);
     if (!expires || !token) return refuse();
-    // A relative Location: behind a reverse proxy the request URL names the
-    // internal host, and the browser resolves this against the one it used.
+    // Absolute, on the configured public origin: Next refuses a relative
+    // Location here, and behind a reverse proxy the request URL names the
+    // internal scheme rather than the one the browser used.
     const response = new NextResponse(null, {
       status: 303,
       headers: {
-        location: previewLandingPath(request.nextUrl.searchParams.get("next")),
+        location: new URL(previewLandingPath(request.nextUrl.searchParams.get("next")), env().APP_URL).toString(),
         "cache-control": "no-store",
         "x-robots-tag": PREVIEW_ROBOTS_HEADER,
         // The token is in this URL; never hand it to the next page's referrer.

@@ -105,7 +105,7 @@ describe("the proxy in private preview", () => {
     const token = mintPreviewToken(KEY, Math.floor(Date.now() / 1000) + 600);
     const response = request(`/preview-access?t=${token}&next=/pricing`);
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("/pricing");
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/pricing");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     const cookie = response.headers.get("set-cookie") ?? "";
     expect(cookie).toContain(`${PREVIEW_COOKIE}=${token}`);
