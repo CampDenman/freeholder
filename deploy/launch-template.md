@@ -67,6 +67,20 @@ does not change, so every version 1 spec installs as before.
 Customers reach My Account through the portal sign-in at `/portal/login`.
 On a private preview, sign-in links depend on preview mail (C3.36).
 
+## Version 2: a working preview (C3.39)
+
+A version 2 spec has `"version": 2` and three more fields. Version 1 specs
+install unchanged. `seed/launch/example-v2.json` is a complete example.
+
+| Field | What it becomes |
+|---|---|
+| `accounts` | "My account" (`/portal`) in the navigation. Customers sign up and sign in with an email link through the portal's one email door. On a preview, that mail follows the preview mail rules (C3.36). |
+| `intake` | `/start`, which has three steps. **1. Your account** links to sign-in. **2. Tell us what you need** is the `onboarding` form: name, email, then the spec's questions. Questions may be text, email, multiline, a choice with options, or a C3.38 file question with `accept` and `maxMb`. **3. Payment** carries the `payments.note`. The form is an intake (C3.37), so each accepted submission opens a project titled `projectTitle` that the customer follows in My Account and the owner delivers to. |
+| `payments` | `mode: "test"` and the note shown only on the payment step, for example "Test payments are not connected yet." It never appears in a site-wide banner. |
+
+`/start` and the account pages are part of the private preview, behind the
+same signed link.
+
 ## Private preview mode
 
 Set `FREEHOLDER_PREVIEW_KEY` to an independent random value of at least 32

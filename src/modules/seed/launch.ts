@@ -44,12 +44,36 @@ import { createForm } from "@/modules/forms/service";
 const line = (max: number) => z.string().trim().min(1).max(max);
 const hex = z.string().regex(/^#[0-9a-f]{6}$/i);
 const slug = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/);
-const RESERVED_SLUGS = new Set(["about", "contact", "status", "intro-call", "book", "call", "admin", "api", "login", "setup", "preview", "preview-access"]);
+const RESERVED_SLUGS = new Set(["about", "contact", "status", "intro-call", "start", "portal", "book", "call", "admin", "api", "login", "setup", "preview", "preview-access"]);
+
+/** One onboarding question (C3.39): an ordinary form field, including C3.38 files. */
+const intakeFieldSchema = z
+  .object({
+    key: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/).refine((key) => key !== "name" && key !== "email", "name and email are asked for already"),
+    label: line(120),
+    kind: z.enum(["text", "email", "multiline", "select", "file"]),
+    required: z.boolean().default(false),
+    help: line(300).optional(),
+    options: z.array(line(80)).min(1).max(12).optional(),
+    accept: z.array(z.enum(["audio", "doc", "image"])).min(1).max(3).optional(),
+    maxMb: z.number().int().min(1).max(500).optional(),
+  })
+  .strict()
+  .superRefine((field, ctx) => {
+    if (field.kind === "file" && !field.accept) ctx.addIssue({ code: "custom", message: "a file question names what it accepts" });
+    if (field.kind !== "file" && (field.accept || field.maxMb)) ctx.addIssue({ code: "custom", message: "only a file question takes accept and maxMb" });
+    if (field.kind === "select" && !field.options) ctx.addIssue({ code: "custom", message: "a choice question lists its options" });
+  });
 
 export const launchSpecSchema = z
   .object({
     format: z.literal("freeholder-launch-spec"),
-    version: z.literal(1),
+    /**
+     * 1 is the C3.35 one-offer site. 2 (C3.39) adds customer accounts, an
+     * onboarding intake on /start and payment-step copy; a version 1 spec
+     * installs exactly as it always did.
+     */
+    version: z.union([z.literal(1), z.literal(2)]),
     /** Who wrote the spec, for the audit trail: a planning tool or an agent. */
     generator: line(120),
     business: z
@@ -113,8 +137,31 @@ export const launchSpecSchema = z
       .optional(),
     contact: z.object({ intro: line(600), seoDescription: line(160) }).strict(),
     about: z.object({ body: z.array(line(1200)).min(1).max(6), seoDescription: line(160) }).strict(),
+    /** Version 2: customers sign up and sign in, and follow their requests in My Account. */
+    accounts: z.object({ enabled: z.boolean() }).strict().optional(),
+    /** Version 2: the onboarding questionnaire on /start, an intake that opens a project (C3.37). */
+    intake: z
+      .object({
+        title: line(80),
+        intro: line(400),
+        projectTitle: line(200),
+        fields: z.array(intakeFieldSchema).min(1).max(12),
+      })
+      .strict()
+      .optional(),
+    /** Version 2: what the payment step says while payments run in test mode. */
+    payments: z.object({ mode: z.literal("test"), note: line(300) }).strict().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((spec, ctx) => {
+    const v2 = [spec.accounts, spec.intake, spec.payments];
+    if (spec.version === 1 && v2.some(Boolean)) {
+      ctx.addIssue({ code: "custom", message: "accounts, intake and payments need a version 2 spec" });
+    }
+    if (spec.version === 2 && !v2.every(Boolean)) {
+      ctx.addIssue({ code: "custom", message: "a version 2 spec states accounts, intake and payments" });
+    }
+  });
 
 export type LaunchSpec = z.output<typeof launchSpecSchema>;
 export type LaunchSpecInput = z.input<typeof launchSpecSchema>;
@@ -136,6 +183,7 @@ export const LAUNCH_FORMS = {
   contact: "contact",
   offer: "offer-request",
   call: "call-request",
+  onboarding: "onboarding",
 } as const;
 
 interface LaunchPage {
@@ -149,7 +197,10 @@ interface LaunchPage {
 export function launchPages(spec: LaunchSpec): LaunchPage[] {
   const { business, home, offer, intro, status, contact, about } = spec;
   const offerHref = `/${offer.slug}`;
-  const cta: BlockNode[] = [button("cta-offer", `See ${offer.name}`, offerHref)];
+  const working = Boolean(spec.accounts?.enabled && spec.intake);
+  const cta: BlockNode[] = working
+    ? [button("cta-start", spec.intake!.title, "/start"), button("cta-offer", `See ${offer.name}`, offerHref, "quiet")]
+    : [button("cta-offer", `See ${offer.name}`, offerHref)];
   if (intro) cta.push(button("cta-call", `Request a ${intro.durationMin}-minute call`, "/intro-call", "quiet"));
   const homeBlocks: BlockNode[] = [
     h("home-h1", home.headline, 1),
@@ -187,6 +238,7 @@ export function launchPages(spec: LaunchSpec): LaunchPage[] {
     { id: "offer-form", type: "form", props: { formSlug: LAUNCH_FORMS.offer } },
   );
   if (intro) offerBlocks.push(button("offer-call", `Or request a ${intro.durationMin}-minute call`, "/intro-call", "quiet"));
+  if (working) offerBlocks.splice(4, 0, button("offer-start", spec.intake!.title, "/start"));
 
   const contactBlocks: BlockNode[] = [
     h("contact-h1", "Contact", 1),
@@ -255,13 +307,44 @@ export function launchPages(spec: LaunchSpec): LaunchPage[] {
       blocks: contactBlocks,
     },
     ...callPages,
+    ...startPages(spec),
+  ];
+}
+
+/** Version 2: /start, where a customer signs in, onboards and reaches the payment step. */
+function startPages(spec: LaunchSpec): LaunchPage[] {
+  if (!spec.intake || !spec.accounts?.enabled) return [];
+  const { intake, payments, business } = spec;
+  return [
+    {
+      slug: "start",
+      title: intake.title,
+      seo: {
+        title: `${intake.title} with ${business.name}`.slice(0, 60),
+        description: `${intake.intro}`.slice(0, 160),
+      },
+      blocks: [
+        h("start-h1", intake.title, 1),
+        body("start-intro", paragraphs(intake.intro)),
+        h("start-account-h", "1. Your account"),
+        body("start-account", paragraphs("Sign in with your email to upload files and follow your request in My Account. New here? The same step creates your account.")),
+        button("start-account-cta", "Sign in or create an account", "/portal/login"),
+        h("start-intake-h", "2. Tell us what you need"),
+        { id: "start-form", type: "form", props: { formSlug: LAUNCH_FORMS.onboarding } },
+        h("start-payment-h", "3. Payment"),
+        body("start-payment", paragraphs(payments?.note ?? "Payments run in test mode.")),
+        button("start-account-link", "Open My Account", "/portal", "quiet"),
+      ],
+    },
   ];
 }
 
 export function launchNav(spec: LaunchSpec) {
   const links = [{ label: spec.offer.name, href: `/${spec.offer.slug}` }];
   if (spec.intro) links.push({ label: "Request a call", href: "/intro-call" });
+  if (spec.intake && spec.accounts?.enabled) links.unshift({ label: spec.intake.title, href: "/start" });
   links.push({ label: "About", href: "/about" }, { label: "Status", href: "/status" }, { label: "Contact", href: "/contact" });
+  if (spec.accounts?.enabled) links.push({ label: "My account", href: "/portal" });
   return links;
 }
 
@@ -277,7 +360,37 @@ function offerIntake(spec: LaunchSpec) {
   return { projectTitle: `${spec.offer.name} for {name}`.slice(0, 200) };
 }
 
+/** Version 2's onboarding form: who it is from, then the spec's questions, as an intake. */
+function onboardingForm(spec: LaunchSpec) {
+  if (!spec.intake || !spec.accounts?.enabled) return [];
+  const intake = spec.intake;
+  return [
+    {
+      slug: LAUNCH_FORMS.onboarding,
+      name: intake.title,
+      submitLabel: "Send",
+      successMessage: "Thank you. Your request is in My Account, where you can follow it and download the delivery.",
+      intake: listServices().has("projects.openFromIntake") ? { projectTitle: intake.projectTitle } : undefined,
+      fields: [
+        { key: "name", label: "Your name", kind: "text" as const, required: true },
+        { key: "email", label: "Email", kind: "email" as const, required: true },
+        ...intake.fields.map((field) => ({
+          key: field.key,
+          label: field.label,
+          kind: field.kind,
+          required: field.required,
+          ...(field.help ? { help: field.help } : {}),
+          ...(field.options ? { options: field.options } : {}),
+          ...(field.accept ? { accept: field.accept } : {}),
+          ...(field.maxMb ? { maxMb: field.maxMb } : {}),
+        })),
+      ],
+    },
+  ];
+}
+
 const LAUNCH_FORM_DEFINITIONS = (spec: LaunchSpec) => [
+  ...onboardingForm(spec),
   ...(spec.intro
     ? [
         {

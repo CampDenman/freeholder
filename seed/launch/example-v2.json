@@ -1,0 +1,123 @@
+{
+  "format": "freeholder-launch-spec",
+  "version": 2,
+  "generator": "example v2 (deploy/launch-template.md)",
+  "business": {
+    "name": "Harbour Notes",
+    "tagline": "Meeting notes a small team can act on",
+    "schemaType": "ProfessionalService",
+    "country": "US",
+    "baseCurrency": "USD",
+    "timezone": "America/New_York"
+  },
+  "brand": {
+    "paper": "#fbfaf7",
+    "ink": "#1f2933",
+    "accent": "#1e5a7a"
+  },
+  "status": {
+    "banner": "Preview: payments run in test mode, so no real money is taken.",
+    "summary": "This is a preview of a planned business. You can read the offer, send a request and book a call. Nothing is charged, and no mailbox or domain exists yet.",
+    "ready": [
+      "Offer page with the planned price",
+      "Request and contact forms that reach the owner",
+      "Booking of a free intro call"
+    ],
+    "planned": [
+      "Online payment",
+      "A business mailbox",
+      "A domain of its own"
+    ]
+  },
+  "home": {
+    "headline": "Meeting notes your team will read",
+    "promise": "Send a recording, get back a one-page summary with decisions and owners.",
+    "problem": [
+      "Small teams lose decisions in long recordings and scattered notes."
+    ],
+    "steps": [
+      "Send a recording link",
+      "Get a one-page summary",
+      "Share it with the team"
+    ],
+    "switchReasons": [
+      "One page instead of a transcript"
+    ],
+    "seoDescription": "One-page meeting summaries with decisions and owners, for small teams."
+  },
+  "offer": {
+    "slug": "summaries",
+    "name": "Meeting summaries",
+    "summary": "Up to twenty one-page meeting summaries a month.",
+    "price": "49.00",
+    "cadence": "monthly",
+    "priceLabel": "$49 a month (planned)",
+    "forWho": "Teams of two to ten people who meet every week.",
+    "includes": [
+      "Twenty summaries a month",
+      "Decisions and owners listed first"
+    ],
+    "faq": [
+      {
+        "question": "Can I pay now?",
+        "answer": "Not yet. Payments are not connected; send a request and the owner will reply."
+      }
+    ],
+    "seoDescription": "Twenty one-page meeting summaries a month for small teams, at a planned $49."
+  },
+  "intro": {
+    "name": "Intro call",
+    "summary": "Twenty minutes to see whether it fits.",
+    "durationMin": 20
+  },
+  "contact": {
+    "intro": "Questions are welcome. Use the form and the owner replies by email.",
+    "seoDescription": "Contact Harbour Notes about meeting summaries for small teams."
+  },
+  "about": {
+    "body": [
+      "Harbour Notes is a planned one-person business."
+    ],
+    "seoDescription": "About Harbour Notes, a planned meeting-summary service."
+  },
+  "accounts": {
+    "enabled": true
+  },
+  "intake": {
+    "title": "Get started",
+    "intro": "Create your account and send one recording. The summary comes back to My Account.",
+    "projectTitle": "Summaries for {name}",
+    "fields": [
+      {
+        "key": "team",
+        "label": "Team name",
+        "kind": "text",
+        "required": true
+      },
+      {
+        "key": "recording",
+        "label": "Meeting recording",
+        "kind": "file",
+        "required": true,
+        "accept": [
+          "audio"
+        ],
+        "maxMb": 200,
+        "help": "MP3 or M4A, up to 200 MB."
+      },
+      {
+        "key": "size",
+        "label": "Team size",
+        "kind": "select",
+        "options": [
+          "2-4",
+          "5-10"
+        ]
+      }
+    ]
+  },
+  "payments": {
+    "mode": "test",
+    "note": "Test payments are not connected yet. Your request is saved, and the owner confirms your plan by email."
+  }
+}
