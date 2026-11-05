@@ -889,6 +889,7 @@ export const SERVICE_NAMES = [
   "invoicing.viewCustomerInvoice",
   "invoicing.void",
   "invoicing.voidCreditNote",
+  "launch.install",
   "locations.checkCoverage",
   "locations.create",
   "locations.createSetupLocation",
@@ -5090,6 +5091,10 @@ export interface ServiceCatalog {
     input: { id: string; reason: string };
     output: { id: string; invoiceId: string; number: string | null; sequenceKey: string; idempotencyKey: string; requestHash: string; status: "draft" | "issued" | "void"; currency: string; reason: string; subtotalMinor: number; taxMinor: number; totalMinor: number; issuedAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "launch.install": {
+    input: { format: "freeholder-launch-spec"; version: 1; generator: string; business: { name: string; tagline: string; schemaType?: string; country?: string; baseCurrency?: string; timezone?: string }; brand?: { paper?: string; ink?: string; accent?: string }; status: { banner: string; summary: string; ready: string[]; planned: string[] }; home: { headline: string; promise: string; problem: string[]; steps: string[]; switchReasons?: string[]; seoDescription: string }; offer: { slug: string; name: string; summary: string; price: string; cadence: "one_time" | "monthly"; priceLabel: string; forWho: string; includes: string[]; faq?: { question: string; answer: string }[]; seoDescription: string }; intro?: { name: string; summary: string; durationMin: number }; contact: { intro: string; seoDescription: string }; about: { body: string[]; seoDescription: string } };
+    output: { business: string; pages: string[]; forms: string[]; callRequest: boolean; brandApplied: boolean };
+  };
   "locations.checkCoverage": {
     input: { postalCode: string; locationId?: string };
     output: { answer: "covered" | "outside" | "unconfirmed"; postalCode: string; locationId: string | null; locationName: string | null; delivery: { weekdays: number[]; opens: string; closes: string } | null };
@@ -8697,6 +8702,9 @@ export interface FreeholderApi {
     viewCustomerInvoice: (input: ServiceCatalog["invoicing.viewCustomerInvoice"]["input"]) => Promise<ServiceCatalog["invoicing.viewCustomerInvoice"]["output"]>;
     void: (input: ServiceCatalog["invoicing.void"]["input"]) => Promise<ServiceCatalog["invoicing.void"]["output"]>;
     voidCreditNote: (input: ServiceCatalog["invoicing.voidCreditNote"]["input"]) => Promise<ServiceCatalog["invoicing.voidCreditNote"]["output"]>;
+  };
+  launch: {
+    install: (input: ServiceCatalog["launch.install"]["input"]) => Promise<ServiceCatalog["launch.install"]["output"]>;
   };
   locations: {
     checkCoverage: (input: ServiceCatalog["locations.checkCoverage"]["input"]) => Promise<ServiceCatalog["locations.checkCoverage"]["output"]>;
