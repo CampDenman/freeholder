@@ -78,8 +78,9 @@ Restore verifies the checksums, takes a safety backup, stops the app, restores
 into a scratch database and swaps it in (the replaced one is kept as
 `freeholder_previous`), restores the media volume and starts the app. Copy
 backups off the server, for example
-`docker run --rm -v freeholder_backups:/b alpine tar -C /b -c . | ssh other-host 'cat > backups.tar'`
-(the volume name is `<project>_backups`; `docker volume ls` shows it). Keep a
+`docker run --rm -v infra_backups:/b alpine tar -C /b -c . | ssh other-host 'cat > backups.tar'`
+(the Compose project is named after the `infra` directory; `docker volume ls`
+shows the volumes). Keep a
 copy of `.env` too: `CREDENTIAL_KEY` is not in the backup.
 
 ## Operate
