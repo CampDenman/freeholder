@@ -169,9 +169,8 @@ export async function runPreflight(input: {
   root?: string;
 }): Promise<PreflightReport> {
   const steps: PreflightStep[] = [];
-  let target: Pick<VerifiedRelease, "version" | "pluginApi" | "digest"> = {
+  let target: Pick<VerifiedRelease, "version" | "digest"> = {
     version: THIS_RELEASE.version,
-    pluginApi: THIS_RELEASE.pluginApi,
     digest: "",
   };
 
@@ -206,10 +205,13 @@ export async function runPreflight(input: {
     );
   }
 
+  // A plugin's `freeholder` range names platform versions, the value boot and
+  // install check (`assertPluginFitsInstance`), so preflight checks the
+  // target's platform version rather than its `pluginApi` declaration.
   const plugins = await db()
     .select({ name: installedPlugins.name, freeholder: installedPlugins.freeholder })
     .from(installedPlugins);
-  steps.push(pluginCompatibility(plugins, input.targetVersion ?? target.pluginApi));
+  steps.push(pluginCompatibility(plugins, input.targetVersion ?? target.version));
 
   const core = await inspectCoreFiles({
     root: input.root ?? process.cwd(),

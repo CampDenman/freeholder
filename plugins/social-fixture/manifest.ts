@@ -8,7 +8,7 @@ import { definePlugin } from "@freeholder/plugin-kit";
 export default definePlugin({
   name: "social-fixture",
   version: "0.1.0",
-  freeholder: ">=0.0.0",
+  freeholder: "^0.2.0",
   license: "Apache-2.0",
   permissions: ["social:view", "network:external"],
   requires: ["core", "social"],

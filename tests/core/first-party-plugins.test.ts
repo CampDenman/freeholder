@@ -7,6 +7,8 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import manifests from "@/modules";
 import { isPluginManifest } from "@/core/plugin";
+import { PLATFORM_VERSION } from "@/core/platform";
+import { firstPartyPluginRange } from "../../scripts/release-packages.mjs";
 import { ready } from "@/core/runtime";
 import { createContact, mergeContacts } from "@/core/contacts/service";
 import { contacts, timelineEvents } from "@/core/contacts/schema";
@@ -108,6 +110,17 @@ describe("first-party plugins (C3.13)", () => {
       if (name === "marketplace") {
         expect(manifest.migrations).toContain("0004_marketplace_channel_sync.sql");
       }
+    }
+  });
+});
+
+describe("first-party plugin compatibility ranges (C3.08, C10.05)", () => {
+  it("names this build's major and minor in every compiled plugin", () => {
+    const expected = firstPartyPluginRange(PLATFORM_VERSION);
+    const plugins = manifests.filter(isPluginManifest);
+    expect(plugins.map((plugin) => plugin.name)).toEqual(expect.arrayContaining([...FIRST_PARTY, "proof"]));
+    for (const plugin of plugins) {
+      expect(plugin.freeholder, plugin.name).toBe(expected);
     }
   });
 });
