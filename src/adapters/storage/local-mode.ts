@@ -31,8 +31,11 @@ export interface LocalStorageEnvironment {
 
 export function localStorageMode(e: LocalStorageEnvironment): LocalStorageMode {
   if (e.NODE_ENV !== "production") return "development";
-  if (e.LOCAL_STORAGE_ROOT && isAbsolute(e.LOCAL_STORAGE_ROOT)) return "persistent";
+  // The legacy override keeps its exact meaning, including creating the
+  // directory on demand: the hourly playground runs on a tmpfs /tmp/media
+  // that is deliberately disposable.
   if (e.FREEHOLDER_UNSAFE_LOCAL_STORAGE === "1") return "unsafe";
+  if (e.LOCAL_STORAGE_ROOT && isAbsolute(e.LOCAL_STORAGE_ROOT)) return "persistent";
   return "refused";
 }
 

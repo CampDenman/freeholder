@@ -15,6 +15,9 @@ describe("local storage mode", () => {
     expect(localStorageMode({ NODE_ENV: "production", LOCAL_STORAGE_ROOT: ".data/media" })).toBe("refused");
     expect(localStorageMode({ NODE_ENV: "production" })).toBe("refused");
     expect(localStorageMode({ NODE_ENV: "production", FREEHOLDER_UNSAFE_LOCAL_STORAGE: "1" })).toBe("unsafe");
+    // The playground's disposable tmpfs: the override wins, so the directory
+    // is still created on demand rather than required to exist.
+    expect(localStorageMode({ NODE_ENV: "production", FREEHOLDER_UNSAFE_LOCAL_STORAGE: "1", LOCAL_STORAGE_ROOT: "/tmp/media" })).toBe("unsafe");
   });
 
   it("tells the owner where the media is and that backups must include it", () => {
