@@ -2187,13 +2187,13 @@ The bar: **zero-config from idea to installable in under an hour.** The dev harn
 
 ## 26. Trust Model (honest v1)
 
-Plugins run **in-process** — same trust level as core once installed. Sandboxing in-process JS is a research project (recorded as open, C3.43), so we do trust engineering instead and say so plainly. Each point below separates what the code does today from what is still open (C3.40–C3.43):
+Plugins run **in-process** — same trust level as core once installed. Sandboxing in-process JS is a research project, deferred to v2 (C3.43, §43.18), so we do trust engineering instead and say so plainly. Each point below separates what the code does today from what is still open (C3.40–C3.42) or deferred (C3.43):
 
 1. **Declared permissions: disclosed, not yet enforced.** A plugin's manifest lists scopes (`contacts:read`, `invoicing:create`, `settings:write`, `network:external`, …). `@freeholder/plugin-kit` validates them and can describe each in plain language (`describePermission`: "can manage invoicing", "can make outbound network requests"), and an importer that fetches a source must declare `network:external`. Nothing yet holds a plugin to its list. Plugin code runs in-process with the caller's actor, so the service registry does not reject a call outside the declared scopes; the install screen does not yet show the scopes or ask for consent (C3.40); and no fetch wrapper limits outbound requests to plugins that declare `network:external` (C3.41). Until then, an installed plugin can do whatever core code can.
 2. **Registry review tiers** (mirrors deploy recipes): **Verified** (maintainer-reviewed source, in the CI matrix, badge) / **Community** (automated checks: no eval, scope-lint, license check, integrity pinned, **CHANGELOG.md present with an entry for the published version — versions without release notes are rejected by the registry**) / **Unlisted** (install by name at your own risk — always possible; it's your instance). Plugin changelog entries are what feed the instance's own release notes when a plugin is installed or updated, so a missing changelog breaks the chain for every downstream site — hence it's a hard registry requirement, not a courtesy.
 3. **Signed releases (§39.3); plugin signatures are weaker.** Platform images and the update feed carry signatures and build provenance, and the updater verifies both before applying anything; the feed is checked against an Ed25519 public key the instance ships. An auto-updater is the most privileged component in a self-hosted system; unverified auto-update would hand every instance to whoever compromises the distribution path. Plugins and registry indexes do not have that yet: an install checks a SHA-256 hash of the plugin directory, and its optional signature (like a registry index signature) is an HMAC made with a shared secret that the caller supplies with the request. That proves only that the signer knew the secret, not who published the plugin. Publisher public keys (Ed25519) are C3.42.
 4. **Kill switches:** per-plugin disable without uninstall (`plugins.disable`); a plugin that fails its version or dependency check, or throws while loading, is named and disabled at boot instead of taking the site down (C3.10). A runtime boundary that degrades a failing plugin to a disabled widget, and audit rows under `actor: plugin:<name>`, are open (C3.40); today a plugin's service calls are audited under the actor who triggered them.
-5. **No sandbox.** Running plugin code out of process, or in a sandbox that limits what it can reach, is recorded as open (C3.43). It is a research problem for in-process JavaScript, so until it lands, install only plugins whose source you trust.
+5. **No sandbox.** Running plugin code out of process, or in a sandbox that limits what it can reach, is deferred to v2 (C3.43, §43.18, owner decision 2026-11-05). It is a research problem for in-process JavaScript, so until it lands, install only plugins whose source you trust.
 
 **Licensing policy (stated up front to avoid ambiguity):**
 - **In-process plugins** may use any license compatible with their use of Apache-2.0 Freeholder APIs, including commercial terms. The registry requires a valid declared SPDX expression and preserves applicable Freeholder notices when code is copied or redistributed.
@@ -3523,7 +3523,7 @@ what is true now and what remains.
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | Plugin trust gaps recorded 2026-11-05, when §26 was corrected to match the code: runtime enforcement of declared plugin permissions with install consent and plugin audit (C3.40), the `network:external` egress wrapper (C3.41), publisher Ed25519 signatures for plugins and registry indexes (C3.42) and plugin isolation or sandboxing (C3.43). Customer-facing acceptance gaps identified 2026-10-07: C9.37 closed 2026-10-17 — the newsletter sending journey (readiness, verified-sender guidance, consent-aware audience selection, test-send, scheduling, per-recipient outcomes, archive and subscribe). SMTP and HTTP doubles prove the behavior; provider credentials and live inbox placement remain the owner's acceptance. C9.38 closed 2026-10-17 — a card-required trial stays paused with no access until a saved card exists. The adapter double proves that path; live settlement remains C11.05. C2.26, C6.19 and C8.17 closed 2026-10-14. Actual new Replit and Lovable launch acceptance with the owner (C3.28). Owner passkey/MCP browser acceptance (C1.39) and private launch tooling/package acceptance (C3.27) closed 2026-10-06; see the evidence under each item. §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). C6.11 closed 2026-10-17 — paid event admission on the invoice spine: held seats, settlement, expiry sweep, refund/void cascade, paid check-in and the public registration form (annotation under the item). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 was recorded closed 2026-09-28, then reopened 2026-10-05 because the drill had no source object bytes (`deploy/stable-acceptance-2026-10-05.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | Plugin trust gaps recorded 2026-11-05, when §26 was corrected to match the code: runtime enforcement of declared plugin permissions with install consent and plugin audit (C3.40), the `network:external` egress wrapper (C3.41) and publisher Ed25519 signatures for plugins and registry indexes (C3.42). Plugin isolation or sandboxing (C3.43) is deferred to v2 (§43.18, owner decision 2026-11-05), not remaining. Customer-facing acceptance gaps identified 2026-10-07: C9.37 closed 2026-10-17 — the newsletter sending journey (readiness, verified-sender guidance, consent-aware audience selection, test-send, scheduling, per-recipient outcomes, archive and subscribe). SMTP and HTTP doubles prove the behavior; provider credentials and live inbox placement remain the owner's acceptance. C9.38 closed 2026-10-17 — a card-required trial stays paused with no access until a saved card exists. The adapter double proves that path; live settlement remains C11.05. C2.26, C6.19 and C8.17 closed 2026-10-14. Actual new Replit and Lovable launch acceptance with the owner (C3.28). Owner passkey/MCP browser acceptance (C1.39) and private launch tooling/package acceptance (C3.27) closed 2026-10-06; see the evidence under each item. §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). C6.11 closed 2026-10-17 — paid event admission on the invoice spine: held seats, settlement, expiry sweep, refund/void cascade, paid check-in and the public registration form (annotation under the item). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 was recorded closed 2026-09-28, then reopened 2026-10-05 because the drill had no source object bytes (`deploy/stable-acceptance-2026-10-05.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -3539,9 +3539,10 @@ DONE requires the plugin and its integration seam, not that capability in
 core. By owner decision dated 2026-09-15, exactly seven mobile-app checklist
 items — C10.17, C10.18, C10.25, C10.26, C10.27, C10.28 and C10.30 — are
 deferred to v2 under §43.18; by owner decision dated 2026-09-27,
-print-on-demand is deferred to v2 under §43.18 alongside them. v1's DONE
-excludes those mobile items and the print-on-demand clause and nothing
-else.
+print-on-demand is deferred to v2 under §43.18 alongside them; by owner
+decision dated 2026-11-05, plugin isolation or sandboxing (C3.43) is deferred
+to v2 under §43.18 as well. v1's DONE excludes those mobile items, the
+print-on-demand clause and C3.43, and nothing else.
 
 **What is not a completion criterion.** A public launch, marketing site,
 stars, downloads, design partners, revenue, and a release announcement are not
@@ -5700,10 +5701,6 @@ deployments are portable, testable and incapable of silently forking the truth.
   secret. That covers key distribution for registries and publishers, key
   rotation, and refusal of a plugin whose signature does not verify against a
   trusted key. Release feeds already use Ed25519 (§39.3, C10.03). Open.
-- [ ] **C3.43** Isolate plugin code from core: out of process or in a
-  sandbox that limits what it can reach. Recorded as open by owner direction
-  2026-11-05. §26 explains why this is a research problem for in-process
-  JavaScript; C3.40–C3.42 are the trust engineering in the meantime.
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
@@ -11620,6 +11617,26 @@ order, not an excuse to leave the product incomplete. Re-entry happens only
 by owner decision, never by silent deletion — the same discipline as the
 mobile deferral above. The live C3.13 text no longer carries the clause;
 the plan's references to print-on-demand as a v1 requirement resolve here.
+
+### Deferred to v2 — plugin isolation (owner decision 2026-11-05)
+
+**Owner decision, 2026-11-05 (Tony Aly):** "v2 for the sandbox." Plugin
+isolation or sandboxing is deferred to v2. The item is quoted verbatim as it
+was recorded the same day, its ID preserved as plain bold text so references
+still resolve:
+
+> **C3.43** Isolate plugin code from core: out of process or in a
+>   sandbox that limits what it can reach. §26 explains why this is a
+>   research problem for in-process JavaScript; C3.40–C3.42 are the trust
+>   engineering in the meantime.
+
+The obligation survives verbatim and moves to v2. C3.40 (runtime permission
+enforcement), C3.41 (the `network:external` egress wrapper) and C3.42
+(publisher Ed25519 signatures) stay in v1. This is a dated, bounded,
+owner-approved scope decision, not a generic escape hatch, with the same
+discipline as the deferrals above: `scripts/plan-gate.mjs` lists C3.43 in
+`DEFERRED` and fails any change that re-enters it as a live checkbox, and
+re-entry happens only by owner decision.
 
 ### Client-readiness repair note — 2026-09-21
 

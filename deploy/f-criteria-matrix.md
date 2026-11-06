@@ -1847,21 +1847,6 @@ v2.
 - **F11** — `deploy/doc-claim-mapping.md`: strike S11 records the gap in MASTER §26 item 3; changeset when it ships.
 - **F12** — `tests/core/plugins-lifecycle.test.ts`: Pending — publisher signs → registry index verified → plugin installed and verified.
 
-## C3.43 — Isolate plugin code from core
-
-- **F01** — `src/core/plugins/schema.ts`: Pending — any isolation state a chosen design needs; MASTER §26 records sandboxing in-process JavaScript as a research problem, and no design is chosen yet.
-- **F02** — `src/core/plugins/isolate.ts`: Pending — today isolation is boot-time naming and disabling only.
-- **F03** — `src/core/plugins/spine.ts`: Pending — an isolated plugin still reaches the spine only through core services (§24 hard rules).
-- **F04** — `app/(admin)/admin/plugins/page.tsx`: Pending — the owner sees each plugin's isolation state.
-- **F05** — `src/core/plugins/service.ts`: Pending — isolation state reported by `plugins.get`.
-- **F06** — `locales/en.json`: Pending — isolation state copy.
-- **F07** — `tests/core/plugins-lifecycle.test.ts`: Pending — a hostile plugin cannot read core memory, secrets or the database outside its grants.
-- **F08** — `tests/core/plugins-lifecycle.test.ts`: Pending — isolation coverage once a design is chosen.
-- **F09** — `src/core/plugins/isolate.ts`: Pending — restart and failure handling for an isolated plugin process.
-- **F10** — `deploy/performance-measurements.md`: Pending — the §15.1 performance budgets still hold with isolation on.
-- **F11** — `deploy/doc-claim-mapping.md`: strike S11 and MASTER §26 item 5 record this as open by owner direction 2026-11-05.
-- **F12** — `tests/core/plugins-lifecycle.test.ts`: Pending — an isolated plugin's service call through core, end to end.
-
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/agents-board.test.ts`.
@@ -5254,6 +5239,21 @@ v2.
 - **F10** — the existing native loading/stale/error states remain; private data is hidden while backgrounded and before an account/route transition can render an old result. Expiry clears it and triggers a fresh query. Uncached management links also follow session invalidation; the bookings profile uses the private lease so it does not block an offline cached list. Physical light/dark, screen-reader and foreground/cold-start checks remain pending. — `tests/core/mobile-private-cache.test.ts`.
 - **F11** — app/package READMEs and the changeset describe the policy. Local validation passed 219 required contract tests (25 files), 67 focused app/cache tests, native/root typechecks, the shared package build, lint after correcting a test-helper binding, and Android/iOS Hermes exports. PR #333 carries the implementation; the item remains open for the native-device evidence above. — `tests/core/mobile-private-cache.test.ts`.
 - **F12** — `tests/core/mobile-private-cache.test.ts` covers exact expiry, encryption/tampering, denial bodies, delayed reads/writes, superseded keychain opens, cleanup failure and offline restart.
+
+## C3.43 — v2-deferred (§43.18) — Isolate plugin code from core
+
+- **F01** — `src/core/plugins/schema.ts`: v2-deferred (§43.18) — any isolation state a chosen design needs; MASTER §26 records sandboxing in-process JavaScript as a research problem, and no design is chosen yet.
+- **F02** — `src/core/plugins/isolate.ts`: v2-deferred (§43.18) — today isolation is boot-time naming and disabling only.
+- **F03** — `src/core/plugins/spine.ts`: v2-deferred (§43.18) — an isolated plugin still reaches the spine only through core services (§24 hard rules).
+- **F04** — `app/(admin)/admin/plugins/page.tsx`: v2-deferred (§43.18) — the owner sees each plugin's isolation state.
+- **F05** — `src/core/plugins/service.ts`: v2-deferred (§43.18) — isolation state reported by `plugins.get`.
+- **F06** — `locales/en.json`: v2-deferred (§43.18) — isolation state copy.
+- **F07** — `tests/core/plugins-lifecycle.test.ts`: v2-deferred (§43.18) — a hostile plugin cannot read core memory, secrets or the database outside its grants.
+- **F08** — `tests/core/plugins-lifecycle.test.ts`: v2-deferred (§43.18) — isolation coverage once a design is chosen.
+- **F09** — `src/core/plugins/isolate.ts`: v2-deferred (§43.18) — restart and failure handling for an isolated plugin process.
+- **F10** — `deploy/performance-measurements.md`: v2-deferred (§43.18) — the §15.1 performance budgets still hold with isolation on.
+- **F11** — `deploy/doc-claim-mapping.md`: strike S11 and MASTER §26 item 5 record it; deferred to v2 under §43.18 by owner decision 2026-11-05.
+- **F12** — `tests/core/plugins-lifecycle.test.ts`: v2-deferred (§43.18) — an isolated plugin's service call through core, end to end.
 
 ## packages/cli — @freeholder/cli — freeholder update (check/preflight/apply/rollback)
 

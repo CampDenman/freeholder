@@ -78,8 +78,8 @@ describe("F-criteria matrix (C11.09)", () => {
     });
     const checklist = checklistItems(master()).map(({ id }) => id);
     expect(ids.slice(0, 12)).toEqual(checklist);
-    expect(ids.slice(12, 19)).toEqual([...DEFERRED]);
-    expect(ids.slice(19)).toEqual([
+    expect(ids.slice(12, 12 + DEFERRED.size)).toEqual([...DEFERRED]);
+    expect(ids.slice(12 + DEFERRED.size)).toEqual([
       "packages/sdk",
       "packages/create-freeholder",
       "plugins/community",
