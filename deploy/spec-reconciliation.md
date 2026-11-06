@@ -94,8 +94,8 @@ Anti-roadmap rows are refusals, not leftovers. Reconciliation updates since
 | 22 | create-freeholder | `packages/create-freeholder`, Apache-2.0. | Built | C3.14. |
 | 23 | Migration matrix | Ownership export + `scripts/ownership-drill.mjs --all-pairs`. | Built; acceptance incomplete | C11.08 was reopened because the 2026-09-28 two-droplet drill had no source object bytes. Actual same-host S3 byte transfer and signed host update/rollback passed on 2026-10-05; the complete cross-target final-candidate journey remains open (`deploy/stable-acceptance-2026-10-05.md`). |
 | 24 | Plugins: the design bet | `src/core/plugins`, `packages/plugin-kit`, isolate, first-party plugins under `plugins/`. | Built | C3.08–C3.13. |
-| 25 | Plugin DX | Scaffolding, fixture instance, contract tests, `packages/plugin-kit`. | Built | C3.12. |
-| 26 | Trust model | Signed install, capability isolation, hostile-plugin refusals. | Built | C3.10–C3.11. |
+| 25 | Plugin DX | `scaffoldPlugin()` and `inspectPluginFolder()` in `packages/plugin-kit`, fixture instance, contract tests. | Built; narrowed 2026-11-05 | C3.12. Struck: a published `create-freeholder-plugin` command, the seeded-demo `npm run dev`/`npm run share`, one-click npm install and naming-convention discovery are now marked planned (doc-claim S12). |
+| 26 | Trust model | Integrity-hashed install with an HMAC signature, boot-time isolation, per-plugin disable, signed release feed. | Remaining | C3.10–C3.11 built. Struck 2026-11-05 (doc-claim S11): runtime enforcement of declared scopes, install consent and `plugin:<name>` audit (C3.40), the `network:external` egress wrapper (C3.41), publisher Ed25519 signatures (C3.42) and a sandbox (C3.43) are open. |
 | 27 | Federated registries | Local/community/verified/private registries. | Built | C3.11. |
 | 28 | Living platform contract | OpenAPI, SDK, MCP, `llms.txt` generated from the registry. | Built | C3.01–C3.07. |
 | 29 | Ecosystem | First-party plugins teach the API by existing. | Built | C3.13 gift/print/community/voice-video/marketplace (closed 2026-09-28). |

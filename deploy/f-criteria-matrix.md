@@ -1802,6 +1802,66 @@ v2.
 - **F11** — `deploy/launch-template.md`, `seed/launch/example-v2.json`, changeset `.changeset/launch-spec-v2.md`.
 - **F12** — `tests/core/launch-template.test.ts` composes a version 2 spec → `launch.install` → `/start` page and onboarding intake form.
 
+## C3.40 — Enforce a plugin's declared permissions at runtime
+
+- **F01** — `src/core/plugins/schema.ts`: Pending — record the owner's consent to each installed plugin's declared scopes.
+- **F02** — `src/core/service.ts`: Pending — a `plugin:<name>` actor whose grants are the plugin's declared scopes, refused by `permits()` outside them.
+- **F03** — `src/core/service.ts`: Pending — audit rows for a plugin's service calls name `plugin:<name>`.
+- **F04** — `app/(admin)/admin/plugins/page.tsx`: Pending — the install screen lists each scope through `describePermission` and asks for consent before enable.
+- **F05** — `src/core/plugins/service.ts`: Pending — `plugins.install` and `plugins.enable` carry the consent through HTTP and MCP with the same checks.
+- **F06** — `locales/en.json`: Pending — plain-language scope and consent copy in every shipped locale.
+- **F07** — `tests/core/plugin-contract.test.ts`: Pending — a plugin calling a service outside its declared scopes is refused; today nothing refuses it (MASTER §26 item 1).
+- **F08** — `tests/core/plugins-lifecycle.test.ts`: Pending — install, consent, enable and a refused out-of-scope call on real PostgreSQL.
+- **F09** — `src/core/plugins/isolate.ts`: Pending — a plugin that throws at runtime is named and disabled like a boot failure (C3.10 covers boot only).
+- **F10** — `src/core/service.ts`: Pending — scope checks add no query per call.
+- **F11** — `deploy/doc-claim-mapping.md`: strike S11 records the gap in MASTER §26 items 1 and 4; changeset when it ships.
+- **F12** — `tests/core/plugins-lifecycle.test.ts`: Pending — install → consent → enable → in-scope call audited as `plugin:<name>` → out-of-scope call refused.
+
+## C3.41 — Route plugin egress through a `network:external` fetch wrapper
+
+- **F01** — N/A — no schema change: the scope already lives in each plugin's declared `permissions`.
+- **F02** — `packages/plugin-kit/src/importer.ts`: Pending — today only importers must declare `network:external`; every plugin's outbound request goes through one wrapper.
+- **F03** — N/A — egress control touches no contact, money or audit surface beyond C3.40's plugin actor.
+- **F04** — `app/(admin)/admin/plugins/page.tsx`: Pending — the install screen says which plugins can make outbound requests.
+- **F05** — N/A — the wrapper is an in-process boundary for plugin code, not an HTTP or MCP action.
+- **F06** — `locales/en.json`: Pending — the refusal and scope copy.
+- **F07** — `tests/core/outbound-boundaries.test.ts`: Pending — a plugin without `network:external` is refused, and a declared one still gets core's private-address refusal and timeouts.
+- **F08** — `tests/core/outbound-boundaries.test.ts`: Pending — unit coverage of the wrapper against a fake transport.
+- **F09** — N/A — the wrapper keeps no data to export, back up or erase.
+- **F10** — `src/core/plugins/isolate.ts`: Pending — the wrapper adds no per-request lookup beyond the plugin's boot-time grants.
+- **F11** — `deploy/doc-claim-mapping.md`: strike S11 records the gap in MASTER §26 item 1; changeset when it ships.
+- **F12** — `tests/core/outbound-boundaries.test.ts`: Pending — a plugin service making a refused and an allowed outbound request.
+
+## C3.42 — Publisher Ed25519 signatures for plugins and registry indexes
+
+- **F01** — `src/core/plugins/schema.ts`: Pending — trusted publisher and registry public keys, with rotation status.
+- **F02** — `src/core/plugins/integrity.ts`: Pending — Ed25519 verification replaces the HMAC over a caller-supplied shared secret; `src/core/update/feed.ts` is the release-feed precedent.
+- **F03** — N/A — signature verification touches no contact or money record; install and refusal are audited by the existing plugin services.
+- **F04** — `app/(admin)/admin/plugins/page.tsx`: Pending — the owner sees which key signed a plugin or registry and adds or retires trusted keys.
+- **F05** — `src/core/plugins/service.ts`: Pending — `plugins.install` and `plugins.cacheRegistry` take a publisher signature instead of `signingSecret`.
+- **F06** — `locales/en.json`: Pending — signer and refusal copy.
+- **F07** — `tests/core/plugins-lifecycle.test.ts`: Pending — an unsigned, forged or untrusted-key plugin or index is refused.
+- **F08** — `tests/core/plugins-lifecycle.test.ts`: Pending — sign, verify, rotate and refuse on real PostgreSQL.
+- **F09** — `src/core/update/keys.ts`: Pending — key rotation keeps a retiring key until every supported release ships its successor, as release keys do.
+- **F10** — N/A — one signature check per install or registry refresh, not per request.
+- **F11** — `deploy/doc-claim-mapping.md`: strike S11 records the gap in MASTER §26 item 3; changeset when it ships.
+- **F12** — `tests/core/plugins-lifecycle.test.ts`: Pending — publisher signs → registry index verified → plugin installed and verified.
+
+## C3.43 — Isolate plugin code from core
+
+- **F01** — `src/core/plugins/schema.ts`: Pending — any isolation state a chosen design needs; MASTER §26 records sandboxing in-process JavaScript as a research problem, and no design is chosen yet.
+- **F02** — `src/core/plugins/isolate.ts`: Pending — today isolation is boot-time naming and disabling only.
+- **F03** — `src/core/plugins/spine.ts`: Pending — an isolated plugin still reaches the spine only through core services (§24 hard rules).
+- **F04** — `app/(admin)/admin/plugins/page.tsx`: Pending — the owner sees each plugin's isolation state.
+- **F05** — `src/core/plugins/service.ts`: Pending — isolation state reported by `plugins.get`.
+- **F06** — `locales/en.json`: Pending — isolation state copy.
+- **F07** — `tests/core/plugins-lifecycle.test.ts`: Pending — a hostile plugin cannot read core memory, secrets or the database outside its grants.
+- **F08** — `tests/core/plugins-lifecycle.test.ts`: Pending — isolation coverage once a design is chosen.
+- **F09** — `src/core/plugins/isolate.ts`: Pending — restart and failure handling for an isolated plugin process.
+- **F10** — `deploy/performance-measurements.md`: Pending — the §15.1 performance budgets still hold with isolation on.
+- **F11** — `deploy/doc-claim-mapping.md`: strike S11 and MASTER §26 item 5 record this as open by owner direction 2026-11-05.
+- **F12** — `tests/core/plugins-lifecycle.test.ts`: Pending — an isolated plugin's service call through core, end to end.
+
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/agents-board.test.ts`.
