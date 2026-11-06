@@ -1,0 +1,50 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# C3.44: Freeholder on a plain Ubuntu/Debian server, no Docker.
+name: linux
+schema: freeholder-deploy-recipe/v1
+tier: 2
+maintainers: ["@tonyaly"]
+freeholder_min_version: "0.2.0-beta.5"
+provides:
+  database: distro-postgres
+  storage: local-disk-or-s3
+  jobs: web-process
+  cron: systemd-timer
+estimated_monthly_cost_usd: { min: 6, typical: 24 }
+limits:
+  - "One server: local-disk media cannot be shared by a second app server; move media to S3 before scaling out"
+  - "Ubuntu 22.04+ or Debian 12+ with systemd, on x86_64 or arm64"
+  - "Media and the database are on the server's disk: keep the nightly backups somewhere else too (BACKUP_RCLONE_REMOTE)"
+artifacts:
+  - deploy/linux/install.sh
+  - deploy/linux/freeholder
+  - deploy/linux/share/systemd/freeholder.service
+  - deploy/linux/share/systemd/freeholder-backup.service
+  - deploy/linux/share/systemd/freeholder-backup.timer
+  - deploy/linux/share/Caddyfile.template
+  - scripts/build-release.mjs
+required_environment:
+  - APP_URL
+  - DATABASE_URL
+  - BOOTSTRAP_SECRET
+  - SESSION_SECRET
+  - CREDENTIAL_KEY
+  - FREEHOLDER_STORAGE
+  - LOCAL_STORAGE_ROOT
+operations:
+  install: "sudo sh install.sh --domain $FREEHOLDER_DOMAIN"
+  verify: "sudo freeholder status"
+  backup: "sudo freeholder backup"
+  restore: "sudo freeholder restore latest"
+  migrate-in: "sudo freeholder restore /path/to/backup-directory"
+  migrate-out: "sudo freeholder backup && sudo ls /var/lib/freeholder/backups"
+  update: "sudo freeholder update $FREEHOLDER_VERSION"
+  rollback: "sudo freeholder rollback"
+update:
+  # The release tarball plays the image: a new one is unpacked beside the
+  # old, `current` is switched, and a failed health check switches back.
+  strategy: image-swap
+  rollback: previous release directory plus the pre-update database backup
+  automatable: false
+tested_on: "2026-11-06"

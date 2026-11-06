@@ -291,7 +291,7 @@ describe("the local adapter refuses production (§18 storage mandate)", () => {
     // is the least recoverable thing a business owns, so this fails loudly at
     // boot instead of at restore time.
     withEnv(
-      { NODE_ENV: "production", FREEHOLDER_UNSAFE_LOCAL_STORAGE: undefined },
+      { NODE_ENV: "production", FREEHOLDER_UNSAFE_LOCAL_STORAGE: undefined, LOCAL_STORAGE_ROOT: undefined },
       () => {
         expect(() =>
           createLocalStorage({ root: ".data/media", publicPath: "/media" }),
@@ -302,13 +302,14 @@ describe("the local adapter refuses production (§18 storage mandate)", () => {
 
   it("names the way out, so the error is actionable", () => {
     withEnv(
-      { NODE_ENV: "production", FREEHOLDER_UNSAFE_LOCAL_STORAGE: undefined },
+      { NODE_ENV: "production", FREEHOLDER_UNSAFE_LOCAL_STORAGE: undefined, LOCAL_STORAGE_ROOT: undefined },
       () => {
         try {
           createLocalStorage({ root: ".data/media", publicPath: "/media" });
         } catch (error) {
           const message = (error as Error).message;
           expect(message).toContain("freeholder.config.ts");
+          expect(message).toContain("LOCAL_STORAGE_ROOT");
           expect(message).toContain("FREEHOLDER_UNSAFE_LOCAL_STORAGE=1");
         }
       },
@@ -322,6 +323,41 @@ describe("the local adapter refuses production (§18 storage mandate)", () => {
         expect(() =>
           createLocalStorage({ root: ".data/media", publicPath: "/media" }),
         ).not.toThrow();
+      },
+    );
+  });
+
+  it("accepts an explicit, existing persistent directory in production (C3.44)", async () => {
+    const persistent = await mkdtemp(join(tmpdir(), "freeholder-persistent-"));
+    try {
+      withEnv(
+        { NODE_ENV: "production", FREEHOLDER_UNSAFE_LOCAL_STORAGE: undefined, LOCAL_STORAGE_ROOT: persistent },
+        () => {
+          const adapter = createLocalStorage({ root: persistent, publicPath: "/media" });
+          // Served only through the app's /media route, which re-checks access.
+          expect(adapter.isPublic).toBe(false);
+        },
+      );
+    } finally {
+      await rm(persistent, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a persistent directory that does not exist, instead of creating it in the container layer", () => {
+    const missing = join(tmpdir(), `freeholder-missing-${Date.now()}`);
+    withEnv(
+      { NODE_ENV: "production", FREEHOLDER_UNSAFE_LOCAL_STORAGE: undefined, LOCAL_STORAGE_ROOT: missing },
+      () => {
+        expect(() => createLocalStorage({ root: missing, publicPath: "/media" })).toThrow(/existing directory/);
+      },
+    );
+  });
+
+  it("still refuses a relative directory in production", () => {
+    withEnv(
+      { NODE_ENV: "production", FREEHOLDER_UNSAFE_LOCAL_STORAGE: undefined, LOCAL_STORAGE_ROOT: ".data/media" },
+      () => {
+        expect(() => createLocalStorage({ root: ".data/media", publicPath: "/media" })).toThrow(/LOCAL_STORAGE_ROOT/);
       },
     );
   });

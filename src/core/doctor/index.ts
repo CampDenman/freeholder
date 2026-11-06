@@ -637,7 +637,16 @@ async function checkSecurity(): Promise<Check[]> {
   const e = env();
   const checks: Check[] = [];
 
-  if (e.NODE_ENV === "production" && e.FREEHOLDER_UNSAFE_LOCAL_STORAGE === "1") {
+  const { localStorageMode, describeLocalStorage } = await import("@/adapters/storage/local-mode");
+  const configuredStorage =
+    e.FREEHOLDER_STORAGE ?? (await import("../../../freeholder.config")).default.adapters.storage;
+  if (configuredStorage === "local" && localStorageMode(e) === "persistent") {
+    // C3.44: a supported single-server mode, so it is information, not a
+    // warning. The owner still needs to know the backup must include it.
+    checks.push(
+      ok("security.localStorage", "Media on this server", describeLocalStorage(e)),
+    );
+  } else if (e.NODE_ENV === "production" && e.FREEHOLDER_UNSAFE_LOCAL_STORAGE === "1") {
     checks.push(
       warn(
         "security.localStorage",
@@ -1081,22 +1090,24 @@ async function checkUpdateSeams(): Promise<Check[]> {
     ),
   );
   const storage = e.FREEHOLDER_STORAGE ?? instanceConfig.adapters.storage;
-  if (storage === "local" && e.NODE_ENV === "production" && e.FREEHOLDER_UNSAFE_LOCAL_STORAGE !== "1") {
+  const { localStorageMode, describeLocalStorage } = await import("@/adapters/storage/local-mode");
+  const mode = storage === "local" ? localStorageMode(e) : undefined;
+  if (mode === "refused") {
     checks.push(
       fail(
         "update.seams.uploads",
         "Uploads seam",
-        "Uploads are on this machine's disk, which does not survive a rebuild.",
-        "Set adapters.storage to s3 or replit, or only use local disk in development.",
+        describeLocalStorage(e),
+        "Set LOCAL_STORAGE_ROOT to a persistent absolute directory, or set adapters.storage to s3 or replit.",
       ),
     );
-  } else if (storage === "local" && e.FREEHOLDER_UNSAFE_LOCAL_STORAGE === "1") {
+  } else if (mode === "unsafe") {
     checks.push(
       warn(
         "update.seams.uploads",
         "Uploads seam",
-        "Uploads are on this machine's disk because FREEHOLDER_UNSAFE_LOCAL_STORAGE=1.",
-        "Move media to object storage before relying on updates to replace this instance.",
+        describeLocalStorage(e),
+        "Set LOCAL_STORAGE_ROOT to a directory updates keep, or move media to object storage.",
       ),
     );
   } else {
@@ -1104,9 +1115,7 @@ async function checkUpdateSeams(): Promise<Check[]> {
       ok(
         "update.seams.uploads",
         "Uploads seam",
-        storage === "local"
-          ? "Local disk storage is for development. Production must use object storage."
-          : `Uploads use ${storage} object storage, not instance disk.`,
+        mode ? describeLocalStorage(e) : `Uploads use ${storage} object storage, not instance disk.`,
       ),
     );
   }

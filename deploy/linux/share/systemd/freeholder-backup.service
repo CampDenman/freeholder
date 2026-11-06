@@ -1,0 +1,13 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# C3.44: nightly database and media backup (freeholder-backup.timer).
+[Unit]
+Description=Freeholder nightly backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/freeholder backup --scheduled
+UMask=0077
+Nice=10
+IOSchedulingClass=idle

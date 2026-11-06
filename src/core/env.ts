@@ -277,7 +277,12 @@ const envSchema = z.object({
   /** Replit Object Storage (§20). Discovered from the environment on Replit. */
   REPLIT_BUCKET_ID: z.string().optional(),
 
-  /** Development only — production mandates managed object storage (§18). */
+  /**
+   * Where `local` storage writes. Defaults to `.data/media` for development.
+   * In production it must be an absolute directory kept across updates and
+   * included in backups (C3.44): `/var/lib/freeholder/media` on the native
+   * Linux install, the media volume in Docker. See local-mode.ts.
+   */
   LOCAL_STORAGE_ROOT: z.string().optional(),
 
   /**

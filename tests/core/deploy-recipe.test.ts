@@ -66,12 +66,16 @@ describe("the compose stack does not contradict the storage mandate", () => {
       compose = undefined;
     }
 
-    it.runIf(compose !== undefined)(`${recipe}: no media volume`, () => {
-      // §18: media lives in object storage, never on instance disk. A bind
-      // mount for uploads would quietly reintroduce exactly what the mandate
-      // forbids, and it would look reasonable in review.
+    it.runIf(compose !== undefined)(`${recipe}: media is never inside the replaceable app`, () => {
+      // §18: media must not live where a rebuild throws it away. A mount
+      // under /app would mix uploads into the release; the only supported
+      // local-disk location is the docker-selfhost volume at
+      // /var/lib/freeholder/media (C3.44), declared with LOCAL_STORAGE_ROOT.
       expect(compose!).not.toMatch(/media.*:\s*\/app\/(public\/)?media/i);
       expect(compose!).not.toMatch(/uploads:/i);
+      if (recipe !== "docker-selfhost") {
+        expect(compose!).not.toMatch(/LOCAL_STORAGE_ROOT|\/var\/lib\/freeholder\/media/);
+      }
     });
 
     it.runIf(compose !== undefined)(
@@ -206,6 +210,52 @@ describe("a trusted client address only where a proxy overwrites it (C11.10)", (
     // naming one would be a guess an attacker could exploit.
     for (const file of ["render.yaml", ".replit"]) {
       expect(readFileSync(file, "utf8")).not.toMatch(/TRUSTED_CLIENT_IP_HEADER|TRUSTED_PROXY_HOPS/);
+    }
+  });
+});
+
+describe("docker-selfhost keeps media on a volume that is backed up (C3.44)", () => {
+  type Service = { image?: string; volumes?: string[]; environment?: Record<string, string>; command?: string[] };
+  for (const file of ["compose.yml", "compose.https.yml"]) {
+    it(`${file}: app media volume, LOCAL_STORAGE_ROOT and a backup service that reads it`, () => {
+      const compose = parse(readFileSync(join(DEPLOY, "docker-selfhost/infra", file), "utf8")) as { services: Record<string, Service>; volumes: Record<string, unknown> };
+      const { app, backup } = compose.services;
+      expect(app!.volumes).toContain("media:/var/lib/freeholder/media");
+      expect(app!.environment!.LOCAL_STORAGE_ROOT).toBe("/var/lib/freeholder/media");
+      // FREEHOLDER_STORAGE comes from .env: an `environment:` value would
+      // override the owner's choice of S3.
+      expect(app!.environment!.FREEHOLDER_STORAGE).toBeUndefined();
+      expect(backup!.image).toBe("postgres:16-alpine");
+      expect(backup!.volumes).toEqual(expect.arrayContaining(["./backup.sh:/usr/local/bin/freeholder-backup:ro", "media:/srv/media", "backups:/backups"]));
+      expect(backup!.command).toEqual(["sh", "/usr/local/bin/freeholder-backup", "schedule"]);
+      expect(Object.keys(compose.volumes)).toEqual(expect.arrayContaining(["pgdata", "media", "backups"]));
+    });
+  }
+
+  it("the image creates the mount point owned by the app user, so a new volume is writable", () => {
+    const dockerfile = readFileSync("Dockerfile", "utf8");
+    const runtime = dockerfile.slice(dockerfile.lastIndexOf("AS runtime"));
+    expect(runtime).toMatch(/mkdir -p \/var\/lib\/freeholder\/media && chown -R freeholder:freeholder \/var\/lib\/freeholder/);
+    expect(runtime.indexOf("/var/lib/freeholder/media")).toBeLessThan(runtime.indexOf("USER freeholder"));
+  });
+
+  it("the backup is a custom-format dump plus media with checksums, restored into a scratch database", () => {
+    const script = readFileSync(join(DEPLOY, "docker-selfhost/infra/backup.sh"), "utf8");
+    expect(script).toContain("pg_dump --format=custom --no-owner --no-privileges");
+    expect(script).toContain("media.tar.gz");
+    expect(script).toContain("sha256sum ./* > SHA256SUMS");
+    expect(script).toMatch(/pg_restore [^\n]*-d freeholder_restore/);
+    expect(script).not.toMatch(/^\s*[^#\r\n]*--clean/m);
+  });
+
+  it("prepare needs only openssl, and pins the release image rather than edge", () => {
+    const selfhost = readFileSync(join(DEPLOY, "docker-selfhost/selfhost.sh"), "utf8");
+    expect(selfhost).toContain("openssl rand -hex 32");
+    const commands = selfhost.split("\n").filter((line) => !line.trim().startsWith("#"));
+    expect(commands.filter((line) => /\b(pnpm|npm|npx|node)\s/.test(line))).toEqual([]);
+    expect(selfhost).toContain('FREEHOLDER_IMAGE "ghcr.io/campdenman/freeholder:$(release_version)"');
+    for (const file of ["compose.yml", "compose.https.yml"]) {
+      expect(readFileSync(join(DEPLOY, "docker-selfhost/infra", file), "utf8")).not.toContain(":edge}");
     }
   });
 });

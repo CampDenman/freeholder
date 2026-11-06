@@ -1519,7 +1519,7 @@ freeholder/                          # Apache-2.0
 │   ├── adapters/                    # vendor isolation layer (see §12)
 │   │   ├── payments/  (stripe/, paypal/, manual/)
 │   │   ├── mail/      (gmail/, outlook/, resend/, smtp/)
-│   │   ├── storage/   (s3/, replit/, local/)   # local = dev-only; production mandates managed object storage (§18)
+│   │   ├── storage/   (s3/, replit/, local/)   # local = dev, or a persistent single-server directory (§18, C3.44)
 │   │   ├── calendar/  (none/ — Google/Microsoft live in core/connections)
 │   │   ├── sms/       (twilio/, none/)
 │   │   ├── ai/        (anthropic/, openai/, none/)   # BYO key — grounding, drafting
@@ -1965,7 +1965,7 @@ tested_on: "2026-07-01"
 
 **Recipe rules:**
 - A recipe may pin *required* adapter choices only when the platform forces them (e.g., no-persistent-disk targets must use S3 storage). Everything else stays owner-choice.
-- **Storage mandate (all tiers):** production media lives in managed object storage, never on instance disk. On Tier-1 targets this is pinned: **Replit → Replit Object Storage; DigitalOcean (both flavors) → Spaces.** Other recipes must mandate their platform's equivalent (R2, S3, GCS…). The `local/` storage adapter is dev-only and refuses to start with `NODE_ENV=production` unless explicitly overridden with `FREEHOLDER_UNSAFE_LOCAL_STORAGE=1` — a flag named to be embarrassing in a config review. Rationale: media is the least-recoverable asset a business has; a dead droplet or wiped container must never be able to take the photo archive with it. Object storage also makes cross-platform migration a bucket sync instead of a rescue operation.
+- **Storage mandate (all tiers):** production media lives where a rebuild cannot take it. On platforms without durable disk this is managed object storage, pinned by the recipe: **Replit → Replit Object Storage; DigitalOcean (both flavors) → Spaces;** App Platform, Render and Railway → S3-compatible. A **single-server self-host** (the `linux` recipe and `docker-selfhost`) may keep media on its own disk instead (C3.44, owner decision 2026-11-06, "freeholder is supposed to be a wordpress replacement"): an explicit absolute `LOCAL_STORAGE_ROOT` outside the replaceable release (`/var/lib/freeholder/media`, or the Compose `media` volume), kept across updates, served through the app's access-checked `/media` route and included in the recipe's nightly backup. The `local/` adapter refuses to start with `NODE_ENV=production` unless `LOCAL_STORAGE_ROOT` names such an existing, writable directory, or the legacy `FREEHOLDER_UNSAFE_LOCAL_STORAGE=1` override is set for an implicit one — a flag named to be embarrassing in a config review. Rationale: media is the least-recoverable asset a business has; a wiped container or a replaced release must never be able to take the photo archive with it. The single-server trade-off is stated in each recipe: losing the server loses the media unless its backups were copied off it, and a second app server cannot share the disk, so those recipes document moving media to S3 (a copy with the same keys). Object storage still makes cross-platform migration a bucket sync instead of a rescue operation.
 - **Migration mandate (Tier 1–2):** a recipe is not approved without a specced migration path. Every Tier 1–2 recipe ships `migrate.md` covering, at minimum, migration **to and from each Tier-1 target** (export archive → provision → import → storage sync → DNS repoint), with expected downtime and a verification checklist. Tier-1 pairs are round-trip tested in CI (see §23); Tier-2 paths are verified by the recipe maintainer per release. No approved platform is ever a dead end — that's the ownership promise expressed as a requirement.
 - **Update mandate (Tier 1–2):** a recipe declares an `update` strategy and a rollback for its target, and CI exercises it in the upgrade gate (§39.9). A platform an instance cannot be kept patched on is not an approved platform — the same argument as the migration mandate, applied to time rather than to place.
 - Every recipe must run the same app code. No target-specific forks of application logic — if a target needs a code change, that change goes behind a capability flag in core (e.g., `jobs: in-process | worker`), available to all targets.
@@ -2883,7 +2883,7 @@ outside them is replaceable:
 | **The database** | Pages, block trees, sections, products, settings, theme tokens, media records, every business record | §32 — structure is data. The site's design and content are rows, not code, so swapping the image cannot touch them. |
 | **Plugins** | Owner and third-party code | Installed artifacts with declared compatibility ranges (§24), loaded at boot, never merged into core |
 | **Configuration** | `freeholder.config.ts`, environment | §17 — the instance's choices, checked in or injected, never baked into the image |
-| **Uploads** | Media in object storage | §18's storage mandate — never on instance disk, so the container is disposable by construction |
+| **Uploads** | Media in object storage, or a single-server self-host's persistent media directory (C3.44) | §18's storage mandate — never inside the release or the container layer, so either is disposable by construction |
 
 **Core is never patched in place.** That is the contract, stated as a rule. If
 an owner needs behaviour core does not have, the answer is a plugin, a
@@ -5783,6 +5783,36 @@ deployments are portable, testable and incapable of silently forking the truth.
   secret. That covers key distribution for registries and publishers, key
   rotation, and refusal of a plugin whose signature does not verify against a
   trusted key. Release feeds already use Ed25519 (§39.3, C10.03). Open.
+- [ ] **C3.44** Make the by-hand install WordPress-easy on any host, with no
+  AI and no Docker required (owner decision 2026-11-06: "native first, Docker
+  optional"). A release ships `freeholder-VERSION-linux-{x64,arm64}.tar.gz`
+  with its own Node runtime, a `.sha256` and `install.sh`; on a plain
+  Ubuntu/Debian server `install.sh` installs PostgreSQL and Caddy from
+  distribution or official packages, creates a `freeholder` user, the database
+  and role, unpacks a root-owned release under `/opt/freeholder/releases` with
+  a `current` symlink, generates secrets with openssl, writes systemd units and
+  a nightly backup timer, serves HTTPS (with a temporary `<ip>.sslip.io`
+  address before DNS is ready) and prints the claim link. Media defaults to a
+  persistent local directory (§18 single-server mode) with S3 optional;
+  `freeholder status|backup|restore|update|rollback|domain` operate it, and a
+  failed update rolls back the release and the pre-update database. The Docker
+  recipe gets the same local-volume media, release-tag image default, nightly
+  backup service, openssl-only prepare (`selfhost.sh`) and a Docker-only health
+  check. Open until a release carries the tarballs and the documented steps
+  pass on a fresh server: HTTPS, claim to the owner form, a published page, a
+  backup and a restore.
+  *(Progress 2026-11-06: `src/adapters/storage/local-mode.ts` decides the
+  persistent mode for the adapter, Doctor, update screen and preflight;
+  `scripts/build-release.mjs`, `deploy/linux/` and
+  `.github/workflows/release-tarballs.yml`, which installs every tarball with
+  `install.sh` on x64 and arm64 runners and backs up and restores it;
+  `deploy/docker-selfhost/selfhost.sh` and `infra/backup.sh`. Evidence
+  `tests/core/linux-install.test.ts`, `tests/core/local-storage-mode.test.ts`,
+  `tests/core/storage.test.ts`, `tests/core/deploy-recipe.test.ts`; changeset
+  `native-linux-install.md`. A throwaway DigitalOcean droplet ran the
+  documented native steps with a tarball built from this branch; the result is
+  recorded in the pull request. The tarballs reach a release only when the
+  next version is tagged.)*
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

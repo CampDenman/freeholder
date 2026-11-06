@@ -7,32 +7,31 @@ maintainers: ["@tonyaly"]
 freeholder_min_version: "0.0.0"
 provides:
   database: compose-postgres
-  storage: minio-or-s3
+  storage: volume-or-s3
   jobs: web-process
-  cron: host-cron
+  cron: compose-backup-service
 estimated_monthly_cost_usd: { min: 0, typical: 20 }
 limits:
-  - "Production media MUST leave the compose volume for real S3/R2/Spaces"
+  - "One server: media on the compose volume cannot be shared by a second app server; use S3 to scale out"
+  - "Copy the backups volume off the server; a backup on the same disk does not survive losing it"
   - "MinIO is the local-dev profile only"
 artifacts:
   - deploy/docker-selfhost/infra/compose.yml
   - deploy/docker-selfhost/infra/compose.https.yml
   - deploy/docker-selfhost/infra/Caddyfile.https
+  - deploy/docker-selfhost/infra/backup.sh
+  - deploy/docker-selfhost/selfhost.sh
 required_environment:
   - POSTGRES_PASSWORD
   - BOOTSTRAP_SECRET
   - SESSION_SECRET
   - CREDENTIAL_KEY
   - APP_URL
-  - S3_BUCKET
-  - S3_ENDPOINT
-  - S3_REGION
-  - S3_ACCESS_KEY_ID
-  - S3_SECRET_ACCESS_KEY
+  - FREEHOLDER_STORAGE
 operations:
   install: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml up -d"
   install-https: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.https.yml up -d"
-  verify: "pnpm doctor --url $FREEHOLDER_URL --email $FREEHOLDER_EMAIL --password $FREEHOLDER_PASSWORD"
+  verify: "deploy/docker-selfhost/selfhost.sh check"
   backup: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml exec -T db pg_dump --format=custom --no-owner --no-privileges -U freeholder freeholder > freeholder.dump"
   restore: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml exec -T db pg_restore --no-owner --no-privileges -U freeholder -d freeholder < freeholder.dump"
   migrate-in: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml exec -T db pg_restore --no-owner --no-privileges -U freeholder -d freeholder < freeholder.dump && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
@@ -42,4 +41,4 @@ operations:
 update:
   strategy: image-swap
   rollback: compose pull the previous tag
-tested_on: "2026-08-25"
+tested_on: "2026-11-06"

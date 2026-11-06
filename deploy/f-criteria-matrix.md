@@ -1847,6 +1847,21 @@ v2.
 - **F11** — `deploy/doc-claim-mapping.md`: strike S11 records the gap in MASTER §26 item 3; changeset when it ships.
 - **F12** — `tests/core/plugins-lifecycle.test.ts`: Pending — publisher signs → registry index verified → plugin installed and verified.
 
+## C3.44 — WordPress-easy manual install on any host, native first, Docker optional
+
+- **F01** — N/A — no schema change; media rows are unchanged and local-disk objects keep their storage keys as paths.
+- **F02** — `src/adapters/storage/local-mode.ts`: one rule for the persistent local-disk mode, used by `src/adapters/storage/local.ts`, Doctor and the update screen and preflight; `tests/core/local-storage-mode.test.ts`, `tests/core/storage.test.ts`.
+- **F03** — N/A — no contact or money record; media stays behind `authorizeObjectDelivery` in `app/media/[...key]/route.ts`.
+- **F04** — N/A as a new screen — Doctor and `/admin/updates` report the storage mode; the operator surface is `deploy/linux/freeholder` (`status`, `backup`, `restore`, `update`, `rollback`, `domain`, `claim-link`).
+- **F05** — `deploy/linux/install.sh`, `deploy/linux/freeholder` and `deploy/docker-selfhost/selfhost.sh` are the operator interfaces; no service change.
+- **F06** — N/A — operator shell output in English; no product copy changed.
+- **F07** — `tests/core/linux-install.test.ts` covers checksum-before-unpack, private secrets, safety backup before restore, and rollback of release and database after a failed update.
+- **F08** — `.github/workflows/release-tarballs.yml` installs each tarball with `install.sh` on x64 and arm64 runners against real PostgreSQL, then backs up and restores it; `tests/core/deploy-recipe.test.ts` pins the Docker volume and backup service.
+- **F09** — `deploy/linux/README.md` and `deploy/docker-selfhost/README.md`: nightly database and media backups with checksums, restore into a scratch database, the replaced database kept, and offsite copies.
+- **F10** — N/A — local reads go through the existing `/media` route; no new per-request work.
+- **F11** — `GETTING_STARTED.md`, `AGENTS.md`, `deploy/README.md`, `deploy/linux/README.md`; changeset `native-linux-install.md`.
+- **F12** — `.github/workflows/release-tarballs.yml`: Pending — a release carrying the tarballs, then the documented steps on a fresh server (HTTPS, claim, publish, backup, restore).
+
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/agents-board.test.ts`.

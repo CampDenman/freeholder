@@ -1,0 +1,655 @@
+#!/bin/sh
+# shellcheck disable=SC3043,SC2010 # `local` is in dash, bash and busybox sh; listed names are our own timestamps and versions.
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+#
+# `freeholder`: run a native (no Docker) Freeholder install (C3.44).
+# install.sh puts this at /usr/local/bin/freeholder. Run `freeholder help`.
+#
+# Layout it manages (deploy/linux/README.md):
+#   /opt/freeholder/releases/VERSION   unpacked release tarballs, root-owned
+#   /opt/freeholder/current            symlink to the running release
+#   /etc/freeholder/freeholder.env     settings and secrets (root:freeholder 640)
+#   /var/lib/freeholder/media          uploaded media (local storage)
+#   /var/lib/freeholder/backups        nightly backups (root 700)
+#   /etc/caddy/Caddyfile               HTTPS reverse proxy
+set -eu
+
+REPOSITORY="CampDenman/freeholder"
+OPT=/opt/freeholder
+ETC=/etc/freeholder
+ENV_FILE=$ETC/freeholder.env
+DATA=/var/lib/freeholder
+MEDIA=$DATA/media
+BACKUPS=$DATA/backups
+STATE=$DATA/state
+CADDYFILE=/etc/caddy/Caddyfile
+LOCAL_URL=http://127.0.0.1:3000
+
+say() { printf 'freeholder: %s\n' "$*"; }
+warn() { printf 'freeholder: warning: %s\n' "$*" >&2; }
+die() { printf 'freeholder: error: %s\n' "$*" >&2; exit 1; }
+need_root() { [ "$(id -u)" = 0 ] || die "run it as root: sudo freeholder $*"; }
+interactive() { [ -t 0 ] && [ -z "${ASSUME_YES:-}" ]; }
+
+# Functions declare their variables `local` (dash, bash and busybox sh all
+# support it): restore calls backup, and a shared name would be overwritten.
+
+# The release this copy of the script belongs to.
+self_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+self_release=$(dirname -- "$self_dir")
+
+env_get() {
+  [ -f "$ENV_FILE" ] || return 0
+  sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1
+}
+
+env_set() {
+  # Values are hex, URLs, paths or hostnames, so no quoting is needed and a
+  # value with whitespace or quotes is refused rather than mangled.
+  case "$2" in *[[:space:]\"\'\\]*) die "refusing to store a value for $1 with spaces, quotes or backslashes" ;; esac
+  tmp="$ENV_FILE.tmp.$$"
+  if [ -f "$ENV_FILE" ]; then grep -v "^$1=" "$ENV_FILE" > "$tmp" || true; else : > "$tmp"; fi
+  printf '%s=%s\n' "$1" "$2" >> "$tmp"
+  chown root:freeholder "$tmp"
+  chmod 640 "$tmp"
+  mv "$tmp" "$ENV_FILE"
+}
+
+secret() { openssl rand -hex 32; }
+
+ensure_secret() {
+  [ -n "$(env_get "$1")" ] || env_set "$1" "$(secret)"
+}
+
+current_version() { [ -f "$OPT/current/VERSION" ] && cat "$OPT/current/VERSION" || echo unknown; }
+
+app_url() { env_get APP_URL; }
+site_host() { app_url | sed -e 's#^https\{0,1\}://##' -e 's#/.*$##'; }
+
+# ---------------------------------------------------------------- addresses
+
+private_ipv4() {
+  case "$1" in
+    10.*|192.168.*|127.*|169.254.*|100.6[4-9].*|100.[7-9][0-9].*|100.1[01][0-9].*|100.12[0-7].*) return 0 ;;
+    172.1[6-9].*|172.2[0-9].*|172.3[01].*) return 0 ;;
+  esac
+  return 1
+}
+
+public_ipv4() {
+  ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") {print $(i + 1); exit}}')
+  if [ -z "$ip" ] || private_ipv4 "$ip"; then
+    # Behind NAT (most clouds other than DigitalOcean, Hetzner and Linode put
+    # a private address on the interface), ask what address the internet sees.
+    ip=$(curl -4 -fsS --max-time 10 https://checkip.amazonaws.com 2>/dev/null | tr -d '[:space:]' || true)
+  fi
+  case "$ip" in
+    *.*.*.*) printf '%s\n' "$ip" ;;
+    *) return 1 ;;
+  esac
+}
+
+sslip_host() { printf '%s.sslip.io\n' "$(printf '%s' "$1" | tr . -)"; }
+
+resolves_here() {
+  # $1 host, $2 this server's public IPv4
+  getent ahostsv4 "$1" 2>/dev/null | awk '{print $1}' | grep -qx "$2"
+}
+
+valid_host() {
+  case "$1" in
+    ''|*[!A-Za-z0-9.-]*|.*|*.|*..*) return 1 ;;
+    *.*) return 0 ;;
+  esac
+  return 1
+}
+
+# ---------------------------------------------------------------- health
+
+wait_for() {
+  # $1 url, $2 seconds
+  deadline=$(( $(date +%s) + $2 ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    if curl -fsS --max-time 10 -o /dev/null "$1" 2>/dev/null; then return 0; fi
+    sleep 3
+  done
+  return 1
+}
+
+restarts() { systemctl show -p NRestarts --value freeholder 2>/dev/null || echo 0; }
+
+wait_ready() {
+  # Ready means /api/health answers 200. A release that crashes on start is
+  # restarted by systemd every few seconds; three crashes is a failure, not
+  # something to wait out.
+  # systemd keeps NRestarts across stop and start, so count from now.
+  local deadline baseline
+  say "waiting for Freeholder to start (migrations run first)"
+  deadline=$(( $(date +%s) + ${1:-240} ))
+  baseline=$(restarts)
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    if curl -fsS --max-time 10 -o /dev/null "$LOCAL_URL/api/health" 2>/dev/null; then return 0; fi
+    if [ "$(restarts)" -ge $((baseline + 3)) ]; then
+      warn "the service crashed three times while starting"
+      return 1
+    fi
+    sleep 3
+  done
+  return 1
+}
+
+# ---------------------------------------------------------------- caddy
+
+write_caddyfile() {
+  host=$1
+  email=$(env_get ACME_EMAIL)
+  template="$OPT/current/share/Caddyfile.template"
+  [ -f "$template" ] || template="$self_release/share/Caddyfile.template"
+  if [ -f "$CADDYFILE" ] && ! grep -q 'managed-by-freeholder' "$CADDYFILE"; then
+    # The Caddy package installs a placeholder that serves :80. Anything else
+    # is somebody's configuration, so it is kept beside ours.
+    if ! grep -qE '^:80([[:space:]]|\{|$)' "$CADDYFILE"; then
+      die "$CADDYFILE has your own configuration. Move it to /etc/caddy/sites/ and import it, then rerun; nothing was changed."
+    fi
+    cp "$CADDYFILE" "$CADDYFILE.before-freeholder"
+  fi
+  if [ -n "$email" ]; then global="{
+	email $email
+}"; else global=""; fi
+  tmp="$CADDYFILE.tmp.$$"
+  awk -v global="$global" -v host="$host" '{ gsub(/__GLOBAL__/, global); gsub(/__DOMAIN__/, host); print }' "$template" > "$tmp"
+  chmod 644 "$tmp"
+  if command -v caddy >/dev/null 2>&1; then
+    caddy validate --adapter caddyfile --config "$tmp" >/dev/null 2>&1 || { rm -f "$tmp"; die "the generated Caddyfile did not validate"; }
+  fi
+  mv "$tmp" "$CADDYFILE"
+}
+
+open_firewall() {
+  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+    ufw allow 80/tcp >/dev/null
+    ufw allow 443/tcp >/dev/null
+    say "opened ports 80 and 443 in ufw"
+  fi
+}
+
+choose_host() {
+  # $1 requested domain (may be empty). Prints the host to serve now.
+  requested=$1
+  ip=$(public_ipv4 || true)
+  if [ -n "$requested" ]; then
+    valid_host "$requested" || die "not a domain name: $requested"
+    if [ -n "$ip" ] && ! resolves_here "$requested" "$ip"; then
+      warn "$requested does not point at this server ($ip) yet." >&2
+      warn "using https://$(sslip_host "$ip") until it does; then run: sudo freeholder domain $requested" >&2
+      printf '%s\n' "$(sslip_host "$ip")"
+      return
+    fi
+    printf '%s\n' "$requested"
+    return
+  fi
+  [ -n "$ip" ] || die "could not find this server's public IPv4 address; pass --domain"
+  sslip_host "$ip"
+}
+
+# ---------------------------------------------------------------- setup
+
+prompt() {
+  # $1 question, $2 default
+  printf '%s' "$1" > /dev/tty
+  IFS= read -r answer < /dev/tty || answer=""
+  [ -n "$answer" ] || answer=$2
+  printf '%s\n' "$answer"
+}
+
+prompt_secret() {
+  printf '%s' "$1" > /dev/tty
+  stty -echo < /dev/tty
+  IFS= read -r answer < /dev/tty || answer=""
+  stty echo < /dev/tty
+  printf '\n' > /dev/tty
+  printf '%s\n' "$answer"
+}
+
+configure_s3() {
+  for name in S3_ENDPOINT S3_REGION S3_BUCKET S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY; do
+    value=$(printenv "$name" || true)
+    [ -n "$value" ] || value=$(env_get "$name")
+    if [ -z "$value" ]; then
+      interactive || die "--storage s3 needs $name (set it in the environment or run interactively)"
+      if [ "$name" = S3_SECRET_ACCESS_KEY ]; then value=$(prompt_secret "$name: "); else value=$(prompt "$name: " ""); fi
+    fi
+    [ -n "$value" ] || die "$name is required for S3 storage"
+    env_set "$name" "$value"
+  done
+  env_set FREEHOLDER_STORAGE s3
+}
+
+cmd_setup() {
+  need_root setup
+  domain="" storage="" email=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --domain) domain=$2; shift 2 ;;
+      --email) email=$2; shift 2 ;;
+      --storage) storage=$2; shift 2 ;;
+      --yes) ASSUME_YES=1; shift ;;
+      *) die "setup: unknown option $1" ;;
+    esac
+  done
+  id freeholder >/dev/null 2>&1 || die "run install.sh first; it creates the freeholder user and installs PostgreSQL and Caddy"
+
+  install -d -m 750 -o root -g freeholder "$ETC"
+  install -d -m 750 -o freeholder -g freeholder "$DATA" "$MEDIA" "$DATA/cache" "$DATA/cache/next"
+  install -d -m 700 -o root -g root "$BACKUPS" "$STATE"
+  [ -f "$ENV_FILE" ] || { : > "$ENV_FILE"; chown root:freeholder "$ENV_FILE"; chmod 640 "$ENV_FILE"; }
+
+  # Only the domain is a question, and an empty answer is fine.
+  existing=$(app_url)
+  if [ -z "$domain" ] && [ -z "$existing" ] && interactive; then
+    domain=$(prompt "Domain for this site (press Enter to use a temporary address and add the domain later): " "")
+  fi
+  if [ -n "$domain" ] || [ -z "$existing" ]; then
+    host=$(choose_host "$domain")
+    env_set APP_URL "https://$host"
+  fi
+  [ -z "$email" ] || env_set ACME_EMAIL "$email"
+
+  ensure_secret BOOTSTRAP_SECRET
+  ensure_secret SESSION_SECRET
+  ensure_secret CREDENTIAL_KEY
+  ensure_secret POSTGRES_PASSWORD
+  password=$(env_get POSTGRES_PASSWORD)
+  env_set DATABASE_URL "postgres://freeholder:${password}@127.0.0.1:5432/freeholder"
+  env_set TRUSTED_CLIENT_IP_HEADER x-freeholder-client-ip
+  [ -n "$(env_get FREEHOLDER_SEED_DEMO)" ] || env_set FREEHOLDER_SEED_DEMO 0
+  case "${storage:-$(env_get FREEHOLDER_STORAGE)}" in
+    s3) configure_s3 ;;
+    ""|local)
+      env_set FREEHOLDER_STORAGE local
+      env_set LOCAL_STORAGE_ROOT "$MEDIA" ;;
+    *) die "--storage is local or s3" ;;
+  esac
+
+  say "creating the database"
+  # The password travels on stdin, never in a process listing.
+  (cd / && runuser -u postgres -- psql -v ON_ERROR_STOP=1 -qtA postgres) <<SQL
+SELECT 'CREATE ROLE freeholder LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'freeholder')\gexec
+ALTER ROLE freeholder WITH LOGIN PASSWORD '${password}';
+SELECT 'CREATE DATABASE freeholder OWNER freeholder' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'freeholder')\gexec
+SQL
+
+  link_release_cache "$OPT/current"
+  install -m 644 "$OPT/current/share/systemd/freeholder.service" /etc/systemd/system/freeholder.service
+  install -m 644 "$OPT/current/share/systemd/freeholder-backup.service" /etc/systemd/system/freeholder-backup.service
+  install -m 644 "$OPT/current/share/systemd/freeholder-backup.timer" /etc/systemd/system/freeholder-backup.timer
+  systemctl daemon-reload
+  systemctl enable freeholder.service freeholder-backup.timer >/dev/null 2>&1
+  systemctl restart freeholder.service
+  systemctl start freeholder-backup.timer
+
+  host=$(site_host)
+  write_caddyfile "$host"
+  open_firewall
+  systemctl enable caddy >/dev/null 2>&1
+  systemctl reload-or-restart caddy
+
+  wait_ready 300 || die "Freeholder did not become ready; see: journalctl -u freeholder -n 100"
+  say "waiting for the HTTPS certificate for $host"
+  if wait_for "https://$host/api/health" 180; then
+    say "https://$host is live"
+  else
+    warn "https://$host is not answering yet. Check that ports 80 and 443 are open to the internet and that $host points at this server, then run: sudo freeholder status"
+  fi
+  echo
+  say "Your private owner claim link (open it yourself; anyone with it can claim the site until you do):"
+  claim_link
+  echo
+  say "Next: open that link, create your owner account, save the recovery codes."
+  say "Run 'sudo freeholder status' any time. Backups run nightly; 'sudo freeholder backup' runs one now."
+}
+
+link_release_cache() {
+  # Next writes its runtime cache in .next/cache; the release itself is
+  # read-only to the service, so the cache lives in the data directory.
+  cache="$1/app/.next/cache"
+  if [ ! -L "$cache" ]; then
+    rm -rf "$cache"
+    ln -s "$DATA/cache/next" "$cache"
+  fi
+}
+
+claim_link() {
+  url=$(app_url)
+  secret=$(env_get BOOTSTRAP_SECRET)
+  [ -n "$url" ] && [ -n "$secret" ] || die "no claim link: run 'sudo freeholder setup' first"
+  # The secret is hex, so it needs no URL encoding.
+  printf '%s/setup#claim=%s\n' "$url" "$secret"
+}
+
+cmd_claim_link() {
+  need_root claim-link
+  claim_link
+  say "It works until the owner account exists. Keep it out of chat, screenshots and tickets." >&2
+}
+
+# ---------------------------------------------------------------- status
+
+cmd_status() {
+  failures=0
+  check() { if "$@" >/dev/null 2>&1; then printf '  ok    %s\n' "$label"; else printf '  FAIL  %s\n' "$label"; failures=$((failures + 1)); fi; }
+  note() { printf '  info  %s\n' "$*"; }
+  echo "Freeholder $(current_version) at $(app_url)"
+  label="freeholder service running"; check systemctl is-active --quiet freeholder
+  label="PostgreSQL running"; check systemctl is-active --quiet postgresql
+  label="Caddy running"; check systemctl is-active --quiet caddy
+  label="app ready on 127.0.0.1:3000 (/api/health)"; check curl -fsS --max-time 10 "$LOCAL_URL/api/health"
+  host=$(site_host)
+  label="https://$host/api/health with a valid certificate"; check curl -fsS --max-time 15 "https://$host/api/health"
+  expiry=$(echo | openssl s_client -servername "$host" -connect "$host:443" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)
+  [ -z "$expiry" ] || note "certificate valid until $expiry (Caddy renews it)"
+  if [ "$(env_get FREEHOLDER_STORAGE)" = local ]; then
+    label="media directory $MEDIA writable by the service"; check runuser -u freeholder -- test -w "$MEDIA"
+    note "media uses $(du -sh "$MEDIA" 2>/dev/null | cut -f1) on this server"
+  else
+    note "media is in S3-compatible storage"
+  fi
+  label="nightly backup timer enabled"; check systemctl is-enabled --quiet freeholder-backup.timer
+  if [ -d "$BACKUPS" ] && [ "$(id -u)" = 0 ]; then
+    latest=$(ls -1 "$BACKUPS" 2>/dev/null | grep -v '\.partial$' | sort | tail -n 1)
+    if [ -n "$latest" ]; then note "latest backup $latest"; else note "no backup yet (the first runs tonight; 'sudo freeholder backup' runs one now)"; fi
+  fi
+  free=$(df -P "$DATA" | awk 'NR == 2 {print int($4 / 1024)}')
+  label="at least 1 GB free on $DATA (${free} MB)"; check test "$free" -ge 1024
+  if [ "$failures" -gt 0 ]; then echo "$failures check(s) failed. Logs: journalctl -u freeholder -n 100"; return 1; fi
+  echo "All checks passed."
+}
+
+# ---------------------------------------------------------------- backup
+
+pg_as_postgres() { (cd / && PGOPTIONS="--client-min-messages=warning" runuser -u postgres -- "$@"); }
+
+cmd_backup() {
+  need_root backup
+  local keep reason stamp dir size
+  keep=$(env_get BACKUP_KEEP); keep=${keep:-14}
+  reason=nightly
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --scheduled) reason=nightly; shift ;;
+      --reason) reason=$2; shift 2 ;;
+      --keep) keep=$2; shift 2 ;;
+      *) die "backup: unknown option $1" ;;
+    esac
+  done
+  case "$keep" in ''|*[!0-9]*) die "BACKUP_KEEP must be a number" ;; esac
+  install -d -m 700 -o root -g root "$BACKUPS"
+  stamp=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+  dir="$BACKUPS/$stamp"
+  rm -rf "$dir.partial"
+  install -d -m 700 "$dir.partial"
+  # Custom format: compressed, checksummed by pg_restore, restorable into a
+  # fresh database. Never --clean against the live one.
+  pg_as_postgres pg_dump --format=custom --no-owner --no-privileges freeholder > "$dir.partial/database.dump"
+  size=$(stat -c %s "$dir.partial/database.dump")
+  [ "$size" -ge 1024 ] || { rm -rf "$dir.partial"; die "the database dump is only $size bytes; refusing to keep a likely-empty backup"; }
+  if [ "$(env_get FREEHOLDER_STORAGE)" = local ] && [ -d "$MEDIA" ]; then
+    tar -C "$DATA" -czf "$dir.partial/media.tar.gz" media
+  fi
+  cp "$OPT/current/RELEASE.json" "$dir.partial/RELEASE.json" 2>/dev/null || true
+  printf 'reason=%s\nversion=%s\n' "$reason" "$(current_version)" > "$dir.partial/BACKUP"
+  (cd "$dir.partial" && sha256sum ./* > SHA256SUMS)
+  mv "$dir.partial" "$dir"
+  say "backup $stamp: database $(du -h "$dir/database.dump" | cut -f1)$([ -f "$dir/media.tar.gz" ] && printf ', media %s' "$(du -h "$dir/media.tar.gz" | cut -f1)") in $dir"
+  # Keep the newest $keep backups; pre-update backups are kept with them.
+  ls -1 "$BACKUPS" | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9-]+Z$' | sort | head -n "-$keep" | while read -r old; do
+    rm -rf "${BACKUPS:?}/$old"
+  done
+  offsite_copy "$dir"
+  printf '%s\n' "$stamp" > "$STATE/last-backup"
+}
+
+offsite_copy() {
+  # Optional: copy each backup to an S3-compatible bucket with rclone, if
+  # BACKUP_RCLONE_REMOTE names a configured remote (deploy/linux/README.md).
+  remote=$(env_get BACKUP_RCLONE_REMOTE)
+  [ -n "$remote" ] || return 0
+  command -v rclone >/dev/null 2>&1 || { warn "BACKUP_RCLONE_REMOTE is set but rclone is not installed (apt install rclone)"; return 0; }
+  if rclone copy "$1" "$remote/$(basename "$1")"; then say "copied to $remote"; else warn "offsite copy to $remote failed; the local backup is intact"; return 1; fi
+}
+
+# ---------------------------------------------------------------- restore
+
+resolve_backup() {
+  case "$1" in
+    /*) printf '%s\n' "$1" ;;
+    latest) printf '%s/%s\n' "$BACKUPS" "$(ls -1 "$BACKUPS" | grep -E '^[0-9]{4}-' | grep -v '\.partial$' | sort | tail -n 1)" ;;
+    *) printf '%s/%s\n' "$BACKUPS" "$1" ;;
+  esac
+}
+
+restore_database() {
+  # $1 dump file. Restores into a scratch database, then swaps it in, so a
+  # failed restore leaves the current database untouched.
+  pg_as_postgres dropdb --if-exists freeholder_restore
+  pg_as_postgres createdb -O freeholder freeholder_restore
+  if ! pg_as_postgres pg_restore --no-owner --no-privileges --role=freeholder --exit-on-error -d freeholder_restore < "$1"; then
+    pg_as_postgres dropdb --if-exists freeholder_restore
+    return 1
+  fi
+  pg_as_postgres dropdb --if-exists freeholder_previous
+  pg_as_postgres psql -v ON_ERROR_STOP=1 -qtA postgres <<'SQL'
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'freeholder' AND pid <> pg_backend_pid();
+ALTER DATABASE freeholder RENAME TO freeholder_previous;
+ALTER DATABASE freeholder_restore RENAME TO freeholder;
+SQL
+}
+
+cmd_restore() {
+  need_root restore
+  local dir answer
+  [ $# -ge 1 ] || die "usage: sudo freeholder restore BACKUP (a name from 'ls $BACKUPS', or 'latest')"
+  dir=$(resolve_backup "$1")
+  [ -f "$dir/database.dump" ] && [ -f "$dir/SHA256SUMS" ] || die "$dir is not a Freeholder backup"
+  (cd "$dir" && sha256sum --quiet -c SHA256SUMS) || die "$dir failed its checksum; nothing was changed"
+  if interactive; then
+    answer=$(prompt "Replace the site's current data with the backup from $(basename "$dir")? A safety backup is taken first. [y/N] " n)
+    case "$answer" in y|Y|yes) ;; *) die "cancelled" ;; esac
+  fi
+  say "taking a safety backup of the current data"
+  cmd_backup --reason "before-restore"
+  systemctl stop freeholder
+  say "restoring the database"
+  if ! restore_database "$dir/database.dump"; then
+    systemctl start freeholder
+    die "the database restore failed; the current database was not changed"
+  fi
+  if [ -f "$dir/media.tar.gz" ]; then
+    say "restoring media"
+    rm -rf "$DATA/media.restore" "$DATA/media.previous"
+    install -d -m 750 -o freeholder -g freeholder "$DATA/media.restore"
+    tar -C "$DATA/media.restore" -xzf "$dir/media.tar.gz" --strip-components=1
+    chown -R freeholder:freeholder "$DATA/media.restore"
+    [ ! -d "$MEDIA" ] || mv "$MEDIA" "$DATA/media.previous"
+    mv "$DATA/media.restore" "$MEDIA"
+  fi
+  systemctl start freeholder
+  wait_ready 300 || die "Freeholder did not come back after the restore; see journalctl -u freeholder. The replaced database is kept as freeholder_previous."
+  say "restored $(basename "$dir"). The replaced database is kept as freeholder_previous and media as $DATA/media.previous until the next restore."
+}
+
+# ---------------------------------------------------------------- update
+
+latest_version() {
+  # Releases are currently prereleases, which GitHub's /releases/latest
+  # skips, so take the newest published release from the list.
+  curl -fsSL --max-time 20 "https://api.github.com/repos/$REPOSITORY/releases?per_page=10" \
+    | sed -n 's/^ *"tag_name": *"v\{0,1\}\([^"]*\)".*/\1/p' | head -n 1
+}
+
+machine_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64) echo x64 ;;
+    aarch64|arm64) echo arm64 ;;
+    *) die "unsupported architecture $(uname -m)" ;;
+  esac
+}
+
+fetch_release() {
+  # $1 version, $2 optional local tarball. Unpacks to releases/$1.
+  local version release name work base expected actual top
+  version=$1
+  release="$OPT/releases/$version"
+  [ ! -x "$release/bin/freeholder" ] || return 0
+  name="freeholder-$version-linux-$(machine_arch)"
+  work=$(mktemp -d)
+  if [ -n "${2:-}" ]; then
+    cp "$2" "$work/$name.tar.gz"; cp "$2.sha256" "$work/$name.tar.gz.sha256"
+  else
+    base="https://github.com/$REPOSITORY/releases/download/v$version"
+    say "downloading $name"
+    curl -fsSL --retry 3 -o "$work/$name.tar.gz" "$base/$name.tar.gz" || { rm -rf "$work"; die "could not download $base/$name.tar.gz"; }
+    curl -fsSL --retry 3 -o "$work/$name.tar.gz.sha256" "$base/$name.tar.gz.sha256" || { rm -rf "$work"; die "could not download its checksum"; }
+  fi
+  expected=$(awk '{print $1; exit}' "$work/$name.tar.gz.sha256")
+  actual=$(sha256sum "$work/$name.tar.gz" | awk '{print $1}')
+  [ -n "$expected" ] && [ "$expected" = "$actual" ] || { rm -rf "$work"; die "checksum mismatch; nothing was changed"; }
+  say "checksum verified ($actual)"
+  tar -xzf "$work/$name.tar.gz" -C "$work"
+  top=$(tar -tzf "$work/$name.tar.gz" | head -n 1 | cut -d/ -f1)
+  [ -x "$work/$top/bin/freeholder" ] || { rm -rf "$work"; die "the tarball is not a Freeholder release"; }
+  rm -rf "$release.partial"
+  mv "$work/$top" "$release.partial"
+  chown -R root:root "$release.partial"
+  mv "$release.partial" "$release"
+  rm -rf "$work"
+}
+
+switch_to() {
+  link_release_cache "$OPT/releases/$1"
+  ln -sfn "releases/$1" "$OPT/current.new"
+  mv -T "$OPT/current.new" "$OPT/current"
+  # Units may change between releases.
+  for unit in freeholder.service freeholder-backup.service freeholder-backup.timer; do
+    install -m 644 "$OPT/current/share/systemd/$unit" "/etc/systemd/system/$unit"
+  done
+  systemctl daemon-reload
+}
+
+cmd_update() {
+  need_root update
+  local target tarball from backup
+  target="" tarball=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --tarball) tarball=$2; shift 2 ;;
+      latest) target=$(latest_version); [ -n "$target" ] || die "could not look up the latest release"; shift ;;
+      *) target=${1#v}; shift ;;
+    esac
+  done
+  [ -n "$target" ] || die "usage: sudo freeholder update VERSION (or 'latest'); see https://github.com/$REPOSITORY/releases"
+  case "$target" in *[!0-9A-Za-z.-]*) die "not a release version: $target" ;; esac
+  from=$(current_version)
+  [ "$from" != "$target" ] || { say "already running $target"; return 0; }
+  fetch_release "$target" "$tarball"
+  say "backing up before the update"
+  cmd_backup --reason "before-update-to-$target"
+  backup=$(cat "$STATE/last-backup")
+  printf 'from=%s\nto=%s\nbackup=%s\n' "$from" "$target" "$backup" > "$STATE/last-update"
+  say "switching $from -> $target"
+  switch_to "$target"
+  systemctl restart freeholder
+  if wait_ready 300; then
+    say "updated to $target. To go back: sudo freeholder rollback"
+    ls -1 "$OPT/releases" | grep -vx -e "$target" -e "$from" | grep -v '\.partial$' | sort | head -n -1 | while read -r old; do rm -rf "${OPT:?}/releases/$old"; done
+    return 0
+  fi
+  warn "$target did not become ready; rolling back to $from"
+  rollback_to "$from" "$backup"
+  die "the update to $target failed and was rolled back to $from (database restored from backup $backup)"
+}
+
+rollback_to() {
+  # $1 version, $2 backup taken before the update. The newer release may have
+  # migrated the schema, so the database comes back from that backup too.
+  systemctl stop freeholder
+  switch_to "$1"
+  restore_database "$BACKUPS/$2/database.dump" || die "restoring $2 failed; the site is stopped. Run: sudo freeholder restore $2"
+  systemctl start freeholder
+  wait_ready 300 || die "$1 did not become ready after rollback; see journalctl -u freeholder"
+}
+
+cmd_rollback() {
+  need_root rollback
+  local from backup answer
+  [ -f "$STATE/last-update" ] || die "no update to roll back"
+  from=$(sed -n 's/^from=//p' "$STATE/last-update")
+  backup=$(sed -n 's/^backup=//p' "$STATE/last-update")
+  [ -x "$OPT/releases/$from/bin/freeholder" ] || die "release $from is no longer on this server"
+  if interactive; then
+    answer=$(prompt "Go back to $from and restore the database from backup $backup? Changes made since the update are lost (a safety backup is taken first). [y/N] " n)
+    case "$answer" in y|Y|yes) ;; *) die "cancelled" ;; esac
+  fi
+  cmd_backup --reason "before-rollback"
+  rollback_to "$from" "$backup"
+  rm -f "$STATE/last-update"
+  say "rolled back to $from"
+}
+
+# ---------------------------------------------------------------- domain
+
+cmd_domain() {
+  need_root domain
+  [ $# -eq 1 ] || die "usage: sudo freeholder domain example.com"
+  valid_host "$1" || die "not a domain name: $1"
+  ip=$(public_ipv4 || true)
+  if [ -n "$ip" ] && ! resolves_here "$1" "$ip"; then
+    die "$1 does not resolve to this server ($ip) yet. Point its A record here, wait for DNS, and run this again."
+  fi
+  old=$(site_host)
+  env_set APP_URL "https://$1"
+  write_caddyfile "$1"
+  systemctl reload-or-restart caddy
+  systemctl restart freeholder
+  wait_ready 300 || die "Freeholder did not become ready; see journalctl -u freeholder"
+  if wait_for "https://$1/api/health" 180; then say "https://$1 is live (was $old)"; else warn "https://$1 is not answering yet; check ports 80/443 and DNS, then: sudo freeholder status"; fi
+  say "Passkeys are tied to a domain: sign in at https://$1 with your password and add a new passkey in Settings."
+}
+
+# ---------------------------------------------------------------- dispatch
+
+usage() {
+  cat <<'USAGE'
+Usage: sudo freeholder COMMAND
+
+  status             Check the service, database, HTTPS certificate, storage and backups.
+  claim-link         Print the private owner claim link (until the owner account exists).
+  backup             Back up the database and media now (also runs nightly).
+  restore BACKUP     Restore a backup by name, path or 'latest' (takes a safety backup first).
+  update VERSION     Download, verify and switch to a release; rolls back if it fails.
+  update latest      The same, for the newest published release.
+  rollback           Undo the last update, restoring the database from its pre-update backup.
+  domain NAME        Move the site to NAME (after its DNS points here).
+  setup              Re-apply settings, units and Caddy configuration (install.sh runs it).
+  logs               Follow the application log.
+  version            Print the installed version.
+USAGE
+}
+
+command=${1:-help}
+[ $# -eq 0 ] || shift
+case "$command" in
+  setup) cmd_setup "$@" ;;
+  status|check|doctor) need_root status; cmd_status ;;
+  claim-link) cmd_claim_link ;;
+  backup) cmd_backup "$@" ;;
+  restore) cmd_restore "$@" ;;
+  update) cmd_update "$@" ;;
+  rollback) cmd_rollback ;;
+  domain) cmd_domain "$@" ;;
+  logs) exec journalctl -u freeholder -f ;;
+  version) current_version ;;
+  help|--help|-h) usage ;;
+  *) usage >&2; exit 2 ;;
+esac

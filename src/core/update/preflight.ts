@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Update preflight (MASTER.md §39.4, C10.05). Honest about what it cannot know.
+import { describeLocalStorage, localStorageMode } from "@/adapters/storage/local-mode";
 import { randomUUID } from "node:crypto";
 import { statfs } from "node:fs/promises";
 import { sql } from "drizzle-orm";
@@ -114,8 +115,8 @@ export async function environmentPreflight(): Promise<PreflightStep[]> {
 
   const e = env();
   const storage = e.FREEHOLDER_STORAGE ?? instanceConfig.adapters.storage;
-  if (storage === "local" && e.NODE_ENV === "production" && e.FREEHOLDER_UNSAFE_LOCAL_STORAGE !== "1") {
-    steps.push(step("adapters", "fail", "Uploads are on local disk in production, which does not survive a rebuild."));
+  if (storage === "local" && localStorageMode(e) === "refused") {
+    steps.push(step("adapters", "fail", describeLocalStorage(e)));
   } else {
     steps.push(step("adapters", "ok", `Storage adapter is ${storage}.`));
   }

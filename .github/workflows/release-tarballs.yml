@@ -1,0 +1,117 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# C3.44: the no-Docker Linux release. Builds freeholder-VERSION-linux-{x64,arm64}
+# tarballs (each with its own Node runtime) on native runners, because sharp's
+# binary in the standalone output is the build machine's. Every build is
+# installed with deploy/linux/install.sh on the runner itself, booted against a
+# real PostgreSQL, backed up and restored, before anything is published. A
+# version tag attaches the tarballs, their .sha256 files and install.sh to the
+# GitHub release that publish-image.yml creates.
+name: Release tarballs
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "scripts/build-release.mjs"
+      - "deploy/linux/**"
+      - "deploy/docker-selfhost/selfhost.sh"
+      - "deploy/docker-selfhost/infra/backup.sh"
+      - ".github/workflows/release-tarballs.yml"
+
+concurrency:
+  group: release-tarballs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and install linux-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Shellcheck the self-host scripts
+        run: shellcheck -s sh -S warning deploy/linux/install.sh deploy/linux/freeholder deploy/docker-selfhost/selfhost.sh deploy/docker-selfhost/infra/backup.sh
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
+      - name: Package
+        run: pnpm release:build
+      - name: Install the tarball with the documented installer
+        run: |
+          tarball=$(ls dist/release/freeholder-*-linux-${{ matrix.arch }}.tar.gz)
+          # No domain: the runner cannot receive a certificate, so this proves
+          # everything up to Caddy's ACME request, which the installer reports
+          # as a warning rather than a failure.
+          sudo sh dist/release/install.sh --tarball "$tarball" --yes
+      - name: Health, backup and restore
+        run: |
+          curl -fsS http://127.0.0.1:3000/api/health | tee /dev/stderr | grep -q '"ok":true'
+          sudo freeholder status || true
+          sudo freeholder claim-link > /dev/null
+          sudo freeholder backup
+          sudo freeholder restore latest
+          curl -fsS http://127.0.0.1:3000/api/health | grep -q '"ok":true'
+      - name: Service log on failure
+        if: failure()
+        run: sudo journalctl -u freeholder -n 200 --no-pager | sed -E 's/(SECRET|PASSWORD|KEY)=[^ ]+/\1=[redacted]/g'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-${{ matrix.arch }}
+          path: |
+            dist/release/*.tar.gz
+            dist/release/*.sha256
+            dist/release/install.sh
+          if-no-files-found: error
+          retention-days: 14
+
+  attach:
+    name: Attach to the GitHub release
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: assets
+          merge-multiple: true
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: assets/*.tar.gz
+      - name: Wait for the release, then upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # publish-image.yml creates the release after its own checks.
+          for attempt in $(seq 1 80); do
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then break; fi
+            sleep 30
+          done
+          gh release view "$GITHUB_REF_NAME" >/dev/null
+          gh release upload "$GITHUB_REF_NAME" assets/*.tar.gz assets/*.sha256 assets/install.sh --clobber

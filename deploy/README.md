@@ -12,18 +12,35 @@ in core, never a fork (§18).
 | [`replit`](replit/) | 1 | Replit Postgres | Replit Object Storage | $25 |
 | [`railway`](railway/) | 1 | Railway Postgres | S3-compatible | $25 |
 | [`render`](render/) | 1 | Render Postgres | S3-compatible | $28 |
-| [`docker-selfhost`](docker-selfhost/) | 1 | Compose Postgres | S3 / MinIO (dev) | $20 |
+| [`docker-selfhost`](docker-selfhost/) | 1 | Compose Postgres | Docker volume or S3 | $12–24 |
+| [`linux`](linux/) (no Docker) | 2 | Distribution Postgres | Server disk or S3 | $12–24 |
+
+**By hand, without an AI assistant:** [`linux`](linux/) is the WordPress-style
+path: download `install.sh` from a release, run it on any Ubuntu or Debian
+server, open the claim link it prints. It needs no Docker, Node, pnpm or
+checkout. [`docker-selfhost`](docker-selfhost/) is the same on a host that
+already runs Docker.
 
 ## The storage mandate
 
-Production media lives in managed object storage, never on instance disk
-(§18). Media is the least recoverable asset a business has: a dead droplet or a
-wiped container must never take the photo archive with it, and object storage
-makes moving providers a bucket sync rather than a rescue operation.
+Production media must live somewhere a rebuild cannot take it (§18). On
+platforms with no durable disk (App Platform, Render, Railway, Replit) that is
+object storage, and the recipe pins it. Media is the least recoverable asset a
+business has, and object storage makes moving providers a bucket sync rather
+than a rescue operation.
 
-The `local` adapter is development-only and **refuses to start** with
-`NODE_ENV=production` unless overridden with `FREEHOLDER_UNSAFE_LOCAL_STORAGE=1`
-— a flag named to be embarrassing in a config review.
+A single-server install may instead keep media on its own disk (C3.44): the
+`linux` recipe's `/var/lib/freeholder/media` and the `docker-selfhost` media
+volume. Both are outside the replaceable release, kept across updates and
+included in the nightly backup, which is why they are supported. The trade-off
+is that losing the server loses the media unless its backups were copied off
+it, and a second app server cannot share it. Each recipe's README says how to
+copy backups elsewhere and how to move media to S3 later.
+
+The `local` adapter **refuses to start** with `NODE_ENV=production` unless
+`LOCAL_STORAGE_ROOT` names such an absolute, existing directory. The legacy
+`FREEHOLDER_UNSAFE_LOCAL_STORAGE=1` override for an implicit directory remains,
+named to be embarrassing in a config review.
 
 ## Adding a recipe
 

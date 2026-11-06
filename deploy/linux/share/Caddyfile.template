@@ -1,0 +1,19 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# managed-by-freeholder: `freeholder setup` and `freeholder domain` rewrite
+# this file. Caddy obtains and renews the HTTPS certificate itself; the
+# domain must resolve to this server with ports 80 and 443 open.
+__GLOBAL__
+__DOMAIN__ {
+	encode zstd gzip
+	# C11.10: Next's image optimizer is off (images.unoptimized); refuse its
+	# endpoint at the edge too (GHSA-2464-fhr4-w9xw).
+	@nextImage path /_next/image /_next/image/*
+	respond @nextImage 404
+	# C11.10: the connecting address, overwritten on every request. The app
+	# trusts it because TRUSTED_CLIENT_IP_HEADER names it and the app listens
+	# only on 127.0.0.1.
+	reverse_proxy 127.0.0.1:3000 {
+		header_up X-Freeholder-Client-Ip {client_ip}
+	}
+}
