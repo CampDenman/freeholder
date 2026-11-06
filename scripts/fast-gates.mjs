@@ -71,6 +71,7 @@ const steps = [
       "tests/core/f-matrix.test.ts",
       "tests/core/doc-claim-mapping.test.ts",
       "tests/core/deploy-droplet.test.ts",
+      "tests/core/release-packages.test.ts",
     ].join(" "),
   },
 ];

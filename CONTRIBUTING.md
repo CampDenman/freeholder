@@ -86,7 +86,7 @@ review is about the code rather than the checks.
 ### On an ordinary laptop
 
 The full suite is large (about 4,300 tests, most of them database-backed). CI
-spreads it across 26 parallel jobs, each with its own database. Run end to end
+spreads it across 28 parallel jobs, each with its own database. Run end to end
 on one machine it takes hours, so you do not need to. Before pushing:
 
 ```bash
@@ -98,6 +98,23 @@ Pass a test file or directory to `vitest run` to limit the run, and let CI run
 everything else. Run one database-backed test command per `TEST_DATABASE_URL`
 at a time. Two runs that share a database truncate each other's tables and
 fail with timeouts and missing rows that have nothing to do with your change.
+
+## Pull requests written with AI agents
+
+Agent-written pull requests are welcome. Point Claude Code, Codex, Cursor or
+any other agent at the repository and let it do the work. The same rules
+apply as for any other change:
+
+- **A human contributor reviews and signs off every commit.** The DCO
+  sign-off (`git commit -s`) is your statement, under your own name, that you
+  have the right to submit the change. An agent can write the commit, but you
+  are the one certifying it, so read it first.
+- **The agent follows [`CLAUDE.md`](CLAUDE.md) and [`AGENTS.md`](AGENTS.md).**
+  They hold the house rules: `MASTER.md` §43 is the plan, money and contacts
+  go through the shared services, colours come from design tokens, and every
+  user-facing change ships a changeset.
+- **It passes `pnpm gates` before you push**, plus the tests for what it
+  changed. CI runs the rest.
 
 ## Licensing of contributions
 

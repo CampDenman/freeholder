@@ -12,13 +12,17 @@ the app are sharing that RAM.
 ## One command
 
 ```bash
-npm install -g @freeholder/cli@next
-freeholder launch --provider digitalocean --domain yourdomain.com
+npx @freeholder/cli@next launch --provider digitalocean --domain yourdomain.com --dry-run
+npx @freeholder/cli@next launch --provider digitalocean --domain yourdomain.com
 ```
 
-`freeholder launch` does every step below — buckets, the scoped key, the
-droplet, secrets, the stack, readiness and backups — then prints a one-click
-owner claim link. It resumes if interrupted and can tear down what it made.
+The dry run prints the plan and the monthly cost at DigitalOcean's list price
+(the CLI defaults to `s-2vcpu-2gb`; pass `--size s-2vcpu-4gb` for the size
+above) and creates nothing. `freeholder launch` does every step below —
+buckets, the scoped key, the droplet, secrets, the stack, readiness and
+backups — then prints a one-click owner claim link. Run the real launch
+yourself, not through an AI agent: the claim link is the owner's alone
+(`AGENTS.md`). It resumes if interrupted and can tear down what it made.
 See [`packages/cli/README.md`](../../packages/cli/README.md). The steps below
 are what it does, for doing it by hand.
 

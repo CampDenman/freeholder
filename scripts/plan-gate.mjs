@@ -20,9 +20,11 @@ const RETIRED_REFERENCE_ALLOW = new Set([
 ]);
 
 /**
- * Owner-approved bounded deferral to v2 (§43.18, decision 2026-09-15):
- * the seven remaining mobile-app acceptance items. DONE for v1 excludes
- * exactly these and nothing else; §35 remains their v2 specification.
+ * Owner-approved bounded deferrals to v2 (§43.18): the seven remaining
+ * mobile-app acceptance items (decision 2026-09-15; §35 remains their v2
+ * specification) and plugin isolation or sandboxing, C3.43 (decision
+ * 2026-11-05; §26 records why). DONE for v1 excludes exactly these IDs and
+ * the print-on-demand clause, and nothing else.
  *
  * This set is the point, not an escape hatch. Entries leave only by shipping
  * in v2 or by an explicit owner reversal — never by silent deletion. The
@@ -38,6 +40,7 @@ export const DEFERRED = new Set([
   "C10.27",
   "C10.28",
   "C10.30",
+  "C3.43",
 ]);
 const REFERENCE_ALLOW = new Set(["tests/core/plan-gate.test.ts"]);
 const REQUIRED_WORKSTREAMS = Array.from({ length: 12 }, (_, i) => `C${i}`);
@@ -323,7 +326,7 @@ function deferredReentryIssues(items) {
       problems.push(
         issue(
           "deferred-reentry",
-          `${id} is deferred to v2 (§43.18, owner decision 2026-09-15) and must not appear as a live checklist line; reverse the deferral in §43.18 instead`,
+          `${id} is deferred to v2 by owner decision (§43.18) and must not appear as a live checklist line; reverse the deferral in §43.18 instead`,
         ),
       );
     }

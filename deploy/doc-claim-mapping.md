@@ -27,7 +27,7 @@ claims and are not rows. Each row is dispositioned:
   generated artifact cited in the row. Every cited path resolves in the tree
   and every row cites at least one `*.test.ts` or gate script.
 - **Narrowed** — §§1–42 over-claimed; the wording was corrected in the same
-  change. Each Narrowed row names its strike entry (S1–S10 below), and
+  change. Each Narrowed row names its strike entry (S1–S12 below), and
   `tests/core/doc-claim-mapping.test.ts` verifies the old wording no longer
   parses in MASTER.md and the new wording does.
 
@@ -128,6 +128,34 @@ appears in MASTER.md or any New string is missing.
 - New: newsletter issues, events, reviews — one system
 - Why: no share target exists for instance release notes (no admin surface lists them; S7), so the enumeration covers exactly the entities `tests/modules/share.test.ts` proves.
 
+### S11 — §26 · Plugin trust model vs code
+- Kind: Narrowed
+- Old: 1. **Declared permissions, enforced at the service registry.**
+- New: 1. **Declared permissions: disclosed, not yet enforced.**
+- Old: The service registry rejects calls outside the granted set; the install screen shows scopes in human language
+- New: so the service registry does not reject a call outside the declared scopes; the install screen does not yet show the scopes or ask for consent (C3.40)
+- Old: Network egress from plugin code goes through a fetch wrapper that enforces the `network:external` scope.
+- New: no fetch wrapper limits outbound requests to plugins that declare `network:external` (C3.41)
+- Old: plugin errors are boundary-caught and degrade to a disabled widget, never a downed site
+- New: is named and disabled at boot instead of taking the site down (C3.10)
+- Old: `AuditLog` records every plugin's service calls under `actor: plugin:<name>`.
+- New: today a plugin's service calls are audited under the actor who triggered them.
+- Old: 3. **Signed releases (§39.3).** Platform images
+- New: Publisher public keys (Ed25519) are C3.42.
+- Why: the row was marked Evidence, but no code enforces a plugin's declared scopes. Plugin code runs with the caller's actor; `network:external` is checked only for importers (`packages/plugin-kit/src/importer.ts`); `/admin/plugins` shows no scopes or consent; no actor kind is `plugin:<name>` (`src/core/service.ts` `actorString`); isolation is boot-time only (`src/core/plugins/isolate.ts`, C3.10). Plugin and registry signatures are HMACs over a caller-supplied shared secret (`src/core/plugins/integrity.ts`, `src/core/plugins/registry.ts`), not Ed25519 like the release feed. The v1 gaps are open items C3.40–C3.42; sandboxing, C3.43, is deferred to v2 under §43.18 (owner decision 2026-11-05).
+
+### S12 — §25 · Plugin scaffolding and install paths
+- Kind: Narrowed
+- Old: npx create-freeholder-plugin gift-registry
+- New: await scaffoldPlugin("plugins/gift-registry", "gift-registry");
+- Old: write a widget. `npm run dev` gives them
+- New: Today the harness checks a plugin folder (`inspectPluginFolder`)
+- Old: one-click install (npm fetch, integrity-pinned) → permission consent screen → enable
+- New: One-click npm fetch and a permission consent screen are planned (C3.40).
+- Old: - Or: `npm i freeholder-plugin-gift-registry` in the deploy
+- New: - Planned: `npm i freeholder-plugin-gift-registry` in the deploy
+- Why: no `create-freeholder-plugin` package is published; scaffolding is `scaffoldPlugin()` in `@freeholder/plugin-kit` (`packages/plugin-kit/src/scaffold.ts`) and the harness is `inspectPluginFolder()` (`packages/plugin-kit/src/harness.ts`), with no `dev` or `share` scripts. `plugins.install` takes a local directory (`src/core/plugins/service.ts`), and modules are a hand-written import list (`src/modules/index.ts`), so there is no npm fetch or naming-convention discovery, and new plugin code needs a rebuild.
+
 ## Claim map
 
 | § | Claim | Disposition | Evidence |
@@ -210,8 +238,9 @@ appears in MASTER.md or any New string is missing.
 | 23 | Migration between approved platforms: six Tier-1 targets, all 30 directed pairs exercised through the database restore/export drill with fingerprint comparison, byte-verified media transfer; restore onto another live Tier-1 instance remains the C11.08 hop | Evidence | `scripts/ownership-drill.mjs`, `tests/core/ownership-export.test.ts`, `tests/core/portability.test.ts`, `scripts/media-transfer.mjs`, `deploy/migration-runbook.md` |
 | 23 | Site import studio: WordPress REST/WXR importer, generic-site crawler with limits/robots/review queue/typed-block output, importer extension contract for connector plugins | Evidence | `tests/core/importers.test.ts` |
 | 24 | Plugins are modules under the same `defineModule()` contract plus plugin-only capabilities (blocks, widgets, adapters, theme hooks, verbs, import connectors, spine-attached custom entities); hard rules enforced: no cross-internals imports, no direct spine tables, money converges through invoicing | Evidence | `tests/core/plugin-contract.test.ts`, `tests/core/plugin-claims.test.ts`, `tests/core/cms-plugin-proof.test.ts` |
-| 25 | Plugin DX bar: `create-freeholder-plugin` scaffold, dev harness booting the seeded demo, three install paths, installed plugins recorded in `freeholder.config.ts` (the harness is Apache-2.0 like every package — was: "MIT plugin-kit") | Narrowed | S3 |
-| 26 | Trust model: declared permission scopes enforced at the registry with a network-egress wrapper; Verified/Community/Unlisted review tiers with the changelog-as-registry-requirement; signed releases verified before apply; per-plugin kill switch, boundary-caught errors, audit actor `plugin:<name>` | Evidence | `tests/core/plugin-contract.test.ts`, `tests/core/plugins-lifecycle.test.ts`, `tests/core/malware.test.ts`, `tests/core/update-feed.test.ts` |
+| 25 | Plugin DX bar: the dev harness is Apache-2.0 like every package (was: "MIT plugin-kit") | Narrowed | S3 |
+| 25 | Plugin scaffolding is `scaffoldPlugin()` in `@freeholder/plugin-kit` and the harness checks a folder; a `create-freeholder-plugin` command, the seeded-demo `npm run dev`, npm install and naming-convention discovery are planned (was: published scaffold CLI, one-click npm install, auto-discovery) | Narrowed | S12 |
+| 26 | Trust model: declared scopes are validated and describable but not enforced at runtime, with no egress wrapper or install consent yet (C3.40, C3.41); plugin and registry signatures are shared-secret HMACs, not publisher keys (C3.42); no sandbox (C3.43, deferred to v2 under §43.18); signed releases verified before apply; per-plugin disable and boot-time isolation (was: scopes enforced at the registry with an egress wrapper, boundary-caught runtime errors, audit actor `plugin:<name>`) | Narrowed | S11 |
 | 27 | Registries are signed JSON indexes; owners add registry URLs (private/agency/marketplace); local/community/verified/private tiers with caching; the hosted canonical index build and browsable catalog site are hub infrastructure, not instance capabilities (was: canonical index auto-generated, catalog doubles as an SEO site) | Narrowed | S4 |
 | 28 | The living platform contract: OpenAPI, SDK, MCP tools, `/llms.txt`+`/llms-full.txt` are all generated from the service registry with Zod schemas; per-instance introspection (`/api/openapi.json`, `/api/mcp`); the drift gate fails stale projections; outputs are described and enforced; hosted docs site with executable prose guides is not part of the v1 tree (was: docs.freeholder.ai with runnable snippets) | Narrowed | S5 |
 | 29 | The ecosystem consequences rest on shipped capabilities: afternoon-plugin scaffolding, private registries, the Apache-2.0 SDK, MCP introspection of the live instance | Evidence | `tests/core/plugin-scaffold.test.ts`, `tests/core/plugins-lifecycle.test.ts`, `tests/core/sdk.test.ts`, `tests/core/mcp.test.ts` |

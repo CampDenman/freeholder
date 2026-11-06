@@ -35,6 +35,52 @@ export function sdkVersionFromSource(source) {
   return match ? match[1] : null;
 }
 
+/**
+ * The `freeholder` range a first-party plugin declares for a platform version:
+ * the current major and minor (`0.2.0-beta.3` gives `^0.2.0`). The update
+ * preflight and boot check installed plugins against it, so a first-party
+ * range that names every version (`>=0.0.0`) protects nothing.
+ */
+export function firstPartyPluginRange(version) {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)/.exec(version);
+  if (!match) throw new Error(`Platform version ${version} is not semver.`);
+  return `^${match[1]}.${match[2]}.0`;
+}
+
+/** Each first-party plugin folder's declared range, from `plugin.json` and `manifest.ts`. */
+export async function readFirstPartyPluginRanges(root = repositoryRoot) {
+  const folders = (await readdir(join(root, "plugins"), { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  const ranges = [];
+  for (const folder of folders) {
+    const json = JSON.parse(await readFile(join(root, "plugins", folder, "plugin.json"), "utf8"));
+    const source = await readFile(join(root, "plugins", folder, "manifest.ts"), "utf8");
+    ranges.push({
+      folder,
+      pluginJson: json.freeholder ?? null,
+      manifest: /\bfreeholder:\s*"([^"]+)"/.exec(source)?.[1] ?? null,
+    });
+  }
+  return ranges;
+}
+
+/** Refuse a release whose first-party plugins do not name its major and minor. */
+export function assertFirstPartyPluginRanges(ranges, version) {
+  const expected = firstPartyPluginRange(version);
+  for (const { folder, pluginJson, manifest } of ranges) {
+    for (const [file, declared] of [["plugin.json", pluginJson], ["manifest.ts", manifest]]) {
+      if (declared !== expected) {
+        throw new Error(
+          `plugins/${folder}/${file} declares freeholder ${JSON.stringify(declared)}; ` +
+            `release ${version} needs "${expected}". Bump every first-party plugin range with the platform version.`,
+        );
+      }
+    }
+  }
+}
+
 export async function readAlignedVersion(root = repositoryRoot) {
   const platform = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
   assert.match(platform.version, RELEASE_VERSION);
@@ -54,6 +100,7 @@ export async function readAlignedVersion(root = repositoryRoot) {
     platform.version,
     "packages/sdk/src/version.ts must match the platform version",
   );
+  assertFirstPartyPluginRanges(await readFirstPartyPluginRanges(root), platform.version);
   return platform.version;
 }
 

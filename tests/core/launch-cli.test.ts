@@ -53,6 +53,7 @@ function fakeFetch(w: World): typeof fetch {
       if (path === "/v2/account") return json({ account: { status: "active" } });
       if (path === "/v2/account/keys") return json({ ssh_keys: [{ id: 11, fingerprint: "aa:bb", name: "tony" }] });
       if (path === "/v2/regions") return json({ regions: [{ slug: "nyc3", available: true, sizes: ["s-2vcpu-2gb"] }] });
+      if (path === "/v2/sizes") return json({ sizes: [{ slug: "s-1vcpu-1gb", price_monthly: 6 }, { slug: "s-2vcpu-2gb", price_monthly: 18 }] });
       if (path === "/v2/droplets" && method === "GET") return json({ droplets: w.droplet ? [{ id: w.droplet.id, name: url.searchParams.get("name") }] : [] });
       if (path === "/v2/droplets" && method === "POST") {
         w.droplet = { id: 77, body: JSON.parse(body) as Record<string, unknown> };
@@ -140,6 +141,25 @@ describe("freeholder launch (C3.30)", () => {
     expect(existsSync(join(root, "example-com", "state.json"))).toBe(false);
   });
 
+  it("states the monthly cost in the plan, from DigitalOcean's own list price", async () => {
+    expect(await runLaunch(args("--dry-run"), setup(w, root))).toBe(0);
+    expect(w.out.join("\n")).toContain("$18/month for the s-2vcpu-2gb droplet plus Spaces' $5/month minimum for both buckets, about $23/month in all");
+    w.out = [];
+    expect(await runLaunch(args("--dry-run", "--json"), setup(w, root))).toBe(0);
+    const plan = JSON.parse(w.out.join("\n")) as { dryRun: boolean; monthlyCostUsd: { server: number | null; storage: number }; cost: string };
+    expect(plan).toMatchObject({ dryRun: true, monthlyCostUsd: { server: 18, storage: 5 } });
+    expect(plan.cost).toMatch(/about \$23\/month in all/);
+    expect(w.requests.filter((r) => r.method !== "GET")).toEqual([]);
+  });
+
+  it("says where to look when DigitalOcean does not list the size's price", async () => {
+    const fetcher = fakeFetch(w);
+    const withoutPrice = (async (input: string | URL, init?: RequestInit) =>
+      new URL(String(input)).pathname === "/v2/sizes" ? new Response(JSON.stringify({ sizes: [] }), { status: 200 }) : fetcher(input, init)) as typeof fetch;
+    expect(await runLaunch(args("--dry-run"), { ...setup(w, root), provider: digitalOcean("do-token", withoutPrice, async () => undefined) })).toBe(0);
+    expect(w.out.join("\n")).toMatch(/the s-2vcpu-2gb droplet \(see DigitalOcean's pricing page\) plus Spaces' \$5\/month minimum/);
+  });
+
   it("launches end to end and prints the claim link once, with no other secret anywhere", async () => {
     expect(await runLaunch(args(), setup(w, root))).toBe(0);
     const dir = join(root, "example-com");
@@ -174,6 +194,13 @@ describe("freeholder launch (C3.30)", () => {
     expect(printed.replace(link, "")).not.toContain(env.BOOTSTRAP_SECRET!);
     expect(printed).toContain(`A  www.example.com  ${IP}`);
     expect(printed).toContain("freeholder launch --cutover --name example-com --domain example.com");
+  });
+
+  it("names the next commands the way it was run, so an npx launch prints runnable ones", async () => {
+    expect(await runLaunch(args(), { ...setup(w, root), invocation: "npx @freeholder/cli@next" })).toBe(0);
+    const printed = w.out.join("\n");
+    expect(printed).toContain("npx @freeholder/cli@next launch --cutover --name example-com --domain example.com");
+    expect(printed).toContain(`npx @freeholder/cli@next update --check --url https://${HOST}`);
   });
 
   it("emits JSON with the claim link and no other secret", async () => {
