@@ -2178,32 +2178,36 @@ export default definePlugin({
 
 ## 25. Ridiculously Easy (the DX bar)
 
-```bash
-npx create-freeholder-plugin gift-registry     # scaffolds manifest, example service+route+test
-cd gift-registry && npm run dev                 # boots a seeded demo Freeholder with your plugin
-                                          # hot-reloading inside it — full site, fake business
-npm test                                  # runs against the same seeded instance
-npm run share                             # validates → publishes to npm as freeholder-plugin-gift-registry
+Scaffolding today is a function in `@freeholder/plugin-kit`, not a command:
+
+```ts
+import { inspectPluginFolder, scaffoldPlugin } from "@freeholder/plugin-kit";
+
+await scaffoldPlugin("plugins/gift-registry", "gift-registry"); // plugin.json, CHANGELOG.md, README.md, example block/service/adapter/automation/route
+await inspectPluginFolder("plugins/gift-registry");             // validates the contract, lists the examples, checks for a changelog
 ```
 
-The bar: **zero-config from idea to installable in under an hour.** The dev harness (part of Apache-2.0 `plugin-kit`, like every package in this repository — §22's license policy) is the make-or-break piece — nobody should need to set up a whole Freeholder to write a widget. `npm run dev` gives them Aurora Coast Photography with their plugin live inside it.
+**Planned, not published:** a `create-freeholder-plugin` command that wraps `scaffoldPlugin`, an `npm run dev` that boots a seeded demo Freeholder with the plugin hot-reloading inside it, and an `npm run share` that validates and publishes to npm as `freeholder-plugin-<name>`.
+
+The bar: **zero-config from idea to installable in under an hour.** The dev harness (part of Apache-2.0 `plugin-kit`, like every package in this repository — §22's license policy) is the make-or-break piece — nobody should need to set up a whole Freeholder to write a widget. Today the harness checks a plugin folder (`inspectPluginFolder`); the planned `npm run dev` gives them Aurora Coast Photography with their plugin live inside it.
 
 **Installing (owner side):**
-- Admin → Plugins → browse/search → one-click install (npm fetch, integrity-pinned) → permission consent screen → enable
-- Or: `npm i freeholder-plugin-gift-registry` in the deploy, auto-discovered by the `freeholder-plugin-*` naming convention
-- Or: drop a folder into `/plugins` (the hackable path — a vibe-coded personal plugin never needs publishing)
+- Admin → Plugins installs a plugin from a directory on the server, checks its integrity hash and optional signature (§26), and enables it; it also browses the cached catalogue of added registries. One-click npm fetch and a permission consent screen are planned (C3.40).
+- Planned: `npm i freeholder-plugin-gift-registry` in the deploy, auto-discovered by the `freeholder-plugin-*` naming convention. Today the installed modules are the hand-written list in `src/modules/index.ts`, plus private plugins an installer writes into `src/modules/local-plugins.ts`.
+- Or: drop a folder into `/plugins` and add it to that list (the hackable path — a vibe-coded personal plugin never needs publishing). Plugin code is compiled into the build, so new plugin code needs a rebuild and redeploy.
 - Config-as-code stays true: installed plugins + versions are recorded in `freeholder.config.ts`, so a redeploy reproduces the instance exactly
 
 ---
 
 ## 26. Trust Model (honest v1)
 
-Plugins run **in-process** — same trust level as core once installed. Sandboxing in-process JS is a research project, not a v1 feature, so we do trust engineering instead and say so plainly:
+Plugins run **in-process** — same trust level as core once installed. Sandboxing in-process JS is a research project, deferred to v2 (C3.43, §43.18), so we do trust engineering instead and say so plainly. Each point below separates what the code does today from what is still open (C3.40–C3.42) or deferred (C3.43):
 
-1. **Declared permissions, enforced at the service registry.** A plugin's manifest lists scopes (`contacts:read`, `invoicing:create`, `settings:write`, `network:external`, …). The service registry rejects calls outside the granted set; the install screen shows scopes in human language ("can create invoices; cannot read your email settings"). Network egress from plugin code goes through a fetch wrapper that enforces the `network:external` scope.
+1. **Declared permissions: disclosed, not yet enforced.** A plugin's manifest lists scopes (`contacts:read`, `invoicing:create`, `settings:write`, `network:external`, …). `@freeholder/plugin-kit` validates them and can describe each in plain language (`describePermission`: "can manage invoicing", "can make outbound network requests"), and an importer that fetches a source must declare `network:external`. Nothing yet holds a plugin to its list. Plugin code runs in-process with the caller's actor, so the service registry does not reject a call outside the declared scopes; the install screen does not yet show the scopes or ask for consent (C3.40); and no fetch wrapper limits outbound requests to plugins that declare `network:external` (C3.41). Until then, an installed plugin can do whatever core code can.
 2. **Registry review tiers** (mirrors deploy recipes): **Verified** (maintainer-reviewed source, in the CI matrix, badge) / **Community** (automated checks: no eval, scope-lint, license check, integrity pinned, **CHANGELOG.md present with an entry for the published version — versions without release notes are rejected by the registry**) / **Unlisted** (install by name at your own risk — always possible; it's your instance). Plugin changelog entries are what feed the instance's own release notes when a plugin is installed or updated, so a missing changelog breaks the chain for every downstream site — hence it's a hard registry requirement, not a courtesy.
-3. **Signed releases (§39.3).** Platform images and the update feed carry signatures and build provenance, and the updater verifies both before applying anything. An auto-updater is the most privileged component in a self-hosted system; unverified auto-update would hand every instance to whoever compromises the distribution path.
-4. **Kill switches:** per-plugin disable without uninstall; plugin errors are boundary-caught and degrade to a disabled widget, never a downed site; `AuditLog` records every plugin's service calls under `actor: plugin:<name>`.
+3. **Signed releases (§39.3); plugin signatures are weaker.** Platform images and the update feed carry signatures and build provenance, and the updater verifies both before applying anything; the feed is checked against an Ed25519 public key the instance ships. An auto-updater is the most privileged component in a self-hosted system; unverified auto-update would hand every instance to whoever compromises the distribution path. Plugins and registry indexes do not have that yet: an install checks a SHA-256 hash of the plugin directory, and its optional signature (like a registry index signature) is an HMAC made with a shared secret that the caller supplies with the request. That proves only that the signer knew the secret, not who published the plugin. Publisher public keys (Ed25519) are C3.42.
+4. **Kill switches:** per-plugin disable without uninstall (`plugins.disable`); a plugin that fails its version or dependency check, or throws while loading, is named and disabled at boot instead of taking the site down (C3.10). A runtime boundary that degrades a failing plugin to a disabled widget, and audit rows under `actor: plugin:<name>`, are open (C3.40); today a plugin's service calls are audited under the actor who triggered them.
+5. **No sandbox.** Running plugin code out of process, or in a sandbox that limits what it can reach, is deferred to v2 (C3.43, §43.18, owner decision 2026-11-05). It is a research problem for in-process JavaScript, so until it lands, install only plugins whose source you trust.
 
 **Licensing policy (stated up front to avoid ambiguity):**
 - **In-process plugins** may use any license compatible with their use of Apache-2.0 Freeholder APIs, including commercial terms. The registry requires a valid declared SPDX expression and preserves applicable Freeholder notices when code is copied or redistributed.
@@ -2942,7 +2946,10 @@ it cannot know:
 1. **Verify** the signature, provenance and digest of the target image.
 2. **Compatibility.** Every installed plugin declares `freeholder: "^1.4"`. A
    target outside any installed plugin's range stops here and *names the
-   plugin*, rather than upgrading and breaking the site.
+   plugin*, rather than upgrading and breaking the site. The range names
+   platform versions, the same value boot and install check. First-party
+   plugins declare the current major and minor (`^0.2.0` for 0.2.x), and
+   release tooling refuses a version bump that leaves one behind.
 3. **Migration dry run against a shadow database.** Clone the schema into a
    temporary database, run the target's migrations there, and report. This is
    the highest-value check in the system: it turns "the migration might fail at
@@ -3533,7 +3540,7 @@ what is true now and what remains.
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | Customer-facing acceptance gaps identified 2026-10-07: C9.37 closed 2026-10-17 — the newsletter sending journey (readiness, verified-sender guidance, consent-aware audience selection, test-send, scheduling, per-recipient outcomes, archive and subscribe). SMTP and HTTP doubles prove the behavior; provider credentials and live inbox placement remain the owner's acceptance. C9.38 closed 2026-10-17 — a card-required trial stays paused with no access until a saved card exists. The adapter double proves that path; live settlement remains C11.05. C2.26, C6.19 and C8.17 closed 2026-10-14. Actual new Replit and Lovable launch acceptance with the owner (C3.28). Owner passkey/MCP browser acceptance (C1.39) and private launch tooling/package acceptance (C3.27) closed 2026-10-06; see the evidence under each item. §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). C6.11 closed 2026-10-17 — paid event admission on the invoice spine: held seats, settlement, expiry sweep, refund/void cascade, paid check-in and the public registration form (annotation under the item). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 was recorded closed 2026-09-28, then reopened 2026-10-05 because the drill had no source object bytes (`deploy/stable-acceptance-2026-10-05.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | Plugin trust gaps recorded 2026-11-05, when §26 was corrected to match the code: runtime enforcement of declared plugin permissions with install consent and plugin audit (C3.40), the `network:external` egress wrapper (C3.41) and publisher Ed25519 signatures for plugins and registry indexes (C3.42). Plugin isolation or sandboxing (C3.43) is deferred to v2 (§43.18, owner decision 2026-11-05), not remaining. Customer-facing acceptance gaps identified 2026-10-07: C9.37 closed 2026-10-17 — the newsletter sending journey (readiness, verified-sender guidance, consent-aware audience selection, test-send, scheduling, per-recipient outcomes, archive and subscribe). SMTP and HTTP doubles prove the behavior; provider credentials and live inbox placement remain the owner's acceptance. C9.38 closed 2026-10-17 — a card-required trial stays paused with no access until a saved card exists. The adapter double proves that path; live settlement remains C11.05. C2.26, C6.19 and C8.17 closed 2026-10-14. Actual new Replit and Lovable launch acceptance with the owner (C3.28). Owner passkey/MCP browser acceptance (C1.39) and private launch tooling/package acceptance (C3.27) closed 2026-10-06; see the evidence under each item. §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). C6.11 closed 2026-10-17 — paid event admission on the invoice spine: held seats, settlement, expiry sweep, refund/void cascade, paid check-in and the public registration form (annotation under the item). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 was recorded closed 2026-09-28, then reopened 2026-10-05 because the drill had no source object bytes (`deploy/stable-acceptance-2026-10-05.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -3549,9 +3556,10 @@ DONE requires the plugin and its integration seam, not that capability in
 core. By owner decision dated 2026-09-15, exactly seven mobile-app checklist
 items — C10.17, C10.18, C10.25, C10.26, C10.27, C10.28 and C10.30 — are
 deferred to v2 under §43.18; by owner decision dated 2026-09-27,
-print-on-demand is deferred to v2 under §43.18 alongside them. v1's DONE
-excludes those mobile items and the print-on-demand clause and nothing
-else.
+print-on-demand is deferred to v2 under §43.18 alongside them; by owner
+decision dated 2026-11-05, plugin isolation or sandboxing (C3.43) is deferred
+to v2 under §43.18 as well. v1's DONE excludes those mobile items, the
+print-on-demand clause and C3.43, and nothing else.
 
 **What is not a completion criterion.** A public launch, marketing site,
 stars, downloads, design partners, revenue, and a release announcement are not
@@ -5111,6 +5119,13 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `scripts/recipe-matrix.sh` boots the built image for all six target contracts
   against PostgreSQL/MinIO and runs the authenticated canonical Doctor in CI.
   Parsed/current-IaC coverage in `tests/core/recipes.test.ts`. **F04** `packages/cli` doctor/migrate, not a new admin screen. **F05** N/A — IaC recipes (`replit.nix`, `render.yaml`, compose, DO/Railway); operator CLI is C10.21. **F07** `tests/core/recipes.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recipes.test.ts` is the composition proof.)
+  *(HTTPS follow-up 2026-11-05: `deploy/docker-selfhost/infra/compose.yml`
+  serves plain HTTP on port 3000, so owner passkeys could not work on a
+  public Compose host. `infra/compose.https.yml` with `infra/Caddyfile.https`
+  adds Caddy with automatic TLS in the same Compose project and database
+  volume, an unpublished app port and the C11.10 trusted client-address
+  header; recipe operation `install-https`. Evidence
+  `tests/core/deploy-recipe.test.ts`; changeset `docker-selfhost-https.md`.)*
 - [x] **C3.17** Give every Tier-1 recipe install, verify, backup, restore,
   migrate-in, migrate-out, update and rollback steps; continuously test matrix.
   (Every parsed `recipe.yaml` carries executable `install`, `verify`, `backup`,
@@ -5428,6 +5443,15 @@ deployments are portable, testable and incapable of silently forking the truth.
   installed and exercised, including generated agent instructions, launch
   scripts, frozen install and typecheck. Production build passed the
   standalone exclusion gate. Actual provider acceptance remains C3.28.)
+  *(Docker follow-up 2026-11-05: `--target docker-selfhost` wrote the
+  repository-root `.env`, never generated `POSTGRES_PASSWORD`, and required
+  a `DATABASE_URL` that Compose builds itself, so the documented Compose
+  command could not start from it. It now writes `deploy/docker-selfhost/.env`
+  (where Compose reads it) when that recipe directory exists, generates an
+  independent URL-safe `POSTGRES_PASSWORD` and refuses one Compose cannot
+  embed, requires only the S3 values, sets `FREEHOLDER_DOMAIN` from an HTTPS
+  URL, and reports the matching start command. Evidence
+  `tests/core/agent-launch.test.ts`; changeset `docker-selfhost-https.md`.)*
 - [ ] **C3.28** Prove fresh account launches with the owner on Replit and Lovable:
   real provider provisioning, final HTTPS owner claim/passkey/recovery, storage
   and readiness, actual platform-agent MCP discovery and permitted publishing,
@@ -5481,6 +5505,20 @@ deployments are portable, testable and incapable of silently forking the truth.
   `--destroy` no longer reports the site's Spaces key deleted when that
   deletion failed. Regression tests in `tests/core/launch-cli.test.ts`;
   changeset `cli-launch-hardening.md`.)*
+  *(Distribution follow-up 2026-11-05: the npm `@freeholder/cli@next`
+  tarball (0.2.0-beta.3, published 2026-10-14) predates #539 and answers
+  `unknown command "launch"`, so the documented one-command path did not
+  work from npm. `scripts/package-artifact-gate.mjs` now runs the packed
+  `freeholder launch --dry-run` against a preloaded DigitalOcean stub that
+  fails on any write, and checks the shipped recipe files, so no release can
+  ship without the command again. The dry run states the monthly cost from
+  DigitalOcean's own `/v2/sizes` list price plus the Spaces minimum, and
+  printed next steps name `npx @freeholder/cli@next` when run through npx.
+  `AGENTS.md` is host-neutral: the agent runs only the dry run, the owner
+  runs the real launch and opens the claim link, and only the owner issues
+  the agent's `/admin/connect` key. Prompt in `deploy/agent-launch.md`;
+  changeset `cli-launch-npx.md`. Shipping it to npm is the next prerelease
+  under C3.20, which the owner approves.)*
 
 - [ ] **C3.31** Offer Paradise Modern as one more transactional and bulk
   mail adapter (`MAIL_ADAPTER=paradise`, `MAIL_BULK_ADAPTER=paradise`) beside
@@ -5727,6 +5765,22 @@ deployments are portable, testable and incapable of silently forking the truth.
   "Get started" in the navigation. Example `seed/launch/example-v2.json`;
   evidence `tests/core/launch-template.test.ts`; guide
   `deploy/launch-template.md`.)*
+- [ ] **C3.40** Enforce a plugin's declared permissions at runtime (§26
+  item 1). A plugin's service calls run as a `plugin:<name>` actor whose grants
+  are its declared scopes, so the service registry refuses a call outside
+  them and the audit log names the plugin. A failing plugin degrades to a
+  disabled widget at runtime as well as at boot. The install screen shows
+  each scope in plain language and records the owner's consent before
+  enable. Open; recorded 2026-11-05 when §26 was corrected to match the code.
+- [ ] **C3.41** Route outbound requests from plugin code through a fetch
+  wrapper that refuses a plugin without `network:external` and applies the
+  same outbound boundary as core (private-address refusal, timeouts). Open;
+  today only importers must declare the scope.
+- [ ] **C3.42** Verify plugin and registry-index signatures with publisher
+  Ed25519 public keys instead of an HMAC over a caller-supplied shared
+  secret. That covers key distribution for registries and publishers, key
+  rotation, and refusal of a plugin whose signature does not verify against a
+  trusted key. Release feeds already use Ed25519 (§39.3, C10.03). Open.
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
@@ -9809,7 +9863,14 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   named. **F08** `tests/core/update-preflight.test.ts`, doctor ids. **F09**
   SPDX. **F10** N/A. **F11** `deploy/update-preflight.md`, changeset
   `update-preflight.md`. **F12** shadow SQL `SELECT 1/0` fails migrations
-  without touching `public`. This is not apply — C10.06.)
+  without touching `public`. This is not apply — C10.06. **2026-11-05:**
+  the plugin range is checked against the target's platform version, as boot
+  and install do, rather than `pluginApi`; first-party plugins declare
+  `^0.2.0` instead of `>=0.0.0`, and `readAlignedVersion` refuses a release
+  whose first-party ranges miss its major and minor. Evidence
+  `tests/core/update-preflight.test.ts` (an installed first-party plugin
+  blocks the next minor), `tests/core/release-packages.test.ts`; changeset
+  `plugin-compat-ranges.md`.)
 - [x] **C10.06** Implement a verified host update executor with recoverable database
   backups, signed immutable image selection, actual migrations, candidate health
   checks and independently verified rollback. The 2026-09-21 readiness audit
@@ -11260,13 +11321,14 @@ schema they inherit reads as a designed thing rather than an excavation.
   machine-checked by `tests/core/doc-claim-mapping.test.ts`, which refuses
   unmapped claims, unresolved evidence paths, and any Struck/Narrowed row whose
   old wording still parses in this document; the gate runs in `pnpm gates`
-  (`scripts/fast-gates.mjs`). 107 rows carry test/gate evidence; 11 rows
-  are Struck/Narrowed (S1–S11): §12 mail-adapter id literal, §21b `backup.sh`
+  (`scripts/fast-gates.mjs`). 106 rows carry test/gate evidence; 13 rows
+  are Struck/Narrowed (S1–S13): §12 mail-adapter id literal, §21b `backup.sh`
   path, §25 "MIT plugin-kit", §27 hosted canonical registry/catalog,
   §28 hosted docs site with executable guides, §31 "pgvector" retrieval,
   §4.8 instance-release-notes scope, §37 agent-note mandate, §38
-  release-notes bullet, §34 changelog share target, §23 WordPress importer
-  completeness (2026-11-05). Two judgment calls stand
+  release-notes bullet, §34 changelog share target, and (2026-11-05) §26
+  plugin permission enforcement and signatures, §25 plugin scaffolding and
+  install paths, §23 WordPress importer completeness. Two judgment calls stand
   as documented behaviour, not scaffolds: §35's branded placeholder
   screenshots are the store-gate stand-in (`apps/mobile/store/metadata.json`,
   `scripts/mobile-store-gate.mjs`), and adapter "not implemented" strings are
@@ -11642,6 +11704,26 @@ order, not an excuse to leave the product incomplete. Re-entry happens only
 by owner decision, never by silent deletion — the same discipline as the
 mobile deferral above. The live C3.13 text no longer carries the clause;
 the plan's references to print-on-demand as a v1 requirement resolve here.
+
+### Deferred to v2 — plugin isolation (owner decision 2026-11-05)
+
+**Owner decision, 2026-11-05 (Tony Aly):** "v2 for the sandbox." Plugin
+isolation or sandboxing is deferred to v2. The item is quoted verbatim as it
+was recorded the same day, its ID preserved as plain bold text so references
+still resolve:
+
+> **C3.43** Isolate plugin code from core: out of process or in a
+>   sandbox that limits what it can reach. §26 explains why this is a
+>   research problem for in-process JavaScript; C3.40–C3.42 are the trust
+>   engineering in the meantime.
+
+The obligation survives verbatim and moves to v2. C3.40 (runtime permission
+enforcement), C3.41 (the `network:external` egress wrapper) and C3.42
+(publisher Ed25519 signatures) stay in v1. This is a dated, bounded,
+owner-approved scope decision, not a generic escape hatch, with the same
+discipline as the deferrals above: `scripts/plan-gate.mjs` lists C3.43 in
+`DEFERRED` and fails any change that re-enters it as a live checkbox, and
+re-entry happens only by owner decision.
 
 ### Client-readiness repair note — 2026-09-21
 

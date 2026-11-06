@@ -17,7 +17,7 @@ import { isPinned, resolveEdgeImage } from "./image.js";
 import { SpacesClient } from "./s3.js";
 import { claimLink, generateSecrets, Redactor } from "./secrets.js";
 import { readEnv, readState, siteDirectory, writeEnv, writeState } from "./state.js";
-import { LaunchFailure, STEPS, type LaunchOptions, type LaunchProvider, type LaunchState, type Remote, type Step } from "./types.js";
+import { LaunchFailure, STEPS, type LaunchCost, type LaunchOptions, type LaunchProvider, type LaunchState, type Remote, type Step } from "./types.js";
 
 export const LAUNCH_EXIT = { ok: 0, failed: 2, unreachable: 3 } as const;
 
@@ -31,6 +31,8 @@ export interface LaunchDeps {
   canOpen?: boolean;
   prompt?: (question: string) => Promise<string>;
   configRoot?: string;
+  /** How to name this CLI in printed next steps: `freeholder`, or `npx @freeholder/cli@next` when run through npx. */
+  invocation?: string;
   out?: { log: (line: string) => void; error: (line: string) => void };
 }
 
@@ -96,7 +98,7 @@ export async function runLaunch(options: LaunchOptions, deps: LaunchDeps): Promi
     const preflight = await deps.provider.preflight(options, state);
     for (const note of preflight.notes) progress(note);
     if (options.dryRun) {
-      printPlan(options, state, envPath, out);
+      printPlan(options, state, envPath, out, preflight.cost);
       return LAUNCH_EXIT.ok;
     }
     state ??= { version: 1, name: options.name, provider: options.provider, domain: options.domain, region: options.region, size: options.size, done: [] };
@@ -175,9 +177,10 @@ export async function runLaunch(options: LaunchOptions, deps: LaunchDeps): Promi
       { type: "A", name: options.domain, value: state.ip! },
       { type: "A", name: `www.${options.domain}`, value: state.ip! },
     ];
+    const invocation = deps.invocation ?? "freeholder";
     const next = [
-      ...(state.temporaryHost ? [`freeholder launch --cutover --name ${options.name} --domain ${options.domain}`] : []),
-      `freeholder update --check --url https://${state.host}`,
+      ...(state.temporaryHost ? [`${invocation} launch --cutover --name ${options.name} --domain ${options.domain}`] : []),
+      `${invocation} update --check --url https://${state.host}`,
     ];
     if (options.json) {
       out.log(JSON.stringify({ ok: true, name: options.name, provider: options.provider, site: `https://${state.host}`, temporaryHost: state.temporaryHost, claimLink: link, envFile: envPath, dnsRecords: state.temporaryHost ? dnsRecords : [], next, server: { id: state.dropletId, ip: state.ip, region: options.region, size: options.size }, buckets: state.buckets }, null, 2));
@@ -213,7 +216,16 @@ export async function runLaunch(options: LaunchOptions, deps: LaunchDeps): Promi
   }
 }
 
-function printPlan(options: LaunchOptions, state: LaunchState | null, envPath: string, out: { log: (line: string) => void }) {
+/** The monthly bill a launch starts, in words: the server at list price plus the storage minimum. */
+export function costSummary(options: LaunchOptions, cost: LaunchCost | undefined): string | null {
+  if (!cost) return null;
+  const known = cost.serverMonthlyUsd !== null;
+  const server = known ? `$${cost.serverMonthlyUsd}/month for the ${options.size} droplet` : `the ${options.size} droplet (see DigitalOcean's pricing page)`;
+  const total = known ? `, about $${cost.serverMonthlyUsd! + cost.storageMonthlyUsd}/month in all` : "";
+  return `Cost: launching starts DigitalOcean billing on your account: ${server} plus Spaces' $${cost.storageMonthlyUsd}/month minimum for both buckets${total}, at list price before tax and any bandwidth overage.`;
+}
+
+function printPlan(options: LaunchOptions, state: LaunchState | null, envPath: string, out: { log: (line: string) => void }, cost?: LaunchCost) {
   const done = new Set(state?.done ?? []);
   const plan = {
     preflight: "check the account, SSH key, region and size",
@@ -228,11 +240,14 @@ function printPlan(options: LaunchOptions, state: LaunchState | null, envPath: s
     backups: "schedule nightly backups and confirm a first one",
   } satisfies Record<Step, string>;
   if (options.json) {
-    out.log(JSON.stringify({ dryRun: true, name: options.name, steps: STEPS.map((s) => ({ step: s, done: done.has(s), action: plan[s] })) }, null, 2));
+    const monthly = cost ? { monthlyCostUsd: { server: cost.serverMonthlyUsd, storage: cost.storageMonthlyUsd }, cost: costSummary(options, cost) } : {};
+    out.log(JSON.stringify({ dryRun: true, name: options.name, steps: STEPS.map((s) => ({ step: s, done: done.has(s), action: plan[s] })), ...monthly }, null, 2));
     return;
   }
   out.log(`Plan for ${options.name} (${options.domain}) on DigitalOcean:`);
   for (const step of STEPS) out.log(`  ${done.has(step) ? "done " : "     "} ${plan[step]}`);
+  const summary = costSummary(options, cost);
+  if (summary) out.log(summary);
   out.log("Nothing was created. Run again without --dry-run to launch.");
 }
 

@@ -17,6 +17,8 @@ import { LaunchFailure, type LaunchOptions, type LaunchProvider, type LaunchStat
 const API = "https://api.digitalocean.com";
 export const EXIT_FAILED = 2;
 export const EXIT_UNREACHABLE = 3;
+/** Spaces is a subscription with this monthly minimum, covering both buckets. */
+export const SPACES_MONTHLY_MINIMUM_USD = 5;
 
 /** DIGITALOCEAN_TOKEN, or the token of the user's current (or named) doctl context. */
 export async function digitalOceanToken(context?: string, env: Record<string, string | undefined> = process.env, home = homedir()): Promise<string | null> {
@@ -95,7 +97,10 @@ export function digitalOcean(token: string, fetcher: typeof fetch = fetch, sleep
       const clash = droplets.find((d) => d.name === options.name && d.id !== state?.dropletId);
       if (clash) throw new LaunchFailure(`A droplet named ${options.name} already exists (${clash.id}) and this launch did not create it.`, "Choose another --name, or remove that droplet first.", EXIT_FAILED);
       if (state?.dropletId) notes.push(`Resuming the launch of ${options.name}.`);
-      return { sshKeyId: key.id, notes };
+      // The list price comes from DigitalOcean, so a plan never quotes a stale figure.
+      const { sizes } = await api<{ sizes?: { slug: string; price_monthly?: number }[] }>("GET", "/v2/sizes?per_page=200");
+      const price = sizes?.find((s) => s.slug === options.size)?.price_monthly;
+      return { sshKeyId: key.id, notes, cost: { serverMonthlyUsd: typeof price === "number" ? price : null, storageMonthlyUsd: SPACES_MONTHLY_MINIMUM_USD } };
     },
 
     async storage(options, state, save) {
