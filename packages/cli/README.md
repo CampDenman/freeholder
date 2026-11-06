@@ -9,7 +9,7 @@ Check, preflight, apply and roll back a [Freeholder](https://github.com/CampDenm
 instance from a terminal or a cron job.
 
 ```sh
-npm install -g @freeholder/cli@next
+npm install -g @freeholder/cli@next   # or prefix each command with npx @freeholder/cli@next
 
 freeholder update --check
 freeholder update --preflight
@@ -66,10 +66,23 @@ owner claim link. DigitalOcean first: a droplet running the
 with media and nightly backups in Spaces.
 
 ```sh
-export DIGITALOCEAN_TOKEN=...      # or rely on your current `doctl` context
-freeholder launch --provider digitalocean --domain example.com --dry-run
-freeholder launch --provider digitalocean --domain example.com
+doctl auth init                    # or export DIGITALOCEAN_TOKEN in your own shell
+npx @freeholder/cli@next launch --provider digitalocean --domain example.com --dry-run
+npx @freeholder/cli@next launch --provider digitalocean --domain example.com
 ```
+
+`npx` runs it without installing anything; `npm install -g @freeholder/cli@next`
+gives you a `freeholder` command instead. Use `@next`: the package is in
+beta, so npm's `latest` tag does not carry it. The dry run reads your account
+and prints every step it would take and what it would cost each month, at
+DigitalOcean's own list price; it creates nothing.
+
+**Launching with an AI agent.** An agent can run the dry run and show you the
+plan and cost. Run the real launch in your own terminal: it ends by printing
+the owner claim link (and opening it in your browser on a desktop), and that
+link is yours alone. Agents must not see or keep it. After you claim the site,
+issue the agent's key yourself at `/admin/connect`; an agent cannot issue its
+own. See [`AGENTS.md`](https://github.com/CampDenman/freeholder/blob/main/AGENTS.md).
 
 It checks the account, SSH key, region and size; creates `<name>-media` and a
 versioned `<name>-backups` bucket with a key scoped to just those two; creates
@@ -92,7 +105,7 @@ own email and password or passkey; the CLI never creates the owner.
 | `--temporary-host` | off | Use `<ip>.sslip.io` even if DNS is ready |
 | `--paradisemodern-key`, `--paradisemodern-site-id` | | Or `PARADISEMODERN_API_KEY` / `PARADISEMODERN_SITE_ID` in the environment |
 | `--context` | current | A named `doctl` context |
-| `--dry-run` | | Print the plan and stop |
+| `--dry-run` | | Print the plan and monthly cost, then stop |
 | `--json` | | Machine-readable summary; no secrets except the claim link |
 | `--non-interactive`, `--no-open` | | Never prompt; never open a browser |
 

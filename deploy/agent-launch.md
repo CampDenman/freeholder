@@ -2,8 +2,43 @@
 # Launch and operate Freeholder with an agent
 
 This guide implements the launch tooling and owner/agent surfaces in MASTER.md
-§43 C1.39 and C3.27. Actual Replit and Lovable account acceptance is C3.28 and
+§43 C1.39, C3.27 and C3.30. Actual Replit and Lovable account acceptance is C3.28 and
 remains open until a fresh launch succeeds on each platform.
+
+## DigitalOcean: launch from a terminal agent
+
+For an agent that runs commands on the owner's machine (Claude Code, Cursor,
+Codex). The owner needs a DigitalOcean account signed in with
+`doctl auth init` (or `DIGITALOCEAN_TOKEN` set in their own shell), an SSH key
+on that account, and a domain. Paste this instruction into the agent:
+
+> Deploy my own Freeholder on DigitalOcean: read
+> https://github.com/CampDenman/freeholder/blob/main/AGENTS.md, then run
+> `npx @freeholder/cli@next launch --provider digitalocean --domain MY-DOMAIN --dry-run`
+> and show me the plan and monthly cost. I'll run the real launch and open the
+> claim link myself, and issue your key at /admin/connect, so secrets stay out
+> of this chat.
+
+The agent should:
+
+1. Run the dry run. It reads the account, SSH key, region, size and price,
+   and creates nothing. Exit 3 means no token or a refused token: ask the owner
+   to run `doctl auth init` in their own terminal, not to paste a token in chat.
+2. Show the plan and the cost line it prints, then hand the owner the same
+   command without `--dry-run`. The owner runs it: it starts billing, takes
+   several minutes, and ends by printing the claim link (opening it in the
+   browser on a desktop). The site's secrets stay in
+   `~/.config/freeholder/<name>/freeholder.env`; the agent never reads it.
+3. Until DNS points at the server the site answers at `<ip>.sslip.io`. Help the
+   owner add the two `A` records the launch printed, then run the
+   `freeholder launch --cutover …` command it named.
+4. After the owner claims the site, they open `/admin/connect`, choose a scope
+   and expiry, and add the key to the agent's private connector settings
+   themselves. Then test as in step 10 below: list tools, publish a permitted
+   test page, verify its URL and confirm a forbidden operation is refused.
+
+`npx @freeholder/cli@next launch --destroy --name <name>` removes what a launch
+created; see `packages/cli/README.md` for what it keeps and what keeps billing.
 
 ## Replit: launch the complete application
 

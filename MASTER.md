@@ -5434,6 +5434,20 @@ deployments are portable, testable and incapable of silently forking the truth.
   `--destroy` no longer reports the site's Spaces key deleted when that
   deletion failed. Regression tests in `tests/core/launch-cli.test.ts`;
   changeset `cli-launch-hardening.md`.)*
+  *(Distribution follow-up 2026-11-05: the npm `@freeholder/cli@next`
+  tarball (0.2.0-beta.3, published 2026-10-14) predates #539 and answers
+  `unknown command "launch"`, so the documented one-command path did not
+  work from npm. `scripts/package-artifact-gate.mjs` now runs the packed
+  `freeholder launch --dry-run` against a preloaded DigitalOcean stub that
+  fails on any write, and checks the shipped recipe files, so no release can
+  ship without the command again. The dry run states the monthly cost from
+  DigitalOcean's own `/v2/sizes` list price plus the Spaces minimum, and
+  printed next steps name `npx @freeholder/cli@next` when run through npx.
+  `AGENTS.md` is host-neutral: the agent runs only the dry run, the owner
+  runs the real launch and opens the claim link, and only the owner issues
+  the agent's `/admin/connect` key. Prompt in `deploy/agent-launch.md`;
+  changeset `cli-launch-npx.md`. Shipping it to npm is the next prerelease
+  under C3.20, which the owner approves.)*
 
 - [ ] **C3.31** Offer Paradise Modern as one more transactional and bulk
   mail adapter (`MAIL_ADAPTER=paradise`, `MAIL_BULK_ADAPTER=paradise`) beside

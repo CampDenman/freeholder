@@ -51,10 +51,18 @@ export interface LaunchState {
   temporaryHost?: boolean;
 }
 
+/** What a launch starts billing at the provider's list price, so a dry run can say so before anything exists. */
+export interface LaunchCost {
+  /** The server's monthly list price as the provider reports it; null when it did not say. */
+  serverMonthlyUsd: number | null;
+  /** The storage subscription's monthly minimum. */
+  storageMonthlyUsd: number;
+}
+
 /** A cloud's side of a launch. Each method is idempotent against `state`. */
 export interface LaunchProvider {
   id: string;
-  preflight(options: LaunchOptions, state: LaunchState | null): Promise<{ sshKeyId: number; notes: string[] }>;
+  preflight(options: LaunchOptions, state: LaunchState | null): Promise<{ sshKeyId: number; notes: string[]; cost?: LaunchCost }>;
   storage(options: LaunchOptions, state: LaunchState, save: (patch: Partial<LaunchState>, env?: Record<string, string>) => Promise<void>): Promise<void>;
   server(options: LaunchOptions, state: LaunchState, userData: string, save: (patch: Partial<LaunchState>) => Promise<void>): Promise<{ id: number; ip: string }>;
   destroy(state: LaunchState, log: (line: string) => void): Promise<void>;
