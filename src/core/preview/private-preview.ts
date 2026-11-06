@@ -88,13 +88,29 @@ const OPEN_PATHS =
   /^\/(?:admin|login|forgot|reset|invite|setup|preview|_next\/static|_next\/image)(?:\/|$)|^\/api\/(?:health|auth|setup)(?:\/|$)|^\/preview-access$/;
 
 /**
+ * Stripe's two webhook endpoints. Stripe cannot hold a preview cookie or send
+ * an Authorization header; it signs each delivery with `Stripe-Signature`,
+ * and each route verifies that signature over the raw body before any effect.
+ */
+const STRIPE_SIGNED_WEBHOOKS = /^\/api\/(?:payouts\/stripe_connect\/webhook|payments\/webhooks\/stripe)$/;
+
+/** What the gate reads from a request besides its path. */
+export interface PreviewGateRequest {
+  method?: string;
+  hasStripeSignature?: boolean;
+}
+
+/**
  * Whether `path` needs the preview cookie. The API is gated too — its public
  * reads are the same content as the pages — except for a request that
- * carries its own credential, which the API authenticates itself.
+ * carries its own credential, which the API authenticates itself: a bearer
+ * credential, or a POST that Stripe signed to one of its own webhook routes.
+ * An unsigned request to those routes stays gated, exactly as before.
  */
-export function previewGated(path: string, hasAuthorization: boolean): boolean {
+export function previewGated(path: string, hasAuthorization: boolean, request: PreviewGateRequest = {}): boolean {
   if (OPEN_PATHS.test(path)) return false;
   if (hasAuthorization && path.startsWith("/api/")) return false;
+  if (request.method === "POST" && request.hasStripeSignature && STRIPE_SIGNED_WEBHOOKS.test(path)) return false;
   return true;
 }
 
