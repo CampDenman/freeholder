@@ -4,7 +4,7 @@ All notable changes to Freeholder are recorded as changesets and summarized
 here. The heading version is the same string `package.json`, health, OpenAPI
 and the SDK publish.
 
-## 0.2.0-beta.3
+## 0.2.0-beta.4
 
 Active development, not a release candidate.
 
@@ -474,6 +474,7 @@ Active development, not a release candidate.
 - Connecting Gmail, Outlook, calendars, social profiles, and signup contact imports no longer ties up a database connection while an outside provider is responding. This removes a pool-exhaustion failure mode without changing any public service name or callback. OAuth state is still single-use: Freeholder commits the claim before spending the provider code, validates identity and permissions outside the transaction, then atomically stores credentials. Signup contact selections also recheck the current account, owner policy, and import limit immediately before staging. The private phases stay caller-authorized and audited while remaining hidden from HTTP, OpenAPI, and MCP.
 - Publish the second public beta at 0.2.0-beta.2, carrying everything merged since the first: passkey-first owner setup and guided agent connections, public booking, membership signup, the blog index and client portal, and the adversarial audit fixes. This is still active development, not a release candidate or stable release; live provider acceptance and the independent security review remain open.
 - Publish 0.2.0-beta.3 through npm trusted publishing. The six packages are now staged by the release workflow's own GitHub identity, with no stored registry token; the owner still approves each staged release. No product changes since 0.2.0-beta.2.
+- Publish 0.2.0-beta.4, the first beta whose `@freeholder/cli@next` includes `freeholder launch`. `npx @freeholder/cli@next launch --provider digitalocean --domain example.com` stands up a hosted site on your own DigitalOcean account and ends at your owner claim link. Add `--dry-run` first to see the plan and the monthly cost without creating anything. This release also carries everything merged since 0.2.0-beta.3. It is still active development, not a release candidate; live provider acceptance and the independent security review remain open.
 - Every change to Freeholder is now checked by crawling a complete example site the way a search engine would — page titles, descriptions, canonical links, headings, image descriptions, structured data and the links between pages — and by an accessibility pass over the main page templates. A change that would have quietly damaged how your site is found or read now fails before it ships.
 - C1.38/C10.31: Add an isolated public playground with restricted visitor sessions, an hourly reset recipe and a persistent privacy notice. Add an opt-in Docker host updater with publisher signature verification, restored-backup rehearsal, unchanged-schema gating, maintenance cutover and verified image recovery. The owner can request an update after fresh two-factor authentication; the host can also check daily. Schema-changing releases still require a manual upgrade.
 - Freeholder is now published as a ready-built container image, so deploying it no longer means building it yourself. Your server pulls the image and starts — no GitHub account, no build tooling, and no fork of this project required.
