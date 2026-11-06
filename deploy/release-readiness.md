@@ -29,6 +29,18 @@ The initial account must satisfy npm publishing/2FA requirements; login alone
 does not prove publish permission. Neither account access nor successful
 public installation is proven by a local packed-artifact test.
 
+npm gives every package a `latest` tag, and the first staged upload of each
+package took it: `latest` is `0.0.0-stage`, a placeholder with no code. A
+prerelease never takes `latest`, and npm cannot remove that tag, so until the
+first stable release the owner deprecates each placeholder, so that an install
+without `@next` warns and names the right tag:
+`npm deprecate <package>@0.0.0-stage "Placeholder. Install <package>@next."`
+(and `create-freeholder@0.0.0-bootstrap.0` likewise). Documentation always
+names `@next`. After a prerelease publishes, confirm the result with
+`npm view <package> dist-tags`, and run
+`npx @freeholder/cli@next launch --provider digitalocean --domain example.com --dry-run`
+to confirm the public CLI answers with a plan.
+
 Run the full C11.17 suite against the candidate and archive exact commit, image digest,
 commands, pass/skip counts and configuration limitations. Exercise fresh bootstrap,
 owner second-factor setup, page editing/publishing and customer journeys. Rehearse

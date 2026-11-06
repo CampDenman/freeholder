@@ -5142,7 +5142,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   acceptance remain open.
 - [x] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
-  (Platform and packages are `0.2.0-beta.3`; SDK `PLATFORM_VERSION` is stamped from
+  (Platform and packages are `0.2.0-beta.4`; SDK `PLATFORM_VERSION` is stamped from
   `package.json`. Health, OpenAPI, Doctor, provenance, catalogue compatibility
   and admin chrome report that same string. `.github/workflows/publish-packages.yml`
   publishes packed tarballs on a matching `vX.Y.Z` tag; `scripts/release-packages.mjs`
