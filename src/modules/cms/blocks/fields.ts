@@ -21,6 +21,7 @@ export type FieldKind =
   | "boolean"
   | "choice"
   | "list"
+  | "datetime"
   | "asset"
   | "collection"
   | "product";
@@ -58,10 +59,16 @@ export interface FieldHint {
    * names something the editor should offer a chooser for, which is why a
    * plugin can ask for one without touching the editor (§24).
    */
-  control?: "multiline" | "asset" | "rich" | "collection" | "product";
+  control?: "multiline" | "asset" | "rich" | "collection" | "product" | "datetime";
   /** When `control` is `asset`, limit the picker to one media kind. */
   assetKind?: "image" | "video";
   hidden?: boolean;
+  /**
+   * For a list of objects: the hints for each item's own fields. A list item
+   * can carry machinery too (a stable id the owner never types), and without
+   * this the derivation had no way to hear about it.
+   */
+  items?: Record<string, FieldHint>;
 }
 
 /** The parts of a Zod schema this reads, named rather than reached for as `any`. */
@@ -147,6 +154,11 @@ function describeField(
       // on-canvas replace affordance read them from the field.
       return { ...base, kind: hint.control };
     }
+    if (hint?.control === "datetime") {
+      // Still a string on the wire: a local wall-clock time the block reads
+      // in the business's own zone. Only the control differs.
+      return { ...base, kind: "datetime" };
+    }
     return { ...base, kind: hint?.control === "multiline" ? "multiline" : "text" };
   }
   if (def.type === "boolean") {
@@ -183,7 +195,7 @@ function describeField(
     const elementDef = internals(element);
     if (elementDef?.type !== "object" || !elementDef.shape) return undefined;
     const itemFields = Object.entries(elementDef.shape)
-      .map(([key, value]) => describeField(key, value, undefined, blockType))
+      .map(([key, value]) => describeField(key, value, hint?.items?.[key], blockType))
       .filter((field): field is FieldDescriptor => field !== undefined);
     if (itemFields.length === 0) return undefined;
     return { ...base, kind: "list", itemFields };

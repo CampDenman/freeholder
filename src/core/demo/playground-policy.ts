@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C1.38: a public playground grants content access, never operator authority.
-export const PLAYGROUND_MANAGE = ["cms", "forms", "contacts", "catalog", "notes", "tasks"] as const;
+export const PLAYGROUND_MANAGE = ["cms", "forms", "contacts", "catalog", "notes", "tasks", "linkinbio"] as const;
 // C12.16: "members" so the playground shows the member admin beside the demo community.
 // 2026-10-22: the rest of the business modules are readable too. An evaluator
 // who cannot open the inbox, invoices, bookings or newsletters cannot judge
@@ -42,6 +42,9 @@ const MUTATIONS = new Set([
   "catalog.activateProduct", "catalog.publishProduct", "catalog.archiveProduct", "catalog.restoreProduct",
   "notes.write", "notes.edit", "notes.pin", "notes.remove", "notes.restore",
   "tasks.create", "tasks.update", "tasks.setStatus", "tasks.remove", "tasks.restore",
+  // C9.39: link-in-bio edits are page edits, so they ride the cms caps above.
+  "linkinbio.setup", "linkinbio.addLink", "linkinbio.updateLink", "linkinbio.setLinkHidden",
+  "linkinbio.scheduleLink", "linkinbio.reorderLinks", "linkinbio.removeLink", "linkinbio.updateProfile",
 ]);
 
 /**
@@ -68,6 +71,7 @@ export const PLAYGROUND_PUBLIC = [
   "messaging.startSiteChat", "messaging.postSiteChat", "messaging.endSiteChat",
   "cms.submitSiteChat", "cms.submitQuoteRequest", "cms.submitTipIntent", "cms.rateHelpArticle",
   "share.shareVia",
+  "linkinbio.follow",
   "popups.record", "popups.capture",
   "reviews.submit",
   "waitlist.join", "waitlist.claim",
@@ -175,6 +179,7 @@ const PUBLIC = new Set<string>(PLAYGROUND_PUBLIC);
 const EDITABLE_SCREENS = [
   "/admin/pages", "/admin/sections", "/admin/templates", "/admin/blog",
   "/admin/forms", "/admin/contacts", "/admin/products", "/admin/tasks",
+  "/admin/link-in-bio",
 ];
 
 export function playgroundScreenIsReadOnly(path: string): boolean {
@@ -252,6 +257,7 @@ export interface PlaygroundRowCap {
 export const PLAYGROUND_ROW_CAPS: Readonly<Record<string, PlaygroundRowCap>> = {
   "cms.createPage": { table: "pages", limit: 50 },
   "cms.createFromTemplate": { table: "pages", limit: 50 },
+  "linkinbio.setup": { table: "pages", limit: 50 },
   "cms.createSection": { table: "sections", limit: 100 },
   "cms.saveAsSection": { table: "sections", limit: 100 },
   "forms.create": { table: "forms", limit: 20 },

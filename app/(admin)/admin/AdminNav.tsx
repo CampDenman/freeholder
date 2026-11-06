@@ -50,6 +50,7 @@ import {
   Newspaper,
   Megaphone,
   ShareNetwork,
+  LinkSimple,
   ChatCircleText,
   ChatCircleDots,
   PuzzlePiece,
@@ -124,6 +125,7 @@ export interface AdminNavLabels {
   assistant: string;
   social: string;
   sharing: string;
+  linkInBio: string;
   popups: string;
   automations: string;
   documents: string;
@@ -215,6 +217,7 @@ const LINKS = [
   { href: "/admin/assistant", key: "assistant", module: "assistant", Icon: Robot },
   { href: "/admin/social", key: "social", module: "social", Icon: ShareNetwork },
   { href: "/admin/sharing", key: "sharing", module: "share", Icon: ShareNetwork },
+  { href: "/admin/link-in-bio", key: "linkInBio", module: "linkinbio", Icon: LinkSimple },
   { href: "/admin/popups", key: "popups", module: "popups", Icon: ChatCircleDots },
   { href: "/admin/loyalty", key: "loyalty", module: "loyalty", Icon: Ticket },
   { href: "/admin/gifts", key: "gifts", module: "giftRegistry", Icon: Gift },
@@ -313,7 +316,7 @@ export const ADMIN_NAV_GROUPS: ReadonlyArray<{
   {
     key: "marketing",
     links: [
-      "newsletters", "ads", "social", "sharing", "automations", "assistant",
+      "newsletters", "ads", "social", "sharing", "linkInBio", "automations", "assistant",
       "traffic", "reports", "experiments",
     ],
   },

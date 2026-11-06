@@ -197,6 +197,8 @@ describe("what the crawl treats as a page", () => {
     expect(isPage("/ics/events/golden-hour-workshop")).toBe(false);
     expect(isPage("/events/golden-hour.ics")).toBe(false);
     expect(isPage("/events/golden-hour-workshop")).toBe(true);
+    // C9.39: a link-in-bio click-out is a counted redirect, not a page.
+    expect(isPage("/go/link/abcd2345ef")).toBe(false);
     expect(isPrivate("/fr-CA/portal/login")).toBe(true);
     expect(isPrivate("/portal/login")).toBe(true);
     expect(isPrivate("/fr-CA/about")).toBe(false);

@@ -37,9 +37,18 @@ const PRIVATE = [
 /**
  * Things a link may point at that are not pages to crawl. Event calendar
  * downloads (`/ics/events/…`) are .ics files served without an extension:
- * a file has no title, h1 or sitemap entry to check.
+ * a file has no title, h1 or sitemap entry to check. A click-out under
+ * `/go/` is a redirect.
  */
-const NOT_A_PAGE = [/^\/media\//, /^\/_next\//, /^\/ics\//, /\.(xml|txt|json|jpg|png|webp|avif|svg|ico|ics)$/];
+const NOT_A_PAGE = [
+  /^\/media\//,
+  /^\/_next\//,
+  /^\/ics\//,
+  // First-party click-outs (`/go/ad`, `/go/link/<id>`) answer a counted 302,
+  // and robots.txt disallows them: a redirect, not a page.
+  /^\/go\//,
+  /\.(xml|txt|json|jpg|png|webp|avif|svg|ico|ics)$/,
+];
 
 /** "/fr-CA/portal/login" is the same private surface as "/portal/login". */
 const LOCALE_PREFIX = /^\/[a-z]{2}(?:-[A-Za-z]{2,4})?(?=\/)/;

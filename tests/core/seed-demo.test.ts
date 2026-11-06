@@ -43,8 +43,10 @@ import {
   CATALOG,
   COLLECTIONS,
   EVENTS,
+  LINK_IN_BIO,
   SERVICES,
 } from "../../seed/demo/content";
+import { page as linkInBioPage } from "@/modules/linkinbio/service";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { recentActivity } from "@/core/events/service";
 import { SEED_AUDIT_ACTOR } from "@/core/service";
@@ -396,8 +398,16 @@ describe.runIf(hasDatabase)("installing the demo", { timeout: 120_000 }, () => {
         ...SERVICES.map((service) => `products/${service.slug}`),
         "events",
         ...EVENTS.map((event) => `events/${event.slug}`),
+        LINK_IN_BIO.slug,
       ].sort(),
     );
+
+    // C9.39: the link-in-bio page, with every smart link resolving to
+    // something the demo publishes — none hidden as unavailable.
+    const bio = await linkInBioPage.call({}, OWNER);
+    expect(bio?.page.slug).toBe(LINK_IN_BIO.slug);
+    expect(bio?.links.map((link) => link.label)).toEqual(LINK_IN_BIO.links.map((link) => link.label));
+    expect(bio?.links.every((link) => link.state === "live")).toBe(true);
 
     const letters = await listNewsletters.call({}, OWNER);
     expect(letters.map((letter) => letter.slug)).toContain(NEWSLETTER.slug);
@@ -483,9 +493,9 @@ describe.runIf(hasDatabase)("installing the demo", { timeout: 120_000 }, () => {
     // set of images.
     const rows = await db().select().from(pages);
     // + the location, its index, the demo issue, and the shop's and events'
-    // own pages and indexes.
+    // own pages and indexes, and the link-in-bio page.
     expect(rows).toHaveLength(
-      PAGES.length + 3 + 1 + CATALOG.length + SERVICES.length + 1 + EVENTS.length,
+      PAGES.length + 3 + 1 + CATALOG.length + SERVICES.length + 1 + EVENTS.length + 1,
     );
     expect(await db().select().from(assets)).toHaveLength(
       Object.keys(IMAGES).length,

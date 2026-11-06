@@ -63,9 +63,18 @@ function walk(nodes: BlockNode[], visit: (node: BlockNode) => void): void {
 }
 
 function headingLevel(node: BlockNode): number | null {
-  if (node.type !== "heading") return null;
-  const level = Number(node.props.level);
-  return [1, 2, 3, 4].includes(level) ? level : 2;
+  if (node.type === "heading") {
+    const level = Number(node.props.level);
+    return [1, 2, 3, 4].includes(level) ? level : 2;
+  }
+  // A block that draws its own heading — a link-in-bio profile names the
+  // business as the page's H1 — says so with a numeric `headingLevel` prop.
+  // A convention on the props rather than a list of block types, so this
+  // file never has to learn what a module's block is, and a plugin's block
+  // can take part the same way.
+  const declared = node.props.headingLevel;
+  if (typeof declared === "number" && [1, 2, 3, 4].includes(declared)) return declared;
+  return null;
 }
 
 function asString(value: unknown): string {

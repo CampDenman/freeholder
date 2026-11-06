@@ -105,6 +105,7 @@ describe("robots and sitemaps", () => {
       "/api/",
       "/checkout",
       "/cart",
+      "/go/",
     ]) {
       expect(robots).toContain(`Disallow: ${path}`);
     }

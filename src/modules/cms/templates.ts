@@ -17,6 +17,7 @@ import type { TemplateKind, TemplatePreset } from "./schema";
 export const TEMPLATE_KEYS = [
   "page.blank",
   "page.landing",
+  "page.link-in-bio",
   "post.article",
   "product.default",
   "service.default",
@@ -188,6 +189,29 @@ export function seedTemplates(preset: TemplatePreset): SeedTemplate[] {
       kind: "page",
       name: "Landing page",
       blocks: landingChildren,
+      variables: [],
+    },
+    {
+      // The optional link-in-bio preset (C9.39): one mobile-first profile
+      // block that follows the site's design tokens, with its links added in
+      // the editor or the Link in bio screen. Like the portfolio templates it
+      // names a module's block, so it is parsed only where that module is on.
+      key: "page.link-in-bio",
+      kind: "page",
+      name: "Link in bio",
+      blocks: [
+        {
+          id: `${preset}-link-in-bio`,
+          type: "linkInBio",
+          props: {
+            name: "",
+            bio: "A line or two about who you are and what you do. Add your links below.",
+            style: "solid",
+            links: [],
+            socials: [],
+          },
+        },
+      ],
       variables: [],
     },
     {
