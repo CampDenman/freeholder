@@ -38,6 +38,7 @@ import referralsManifest from "@/modules/referrals/manifest";
 import adsManifest from "@/modules/ads/manifest";
 import shareManifest from "@/modules/share/manifest";
 import popupsManifest from "@/modules/popups/manifest";
+import linkInBioManifest from "@/modules/linkinbio/manifest";
 import documentsManifest from "@/modules/documents/manifest";
 import automationsManifest from "@/modules/automations/manifest";
 import reportingManifest from "@/modules/reporting/manifest";
@@ -77,6 +78,7 @@ const manifests: ModuleManifest[] = [
   adsManifest,
   shareManifest,
   popupsManifest,
+  linkInBioManifest,
   documentsManifest,
   automationsManifest,
   reportingManifest,

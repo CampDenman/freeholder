@@ -78,6 +78,7 @@ export interface EditorField {
     | "boolean"
     | "choice"
     | "list"
+    | "datetime"
     | "asset"
     | "collection"
     | "product";
@@ -1707,6 +1708,34 @@ function BlockCard({
   );
 }
 
+/** One list item moved to another position; the rest keep their order. */
+function moveItem<T>(items: T[], from: number, to: number): T[] {
+  if (to < 0 || to >= items.length) return items;
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved as T);
+  return next;
+}
+
+/**
+ * What a freshly added list item holds for one field.
+ *
+ * An empty string for everything was wrong for a checkbox or a choice: the
+ * schema refused "" where it wanted `false` or one of its values, and the new
+ * item could not be saved until somebody touched every control in it.
+ */
+function emptyValue(field: EditorField): unknown {
+  if (field.kind === "boolean") return false;
+  if (field.kind === "choice") {
+    const first = field.choices?.[0]?.value;
+    if (first === undefined) return "";
+    const asNumber = Number(first);
+    return first !== "" && !Number.isNaN(asNumber) ? asNumber : first;
+  }
+  if (field.kind === "list") return [];
+  return "";
+}
+
 function IconButton({
   label,
   onClick,
@@ -1851,7 +1880,28 @@ function Field({
                   }
                 />
               ))}
-              <div>
+              <div className="flex flex-wrap items-center gap-3">
+                {/*
+                  Order is meaning for most lists — a menu, a set of links —
+                  so an item moves one place at a time with a real button,
+                  which a keyboard and a screen reader can both reach.
+                */}
+                <button
+                  type="button"
+                  disabled={index === 0}
+                  onClick={() => onChange(moveItem(items, index, index - 1))}
+                  className="text-xs text-ink-muted underline decoration-rule underline-offset-2 disabled:no-underline disabled:opacity-40"
+                >
+                  {labels.moveUp}
+                </button>
+                <button
+                  type="button"
+                  disabled={index === items.length - 1}
+                  onClick={() => onChange(moveItem(items, index, index + 1))}
+                  className="text-xs text-ink-muted underline decoration-rule underline-offset-2 disabled:no-underline disabled:opacity-40"
+                >
+                  {labels.moveDown}
+                </button>
                 <button
                   type="button"
                   onClick={() => onChange(items.filter((_, i) => i !== index))}
@@ -1869,7 +1919,7 @@ function Field({
             onClick={() =>
               onChange([
                 ...items,
-                Object.fromEntries(itemFields.map((sub) => [sub.name, ""])),
+                Object.fromEntries(itemFields.map((sub) => [sub.name, emptyValue(sub)])),
               ])
             }
             className="inline-flex items-center gap-1.5 rounded-md border border-rule px-2.5 py-1.5 text-xs font-medium text-ink"
@@ -1878,6 +1928,25 @@ function Field({
             {labels.addItem}
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (field.kind === "datetime") {
+    // A wall-clock time with no zone of its own: the block reads it in the
+    // business's zone, which is the clock the owner is looking at.
+    return (
+      <div className="grid gap-1.5">
+        <label htmlFor={id} className="font-mono text-xs font-medium text-ink-muted">
+          {field.label}
+        </label>
+        <input
+          id={id}
+          type="datetime-local"
+          value={typeof value === "string" ? value.slice(0, 16) : ""}
+          onChange={(event) => onChange(event.target.value)}
+          className={control}
+        />
       </div>
     );
   }

@@ -76,6 +76,7 @@ export const SERVICE_NAMES = [
   "analytics.contactActivity",
   "analytics.correctClassification",
   "analytics.daily",
+  "analytics.eventTotals",
   "analytics.experimentReport",
   "analytics.exportAnonymized",
   "analytics.funnel",
@@ -478,6 +479,7 @@ export const SERVICE_NAMES = [
   "cms.listSectionUsages",
   "cms.listSections",
   "cms.listTemplates",
+  "cms.livePaths",
   "cms.loadDemoFixture",
   "cms.mergePage",
   "cms.nameRevision",
@@ -791,16 +793,19 @@ export const SERVICE_NAMES = [
   "i18n.setTranslation",
   "i18n.translatedIds",
   "i18n.translationIndex",
+  "imports.beginSourceUpload",
   "imports.commit",
   "imports.list",
   "imports.map",
   "imports.preview",
   "imports.previewFromSource",
+  "imports.previewFromUpload",
   "imports.publish",
   "imports.reconcile",
   "imports.reviewConflicts",
   "imports.rollback",
   "imports.start",
+  "imports.uploadSourceChunk",
   "invitations.accept",
   "invitations.create",
   "invitations.inspect",
@@ -892,6 +897,18 @@ export const SERVICE_NAMES = [
   "invoicing.void",
   "invoicing.voidCreditNote",
   "launch.install",
+  "linkinbio.addLink",
+  "linkinbio.follow",
+  "linkinbio.page",
+  "linkinbio.removeLink",
+  "linkinbio.reorderLinks",
+  "linkinbio.report",
+  "linkinbio.scheduleLink",
+  "linkinbio.setLinkHidden",
+  "linkinbio.setup",
+  "linkinbio.targets",
+  "linkinbio.updateLink",
+  "linkinbio.updateProfile",
   "locations.checkCoverage",
   "locations.create",
   "locations.createSetupLocation",
@@ -1844,6 +1861,10 @@ export interface ServiceCatalog {
   "analytics.daily": {
     input: { days?: number; includeBots?: boolean; timezone?: string };
     output: { day: string; views: number; visitors: number; [key: string]: unknown }[];
+  };
+  "analytics.eventTotals": {
+    input: { name: string; prop: string; values: string[]; days?: number; includeBots?: boolean };
+    output: { value: string; events: number; visitors: number }[];
   };
   "analytics.experimentReport": {
     input: Record<string, never>;
@@ -3453,6 +3474,10 @@ export interface ServiceCatalog {
     input: { kind?: "page" | "post" | "product" | "service" | "email" | "sms"; preset?: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; locale?: string };
     output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
+  "cms.livePaths": {
+    input: { slugs: string[] };
+    output: { slugs: string[] };
+  };
   "cms.loadDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { records: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
@@ -3490,7 +3515,7 @@ export interface ServiceCatalog {
     output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.publishPage": {
-    input: { id: string; published: boolean; expectedVersion?: number };
+    input: { id: string; published: boolean; expectedVersion?: number; publishedAt?: string };
     output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.publishedPaths": {
@@ -4705,6 +4730,10 @@ export interface ServiceCatalog {
     input: { entityType: string };
     output: { id: string; entityId: string; locale: string; status: "draft" | "machine" | "reviewed"; updatedAt: string; [key: string]: unknown }[];
   };
+  "imports.beginSourceUpload": {
+    input: { id: string; filename: string; bytes: number };
+    output: { uploadId: string; chunkBytes: number; chunkCount: number; maxBytes: number };
+  };
   "imports.commit": {
     input: { id: string };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -4725,12 +4754,16 @@ export interface ServiceCatalog {
     input: { id: string; payload: string; robotsTxt?: string };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "imports.previewFromUpload": {
+    input: { id: string; uploadId: string };
+    output: { id: string; status: string; error: string | null; counts: unknown };
+  };
   "imports.publish": {
     input: { id: string };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "imports.reconcile": {
-    input: { id: string; counts: { pages: number; media: number; redirects: number } };
+    input: { id: string; counts?: { pages: number; media: number; redirects: number } };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "imports.reviewConflicts": {
@@ -4744,6 +4777,10 @@ export interface ServiceCatalog {
   "imports.start": {
     input: { origin: string; kind: "wordpress-rest" | "wordpress-wxr" | "sitemap" | "rss" | "atom" | "html" | "archive" };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "imports.uploadSourceChunk": {
+    input: { id: string; uploadId: string; index: number; bytes: unknown };
+    output: { received: number; chunks: number; complete: boolean };
   };
   "invitations.accept": {
     input: { token: string; password: string };
@@ -5108,6 +5145,54 @@ export interface ServiceCatalog {
   "launch.install": {
     input: { format: "freeholder-launch-spec"; version: 1 | 2; generator: string; business: { name: string; tagline: string; schemaType?: string; country?: string; baseCurrency?: string; timezone?: string }; brand?: { paper?: string; ink?: string; accent?: string }; status: { banner: string; summary: string; ready: string[]; planned: string[] }; home: { headline: string; promise: string; problem: string[]; steps: string[]; switchReasons?: string[]; seoDescription: string }; offer: { slug: string; name: string; summary: string; price: string; cadence: "one_time" | "monthly"; priceLabel: string; forWho: string; includes: string[]; faq?: { question: string; answer: string }[]; seoDescription: string }; intro?: { name: string; summary: string; durationMin: number }; contact: { intro: string; seoDescription: string }; about: { body: string[]; seoDescription: string }; accounts?: { enabled: boolean; members?: boolean; shop?: boolean }; intake?: { title: string; intro: string; projectTitle: string; fields: { key: string; label: string; kind: "text" | "email" | "multiline" | "select" | "file"; required?: boolean; help?: string; options?: string[]; accept?: ("audio" | "doc" | "image")[]; maxMb?: number }[] }; payments?: { mode: "test"; note: string } };
     output: { business: string; pages: string[]; forms: string[]; intakeForms: string[]; callRequest: boolean; brandApplied: boolean };
+  };
+  "linkinbio.addLink": {
+    input: { pageId?: string; blockId?: string; label: string; kind?: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; target?: string; hidden?: boolean; startsAt?: string | null; endsAt?: string | null; position?: number; publish?: boolean };
+    output: { view: { page: { id: string; slug: string; title: string; status: "draft" | "published"; version: number; publicUrl: string; editorPath: string; unpublishedEdits: boolean; [key: string]: unknown }; blockId: string; timezone: string; profile: { name: string; bio: string; avatarAssetId: string; style: "solid" | "outline" | "soft"; socials: { network: "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "threads" | "bluesky" | "mastodon" | "linkedin" | "pinterest" | "spotify" | "soundcloud" | "twitch" | "github" | "whatsapp" | "telegram" | "email" | "website"; url: string; [key: string]: unknown }[]; [key: string]: unknown }; links: { id: string; label: string; kind: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; target: string; hidden: boolean; startsAt: string; endsAt: string; destination: string | null; external: boolean; state: "live" | "hidden" | "scheduled" | "expired" | "invalidSchedule" | "needsLabel" | "needsTarget" | "unavailable"; clickUrl: string; [key: string]: unknown }[]; [key: string]: unknown }; publication: { live: boolean; pending: ("notRequested" | "draftPage" | "unpublishedEdits" | "awaitingApproval") | null; [key: string]: unknown }; [key: string]: unknown };
+  };
+  "linkinbio.follow": {
+    input: { id: string; from?: string; lang?: string; anonId?: string | null; sessionId?: string | null; visitorKind?: "human" | "bot" | "suspected"; botReasons?: string[] };
+    output: { destination: string; [key: string]: unknown };
+  };
+  "linkinbio.page": {
+    input: { pageId?: string; blockId?: string };
+    output: { page: { id: string; slug: string; title: string; status: "draft" | "published"; version: number; publicUrl: string; editorPath: string; unpublishedEdits: boolean; [key: string]: unknown }; blockId: string; timezone: string; profile: { name: string; bio: string; avatarAssetId: string; style: "solid" | "outline" | "soft"; socials: { network: "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "threads" | "bluesky" | "mastodon" | "linkedin" | "pinterest" | "spotify" | "soundcloud" | "twitch" | "github" | "whatsapp" | "telegram" | "email" | "website"; url: string; [key: string]: unknown }[]; [key: string]: unknown }; links: { id: string; label: string; kind: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; target: string; hidden: boolean; startsAt: string; endsAt: string; destination: string | null; external: boolean; state: "live" | "hidden" | "scheduled" | "expired" | "invalidSchedule" | "needsLabel" | "needsTarget" | "unavailable"; clickUrl: string; [key: string]: unknown }[]; [key: string]: unknown } | null;
+  };
+  "linkinbio.removeLink": {
+    input: { pageId?: string; blockId?: string; id: string; confirm: true; publish?: boolean };
+    output: { view: { page: { id: string; slug: string; title: string; status: "draft" | "published"; version: number; publicUrl: string; editorPath: string; unpublishedEdits: boolean; [key: string]: unknown }; blockId: string; timezone: string; profile: { name: string; bio: string; avatarAssetId: string; style: "solid" | "outline" | "soft"; socials: { network: "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "threads" | "bluesky" | "mastodon" | "linkedin" | "pinterest" | "spotify" | "soundcloud" | "twitch" | "github" | "whatsapp" | "telegram" | "email" | "website"; url: string; [key: string]: unknown }[]; [key: string]: unknown }; links: { id: string; label: string; kind: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; target: string; hidden: boolean; startsAt: string; endsAt: string; destination: string | null; external: boolean; state: "live" | "hidden" | "scheduled" | "expired" | "invalidSchedule" | "needsLabel" | "needsTarget" | "unavailable"; clickUrl: string; [key: string]: unknown }[]; [key: string]: unknown }; publication: { live: boolean; pending: ("notRequested" | "draftPage" | "unpublishedEdits" | "awaitingApproval") | null; [key: string]: unknown }; [key: string]: unknown };
+  };
+  "linkinbio.reorderLinks": {
+    input: { pageId?: string; blockId?: string; ids: string[]; publish?: boolean };
+    output: { view: { page: { id: string; slug: string; title: string; status: "draft" | "published"; version: number; publicUrl: string; editorPath: string; unpublishedEdits: boolean; [key: string]: unknown }; blockId: string; timezone: string; profile: { name: string; bio: string; avatarAssetId: string; style: "solid" | "outline" | "soft"; socials: { network: "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "threads" | "bluesky" | "mastodon" | "linkedin" | "pinterest" | "spotify" | "soundcloud" | "twitch" | "github" | "whatsapp" | "telegram" | "email" | "website"; url: string; [key: string]: unknown }[]; [key: string]: unknown }; links: { id: string; label: string; kind: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; target: string; hidden: boolean; startsAt: string; endsAt: string; destination: string | null; external: boolean; state: "live" | "hidden" | "scheduled" | "expired" | "invalidSchedule" | "needsLabel" | "needsTarget" | "unavailable"; clickUrl: string; [key: string]: unknown }[]; [key: string]: unknown }; publication: { live: boolean; pending: ("notRequested" | "draftPage" | "unpublishedEdits" | "awaitingApproval") | null; [key: string]: unknown }; [key: string]: unknown };
+  };
+  "linkinbio.report": {
+    input: { pageId?: string; blockId?: string; days?: number };
+    output: { days: number; totalClicks: number; links: { id: string; label: string; kind: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; state: "live" | "hidden" | "scheduled" | "expired" | "invalidSchedule" | "needsLabel" | "needsTarget" | "unavailable"; clicks: number; visitors: number; arrivals: number; conversions: number; [key: string]: unknown }[]; [key: string]: unknown } | null;
+  };
+  "linkinbio.scheduleLink": {
+    input: { pageId?: string; blockId?: string; id: string; startsAt: string | null; endsAt: string | null; publish?: boolean };
+    output: { view: { page: { id: string; slug: string; title: string; status: "draft" | "published"; version: number; publicUrl: string; editorPath: string; unpublishedEdits: boolean; [key: string]: unknown }; blockId: string; timezone: string; profile: { name: string; bio: string; avatarAssetId: string; style: "solid" | "outline" | "soft"; socials: { network: "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "threads" | "bluesky" | "mastodon" | "linkedin" | "pinterest" | "spotify" | "soundcloud" | "twitch" | "github" | "whatsapp" | "telegram" | "email" | "website"; url: string; [key: string]: unknown }[]; [key: string]: unknown }; links: { id: string; label: string; kind: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; target: string; hidden: boolean; startsAt: string; endsAt: string; destination: string | null; external: boolean; state: "live" | "hidden" | "scheduled" | "expired" | "invalidSchedule" | "needsLabel" | "needsTarget" | "unavailable"; clickUrl: string; [key: string]: unknown }[]; [key: string]: unknown }; publication: { live: boolean; pending: ("notRequested" | "draftPage" | "unpublishedEdits" | "awaitingApproval") | null; [key: string]: unknown }; [key: string]: unknown };
+  };
+  "linkinbio.setLinkHidden": {
+    input: { pageId?: string; blockId?: string; id: string; hidden: boolean; publish?: boolean };
+    output: { view: { page: { id: string; slug: string; title: string; status: "draft" | "published"; version: number; publicUrl: string; editorPath: string; unpublishedEdits: boolean; [key: string]: unknown }; blockId: string; timezone: string; profile: { name: string; bio: string; avatarAssetId: string; style: "solid" | "outline" | "soft"; socials: { network: "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "threads" | "bluesky" | "mastodon" | "linkedin" | "pinterest" | "spotify" | "soundcloud" | "twitch" | "github" | "whatsapp" | "telegram" | "email" | "website"; url: string; [key: string]: unknown }[]; [key: string]: unknown }; links: { id: string; label: string; kind: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; target: string; hidden: boolean; startsAt: string; endsAt: string; destination: string | null; external: boolean; state: "live" | "hidden" | "scheduled" | "expired" | "invalidSchedule" | "needsLabel" | "needsTarget" | "unavailable"; clickUrl: string; [key: string]: unknown }[]; [key: string]: unknown }; publication: { live: boolean; pending: ("notRequested" | "draftPage" | "unpublishedEdits" | "awaitingApproval") | null; [key: string]: unknown }; [key: string]: unknown };
+  };
+  "linkinbio.setup": {
+    input: { slug?: string; title?: string; publish?: boolean };
+    output: { view: { page: { id: string; slug: string; title: string; status: "draft" | "published"; version: number; publicUrl: string; editorPath: string; unpublishedEdits: boolean; [key: string]: unknown }; blockId: string; timezone: string; profile: { name: string; bio: string; avatarAssetId: string; style: "solid" | "outline" | "soft"; socials: { network: "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "threads" | "bluesky" | "mastodon" | "linkedin" | "pinterest" | "spotify" | "soundcloud" | "twitch" | "github" | "whatsapp" | "telegram" | "email" | "website"; url: string; [key: string]: unknown }[]; [key: string]: unknown }; links: { id: string; label: string; kind: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; target: string; hidden: boolean; startsAt: string; endsAt: string; destination: string | null; external: boolean; state: "live" | "hidden" | "scheduled" | "expired" | "invalidSchedule" | "needsLabel" | "needsTarget" | "unavailable"; clickUrl: string; [key: string]: unknown }[]; [key: string]: unknown }; publication: { live: boolean; pending: ("notRequested" | "draftPage" | "unpublishedEdits" | "awaitingApproval") | null; [key: string]: unknown }; [key: string]: unknown };
+  };
+  "linkinbio.targets": {
+    input: Record<string, never>;
+    output: { kind: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; target: string; title: string; [key: string]: unknown }[];
+  };
+  "linkinbio.updateLink": {
+    input: { pageId?: string; blockId?: string; id: string; label?: string; kind?: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; target?: string; hidden?: boolean; startsAt?: string | null; endsAt?: string | null; publish?: boolean };
+    output: { view: { page: { id: string; slug: string; title: string; status: "draft" | "published"; version: number; publicUrl: string; editorPath: string; unpublishedEdits: boolean; [key: string]: unknown }; blockId: string; timezone: string; profile: { name: string; bio: string; avatarAssetId: string; style: "solid" | "outline" | "soft"; socials: { network: "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "threads" | "bluesky" | "mastodon" | "linkedin" | "pinterest" | "spotify" | "soundcloud" | "twitch" | "github" | "whatsapp" | "telegram" | "email" | "website"; url: string; [key: string]: unknown }[]; [key: string]: unknown }; links: { id: string; label: string; kind: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; target: string; hidden: boolean; startsAt: string; endsAt: string; destination: string | null; external: boolean; state: "live" | "hidden" | "scheduled" | "expired" | "invalidSchedule" | "needsLabel" | "needsTarget" | "unavailable"; clickUrl: string; [key: string]: unknown }[]; [key: string]: unknown }; publication: { live: boolean; pending: ("notRequested" | "draftPage" | "unpublishedEdits" | "awaitingApproval") | null; [key: string]: unknown }; [key: string]: unknown };
+  };
+  "linkinbio.updateProfile": {
+    input: { pageId?: string; blockId?: string; name?: string; bio?: string; avatarAssetId?: (string | "") | null; style?: "solid" | "outline" | "soft"; socials?: { network: "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "threads" | "bluesky" | "mastodon" | "linkedin" | "pinterest" | "spotify" | "soundcloud" | "twitch" | "github" | "whatsapp" | "telegram" | "email" | "website"; url: string }[]; publish?: boolean };
+    output: { view: { page: { id: string; slug: string; title: string; status: "draft" | "published"; version: number; publicUrl: string; editorPath: string; unpublishedEdits: boolean; [key: string]: unknown }; blockId: string; timezone: string; profile: { name: string; bio: string; avatarAssetId: string; style: "solid" | "outline" | "soft"; socials: { network: "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "threads" | "bluesky" | "mastodon" | "linkedin" | "pinterest" | "spotify" | "soundcloud" | "twitch" | "github" | "whatsapp" | "telegram" | "email" | "website"; url: string; [key: string]: unknown }[]; [key: string]: unknown }; links: { id: string; label: string; kind: "url" | "page" | "product" | "booking" | "newsletter" | "event" | "gallery"; target: string; hidden: boolean; startsAt: string; endsAt: string; destination: string | null; external: boolean; state: "live" | "hidden" | "scheduled" | "expired" | "invalidSchedule" | "needsLabel" | "needsTarget" | "unavailable"; clickUrl: string; [key: string]: unknown }[]; [key: string]: unknown }; publication: { live: boolean; pending: ("notRequested" | "draftPage" | "unpublishedEdits" | "awaitingApproval") | null; [key: string]: unknown }; [key: string]: unknown };
   };
   "locations.checkCoverage": {
     input: { postalCode: string; locationId?: string };
@@ -7841,6 +7926,7 @@ export interface FreeholderApi {
     contactActivity: (input: ServiceCatalog["analytics.contactActivity"]["input"]) => Promise<ServiceCatalog["analytics.contactActivity"]["output"]>;
     correctClassification: (input: ServiceCatalog["analytics.correctClassification"]["input"]) => Promise<ServiceCatalog["analytics.correctClassification"]["output"]>;
     daily: (input?: ServiceCatalog["analytics.daily"]["input"]) => Promise<ServiceCatalog["analytics.daily"]["output"]>;
+    eventTotals: (input: ServiceCatalog["analytics.eventTotals"]["input"]) => Promise<ServiceCatalog["analytics.eventTotals"]["output"]>;
     experimentReport: (input?: ServiceCatalog["analytics.experimentReport"]["input"]) => Promise<ServiceCatalog["analytics.experimentReport"]["output"]>;
     exportAnonymized: (input?: ServiceCatalog["analytics.exportAnonymized"]["input"]) => Promise<ServiceCatalog["analytics.exportAnonymized"]["output"]>;
     funnel: (input?: ServiceCatalog["analytics.funnel"]["input"]) => Promise<ServiceCatalog["analytics.funnel"]["output"]>;
@@ -8277,6 +8363,7 @@ export interface FreeholderApi {
     listSectionUsages: (input: ServiceCatalog["cms.listSectionUsages"]["input"]) => Promise<ServiceCatalog["cms.listSectionUsages"]["output"]>;
     listSections: (input?: ServiceCatalog["cms.listSections"]["input"]) => Promise<ServiceCatalog["cms.listSections"]["output"]>;
     listTemplates: (input?: ServiceCatalog["cms.listTemplates"]["input"]) => Promise<ServiceCatalog["cms.listTemplates"]["output"]>;
+    livePaths: (input: ServiceCatalog["cms.livePaths"]["input"]) => Promise<ServiceCatalog["cms.livePaths"]["output"]>;
     loadDemoFixture: (input: ServiceCatalog["cms.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["cms.loadDemoFixture"]["output"]>;
     mergePage: (input: ServiceCatalog["cms.mergePage"]["input"]) => Promise<ServiceCatalog["cms.mergePage"]["output"]>;
     nameRevision: (input: ServiceCatalog["cms.nameRevision"]["input"]) => Promise<ServiceCatalog["cms.nameRevision"]["output"]>;
@@ -8630,16 +8717,19 @@ export interface FreeholderApi {
     translationIndex: (input: ServiceCatalog["i18n.translationIndex"]["input"]) => Promise<ServiceCatalog["i18n.translationIndex"]["output"]>;
   };
   imports: {
+    beginSourceUpload: (input: ServiceCatalog["imports.beginSourceUpload"]["input"]) => Promise<ServiceCatalog["imports.beginSourceUpload"]["output"]>;
     commit: (input: ServiceCatalog["imports.commit"]["input"]) => Promise<ServiceCatalog["imports.commit"]["output"]>;
     list: (input?: ServiceCatalog["imports.list"]["input"]) => Promise<ServiceCatalog["imports.list"]["output"]>;
     map: (input: ServiceCatalog["imports.map"]["input"]) => Promise<ServiceCatalog["imports.map"]["output"]>;
     preview: (input: ServiceCatalog["imports.preview"]["input"]) => Promise<ServiceCatalog["imports.preview"]["output"]>;
     previewFromSource: (input: ServiceCatalog["imports.previewFromSource"]["input"]) => Promise<ServiceCatalog["imports.previewFromSource"]["output"]>;
+    previewFromUpload: (input: ServiceCatalog["imports.previewFromUpload"]["input"]) => Promise<ServiceCatalog["imports.previewFromUpload"]["output"]>;
     publish: (input: ServiceCatalog["imports.publish"]["input"]) => Promise<ServiceCatalog["imports.publish"]["output"]>;
     reconcile: (input: ServiceCatalog["imports.reconcile"]["input"]) => Promise<ServiceCatalog["imports.reconcile"]["output"]>;
     reviewConflicts: (input: ServiceCatalog["imports.reviewConflicts"]["input"]) => Promise<ServiceCatalog["imports.reviewConflicts"]["output"]>;
     rollback: (input: ServiceCatalog["imports.rollback"]["input"]) => Promise<ServiceCatalog["imports.rollback"]["output"]>;
     start: (input: ServiceCatalog["imports.start"]["input"]) => Promise<ServiceCatalog["imports.start"]["output"]>;
+    uploadSourceChunk: (input: ServiceCatalog["imports.uploadSourceChunk"]["input"]) => Promise<ServiceCatalog["imports.uploadSourceChunk"]["output"]>;
   };
   invitations: {
     accept: (input: ServiceCatalog["invitations.accept"]["input"]) => Promise<ServiceCatalog["invitations.accept"]["output"]>;
@@ -8737,6 +8827,20 @@ export interface FreeholderApi {
   };
   launch: {
     install: (input: ServiceCatalog["launch.install"]["input"]) => Promise<ServiceCatalog["launch.install"]["output"]>;
+  };
+  linkinbio: {
+    addLink: (input: ServiceCatalog["linkinbio.addLink"]["input"]) => Promise<ServiceCatalog["linkinbio.addLink"]["output"]>;
+    follow: (input: ServiceCatalog["linkinbio.follow"]["input"]) => Promise<ServiceCatalog["linkinbio.follow"]["output"]>;
+    page: (input?: ServiceCatalog["linkinbio.page"]["input"]) => Promise<ServiceCatalog["linkinbio.page"]["output"]>;
+    removeLink: (input: ServiceCatalog["linkinbio.removeLink"]["input"]) => Promise<ServiceCatalog["linkinbio.removeLink"]["output"]>;
+    reorderLinks: (input: ServiceCatalog["linkinbio.reorderLinks"]["input"]) => Promise<ServiceCatalog["linkinbio.reorderLinks"]["output"]>;
+    report: (input?: ServiceCatalog["linkinbio.report"]["input"]) => Promise<ServiceCatalog["linkinbio.report"]["output"]>;
+    scheduleLink: (input: ServiceCatalog["linkinbio.scheduleLink"]["input"]) => Promise<ServiceCatalog["linkinbio.scheduleLink"]["output"]>;
+    setLinkHidden: (input: ServiceCatalog["linkinbio.setLinkHidden"]["input"]) => Promise<ServiceCatalog["linkinbio.setLinkHidden"]["output"]>;
+    setup: (input?: ServiceCatalog["linkinbio.setup"]["input"]) => Promise<ServiceCatalog["linkinbio.setup"]["output"]>;
+    targets: (input?: ServiceCatalog["linkinbio.targets"]["input"]) => Promise<ServiceCatalog["linkinbio.targets"]["output"]>;
+    updateLink: (input: ServiceCatalog["linkinbio.updateLink"]["input"]) => Promise<ServiceCatalog["linkinbio.updateLink"]["output"]>;
+    updateProfile: (input?: ServiceCatalog["linkinbio.updateProfile"]["input"]) => Promise<ServiceCatalog["linkinbio.updateProfile"]["output"]>;
   };
   locations: {
     checkCoverage: (input: ServiceCatalog["locations.checkCoverage"]["input"]) => Promise<ServiceCatalog["locations.checkCoverage"]["output"]>;

@@ -11,6 +11,7 @@ import {
   type ImporterDiscovery,
   type ImporterMapping,
 } from "./contract";
+import { parseWordpressExport } from "./wordpress";
 
 export type ParsedPage = ImporterMapping & {
   body: string;
@@ -92,28 +93,19 @@ export function parseWordpressRest(payload: unknown, origin: string): ParsedPage
   return pages;
 }
 
+/**
+ * Pages and posts from a WXR export, in the generic page shape. The full
+ * reading (media, terms, menus, SEO, dates) is `parseWordpressExport`.
+ */
 export function parseWordpressWxr(xml: string): ParsedPage[] {
-  const items = xml.split(/<item>/i).slice(1);
-  const pages: ParsedPage[] = [];
-  let bytes = 0;
-  for (const item of items) {
-    const type = textOf(item, "wp:post_type") || textOf(item, "post_type");
-    if (type && type !== "post" && type !== "page") continue;
-    const url = textOf(item, "link");
-    const title = decodeEntities(textOf(item, "title") || "Untitled");
-    const body = textOf(item, "content:encoded") || textOf(item, "description");
-    bytes += body.length + xml.length * 0;
-    enforceImporterLimits({ pages: pages.length + 1, bytes, depth: 1 });
-    pages.push({
-      url,
-      slug: textOf(item, "wp:post_name") || slugFromUrl(url),
-      title,
-      kind: type === "post" ? "post" : "page",
-      body,
-      provenance: { url, source: "wordpress-wxr" },
-    });
-  }
-  return pages;
+  return parseWordpressExport(xml).items.map((item) => ({
+    url: item.url,
+    slug: item.slug,
+    title: item.title,
+    kind: item.kind,
+    body: item.body,
+    provenance: { url: item.url, source: "wordpress-wxr" },
+  }));
 }
 
 export function parseSitemap(xml: string): ImporterDiscovery["pages"] {

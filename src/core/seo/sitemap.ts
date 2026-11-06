@@ -174,6 +174,10 @@ export function renderRobots(origin: string): string {
     "Disallow: /api/",
     "Disallow: /checkout",
     "Disallow: /cart",
+    // First-party click-outs (`/go/ad`, `/go/link/<id>`): a counted redirect,
+    // not a page. A crawler following one would inflate the counts and index
+    // nothing.
+    "Disallow: /go/",
     "Disallow: /*?*filter",
     "Disallow: /*?*filters",
     "Disallow: /*?*sort=",

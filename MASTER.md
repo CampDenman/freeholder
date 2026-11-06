@@ -47,6 +47,7 @@ Freeholder is a single open-source application that replaces the rented stack. E
 ### What's inside
 
 - **Website + CMS** — server-rendered, SEO-serious by construction (clean browse architecture, full schema.org, hreflang, auto sitemaps, llms.txt)
+- **Link in bio** — the one link for every social profile, as a page on your own site: picture, name, bio, ordered buttons and social icons; links that can be hidden or scheduled, smart links that follow your own products, bookings, events, galleries, pages and newsletter, and per-link clicks counted by your own analytics (C9.39)
 - **Commerce** — products (physical, digital, services), cart, checkout, coupons, gift cards; Stripe first, PayPal adapter
 - **Bookings** — availability, deposits, reminders, reschedule links, 2-way Google/Outlook calendar sync
 - **Quotes → contracts → invoices** — send quotes, negotiate line items with logged-in prospects, click-to-sign, deposits, payment plans
@@ -182,6 +183,7 @@ freeholder/
 │   ├── email-marketing      # Broadcasts, simple automations, list segments (spine-native)
 │   ├── reviews              # Post-job review requests, moderation, display widgets
 │   ├── social               # Media prep (crop/trim presets, captions) + scheduled publishing
+│   ├── link-in-bio          # The social-profile link as a CMS page + typed block: scheduled/hidden smart links, first-party click counts
 │   ├── affiliates           # Referral & commission engine: dual-sided codes, attribution touches, holdbacks, payout batches
 │   ├── loyalty              # Points ledger, earn rules over spine events, tiers, rewards, redemption & liability
 │   ├── ads                  # Ad slots at IAB sizes per breakpoint, house & sold campaigns, third-party tags, first-party counts
@@ -2092,11 +2094,25 @@ studio**: connect or enter a source, discover content, preview the mapping and
 diff, then stage and commit a reversible import. Nothing is published and DNS
 never changes merely because the crawler finished.
 
-- **WordPress is the first complete importer:** WordPress REST and WXR/export
-  paths cover pages, posts, media, authors, categories/tags, menus, comments
-  when selected, publication dates, slugs and common SEO metadata. Original
-  URLs either survive or receive explicit `Redirect` rows; media alt text,
-  captions and provenance come across rather than becoming anonymous files.
+- **WordPress is the first importer, and the most complete:** the WXR export
+  path brings pages (keeping their paths), posts (under `blog/`, so the blog
+  listing shows them, keeping slugs and publication dates), attachments into
+  the media library through the ordinary upload pipeline (pinned SSRF-safe
+  download, content-sniffed type, size limit, AVIF/WebP renditions, alt text
+  and source-URL provenance kept, body captions kept as text), body images
+  rewritten to image and gallery blocks, Yoast/Rank Math SEO titles and
+  descriptions, and the top level of one menu (joined to the nav section at
+  publish). Original URLs either survive or receive explicit `Redirect` rows.
+  The REST path covers pages and posts with dates, Yoast fields and embedded
+  terms; it carries no attachment list, so only same-site body images are
+  fetched. Not yet recreated, and said so in the run report: categories/tags
+  and authors are recorded on the import run because the blog has no taxonomy
+  and pages carry no author; reader comments are not imported because CMS
+  pages have no public thread; nested menu items are not applied (C3.22
+  open). An export file of up to 100 MB is reserved, sent in 4 MB chunks to
+  an import-only route that stores them in private object storage, and read
+  back as a stream; the 1 MB JSON body limit and the request proxy's buffer
+  stay as they are for every other route.
 - **The generic-site importer is built in:** it discovers `sitemap.xml`, RSS/
   Atom, canonical links, JSON-LD, Open Graph and semantic HTML, then crawls only
   owner-approved origins with visible depth/page/byte/rate limits. It resumes
@@ -2420,7 +2436,7 @@ One block editor for **everything with a public face** — pages, posts, email t
 
 **Structure is data; code is vocabulary.** The governing rule of the whole editing surface: rearranging the site — any page, the chrome around it, the look of it — is a database write, live on next request, never a build. Only extending the *vocabulary* (a new block type, a new behavior) is code, which arrives via plugin and its rebuild-on-install. There is no build step between an owner and their site.
 
-- **Block library v1:** text, heading, image (auto alt-text suggestion), gallery embed, video, button/CTA, columns, divider, FAQ (emits FAQPage schema), testimonial (pulls from reviews), product/service card (live from catalog), booking widget, form embed, quote-request, map (from locations), social embed, share block (§34), tip/support (pay-what-you-want with preset amounts), paywall gate (wraps any blocks behind a one-time unlock or subscription — server-rendered teaser, gated content never present in the HTML), ad slot (names an `AdSlot`; reserves its declared size at every breakpoint so nothing shifts when a creative arrives), custom HTML (admin-only permission).
+- **Block library v1:** text, heading, image (auto alt-text suggestion), gallery embed, video, button/CTA, columns, divider, FAQ (emits FAQPage schema), testimonial (pulls from reviews), product/service card (live from catalog), booking widget, form embed, quote-request, map (from locations), social embed, share block (§34), link-in-bio profile (ordered, hideable, scheduled smart links; C9.39), tip/support (pay-what-you-want with preset amounts), paywall gate (wraps any blocks behind a one-time unlock or subscription — server-rendered teaser, gated content never present in the HTML), ad slot (names an `AdSlot`; reserves its declared size at every breakpoint so nothing shifts when a creative arrives), custom HTML (admin-only permission).
 - **Editing model:** drag to reorder, slash-command insertion, inline editing, autosave with visible version history and one-click restore (`ContentRevision` rows — normalized, in the database, per the mandate). Live responsive preview (desktop/mobile) and — for emails — inbox preview with the test-send button adjacent.
 - **Templates & sections:** any block arrangement can be saved as a reusable Section (synced or detached copies), and full-page templates ship per business preset. Plugins register new block types through the manifest (§24) and they appear in the palette with zero editor changes.
 - **Site chrome is Sections:** the header, footer, nav, and announcement bar are synced Sections — block trees in the database, edited in the same editor, server-rendered on every page. Menus are rows, not JSX. `app/(public)/layout.tsx` is a thin shell that renders the chrome Sections; it contains no hardcoded site structure.
@@ -3526,7 +3542,7 @@ what is true now and what remains.
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | Plugin trust gaps recorded 2026-11-05, when §26 was corrected to match the code: runtime enforcement of declared plugin permissions with install consent and plugin audit (C3.40), the `network:external` egress wrapper (C3.41) and publisher Ed25519 signatures for plugins and registry indexes (C3.42). Plugin isolation or sandboxing (C3.43) is deferred to v2 (§43.18, owner decision 2026-11-05), not remaining. Customer-facing acceptance gaps identified 2026-10-07: C9.37 closed 2026-10-17 — the newsletter sending journey (readiness, verified-sender guidance, consent-aware audience selection, test-send, scheduling, per-recipient outcomes, archive and subscribe). SMTP and HTTP doubles prove the behavior; provider credentials and live inbox placement remain the owner's acceptance. C9.38 closed 2026-10-17 — a card-required trial stays paused with no access until a saved card exists. The adapter double proves that path; live settlement remains C11.05. C2.26, C6.19 and C8.17 closed 2026-10-14. Actual new Replit and Lovable launch acceptance with the owner (C3.28). Owner passkey/MCP browser acceptance (C1.39) and private launch tooling/package acceptance (C3.27) closed 2026-10-06; see the evidence under each item. §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). C6.11 closed 2026-10-17 — paid event admission on the invoice spine: held seats, settlement, expiry sweep, refund/void cascade, paid check-in and the public registration form (annotation under the item). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 was recorded closed 2026-09-28, then reopened 2026-10-05 because the drill had no source object bytes (`deploy/stable-acceptance-2026-10-05.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | Plugin trust gaps recorded 2026-11-05, when §26 was corrected to match the code: runtime enforcement of declared plugin permissions with install consent and plugin audit (C3.40), the `network:external` egress wrapper (C3.41) and publisher Ed25519 signatures for plugins and registry indexes (C3.42). Plugin isolation or sandboxing (C3.43) is deferred to v2 (§43.18, owner decision 2026-11-05), not remaining. Customer-facing acceptance gaps identified 2026-10-07: C9.37 closed 2026-10-17 — the newsletter sending journey (readiness, verified-sender guidance, consent-aware audience selection, test-send, scheduling, per-recipient outcomes, archive and subscribe). SMTP and HTTP doubles prove the behavior; provider credentials and live inbox placement remain the owner's acceptance. C9.38 closed 2026-10-17 — a card-required trial stays paused with no access until a saved card exists. The adapter double proves that path; live settlement remains C11.05. C2.26, C6.19 and C8.17 closed 2026-10-14. Actual new Replit and Lovable launch acceptance with the owner (C3.28). Owner passkey/MCP browser acceptance (C1.39) and private launch tooling/package acceptance (C3.27) closed 2026-10-06; see the evidence under each item. §43.2's F01–F12 row applies per item. C2.25 closed 2026-09-30 — inline editing, drag-and-drop and store-section composition (slices A–C, #450/#452/#455) plus the canvas picker's upload and crop/focal point (annotation under the item). C6.11 closed 2026-10-17 — paid event admission on the invoice spine: held seats, settlement, expiry sweep, refund/void cascade, paid check-in and the public registration form (annotation under the item). Live settlement (C11.05). Tier-1 restore with real object bytes and candidate rollback (C11.08). Independent security review (C11.10). C9.39 link in bio: hosted acceptance of `/links`, a phone following a link, and that click in the admin report. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.24, C3.25 and C3.26 closed 2026-09-29 — the capability mapping published and both fix-now gaps closed by the storefront slices and editor blocks (#448–#453), the two parity gaps closed on the existing commerce spine, and world-class merchandising evidenced end to end (annotations under the items; `deploy/c324-storefront-parity-2026-09-29.md`). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 was recorded closed 2026-09-28, then reopened 2026-10-05 because the drill had no source object bytes (`deploy/stable-acceptance-2026-10-05.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -5181,13 +5197,46 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   partial-source conformance; core retains jobs, preview, commit and rollback.
   (`defineImporter`; `assertPublicHttpUrl`; robots/limits. Coverage in
   `tests/core/importers.test.ts`. **F04** `/admin/imports` map/review-conflicts. **F05** N/A as a new HTTP family — `defineImporter` in plugin-kit; owner runs go through `imports.*` (C3.23). **F07** `tests/core/importers.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/importers.test.ts` is the composition proof.)
-- [x] **C3.22** Ship complete first-party WordPress REST/WXR and generic-site
+- [ ] **C3.22** Ship complete first-party WordPress REST/WXR and generic-site
   sitemap/RSS/Atom/semantic-HTML importers plus static archive/common hosted-
   site paths; preserve content/media/SEO/URL intent and generate redirects
   while enforcing SSRF, origin, robots, rate, page, byte and depth limits.
   (`parseWordpressRest` / `parseWordpressWxr` / `parseSitemap` /
   `parseRssOrAtom` / `parseSemanticHtml` / `discoverFromPublicOrigin`.
   Coverage in `tests/core/importers.test.ts`. **F04** N/A — first-party plugin seam, not a new screen. **F05** parsers sit behind `imports.start`/`previewFromSource` at `/api/v1/imports.*`, MCP `imports_*`; no extra importer family. **F07** `tests/core/importers.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/importers.test.ts` is the composition proof.)
+  *(Reopened 2026-11-05: the item was checked while the WordPress paths kept
+  only title, slug, HTML body and page/post, landed every item as a page with
+  one raw `html` block, and recorded `media: 0, redirects: 0`. Closed in this
+  change, for WordPress: `src/core/import/wordpress.ts` reads WXR attachments,
+  menus, terms, authors, dates, statuses, comment counts and Yoast/Rank Math
+  meta; posts land under `blog/` with original dates (`cms.publishPage` takes
+  an optional past `publishedAt`), WordPress drafts stay drafts at publish, a
+  blog listing page is created when none exists, bodies become typed heading/
+  text/image/gallery blocks with `html` only for tables, quotes and code,
+  internal links are rewritten, attachments are fetched by the orchestrated
+  `imports.commit` through `getPinnedBytes` and `media.upload`, moved
+  permalinks become `Redirect` rows (existing redirects and pages are never
+  overwritten), and rollback removes pages, redirects, nav links and unused
+  imported files. Coverage in `tests/core/wordpress-import.test.ts` and
+  `tests/core/wordpress-import-flow.test.ts` against the fictional fixture
+  `tests/fixtures/wordpress/sample-export.xml`; changeset
+  `.changeset/wordpress-import-media-redirects.md`. Real-size exports
+  (2026-11-06): `imports.beginSourceUpload` reserves a file of up to 100 MB,
+  `/api/imports/source/chunk` (`imports.uploadSourceChunk`, own 4 MB bound,
+  first-chunk content sniff, rate limit, same uploader only) writes each chunk
+  to private object storage outside any transaction, and
+  `imports.previewFromUpload` streams them through `WxrStreamReader`, so
+  memory holds one chunk and one item, then deletes the chunks; coverage in
+  `tests/core/wordpress-import-upload.test.ts` with a generated multi-megabyte
+  fictional export. Still open before this can
+  be checked: WordPress categories/tags and authors have no CMS home (recorded
+  on the run only); reader comments are not imported; nested menu items are
+  not applied; an import still keeps at most 500 items and 20 MB of bodies
+  (the importer limits), whatever the file size;
+  there is no live WordPress REST crawl, so REST input is a pasted response;
+  the generic sitemap/RSS/Atom/HTML importers still produce a heading plus one
+  `html` block with no media or redirects; the `archive` kind has no archive
+  reader of its own.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,
@@ -9624,6 +9673,73 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   **What stays C11.05.** The adapter double in `tests/modules/subscription-billing.test.ts` and `tests/core/payment-adapters.test.ts` proves the handoff. The browser journey in `tests/browser/customer-surfaces.spec.ts` proves an incapable adapter does not offer the trial, and runs axe on that screen. Live recurring settlement is still the owner's acceptance (`deploy/customer-surfaces-2026-10-07.md`). No new migration. Changeset `c9-38-card-trial.md`.
   **F04** `/memberships`, `/memberships/trial-return`, the member profile subscribe form, and the portal subscription page. **F05** `subscriptions.beginTrialCardSetup` and `subscriptions.startCardTrial`, plus `cardSetup` on `subscriptions.join` and `subscriptions.mine`, at `/api/v1/subscriptions.*`, MCP `subscriptions_*`; `packages/sdk/src/generated.ts`. **F07** `tests/modules/subscription-billing.test.ts` covers a cancelled signup, an unrelated card, a staff-saved card, an older card, and an adapter that cannot save one; `tests/core/payment-adapters.test.ts` covers a setup session that must not become a payment. Scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** live settlement stays owner acceptance in `deploy/customer-surfaces-2026-10-07.md`. Product-wide export/restore/retention remains C11.14; this item rides the shared audit/outbox (`tests/core/record-participation.test.ts`). **F12** `tests/modules/subscription-billing.test.ts` is the composition proof, with the incapable-adapter screen in `tests/browser/customer-surfaces.spec.ts`.)
 
+- [ ] **C9.39** Link in bio: the one link a business puts in every social
+  profile, as a page on its own site rather than a rented one (§1 names it in
+  the rented stack). A mobile-first page at a configurable slug (default
+  `/links`) shows the picture or logo, the name, a short bio, an ordered list
+  of buttons and social icons. Each link can be hidden or scheduled (start and
+  end, in the business's time zone). Smart links point at the site's own
+  product, bookable service, event, gallery, page or newsletter sign-up, and
+  drop off the page when their destination is no longer published. It follows
+  the design tokens with an optional link-in-bio template, meets WCAG AA in
+  light and dark, works by keyboard and screen reader, and carries the page's
+  meta, Open Graph and canonical tags. Per-link clicks are first-party
+  analytics events under the existing consent rules. It is editable in the
+  visual editor and the admin, and the same services are the HTTP API and the
+  MCP tools, with the CMS page permissions and audit. Open until a hosted site
+  serves its `/links` page, a phone follows a link through the click
+  redirect, and that click appears in the admin report.
+  *(Progress 2026-11-06: a new `linkinbio` module with no table and no
+  migration. **The page is a CMS page and the links are one typed block on it**
+  (`src/modules/linkinbio/blocks.tsx`, schema in
+  `src/modules/linkinbio/links.ts`), so revisions, translation, variants, SEO,
+  the social card and publishing are the CMS's own. Stable link ids are
+  assigned by a Zod `overwrite` that keeps the schema an array, so the editor
+  still derives a list control. The editor gained generic list-item hints
+  (hidden ids), a `datetime` control, move up/down for list items and typed
+  defaults for new items (`src/modules/cms/blocks/fields.ts`,
+  `app/(admin)/admin/BlockEditor.tsx`). A block may declare its own heading
+  with a numeric `headingLevel` prop, which the publish gate counts
+  (`src/modules/cms/a11y-hints.ts`). **Every edit is a page edit**:
+  `src/modules/linkinbio/service.ts` composes `cms.updatePage` and
+  `cms.publishPage` as the caller, so a person needs the `linkinbio` and `cms`
+  grants and an agent needs both scopes, and every edit leaves a page
+  revision. An edit is published only when that publishes nothing else (the
+  page is live, has no other unpublished edits and is not awaiting approval);
+  otherwise `publication.pending` names why. **Smart links follow the site**
+  through the new public `cms.livePaths` (published, untrashed, unvetoed) and,
+  by service name, `catalog.bookableServices` and `galleries.publicBySlug`
+  (`src/modules/linkinbio/availability.ts`). **Clicks have one door**:
+  `app/go/link/[id]/route.ts` → `linkinbio.follow`, which resolves the link on
+  the *published* page and redirects to the stored destination only;
+  `robots.txt` now disallows `/go/` and the SEO gate treats it as a redirect,
+  not a page (`src/core/seo/sitemap.ts`, `scripts/seo-gate.mjs`). It
+  writes one `linkinbio.clicked` event through `analytics.track` when consent
+  allows identifiers, deduplicated per minute and classified human or bot.
+  `linkinbio.report` reads clicks back through the new
+  `analytics.eventTotals`, and on-site visits and conversions through
+  `analytics.campaignTotals` under `utm_campaign=bio:<id>`. Social icons link
+  straight to the profile with `rel="me"` and are not counted. The template
+  `page.link-in-bio` is in `src/modules/cms/templates.ts`. The demo installs
+  `/links` with six smart links (`seed/demo/content.ts`). Owner guide:
+  `deploy/link-in-bio.md`. Changeset `link-in-bio.md`.
+  **F04** `/admin/link-in-bio` (`app/(admin)/admin/link-in-bio/page.tsx`) and
+  the visual editor. **F05** `linkinbio.page`/`setup`/`addLink`/`updateLink`/`setLinkHidden`/`scheduleLink`/`reorderLinks`/`removeLink`/`updateProfile`/`targets`/`report`
+  at `/api/v1/linkinbio.*`, MCP `linkinbio_*`, public `linkinbio.follow`;
+  `packages/sdk/src/generated.ts`. **F06** catalogs in all four locales;
+  render and axe checks in `tests/modules/linkinbio-links.test.ts`, and `/links`
+  and `/admin/link-in-bio` in `tests/browser/accessibility.spec.ts`. **F07**
+  `tests/modules/linkinbio.test.ts` covers refused destinations, hostile
+  `from` values, hidden, scheduled and unavailable links, confirmation on
+  removal, and customers, anonymous callers and narrow agents being refused.
+  **F09** no new data: the links live in page rows and revisions, and clicks
+  in the analytics ledger, both already in export, retention and erasure.
+  **F12** `tests/modules/linkinbio.test.ts` composes setup → addLink →
+  follow → `analytics.track` → report, and `tests/browser/journeys.spec.ts`
+  runs the owner screen to a followed and then hidden link. Remaining: the
+  hosted acceptance above. Out of scope: a chromeless page layout, per-link
+  thumbnails and colours, and UTM tagging of outside addresses.)*
+
 ### 43.15 C10 — Ownership durability, self-update, and mobile applications
 
 #### Safe update system
@@ -11274,14 +11390,14 @@ schema they inherit reads as a designed thing rather than an excavation.
   machine-checked by `tests/core/doc-claim-mapping.test.ts`, which refuses
   unmapped claims, unresolved evidence paths, and any Struck/Narrowed row whose
   old wording still parses in this document; the gate runs in `pnpm gates`
-  (`scripts/fast-gates.mjs`). 107 rows carry test/gate evidence; 12 rows
-  are Struck/Narrowed (S1–S12): §12 mail-adapter id literal, §21b `backup.sh`
+  (`scripts/fast-gates.mjs`). 106 rows carry test/gate evidence; 13 rows
+  are Struck/Narrowed (S1–S13): §12 mail-adapter id literal, §21b `backup.sh`
   path, §25 "MIT plugin-kit", §27 hosted canonical registry/catalog,
   §28 hosted docs site with executable guides, §31 "pgvector" retrieval,
   §4.8 instance-release-notes scope, §37 agent-note mandate, §38
   release-notes bullet, §34 changelog share target, and (2026-11-05) §26
   plugin permission enforcement and signatures, §25 plugin scaffolding and
-  install paths. Two judgment calls stand
+  install paths, §23 WordPress importer completeness. Two judgment calls stand
   as documented behaviour, not scaffolds: §35's branded placeholder
   screenshots are the store-gate stand-in (`apps/mobile/store/metadata.json`,
   `scripts/mobile-store-gate.mjs`), and adapter "not implemented" strings are

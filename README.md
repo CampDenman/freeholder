@@ -43,6 +43,10 @@ already implemented. `MASTER.md` §43 is authoritative about current status.
 
 - **Website + CMS** — pages, blog, portfolio, SEO-as-architecture (schema.org,
   sitemaps, OG images) baked in
+- **Link in bio** — the one link for every social profile as a page on your
+  own site: ordered buttons that can be hidden or scheduled, smart links to
+  your own products, bookings, events, galleries, pages and newsletter, social
+  icons, and per-link clicks from first-party analytics
 - **Unified CRM spine** — contacts, organizations, canonical tags, typed custom
   fields, relationships, lifecycle history, explainable duplicate review with
   conflict-safe merge undo, consent/privacy-rights workflows, and one shared

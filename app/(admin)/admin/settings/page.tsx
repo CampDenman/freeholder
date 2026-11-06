@@ -28,7 +28,7 @@ export const dynamic = "force-dynamic";
 
 /** Modules with a readable name; a plugin's module shows its own key. */
 const MODULE_NAMES = new Set([
-  "core", "cms", "forms", "analytics", "invoicing", "catalog", "seed", "builder", "events", "newsletters", "proof", "contracts", "rentals", "quotes", "projects", "galleries", "reviews", "crm", "ads", "share", "popups", "documents", "automations", "reporting", "subscriptions", "assistant", "social", "loyalty", "referrals", "gift-registry", "print-on-demand", "assessments", "calculators", "community", "voice-video", "marketplace", "members",
+  "core", "cms", "forms", "analytics", "invoicing", "catalog", "seed", "builder", "events", "newsletters", "proof", "contracts", "rentals", "quotes", "projects", "galleries", "reviews", "crm", "ads", "share", "linkinbio", "popups", "documents", "automations", "reporting", "subscriptions", "assistant", "social", "loyalty", "referrals", "gift-registry", "print-on-demand", "assessments", "calculators", "community", "voice-video", "marketplace", "members",
 ]);
 
 

@@ -93,6 +93,7 @@ import contributeServices from "@/core/contribute/service";
 import designServices from "@/core/design/service";
 import pluginServices from "@/core/plugins/service";
 import importServices from "@/core/import/service";
+import importSourceUploadServices from "@/core/import/source-upload";
 import portabilityServices from "@/core/portability/service";
 import provenanceServices from "@/core/provenance/service";
 import updateSeamServices from "@/core/update/service";
@@ -187,6 +188,7 @@ const services: Service[] = [
   ...designServices,
   ...pluginServices,
   ...importServices,
+  ...importSourceUploadServices,
   ...portabilityServices,
   ...provenanceServices,
   ...updateSeamServices,
