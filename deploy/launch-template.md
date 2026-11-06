@@ -90,6 +90,12 @@ characters. Then:
   `fh_preview` cookie. That covers pages, media, `/og`, `llms.txt`, the
   sitemap and the anonymous API. A request with its own `Authorization`
   header is left to the API's own authentication;
+- Stripe's two webhook routes, `/api/payouts/stripe_connect/webhook` and
+  `/api/payments/webhooks/stripe`, accept a `POST` that carries a
+  `Stripe-Signature` header without the cookie. Each route verifies that
+  signature over the raw body before any effect and refuses a bad one. An
+  unsigned request, any other method and every other webhook route stay
+  behind the gate;
 - `/admin`, sign-in, `/setup` and `/api/health` stay open, so the owner can
   claim the site and the host can check health;
 - every response carries `X-Robots-Tag: noindex, nofollow, noarchive`,

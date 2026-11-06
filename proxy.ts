@@ -274,7 +274,11 @@ function privatePreview(request: NextRequest, path: string, key: string): NextRe
     });
     return response;
   }
-  if (!previewGated(path, request.headers.has("authorization"))) return null;
+  const gated = previewGated(path, request.headers.has("authorization"), {
+    method: request.method,
+    hasStripeSignature: Boolean(request.headers.get("stripe-signature")),
+  });
+  if (!gated) return null;
   return verifyPreviewToken(key, request.cookies.get(PREVIEW_COOKIE)?.value, now) ? null : refuse();
 }
 

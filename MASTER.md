@@ -5590,7 +5590,13 @@ deployments are portable, testable and incapable of silently forking the truth.
   `tests/core/launch-template.test.ts`, `tests/core/private-preview.test.ts`;
   changeset `launch-template-private-preview.md`. A free intro call is a
   request form, not a calendar booking: the booking flow prices every
-  bookable service, and a zero price is refused.)*
+  bookable service, and a zero price is refused.)* *(Progress 2026-11-06:
+  Stripe's signed webhooks reach a preview. A `POST` with `Stripe-Signature`
+  to exactly `/api/payouts/stripe_connect/webhook` or
+  `/api/payments/webhooks/stripe` passes the gate; the route verifies the
+  signature itself. Unsigned requests, other methods and other paths stay
+  gated. Evidence `tests/core/private-preview-webhooks.test.ts`; changeset
+  `preview-stripe-webhooks.md`.)*
 - [ ] **C3.36** Preview mail: on a private preview (`FREEHOLDER_PREVIEW_KEY`)
   transactional mail (sign-in links, notifications) works without a public
   domain, but reaches only people the preview already involves: the owner's
