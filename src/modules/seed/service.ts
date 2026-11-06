@@ -248,6 +248,36 @@ const installDemoApply = defineService({
       status: "active",
     });
 
+    // The link-in-bio page last (C9.39): its smart links point at the
+    // services, events, products and pages installed above, and an entry is
+    // only offered while what it points at is published.
+    const bio = pack.LINK_IN_BIO;
+    const { addLink, setup: setupLinkInBio, updateProfile } = await import(
+      "@/modules/linkinbio/service"
+    );
+    const { bookableServices } = await import("@/modules/catalog/public-booking");
+    await ctx.callAsSystem(setupLinkInBio, { slug: bio.slug, publish: input.publish });
+    await ctx.callAsSystem(updateProfile, {
+      bio: bio.bio,
+      socials: bio.socials.map((item) => ({ ...item })),
+      publish: input.publish,
+    });
+    const bookable = (await ctx.callAsSystem(bookableServices, {})).services;
+    for (const entry of bio.links) {
+      const target =
+        entry.kind === "booking"
+          ? bookable.find((service) => service.name === entry.service)?.productId
+          : entry.target;
+      if (target === undefined) continue;
+      await ctx.callAsSystem(addLink, {
+        label: entry.label,
+        kind: entry.kind,
+        target,
+        publish: input.publish,
+      });
+    }
+    created.push(bio.slug);
+
     await ctx.callAsSystem(completeSetup, {});
 
     ctx.queueEvent("demo.installed", { pages: created.length });

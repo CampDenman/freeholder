@@ -607,6 +607,7 @@ test.describe("real-browser accessibility", () => {
         ["/admin/assistant", t("en", "assistant.title")],
         ["/admin/shipping", t("en", "catalog.shipping.title")],
         ["/admin/traffic", t("en", "analytics.title")],
+        ["/admin/link-in-bio", t("en", "linkinbio.title")],
       ] as const) {
         await assertHeadingAxeAndSkip(page, path, heading);
       }
@@ -651,6 +652,16 @@ test.describe("real-browser accessibility", () => {
     await test.step("storefront", async () => {
       await page.goto("/");
       await assertSurface(page, "storefront");
+    });
+
+    // C9.39: the demo's link-in-bio page — the profile's name is the page's
+    // only H1, both themes pass axe, every button and icon is a visible
+    // keyboard stop, and it reflows at 320 CSS px, which is the width it is
+    // actually opened at from a social profile.
+    await test.step("link in bio", async () => {
+      await assertHeadingAxeAndSkip(page, "/links", "Aurora Coast Photography");
+      await assertKeyboardAndFocus(page, "link-in-bio");
+      await assertReflow(page, "link-in-bio");
     });
 
     await test.step("French, Spanish and catalog-driven Arabic RTL", async () => {

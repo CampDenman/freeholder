@@ -103,6 +103,7 @@ function navLabels(t: Translate): AdminNavLabels {
     assistant: t("assistant.title"),
     social: t("social.title"),
     sharing: t("share.title"),
+    linkInBio: t("linkinbio.title"),
     popups: t("popups.title"),
     automations: t("automations.title"),
     documents: t("documents.title"),

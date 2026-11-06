@@ -500,6 +500,46 @@ test.describe("real-browser product journeys", () => {
       await expect(page.getByRole("button", { name: "Send journey" })).toBeVisible();
     });
 
+    await test.step("link in bio: set up, add a smart link, follow it, hide it", async () => {
+      // C9.39 end to end through the owner's screen: the page is created, a
+      // smart link to a page on this site is added from its picker, a visitor
+      // follows it through the first-party click door to the page with the
+      // link's campaign attached, and hiding it removes it and stops the door.
+      await page.goto("/admin/link-in-bio");
+      await page.getByLabel("Address").fill("links");
+      await page.getByLabel("Publish it straight away").check();
+      await page.getByRole("button", { name: "Create page" }).click();
+      await expect(page).toHaveURL(/\/admin\/link-in-bio\?saved=1/);
+
+      await page.getByLabel("Label", { exact: true }).fill("Start a journey");
+      await page.getByLabel("Links to", { exact: true }).selectOption("page");
+      await page.getByLabel("Page", { exact: true }).selectOption({ label: "Journey Page" });
+      await page.getByRole("button", { name: "Add link" }).click();
+      await expect(page).toHaveURL(/\/admin\/link-in-bio\?saved=1$/);
+      await expect(page.getByText("Showing", { exact: true })).toBeVisible();
+
+      await page.goto("/links");
+      const button = page.getByRole("link", { name: "Start a journey" });
+      const clickUrl = await button.getAttribute("href");
+      expect(clickUrl).toMatch(/^\/go\/link\/[a-z0-9]+\?from=%2Flinks$/);
+      await button.click();
+      await expect(page).toHaveURL(/\/journey\?/);
+      const landed = new URL(page.url());
+      expect(landed.searchParams.get("utm_medium")).toBe("link-in-bio");
+      expect(landed.searchParams.get("utm_campaign")).toMatch(/^bio:[a-z0-9]+$/);
+
+      await page.goto("/admin/link-in-bio");
+      await page.getByRole("button", { name: "Hide", exact: true }).click();
+      await expect(page).toHaveURL(/\/admin\/link-in-bio\?saved=1$/);
+      await expect(page.getByText("Hidden", { exact: true })).toBeVisible();
+      await page.goto("/links");
+      await expect(page.getByRole("link", { name: "Start a journey" })).toHaveCount(0);
+      const gone = await page.goto(clickUrl!);
+      expect(gone?.status()).toBe(404);
+      // The next step fills in the journey page's form.
+      await page.goto("/journey");
+    });
+
     await test.step("public form creates a visible submission and contact", async () => {
       // Let the signed form timestamp clear its intentional three-second trap.
       await page.waitForTimeout(3_100);

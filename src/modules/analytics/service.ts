@@ -872,6 +872,68 @@ export const campaignTotals = defineService({
   },
 });
 
+/**
+ * How often a named event happened, split by one of its properties.
+ *
+ * The question a module asks when it records its own event through `track`
+ * and then needs the count back — a link-in-bio entry asking "how many
+ * clicks did I get" (C9.39). Answered here for the same reason as
+ * `campaignTotals`: what counts as a person, a bot and a window is analytics'
+ * definition, and a module counting its own rows would grow a second number
+ * that disagrees with the traffic report the first time either changed.
+ *
+ * Only values the caller names are counted. That keeps it a lookup rather
+ * than a leaderboard, so a link clicked twice is present rather than ranked
+ * out, and it keeps an arbitrary property from becoming a way to enumerate
+ * whatever else happens to be stored in `props`.
+ */
+export const eventTotals = defineService({
+  name: "analytics.eventTotals",
+  summary: "Event and visitor counts for one event name, split by a named property.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    name: z.string().min(1).max(60),
+    prop: z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,39}$/),
+    values: z.array(z.string().min(1).max(160)).min(1).max(500),
+    days: since,
+    includeBots,
+  }),
+  output: listed(
+    z.object({
+      value: z.string(),
+      events: z.number().int(),
+      visitors: z.number().int(),
+    }),
+  ),
+  handler: async (input, ctx) => {
+    const value = sql<string>`${analyticsEvents.props} ->> ${input.prop}`;
+    const rows = await ctx.tx
+      .select({
+        value,
+        events: count(),
+        visitors: countDistinct(analyticsEvents.anonId),
+      })
+      .from(analyticsEvents)
+      .where(
+        and(
+          eq(analyticsEvents.name, input.name),
+          gte(analyticsEvents.at, new Date(Date.now() - input.days * 86_400_000)),
+          inArray(value, input.values),
+          humansOnly(input.includeBots),
+        ),
+      )
+      // By position: the prop is a bound parameter, and Postgres will not
+      // treat two separately bound `props ->> $n` as the same expression.
+      .groupBy(sql`1`);
+    return rows.map((each) => ({
+      value: String(each.value ?? ""),
+      events: Number(each.events),
+      visitors: Number(each.visitors),
+    }));
+  },
+});
+
 export const classificationCandidates = defineService({
   name: "analytics.classificationCandidates",
   summary: "Recent automated traffic an owner may correct.",
@@ -1386,6 +1448,7 @@ export default [
   webVitalsSummary,
   campaignAttribution,
   campaignTotals,
+  eventTotals,
   classificationCandidates,
   correctClassification,
   exportAnonymizedAnalytics,

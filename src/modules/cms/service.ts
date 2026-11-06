@@ -569,6 +569,50 @@ export const publishedPaths = defineService({
 });
 
 /**
+ * Which of these addresses a visitor can open right now (C9.39).
+ *
+ * The question a block asks when it links to other pages on the site and
+ * would rather drop a link than send somebody to a 404 — a link-in-bio entry
+ * for a product that was unpublished last night. `publishedPaths` answers it
+ * too, but by walking every page and its vetoes, which is a sitemap's cost and
+ * not a page render's. This reads only the slugs it was given, through the
+ * same three rules: published, not in the trash, no veto from the ledger
+ * that owns it.
+ *
+ * Public because the answer is: a published page is already readable at its
+ * address, and an unpublished one answers 404 to anybody who asks there.
+ */
+export const livePaths = defineService({
+  name: "cms.livePaths",
+  summary: "Which of the given page addresses are published and may render now.",
+  kind: "query",
+  permission: "public",
+  input: z.object({ slugs: z.array(lookupSlug).max(200) }),
+  output: z.object({ slugs: listed(z.string()) }),
+  handler: async (input, ctx) => {
+    const asked = [...new Set(input.slugs)];
+    if (asked.length === 0) return { slugs: [] };
+    const found = await ctx.tx
+      .select({ id: pages.id, slug: pages.slug })
+      .from(pages)
+      .where(
+        and(
+          inArray(pages.slug, asked),
+          eq(pages.status, "published"),
+          isNull(pages.trashedAt),
+          visibleLocationPage,
+        ),
+      );
+    const live: string[] = [];
+    for (const page of found) {
+      if ((await blockingVetoes(ctx.tx, { id: page.id, slug: page.slug })).length > 0) continue;
+      live.push(page.slug);
+    }
+    return { slugs: [...new Set(live)].sort() };
+  },
+});
+
+/**
  * Published pages whose title or summary match a visitor's search (C1.38).
  *
  * The public /search page searched only products, so a wedding photographer's
@@ -1816,6 +1860,7 @@ export default [
   getPage,
   listPages,
   publishedPaths,
+  livePaths,
   searchPublishedPages,
   createPage,
   deleteDraftPage,

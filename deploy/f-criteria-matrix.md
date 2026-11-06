@@ -3917,6 +3917,21 @@ v2.
 - **F11** — Changeset `.changeset/c9-38-card-trial.md`. Annotation in `MASTER.md`. Reconciliation row in `deploy/spec-reconciliation.md`. Acceptance boundary: `deploy/customer-surfaces-2026-10-07.md`.
 - **F12** — `tests/modules/subscription-billing.test.ts` composes signup, consent, the saved card and the grant. The browser path in `tests/browser/customer-surfaces.spec.ts` proves an incapable adapter keeps the plan unavailable; the server default is manual, so that run does not render the save-card form.
 
+## C9.39 — Link in bio
+
+- **F01** — No new migration and no new table. The page is a `pages` row from `db/migrations/0000_reviewed-baseline.sql`; the links are a Zod-validated `linkInBio` block in its `blocks` tree (`src/modules/linkinbio/links.ts`), with ids assigned on save; clicks are `analytics_events` rows.
+- **F02** — `src/modules/linkinbio/service.ts` — typed inputs and outputs, strict destination and schedule validation, stable `validation`/`not_found`/`permission` errors, one transaction per edit composed through `cms.updatePage` with the version it read; covered in `tests/modules/linkinbio.test.ts`.
+- **F03** — N/A — no contact column: a link-in-bio entry is page content, and a click is an anonymous analytics event that joins the contact spine only through analytics' existing `identify` backfill. Audit rows for every edit and the composed `cms.updatePage` row: `tests/modules/linkinbio.test.ts`.
+- **F04** — `app/(admin)/admin/link-in-bio/page.tsx` — setup, add, edit, reorder, hide, schedule, remove with confirmation, profile and per-link clicks; the visual editor edits the same block (`app/(admin)/admin/BlockEditor.tsx`). Owner path in `tests/browser/journeys.spec.ts`.
+- **F05** — `linkinbio.*` at `/api/v1/linkinbio.*` and MCP `linkinbio_*`, from the same registry (`packages/sdk/src/generated.ts`); MCP listing and destructive hint in `tests/modules/linkinbio.test.ts`; surface equivalence for every service in `tests/core/api.test.ts` and `tests/core/mcp.test.ts`.
+- **F06** — `locales/en.json`, `locales/es.json`, `locales/fr.json`, `locales/ar.json`; token-only button styles and an axe pass on the rendered block in `tests/modules/linkinbio-links.test.ts`; `/links` and `/admin/link-in-bio` in both themes, keyboard and 320px reflow in `tests/browser/accessibility.spec.ts`.
+- **F07** — `tests/modules/linkinbio.test.ts`: Pending — refused destinations (`javascript:`, schemes on page links, traversal), a hostile `from`, hidden, scheduled, expired and unavailable links answering 404 alike, removal only with confirmation, rate-limited public clicks, and customers, anonymous callers and narrow agents refused. No hosted site checked yet.
+- **F08** — `tests/modules/linkinbio.test.ts` and `tests/modules/linkinbio-links.test.ts`: Pending — service, database, permission, MCP, rendering, scheduling, analytics and axe on real PostgreSQL; the browser journey and accessibility pass run in CI. No phone on a hosted site yet.
+- **F09** — N/A — no job and no new store: links ride page rows and revisions, and clicks ride the analytics ledger, which already participate in export, retention and erasure (`tests/core/record-participation.test.ts`).
+- **F10** — `seed/demo/content.ts` — the demo installs `/links` with six smart links, asserted live in `tests/core/seed-demo.test.ts`; the `page.link-in-bio` template is in `src/modules/cms/templates.ts`.
+- **F11** — `deploy/link-in-bio.md`, changeset `.changeset/link-in-bio.md`, `MASTER.md` §1, §3, §32 and the C9.39 annotation, reconciliation row in `deploy/spec-reconciliation.md`.
+- **F12** — `tests/modules/linkinbio.test.ts` composes `linkinbio.setup` → `linkinbio.addLink` → `cms.publishPage` → `linkinbio.follow` → `analytics.track` → `linkinbio.report`; `tests/browser/journeys.spec.ts` follows a link from `/links` to a published page and hides it again.
+
 ## C9.32 — Build scheduled exports and the accounting export shapes
 
 - **F01** — `db/migrations/0000_reviewed-baseline.sql` — reviewed baseline (C10.19) folding the item's migration tag `0158_scheduled_exports.sql`; table invariants asserted in `tests/modules/reporting-exports.test.ts`.

@@ -538,6 +538,29 @@ export const NEWSLETTER = {
   },
 };
 
+/**
+ * The studio's link-in-bio page at /links (C9.39): the one address on every
+ * social profile. Every entry but one is a smart link to something the demo
+ * already publishes, so it shows the feature's point — the links follow the
+ * site. The booking entry is resolved to its service id at install time.
+ */
+export const LINK_IN_BIO = {
+  slug: "links",
+  bio: "Wedding, portrait and coastal photography from a small studio on the island. Prints, sessions and the occasional workshop.",
+  links: [
+    { label: "Book a portrait session", kind: "booking", service: "Portrait session" },
+    { label: "Golden-hour beach workshop", kind: "event", target: "golden-hour-workshop" },
+    { label: "Driftwood at dawn — fine-art print", kind: "product", target: "driftwood-dawn-print" },
+    { label: "Wedding photography", kind: "page", target: "services/weddings" },
+    { label: "Get the Aurora Coast Letter", kind: "newsletter", target: "" },
+    { label: "Plan your wedding day", kind: "page", target: "planning" },
+  ],
+  socials: [
+    { network: "email", url: "hello@auroracoast.example" },
+    { network: "website", url: "https://auroracoast.example/" },
+  ],
+} as const;
+
 export const PAGES: SeedPage[] = [
   {
     slug: "blog",
