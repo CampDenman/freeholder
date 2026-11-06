@@ -127,7 +127,9 @@ it('concurrent loyalty redemptions cannot spend the same points twice', async ()
 
 it('self-host compose honors the image pin used by rollback', () => {
   const compose = parse(readFileSync('deploy/docker-selfhost/infra/compose.yml', 'utf8')) as { services: { app: { image: string } } };
-  expect(compose.services.app.image).toBe('${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:edge}');
+  // C3.44: the default is the checkout's release, never `edge`.
+  const { version } = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
+  expect(compose.services.app.image).toBe(`\${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:${version}}`);
 });
 
 it('cannot claim a fingerprint is a recoverable snapshot', async () => {

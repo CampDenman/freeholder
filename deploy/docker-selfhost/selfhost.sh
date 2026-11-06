@@ -42,8 +42,6 @@ compose_file() {
     *) echo "$here/infra/compose.yml" ;;
   esac
 }
-# Backups, restores and the nightly schedule run deploy/docker-selfhost/infra/backup.sh
-# inside the Compose `backup` service.
 compose() { docker compose --env-file "$ENV_FILE" -f "$(compose_file)" "$@"; }
 
 private_ipv4() {

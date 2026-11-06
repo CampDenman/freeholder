@@ -32,11 +32,11 @@ operations:
   install: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml up -d"
   install-https: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.https.yml up -d"
   verify: "deploy/docker-selfhost/selfhost.sh check"
-  backup: "deploy/docker-selfhost/selfhost.sh backup"
-  restore: "deploy/docker-selfhost/selfhost.sh restore latest"
+  backup: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml exec -T db pg_dump --format=custom --no-owner --no-privileges -U freeholder freeholder > freeholder.dump"
+  restore: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml exec -T db pg_restore --no-owner --no-privileges -U freeholder -d freeholder < freeholder.dump"
   migrate-in: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml exec -T db pg_restore --no-owner --no-privileges -U freeholder -d freeholder < freeholder.dump && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
   migrate-out: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml exec -T db pg_dump --format=custom --no-owner --no-privileges -U freeholder freeholder > freeholder.dump && pnpm ownership:export -- --output ownership-export && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
-  update: "deploy/docker-selfhost/selfhost.sh update $FREEHOLDER_VERSION"
+  update: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml pull && docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml up -d"
   rollback: "FREEHOLDER_IMAGE=${PREVIOUS_FREEHOLDER_IMAGE:?set previous immutable image digest} docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml up -d"
 update:
   strategy: image-swap
