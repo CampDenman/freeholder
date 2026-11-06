@@ -105,8 +105,9 @@ cmd_prepare() {
 
 cmd_start() {
   [ -f "$ENV_FILE" ] || die "run '$0 prepare' first"
-  compose pull --quiet
-  compose up -d --wait
+  # Release tags do not move, so pull only what is not here yet (a locally
+  # built FREEHOLDER_IMAGE is never pulled).
+  compose up -d --wait --pull missing
   url=$(env_get APP_URL)
   say "waiting for $url"
   i=0

@@ -226,7 +226,7 @@ describe("docker-selfhost keeps media on a volume that is backed up (C3.44)", ()
       // override the owner's choice of S3.
       expect(app!.environment!.FREEHOLDER_STORAGE).toBeUndefined();
       expect(backup!.image).toBe("postgres:16-alpine");
-      expect(backup!.volumes).toEqual(expect.arrayContaining(["./backup.sh:/usr/local/bin/freeholder-backup:ro", "media:/media", "backups:/backups"]));
+      expect(backup!.volumes).toEqual(expect.arrayContaining(["./backup.sh:/usr/local/bin/freeholder-backup:ro", "media:/srv/media", "backups:/backups"]));
       expect(backup!.command).toEqual(["sh", "/usr/local/bin/freeholder-backup", "schedule"]);
       expect(Object.keys(compose.volumes)).toEqual(expect.arrayContaining(["pgdata", "media", "backups"]));
     });

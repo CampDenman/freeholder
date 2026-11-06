@@ -28,8 +28,8 @@ backup_now() {
     echo "backup: the database dump is only $size bytes; refusing to keep a likely-empty backup" >&2
     return 1
   fi
-  if [ -n "$(ls -A /media 2>/dev/null)" ]; then
-    tar -C / -czf "$dir.partial/media.tar.gz" media
+  if [ -n "$(ls -A /srv/media 2>/dev/null)" ]; then
+    tar -C /srv -czf "$dir.partial/media.tar.gz" media
   fi
   (cd "$dir.partial" && sha256sum ./* > SHA256SUMS)
   mv "$dir.partial" "$dir"
@@ -59,8 +59,8 @@ ALTER DATABASE freeholder_restore RENAME TO freeholder;
 SQL
   # The media volume becomes exactly what the backup held (empty if it held
   # none, as with S3 storage, where the volume is unused).
-  find /media -mindepth 1 -delete
-  [ ! -f "$dir/media.tar.gz" ] || tar -C / -xzf "$dir/media.tar.gz"
+  find /srv/media -mindepth 1 -delete
+  [ ! -f "$dir/media.tar.gz" ] || tar -C /srv -xzf "$dir/media.tar.gz"
   echo "restore: $1 restored; the replaced database is kept as freeholder_previous"
 }
 

@@ -88,11 +88,16 @@ services:
       BACKUP_KEEP: ${BACKUP_KEEP:-14}
     volumes:
       - ./backup.sh:/usr/local/bin/freeholder-backup:ro
-      - media:/media
+      # Not /media: Alpine ships one, and its contents would seed the volume.
+      - media:/srv/media
       - backups:/backups
+    # After app: Docker gives a new named volume the ownership of the first
+    # container's mount point, and only the app image's is the app user's.
     depends_on:
       db:
         condition: service_healthy
+      app:
+        condition: service_started
 volumes:
   pgdata:
   media:
