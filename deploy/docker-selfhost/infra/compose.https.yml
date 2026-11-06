@@ -1,0 +1,70 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# The same stack as compose.yml behind Caddy with automatic HTTPS, for a
+# public host. Passkeys need a secure origin, so a public site uses this file
+# instead of compose.yml's plain HTTP on port 3000. Both files live in infra/,
+# so Compose gives them the same project and database volume: switching from
+# one to the other keeps the data.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.https:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificates; losing this re-issues them
+      - caddy_config:/config
+    # `{$FREEHOLDER_DOMAIN}` in the Caddyfile is Caddy's own substitution
+    # against this container's environment, so the name must be passed here.
+    # `:?` rather than a default: a certificate requested for a guessed name
+    # fails at Let's Encrypt, and failing at `compose up` is clearer.
+    environment:
+      FREEHOLDER_DOMAIN: ${FREEHOLDER_DOMAIN:?set FREEHOLDER_DOMAIN in .env to the site's hostname}
+    depends_on:
+      - app
+  app:
+    image: ${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:edge}
+    restart: unless-stopped
+    # Not published to the host: Caddy is the only way in.
+    expose:
+      - "3000"
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgres://freeholder:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/freeholder
+      # Caddy overwrites this header with the connecting address, and the app
+      # port is not published, so rate limits can tell visitors apart (C11.10).
+      TRUSTED_CLIENT_IP_HEADER: x-freeholder-client-ip
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: freeholder
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: freeholder
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U freeholder -d freeholder"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

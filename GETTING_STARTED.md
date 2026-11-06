@@ -58,15 +58,20 @@ credentials ready. From a fresh checkout:
 ```sh
 git clone https://github.com/CampDenman/freeholder.git
 cd freeholder
-cp deploy/docker-selfhost/.env.example deploy/docker-selfhost/.env
-# Fill POSTGRES_PASSWORD, BOOTSTRAP_SECRET, SESSION_SECRET, CREDENTIAL_KEY,
-# APP_URL, and the S3 values in deploy/docker-selfhost/.env.
+pnpm install --frozen-lockfile
+pnpm launch:prepare --target docker-selfhost --url http://localhost:3000
+# Add the S3 values to deploy/docker-selfhost/.env; the secrets and
+# POSTGRES_PASSWORD are already generated there.
 docker compose --env-file deploy/docker-selfhost/.env \
   -f deploy/docker-selfhost/infra/compose.yml up -d
 ```
 
-Open the `APP_URL` you configured, visit `/setup`, and enter the bootstrap
-secret from your `.env` file. The [recipe verification
+For a public server, prepare with `--url https://YOUR-DOMAIN` and start
+`deploy/docker-selfhost/infra/compose.https.yml` instead: Caddy serves the
+site over HTTPS, which owner passkeys need.
+
+Open the claim link in `.freeholder-launch/claim-link.txt` yourself. The
+[recipe verification
 guide](deploy/docker-selfhost/verify.md) covers health, storage, backup,
 restore and updates. Keep the `.env` file out of version control.
 
