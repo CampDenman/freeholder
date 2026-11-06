@@ -125,6 +125,7 @@ describe("a trusted client address only where a proxy overwrites it (C11.10)", (
     { caddy: "digitalocean-droplet/infra/Caddyfile", compose: "digitalocean-droplet/infra/compose.yml" },
     { caddy: "docker-selfhost/docker-updater/Caddyfile", compose: "docker-selfhost/docker-updater/compose.yml" },
     { caddy: "docker-selfhost/playground/demo.freeholder.ai.caddy", compose: "docker-selfhost/playground/compose.yml" },
+    { caddy: "docker-selfhost/infra/Caddyfile.https", compose: "docker-selfhost/infra/compose.https.yml" },
   ];
 
   for (const recipe of recipesWithCaddy) {
@@ -168,6 +169,23 @@ describe("a trusted client address only where a proxy overwrites it (C11.10)", (
     expect(proxies.length).toBeGreaterThan(0);
     for (const proxy of proxies) expect(proxy).toMatch(/header_up X-Freeholder-Client-Ip \{client_ip\}/);
     expect(readme).toMatch(/@nextImage path \/_next\/image \/_next\/image\/\*\n\s*respond @nextImage 404\n\s*reverse_proxy /);
+  });
+
+  it("the HTTPS compose file gives Caddy its hostname and keeps the plain file's project and database", () => {
+    // Passkeys need HTTPS on a public host; compose.yml alone serves HTTP:3000.
+    type Service = { ports?: string[]; volumes?: string[]; environment?: Record<string, string>; env_file?: string };
+    const https = parse(readFileSync(join(DEPLOY, "docker-selfhost/infra/compose.https.yml"), "utf8")) as { services: Record<string, Service>; volumes: Record<string, unknown> };
+    const plain = parse(readFileSync(join(DEPLOY, "docker-selfhost/infra/compose.yml"), "utf8")) as { services: Record<string, Service> };
+    expect(https.services.caddy!.ports).toEqual(["80:80", "443:443"]);
+    expect(https.services.caddy!.volumes).toContain("./Caddyfile.https:/etc/caddy/Caddyfile:ro");
+    expect(https.services.caddy!.environment!.FREEHOLDER_DOMAIN).toMatch(/^\$\{FREEHOLDER_DOMAIN:\?/);
+    expect(https.services.db!.ports).toBeUndefined();
+    // Same directory and no `name:`, so one project; same volume, so switching keeps the data.
+    expect(https.services.db!.volumes).toEqual(plain.services.db!.volumes);
+    expect(https.services.app!.env_file).toBe(plain.services.app!.env_file);
+    expect(https.services.app!.environment!.DATABASE_URL).toBe(plain.services.app!.environment!.DATABASE_URL);
+    const recipe = parse(readFileSync(join(DEPLOY, "docker-selfhost/recipe.yaml"), "utf8")) as { operations: Record<string, string> };
+    expect(recipe.operations["install-https"]).toBe(recipe.operations.install!.replace("compose.yml", "compose.https.yml"));
   });
 
   it("the plain compose recipe, which publishes the app, trusts no header", () => {

@@ -16,6 +16,8 @@ limits:
   - "MinIO is the local-dev profile only"
 artifacts:
   - deploy/docker-selfhost/infra/compose.yml
+  - deploy/docker-selfhost/infra/compose.https.yml
+  - deploy/docker-selfhost/infra/Caddyfile.https
 required_environment:
   - POSTGRES_PASSWORD
   - BOOTSTRAP_SECRET
@@ -29,6 +31,7 @@ required_environment:
   - S3_SECRET_ACCESS_KEY
 operations:
   install: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml up -d"
+  install-https: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.https.yml up -d"
   verify: "pnpm doctor --url $FREEHOLDER_URL --email $FREEHOLDER_EMAIL --password $FREEHOLDER_PASSWORD"
   backup: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml exec -T db pg_dump --format=custom --no-owner --no-privileges -U freeholder freeholder > freeholder.dump"
   restore: "docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.yml exec -T db pg_restore --no-owner --no-privileges -U freeholder -d freeholder < freeholder.dump"

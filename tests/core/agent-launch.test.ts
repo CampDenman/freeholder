@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { parseEnv } from "node:util";
@@ -47,6 +47,64 @@ describe("private launch preparation", () => {
     await rm(join(dir, ".env")); await writeFile(join(dir, "untouched"), "original"); await symlink(join(dir, "untouched"), join(dir, ".env"));
     await expect(prepareLaunch({ directory: dir, environment: {} })).rejects.toThrow(/regular/);
     expect(await readFile(join(dir, "untouched"), "utf8")).toBe("original");
+  });
+});
+
+describe("Docker Compose launch preparation", () => {
+  async function checkout() {
+    const dir = await directory();
+    await mkdir(join(dir, "deploy", "docker-selfhost"), { recursive: true });
+    return dir;
+  }
+
+  it("writes the .env Compose reads, with a database password, and needs no DATABASE_URL", async () => {
+    const dir = await checkout();
+    const result = await prepareLaunch({ directory: dir, target: "docker-selfhost", url: "https://shop.example.com", environment: {} });
+    expect(result.privateEnvironmentFile).toBe(join(dir, "deploy", "docker-selfhost", ".env"));
+    await expect(stat(join(dir, ".env"))).rejects.toThrow(/ENOENT/);
+    const values = parseEnv(await readFile(result.privateEnvironmentFile, "utf8"));
+    const secrets = ["BOOTSTRAP_SECRET", "SESSION_SECRET", "CREDENTIAL_KEY", "POSTGRES_PASSWORD"];
+    for (const name of secrets) { expect(values[name]).toMatch(/^[a-f0-9]{64}$/); expect(JSON.stringify(result)).not.toContain(values[name]); }
+    expect(new Set(secrets.map((name) => values[name])).size).toBe(4);
+    expect(values).toMatchObject({ APP_URL: "https://shop.example.com", FREEHOLDER_DOMAIN: "shop.example.com", FREEHOLDER_STORAGE: "s3" });
+    expect(values.DATABASE_URL).toBeUndefined();
+    expect(result.missing).toEqual(["S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]);
+    expect(result.composeFile).toBe("deploy/docker-selfhost/infra/compose.https.yml");
+    expect(result.startCommand).toBe("docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.https.yml up -d");
+    expect((await stat(result.privateEnvironmentFile)).mode & 0o777).toBe(0o600);
+    expect(result.privateClaimLinkFile).toBe(join(dir, ".freeholder-launch", "claim-link.txt"));
+    expect((await readFile(result.privateClaimLinkFile, "utf8")).trim()).toBe(`https://shop.example.com/setup#claim=${values.BOOTSTRAP_SECRET}`);
+
+    const ready = await prepareLaunch({ directory: dir, target: "docker-selfhost", url: "https://shop.example.com", environment: { S3_ENDPOINT: "https://s3.example.test", S3_REGION: "r", S3_BUCKET: "b", S3_ACCESS_KEY_ID: "a", S3_SECRET_ACCESS_KEY: "s" } });
+    expect(ready.configurationReady).toBe(true);
+    const again = parseEnv(await readFile(ready.privateEnvironmentFile, "utf8"));
+    for (const name of secrets) expect(again[name]).toBe(values[name]);
+  });
+
+  it("uses plain HTTP Compose on localhost, and keeps an existing database password", async () => {
+    const dir = await checkout();
+    await writeFile(join(dir, "deploy", "docker-selfhost", ".env"), "POSTGRES_PASSWORD=existing-db-password\n", { mode: 0o600 });
+    const result = await prepareLaunch({ directory: dir, target: "docker-selfhost", url: "http://localhost:3000", environment: {} });
+    const values = parseEnv(await readFile(result.privateEnvironmentFile, "utf8"));
+    expect(values.POSTGRES_PASSWORD).toBe("existing-db-password");
+    expect(values.FREEHOLDER_DOMAIN).toBeUndefined();
+    expect(result.composeFile).toBe("deploy/docker-selfhost/infra/compose.yml");
+    expect(result.next.join(" ")).toMatch(/passkeys need HTTPS/);
+  });
+
+  it("refuses a database password Compose cannot put in DATABASE_URL, and preserves it", async () => {
+    const dir = await checkout();
+    const envPath = join(dir, "deploy", "docker-selfhost", ".env");
+    await writeFile(envPath, "POSTGRES_PASSWORD=p@ss/word\n", { mode: 0o600 });
+    await expect(prepareLaunch({ directory: dir, target: "docker-selfhost", environment: {} })).rejects.toThrow(/POSTGRES_PASSWORD/);
+    expect(await readFile(envPath, "utf8")).toBe("POSTGRES_PASSWORD=p@ss/word\n");
+  });
+
+  it("still writes beside --directory when it names the recipe folder itself", async () => {
+    const dir = await directory();
+    const result = await prepareLaunch({ directory: dir, target: "docker-selfhost", environment: {} });
+    expect(result.privateEnvironmentFile).toBe(join(dir, ".env"));
+    expect(result.startCommand).toBeUndefined();
   });
 });
 

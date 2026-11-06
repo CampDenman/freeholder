@@ -6,6 +6,9 @@ export interface LaunchReport {
   missing: string[];
   privateEnvironmentFile: string;
   privateClaimLinkFile: string;
+  /** docker-selfhost in a checkout with the recipe: the Compose file for this URL, and the command that starts it. */
+  composeFile?: string;
+  startCommand?: string;
   setupUrl: string;
   mcpUrl: string;
   next: string[];

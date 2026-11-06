@@ -25,27 +25,41 @@ export async function prepareLaunch({ directory = process.cwd(), target = "repli
   const root = resolve(directory);
   const rootStat = await lstat(root);
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error("Use a real project directory.");
-  const envPath = join(root, ".env");
+  // Compose reads deploy/docker-selfhost/.env (its env_file and the recipe's
+  // --env-file), so the Docker target writes there; a project without the
+  // recipe directory keeps .env at its root.
+  const docker = target === "docker-selfhost";
+  const recipeDirectory = join(root, "deploy", "docker-selfhost");
+  const recipeStat = docker ? await lstat(recipeDirectory).catch(error => { if (error.code === "ENOENT") return null; throw error; }) : null;
+  if (recipeStat && (!recipeStat.isDirectory() || recipeStat.isSymbolicLink())) throw new Error("deploy/docker-selfhost must be a real directory.");
+  const envPath = join(recipeStat ? recipeDirectory : root, ".env");
   const existing = await regularFile(envPath);
   const original = existing ? await readFile(envPath, "utf8") : "";
   const stored = parseEnv(original);
   const values = { ...stored };
-  const managed = ["DATABASE_URL", "APP_URL", "BOOTSTRAP_SECRET", "SESSION_SECRET", "CREDENTIAL_KEY", "FREEHOLDER_STORAGE", "REPLIT_BUCKET_ID", "S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "FREEHOLDER_SEED_DEMO"];
+  const managed = ["DATABASE_URL", "APP_URL", "BOOTSTRAP_SECRET", "SESSION_SECRET", "CREDENTIAL_KEY", "FREEHOLDER_STORAGE", "REPLIT_BUCKET_ID", "S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "FREEHOLDER_SEED_DEMO", ...(docker ? ["POSTGRES_PASSWORD", "FREEHOLDER_DOMAIN"] : [])];
   for (const name of managed) if (environment[name]) values[name] = environment[name];
   const additions = {};
-  for (const name of ["BOOTSTRAP_SECRET", "SESSION_SECRET", "CREDENTIAL_KEY"]) {
+  const secrets = ["BOOTSTRAP_SECRET", "SESSION_SECRET", "CREDENTIAL_KEY", ...(docker ? ["POSTGRES_PASSWORD"] : [])];
+  for (const name of secrets) {
     if (!values[name]) { values[name] = randomBytes(32).toString("hex"); additions[name] = values[name]; }
-    if (name !== "CREDENTIAL_KEY" && values[name].length < 32) throw new Error(`${name} must contain at least 32 characters; the existing value was preserved.`);
+    if (name === "POSTGRES_PASSWORD") {
+      // Compose interpolates it into DATABASE_URL; an existing database keeps the password it was created with.
+      if (!/^[A-Za-z0-9._~-]+$/.test(values[name])) throw new Error("POSTGRES_PASSWORD must use only letters, digits and . _ ~ - because Compose puts it in DATABASE_URL; the existing value was preserved.");
+    } else if (name !== "CREDENTIAL_KEY" && values[name].length < 32) throw new Error(`${name} must contain at least 32 characters; the existing value was preserved.`);
   }
   if (!/^[a-fA-F0-9]{64}$/.test(values.CREDENTIAL_KEY) && !/^[A-Za-z0-9_-]{43}$/.test(values.CREDENTIAL_KEY)) throw new Error("CREDENTIAL_KEY must be canonical 32-byte hex or base64url; the existing value was preserved.");
   const credentialBytes = /^[a-fA-F0-9]{64}$/.test(values.CREDENTIAL_KEY) ? Buffer.from(values.CREDENTIAL_KEY, "hex") : Buffer.from(values.CREDENTIAL_KEY, "base64url");
   if (credentialBytes.length !== 32) throw new Error("CREDENTIAL_KEY must encode 32 bytes; the existing value was preserved.");
-  if (values.BOOTSTRAP_SECRET === values.SESSION_SECRET || values.BOOTSTRAP_SECRET === values.CREDENTIAL_KEY || values.SESSION_SECRET === values.CREDENTIAL_KEY) throw new Error("Deployment secrets must be independent; existing values were preserved.");
+  if (new Set(secrets.map(name => values[name])).size !== secrets.length) throw new Error("Deployment secrets must be independent; existing values were preserved.");
   const inferred = target === "replit" && environment.REPLIT_DOMAINS ? `https://${environment.REPLIT_DOMAINS.split(",")[0]}` : undefined;
   const siteOrigin = publicOrigin(url ?? values.APP_URL ?? inferred ?? "http://localhost:3000");
   values.APP_URL = siteOrigin;
   values.FREEHOLDER_STORAGE = target === "replit" ? "replit" : "s3";
   values.FREEHOLDER_SEED_DEMO ??= "0";
+  const publicHttps = new URL(siteOrigin).protocol === "https:";
+  // The HTTPS Compose file's Caddy requests a certificate for this name.
+  if (docker && publicHttps && !values.FREEHOLDER_DOMAIN) values.FREEHOLDER_DOMAIN = new URL(siteOrigin).hostname;
   // Preserve unrelated settings and comments; append overrides only when required.
   for (const name of managed) if (values[name] !== undefined && values[name] !== stored[name]) additions[name] = values[name];
   const added = Object.entries(additions).map(([name, value]) => envLine(name, value)).join("\n");
@@ -58,13 +72,22 @@ export async function prepareLaunch({ directory = process.cwd(), target = "repli
   await mkdir(privateDirectory, { recursive: true, mode: 0o700 }); await chmod(privateDirectory, 0o700);
   const claimPath = join(privateDirectory, "claim-link.txt"); await regularFile(claimPath);
   await writeFile(claimPath, `${siteOrigin}/setup#claim=${encodeURIComponent(values.BOOTSTRAP_SECRET)}\n`, { mode: 0o600 }); await chmod(claimPath, 0o600);
-  const required = target === "replit" ? ["DATABASE_URL", "REPLIT_BUCKET_ID"] : ["DATABASE_URL", "S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"];
+  // Compose runs PostgreSQL and builds DATABASE_URL from POSTGRES_PASSWORD itself.
+  const required = target === "replit" ? ["DATABASE_URL", "REPLIT_BUCKET_ID"] : ["S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"];
+  const composeFile = `deploy/docker-selfhost/infra/${publicHttps ? "compose.https.yml" : "compose.yml"}`;
+  const startCommand = recipeStat ? `docker compose --env-file deploy/docker-selfhost/.env -f ${composeFile} up -d` : undefined;
   const missing = required.filter(name => !values[name]);
   if (target === "replit" && new URL(siteOrigin).protocol !== "https:") missing.push("APP_URL (HTTPS deployment URL)");
   const report = {
     target, configurationReady: missing.length === 0, missing, privateEnvironmentFile: envPath, privateClaimLinkFile: claimPath,
+    ...(docker && startCommand ? { composeFile, startCommand } : {}),
     setupUrl: `${siteOrigin}/setup`, mcpUrl: `${siteOrigin}/api/mcp`,
-    next: target === "replit" ? ["Provision Replit PostgreSQL and Object Storage using Replit Agent.", "Import the private .env into Replit Secrets; preserve these same secrets in the Deployment.", "Set APP_URL to the published HTTPS URL and rerun preparation with --url.", "Run pnpm start:replit for development; publish using the checked-in Deployment configuration.", "Open the private claim link yourself, create a passkey, and connect your assistant in /admin/connect."] : ["Configure the database and private S3 bucket, then use deploy/docker-selfhost/README.md.", "Open the private claim link yourself, create a passkey, and connect your assistant in /admin/connect."],
+    next: target === "replit" ? ["Provision Replit PostgreSQL and Object Storage using Replit Agent.", "Import the private .env into Replit Secrets; preserve these same secrets in the Deployment.", "Set APP_URL to the published HTTPS URL and rerun preparation with --url.", "Run pnpm start:replit for development; publish using the checked-in Deployment configuration.", "Open the private claim link yourself, create a passkey, and connect your assistant in /admin/connect."] : [
+      "Create a private S3-compatible bucket and a key scoped to it, and put the S3 values in the private .env. Compose runs PostgreSQL itself.",
+      publicHttps ? `Point ${new URL(siteOrigin).hostname}'s DNS A record at this server and open ports 80 and 443; Caddy obtains the certificate itself.` : "This serves plain HTTP for local use. For a public site, rerun with --url https://YOUR-DOMAIN to use the HTTPS Compose file; passkeys need HTTPS.",
+      startCommand ? `Start it from the repository root: ${startCommand}` : "Start it with deploy/docker-selfhost/README.md.",
+      "Open the private claim link yourself, create a passkey, and issue your assistant's key in /admin/connect.",
+    ],
     note: "Configuration preparation is not provider provisioning or a successful deployment. Private credentials and the claim link are never printed.",
   };
   const reportPath = join(privateDirectory, "report.json");

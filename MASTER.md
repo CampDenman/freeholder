@@ -5100,6 +5100,13 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `scripts/recipe-matrix.sh` boots the built image for all six target contracts
   against PostgreSQL/MinIO and runs the authenticated canonical Doctor in CI.
   Parsed/current-IaC coverage in `tests/core/recipes.test.ts`. **F04** `packages/cli` doctor/migrate, not a new admin screen. **F05** N/A — IaC recipes (`replit.nix`, `render.yaml`, compose, DO/Railway); operator CLI is C10.21. **F07** `tests/core/recipes.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recipes.test.ts` is the composition proof.)
+  *(HTTPS follow-up 2026-11-05: `deploy/docker-selfhost/infra/compose.yml`
+  serves plain HTTP on port 3000, so owner passkeys could not work on a
+  public Compose host. `infra/compose.https.yml` with `infra/Caddyfile.https`
+  adds Caddy with automatic TLS in the same Compose project and database
+  volume, an unpublished app port and the C11.10 trusted client-address
+  header; recipe operation `install-https`. Evidence
+  `tests/core/deploy-recipe.test.ts`; changeset `docker-selfhost-https.md`.)*
 - [x] **C3.17** Give every Tier-1 recipe install, verify, backup, restore,
   migrate-in, migrate-out, update and rollback steps; continuously test matrix.
   (Every parsed `recipe.yaml` carries executable `install`, `verify`, `backup`,
@@ -5384,6 +5391,15 @@ deployments are portable, testable and incapable of silently forking the truth.
   installed and exercised, including generated agent instructions, launch
   scripts, frozen install and typecheck. Production build passed the
   standalone exclusion gate. Actual provider acceptance remains C3.28.)
+  *(Docker follow-up 2026-11-05: `--target docker-selfhost` wrote the
+  repository-root `.env`, never generated `POSTGRES_PASSWORD`, and required
+  a `DATABASE_URL` that Compose builds itself, so the documented Compose
+  command could not start from it. It now writes `deploy/docker-selfhost/.env`
+  (where Compose reads it) when that recipe directory exists, generates an
+  independent URL-safe `POSTGRES_PASSWORD` and refuses one Compose cannot
+  embed, requires only the S3 values, sets `FREEHOLDER_DOMAIN` from an HTTPS
+  URL, and reports the matching start command. Evidence
+  `tests/core/agent-launch.test.ts`; changeset `docker-selfhost-https.md`.)*
 - [ ] **C3.28** Prove fresh account launches with the owner on Replit and Lovable:
   real provider provisioning, final HTTPS owner claim/passkey/recovery, storage
   and readiness, actual platform-agent MCP discovery and permitted publishing,
