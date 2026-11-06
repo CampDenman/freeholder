@@ -78,8 +78,11 @@ already implemented. `MASTER.md` §43 is authoritative about current status.
 - **Full admin** — CRUD everything, toggle modules, seed/demo mode
 - **Operational control** — retained background-work history, sanitized run
   detail, dead-letter recovery, lease-overdue warnings, and audited controls
-- **MCP server** — the whole site is operable by the owner's AI assistant,
-  out of the box
+- **MCP server** — the owner's AI assistant connects with a named, scoped
+  key and can do only what that key allows. The `/admin/connect` presets
+  cover the website (read content, edit and publish pages, inspect health
+  and updates) and always expire. Broader scopes, such as the CRM, invoicing
+  or design, are granted per area under API keys in Settings
 - **Auth** — email + password, TOTP, passkeys/security keys, recovery codes,
   mandatory 2FA for privileged roles, and fresh verification for critical
   work; personal session/device controls and privacy-limited suspicious-login
