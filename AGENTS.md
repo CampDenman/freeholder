@@ -14,6 +14,17 @@ step that reveals the owner claim. Use the provider's own tools to provision
 Postgres and private object storage; do not substitute in-memory or workspace
 storage. Pick the path for where the owner wants to host:
 
+- **The owner's own Linux server, no Docker** (any provider; Ubuntu 22.04+ or
+  Debian 12+). Give the owner the block under "Install on your own server" in
+  `GETTING_STARTED.md`: they download `install.sh` from the release and run
+  `sudo sh install.sh --domain THEIR-DOMAIN` (or no `--domain` for a temporary
+  `<ip>.sslip.io` address) in their own SSH session, because it prints the
+  owner claim link. It needs no Docker, Node or checkout. Afterwards
+  `sudo freeholder status` is the health check. Never read or print
+  `/etc/freeholder/freeholder.env`. See `deploy/linux/README.md`.
+- **The owner's own server with Docker.** `deploy/docker-selfhost/README.md`:
+  `deploy/docker-selfhost/selfhost.sh prepare` needs only Docker and
+  openssl, then the owner runs `selfhost.sh claim-link` themselves.
 - **DigitalOcean, from a terminal agent** (Claude Code, Cursor, Codex). The
   owner signs in with `doctl auth init` (or sets `DIGITALOCEAN_TOKEN`) in their
   own shell and has an SSH key on the account. Run
@@ -44,8 +55,10 @@ tooling.
 
 ## The owner claims the site, then connects you
 
-The owner personally opens the claim link (`freeholder launch` prints it in
-their terminal; `launch:prepare` writes `.freeholder-launch/claim-link.txt`),
+The owner personally opens the claim link (`freeholder launch` and the Linux
+`install.sh` print it in their terminal, `sudo freeholder claim-link` and
+`selfhost.sh claim-link` print it again; `launch:prepare` writes
+`.freeholder-launch/claim-link.txt`),
 creates their account and passkey, and saves the recovery codes. Agents must
 not open or retain the claim link, and must not retain the owner's password,
 passkey or recovery codes.

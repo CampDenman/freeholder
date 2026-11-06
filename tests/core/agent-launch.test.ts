@@ -66,18 +66,23 @@ describe("Docker Compose launch preparation", () => {
     const secrets = ["BOOTSTRAP_SECRET", "SESSION_SECRET", "CREDENTIAL_KEY", "POSTGRES_PASSWORD"];
     for (const name of secrets) { expect(values[name]).toMatch(/^[a-f0-9]{64}$/); expect(JSON.stringify(result)).not.toContain(values[name]); }
     expect(new Set(secrets.map((name) => values[name])).size).toBe(4);
-    expect(values).toMatchObject({ APP_URL: "https://shop.example.com", FREEHOLDER_DOMAIN: "shop.example.com", FREEHOLDER_STORAGE: "s3" });
+    // C3.44: media defaults to the recipe's volume, so nothing is missing.
+    expect(values).toMatchObject({ APP_URL: "https://shop.example.com", FREEHOLDER_DOMAIN: "shop.example.com", FREEHOLDER_STORAGE: "local" });
     expect(values.DATABASE_URL).toBeUndefined();
-    expect(result.missing).toEqual(["S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]);
+    expect(result.missing).toEqual([]);
+    expect(result.configurationReady).toBe(true);
     expect(result.composeFile).toBe("deploy/docker-selfhost/infra/compose.https.yml");
     expect(result.startCommand).toBe("docker compose --env-file deploy/docker-selfhost/.env -f deploy/docker-selfhost/infra/compose.https.yml up -d");
     expect((await stat(result.privateEnvironmentFile)).mode & 0o777).toBe(0o600);
     expect(result.privateClaimLinkFile).toBe(join(dir, ".freeholder-launch", "claim-link.txt"));
     expect((await readFile(result.privateClaimLinkFile, "utf8")).trim()).toBe(`https://shop.example.com/setup#claim=${values.BOOTSTRAP_SECRET}`);
 
+    const s3 = await prepareLaunch({ directory: dir, target: "docker-selfhost", url: "https://shop.example.com", environment: { FREEHOLDER_STORAGE: "s3" } });
+    expect(s3.missing).toEqual(["S3_ENDPOINT", "S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]);
     const ready = await prepareLaunch({ directory: dir, target: "docker-selfhost", url: "https://shop.example.com", environment: { S3_ENDPOINT: "https://s3.example.test", S3_REGION: "r", S3_BUCKET: "b", S3_ACCESS_KEY_ID: "a", S3_SECRET_ACCESS_KEY: "s" } });
     expect(ready.configurationReady).toBe(true);
     const again = parseEnv(await readFile(ready.privateEnvironmentFile, "utf8"));
+    expect(again.FREEHOLDER_STORAGE).toBe("s3");
     for (const name of secrets) expect(again[name]).toBe(values[name]);
   });
 

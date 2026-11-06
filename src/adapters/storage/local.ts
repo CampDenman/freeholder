@@ -1,17 +1,20 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Filesystem storage. **Development only** — §10 and §18 both say production
-// mandates managed object storage, because a droplet's disk is not backed up,
-// does not survive a rebuild, and cannot be shared by two app processes.
+// Filesystem storage. The development default, and (C3.44) a supported
+// production mode for a single-server install that keeps its media directory
+// across updates and backs it up: the native Linux installer's
+// /var/lib/freeholder/media, or the Docker recipe's named volume. What §18
+// still refuses is the implicit relative directory, which lives inside the
+// release or the container layer and is thrown away by a rebuild.
 //
-// It exists so `pnpm dev` works with no cloud account at all, and so the
-// adapter contract has a second implementation keeping it honest: an interface
-// with one implementation is just that implementation with extra steps.
-import { createReadStream } from "node:fs";
+// One app process only: two processes on two machines cannot share it. Move
+// to S3-compatible storage before scaling out (deploy/linux/README.md).
+import { accessSync, constants, createReadStream, statSync } from "node:fs";
 import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import type { StorageAdapter, StoredObject } from "@/adapters/storage/types";
 import { env } from "@/core/env";
+import { localStorageMode } from "@/adapters/storage/local-mode";
 
 export interface LocalConfig {
   /** Directory to write under. Created on demand. */
@@ -22,21 +25,41 @@ export interface LocalConfig {
 
 /**
  * §18's storage mandate, enforced rather than documented: media is the least
- * recoverable asset a business has, and a droplet's disk is not backed up, does
- * not survive a rebuild, and cannot be shared by two processes. A dead box must
- * never be able to take the photo archive with it.
+ * recoverable asset a business has. A production instance may keep it on
+ * local disk only in a directory it names explicitly (an absolute
+ * LOCAL_STORAGE_ROOT), which the self-host recipes keep across updates and
+ * include in the nightly backup. That directory must already exist: creating
+ * it on demand would quietly write to the container layer when a volume was
+ * forgotten.
  *
- * The override exists because a self-hoster who genuinely means it should not
- * be locked out of their own software — and it is named to be embarrassing in
- * a config review, which is the point.
+ * The legacy override remains for an implicit directory, and it is still
+ * named to be embarrassing in a config review.
  */
-function refuseInProduction(): void {
+function refuseInProduction(root: string): void {
   // Through env() like everything else: a guard that decides for itself what
   // production means can disagree with the platform that configured it, and
   // the disagreement is only discovered by losing an owner's media.
-  const { NODE_ENV, FREEHOLDER_UNSAFE_LOCAL_STORAGE } = env();
-  if (NODE_ENV !== "production") return;
-  if (FREEHOLDER_UNSAFE_LOCAL_STORAGE === "1") {
+  const current = env();
+  const mode = localStorageMode(current);
+  if (mode === "development") return;
+  if (mode === "persistent") {
+    let directory = false;
+    try {
+      directory = statSync(/* turbopackIgnore: true */ root).isDirectory();
+      accessSync(/* turbopackIgnore: true */ root, constants.W_OK);
+    } catch {
+      directory = false;
+    }
+    if (!directory) {
+      throw new Error(
+        `LOCAL_STORAGE_ROOT (${root}) must be an existing directory this ` +
+          "process can write. Create it on persistent disk (the self-host " +
+          "installers do), or mount the recipe's media volume there.",
+      );
+    }
+    return;
+  }
+  if (mode === "unsafe") {
     console.warn(
       "[storage] Using local disk in production because " +
         "FREEHOLDER_UNSAFE_LOCAL_STORAGE=1. Uploaded media will be lost if " +
@@ -45,20 +68,22 @@ function refuseInProduction(): void {
     return;
   }
   throw new Error(
-    "Storage is set to \"local\", which is for development only: media on a " +
-      "server's own disk is not backed up and does not survive a rebuild " +
-      "(MASTER.md §18).\n" +
-      "Set adapters.storage to \"s3\" in freeholder.config.ts and configure " +
-      "S3_* in the environment — DigitalOcean Spaces, Cloudflare R2, MinIO and " +
-      "AWS all work.\n" +
-      "If you truly intend to keep media on this machine's disk, set " +
+    "Storage is set to \"local\" without a persistent directory. In " +
+      "production, local disk is for development only unless it is a " +
+      "directory you keep and back up (MASTER.md §18).\n" +
+      "Set LOCAL_STORAGE_ROOT to an absolute path on persistent disk (the " +
+      "self-host installers use /var/lib/freeholder/media), or set " +
+      "adapters.storage to \"s3\" in freeholder.config.ts and configure S3_* " +
+      "in the environment: DigitalOcean Spaces, Cloudflare R2, MinIO and AWS " +
+      "all work.\n" +
+      "To keep media in an implicit directory anyway, set " +
       "FREEHOLDER_UNSAFE_LOCAL_STORAGE=1.",
   );
 }
 
 export function createLocalStorage(config: LocalConfig): StorageAdapter {
-  refuseInProduction();
   const root = resolve(config.root);
+  refuseInProduction(root);
 
   /**
    * A key is attacker-influenced (it derives from an uploaded filename), so
@@ -78,7 +103,9 @@ export function createLocalStorage(config: LocalConfig): StorageAdapter {
 
   return {
     id: "local",
-    isPublic: true,
+    // Objects are served by the app's /media route, which re-checks the
+    // object inventory on every request; nothing reaches them directly.
+    isPublic: false,
 
     async put(key, body, contentType): Promise<StoredObject> {
       const target = pathFor(key);

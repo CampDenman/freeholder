@@ -2,13 +2,21 @@
 # SPDX-License-Identifier: Apache-2.0
 services:
   app:
-    image: ${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:edge}
+    # The release this checkout belongs to (tests/core/linux-install.test.ts
+    # keeps it equal to package.json). Update: selfhost.sh update VERSION.
+    image: ${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:0.2.0-beta.4}
     restart: unless-stopped
     ports:
       - "3000:3000"
     env_file: ../.env
     environment:
       DATABASE_URL: postgres://freeholder:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/freeholder
+      # C3.44: used when FREEHOLDER_STORAGE=local (the default from
+      # selfhost.sh prepare): media on the `media` volume, kept across image
+      # updates and included in the nightly backup.
+      LOCAL_STORAGE_ROOT: /var/lib/freeholder/media
+    volumes:
+      - media:/var/lib/freeholder/media
     depends_on:
       db:
         condition: service_healthy
@@ -37,5 +45,28 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+  # C3.44: nightly database and media backup into the `backups` volume,
+  # inside Compose so no host cron is needed. `selfhost.sh backup` runs one
+  # now and `selfhost.sh restore` restores one.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    command: ["sh", "/usr/local/bin/freeholder-backup", "schedule"]
+    environment:
+      PGHOST: db
+      PGUSER: freeholder
+      PGDATABASE: freeholder
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-3}
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+    volumes:
+      - ./backup.sh:/usr/local/bin/freeholder-backup:ro
+      - media:/media
+      - backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
 volumes:
   pgdata:
+  media:
+  backups:

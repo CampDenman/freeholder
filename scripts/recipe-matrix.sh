@@ -26,6 +26,27 @@ for target in "${TARGETS[@]}"; do
   psql -h "$PGHOST" -U "$PGUSER" -d postgres -c "drop database if exists ${database}" >/dev/null
   psql -h "$PGHOST" -U "$PGUSER" -d postgres -c "create database ${database}" >/dev/null
 
+  # C3.44: docker-selfhost's default keeps media on a named volume at
+  # /var/lib/freeholder/media, so boot that target the way its Compose file
+  # does. Doctor's storage round trip then proves the image's volume mount
+  # point is writable and the production local-disk mode starts.
+  storage=(
+    -e FREEHOLDER_STORAGE=s3
+    -e S3_ENDPOINT=http://127.0.0.1:9000
+    -e S3_REGION=us-east-1
+    -e S3_BUCKET=freeholder-recipe-gate
+    -e S3_ACCESS_KEY_ID=freeholder-ci
+    -e S3_SECRET_ACCESS_KEY=freeholder-ci-secret
+    -e S3_ADDRESSING_STYLE=path
+  )
+  if [ "$target" = "docker-selfhost" ]; then
+    docker volume rm -f freeholder-recipe-gate-media >/dev/null 2>&1 || true
+    storage=(
+      -e FREEHOLDER_STORAGE=local
+      -e LOCAL_STORAGE_ROOT=/var/lib/freeholder/media
+      -v freeholder-recipe-gate-media:/var/lib/freeholder/media
+    )
+  fi
   docker run -d --name freeholder-recipe-gate --network host \
     -e PORT="$PORT" \
     -e NODE_ENV=production \
@@ -35,13 +56,7 @@ for target in "${TARGETS[@]}"; do
     -e CREDENTIAL_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
     -e DATABASE_URL="postgres://${PGUSER}:${PGPASSWORD}@${PGHOST}:5432/${database}" \
     -e FREEHOLDER_SEED_DEMO=1 \
-    -e FREEHOLDER_STORAGE=s3 \
-    -e S3_ENDPOINT=http://127.0.0.1:9000 \
-    -e S3_REGION=us-east-1 \
-    -e S3_BUCKET=freeholder-recipe-gate \
-    -e S3_ACCESS_KEY_ID=freeholder-ci \
-    -e S3_SECRET_ACCESS_KEY=freeholder-ci-secret \
-    -e S3_ADDRESSING_STYLE=path \
+    "${storage[@]}" \
     -e FREEHOLDER_RECIPE_TARGET="$target" \
     "$IMAGE" >/dev/null
 

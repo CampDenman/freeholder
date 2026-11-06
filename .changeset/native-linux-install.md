@@ -1,0 +1,6 @@
+---
+"freeholder": minor
+---
+Install Freeholder by hand on your own server, without Docker or an AI assistant. Each release now ships a Linux tarball for x86_64 and arm64 that carries its own Node.js runtime, with its SHA-256, and an `install.sh`. On a fresh Ubuntu or Debian server, `sudo sh install.sh` installs PostgreSQL and Caddy, sets up HTTPS (on a temporary `<ip>.sslip.io` address until your domain is ready), generates the secrets, starts the site and prints your claim link. Uploaded media is kept on the server by default and included in a nightly backup of the database and media; S3-compatible storage remains an option. `sudo freeholder status`, `backup`, `restore`, `update` (with automatic rollback) and `domain` run it from then on.
+
+The Docker Compose recipe no longer needs Node, pnpm or a storage bucket: `deploy/docker-selfhost/selfhost.sh prepare` writes the settings with openssl, media can stay on a Docker volume, a backup service runs nightly inside Compose, `selfhost.sh check` is a Docker-only health check, and the image defaults to the release you checked out instead of `edge`. A production instance may now keep media on local disk when `LOCAL_STORAGE_ROOT` names a persistent directory.

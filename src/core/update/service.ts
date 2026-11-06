@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Customization seams (C10.01), channels (C10.02), signed feed (C10.03), daily check (C10.04), preflight (C10.05), apply (C10.06).
+import { describeLocalStorage, localStorageMode, type LocalStorageEnvironment } from "@/adapters/storage/local-mode";
 import { z } from "zod";
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import { access } from "node:fs/promises";
@@ -91,7 +92,7 @@ export const inspectSeams = defineService({
       () => false,
     );
     const storage = e.FREEHOLDER_STORAGE ?? instanceConfig.adapters.storage;
-    const uploads = uploadsStatus(storage, e.NODE_ENV, e.FREEHOLDER_UNSAFE_LOCAL_STORAGE === "1");
+    const uploads = uploadsStatus(storage, e);
     const core = await inspectCoreFiles({
       root,
       expectedDigest: e.FREEHOLDER_CORE_DIGEST ?? null,
@@ -191,8 +192,7 @@ export const describeRelease = defineService({
 
 function uploadsStatus(
   storage: string,
-  nodeEnv: string,
-  unsafeLocal: boolean,
+  e: LocalStorageEnvironment,
 ): { status: "ok" | "warn" | "fail"; detail: string } {
   if (storage !== "local") {
     return {
@@ -200,21 +200,11 @@ function uploadsStatus(
       detail: `Uploads use ${storage} object storage, not instance disk.`,
     };
   }
-  if (nodeEnv !== "production") {
-    return {
-      status: "ok",
-      detail: "Local disk storage is for development. Production must use object storage.",
-    };
-  }
-  if (unsafeLocal) {
-    return {
-      status: "warn",
-      detail: "Uploads are on this machine's disk because FREEHOLDER_UNSAFE_LOCAL_STORAGE=1.",
-    };
-  }
+  // C3.44: one rule for adapter, Doctor, preflight and this screen.
+  const mode = localStorageMode(e);
   return {
-    status: "fail",
-    detail: "Uploads are configured for local disk in production, which does not survive a rebuild.",
+    status: mode === "refused" ? "fail" : mode === "unsafe" ? "warn" : "ok",
+    detail: describeLocalStorage(e),
   };
 }
 

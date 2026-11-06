@@ -60,11 +60,34 @@ if (!recipe?.update?.rollback) {
   problems.push("declares no update.rollback");
 }
 
+/**
+ * C3.44: a recipe may delegate an operation to its own shell script
+ * (docker-selfhost's selfhost.sh, which calls infra/backup.sh). Follow
+ * `deploy/...sh` references two levels deep so the delegated source is what
+ * gets checked, rather than forcing a longer command onto the owner.
+ */
+function delegatedSources(command, depth = 2) {
+  const sources = [];
+  if (depth === 0) return sources;
+  for (const match of command.matchAll(/\b(deploy\/[\w./-]+\.sh)\b/g)) {
+    let source = "";
+    try {
+      source = readFileSync(match[1], "utf8");
+    } catch {
+      problems.push(`an operation invokes ${match[1]}, which does not exist`);
+      continue;
+    }
+    sources.push(source, ...delegatedSources(source, depth - 1));
+  }
+  return sources;
+}
+const shaped = (command, pattern) => pattern.test(command) || delegatedSources(command).some((source) => pattern.test(source));
+
 const update = recipe?.operations?.update;
 const rollback = recipe?.operations?.rollback;
 if (!update) {
   problems.push("has no operations.update");
-} else if (!SHAPE[expected].test(update)) {
+} else if (!shaped(update, SHAPE[expected])) {
   problems.push(`operations.update is not a ${expected}: ${update}`);
 }
 if (!rollback) {
@@ -87,6 +110,7 @@ if (!rollback) {
 function pinsAnImageTag(command) {
   if (/\$FREEHOLDER_IMAGE_TAG/.test(command)) return true;
   if (/\bpull\b/.test(command)) return true;
+  if (delegatedSources(command).some((source) => /\bpull\b/.test(source) && /FREEHOLDER_IMAGE/.test(source))) return true;
   for (const match of command.matchAll(/\b(scripts\/[\w.-]+\.mjs)\b/g)) {
     let source = "";
     try {
@@ -121,18 +145,7 @@ const RESTORES_INTO_DATABASE = /\bpg_restore\b[\s\S]*(--dbname\b|\s-d\s)/;
 
 /** A recipe may delegate to its own script (the droplet ships backup.sh). */
 function dumpsCustomFormat(command) {
-  if (CUSTOM_DUMP.test(command)) return true;
-  for (const match of command.matchAll(/\b(deploy\/[\w./-]+\.sh)\b/g)) {
-    let source = "";
-    try {
-      source = readFileSync(match[1], "utf8");
-    } catch {
-      problems.push(`operations.backup invokes ${match[1]}, which does not exist`);
-      continue;
-    }
-    if (CUSTOM_DUMP.test(source)) return true;
-  }
-  return false;
+  return shaped(command, CUSTOM_DUMP);
 }
 
 const backup = recipe?.operations?.backup;
@@ -144,7 +157,7 @@ if (!backup) {
 }
 if (!restore) {
   problems.push("has no operations.restore, so the backup is never rehearsed");
-} else if (!RESTORES_INTO_DATABASE.test(restore)) {
+} else if (!shaped(restore, RESTORES_INTO_DATABASE)) {
   problems.push(`operations.restore is not pg_restore into a database: ${restore}`);
 }
 

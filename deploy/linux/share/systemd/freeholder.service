@@ -1,0 +1,41 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# C3.44: the Freeholder web process on a native Linux install. Migrations run
+# inside this process before it reports ready (instrumentation.node.ts), the
+# same as the container image, so there is no separate migration unit that
+# could run a different release's migrations.
+[Unit]
+Description=Freeholder
+Documentation=https://github.com/CampDenman/freeholder/blob/main/deploy/linux/README.md
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=freeholder
+Group=freeholder
+EnvironmentFile=/etc/freeholder/freeholder.env
+Environment=NODE_ENV=production NEXT_MANUAL_SIG_HANDLE=true PORT=3000 HOSTNAME=127.0.0.1
+WorkingDirectory=/opt/freeholder/current/app
+ExecStart=/opt/freeholder/current/runtime/node/bin/node server.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=45
+UMask=0027
+LimitNOFILE=65536
+# The release is root-owned and read-only to the service; it may write only
+# its data directory (media, Next's cache).
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadWritePaths=/var/lib/freeholder
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
