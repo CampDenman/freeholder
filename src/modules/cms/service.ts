@@ -1109,9 +1109,25 @@ export const publishPage = defineService({
   summary: "Make a page live, or take it back to draft.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({ id: z.string().uuid(), published: z.boolean(), expectedVersion: z.number().int().positive().optional() }),
+  input: z.object({
+    id: z.string().uuid(),
+    published: z.boolean(),
+    expectedVersion: z.number().int().positive().optional(),
+    /**
+     * The date the page was first published, when it was first published
+     * somewhere else (C3.22: an imported post keeps its WordPress date, so
+     * the blog listing orders and dates it truthfully). Never in the future.
+     */
+    publishedAt: z.iso.datetime({ offset: true }).optional(),
+  }),
   output: pageRow,
   handler: async (input, ctx) => {
+    if (input.publishedAt && (!input.published || new Date(input.publishedAt).getTime() > Date.now())) {
+      throw new ServiceError(
+        "validation",
+        "An original publication date applies only when publishing, and cannot be in the future.",
+      );
+    }
     const [before] = await ctx.tx
       .select()
       .from(pages)
@@ -1152,7 +1168,9 @@ export const publishPage = defineService({
       .update(pages)
       .set({
         status: input.published ? "published" : "draft",
-        publishedAt: input.published ? sql`now()` : null,
+        publishedAt: input.published
+          ? (input.publishedAt ? new Date(input.publishedAt) : sql`now()`)
+          : null,
         ...(input.published
           ? {
               title,

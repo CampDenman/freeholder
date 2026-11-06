@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { apiJson } from "../media/upload-client";
 import { Button, Field, Input, Select } from "@/ui/primitives";
 import {
   commitImportAction,
@@ -79,10 +81,19 @@ export function ImportStepForms({
     reconcile: string;
     publish: string;
     rollback: string;
+    upload: string;
+    uploadHint: string;
+    stage: string;
+    uploading: string;
+    readingSource: string;
+    uploadFailed: string;
   };
 }) {
   return (
     <div className="grid gap-4">
+      {status === "discover" || status === "mapped" || status === "failed" || status === "previewed" ? (
+        <SourceUploadForm id={id} labels={labels} />
+      ) : null}
       {status === "discover" ? (
         <form action={mapImportAction} className="grid gap-3">
           <input type="hidden" name="id" value={id} />
@@ -163,5 +174,99 @@ export function ImportStepForms({
         </form>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * An export file goes up in fixed chunks to the import-only chunk route, so
+ * a real-size WordPress export never meets the 1 MB limit every other form
+ * and JSON route keeps. The server reads it back as a stream and stages the
+ * preview; nothing is written to the site until the batch is committed.
+ */
+function SourceUploadForm({
+  id,
+  labels,
+}: {
+  id: string;
+  labels: {
+    upload: string;
+    uploadHint: string;
+    stage: string;
+    uploading: string;
+    readingSource: string;
+    uploadFailed: string;
+  };
+}) {
+  const router = useRouter();
+  const [progress, setProgress] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const input = event.currentTarget.elements.namedItem("file");
+    const file = input instanceof HTMLInputElement ? input.files?.[0] : undefined;
+    if (!file) return;
+    setError(null);
+    try {
+      setProgress(labels.uploading);
+      const reserved = await apiJson<{ uploadId: string; chunkBytes: number; chunkCount: number }>(
+        "/api/v1/imports.beginSourceUpload",
+        { method: "POST", body: JSON.stringify({ id, filename: file.name, bytes: file.size }) },
+      );
+      for (let index = 0; index < reserved.chunkCount; index += 1) {
+        const part = file.slice(index * reserved.chunkBytes, (index + 1) * reserved.chunkBytes);
+        const url = `/api/imports/source/chunk?id=${encodeURIComponent(id)}&uploadId=${encodeURIComponent(reserved.uploadId)}&index=${index}`;
+        // One retry: a dropped connection should not cost the whole upload.
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            await apiJson(url, { method: "POST", body: part, headers: { "content-type": "application/octet-stream" } });
+            break;
+          } catch (failure) {
+            if (attempt >= 1) throw failure;
+          }
+        }
+        setProgress(`${labels.uploading} ${Math.round(((index + 1) / reserved.chunkCount) * 100)}%`);
+      }
+      setProgress(labels.readingSource);
+      const staged = await apiJson<{ status: string; error: string | null }>("/api/v1/imports.previewFromUpload", {
+        method: "POST",
+        body: JSON.stringify({ id, uploadId: reserved.uploadId }),
+      });
+      if (staged.status === "failed") setError(staged.error ?? labels.uploadFailed);
+      setProgress(null);
+      router.refresh();
+    } catch (failure) {
+      setProgress(null);
+      setError(failure instanceof Error && failure.message ? failure.message : labels.uploadFailed);
+    }
+  }
+
+  return (
+    <form onSubmit={(event) => void submit(event)} className="grid gap-3">
+      {error ? (
+        <p role="alert" className="text-sm font-medium text-danger">
+          {error}
+        </p>
+      ) : null}
+      <Field htmlFor="source-file" label={labels.upload} hint={labels.uploadHint}>
+        <input
+          id="source-file"
+          name="file"
+          type="file"
+          accept=".xml,.json,.html,.htm,.rss,.atom,application/xml,text/xml,application/json,text/html"
+          required
+          disabled={progress !== null}
+          className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
+        />
+      </Field>
+      {progress ? (
+        <p role="status" className="text-sm text-ink-muted">
+          {progress}
+        </p>
+      ) : null}
+      <Button type="submit" disabled={progress !== null}>
+        {labels.stage}
+      </Button>
+    </form>
   );
 }

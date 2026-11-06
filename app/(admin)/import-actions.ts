@@ -123,7 +123,8 @@ export async function commitImportAction(form: FormData): Promise<void> {
 export async function reconcileImportAction(form: FormData): Promise<void> {
   const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
   const id = text(form, "id");
-  await reconcileImport.call({ id, counts: { pages: 1, media: 0, redirects: 0 } }, actor);
+  // The service recounts what the commit wrote; nothing is asserted from here.
+  await reconcileImport.call({ id }, actor);
   revalidatePath(`/admin/imports/${id}`);
 }
 
