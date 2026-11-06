@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { access, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { readAlignedVersion } from "./release-packages.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -28,11 +28,11 @@ const packageNames = [
  * `freeholder update` exits 3 when it cannot reach an instance, which is the
  * contract a crontab depends on.
  */
-async function run(command, args, cwd, { allowFailure = false } = {}) {
+async function run(command, args, cwd, { allowFailure = false, env = process.env } = {}) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(command, args, {
       cwd,
-      env: { ...process.env, NO_COLOR: "1" },
+      env: { ...env, NO_COLOR: "1" },
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -213,6 +213,56 @@ void preset;
     );
     assert.match(unreachable.output, /Could not reach/);
     assert.equal(unreachable.code, 3);
+
+    // `freeholder launch` (C3.30) through the packed artifact, the way
+    // `npx @freeholder/cli@next launch` runs it. A release whose tarball
+    // predates the command answers "unknown command" here instead of a plan.
+    // DigitalOcean is a stub preloaded into the CLI's own process: it answers
+    // the dry run's reads and fails the gate on any write or other host, so
+    // nothing real is reached or created.
+    const cliEntry = join(consumer, "node_modules", "@freeholder", "cli", "dist", "index.js");
+    for (const file of ["compose.yml", "Caddyfile", "backup.sh", "cloud-init.yml"]) {
+      await access(join(consumer, "node_modules", "@freeholder", "cli", "recipes", "digitalocean-droplet", file));
+    }
+    const fakeDigitalOcean = join(scratch, "fake-digitalocean.mjs");
+    await writeFile(
+      fakeDigitalOcean,
+      `const json = (value) => new Response(JSON.stringify(value), { status: 200, headers: { "content-type": "application/json" } });
+globalThis.fetch = async (input, init = {}) => {
+  const url = new URL(String(input));
+  const method = init.method ?? "GET";
+  if (url.host !== "api.digitalocean.com" || method !== "GET") throw new Error(\`artifact gate: a dry run sent \${method} \${url}\`);
+  if (new Headers(init.headers).get("authorization") !== "Bearer artifact-gate-token") throw new Error("artifact gate: the token was not sent");
+  switch (url.pathname) {
+    case "/v2/account": return json({ account: { status: "active" } });
+    case "/v2/account/keys": return json({ ssh_keys: [{ id: 1, fingerprint: "aa:bb", name: "gate" }] });
+    case "/v2/regions": return json({ regions: [{ slug: "nyc3", available: true, sizes: ["s-2vcpu-2gb"] }] });
+    case "/v2/droplets": return json({ droplets: [] });
+    case "/v2/sizes": return json({ sizes: [{ slug: "s-2vcpu-2gb", price_monthly: 18 }] });
+    default: throw new Error(\`artifact gate: unexpected \${url.pathname}\`);
+  }
+};
+`,
+    );
+    const launchHome = join(scratch, "launch-home");
+    await mkdir(launchHome, { recursive: true });
+    const launchEnv = { ...process.env, HOME: launchHome, XDG_CONFIG_HOME: launchHome, FREEHOLDER_CONFIG_HOME: join(launchHome, "freeholder") };
+    delete launchEnv.DIGITALOCEAN_TOKEN;
+    const launchArgs = ["launch", "--provider", "digitalocean", "--domain", "example.com", "--dry-run", "--non-interactive"];
+    const plan = await run(
+      process.execPath,
+      ["--import", pathToFileURL(fakeDigitalOcean).href, cliEntry, ...launchArgs],
+      consumer,
+      { env: { ...launchEnv, DIGITALOCEAN_TOKEN: "artifact-gate-token" } },
+    );
+    assert.match(plan, /Plan for example-com \(example\.com\) on DigitalOcean/);
+    assert.match(plan, /create droplet example-com \(s-2vcpu-2gb, nyc3/);
+    assert.match(plan, /about \$23\/month in all/);
+    assert.match(plan, /Nothing was created/);
+    await assert.rejects(access(join(launchHome, "freeholder", "example-com")), /ENOENT/, "a dry run must not write a launch record");
+    const tokenless = await run(process.execPath, [cliEntry, ...launchArgs], consumer, { allowFailure: true, env: launchEnv });
+    assert.match(tokenless.output, /no DigitalOcean token/);
+    assert.equal(tokenless.code, 3);
 
     const appBin = join(
       consumer,

@@ -26,6 +26,8 @@ export async function launch(argv: readonly string[], out: { log: (l: string) =>
   return runLaunch(options, {
     provider: digitalOcean(token),
     remote: sshRemote,
+    // npm sets npm_command=exec under npx, where `freeholder` is not on the PATH afterwards.
+    invocation: process.env.npm_command === "exec" ? "npx @freeholder/cli@next" : "freeholder",
     canOpen: desktop && Boolean(process.stdout.isTTY),
     openUrl: (url) => {
       const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
