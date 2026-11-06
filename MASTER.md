@@ -2928,7 +2928,10 @@ it cannot know:
 1. **Verify** the signature, provenance and digest of the target image.
 2. **Compatibility.** Every installed plugin declares `freeholder: "^1.4"`. A
    target outside any installed plugin's range stops here and *names the
-   plugin*, rather than upgrading and breaking the site.
+   plugin*, rather than upgrading and breaking the site. The range names
+   platform versions, the same value boot and install check. First-party
+   plugins declare the current major and minor (`^0.2.0` for 0.2.x), and
+   release tooling refuses a version bump that leaves one behind.
 3. **Migration dry run against a shadow database.** Clone the schema into a
    temporary database, run the target's migrations there, and report. This is
    the highest-value check in the system: it turns "the migration might fail at
@@ -9762,7 +9765,14 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   named. **F08** `tests/core/update-preflight.test.ts`, doctor ids. **F09**
   SPDX. **F10** N/A. **F11** `deploy/update-preflight.md`, changeset
   `update-preflight.md`. **F12** shadow SQL `SELECT 1/0` fails migrations
-  without touching `public`. This is not apply — C10.06.)
+  without touching `public`. This is not apply — C10.06. **2026-11-05:**
+  the plugin range is checked against the target's platform version, as boot
+  and install do, rather than `pluginApi`; first-party plugins declare
+  `^0.2.0` instead of `>=0.0.0`, and `readAlignedVersion` refuses a release
+  whose first-party ranges miss its major and minor. Evidence
+  `tests/core/update-preflight.test.ts` (an installed first-party plugin
+  blocks the next minor), `tests/core/release-packages.test.ts`; changeset
+  `plugin-compat-ranges.md`.)
 - [x] **C10.06** Implement a verified host update executor with recoverable database
   backups, signed immutable image selection, actual migrations, candidate health
   checks and independently verified rollback. The 2026-09-21 readiness audit

@@ -1,6 +1,10 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { PLATFORM_VERSION } from "@/core/platform";
+import { installPlugin } from "@/core/plugins/service";
 import { pluginCompatibility, runPreflight } from "@/core/update/preflight";
 import { preflightUpdate } from "@/core/update/service";
 import {
@@ -27,6 +31,34 @@ describe("plugin compatibility (C10.05)", () => {
   });
 });
 
+/** The next minor after this build: a release no current first-party range covers. */
+function nextMinor(version: string): string {
+  const [major, minor] = version.split(".").map((part) => Number.parseInt(part, 10));
+  return `${major}.${(minor ?? 0) + 1}.0`;
+}
+
+function firstPartyPlugins(): { name: string; freeholder: string }[] {
+  return readdirSync("plugins", { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => JSON.parse(readFileSync(join("plugins", entry.name, "plugin.json"), "utf8")) as {
+      name: string;
+      freeholder: string;
+    });
+}
+
+describe("first-party plugin ranges in preflight (C10.05)", () => {
+  it("fit this build and block the next minor, naming each plugin", () => {
+    const plugins = firstPartyPlugins();
+    expect(plugins.length).toBeGreaterThan(0);
+    expect(pluginCompatibility(plugins, PLATFORM_VERSION).verdict).toBe("ok");
+    const blocked = pluginCompatibility(plugins, nextMinor(PLATFORM_VERSION));
+    expect(blocked.verdict).toBe("fail");
+    for (const plugin of plugins) {
+      expect(blocked.detail).toContain(`${plugin.name} needs ${plugin.freeholder}`);
+    }
+  });
+});
+
 describe.runIf(hasDatabase)("update preflight (C10.05)", { timeout: 60_000 }, () => {
   beforeEach(truncateSpine, 30_000);
   afterAll(closeDb);
@@ -46,6 +78,20 @@ describe.runIf(hasDatabase)("update preflight (C10.05)", { timeout: 60_000 }, ()
     const report = await runPreflight({ extraSql: ["SELECT 1/0"] });
     expect(report.ok).toBe(false);
     expect(report.steps.find((step) => step.id === "migrations")?.verdict).toBe("fail");
+  });
+
+  it("blocks an update that leaves an installed plugin outside its range", async () => {
+    await installPlugin.call({ path: join("plugins", "gift-registry") }, OWNER);
+
+    const current = await runPreflight({});
+    expect(current.steps.find((step) => step.id === "plugins")?.verdict).toBe("ok");
+
+    const target = nextMinor(PLATFORM_VERSION);
+    const report = await runPreflight({ targetVersion: target });
+    const plugins = report.steps.find((step) => step.id === "plugins");
+    expect(plugins?.verdict).toBe("fail");
+    expect(plugins?.detail).toContain(`Cannot apply ${target}: gift-registry needs ^`);
+    expect(report.ok).toBe(false);
   });
 
   it("hard-stops on an unsigned feed and refuses anonymous callers", async () => {

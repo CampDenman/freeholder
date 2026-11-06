@@ -19,7 +19,9 @@ Every release declares, in machine-readable form:
 - **schemaRisk** — `compatible` or `breaking`
 - **CVSS** and **severity** — a score where a CVE applies, otherwise neither
 - **manualSteps** — an empty list when none are required
-- **pluginApi** — the plugin-API version this release ships
+- **pluginApi** — the plugin-API version this release ships. Plugin
+  `freeholder` ranges are checked against the platform version, not this
+  field.
 
 `platform.describeRelease` reports this build’s declaration. Doctor checks
 `update.channel` and `update.release`. The signed feed that publishes these

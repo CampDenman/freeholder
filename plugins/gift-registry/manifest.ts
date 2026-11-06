@@ -5,7 +5,7 @@ import { definePlugin } from "@freeholder/plugin-kit";
 export default definePlugin({
   name: "gift-registry",
   version: "0.1.0",
-  freeholder: ">=0.0.0",
+  freeholder: "^0.2.0",
   license: "Apache-2.0",
   permissions: ["contacts:read", "invoicing:create"],
   requires: ["core", "invoicing"],
