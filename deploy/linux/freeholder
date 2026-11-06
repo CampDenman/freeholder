@@ -117,16 +117,20 @@ wait_for() {
   return 1
 }
 
+restarts() { systemctl show -p NRestarts --value freeholder 2>/dev/null || echo 0; }
+
 wait_ready() {
   # Ready means /api/health answers 200. A release that crashes on start is
   # restarted by systemd every few seconds; three crashes is a failure, not
   # something to wait out.
-  local deadline
+  # systemd keeps NRestarts across stop and start, so count from now.
+  local deadline baseline
   say "waiting for Freeholder to start (migrations run first)"
   deadline=$(( $(date +%s) + ${1:-240} ))
+  baseline=$(restarts)
   while [ "$(date +%s)" -lt "$deadline" ]; do
     if curl -fsS --max-time 10 -o /dev/null "$LOCAL_URL/api/health" 2>/dev/null; then return 0; fi
-    if [ "$(systemctl show -p NRestarts --value freeholder 2>/dev/null || echo 0)" -ge 3 ]; then
+    if [ "$(restarts)" -ge $((baseline + 3)) ]; then
       warn "the service crashed three times while starting"
       return 1
     fi
