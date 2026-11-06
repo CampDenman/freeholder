@@ -200,15 +200,27 @@ export type WordpressPlan = {
  */
 type Masked = { text: string; cdata: string[] };
 
+/** XML comments out, by scanning rather than a single regex pass. */
+function withoutXmlComments(text: string): string {
+  let out = "";
+  let at = 0;
+  for (;;) {
+    const open = text.indexOf("<!--", at);
+    if (open === -1) return out + text.slice(at);
+    out += text.slice(at, open);
+    const close = text.indexOf("-->", open + 4);
+    if (close === -1) return out;
+    at = close + 3;
+  }
+}
+
 function maskCdata(xml: string): Masked {
   const cdata: string[] = [];
-  const text = xml
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, (_match, inner: string) => {
-      cdata.push(inner);
-      return `\u0000${cdata.length - 1}\u0000`;
-    })
-    .replace(/<!--[\s\S]*?-->/g, "");
-  return { text, cdata };
+  const masked = xml.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, (_match, inner: string) => {
+    cdata.push(inner);
+    return `\u0000${cdata.length - 1}\u0000`;
+  });
+  return { text: withoutXmlComments(masked), cdata };
 }
 
 function decodeXml(value: string): string {

@@ -707,7 +707,7 @@ const commitApply = defineService({
         /* keep no fragment */
       }
       const mapped = linkMap.get(path);
-      return `/${mapped ?? path}${hash}`.replace(/^\/$/, "/");
+      return `/${mapped ?? path}${hash}`;
     };
     const hasPosts = written.some((placement) => placement.page.kind === "post");
 
@@ -852,9 +852,9 @@ const commitApply = defineService({
           continue;
         }
         const href = item.targetWpId
-          ? slugByWpId.has(item.targetWpId) ? `/${slugByWpId.get(item.targetWpId)}`.replace(/^\/$/, "/") : undefined
+          ? slugByWpId.has(item.targetWpId) ? `/${slugByWpId.get(item.targetWpId)}` : undefined
           : item.href?.startsWith("/") && linkMap.has(item.href.slice(1))
-            ? `/${linkMap.get(item.href.slice(1))}`.replace(/^\/$/, "/")
+            ? `/${linkMap.get(item.href.slice(1))}`
             : item.href;
         if (!href || !item.label.trim()) {
           unresolved += 1;
