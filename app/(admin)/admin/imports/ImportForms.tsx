@@ -7,6 +7,7 @@ import { Button, Field, Input, Select } from "@/ui/primitives";
 import {
   commitImportAction,
   mapImportAction,
+  previewFromSourceAction,
   previewImportAction,
   publishImportAction,
   reconcileImportAction,
@@ -79,10 +80,29 @@ export function ImportStepForms({
     reconcile: string;
     publish: string;
     rollback: string;
+    upload: string;
+    uploadHint: string;
+    stage: string;
   };
 }) {
   return (
     <div className="grid gap-4">
+      {status === "discover" || status === "mapped" || status === "failed" ? (
+        <form action={previewFromSourceAction} className="grid gap-3">
+          <input type="hidden" name="id" value={id} />
+          <Field htmlFor="source-file" label={labels.upload} hint={labels.uploadHint}>
+            <input
+              id="source-file"
+              name="file"
+              type="file"
+              accept=".xml,.json,.html,.htm,.rss,.atom,application/xml,text/xml,application/json,text/html"
+              required
+              className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
+            />
+          </Field>
+          <Button type="submit">{labels.stage}</Button>
+        </form>
+      ) : null}
       {status === "discover" ? (
         <form action={mapImportAction} className="grid gap-3">
           <input type="hidden" name="id" value={id} />

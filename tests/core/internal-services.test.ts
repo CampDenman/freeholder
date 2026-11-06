@@ -224,6 +224,10 @@ const CALLER_AUTHORIZED_PHASES = [
   "assistant.applyAnswer",
   "assistant.prepareAnswer",
   "assistant.settingsSnapshot",
+  // C3.22: the halves of imports.commit around WordPress media downloads.
+  "imports.commitApply",
+  "imports.commitSource",
+  "imports.recordMedia",
   "builder.recordCodeProposal",
   "builder.recordProposal",
   "builder.releaseCodeReservation",

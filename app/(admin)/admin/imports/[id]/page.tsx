@@ -22,6 +22,22 @@ export default async function ImportRunPage({
   const [t, runs] = await Promise.all([getT(), listImports.call({}, actor)]);
   const run = runs.find((item) => item.id === id);
   if (!run) notFound();
+  const counts = run.counts && typeof run.counts === "object" ? (run.counts as Record<string, unknown>) : {};
+  const countLabels: Array<[string, string]> = [
+    ["pages", t("imports.count.pages")],
+    ["posts", t("imports.count.posts")],
+    ["media", t("imports.count.media")],
+    ["mediaFailed", t("imports.count.mediaFailed")],
+    ["redirects", t("imports.count.redirects")],
+    ["menus", t("imports.count.menus")],
+    ["categories", t("imports.count.categories")],
+    ["tags", t("imports.count.tags")],
+    ["authors", t("imports.count.authors")],
+    ["commentsSkipped", t("imports.count.commentsSkipped")],
+    ["skippedPages", t("imports.count.skippedPages")],
+  ];
+  const shown = countLabels.filter(([key]) => typeof counts[key] === "number");
+  const wordpress = run.source.startsWith("wordpress-");
 
   return (
     <div className="grid gap-6">
@@ -56,10 +72,38 @@ export default async function ImportRunPage({
               reconcile: t("imports.reconcile"),
               publish: t("imports.publish"),
               rollback: t("imports.rollback"),
+              upload: t("imports.upload"),
+              uploadHint: t("imports.uploadHint"),
+              stage: t("imports.stage"),
             }}
           />
         </CardBody>
       </Card>
+      {shown.length > 0 || run.error ? (
+        <Card>
+          <CardHeader title={t("imports.report")} />
+          <CardBody>
+            {run.error ? (
+              <p role="alert" className="text-sm font-medium text-danger">
+                {run.error}
+              </p>
+            ) : null}
+            {shown.length > 0 ? (
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+                {shown.map(([key, label]) => (
+                  <div key={key} className="grid gap-0.5">
+                    <dt className="text-ink-muted">{label}</dt>
+                    <dd className="font-semibold text-ink">{String(counts[key])}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
+            {wordpress ? (
+              <p className="mt-4 max-w-prose text-sm text-ink-muted">{t("imports.note.wordpress")}</p>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
     </div>
   );
 }

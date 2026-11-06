@@ -2092,11 +2092,22 @@ studio**: connect or enter a source, discover content, preview the mapping and
 diff, then stage and commit a reversible import. Nothing is published and DNS
 never changes merely because the crawler finished.
 
-- **WordPress is the first complete importer:** WordPress REST and WXR/export
-  paths cover pages, posts, media, authors, categories/tags, menus, comments
-  when selected, publication dates, slugs and common SEO metadata. Original
-  URLs either survive or receive explicit `Redirect` rows; media alt text,
-  captions and provenance come across rather than becoming anonymous files.
+- **WordPress is the first importer, and the most complete:** the WXR export
+  path brings pages (keeping their paths), posts (under `blog/`, so the blog
+  listing shows them, keeping slugs and publication dates), attachments into
+  the media library through the ordinary upload pipeline (pinned SSRF-safe
+  download, content-sniffed type, size limit, AVIF/WebP renditions, alt text
+  and source-URL provenance kept, body captions kept as text), body images
+  rewritten to image and gallery blocks, Yoast/Rank Math SEO titles and
+  descriptions, and the top level of one menu (joined to the nav section at
+  publish). Original URLs either survive or receive explicit `Redirect` rows.
+  The REST path covers pages and posts with dates, Yoast fields and embedded
+  terms; it carries no attachment list, so only same-site body images are
+  fetched. Not yet recreated, and said so in the run report: categories/tags
+  and authors are recorded on the import run because the blog has no taxonomy
+  and pages carry no author; reader comments are not imported because CMS
+  pages have no public thread; nested menu items are not applied; an export
+  over the 1 MB request-body limit cannot be submitted yet (C3.22 open).
 - **The generic-site importer is built in:** it discovers `sitemap.xml`, RSS/
   Atom, canonical links, JSON-LD, Open Graph and semantic HTML, then crawls only
   owner-approved origins with visible depth/page/byte/rate limits. It resumes
@@ -5166,13 +5177,37 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   partial-source conformance; core retains jobs, preview, commit and rollback.
   (`defineImporter`; `assertPublicHttpUrl`; robots/limits. Coverage in
   `tests/core/importers.test.ts`. **F04** `/admin/imports` map/review-conflicts. **F05** N/A as a new HTTP family — `defineImporter` in plugin-kit; owner runs go through `imports.*` (C3.23). **F07** `tests/core/importers.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/importers.test.ts` is the composition proof.)
-- [x] **C3.22** Ship complete first-party WordPress REST/WXR and generic-site
+- [ ] **C3.22** Ship complete first-party WordPress REST/WXR and generic-site
   sitemap/RSS/Atom/semantic-HTML importers plus static archive/common hosted-
   site paths; preserve content/media/SEO/URL intent and generate redirects
   while enforcing SSRF, origin, robots, rate, page, byte and depth limits.
   (`parseWordpressRest` / `parseWordpressWxr` / `parseSitemap` /
   `parseRssOrAtom` / `parseSemanticHtml` / `discoverFromPublicOrigin`.
   Coverage in `tests/core/importers.test.ts`. **F04** N/A — first-party plugin seam, not a new screen. **F05** parsers sit behind `imports.start`/`previewFromSource` at `/api/v1/imports.*`, MCP `imports_*`; no extra importer family. **F07** `tests/core/importers.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/importers.test.ts` is the composition proof.)
+  *(Reopened 2026-11-05: the item was checked while the WordPress paths kept
+  only title, slug, HTML body and page/post, landed every item as a page with
+  one raw `html` block, and recorded `media: 0, redirects: 0`. Closed in this
+  change, for WordPress: `src/core/import/wordpress.ts` reads WXR attachments,
+  menus, terms, authors, dates, statuses, comment counts and Yoast/Rank Math
+  meta; posts land under `blog/` with original dates (`cms.publishPage` takes
+  an optional past `publishedAt`), WordPress drafts stay drafts at publish, a
+  blog listing page is created when none exists, bodies become typed heading/
+  text/image/gallery blocks with `html` only for tables, quotes and code,
+  internal links are rewritten, attachments are fetched by the orchestrated
+  `imports.commit` through `getPinnedBytes` and `media.upload`, moved
+  permalinks become `Redirect` rows (existing redirects and pages are never
+  overwritten), and rollback removes pages, redirects, nav links and unused
+  imported files. Coverage in `tests/core/wordpress-import.test.ts` and
+  `tests/core/wordpress-import-flow.test.ts` against the fictional fixture
+  `tests/fixtures/wordpress/sample-export.xml`; changeset
+  `.changeset/wordpress-import-media-redirects.md`. Still open before this can
+  be checked: WordPress categories/tags and authors have no CMS home (recorded
+  on the run only); reader comments are not imported; nested menu items are
+  not applied; exports over the 1 MB request-body limit cannot be submitted;
+  there is no live WordPress REST crawl, so REST input is a pasted response;
+  the generic sitemap/RSS/Atom/HTML importers still produce a heading plus one
+  `html` block with no media or redirects; the `archive` kind has no archive
+  reader of its own.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,
@@ -11213,12 +11248,13 @@ schema they inherit reads as a designed thing rather than an excavation.
   machine-checked by `tests/core/doc-claim-mapping.test.ts`, which refuses
   unmapped claims, unresolved evidence paths, and any Struck/Narrowed row whose
   old wording still parses in this document; the gate runs in `pnpm gates`
-  (`scripts/fast-gates.mjs`). 108 rows carry test/gate evidence; 10 rows
-  are Struck/Narrowed (S1–S10): §12 mail-adapter id literal, §21b `backup.sh`
+  (`scripts/fast-gates.mjs`). 107 rows carry test/gate evidence; 11 rows
+  are Struck/Narrowed (S1–S11): §12 mail-adapter id literal, §21b `backup.sh`
   path, §25 "MIT plugin-kit", §27 hosted canonical registry/catalog,
   §28 hosted docs site with executable guides, §31 "pgvector" retrieval,
   §4.8 instance-release-notes scope, §37 agent-note mandate, §38
-  release-notes bullet, §34 changelog share target. Two judgment calls stand
+  release-notes bullet, §34 changelog share target, §23 WordPress importer
+  completeness (2026-11-05). Two judgment calls stand
   as documented behaviour, not scaffolds: §35's branded placeholder
   screenshots are the store-gate stand-in (`apps/mobile/store/metadata.json`,
   `scripts/mobile-store-gate.mjs`), and adapter "not implemented" strings are

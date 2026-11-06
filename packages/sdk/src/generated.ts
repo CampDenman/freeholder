@@ -3490,7 +3490,7 @@ export interface ServiceCatalog {
     output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.publishPage": {
-    input: { id: string; published: boolean; expectedVersion?: number };
+    input: { id: string; published: boolean; expectedVersion?: number; publishedAt?: string };
     output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.publishedPaths": {
@@ -4730,7 +4730,7 @@ export interface ServiceCatalog {
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "imports.reconcile": {
-    input: { id: string; counts: { pages: number; media: number; redirects: number } };
+    input: { id: string; counts?: { pages: number; media: number; redirects: number } };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "imports.reviewConflicts": {
