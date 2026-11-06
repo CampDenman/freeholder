@@ -251,10 +251,12 @@ describe.runIf(hasDatabase)("link in bio", { timeout: 60_000 }, () => {
     expect(landed.searchParams.get("utm_medium")).toBe("link-in-bio");
     expect(landed.searchParams.get("utm_campaign")).toBe(`bio:${workshopsId}`);
 
-    // A page that does not carry the link, an unknown id and a hostile `from`
-    // all get the same answer.
+    // A click that lost its page is found on the published link-in-bio page,
+    // and still goes only where that page says.
     await publishedOnSite("about", "About");
-    expect((await failure(follow.call({ id: podcastId, from: "/about" }, ANONYMOUS))).code).toBe("not_found");
+    expect((await follow.call({ id: podcastId, from: "/about" }, ANONYMOUS)).destination).toBe("https://example.test/pod");
+    expect((await follow.call({ id: podcastId }, ANONYMOUS)).destination).toBe("https://example.test/pod");
+    // An unknown id and a hostile `from` get the same answer.
     expect((await failure(follow.call({ id: "unknownid", from: "/links" }, ANONYMOUS))).code).toBe("not_found");
     expect((await failure(follow.call({ id: podcastId, from: "https://evil.example/links" }, ANONYMOUS))).code).toBe(
       "not_found",

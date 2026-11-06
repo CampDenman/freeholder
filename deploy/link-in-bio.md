@@ -52,8 +52,11 @@ this is that replacement. The plan item and its evidence are C9.39 in §43.
 Every rendered link points at `/go/link/<id>?from=<page>`. The route hands the
 id to `linkinbio.follow`, which looks the link up **on the published page**
 and redirects (302, `no-store`, `noindex`) to the stored destination — never
-to anything in the request, so it is not an open redirect. Hidden, expired,
-unavailable and unknown links all answer 404 alike.
+to anything in the request, so it is not an open redirect. A click whose
+`from` was lost is looked up on the site's other published link-in-bio pages.
+Hidden, expired, unavailable and unknown links all answer 404 alike.
+`robots.txt` disallows `/go/` (this and the ad click-out), so crawlers neither
+inflate the counts nor treat a redirect as a page.
 
 A click is one `linkinbio.clicked` event written through `analytics.track`,
 only when the visitor's analytics consent policy allows identifiers, never on

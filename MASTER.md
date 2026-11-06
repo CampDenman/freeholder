@@ -9664,7 +9664,9 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   by service name, `catalog.bookableServices` and `galleries.publicBySlug`
   (`src/modules/linkinbio/availability.ts`). **Clicks have one door**:
   `app/go/link/[id]/route.ts` → `linkinbio.follow`, which resolves the link on
-  the *published* page and redirects to the stored destination only. It
+  the *published* page and redirects to the stored destination only;
+  `robots.txt` now disallows `/go/` and the SEO gate treats it as a redirect,
+  not a page (`src/core/seo/sitemap.ts`, `scripts/seo-gate.mjs`). It
   writes one `linkinbio.clicked` event through `analytics.track` when consent
   allows identifiers, deduplicated per minute and classified human or bot.
   `linkinbio.report` reads clicks back through the new

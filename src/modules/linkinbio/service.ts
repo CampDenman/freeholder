@@ -30,7 +30,7 @@
 // `analytics.eventTotals`. There is no click column to disagree with the
 // traffic report.
 import { z } from "zod";
-import { and, desc, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { listed, row, uuid as uuidSchema } from "@/core/contract";
 import {
   actorString,
@@ -220,6 +220,24 @@ async function findPageId(ctx: ServiceContext): Promise<string | null> {
     .orderBy(sql`case when ${pages.status} = 'published' then 0 else 1 end`, desc(pages.updatedAt))
     .limit(1);
   return found?.id ?? null;
+}
+
+/** Published pages carrying a link-in-bio block, for a click with no page. */
+async function publishedBioSlugs(ctx: ServiceContext): Promise<string[]> {
+  const marker = `%"type": "${LINK_IN_BIO_BLOCK}"%`;
+  const rows = await ctx.tx
+    .select({ slug: pages.slug })
+    .from(pages)
+    .where(
+      and(
+        isNull(pages.trashedAt),
+        eq(pages.status, "published"),
+        sql`${pages.blocks}::text like ${marker}`,
+      ),
+    )
+    .orderBy(desc(pages.updatedAt))
+    .limit(10);
+  return rows.map((row) => row.slug);
 }
 
 async function locate(
@@ -918,9 +936,20 @@ export const follow = defineService({
     if (slug === null || !isLinkId(input.id)) throw gone();
     const facts = await businessFacts(ctx);
     const locale = input.lang && facts.enabledLocales.includes(input.lang) ? input.lang : facts.defaultLocale;
-    const published = await ctx.callAsSystem(resolvePageForRender, { slug, locale });
-    if (!published) throw gone();
-    const found = findLink(asTree(published.blocks), input.id);
+    // The page the button was on first. A click whose `from` was lost (a
+    // shortened or re-shared address) is looked up on the site's other
+    // published link-in-bio pages; either way the link must be on a
+    // published page to be followed.
+    let found: ReturnType<typeof findLink> = null;
+    let pageSlug = slug;
+    for (const candidate of [slug, ...(await publishedBioSlugs(ctx)).filter((each) => each !== slug)]) {
+      const published = await ctx.callAsSystem(resolvePageForRender, { slug: candidate, locale });
+      found = published ? findLink(asTree(published.blocks), input.id) : null;
+      if (found) {
+        pageSlug = candidate;
+        break;
+      }
+    }
     if (!found) throw gone();
     const { shown } = await availableLinks([found.link], facts.timezone, systemCall(ctx));
     if (shown.length === 0) throw gone();
@@ -950,7 +979,7 @@ export const follow = defineService({
         // A double tap and a retried request are one click; a second visit
         // an hour later is another.
         eventKey: `${BIO_CLICK_EVENT}:${input.anonId}:${found.link.id}:${Math.floor(Date.now() / 60_000)}`,
-        path: slug === "" ? "/" : `/${slug}`,
+        path: pageSlug === "" ? "/" : `/${pageSlug}`,
         locale,
         props: { linkId: found.link.id, kind: found.link.kind },
         visitorKind: input.visitorKind,
