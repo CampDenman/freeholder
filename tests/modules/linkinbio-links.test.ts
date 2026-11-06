@@ -117,14 +117,18 @@ describe("where a link may go", () => {
 
 describe("when a link shows", () => {
   it("reads a wall-clock time in the business's zone", () => {
-    // 09:00 in Vancouver in March 2099 is 16:00 UTC (daylight time).
-    expect(scheduleInstant("2099-03-20T09:00", ZONE, "start")?.toISOString()).toBe("2099-03-20T16:00:00.000Z");
-    expect(scheduleInstant("2099-03-20T09:00:00Z", ZONE, "start")?.toISOString()).toBe("2099-03-20T09:00:00.000Z");
+    // A zone with no daylight time, so the expectation does not depend on
+    // which tz database release the machine running the test carries.
+    const tokyo = "Asia/Tokyo";
+    expect(scheduleInstant("2027-03-20T09:00", tokyo, "start")?.toISOString()).toBe("2027-03-20T00:00:00.000Z");
+    expect(scheduleInstant("2027-03-20T09:00:00Z", tokyo, "start")?.toISOString()).toBe("2027-03-20T09:00:00.000Z");
+    expect(scheduleInstant("2027-03-20T09:00+02:00", tokyo, "start")?.toISOString()).toBe("2027-03-20T07:00:00.000Z");
     // An end date with no time means through that day.
-    expect(scheduleInstant("2099-01-31", ZONE, "end")?.toISOString()).toBe("2099-02-01T08:00:00.000Z");
-    expect(scheduleInstant("", ZONE, "start")).toBeUndefined();
-    expect(scheduleInstant("2099-02-31", ZONE, "start")).toBeNull();
-    expect(scheduleInstant("soon", ZONE, "start")).toBeNull();
+    expect(scheduleInstant("2027-01-31", tokyo, "end")?.toISOString()).toBe("2027-01-31T15:00:00.000Z");
+    expect(scheduleInstant("2027-01-31", tokyo, "start")?.toISOString()).toBe("2027-01-30T15:00:00.000Z");
+    expect(scheduleInstant("", tokyo, "start")).toBeUndefined();
+    expect(scheduleInstant("2027-02-31", tokyo, "start")).toBeNull();
+    expect(scheduleInstant("soon", tokyo, "start")).toBeNull();
   });
 
   it("explains every reason a link is not on the page", () => {

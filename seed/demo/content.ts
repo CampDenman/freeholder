@@ -228,6 +228,10 @@ export function footer(): BlockNode[] {
               { label: "Planning", href: "/planning" },
               { label: "Newsletters", href: "/newsletters" },
               { label: "Gifts", href: "/c/gifts" },
+              // C9.39: the link-in-bio page is a real page, so it is linked
+              // like one — an address only social profiles point at would be
+              // an orphan to a crawler.
+              { label: "Links", href: "/links" },
               { label: "Search", href: "/search" },
             ],
             ariaLabelKey: "cms.nav.footer",

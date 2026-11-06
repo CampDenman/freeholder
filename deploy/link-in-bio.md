@@ -90,6 +90,13 @@ approval. Otherwise it is saved to the draft and the response's
 `publication.pending` says why (`draftPage`, `unpublishedEdits`,
 `awaitingApproval`, or `notRequested` when `publish: false`).
 
+## Linking to it
+
+The page is in the sitemap like any published page, so link to it from the
+site itself (the footer is the usual place). A page that only social
+profiles point at is an orphan to a crawler, and the SEO gate reports
+"in the sitemap but no page links to it". The demo links it from its footer.
+
 ## Demo
 
 The Aurora Coast sample site installs `/links` with a booking, an event, a
