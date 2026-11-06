@@ -2106,8 +2106,11 @@ never changes merely because the crawler finished.
   fetched. Not yet recreated, and said so in the run report: categories/tags
   and authors are recorded on the import run because the blog has no taxonomy
   and pages carry no author; reader comments are not imported because CMS
-  pages have no public thread; nested menu items are not applied; an export
-  over the 1 MB request-body limit cannot be submitted yet (C3.22 open).
+  pages have no public thread; nested menu items are not applied (C3.22
+  open). An export file of up to 100 MB is reserved, sent in 4 MB chunks to
+  an import-only route that stores them in private object storage, and read
+  back as a stream; the 1 MB JSON body limit and the request proxy's buffer
+  stay as they are for every other route.
 - **The generic-site importer is built in:** it discovers `sitemap.xml`, RSS/
   Atom, canonical links, JSON-LD, Open Graph and semantic HTML, then crawls only
   owner-approved origins with visible depth/page/byte/rate limits. It resumes
@@ -5200,10 +5203,19 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   imported files. Coverage in `tests/core/wordpress-import.test.ts` and
   `tests/core/wordpress-import-flow.test.ts` against the fictional fixture
   `tests/fixtures/wordpress/sample-export.xml`; changeset
-  `.changeset/wordpress-import-media-redirects.md`. Still open before this can
+  `.changeset/wordpress-import-media-redirects.md`. Real-size exports
+  (2026-11-06): `imports.beginSourceUpload` reserves a file of up to 100 MB,
+  `/api/imports/source/chunk` (`imports.uploadSourceChunk`, own 4 MB bound,
+  first-chunk content sniff, rate limit, same uploader only) writes each chunk
+  to private object storage outside any transaction, and
+  `imports.previewFromUpload` streams them through `WxrStreamReader`, so
+  memory holds one chunk and one item, then deletes the chunks; coverage in
+  `tests/core/wordpress-import-upload.test.ts` with a generated multi-megabyte
+  fictional export. Still open before this can
   be checked: WordPress categories/tags and authors have no CMS home (recorded
   on the run only); reader comments are not imported; nested menu items are
-  not applied; exports over the 1 MB request-body limit cannot be submitted;
+  not applied; an import still keeps at most 500 items and 20 MB of bodies
+  (the importer limits), whatever the file size;
   there is no live WordPress REST crawl, so REST input is a pasted response;
   the generic sitemap/RSS/Atom/HTML importers still produce a heading plus one
   `html` block with no media or redirects; the `archive` kind has no archive

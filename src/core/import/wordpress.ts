@@ -317,95 +317,211 @@ function expandSeoTemplate(value: string, title: string, siteTitle: string): str
     .trim();
 }
 
-/**
- * Read a WordPress eXtended RSS (WXR) export: Tools → Export in wp-admin.
- * Unknown post types and throwaway statuses are counted in `skipped` rather
- * than silently dropped.
- */
-export function parseWordpressExport(xml: string): WordpressExport {
-  const masked = maskCdata(xml);
-  const head = masked.text.split(/<item(?:\s[^>]*)?>/i)[0] ?? "";
-  const siteTitle = htmlText(child(head, "title", masked, "raw"));
-  const site = {
-    title: siteTitle,
-    url: child(head, "link", masked) || child(head, "wp:base_blog_url", masked),
-    baseUrl: child(head, "wp:base_blog_url", masked) || child(head, "wp:base_site_url", masked) || undefined,
-  };
-  const authors = elements(head, "wp:author").map(({ inner }) => ({
-    login: child(inner, "wp:author_login", masked),
-    displayName: htmlText(child(inner, "wp:author_display_name", masked, "raw")) || undefined,
-    email: child(inner, "wp:author_email", masked) || undefined,
-  })).filter((author) => author.login);
-  const menus = elements(head, "wp:term")
-    .filter(({ inner }) => child(inner, "wp:term_taxonomy", masked) === "nav_menu")
-    .map(({ inner }) => ({
-      slug: child(inner, "wp:term_slug", masked),
-      name: htmlText(child(inner, "wp:term_name", masked, "raw")),
-    }))
-    .filter((menu) => menu.slug);
+/** The largest single `<item>` the streaming reader will hold (a post plus its comments). */
+export const WXR_ITEM_MAX_CHARS = 32 * 1024 * 1024;
+/** The channel header (site, authors, terms) before the first item. */
+export const WXR_HEAD_MAX_CHARS = 32 * 1024 * 1024;
 
+/**
+ * Splits a WXR stream into its channel header and one `<item>` at a time,
+ * so a large export is read with memory bounded by its largest item rather
+ * than its size. CDATA sections and comments are skipped while looking for
+ * `<item` and `</item>`, so a post that quotes them cannot cut an item short,
+ * and a marker split across two chunks is found once the next chunk arrives.
+ */
+export class WxrStreamReader {
+  private buffer = "";
+  private scanFrom = 0;
+  private itemStart = -1;
+  private headDone = false;
+  private head = "";
+
+  constructor(
+    private readonly onHead: (xml: string) => void,
+    private readonly onItem: (xml: string) => void,
+  ) {}
+
+  push(chunk: string): void {
+    this.buffer += chunk;
+    for (;;) {
+      if (this.itemStart < 0) {
+        const open = this.find("open");
+        if (open === null) {
+          if (!this.headDone && this.buffer.length > WXR_HEAD_MAX_CHARS) {
+            throw new Error("This export's header is too large to read.");
+          }
+          // Between items nothing is kept but an unfinished marker.
+          if (this.headDone) this.discardBefore(this.scanFrom);
+          return;
+        }
+        if (!this.headDone) {
+          this.head = this.buffer.slice(0, open);
+          this.headDone = true;
+          this.onHead(this.head);
+        }
+        this.discardBefore(open);
+        this.itemStart = 0;
+        this.scanFrom = 5;
+      }
+      const close = this.find("close");
+      if (close === null) {
+        if (this.buffer.length > WXR_ITEM_MAX_CHARS) {
+          throw new Error("One item in this export is too large to read.");
+        }
+        return;
+      }
+      this.onItem(this.buffer.slice(0, close));
+      this.discardBefore(close);
+      this.itemStart = -1;
+      this.scanFrom = 0;
+    }
+  }
+
+  /** Call once the stream has ended. */
+  end(): void {
+    if (this.itemStart >= 0) throw new Error("This export ends in the middle of an item.");
+    if (!this.headDone) {
+      this.head = this.buffer;
+      this.headDone = true;
+      this.onHead(this.head);
+    }
+    this.buffer = "";
+  }
+
+  private discardBefore(index: number): void {
+    this.buffer = this.buffer.slice(index);
+    this.scanFrom = Math.max(0, this.scanFrom - index);
+  }
+
+  /**
+   * Where the next `<item` starts (or just past the next `</item>`), outside
+   * CDATA and comments; null when more input is needed to know. One forward
+   * scan to the nearest marker per step, so the whole stream is read once.
+   */
+  private find(target: "open" | "close"): number | null {
+    const pattern = target === "open" ? /<!\[CDATA\[|<!--|<item[\s>/]/g : /<!\[CDATA\[|<!--|<\/item\s*>/g;
+    let at = this.scanFrom;
+    for (;;) {
+      pattern.lastIndex = at;
+      const match = pattern.exec(this.buffer);
+      if (!match) {
+        // Keep enough tail that a marker split across chunks is seen whole.
+        this.scanFrom = Math.max(at, this.buffer.length - 16);
+        return null;
+      }
+      const token = match[0];
+      if (token === "<![CDATA[" || token === "<!--") {
+        const terminator = token === "<!--" ? "-->" : "]]>";
+        const ends = this.buffer.indexOf(terminator, match.index + token.length);
+        if (ends < 0) {
+          this.scanFrom = match.index;
+          return null;
+        }
+        at = ends + terminator.length;
+        this.scanFrom = at;
+        continue;
+      }
+      return target === "open" ? match.index : match.index + token.length;
+    }
+  }
+}
+
+/**
+ * Builds a `WordpressExport` from a channel header and then one item at a
+ * time. The whole-string reader and the streaming upload share it.
+ */
+export function wordpressExportBuilder() {
+  let siteTitle = "";
+  let site: WordpressExport["site"] = { title: "", url: "" };
+  let authors: WordpressAuthor[] = [];
+  let menus: WordpressExport["menus"] = [];
   const items: WordpressItem[] = [];
   const attachments: WordpressAttachment[] = [];
   const menuItems: WordpressMenuItem[] = [];
   const skipped: Record<string, number> = {};
   let bytes = 0;
 
-  for (const { inner: raw } of elements(masked.text, "item")) {
+  const head = (xml: string): void => {
+    const masked = maskCdata(xml);
+    const text = masked.text;
+    siteTitle = htmlText(child(text, "title", masked, "raw"));
+    site = {
+      title: siteTitle,
+      url: child(text, "link", masked) || child(text, "wp:base_blog_url", masked),
+      baseUrl: child(text, "wp:base_blog_url", masked) || child(text, "wp:base_site_url", masked) || undefined,
+    };
+    authors = elements(text, "wp:author").map(({ inner }) => ({
+      login: child(inner, "wp:author_login", masked),
+      displayName: htmlText(child(inner, "wp:author_display_name", masked, "raw")) || undefined,
+      email: child(inner, "wp:author_email", masked) || undefined,
+    })).filter((author) => author.login);
+    menus = elements(text, "wp:term")
+      .filter(({ inner }) => child(inner, "wp:term_taxonomy", masked) === "nav_menu")
+      .map(({ inner }) => ({
+        slug: child(inner, "wp:term_slug", masked),
+        name: htmlText(child(inner, "wp:term_name", masked, "raw")),
+      }))
+      .filter((menu) => menu.slug);
+  };
+
+  const item = (xml: string): void => {
+    const masked = maskCdata(xml);
+    const raw = masked.text;
     const comments = elements(raw, "wp:comment");
-    const item = raw.replace(/<wp:comment(\s[^>]*)?>[\s\S]*?<\/wp:comment>/gi, "");
-    const type = child(item, "wp:post_type", masked) || child(item, "post_type", masked);
-    const wpId = child(item, "wp:post_id", masked) || undefined;
-    const wpStatus = child(item, "wp:status", masked);
+    const fields = raw.replace(/<wp:comment(\s[^>]*)?>[\s\S]*?<\/wp:comment>/gi, "");
+    const type = child(fields, "wp:post_type", masked) || child(fields, "post_type", masked);
+    const wpId = child(fields, "wp:post_id", masked) || undefined;
+    const wpStatus = child(fields, "wp:status", masked);
     const meta = new Map<string, string>();
-    for (const { inner } of elements(item, "wp:postmeta")) {
+    for (const { inner } of elements(fields, "wp:postmeta")) {
       meta.set(child(inner, "wp:meta_key", masked), child(inner, "wp:meta_value", masked, "raw"));
     }
-    const terms = elements(item, "category").map(({ attrs, inner }) => ({
+    const terms = elements(fields, "category").map(({ attrs, inner }) => ({
       domain: attr(attrs, "domain"),
       slug: attr(attrs, "nicename"),
       name: htmlText(unmask(inner, masked, "raw")),
     }));
-    const title = htmlText(child(item, "title", masked, "raw"));
+    const title = htmlText(child(fields, "title", masked, "raw"));
 
     if (type === "attachment") {
-      const sourceUrl = child(item, "wp:attachment_url", masked) || child(item, "guid", masked);
-      if (!sourceUrl) continue;
+      const sourceUrl = child(fields, "wp:attachment_url", masked) || child(fields, "guid", masked);
+      if (!sourceUrl) return;
       attachments.push({
         wpId,
         sourceUrl,
         title: title || undefined,
         altText: htmlText(meta.get("_wp_attachment_image_alt") ?? "") || undefined,
-        caption: htmlText(child(item, "excerpt:encoded", masked, "raw")) || undefined,
-        parentWpId: child(item, "wp:post_parent", masked) || undefined,
+        caption: htmlText(child(fields, "excerpt:encoded", masked, "raw")) || undefined,
+        parentWpId: child(fields, "wp:post_parent", masked) || undefined,
       });
-      continue;
+      return;
     }
     if (type === "nav_menu_item") {
       const menu = terms.find((term) => term.domain === "nav_menu");
-      if (!menu || !wpId) continue;
+      if (!menu || !wpId) return;
       menuItems.push({
         wpId,
         menu: menu.slug,
         label: title,
-        order: Number(child(item, "wp:menu_order", masked)) || 0,
+        order: Number(child(fields, "wp:menu_order", masked)) || 0,
         type: meta.get("_menu_item_type") ?? "",
         object: meta.get("_menu_item_object") ?? "",
         objectId: meta.get("_menu_item_object_id") || undefined,
         url: decodeXml(meta.get("_menu_item_url") ?? "") || undefined,
         parentItemId: meta.get("_menu_item_menu_item_parent") || undefined,
       });
-      continue;
+      return;
     }
     if (type && type !== "post" && type !== "page") {
       bump(skipped, `post type: ${type}`);
-      continue;
+      return;
     }
     if (SKIPPED_STATUSES.has(wpStatus)) {
       bump(skipped, `status: ${wpStatus}`);
-      continue;
+      return;
     }
-    const url = child(item, "link", masked) || child(item, "guid", masked);
-    const body = child(item, "content:encoded", masked, "raw") || child(item, "description", masked, "raw");
+    const url = child(fields, "link", masked) || child(fields, "guid", masked);
+    const body = child(fields, "content:encoded", masked, "raw") || child(fields, "description", masked, "raw");
     bytes += body.length;
     enforceImporterLimits({ pages: items.length + 1, bytes, depth: 1 });
     const seoTitle = meta.get("_yoast_wpseo_title") || meta.get("rank_math_title") || "";
@@ -413,17 +529,17 @@ export function parseWordpressExport(xml: string): WordpressExport {
     items.push({
       wpId,
       url,
-      slug: safeDecodeUri(child(item, "wp:post_name", masked)) || slugFromUrl(url),
+      slug: safeDecodeUri(child(fields, "wp:post_name", masked)) || slugFromUrl(url),
       title: title || "Untitled",
       kind: type === "post" ? "post" : "page",
       body,
       status: itemStatus(wpStatus),
       wpStatus: wpStatus || "publish",
       publishedAt:
-        wordpressDate(child(item, "wp:post_date_gmt", masked)) ??
-        rfcDate(child(item, "pubDate", masked)) ??
-        wordpressDate(child(item, "wp:post_date", masked)),
-      author: child(item, "dc:creator", masked) || undefined,
+        wordpressDate(child(fields, "wp:post_date_gmt", masked)) ??
+        rfcDate(child(fields, "pubDate", masked)) ??
+        wordpressDate(child(fields, "wp:post_date", masked)),
+      author: child(fields, "dc:creator", masked) || undefined,
       categories: terms.filter((term) => term.domain === "category").map(({ slug, name }) => ({ slug, name })),
       tags: terms.filter((term) => term.domain === "post_tag").map(({ slug, name }) => ({ slug, name })),
       seo: {
@@ -431,14 +547,31 @@ export function parseWordpressExport(xml: string): WordpressExport {
         description: expandSeoTemplate(htmlText(seoDescription), title, siteTitle) || undefined,
       },
       featuredWpId: meta.get("_thumbnail_id") || undefined,
-      passwordProtected: child(item, "wp:post_password", masked) !== "",
+      passwordProtected: child(fields, "wp:post_password", masked) !== "",
       comments: {
         total: comments.length,
         approved: comments.filter(({ inner }) => child(inner, "wp:comment_approved", masked) === "1").length,
       },
     });
-  }
-  return { site, items, attachments, authors, menus, menuItems, skipped };
+  };
+
+  return {
+    reader: () => new WxrStreamReader(head, item),
+    finish: (): WordpressExport => ({ site, items, attachments, authors, menus, menuItems, skipped }),
+  };
+}
+
+/**
+ * Read a WordPress eXtended RSS (WXR) export: Tools → Export in wp-admin.
+ * Unknown post types and throwaway statuses are counted in `skipped` rather
+ * than silently dropped. Large uploads stream through the same reader.
+ */
+export function parseWordpressExport(xml: string): WordpressExport {
+  const builder = wordpressExportBuilder();
+  const reader = builder.reader();
+  reader.push(xml);
+  reader.end();
+  return builder.finish();
 }
 
 /**

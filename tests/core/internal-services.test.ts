@@ -228,6 +228,12 @@ const CALLER_AUTHORIZED_PHASES = [
   "imports.commitApply",
   "imports.commitSource",
   "imports.recordMedia",
+  // C3.22: the halves of the chunked export upload around object storage.
+  "imports.applyUploadedPreview",
+  "imports.beginSourceUploadApply",
+  "imports.claimSourceChunk",
+  "imports.recordSourceChunk",
+  "imports.sourceUploadState",
   "builder.recordCodeProposal",
   "builder.recordProposal",
   "builder.releaseCodeReservation",

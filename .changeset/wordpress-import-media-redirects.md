@@ -22,7 +22,11 @@ pictures and galleries) rather than one block of raw HTML.
 Some things are not recreated, and the import report says so: categories,
 tags and authors are listed but not attached to posts, because Freeholder's
 blog has no categories or authors yet; reader comments are not imported; nested
-menu items are not added. Export files over 1 MB cannot be uploaded yet.
+menu items are not added.
+
+Real-size exports work: a WordPress export file of up to 100 MB uploads in
+pieces, showing its progress, and Freeholder reads it piece by piece rather than
+all at once. One import still brings in at most 500 posts and pages.
 
 Everything is still a draft until you approve publishing, and rolling the
 import back removes the pages, redirects, menu links and imported files again.

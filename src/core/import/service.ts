@@ -47,6 +47,7 @@ import {
   wordpressExportFromRest,
   wordpressPath,
   type ImageMatch,
+  type WordpressExport,
 } from "./wordpress";
 
 const HTML_MARKUP_MAX = 20_000;
@@ -1299,11 +1300,10 @@ export const publishImport = defineService({
 
 /* ----------------------------------------------------------------- preview */
 
-function wordpressStage(kind: "wordpress-wxr" | "wordpress-rest", payload: string, origin: string) {
-  const exported =
-    kind === "wordpress-wxr"
-      ? parseWordpressExport(payload)
-      : wordpressExportFromRest(JSON.parse(payload) as unknown, origin);
+type StagedPreview = { preview: Record<string, unknown>; counts: Record<string, number> };
+
+/** A parsed WordPress export as a staged preview: plan, media list and report. */
+export function stageWordpressExport(exported: WordpressExport, origin: string): StagedPreview {
   const plan = planWordpressImport(exported, origin);
   // Only public addresses are ever fetched; anything else is reported now.
   const media = plan.media.filter((item) => {
@@ -1342,6 +1342,42 @@ function wordpressStage(kind: "wordpress-wxr" | "wordpress-rest", payload: strin
   };
 }
 
+/** Any supported source text as a staged preview. Throws when it cannot be read. */
+export function stageImportSource(kind: string, payload: string, origin: string, robotsTxt = ""): StagedPreview {
+  if (kind === "wordpress-wxr") return stageWordpressExport(parseWordpressExport(payload), origin);
+  if (kind === "wordpress-rest") {
+    return stageWordpressExport(wordpressExportFromRest(JSON.parse(payload) as unknown, origin), origin);
+  }
+  let parsed: ParsedPage[] = [];
+  if (kind === "sitemap") {
+    parsed = parseSitemap(payload).map((page) => ({
+      url: page.url,
+      slug: page.title ?? "page",
+      title: page.title ?? page.url,
+      kind: "page",
+      body: "",
+      provenance: { url: page.url, source: "sitemap" },
+    }));
+  } else if (kind === "rss" || kind === "atom") {
+    parsed = parseRssOrAtom(payload);
+  } else {
+    parsed = [parseSemanticHtml(payload, origin)];
+  }
+  const discovered = discoverFromPublicOrigin(origin, parsed, robotsTxt);
+  const pages: PreviewPage[] = discovered.pages.map((page) => {
+    const full = parsed.find((candidate) => candidate.url === page.url);
+    const extra = page as { slug?: string };
+    return {
+      url: page.url,
+      slug: extra.slug ?? full?.slug ?? page.title ?? "page",
+      title: page.title ?? full?.title ?? page.url,
+      body: full?.body ?? "",
+      kind: full?.kind ?? (page.kind === "post" ? "post" : "page"),
+    };
+  });
+  return { preview: { pages }, counts: { pages: pages.length } };
+}
+
 export const previewFromSource = defineService({
   name: "imports.previewFromSource",
   summary: "Parse a WordPress or generic-site payload into a staged preview.",
@@ -1361,39 +1397,7 @@ export const previewFromSource = defineService({
     let preview: Record<string, unknown>;
     let counts: Record<string, number>;
     try {
-      if (kind === "wordpress-wxr" || kind === "wordpress-rest") {
-        ({ preview, counts } = wordpressStage(kind, input.payload, origin));
-      } else {
-        let parsed: ParsedPage[] = [];
-        if (kind === "sitemap") {
-          parsed = parseSitemap(input.payload).map((page) => ({
-            url: page.url,
-            slug: page.title ?? "page",
-            title: page.title ?? page.url,
-            kind: "page",
-            body: "",
-            provenance: { url: page.url, source: "sitemap" },
-          }));
-        } else if (kind === "rss" || kind === "atom") {
-          parsed = parseRssOrAtom(input.payload);
-        } else {
-          parsed = [parseSemanticHtml(input.payload, origin)];
-        }
-        const discovered = discoverFromPublicOrigin(origin, parsed, input.robotsTxt ?? "");
-        const pages: PreviewPage[] = discovered.pages.map((page) => {
-          const full = parsed.find((candidate) => candidate.url === page.url);
-          const extra = page as { slug?: string };
-          return {
-            url: page.url,
-            slug: extra.slug ?? full?.slug ?? page.title ?? "page",
-            title: page.title ?? full?.title ?? page.url,
-            body: full?.body ?? "",
-            kind: full?.kind ?? (page.kind === "post" ? "post" : "page"),
-          };
-        });
-        preview = { pages };
-        counts = { pages: pages.length };
-      }
+      ({ preview, counts } = stageImportSource(kind, input.payload, origin, input.robotsTxt ?? ""));
     } catch (error) {
       const [failed] = await ctx.tx
         .update(importRuns)

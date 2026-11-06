@@ -791,16 +791,19 @@ export const SERVICE_NAMES = [
   "i18n.setTranslation",
   "i18n.translatedIds",
   "i18n.translationIndex",
+  "imports.beginSourceUpload",
   "imports.commit",
   "imports.list",
   "imports.map",
   "imports.preview",
   "imports.previewFromSource",
+  "imports.previewFromUpload",
   "imports.publish",
   "imports.reconcile",
   "imports.reviewConflicts",
   "imports.rollback",
   "imports.start",
+  "imports.uploadSourceChunk",
   "invitations.accept",
   "invitations.create",
   "invitations.inspect",
@@ -4705,6 +4708,10 @@ export interface ServiceCatalog {
     input: { entityType: string };
     output: { id: string; entityId: string; locale: string; status: "draft" | "machine" | "reviewed"; updatedAt: string; [key: string]: unknown }[];
   };
+  "imports.beginSourceUpload": {
+    input: { id: string; filename: string; bytes: number };
+    output: { uploadId: string; chunkBytes: number; chunkCount: number; maxBytes: number };
+  };
   "imports.commit": {
     input: { id: string };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -4725,6 +4732,10 @@ export interface ServiceCatalog {
     input: { id: string; payload: string; robotsTxt?: string };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "imports.previewFromUpload": {
+    input: { id: string; uploadId: string };
+    output: { id: string; status: string; error: string | null; counts: unknown };
+  };
   "imports.publish": {
     input: { id: string };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -4744,6 +4755,10 @@ export interface ServiceCatalog {
   "imports.start": {
     input: { origin: string; kind: "wordpress-rest" | "wordpress-wxr" | "sitemap" | "rss" | "atom" | "html" | "archive" };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "imports.uploadSourceChunk": {
+    input: { id: string; uploadId: string; index: number; bytes: unknown };
+    output: { received: number; chunks: number; complete: boolean };
   };
   "invitations.accept": {
     input: { token: string; password: string };
@@ -8630,16 +8645,19 @@ export interface FreeholderApi {
     translationIndex: (input: ServiceCatalog["i18n.translationIndex"]["input"]) => Promise<ServiceCatalog["i18n.translationIndex"]["output"]>;
   };
   imports: {
+    beginSourceUpload: (input: ServiceCatalog["imports.beginSourceUpload"]["input"]) => Promise<ServiceCatalog["imports.beginSourceUpload"]["output"]>;
     commit: (input: ServiceCatalog["imports.commit"]["input"]) => Promise<ServiceCatalog["imports.commit"]["output"]>;
     list: (input?: ServiceCatalog["imports.list"]["input"]) => Promise<ServiceCatalog["imports.list"]["output"]>;
     map: (input: ServiceCatalog["imports.map"]["input"]) => Promise<ServiceCatalog["imports.map"]["output"]>;
     preview: (input: ServiceCatalog["imports.preview"]["input"]) => Promise<ServiceCatalog["imports.preview"]["output"]>;
     previewFromSource: (input: ServiceCatalog["imports.previewFromSource"]["input"]) => Promise<ServiceCatalog["imports.previewFromSource"]["output"]>;
+    previewFromUpload: (input: ServiceCatalog["imports.previewFromUpload"]["input"]) => Promise<ServiceCatalog["imports.previewFromUpload"]["output"]>;
     publish: (input: ServiceCatalog["imports.publish"]["input"]) => Promise<ServiceCatalog["imports.publish"]["output"]>;
     reconcile: (input: ServiceCatalog["imports.reconcile"]["input"]) => Promise<ServiceCatalog["imports.reconcile"]["output"]>;
     reviewConflicts: (input: ServiceCatalog["imports.reviewConflicts"]["input"]) => Promise<ServiceCatalog["imports.reviewConflicts"]["output"]>;
     rollback: (input: ServiceCatalog["imports.rollback"]["input"]) => Promise<ServiceCatalog["imports.rollback"]["output"]>;
     start: (input: ServiceCatalog["imports.start"]["input"]) => Promise<ServiceCatalog["imports.start"]["output"]>;
+    uploadSourceChunk: (input: ServiceCatalog["imports.uploadSourceChunk"]["input"]) => Promise<ServiceCatalog["imports.uploadSourceChunk"]["output"]>;
   };
   invitations: {
     accept: (input: ServiceCatalog["invitations.accept"]["input"]) => Promise<ServiceCatalog["invitations.accept"]["output"]>;

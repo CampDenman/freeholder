@@ -12,7 +12,6 @@ import { ownerFacing } from "./action-helpers";
 import {
   commitImport,
   mapImport,
-  previewFromSource,
   previewImport,
   publishImport,
   reconcileImport,
@@ -111,21 +110,6 @@ export async function previewImportAction(form: FormData): Promise<void> {
     },
     actor,
   );
-  revalidatePath(`/admin/imports/${id}`);
-}
-
-/**
- * Stage a preview from an export file: a WordPress WXR or REST JSON, a feed,
- * a sitemap or a page. The parsing, planning and limits live in core/import,
- * so the API and MCP paths stage exactly the same preview.
- */
-export async function previewFromSourceAction(form: FormData): Promise<void> {
-  const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
-  const id = text(form, "id");
-  const file = form.get("file");
-  const payload = file instanceof File && file.size > 0 ? await file.text() : text(form, "payload");
-  if (!payload) return;
-  await previewFromSource.call({ id, payload }, actor);
   revalidatePath(`/admin/imports/${id}`);
 }
 

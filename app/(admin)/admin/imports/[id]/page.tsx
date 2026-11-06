@@ -75,6 +75,9 @@ export default async function ImportRunPage({
               upload: t("imports.upload"),
               uploadHint: t("imports.uploadHint"),
               stage: t("imports.stage"),
+              uploading: t("imports.uploading"),
+              readingSource: t("imports.readingSource"),
+              uploadFailed: t("imports.uploadFailed"),
             }}
           />
         </CardBody>
