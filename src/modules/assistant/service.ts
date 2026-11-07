@@ -38,6 +38,7 @@
 // conversation, because §31's "every conversation lands on the spine" is
 // exactly the sentence a private transcript table would break.
 import { createHash } from "node:crypto";
+export { previewCall, managedDetails, syncManagedSettings } from "./preview";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
@@ -554,6 +555,7 @@ const answerPlan = z.object({
   system: z.string(),
   asked: z.string(),
   maxOutputTokens: z.number().int(),
+  reservedCents: z.number().int().nonnegative(),
   price: z.object({
     inputCentsPerMillion: z.number(),
     outputCentsPerMillion: z.number(),
@@ -584,6 +586,9 @@ const prepareAnswer = defineService({
   output: answerPrepared,
   handler: async (input, ctx) => {
     const startedAt = Date.now();
+    // Serialize budget reads and claims across chats, including managed
+    // turns which hold the whole remaining cap until a provider receipt.
+    await ctx.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('assistant-budget'))`);
     const current = await readSettings(ctx.tx);
     // The off fallback, first and cheapest: no provider, no session lookup, no
     // row. An instance that never switched this on is an instance where this
@@ -715,14 +720,14 @@ const prepareAnswer = defineService({
     // Everything that can refuse is decided here, from reads, before a single
     // insert — see the file header for why that ordering is not optional.
     const price = assistantPrice(current);
-    const estimateCents = price
-      ? estimateTurnCents(price, `${system}\n${asked}`, current.maxOutputTokens)
-      : 0;
     const [spentCents, repliesThisHour, repliesHere] = await Promise.all([
       periodSpend(ctx.tx, current.spendPeriod),
       repliesInLastHour(ctx.tx),
       repliesOnConversation(ctx.tx, session.conversationId),
     ]);
+    const estimateCents = current.provider === "paradise"
+      ? Math.max(0, current.spendCapCents - spentCents)
+      : price ? estimateTurnCents(price, `${system}\n${asked}`, current.maxOutputTokens) : 0;
     const verdict = allowance({
       settings: current,
       spentCents,
@@ -801,6 +806,7 @@ const prepareAnswer = defineService({
         system,
         asked,
         maxOutputTokens: current.maxOutputTokens,
+        reservedCents: estimateCents,
         price: verdict.price,
         notes,
         lastQuestion: transcript.at(-1)?.body ?? "",
@@ -814,6 +820,7 @@ const generatedAnswer = z.object({
   structured: z.unknown().optional(),
   provider: z.string(),
   model: z.string(),
+  meteredCents: z.number().int().nonnegative().optional(),
   usage: z.object({
     inputTokens: z.number(),
     outputTokens: z.number(),
@@ -894,13 +901,17 @@ const applyAnswer = defineService({
       // An adapter failure is an HTTP failure that happened with no
       // transaction open; this one records it.
       const detail = input.failure ?? "The model could not be reached.";
-      await finish({ outcome: "failed", detail });
+      // An unknown managed timeout may follow a charged turn. Preserve its
+      // reservation until the owner reconciles the managed ledger receipt.
+      await finish({ outcome: "failed", detail, ...(turn.provider === "paradise" ? { costCents: turn.costCents } : {}) });
       await noteError(ctx.tx, detail);
       ctx.setSubject("conversation", session.conversationId);
       return { status: "failed" as const, reply: null, action: null };
     }
 
-    const costCents = turnCostCents(plan.price, generated.usage);
+    const costCents = generated.provider === "paradise"
+      ? Math.min(plan.reservedCents, generated.meteredCents ?? plan.reservedCents)
+      : turnCostCents(plan.price, generated.usage);
     const usage = {
       provider: generated.provider,
       model: generated.model,
@@ -1108,6 +1119,8 @@ export const answer = defineOrchestratedService({
           maxOutputTokens: plan.maxOutputTokens,
           responseSchema: ASSISTANT_RESPONSE_SCHEMA,
           idempotencyKey: `assistant.answer:${plan.messageId}`,
+          visitorRef: createHash("sha256").update(`pm-preview-assistant-visitor-v1\n${input.token}`).digest("hex"),
+          maxChargeCents: plan.reservedCents,
         });
       } catch (error) {
         failure = error instanceof Error ? error.message : "The model could not be reached.";
@@ -1125,6 +1138,7 @@ export const answer = defineOrchestratedService({
               provider: generated.provider,
               model: generated.model,
               usage: generated.usage,
+              meteredCents: generated.meteredCents,
             }
           : null,
         failure,

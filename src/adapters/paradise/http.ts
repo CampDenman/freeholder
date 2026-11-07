@@ -141,7 +141,7 @@ function machineCode(body: unknown): string | undefined {
  */
 export async function paradiseRequest<T>(
   path: string,
-  init: { method?: "GET" | "POST"; body?: unknown; timeoutMs?: number } = {},
+  init: { method?: "GET" | "POST" | "PATCH"; body?: unknown; timeoutMs?: number; query?: Record<string, string> } = {},
 ): Promise<ParadiseResponse<T>> {
   if (playgroundBlocksExternalDelivery(env())) {
     // Matches mail, SMS and webhooks: a public playground fails closed.
@@ -156,10 +156,11 @@ export async function paradiseRequest<T>(
   if (!site.apiKey) {
     throw new ParadiseRequestError("PARADISEMODERN_API_KEY is not set.", 0, false, "not_configured");
   }
-  const url = paradiseUrl(site.baseUrl, path);
+  const url = new URL(paradiseUrl(site.baseUrl, path));
+  for (const [key, value] of Object.entries(init.query ?? {})) url.searchParams.set(key, value);
   let response: Response;
   try {
-    response = await (fetchOverride ?? fetch)(url, {
+    response = await (fetchOverride ?? fetch)(url.href, {
       method: init.method ?? "POST",
       headers: {
         accept: "application/json",

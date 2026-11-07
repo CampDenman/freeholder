@@ -314,6 +314,7 @@ function requestPolicy(
       uploadOrigins: storageOrigins,
       creativeOrigins: parseCspOrigins(runtime.CSP_THIRD_PARTY_ORIGINS),
       callOrigins: sfuOrigins(runtime.LIVEKIT_URL),
+      assistantOrigins: parseCspOrigins(runtime.PARADISEMODERN_ASSISTANT_ORIGINS).flatMap(origin => [origin, origin.replace(/^https:/, "wss:")]),
       thirdPartyCreativeConsent: thirdPartyCreativeConsentGranted(
         request.cookies.get(THIRD_PARTY_CREATIVE_CONSENT_COOKIE)?.value,
       ),

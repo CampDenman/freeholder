@@ -96,6 +96,9 @@ export async function repliesOnConversation(
  * fail-closed direction, because a cap enforced against a guess is not a cap.
  */
 export function assistantPrice(settings: AssistantSettings): ModelPrice | null {
+  // Managed calls reserve the entire remaining cap and receive an actual
+  // list-price receipt. They do not pretend to have a token price.
+  if (settings.provider === "paradise") return { inputCentsPerMillion: 0, outputCentsPerMillion: 0 };
   return modelPrice(settings.model, {
     ...(settings.inputCentsPerMillion === null
       ? {}

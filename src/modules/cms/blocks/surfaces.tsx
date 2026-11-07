@@ -866,6 +866,14 @@ export const siteChat = defineBlock({
           <SiteChatClient
             locale={ctx.locale}
             labels={{
+              call: {
+                label: ctx.t("assistant.call.label"), captions: ctx.t("assistant.call.captions"),
+                video: ctx.t("assistant.call.video"), voice: ctx.t("assistant.call.voice"),
+                leave: ctx.t("assistant.call.leave"), end: ctx.t("assistant.call.end"),
+                waiting: ctx.t("assistant.call.waiting"), unavailable: ctx.t("assistant.call.unavailable"),
+                connecting: ctx.t("assistant.call.connecting"), captionFailed: ctx.t("assistant.call.captionFailed"),
+                ended: ctx.t("assistant.call.ended"), lost: ctx.t("assistant.call.lost"), microphone: ctx.t("assistant.call.microphone"),
+              },
               loading: ctx.t("cms.chat.loading"),
               ended: ctx.t("cms.chat.ended"),
               escalated: ctx.t("cms.chat.escalated"),

@@ -5814,6 +5814,8 @@ deployments are portable, testable and incapable of silently forking the truth.
   recorded in the pull request. The tarballs reach a release only when the
   next version is tagged.)*
 
+- [ ] **C3.45** — Managed preview assistant: launch-spec v3 preserves v1/v2 compatibility; PM-hosted previews use server-only scoped keys, cleared SFW Canon assets and revocation, AI/no-endorsement disclosure, owner settings and caps, visitor-bound queued voice/video with shared PM duplex transport and leases, and the existing assistant transcript for text; no chatbot age gate. Qualify the consumer, PM backend, deployed text fallback and a real approved call before closing.
+
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
 #### Workforce completion

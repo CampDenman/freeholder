@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { postSiteChatAction } from "../../../../app/(public)/inbound-actions";
+import { PreviewAssistantCall, type PreviewAssistantLabels } from "./PreviewAssistantCall";
 
 interface ChatMessage {
   id: string;
@@ -21,6 +22,7 @@ interface Transcript {
 }
 
 interface Labels {
+  call: PreviewAssistantLabels;
   loading: string;
   ended: string;
   escalated: string;
@@ -157,6 +159,7 @@ export function SiteChatClient({ locale, labels }: { locale: string; labels: Lab
 
   return (
     <section aria-label={labels.message} className="grid max-w-xl gap-4 border-s-4 border-accent ps-4">
+      <PreviewAssistantCall ended={ended || chat?.state === "closed"} labels={labels.call} />
       {chat?.escalated ? (
         <p role="status" className="rounded-md bg-warning-soft px-3 py-2 text-sm text-warning">
           {labels.escalated}

@@ -334,6 +334,8 @@ const envSchema = z.object({
   AGENT_GATEWAY_MODEL: z.string().trim().min(1).max(200).optional(),
   /** `paradise`: purpose-bound Paradise Modern site credential (optional provider). */
   PARADISEMODERN_API_KEY: z.string().trim().min(1).optional(),
+  /** Exact HTTPS voice/face worker origins for managed preview calls; no wildcard. */
+  PARADISEMODERN_ASSISTANT_ORIGINS: z.string().optional(),
   /** `https://` only, or `http://` on a loopback host for tests and local work. */
   PARADISEMODERN_URL: z
     .string()
