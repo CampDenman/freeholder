@@ -4916,7 +4916,10 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   written to native immutable redirect headers; the adapter now constructs a
   mutable framework response before applying the security policy; the HTTP
   harness resolves Next’s valid relative Location before checking the exact
-  destination. This is covered by
+  destination. Full CI also caught missing new-table policy decisions: reader
+  comments now explicitly stay in their scoped moderation queue and page/privacy
+  retention lifecycle; playground submission has a 200-row cap plus shared
+  contact/client limits. This is covered by
   `tests/core/legacy-redirect-proxy.test.ts`. Reusable
   fixes stage replacement metadata/comments until publication, reuse the
   shared published-page resolver, retain first publication dates and restore

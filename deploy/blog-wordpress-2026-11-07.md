@@ -120,3 +120,11 @@ The next browser run returned the required301 and a valid relative Location;
 the overly strict absolute-header assertion was a harness defect. The harness
 now resolves that header against the trusted test origin before asserting the
 exact destination, retaining the one-hop and origin checks.
+
+Full CI found the new comment contact foreign key and public submission were
+unclassified in the existing search, retention and playground completeness
+guards. These were product integration omissions. Comments remain discoverable
+through the scoped moderation queue; page deletion and `cms.readerComments`
+privacy erasure govern their discussion history instead of a notes TTL.
+Playground submissions use a 200-row comment cap and the existing shared
+contact/client limits, with external notification delivery still blocked.

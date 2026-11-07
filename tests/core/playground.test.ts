@@ -88,7 +88,7 @@ it("treats only the content modules as editable admin screens", () => {
 
 describe("playground public-site policy (2026-10-22)", () => {
   it("lets the public site's own actions through and keeps credential and provider flows out", () => {
-    for (const name of ["forms.submit", "newsletters.subscribe", "events.register", "catalog.addCartItem", "catalog.shopperCheckout", "cms.submitSiteChat", "share.shareVia", "popups.capture", "reviews.submit"]) {
+    for (const name of ["forms.submit", "newsletters.subscribe", "events.register", "catalog.addCartItem", "catalog.shopperCheckout", "cms.submitSiteChat", "cms.submitReaderComment", "share.shareVia", "popups.capture", "reviews.submit"]) {
       expect(playgroundAllows(name, "mutation"), name).toBe(true);
     }
     for (const name of ["auth.requestCustomerMagicLink", "portal.requestSignIn", "invoicing.beginCustomerCheckout", "invoicing.claimCustomerCheckout", "assistant.answer", "media.signUploadClaim"]) {
@@ -113,7 +113,7 @@ describe("playground public-site policy (2026-10-22)", () => {
     }
     // Public verbs that add a row of their own carry a cap; the community
     // join (a member row per email) was missed once.
-    for (const name of ["forms.submit", "events.register", "community.joinBySlug", "catalog.getOrCreateCart", "reviews.submit"]) {
+    for (const name of ["forms.submit", "events.register", "community.joinBySlug", "catalog.getOrCreateCart", "reviews.submit", "cms.submitReaderComment"]) {
       expect(PLAYGROUND_ROW_CAPS[name], name).toBeDefined();
     }
     // Every capped public surface is one the policy actually allows.

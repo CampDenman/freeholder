@@ -129,6 +129,8 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   rental_agreements: "Find from hire; the agreement is the document, not a search hit.",
   time_entries: "Time against a project; find the project.",
   reviews: "Find the contact or the listing they reviewed.",
+  blog_reader_comments:
+    "Untitled reader contributions; review through the scoped blog moderation queue, not global contact search.",
   review_requests: "Solicitation workflow.",
   contact_stages: "Join table of a contact to a pipeline stage.",
   advertisers: "Ad-account counterparties.",
