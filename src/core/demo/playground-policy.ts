@@ -36,6 +36,8 @@ const MUTATIONS = new Set([
   "cms.updateSection", "cms.createSectionLocale", "cms.restoreRevision",
   "cms.attachLayout", "cms.detachLayout", "cms.rejoinLayout", "cms.createSection",
   "cms.saveAsSection", "cms.detachSection", "cms.deleteSection", "cms.createFromTemplate",
+  "cms.createPost", "cms.setPostMeta", "cms.saveTerm", "cms.deleteTerm",
+  "cms.saveAuthor", "cms.deleteAuthor", "cms.updateBlogSettings", "cms.moderateReaderComment",
   "forms.create", "forms.update", "forms.delete", "forms.reviewSubmission",
   "contacts.create", "contacts.update", "contacts.merge", "contacts.undoMerge",
   "catalog.createProduct", "catalog.updateProduct", "catalog.updateProductDescription",
@@ -259,6 +261,9 @@ export interface PlaygroundRowCap {
 
 export const PLAYGROUND_ROW_CAPS: Readonly<Record<string, PlaygroundRowCap>> = {
   "cms.createPage": { table: "pages", limit: 50 },
+  "cms.createPost": { table: "pages", limit: 50 },
+  "cms.saveAuthor": { table: "blog_authors", limit: 50 },
+  "cms.saveTerm": { table: "blog_terms", limit: 100 },
   "cms.createFromTemplate": { table: "pages", limit: 50 },
   "linkinbio.setup": { table: "pages", limit: 50 },
   "cms.createSection": { table: "sections", limit: 100 },

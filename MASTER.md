@@ -4919,7 +4919,16 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   destination. Full CI also caught missing new-table policy decisions: reader
   comments now explicitly stay in their scoped moderation queue and page/privacy
   retention lifecycle; playground submission has a 200-row cap plus shared
-  contact/client limits. This is covered by
+  contact/client limits.
+  A subsequent real-session regression also found the advertised editable
+  playground blog forms still refused scoped blog saves, and its create form
+  attempted operator-only bootstrap. Explicit content mutations now use bounded
+  page/author/term stores; playground creation reuses startup-seeded chrome.
+  A shared transaction-scoped insert guard counts inline tag batches and
+  serializes concurrent creators; an over-limit batch rolls back atomically.
+  `tests/core/blog-playground.test.ts` exercises the real server action with
+  a genuine disposable visitor session and verifies moderation and caps.
+  Deployed demo acceptance remains open. Redirect coverage is in
   `tests/core/legacy-redirect-proxy.test.ts`. Reusable
   fixes stage replacement metadata/comments until publication, reuse the
   shared published-page resolver, retain first publication dates and restore

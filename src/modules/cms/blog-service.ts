@@ -9,6 +9,7 @@
 // the same way `cms.updatePage` does for a renamed page.
 import { and, asc, desc, eq, inArray, isNull, isNotNull, like, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { checkPlaygroundInsert } from "@/core/demo/playground-inserts";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, getService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
@@ -342,6 +343,7 @@ export const saveTerm = defineService({
       source: before?.source ?? input.source ?? "admin",
     };
     let saved: TermRecord;
+    if (!before) await checkPlaygroundInsert(ctx.tx, ctx.actor, "cms.saveTerm");
     try {
       if (before) {
         [saved] = (await ctx.tx.update(blogTerms).set(values).where(eq(blogTerms.id, before.id)).returning()) as [TermRecord];
@@ -474,6 +476,7 @@ export const saveAuthor = defineService({
       source: before?.source ?? input.source ?? "admin",
     };
     let saved: typeof blogAuthors.$inferSelect;
+    if (!before) await checkPlaygroundInsert(ctx.tx, ctx.actor, "cms.saveAuthor");
     try {
       [saved] = before
         ? ((await ctx.tx.update(blogAuthors).set(values).where(eq(blogAuthors.id, before.id)).returning()) as [typeof saved])
@@ -615,6 +618,7 @@ export const setPostMeta = defineService({
           }
           const path = `${settings.tagBase}/${slug}`;
           await assertPathFree(ctx.tx, path, {});
+          await checkPlaygroundInsert(ctx.tx, ctx.actor, "cms.saveTerm");
           const [created] = await ctx.tx
             .insert(blogTerms)
             .values({ taxonomy: "tag", name, slug, path, source: input.source ?? "admin" })

@@ -16,6 +16,7 @@ import {
   updateBlogSettings,
 } from "@/modules/cms/blog-service";
 import { ServiceError } from "@/core/service";
+import { env } from "@/core/env";
 import { requireStaffActor } from "../guard";
 import { currentBusiness } from "@/core/settings/read";
 import { ownerFacing } from "../../action-helpers";
@@ -45,7 +46,8 @@ export async function createBlogPostAction(form: FormData) {
   if (!title || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) redirect("/admin/blog?error=1");
   let id: string;
   try {
-    await ensureDefaults.call({ locale }, actor);
+    // Playground startup already seeds chrome; visitors cannot run bootstrap.
+    if (env().FREEHOLDER_PLAYGROUND !== "1") await ensureDefaults.call({ locale }, actor);
     const page = await createPost.call(
       {
         title,
