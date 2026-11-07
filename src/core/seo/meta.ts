@@ -2,11 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Per-page SEO fields (MASTER.md §5).
 //
-// Titles and descriptions are unique *and* short. An owner-supplied override
-// already has a 60/155 character ceiling in the write schema; the renderer
-// still has to keep the composed title (page · site) inside that budget, or
-// the search snippet is whatever the engine truncated — usually the unique
-// half of the title.
+// Newly composed titles and descriptions use 60/155-character suggestions.
+// Imported originals carry an explicit preservation flag: migration must not
+// silently change a publisher’s existing search title or description.
 //
 // Filter query strings are a different page to a crawler and the same page
 // to a visitor. They are noindexed and canonicalised to the clean path so
@@ -27,6 +25,7 @@ export const FILTER_QUERY_KEYS = new Set([
   "min",
   "max",
   "page",
+  "commentPage",
   "facet",
 ]);
 
@@ -52,7 +51,11 @@ export function composeDocumentTitle(
   title: string,
   siteName: string | undefined,
   isHome: boolean,
+  preserve = false,
 ): string {
+  // Imported search titles already carry the publisher's deliberate wording.
+  // Keep them byte-for-byte instead of silently clipping or appending a brand.
+  if (preserve) return title;
   const own = clipSeoText(title, TITLE_LIMIT);
   // A title that already names the business ("About Aurora Coast
   // Photography") would otherwise come out doubled: "About Aurora Coast
@@ -76,9 +79,9 @@ function namesBrand(title: string, brand: string): boolean {
   return new RegExp(`^(?:${escaped})(?:$|${edge})|(?:^|${edge})(?:${escaped})$`, "iu").test(title.trim());
 }
 
-export function composeDescription(description: string | undefined): string | undefined {
+export function composeDescription(description: string | undefined, preserve = false): string | undefined {
   if (!description) return undefined;
-  return clipSeoText(description, DESCRIPTION_LIMIT);
+  return preserve ? description : clipSeoText(description, DESCRIPTION_LIMIT);
 }
 
 export function isFilterQuery(

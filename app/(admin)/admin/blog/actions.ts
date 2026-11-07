@@ -5,11 +5,11 @@
 // cms services, so the admin, the HTTP API and MCP do the same thing.
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createPage, ensureDefaults } from "@/modules/cms/service";
+import { ensureDefaults } from "@/modules/cms/service";
 import {
   deleteAuthor,
+  createPost,
   deleteTerm,
-  listAuthors,
   saveAuthor,
   saveTerm,
   setPostMeta,
@@ -19,6 +19,7 @@ import { ServiceError } from "@/core/service";
 import { requireStaffActor } from "../guard";
 import { currentBusiness } from "@/core/settings/read";
 import { ownerFacing } from "../../action-helpers";
+import { moderateReaderComment } from "@/modules/cms/blog-comments";
 
 function text(form: FormData, key: string): string {
   const value = form.get(key);
@@ -31,7 +32,7 @@ function optional(form: FormData, key: string): string | undefined {
 
 function refused(error: unknown, back: string): never {
   if (error instanceof Error && error.message === "NEXT_REDIRECT") throw error;
-  if (typeof error === "object" && error !== null && "digest" in error) throw error;
+  if (error instanceof Error && "digest" in error) throw error;
   const message = error instanceof ServiceError ? ownerFacing(error.message) : "";
   redirect(`${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent(message || "1")}`);
 }
@@ -45,25 +46,15 @@ export async function createBlogPostAction(form: FormData) {
   let id: string;
   try {
     await ensureDefaults.call({ locale }, actor);
-    const page = await createPage.call(
+    const page = await createPost.call(
       {
         title,
-        slug: `blog/${slug}`,
+        slug,
         locale,
-        blocks: [
-          { id: "post-title", type: "heading", props: { text: title, level: 1 } },
-          { id: "post-body", type: "text", props: { body: "" } },
-        ],
       },
       actor,
     );
     id = page.id;
-    // The writer is the author when they have an author profile.
-    const mine =
-      actor.kind === "user"
-        ? (await listAuthors.call({}, actor)).find((author) => author.userId === actor.userId)
-        : undefined;
-    await setPostMeta.call({ pageId: page.id, isPost: true, authorId: mine?.id ?? null }, actor);
   } catch (error) {
     refused(error, "/admin/blog");
   }
@@ -79,6 +70,7 @@ export async function saveBlogSettingsAction(form: FormData) {
         tagBase: optional(form, "tagBase"),
         authorBase: optional(form, "authorBase"),
         postsPerPage: Number(text(form, "postsPerPage")) || undefined,
+        commentsEnabled: form.get("commentsEnabled") === "on",
       },
       actor,
     );
@@ -87,6 +79,17 @@ export async function saveBlogSettingsAction(form: FormData) {
   }
   revalidatePath("/admin/blog");
   redirect("/admin/blog?saved=1");
+}
+
+export async function moderateReaderCommentAction(form: FormData) {
+  const actor = await requireStaffActor("cms", "manage");
+  const status = text(form, "status");
+  if (!["pending", "approved", "spam", "trash"].includes(status)) redirect("/admin/blog/comments?error=1");
+  try {
+    await moderateReaderComment.call({ id: text(form, "id"), status: status as "pending" | "approved" | "spam" | "trash" }, actor);
+  } catch (error) { refused(error, "/admin/blog/comments"); }
+  revalidatePath("/", "layout");
+  redirect("/admin/blog/comments?saved=1");
 }
 
 export async function saveTermAction(form: FormData) {

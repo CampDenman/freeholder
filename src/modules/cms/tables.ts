@@ -13,3 +13,4 @@ export {
   helpCategories,
 } from "./schema";
 export { blogSettings, blogAuthors, blogTerms, blogPosts, blogPostTerms } from "./blog-schema";
+export { blogReaderComments } from "./blog-comments-schema";

@@ -7,7 +7,7 @@
 // slug, a parent or deleting a term moves an archive, so the service that
 // moves it records the redirect (MASTER.md §5: "slugs never silently break"),
 // the same way `cms.updatePage` does for a renamed page.
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, isNotNull, like, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, getService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
@@ -83,6 +83,7 @@ const settingsRow = z.object({
   tagBase: z.string(),
   authorBase: z.string(),
   postsPerPage: z.number().int(),
+  commentsEnabled: z.boolean(),
 });
 
 export type BlogSettings = z.infer<typeof settingsRow>;
@@ -92,6 +93,7 @@ export const DEFAULT_BLOG_SETTINGS: BlogSettings = {
   tagBase: "blog/tag",
   authorBase: "blog/author",
   postsPerPage: 12,
+  commentsEnabled: true,
 };
 
 /* --------------------------------------------------------------- helpers */
@@ -104,6 +106,7 @@ export async function loadBlogSettings(tx: Tx): Promise<BlogSettings> {
         tagBase: found.tagBase,
         authorBase: found.authorBase,
         postsPerPage: found.postsPerPage,
+        commentsEnabled: found.commentsEnabled,
       }
     : DEFAULT_BLOG_SETTINGS;
 }
@@ -221,6 +224,7 @@ export const updateBlogSettings = defineService({
     tagBase: archivePath.optional(),
     authorBase: archivePath.optional(),
     postsPerPage: z.number().int().min(1).max(50).optional(),
+    commentsEnabled: z.boolean().optional(),
   }),
   output: settingsRow,
   handler: async (input, ctx) => {
@@ -241,7 +245,7 @@ export const listTerms = defineService({
   name: "cms.listTerms",
   summary: "Blog categories and tags, with how many published posts each has.",
   kind: "query",
-  permission: "public",
+  permission: "scoped",
   input: z.object({ taxonomy: z.enum(BLOG_TAXONOMIES).optional() }),
   output: listed(termRow.extend({ posts: z.number().int() })),
   handler: async (input, ctx) => {
@@ -254,6 +258,21 @@ export const listTerms = defineService({
       .groupBy(blogPostTerms.termId);
     const byTerm = new Map(counts.map((count) => [count.termId, Number(count.posts)]));
     return terms.map((term) => ({ ...term, posts: byTerm.get(term.id) ?? 0 }));
+  },
+});
+
+export const publicBlogCategories = defineService({
+  name: "cms.publicBlogCategories", summary: "Public category links with published posts, without draft taxonomy or import metadata.",
+  kind: "query", permission: "public", input: z.object({}),
+  output: listed(z.object({ slug: z.string(), name: z.string(), path: z.string(), posts: z.number().int() })),
+  handler: async (_input, ctx) => {
+    const out = [];
+    for (const category of await allTerms(ctx.tx, "category")) {
+      if (category.parentId) continue;
+      const dated = await publishedPostDates(ctx, await postIdsMatching(ctx.tx, { category: category.id }));
+      if (dated.length) out.push({ slug: category.slug, name: category.name, path: category.path, posts: dated.length });
+    }
+    return out;
   },
 });
 
@@ -656,6 +675,7 @@ export const postMetaAt = defineService({
       .where(and(eq(pages.slug, slug), eq(pages.status, "published"), isNull(pages.trashedAt)))
       .limit(1);
     if (!found) return null;
+    if (!await ctx.call(getService("cms.resolvePage"), { slug: found.page.slug })) return null;
     const [author] = found.post.authorId
       ? await ctx.tx
           .select({ name: blogAuthors.name, path: blogAuthors.path, bio: blogAuthors.bio })
@@ -727,8 +747,8 @@ export async function postIdsMatching(
 
 const archiveShape = z
   .object({
-    kind: z.enum(["category", "tag", "author"]),
-    id: uuid,
+    kind: z.enum(["category", "tag", "author", "date"]),
+    id: z.string(),
     slug: z.string(),
     path: z.string(),
     name: z.string(),
@@ -741,10 +761,10 @@ const archiveShape = z
   })
   .nullable();
 
-async function publishedPostDates(tx: Tx, ids: Set<string> | null): Promise<Array<{ id: string; publishedAt: Date | null }>> {
+async function publishedPostDates(ctx: ServiceContext, ids: Set<string> | null): Promise<Array<{ id: string; publishedAt: Date | null }>> {
   if (ids !== null && ids.size === 0) return [];
-  return tx
-    .select({ id: pages.id, publishedAt: pages.publishedAt })
+  const found = await ctx.tx
+    .select({ id: pages.id, slug: pages.slug, locale: pages.locale, publishedAt: pages.publishedAt })
     .from(pages)
     .innerJoin(blogPosts, eq(blogPosts.pageId, pages.id))
     .where(
@@ -754,6 +774,9 @@ async function publishedPostDates(tx: Tx, ids: Set<string> | null): Promise<Arra
         ids === null ? undefined : inArray(pages.id, [...ids]),
       ),
     );
+  const visible = [];
+  for (const post of found) if (await ctx.call(getService("cms.resolvePage"), { slug: post.slug, locale: post.locale })) visible.push(post);
+  return visible;
 }
 
 /** A category, tag or author archive at a path, while it has a published post. */
@@ -767,10 +790,16 @@ export const resolveBlogArchive = defineService({
   handler: async (input, ctx) => {
     const path = input.path.replace(/^\/+|\/+$/g, "").toLowerCase();
     if (!path) return null;
+    const date = /^(\d{4})(?:\/(0[1-9]|1[0-2]))?(?:\/(0[1-9]|[12]\d|3[01]))?$/.exec(path);
+    if (date) {
+      const dated = (await publishedPostDates(ctx, null)).filter(post => post.publishedAt?.toISOString().startsWith(path.replaceAll("/", "-")));
+      if (!dated.length) return null;
+      return { kind: "date" as const, id: `date:${path}`, slug: path, path, name: path.replaceAll("/", "-"), description: null, seo: {}, trail: [], posts: dated.length, updatedAt: latest(dated) };
+    }
     const [term] = await ctx.tx.select().from(blogTerms).where(eq(blogTerms.path, path)).limit(1);
     if (term) {
       const ids = await postIdsMatching(ctx.tx, term.taxonomy === "category" ? { category: term.id } : { tag: term.id });
-      const dated = await publishedPostDates(ctx.tx, ids);
+      const dated = await publishedPostDates(ctx, ids);
       if (dated.length === 0) return null;
       const trail: Array<{ name: string; path: string }> = [];
       if (term.taxonomy === "category") {
@@ -796,7 +825,7 @@ export const resolveBlogArchive = defineService({
     }
     const [author] = await ctx.tx.select().from(blogAuthors).where(eq(blogAuthors.path, path)).limit(1);
     if (!author) return null;
-    const dated = await publishedPostDates(ctx.tx, await postIdsMatching(ctx.tx, { author: author.id }));
+    const dated = await publishedPostDates(ctx, await postIdsMatching(ctx.tx, { author: author.id }));
     if (dated.length === 0) return null;
     return {
       kind: "author" as const,
@@ -846,7 +875,7 @@ export const blogArchivePaths = defineService({
     for (const term of await allTerms(ctx.tx)) {
       if (archiveSeo.parse(term.seo ?? {}).noindex) continue;
       const ids = await postIdsMatching(ctx.tx, term.taxonomy === "category" ? { category: term.id } : { tag: term.id });
-      const dated = await publishedPostDates(ctx.tx, ids);
+      const dated = await publishedPostDates(ctx, ids);
       if (dated.length === 0) continue;
       out.push({
         slug: term.path,
@@ -859,7 +888,7 @@ export const blogArchivePaths = defineService({
     }
     for (const author of await ctx.tx.select().from(blogAuthors)) {
       if (archiveSeo.parse(author.seo ?? {}).noindex) continue;
-      const dated = await publishedPostDates(ctx.tx, await postIdsMatching(ctx.tx, { author: author.id }));
+      const dated = await publishedPostDates(ctx, await postIdsMatching(ctx.tx, { author: author.id }));
       if (dated.length === 0) continue;
       out.push({
         slug: author.path,
@@ -874,7 +903,75 @@ export const blogArchivePaths = defineService({
   },
 });
 
+export const listPostPages = defineService({
+  name: "cms.listPostPages",
+  summary: "Blog posts for the owner, including drafts and imported posts at their original addresses.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({}),
+  output: listed(z.object({ id: uuid, title: z.string(), slug: z.string(), status: z.string() })),
+  handler: (_input, ctx) => ctx.tx.select({ id: pages.id, title: pages.title, slug: pages.slug, status: pages.status })
+    .from(pages).leftJoin(blogPosts, eq(blogPosts.pageId, pages.id))
+    .where(and(isNull(pages.trashedAt), or(isNotNull(blogPosts.pageId), like(pages.slug, "blog/%"))))
+    .orderBy(desc(pages.createdAt)),
+});
+
+export const createPost = defineService({
+  name: "cms.createPost",
+  summary: "Create a draft blog post and its post metadata atomically.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "blocks",
+  input: z.object({ title: z.string().trim().min(1).max(200), slug: slugPart, locale: z.string().default("en") }),
+  output: z.object({ id: uuid }),
+  handler: async (input, ctx) => {
+    const page = z.object({ id: uuid }).parse(await ctx.call(getService("cms.createPage"), {
+      title: input.title, slug: `blog/${input.slug}`, locale: input.locale,
+      blocks: [{ id: "post-title", type: "heading", props: { text: input.title, level: 1 } }, { id: "post-body", type: "text", props: { body: "" } }],
+    }));
+    const [author] = ctx.actor.kind === "user"
+      ? await ctx.tx.select({ id: blogAuthors.id }).from(blogAuthors).where(eq(blogAuthors.userId, ctx.actor.userId)).limit(1)
+      : [];
+    await ctx.call(setPostMeta, { pageId: page.id, isPost: true, authorId: author?.id ?? null });
+    ctx.setSubject("page", page.id);
+    return { id: page.id };
+  },
+});
+
+export const authorAccounts = defineService({
+  name: "cms.authorAccounts", summary: "Owner and staff accounts available to link to a blog author; this is a private administration directory.",
+  kind: "query", permission: "scoped", input: z.object({}), output: listed(z.object({ id: uuid, email: z.string() })),
+  handler: (_input, ctx) => ctx.tx.select({ id: users.id, email: users.email }).from(users).where(inArray(users.role, ["owner", "staff"])).orderBy(asc(users.email)),
+});
+
+export const rollbackImportedBlogProfiles = defineService({
+  name: "cms.rollbackImportedBlogProfiles",
+  summary: "Remove unused blog profiles created by one rolled-back import; profiles used by other posts are retained.",
+  kind: "mutation", permission: "scoped", writeClass: "destructive",
+  input: z.object({ runId: uuid }), output: okResult,
+  handler: async (input, ctx) => {
+    const source = `import:${input.runId}`;
+    const terms = await allTerms(ctx.tx);
+    const referenced = new Set((await ctx.tx.select({ id: blogPostTerms.termId }).from(blogPostTerms)).map(row => row.id));
+    const retained = new Set(terms.filter(term => term.source !== source || referenced.has(term.id)).map(term => term.id));
+    const byId = new Map(terms.map(term => [term.id, term]));
+    for (const id of [...retained]) {
+      let parent = byId.get(id)?.parentId;
+      while (parent && !retained.has(parent)) { retained.add(parent); parent = byId.get(parent)?.parentId; }
+    }
+    await ctx.tx.delete(blogTerms).where(and(eq(blogTerms.source, source), retained.size ? notInArray(blogTerms.id, [...retained]) : undefined));
+    await ctx.tx.delete(blogAuthors).where(and(eq(blogAuthors.source, source), sql`not exists (select 1 from ${blogPosts} where ${blogPosts.authorId} = ${blogAuthors.id})`));
+    ctx.setSubject("import_run", input.runId);
+    return { ok: true as const };
+  },
+});
+
 export default [
+  authorAccounts,
+  publicBlogCategories,
+  listPostPages,
+  createPost,
+  rollbackImportedBlogProfiles,
   getBlogSettings,
   updateBlogSettings,
   listTerms,

@@ -63,6 +63,8 @@ export default defineModule({
       "cms.termUpdated",
       "cms.termDeleted",
       "cms.postMetaChanged",
+      "cms.readerCommentSubmitted",
+      "cms.readerCommentModerated",
     ],
     listens: {
       "settings.setupCompleted": "onSetupCompleted",

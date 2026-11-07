@@ -4889,6 +4889,31 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 - [x] **C2.26** Deliver a public blog index with published post discovery, pagination, locale-aware links and metadata, an editable index block and an owner publish workflow. Drafts and gated bodies remain private.
   *(Closed 2026-10-14 against `C2.26` on `main` (`f9b155be`, released as 0.2.0-beta.3 and live on freeholder.ai). Evidence: `tests/modules/customer-surfaces.test.ts` (published-only listing, drafts and working copies hidden, page 2 pagination, reviewed fr translation) and `tests/browser/customer-surfaces.spec.ts` (owner writes and publishes at /admin/blog; post appears on /blog only after publish; Axe light/dark); /blog serves 200 with a canonical link; scope and limits in `deploy/customer-surfaces-2026-10-07.md`; F01–F12 rows in `deploy/f-criteria-matrix.md`. **F04** `app/(admin)/admin/blog/page.tsx` and `/blog`. **F05** `cms.listBlogPosts` in `src/modules/cms/blog.tsx`, projected to HTTP/MCP and `packages/sdk/src/generated.ts`. **F07** customer ownership and privacy in `tests/modules/customer-surfaces.test.ts`. **F09** provider and deployment limits recorded in `deploy/customer-surfaces-2026-10-07.md`. **F12** `tests/browser/customer-surfaces.spec.ts` composed journey. Live payment-provider settlement stays with C11.05.)*
 
+- [ ] **C2.27** Blog categories and tags: hierarchical categories, flat tags,
+  owner CRUD, post assignment, public archive pages, sitemap and slug-move
+  redirects through the same scoped services on UI, HTTP and MCP.
+- [ ] **C2.28** Blog authors: account-linked or guest profiles, private email,
+  public bylines/bios and author archives; preserve WordPress authors, terms,
+  post dates and exact archive paths at import. Owner administration and
+  four-locale labels are required before checking this item.
+- [ ] **C2.29** Public blog comments: moderated threads with owner controls,
+  spam/honeypot and rate limits, unified contacts resolution/merge/privacy,
+  notifications and WordPress comment import. Never expose a comment email.
+  *(Implementation and qualification in progress 2026-11-07; owner: CMS/importer.
+  Reproductions: a live replacement exposed imported post metadata before
+  cutover; direct public metadata/comment queries could bypass a registered
+  publication veto; republishing reset an imported original date. Reusable
+  fixes stage replacement metadata/comments until publication, reuse the
+  shared published-page resolver, retain first publication dates and restore
+  rollback dates/working copies. Regression evidence:
+  `tests/core/wordpress-import-flow.test.ts`,
+  `tests/core/blog-structure-comments.test.ts` and
+  `tests/core/wordpress-migration-verification.test.ts`. The browser's first
+  run reached moderation but its status selector also matched the filter nav;
+  the harness now selects the combobox by role. Production deployment and
+  deployed acceptance remain pending; operational limits and all evidence
+  are recorded in `deploy/blog-wordpress-2026-11-07.md`.)*
+
 ### 43.8 C3 — Living contract, plugins, packages, and portable operation
 
 #### One generated platform contract
@@ -5813,6 +5838,12 @@ deployments are portable, testable and incapable of silently forking the truth.
   documented native steps with a tarball built from this branch; the result is
   recorded in the pull request. The tarballs reach a release only when the
   next version is tagged.)*
+
+- [ ] **C3.45** — Managed preview assistant: launch-spec v3 preserves v1/v2 compatibility; PM-hosted previews use server-only scoped keys, cleared SFW Canon assets and revocation, AI/no-endorsement disclosure, owner settings and caps, visitor-bound queued voice/video with shared PM duplex transport and leases, and the existing assistant transcript for text; no chatbot age gate. Qualify the consumer, PM backend, deployed text fallback and a real approved call before closing.
+- [ ] **C3.46** SEO-safe WordPress migration: original URLs or single-hop301s,
+  query-ID/feed/archive/attachment URL accounting, original SEO metadata,
+  sitemap/canonical/hreflang validation and an exportable URL/reconciliation
+  report. Publishing is explicit; imported drafts remain private.
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

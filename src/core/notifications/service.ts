@@ -56,6 +56,7 @@ import {
 export const NOTIFICATION_TOPICS = [
   "briefing.ready",
   "forms.submission",
+  "cms.comment_pending",
   "connections.attention",
   "agents.failed",
   "agents.budget",

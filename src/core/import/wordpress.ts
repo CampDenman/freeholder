@@ -25,6 +25,7 @@ import {
   serializeOuter,
   type DefaultTreeAdapterTypes,
 } from "parse5";
+import { z } from "zod";
 import { sanitizeOwnerHtml } from "@/modules/cms/blocks/html";
 import {
   richBlockSchema,
@@ -56,8 +57,8 @@ export const WORDPRESS_MEDIA_LIMITS = {
 } as const;
 
 /** CMS field limits the importer has to fit (cms.createPage `seo`). */
-const SEO_TITLE_MAX = 60;
-const SEO_DESCRIPTION_MAX = 155;
+const SEO_TITLE_MAX = 1000;
+const SEO_DESCRIPTION_MAX = 1000;
 const HTML_BLOCK_MAX = 20_000;
 const RICH_BLOCKS_PER_TEXT = 200;
 const GALLERY_MAX = 24;
@@ -66,7 +67,10 @@ const GALLERY_MAX = 24;
 
 export type WordpressStatus = "publish" | "draft";
 
-export type WordpressTerm = { slug: string; name: string };
+export type WordpressTerm = { slug: string; name: string; parentSlug?: string; description?: string };
+export type WordpressComment = { id: string; parentId?: string; name: string; email: string | null; body: string; status: "pending" | "approved" | "spam" | "trash"; createdAt?: string };
+
+export type WordpressSeo = { title?: string; description?: string; preserveTitle?: boolean; preserveDescription?: boolean; noindex?: boolean; nofollow?: boolean; canonical?: string; ogTitle?: string; ogDescription?: string; ogImage?: string };
 
 export type WordpressItem = {
   wpId?: string;
@@ -79,18 +83,20 @@ export type WordpressItem = {
   /** The raw WordPress status, for the report ("private", "future", ...). */
   wpStatus: string;
   publishedAt?: string;
+  modifiedAt?: string;
   author?: string;
   categories: WordpressTerm[];
   tags: WordpressTerm[];
-  seo: { title?: string; description?: string };
+  seo: WordpressSeo;
   featuredWpId?: string;
   /** For REST exports with `_embed`, the featured image's URL directly. */
   featuredUrl?: string;
   passwordProtected: boolean;
-  comments: { total: number; approved: number };
+  comments: { total: number; approved: number; entries?: WordpressComment[] };
 };
 
 export type WordpressAttachment = {
+  url?: string;
   wpId?: string;
   sourceUrl: string;
   title?: string;
@@ -118,6 +124,7 @@ export type WordpressExport = {
   items: WordpressItem[];
   attachments: WordpressAttachment[];
   authors: WordpressAuthor[];
+  taxonomy?: { categories: WordpressTerm[]; tags: WordpressTerm[] };
   menus: { slug: string; name: string }[];
   menuItems: WordpressMenuItem[];
   /** Items left out on purpose, by reason ("post type: product", "status: trash"). */
@@ -134,15 +141,19 @@ export type PlannedPage = {
   status: WordpressStatus;
   wpStatus: string;
   publishedAt?: string;
+  modifiedAt?: string;
   /** The old WordPress path, when it differs from the new slug. */
   redirectFrom?: string;
-  seo: { title?: string; description?: string };
+  seo: WordpressSeo;
   author?: string;
   categories: string[];
   tags: string[];
+  categorySlugs?: string[];
+  tagSlugs?: string[];
   featuredMedia?: string;
   wpId?: string;
   comments: number;
+  readerComments?: WordpressComment[];
 };
 
 export type PlannedMedia = {
@@ -434,6 +445,7 @@ export function wordpressExportBuilder() {
   let siteTitle = "";
   let site: WordpressExport["site"] = { title: "", url: "" };
   let authors: WordpressAuthor[] = [];
+  let taxonomy: NonNullable<WordpressExport["taxonomy"]> = { categories: [], tags: [] };
   let menus: WordpressExport["menus"] = [];
   const items: WordpressItem[] = [];
   const attachments: WordpressAttachment[] = [];
@@ -455,6 +467,18 @@ export function wordpressExportBuilder() {
       displayName: htmlText(child(inner, "wp:author_display_name", masked, "raw")) || undefined,
       email: child(inner, "wp:author_email", masked) || undefined,
     })).filter((author) => author.login);
+    taxonomy = {
+      categories: elements(text, "wp:category").map(({ inner }) => ({
+        slug: child(inner, "wp:category_nicename", masked),
+        name: htmlText(child(inner, "wp:cat_name", masked, "raw")),
+        parentSlug: child(inner, "wp:category_parent", masked) || undefined,
+        description: htmlText(child(inner, "wp:category_description", masked, "raw")) || undefined,
+      })).filter(term => term.slug),
+      tags: elements(text, "wp:tag").map(({ inner }) => ({
+        slug: child(inner, "wp:tag_slug", masked), name: htmlText(child(inner, "wp:tag_name", masked, "raw")),
+        description: htmlText(child(inner, "wp:tag_description", masked, "raw")) || undefined,
+      })).filter(term => term.slug),
+    };
     menus = elements(text, "wp:term")
       .filter(({ inner }) => child(inner, "wp:term_taxonomy", masked) === "nav_menu")
       .map(({ inner }) => ({
@@ -487,7 +511,7 @@ export function wordpressExportBuilder() {
       const sourceUrl = child(fields, "wp:attachment_url", masked) || child(fields, "guid", masked);
       if (!sourceUrl) return;
       attachments.push({
-        wpId,
+        wpId, url: child(fields, "link", masked) || undefined,
         sourceUrl,
         title: title || undefined,
         altText: htmlText(meta.get("_wp_attachment_image_alt") ?? "") || undefined,
@@ -539,25 +563,45 @@ export function wordpressExportBuilder() {
         wordpressDate(child(fields, "wp:post_date_gmt", masked)) ??
         rfcDate(child(fields, "pubDate", masked)) ??
         wordpressDate(child(fields, "wp:post_date", masked)),
+      modifiedAt: wordpressDate(child(fields, "wp:post_modified_gmt", masked)) ?? wordpressDate(child(fields, "wp:post_modified", masked)),
       author: child(fields, "dc:creator", masked) || undefined,
       categories: terms.filter((term) => term.domain === "category").map(({ slug, name }) => ({ slug, name })),
       tags: terms.filter((term) => term.domain === "post_tag").map(({ slug, name }) => ({ slug, name })),
       seo: {
         title: expandSeoTemplate(htmlText(seoTitle), title, siteTitle) || undefined,
         description: expandSeoTemplate(htmlText(seoDescription), title, siteTitle) || undefined,
+        noindex: meta.get("_yoast_wpseo_meta-robots-noindex") === "1" || /noindex/.test(meta.get("rank_math_robots") ?? ""),
+        nofollow: meta.get("_yoast_wpseo_meta-robots-nofollow") === "1" || /nofollow/.test(meta.get("rank_math_robots") ?? ""),
+        canonical: meta.get("_yoast_wpseo_canonical") || meta.get("rank_math_canonical_url") || undefined,
+        ogTitle: htmlText(meta.get("_yoast_wpseo_opengraph-title") || meta.get("rank_math_facebook_title") || "") || undefined,
+        ogDescription: htmlText(meta.get("_yoast_wpseo_opengraph-description") || meta.get("rank_math_facebook_description") || "") || undefined,
+        ogImage: meta.get("_yoast_wpseo_opengraph-image") || meta.get("rank_math_facebook_image") || undefined,
       },
       featuredWpId: meta.get("_thumbnail_id") || undefined,
       passwordProtected: child(fields, "wp:post_password", masked) !== "",
       comments: {
         total: comments.length,
         approved: comments.filter(({ inner }) => child(inner, "wp:comment_approved", masked) === "1").length,
+        entries: comments.filter(({ inner }) => !child(inner, "wp:comment_type", masked) || child(inner, "wp:comment_type", masked) === "comment").map(({ inner }, index) => {
+          const status = child(inner, "wp:comment_approved", masked);
+          const email = z.string().email().safeParse(child(inner, "wp:comment_author_email", masked));
+          return {
+            id: child(inner, "wp:comment_id", masked) || `${wpId ?? items.length}-${index}`,
+            parentId: child(inner, "wp:comment_parent", masked) !== "0" ? child(inner, "wp:comment_parent", masked) || undefined : undefined,
+            name: htmlText(child(inner, "wp:comment_author", masked, "raw")) || "Reader",
+            email: email.success ? email.data.toLowerCase() : null,
+            body: htmlText(child(inner, "wp:comment_content", masked, "raw")),
+            status: status === "1" ? "approved" as const : status === "spam" ? "spam" as const : status === "trash" ? "trash" as const : "pending" as const,
+            createdAt: wordpressDate(child(inner, "wp:comment_date_gmt", masked)) ?? wordpressDate(child(inner, "wp:comment_date", masked)),
+          };
+        }).filter(comment => comment.body),
       },
     });
   };
 
   return {
     reader: () => new WxrStreamReader(head, item),
-    finish: (): WordpressExport => ({ site, items, attachments, authors, menus, menuItems, skipped }),
+    finish: (): WordpressExport => ({ site, items, attachments, authors, taxonomy, menus, menuItems, skipped }),
   };
 }
 
@@ -872,17 +916,17 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
   const wpIdToSlug = new Map<string, string>();
   const categories = new Map<string, WordpressTerm & { posts: number }>();
   const tags = new Map<string, WordpressTerm & { posts: number }>();
+  for (const term of exported.taxonomy?.categories ?? []) categories.set(term.slug, { ...term, posts: 0 });
+  for (const term of exported.taxonomy?.tags ?? []) tags.set(term.slug, { ...term, posts: 0 });
   const authorPosts = new Map<string, number>();
 
   for (const item of exported.items) {
     const oldPath = wordpressPath(item.url, hosts, basePath);
     const wpSlug = toCmsSlug(item.slug || slugFromUrl(item.url));
     const slug = unique(
-      item.kind === "post"
-        ? `blog/${(wpSlug.split("/").at(-1) ?? wpSlug) || "post"}`
-        : oldPath !== null
+      oldPath !== null && oldPath !== ""
           ? toCmsSlug(oldPath)
-          : wpSlug,
+          : item.kind === "post" ? `blog/${(wpSlug.split("/").at(-1) ?? wpSlug) || "post"}` : wpSlug,
     );
     if (item.wpId) wpIdToSlug.set(item.wpId, slug);
 
@@ -924,7 +968,7 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
       featuredMedia = featured.key;
     }
 
-    const title = trimTo(item.seo.title, SEO_TITLE_MAX);
+    const title = trimTo(item.seo.title || item.title, SEO_TITLE_MAX);
     const description = trimTo(item.seo.description, SEO_DESCRIPTION_MAX);
     if (title.trimmed || description.trimmed) report.seoTrimmed += 1;
     if (item.status === "draft") report.drafts += 1;
@@ -952,14 +996,18 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
       status: item.passwordProtected ? "draft" : item.status,
       wpStatus: item.wpStatus,
       publishedAt: item.publishedAt,
+      modifiedAt: item.modifiedAt,
       redirectFrom: oldPath !== null && oldPath !== "" && oldPath !== slug ? oldPath : undefined,
-      seo: { title: title.value, description: description.value },
+      seo: { ...item.seo, ...(item.seo.canonical ? { canonical: wordpressPath(item.seo.canonical, hosts, basePath) !== null ? `/${wordpressPath(item.seo.canonical, hosts, basePath)}` : item.seo.canonical } : {}), title: title.value, description: description.value, ...(title.value ? { preserveTitle: true } : {}), ...(description.value ? { preserveDescription: true } : {}) },
       author: item.author,
       categories: item.categories.map((term) => term.name),
       tags: item.tags.map((term) => term.name),
+      categorySlugs: item.categories.map((term) => term.slug),
+      tagSlugs: item.tags.map((term) => term.slug),
       featuredMedia,
       wpId: item.wpId,
       comments: item.comments.total,
+      readerComments: item.comments.entries,
     });
   }
 

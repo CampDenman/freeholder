@@ -30,6 +30,7 @@ export const listBlogPosts = defineService({
     category: filterValue,
     tag: filterValue,
     author: filterValue,
+    date: z.string().regex(/^\d{4}(?:-\d{2}){0,2}$/).optional(),
   }),
   output: z.object({
     total: z.number().int(),
@@ -79,6 +80,7 @@ export const listBlogPosts = defineService({
           .where(and(inArray(pages.slug, paths), eq(pages.status, "published"), isNull(pages.trashedAt)))
       : [];
     if (matching !== null) metadata = metadata.filter((row) => matching.has(row.id));
+    if (input.date) metadata = metadata.filter(row => row.publishedAt?.toISOString().startsWith(input.date!));
     metadata.sort(
       (a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0) || a.slug.localeCompare(b.slug),
     );
@@ -134,6 +136,7 @@ export const blogIndex = defineBlock({
     limit: z.number().int().min(1).max(50).default(12),
     /** Only posts in this category (and its subcategories), by slug. */
     category: blockFilter,
+    date: z.string().regex(/^(?:\d{4}(?:-\d{2}){0,2})?$/).default(""),
     /** Only posts with this tag, by slug. */
     tag: blockFilter,
     /** Only posts by this author, by slug. */
@@ -143,7 +146,7 @@ export const blogIndex = defineBlock({
   }),
   starter: () => ({ prefix: "blog", limit: 12 }),
   resolve: async (props, ctx) => {
-    const { listTerms } = await import("./blog-service");
+    const { publicBlogCategories } = await import("./blog-service");
     const anonymous = { kind: "anonymous" } as const;
     // A visitor can narrow an unfiltered listing (`?category=glazes`); a
     // listing the owner already filtered stays what the owner set. Filtered
@@ -160,14 +163,15 @@ export const blogIndex = defineBlock({
           limit: props.limit,
           page: Math.min(10000, Math.max(1, Math.floor(Number(firstQueryValue(ctx.query?.page))) || 1)),
           category: props.category || asked("category"),
+          date: props.date || undefined,
           tag: props.tag || asked("tag"),
           author: props.author || asked("author"),
         },
         anonymous,
       ),
-      props.showCategories ? listTerms.call({ taxonomy: "category" }, anonymous) : Promise.resolve([]),
+      props.showCategories ? publicBlogCategories.call({}, anonymous) : Promise.resolve([]),
     ]);
-    return { ...listing, categories: categories.filter((term) => term.posts > 0 && !term.parentId) };
+    return { ...listing, categories: categories.filter((term) => term.posts > 0) };
   },
   render: ({ props, resolved, ctx }) => {
     if (!resolved) return null;
@@ -189,7 +193,7 @@ export const blogIndex = defineBlock({
           <nav aria-label={ctx.t("blog.categories")}>
             <ul className="flex list-none flex-wrap gap-2 p-0">
               {resolved.categories.map((term) => (
-                <li key={term.id}>
+                <li key={term.path}>
                   <a
                     className="inline-flex rounded-full border border-rule px-3 py-1 text-sm text-ink underline-offset-4 hover:underline"
                     href={href(`/${term.path}`)}

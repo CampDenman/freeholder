@@ -5,7 +5,7 @@ import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { redirects } from "@/core/seo/schema";
-import { defineService, ServiceError } from "@/core/service";
+import { defineService, getService, ServiceError } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
 
 const redirectRow = row({
@@ -58,6 +58,19 @@ export const resolveRedirect = defineService({
         )
         .limit(1);
       if (!row) {
+        if (hop === 0) {
+          const pagination = /^(.*)\/page\/([1-9]\d*)$/.exec(current);
+          if (pagination && !/\/page\/\d+$/.test(pagination[1]!) && Number(pagination[2]) <= 10000) {
+            const originalRoot = pagination[1]!;
+            const movedRoot = z.object({ toPath: z.string(), status: z.enum(["301", "302"]) }).nullable().parse(await ctx.call(getService("seo.resolveRedirect"), { path: originalRoot, locale: input.locale }));
+            const root = movedRoot?.toPath ?? originalRoot;
+            const archive = z.object({ posts: z.number() }).nullable().parse(await ctx.call(getService("cms.resolveBlogArchive"), { path: root }));
+            const listing = root === "blog" ? await ctx.call(getService("cms.resolvePage"), { slug: root, locale: input.locale }) : null;
+            const settings = z.object({ postsPerPage: z.number() }).parse(await ctx.call(getService("cms.blogSettings"), {}));
+            const count = listing ? z.object({ pages: z.number() }).parse(await ctx.call(getService("cms.listBlogPosts"), { locale: input.locale, limit: settings.postsPerPage })).pages : Math.ceil((archive?.posts ?? 0) / settings.postsPerPage);
+            if ((archive || listing) && Number(pagination[2]) <= count) return { toPath: Number(pagination[2]) === 1 ? root : `${root}?page=${pagination[2]}`, status: movedRoot?.status ?? "301" as const };
+          }
+        }
         return hop === 0 ? null : { toPath: current, status };
       }
       // A 302 anywhere in the chain makes the whole journey temporary: the

@@ -36,7 +36,7 @@ function context(overrides: Partial<BodyContext> = {}): BodyContext {
         : wpId === "11" || src.includes("glaze")
           ? { assetId: GLAZE }
           : null,
-    rewriteHref: (href) => href.replace("https://old.example.org/glaze-notes/", "/blog/glaze-notes"),
+    rewriteHref: (href) => href.replace("https://old.example.org/glaze-notes/", "/glaze-notes"),
     ...overrides,
   };
 }
@@ -71,11 +71,11 @@ describe("WordPress WXR export (C3.22)", () => {
     expect(post.seo.title).toBe("Our First Wood Firing – Wood firing diary from a very small studio in the hills");
     expect(post.seo.description).toBe("Three days of loading and two of stoking.");
     expect(post.featuredWpId).toBe("10");
-    expect(post.comments).toEqual({ total: 2, approved: 1 });
+    expect(post.comments).toMatchObject({ total: 2, approved: 1 });
     // A body that says </item> inside CDATA does not end the item.
     expect(post.body).toContain("</item> on purpose");
     const about = exported.items.find((item) => item.slug === "about")!;
-    expect(about.seo).toEqual({
+    expect(about.seo).toMatchObject({
       title: "About the Studio – Fernwood Kiln",
       description: "A small studio making wood-fired stoneware by hand.",
     });
@@ -97,12 +97,12 @@ describe("WordPress WXR export (C3.22)", () => {
 describe("WordPress import plan (C3.22)", () => {
   const plan = planWordpressImport(parseWordpressExport(FIXTURE), ORIGIN);
 
-  it("puts posts under blog/, keeps page paths, and plans redirects for moved URLs", () => {
+  it("keeps original page and post permalinks; query-only posts get a blog address", () => {
     expect(plan.pages.map((page) => [page.slug, page.redirectFrom ?? null])).toEqual([
       ["about", null],
       ["about/team", null],
-      ["blog/first-wood-firing", "2025/03/first-wood-firing"],
-      ["blog/glaze-notes", "glaze-notes"],
+      ["2025/03/first-wood-firing", null],
+      ["glaze-notes", null],
       // `/?p=22` has no path of its own, so there is nothing to redirect.
       ["blog/upcoming-sale", null],
     ]);
@@ -116,7 +116,7 @@ describe("WordPress import plan (C3.22)", () => {
       ["glaze-scaled.png", true],
     ]);
     expect(plan.media[1]!.aliases).toContain("old.example.org/wp-content/uploads/2025/04/glaze.png");
-    expect(plan.pages.find((page) => page.slug === "blog/first-wood-firing")!.featuredMedia).toBe(plan.media[0]!.key);
+    expect(plan.pages.find((page) => page.slug === "2025/03/first-wood-firing")!.featuredMedia).toBe(plan.media[0]!.key);
     expect(plan.report.externalImages).toEqual(["https://cdn.other.example.net/borrowed.jpg"]);
   });
 
@@ -129,8 +129,8 @@ describe("WordPress import plan (C3.22)", () => {
       { login: "maple", displayName: "Maple Rivers", email: "maple@example.org", posts: 3 },
     ]);
     expect(plan.report.comments).toEqual({ total: 2, approved: 1 });
-    expect(plan.report.seoTrimmed).toBe(1);
-    expect(plan.pages.find((page) => page.slug === "blog/first-wood-firing")!.seo.title!.length).toBeLessThanOrEqual(60);
+    expect(plan.report.seoTrimmed).toBe(0);
+    expect(plan.pages.find((page) => page.slug === "2025/03/first-wood-firing")!.seo.title).toBe("Our First Wood Firing – Wood firing diary from a very small studio in the hills");
   });
 
   it("maps menu items to imported pages, custom links and nesting", () => {
@@ -172,7 +172,7 @@ describe("WordPress body conversion (C3.22)", () => {
     expect(title!.props).toMatchObject({ text: "Our First Wood Firing", level: 1 });
     expect(section!.props).toMatchObject({ text: "Loading the kiln", level: 2 });
     expect(JSON.stringify(prose!.props.body)).toContain('"marks":["strong"]');
-    expect(JSON.stringify(prose!.props.body)).toContain('"href":"/blog/glaze-notes"');
+    expect(JSON.stringify(prose!.props.body)).toContain('"href":"/glaze-notes"');
     expect(image!.props).toEqual({ assetId: KILN, alt: "A brick kiln stacked with bowls" });
     expect(JSON.stringify(after!.props.body)).toContain("Packed and ready.");
     expect(JSON.stringify(after!.props.body)).toContain('"type":"bulletList"');
@@ -253,8 +253,8 @@ describe("WordPress REST payloads (C3.22)", () => {
     });
     expect(exported.skipped).toEqual({ "post type: wp_block": 1 });
     expect(planWordpressImport(exported, ORIGIN).pages[0]).toMatchObject({
-      slug: "blog/hello",
-      redirectFrom: "2025/01/hello",
+      slug: "2025/01/hello",
+      redirectFrom: undefined,
     });
   });
 });

@@ -69,6 +69,7 @@ import {
 } from "@/core/http/csp";
 import { targetFor } from "@/modules/share/service";
 import { ShareBar } from "../ShareBar";
+import { ReaderComments } from "./ReaderComments";
 
 export const dynamic = "force-dynamic";
 
@@ -143,15 +144,24 @@ export async function generateMetadata({
     title?: string;
     description?: string;
     ogImage?: string;
+    preserveTitle?: boolean;
+    preserveDescription?: boolean;
+    noindex?: boolean;
+    nofollow?: boolean;
+    canonical?: string;
+    ogTitle?: string;
+    ogDescription?: string;
   };
   const siteName = business?.name;
   const title = composeDocumentTitle(
     seo.title ?? page.title,
     siteName,
     page.slug === "",
+    seo.preserveTitle === true,
   );
   const description = composeDescription(
     seo.description ?? business?.tagline ?? undefined,
+    seo.preserveDescription === true,
   );
 
   // §5 wants the canonical *absolute*, and absolute means configured rather
@@ -174,7 +184,7 @@ export async function generateMetadata({
       ? locale
       : (business?.defaultLocale ?? locale);
 
-  const canonical = canonicalFor(origin, page.slug, servedLocale, business);
+  const canonical = seo.canonical ? new URL(seo.canonical, origin).href : canonicalFor(origin, page.slug, servedLocale, business);
 
   // §34: the `ShareTarget` is "canonical URL + auto-generated OG image", so
   // the social card is the share target's when the owner has written one. It
@@ -185,8 +195,8 @@ export async function generateMetadata({
   const share = await targetFor
     .call({ path: page.slug, locale: servedLocale }, ANONYMOUS)
     .catch(() => null);
-  const socialTitle = share?.socialTitle ?? title;
-  const socialDescription = share?.socialDescription ?? description;
+  const socialTitle = share?.socialTitle ?? seo.ogTitle ?? title;
+  const socialDescription = share?.socialDescription ?? seo.ogDescription ?? description;
   const ogImage =
     share?.imageUrl ?? seo.ogImage ?? `${origin}${ogImagePath(page.slug)}`;
   const filtered = isFilterQuery(query);
@@ -197,7 +207,7 @@ export async function generateMetadata({
   return {
     title,
     description,
-    robots: filtered ? { index: false, follow: true } : undefined,
+    robots: filtered || seo.noindex || seo.nofollow ? { index: !(filtered || seo.noindex), follow: !seo.nofollow } : undefined,
     alternates: {
       canonical,
       ...(alternates ? { languages: alternates } : {}),
@@ -429,6 +439,7 @@ export default async function PublicPage({
       <article className="grid gap-8">
         {rendered}
         {post ? <PostFooter meta={post} t={t} href={localize} /> : null}
+        {post ? <ReaderComments pageValue={typeof query.commentPage === "string" ? query.commentPage : undefined} pageId={page.id} enabled={post.commentsEnabled} returnTo={localize(`/${path}`)} result={typeof query.comment === "string" ? query.comment : undefined} locale={locale} t={t} /> : null}
       </article>
       {/*
         §34: sharing is "a property of every entity with a public face", so it

@@ -18,6 +18,7 @@
 // prefix before the route sees it is exactly this layer's job.
 import { NextResponse, type NextRequest } from "next/server";
 import instanceConfig from "./freeholder.config";
+import { legacyRedirect } from "@/core/seo/legacy-proxy";
 import {
   LOCALE_HEADER,
   PATH_HEADER,
@@ -132,7 +133,21 @@ function sfuOrigins(url: string | undefined): string[] {
   }
 }
 
-export function proxy(request: NextRequest): NextResponse {
+export async function proxy(request: NextRequest): Promise<NextResponse> {
+  const context = requestContextProxy(request);
+  // The preview access decision must run before a public route is examined.
+  if (context.status >= 300 || context.headers.has("X-Robots-Tag")) return context;
+  const moved = await legacyRedirect(request);
+  if (!moved) return context;
+  for (const name of ["Content-Security-Policy", "Reporting-Endpoints"]) {
+    const value = context.headers.get(name);
+    if (value) moved.headers.set(name, value);
+  }
+  return new NextResponse(null, { status: moved.status, headers: moved.headers });
+}
+
+/** Request-context projection, independently testable without a running server. */
+export function requestContextProxy(request: NextRequest): NextResponse {
   const headers = new Headers(request.headers);
   const path = request.nextUrl.pathname;
   const playground = env().FREEHOLDER_PLAYGROUND === "1";

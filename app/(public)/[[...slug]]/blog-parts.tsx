@@ -12,7 +12,7 @@ import type { BlockNode } from "@/modules/cms/blocks/types";
 import type { Translate } from "@/core/i18n";
 
 export type BlogArchive = {
-  kind: "category" | "tag" | "author";
+  kind: "category" | "tag" | "author" | "date";
   id: string;
   slug: string;
   path: string;
@@ -48,6 +48,7 @@ export function archiveBlocks(archive: BlogArchive, postsPerPage: number): Block
         ...(archive.kind === "category" ? { category: archive.slug } : {}),
         ...(archive.kind === "tag" ? { tag: archive.slug } : {}),
         ...(archive.kind === "author" ? { author: archive.slug } : {}),
+        ...(archive.kind === "date" ? { date: archive.slug.replaceAll("/", "-") } : {}),
       },
     },
   ];

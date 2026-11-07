@@ -41,6 +41,7 @@ import { PagePresence } from "./PagePresence";
 import { PageComments } from "./PageComments";
 import { currentBusiness } from "@/core/settings/read";
 import { detachLayoutAction, fileHelpArticleAction, rejoinLayoutAction } from "../../../cms-actions";
+import { BlogPostSettings } from "../../blog/PostSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +96,7 @@ export default async function EditPagePage({
 
   return (
     <div className="grid gap-6">
+      <BlogPostSettings pageId={page.id} actor={actor} />
       <div>
         <a href="/admin/pages" className="text-sm text-ink-muted">
           {t("cms.pages.back")}

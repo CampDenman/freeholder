@@ -12,7 +12,7 @@ import {
   cspAppliesToPath,
   parseCspOrigins,
 } from "@/core/http/csp";
-import { proxy } from "../../proxy";
+import { requestContextProxy as proxy } from "../../proxy";
 
 function directive(policy: string, name: string): string {
   return policy.split("; ").find((part) => part.startsWith(`${name} `)) ?? "";

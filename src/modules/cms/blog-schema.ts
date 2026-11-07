@@ -46,6 +46,7 @@ export const blogSettings = pgTable("blog_settings", {
   tagBase: text("tag_base").notNull().default("blog/tag"),
   authorBase: text("author_base").notNull().default("blog/author"),
   postsPerPage: integer("posts_per_page").notNull().default(12),
+  commentsEnabled: boolean("comments_enabled").notNull().default(true),
   createdAt: createdAtColumn(),
   updatedAt: updatedAtColumn(),
 });
