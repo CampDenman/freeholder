@@ -137,6 +137,8 @@ export const PLAYGROUND_PUBLIC_REFUSED: Readonly<Record<string, string>> = {
   "media.claimCaptureOriginal": "Uploads are refused on the bounded playground disk.",
   "media.applyCaptureOriginal": "Uploads are refused on the bounded playground disk.",
   "agents.proposeWriteGate": "Agent workers authenticate with keys the playground never issues.",
+  "assistant.previewCall": "Managed provider call controls are unavailable in the playground; no owner-issued preview key or media session is created.",
+  "assistant.saveCallCaption": "Private phase of a provider call the playground never admits.",
   "assistant.prepareAnswer": "Phase of the model-backed answer the playground refuses.",
   "assistant.applyAnswer": "Phase of the model-backed answer the playground refuses.",
   "media.upload": "Uploads are refused on the bounded playground disk.",

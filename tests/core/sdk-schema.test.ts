@@ -1,6 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // JSON Schema → TypeScript for the generated SDK (C3.03).
+import { z } from "zod";
+import { toContractJsonSchema } from "@/core/contract/json-schema";
 import { describe, expect, it } from "vitest";
 import { isPageableSchema, jsonSchemaToTs } from "@/core/contract/sdk";
 
@@ -103,4 +105,22 @@ describe("jsonSchemaToTs (C3.03)", () => {
       ),
     ).toBe(false);
   });
+});
+
+// A real managed assistant action union first exposed MCP's object-only
+// fallback. Keep one shared projection, not a hand-authored MCP action list.
+it("retains complete action-object unions for MCP, HTTP and SDK without labeling mixed primitives objects", () => {
+  const input = z.discriminatedUnion("action", [
+    z.object({ action: z.literal("config"), token: z.string() }).strict(),
+    z.object({ action: z.literal("start"), token: z.string(), want: z.enum(["voice", "video"]) }).strict(),
+  ]);
+  const schema = toContractJsonSchema(input, "input") as { type: string; oneOf: Array<{ required: string[]; properties: Record<string, unknown> }> };
+  expect(schema.type).toBe("object");
+  expect(schema.oneOf).toHaveLength(2);
+  expect(schema.oneOf[0]!.required).toEqual(["action", "token"]);
+  expect(schema.oneOf[1]!.required).toEqual(["action", "token", "want"]);
+  expect(jsonSchemaToTs(schema)).toContain('action: "config"');
+  expect(jsonSchemaToTs(schema)).toContain('action: "start"');
+  const mixed = toContractJsonSchema(z.union([z.string(), z.object({ id: z.string() })]), "input") as { type?: string };
+  expect(mixed.type).toBeUndefined();
 });

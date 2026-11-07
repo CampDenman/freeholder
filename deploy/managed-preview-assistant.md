@@ -83,3 +83,17 @@ CSRF header on message/assistant/End requests. All chat media/text actions now
 reuse a browser-safe token helper; a mounted browser regression runs those
 requests through the real requireCsrf guard with a simulated httpOnly login
 cookie. Anonymous visitor behavior and server CSRF requirements are preserved.
+
+Hosted full CI found two additional source integration defects (shards19/26).
+The first top-level discriminated object-action union reached a MCP adapter
+that required an explicit root object type and otherwise erased every oneOf
+branch. The shared JSONSchema projection now retains all object alternatives
+and required fields with a semantically equivalent explicit root object;
+mixed primitive unions stay unchanged. Native old-source MCP reproduction
+was red; the corrected HTTP/MCP/SDK projections are qualified together.
+
+The playground completeness guard also found managed call control and its
+private caption phase unclassified. Unknown services already failed closed;
+explicit refusal reasons now keep both provider-backed actions unavailable
+in demos. No provider admission or privacy leak was observed. Both findings
+remain linked to C3.45 until normal green release and deployed acceptance.
