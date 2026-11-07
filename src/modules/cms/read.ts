@@ -25,3 +25,21 @@ export const publishedPage = cache((slug: string, locale: string) =>
 export const publishedSection = cache((key: string, locale: string) =>
   getSection.call({ key, locale }, ANONYMOUS),
 );
+
+/** A blog category, tag or author archive at a path, once per request. */
+export const blogArchiveAt = cache(async (path: string) => {
+  const { resolveBlogArchive } = await import("./blog-service");
+  return resolveBlogArchive.call({ path }, ANONYMOUS);
+});
+
+/** A published post's byline and terms, once per request. */
+export const postMetaFor = cache(async (slug: string) => {
+  const { postMetaAt } = await import("./blog-service");
+  return postMetaAt.call({ slug }, ANONYMOUS);
+});
+
+/** The blog's archive settings, once per request. */
+export const blogSettingsCached = cache(async () => {
+  const { getBlogSettings } = await import("./blog-service");
+  return getBlogSettings.call({}, ANONYMOUS);
+});

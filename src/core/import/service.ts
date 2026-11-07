@@ -48,6 +48,8 @@ import {
   wordpressPath,
   type ImageMatch,
   type WordpressExport,
+  type WordpressComment,
+  type WordpressSeo,
 } from "./wordpress";
 
 const HTML_MARKUP_MAX = 20_000;
@@ -62,14 +64,18 @@ type PreviewPage = {
   /** WordPress only: a draft, private or scheduled item stays a draft at publish. */
   status?: "publish" | "draft";
   publishedAt?: string;
+  modifiedAt?: string;
   redirectFrom?: string;
-  seo?: { title?: string; description?: string };
+  seo?: WordpressSeo;
   author?: string;
   categories?: string[];
   tags?: string[];
+  categorySlugs?: string[];
+  tagSlugs?: string[];
   featuredMedia?: string;
   wpId?: string;
   comments?: number;
+  readerComments?: WordpressComment[];
 };
 
 type ConflictDecision = {
@@ -104,14 +110,18 @@ function previewPages(preview: unknown): PreviewPage[] {
       kind: row.kind === "post" ? "post" : "page",
       status: row.status === "draft" ? "draft" : row.status === "publish" ? "publish" : undefined,
       publishedAt: optionalString(row.publishedAt),
+      modifiedAt: optionalString(row.modifiedAt),
       redirectFrom: optionalString(row.redirectFrom),
-      seo: seo ? { title: optionalString(seo.title), description: optionalString(seo.description) } : undefined,
+      seo: seo ? { title: optionalString(seo.title), description: optionalString(seo.description), preserveTitle: seo.preserveTitle === true, preserveDescription: seo.preserveDescription === true, noindex: seo.noindex === true, nofollow: seo.nofollow === true, canonical: optionalString(seo.canonical), ogTitle: optionalString(seo.ogTitle), ogDescription: optionalString(seo.ogDescription), ogImage: optionalString(seo.ogImage) } : undefined,
       author: optionalString(row.author),
       categories: stringList(row.categories),
       tags: stringList(row.tags),
+      categorySlugs: stringList(row.categorySlugs),
+      tagSlugs: stringList(row.tagSlugs),
       featuredMedia: optionalString(row.featuredMedia),
       wpId: optionalString(row.wpId),
       comments: typeof row.comments === "number" ? row.comments : undefined,
+      readerComments: Array.isArray(row.readerComments) ? row.readerComments as WordpressComment[] : undefined,
     });
   }
   return out;
@@ -160,9 +170,10 @@ const wordpressPreviewSchema = z.object({
     }),
   ),
   taxonomy: z.object({
-    categories: z.array(z.object({ slug: z.string(), name: z.string(), posts: z.number() })),
-    tags: z.array(z.object({ slug: z.string(), name: z.string(), posts: z.number() })),
+    categories: z.array(z.object({ slug: z.string(), name: z.string(), posts: z.number(), parentSlug: z.string().optional(), description: z.string().optional() })),
+    tags: z.array(z.object({ slug: z.string(), name: z.string(), posts: z.number(), description: z.string().optional() })),
   }),
+  attachments: z.array(z.object({ wpId: z.string().optional(), parentWpId: z.string().optional(), path: z.string().optional() })).default([]),
   report: z.record(z.string(), z.unknown()),
 });
 type WordpressPreview = z.infer<typeof wordpressPreviewSchema>;
@@ -180,6 +191,10 @@ const cmsPageRef = z.object({
   blocks: z.unknown(),
   seo: z.unknown(),
   status: z.enum(["draft", "published"]),
+  publishedAt: z.coerce.date().nullable().optional(),
+  workingTitle: z.string().nullable().optional(),
+  workingBlocks: z.unknown().optional(),
+  workingSeo: z.unknown().optional(),
 });
 type CmsPageRef = z.infer<typeof cmsPageRef>;
 
@@ -320,7 +335,10 @@ async function restoreReplacedPage(ctx: ServiceContext, snapshot: CmsPageRef): P
     seo: snapshot.seo ?? {},
   });
   if (snapshot.status === "published") {
-    await ctx.call(getService("cms.publishPage"), { id: snapshot.id, published: true });
+    await ctx.call(getService("cms.publishPage"), { id: snapshot.id, published: true, ...(snapshot.publishedAt ? { publishedAt: snapshot.publishedAt.toISOString() } : {}) });
+    if (snapshot.workingTitle != null || snapshot.workingBlocks != null || snapshot.workingSeo != null) {
+      await ctx.call(getService("cms.updatePage"), { id: snapshot.id, title: snapshot.workingTitle ?? snapshot.title, blocks: snapshot.workingBlocks ?? snapshot.blocks, seo: snapshot.workingSeo ?? snapshot.seo ?? {} });
+    }
   }
 }
 
@@ -600,6 +618,26 @@ function chooseMenu(menus: ResolvedMenu[]): ResolvedMenu | undefined {
 }
 
 /** The write half of a commit: one transaction for pages, redirects and report. */
+const pendingBlogPost = z.object({ pageId: uuid, key: z.string(), meta: z.record(z.string(), z.unknown()), comments: z.array(z.object({ id: z.string(), parentId: z.string().optional(), name: z.string(), email: z.string().nullable(), body: z.string(), status: z.enum(["pending", "approved", "spam", "trash"]), createdAt: z.string().optional() })) });
+
+async function importPostComments(ctx: ServiceContext, runId: string, pageId: string, key: string, entries: WordpressComment[]): Promise<number> {
+  const remaining = [...entries], ids = new Map<string, string>();
+  for (let pass = 0; remaining.length && pass <= entries.length; pass += 1) {
+    for (let index = remaining.length - 1; index >= 0; index -= 1) {
+      const comment = remaining[index]!;
+      if (comment.parentId && remaining.some(parent => parent.id === comment.parentId)) continue;
+      const saved = z.object({ id: uuid }).parse(await ctx.call(getService("cms.importReaderComment"), {
+        runId, externalId: `${key}:${comment.id}`, pageId, parentId: comment.parentId ? ids.get(comment.parentId) ?? null : null,
+        name: comment.name, email: comment.email, body: comment.body, status: comment.status,
+        ...(comment.createdAt ? { createdAt: comment.createdAt } : {}),
+      }));
+      ids.set(comment.id, saved.id); remaining.splice(index, 1);
+    }
+  }
+  if (remaining.length) throw new ServiceError("validation", "The imported comment thread contains a cycle.");
+  return entries.length;
+}
+
 const commitApply = defineService({
   name: "imports.commitApply",
   summary: "Write a previewed import into the CMS as drafts, with redirects and a report.",
@@ -639,6 +677,7 @@ const commitApply = defineService({
         slug = cmsSlug(decision.renamedSlug?.trim() || `${page.slug}-imported`);
       }
       if (bySlug.has(slug) && decision?.resolution === "replace") {
+        if (wordpress && page.status === "draft" && bySlug.get(slug)!.status === "published") throw new ServiceError("conflict", "A WordPress draft cannot replace a live page. Rename the imported draft or keep the live page.");
         placements.push({ page, slug, action: "replace", current: bySlug.get(slug)! });
         continue;
       }
@@ -654,6 +693,55 @@ const commitApply = defineService({
       placements.push({ page, slug, action: "create" });
     }
     const written = placements.filter((placement) => placement.action !== "keep");
+    // Real blog records, shared by owner screens, the API and the public archives.
+    const blogSource = `import:${before.id}`;
+    const authorIds = new Map<string, string>();
+    const categoryIds = new Map<string, string>();
+    const tagIds = new Map<string, string>();
+    const categoryPaths = new Map<string, string>();
+    const archiveAliases: Array<{ fromPath: string; toPath: string }> = [];
+    const postSnapshots: unknown[] = [];
+    const pendingBlogPosts: z.infer<typeof pendingBlogPost>[] = [];
+    const directoryRows = z.array(z.object({ id: z.string(), slug: z.string(), email: z.string().nullable().optional() }));
+    if (wordpress) {
+      const existingAuthors = directoryRows.element.extend({ path: z.string() }).array().parse(await ctx.call(getService("cms.listAuthors"), {}));
+      for (const author of wordpress.authors) {
+        const slug = toCmsSlug(author.login).replaceAll("/", "-") || "author";
+        const existing = existingAuthors.find(row => row.slug === slug || (author.email && row.email?.toLowerCase() === author.email.toLowerCase()));
+        const saved = existing ?? z.object({ id: z.string() }).parse(await ctx.call(getService("cms.saveAuthor"), {
+          name: author.displayName || author.login, slug, email: author.email ?? null, path: `author/${slug}`, source: blogSource,
+        }));
+        authorIds.set(author.login, saved.id);
+        if (existing && existing.path !== `author/${slug}`) archiveAliases.push({ fromPath: `author/${slug}`, toPath: existing.path });
+      }
+      const existingTerms = z.array(z.object({ id: z.string(), slug: z.string(), taxonomy: z.string(), path: z.string() })).parse(await ctx.call(getService("cms.listTerms"), {}));
+      for (const taxonomy of ["category", "tag"] as const) {
+        const items = taxonomy === "category" ? wordpress.taxonomy.categories : wordpress.taxonomy.tags;
+        const ids = taxonomy === "category" ? categoryIds : tagIds;
+        const remaining = [...items];
+        for (let pass = 0; remaining.length && pass <= items.length; pass += 1) {
+          for (let index = remaining.length - 1; index >= 0; index -= 1) {
+            const term = remaining[index]!;
+            const parentSlug = taxonomy === "category" ? (term as { parentSlug?: string }).parentSlug : undefined;
+            if (parentSlug && items.some(row => row.slug === parentSlug) && !ids.has(parentSlug)) continue;
+            const slug = toCmsSlug(term.slug).replaceAll("/", "-");
+            const path = parentSlug && categoryPaths.has(parentSlug) ? `${categoryPaths.get(parentSlug)}/${slug}` : `${taxonomy}/${slug}`;
+            const existing = existingTerms.find(row => row.taxonomy === taxonomy && row.slug === slug);
+            const saved = existing ?? z.object({ id: z.string() }).parse(await ctx.call(getService("cms.saveTerm"), {
+              taxonomy, name: term.name || slug, slug, description: term.description ?? null,
+              parentId: parentSlug ? ids.get(parentSlug) ?? null : null,
+              // WordPress archive addresses are kept, independent of Freeholder's defaults.
+              path, source: blogSource,
+            }));
+            ids.set(term.slug, saved.id);
+            if (taxonomy === "category") categoryPaths.set(term.slug, path);
+            if (existing && existing.path !== path) archiveAliases.push({ fromPath: path, toPath: existing.path });
+            remaining.splice(index, 1);
+          }
+        }
+        if (remaining.length) throw new ServiceError("validation", "The imported category hierarchy contains a cycle. Correct the export before committing.");
+      }
+    }
 
     // Media and links, for WordPress bodies.
     const records = mediaRecordsFrom(before.checkpoint);
@@ -722,6 +810,7 @@ const commitApply = defineService({
     let droppedEmbeds = 0;
     let flattenedHtml = 0;
     let posts = 0;
+    let commentsImported = 0;
     const landed: Placement[] = [];
 
     for (const placement of placements) {
@@ -731,7 +820,7 @@ const commitApply = defineService({
         continue;
       }
       let blocks: unknown[];
-      let seo: { title?: string; description?: string } = {};
+      let seo: WordpressSeo = {};
       if (wordpress) {
         const featuredKey = page.featuredMedia;
         const featuredAsset = featuredKey ? assetByKey.get(featuredKey) : undefined;
@@ -754,8 +843,10 @@ const commitApply = defineService({
         droppedEmbeds += converted.droppedEmbeds;
         flattenedHtml += converted.flattenedHtml;
         seo = Object.fromEntries(
-          Object.entries(page.seo ?? {}).filter(([, value]) => typeof value === "string" && value !== ""),
+          Object.entries(page.seo ?? {}).filter(([, value]) => (typeof value === "string" && value !== "") || value === true),
         );
+        if (seo.canonical) seo.canonical = rewriteHref(seo.canonical);
+        page.seo = seo;
       } else {
         blocks = importedBlocks(slug, page.title, page.body);
       }
@@ -782,6 +873,28 @@ const commitApply = defineService({
         id = created.id;
       }
       if (page.status === "draft") draftPageIds.push(id);
+      if (wordpress && placement.action === "replace") {
+        postSnapshots.push(await ctx.call(getService("cms.getPostMeta"), { pageId: id }));
+        if (page.kind !== "post") {
+          const meta = { pageId: id, isPost: false };
+          if (placement.current?.status === "published") pendingBlogPosts.push({ pageId: id, key: page.wpId ?? slug, meta, comments: [] });
+          else await ctx.call(getService("cms.setPostMeta"), meta);
+        }
+      }
+      if (wordpress && page.kind === "post") {
+        const meta = {
+          pageId: id, isPost: true, authorId: page.author ? authorIds.get(page.author) ?? null : null,
+          categoryIds: (page.categorySlugs ?? []).flatMap(slug => categoryIds.has(slug) ? [categoryIds.get(slug)!] : []),
+          tagIds: (page.tagSlugs ?? []).flatMap(slug => tagIds.has(slug) ? [tagIds.get(slug)!] : []),
+          source: blogSource, sourceModifiedAt: page.modifiedAt,
+        };
+        if (placement.action === "replace" && placement.current?.status === "published") {
+          pendingBlogPosts.push({ pageId: id, key: page.wpId ?? slug, meta, comments: page.readerComments ?? [] });
+        } else {
+          await ctx.call(getService("cms.setPostMeta"), meta);
+          commentsImported += await importPostComments(ctx, before.id, id, page.wpId ?? slug, page.readerComments ?? []);
+        }
+      }
       if (page.publishedAt) publishedAt[id] = page.publishedAt;
       if (page.kind === "post") posts += 1;
       if (page.wpId) slugByWpId.set(page.wpId, slug);
@@ -886,6 +999,7 @@ const commitApply = defineService({
         : undefined,
     }));
 
+    const commentsStaged = pendingBlogPosts.reduce((total, post) => total + post.comments.length, 0);
     const mediaImported = records.filter((record) => record.assetId).length;
     const mediaFailures = records.filter((record) => !record.assetId);
     const report = wordpress
@@ -902,10 +1016,12 @@ const commitApply = defineService({
           menus: menus.map(({ slug, name, links, nested, unresolved }) => ({ slug, name, links: links.length, nested, unresolved })),
           // Said out loud so nobody reads a silent zero as "done".
           notRecreated: [
-            "Categories and tags are recorded here; Freeholder's blog has no taxonomy to file them under.",
-            "Authors are recorded here; Freeholder pages do not carry an author.",
-            "Reader comments are not imported; CMS pages have no public comment thread.",
+            ...(Number((wordpress.report.comments as { total?: number } | undefined)?.total ?? 0) > commentsImported + commentsStaged ? ["Unsupported comment types, comments on ordinary pages or skipped posts remain in the source export; counts.commentsSkipped reports the difference."] : []),
+            ...(wordpress.attachments.some(attachment => !attachment.parentWpId || !slugByWpId.has(attachment.parentWpId)) ? ["Orphan attachment pages need an owner-selected destination."] : []),
+            "WordPress /feed is already Freeholder’s member feed; root ?feed=rss2/atom/rss aliases use /feeds/blog.xml. Review this reserved-path collision before DNS cutover.",
+            "WXR does not carry rendered hreflang or all plugin-generated metadata. Compare the source crawl with the destination before DNS cutover.",
           ],
+          commentsImported, commentsStaged,
         }
       : undefined;
     const counts = wordpress
@@ -919,7 +1035,8 @@ const commitApply = defineService({
           categories: wordpress.taxonomy.categories.length,
           tags: wordpress.taxonomy.tags.length,
           authors: authors.length,
-          commentsSkipped: Number((wordpress.report.comments as { total?: number } | undefined)?.total ?? 0),
+          commentsImported, commentsStaged,
+          commentsSkipped: Math.max(0, Number((wordpress.report.comments as { total?: number } | undefined)?.total ?? 0) - commentsImported - commentsStaged),
           skippedPages: skippedPages.length,
         }
       : { pages: createdPageIds.length + replacedPages.length, media: 0, redirects: 0 };
@@ -930,6 +1047,21 @@ const commitApply = defineService({
       publishedAt,
       redirectIds,
       displacedRedirects,
+      postSnapshots, pendingBlogPosts,
+      landedPaths: landed.map(({ page, slug }) => ({ sourceUrl: page.url, path: slug, status: page.status ?? "publish", seo: page.seo ?? {} })),
+      legacyAliases: [
+        ...archiveAliases,
+        ...(wordpress?.attachments ?? []).flatMap(attachment => {
+          const target = attachment.parentWpId ? slugByWpId.get(attachment.parentWpId) : undefined;
+          if (target === undefined) return [];
+          return [
+            ...(attachment.path ? [{ fromPath: attachment.path, toPath: target }] : []),
+            ...(attachment.wpId ? ["", "index.php"].map(root => ({ fromPath: `${root}?attachment_id=${attachment.wpId}`, toPath: target })) : []),
+          ];
+        }),
+        ...(wordpress ? ["rss2", "atom", "rss"].map(feed => ({ fromPath: `?feed=${feed}`, toPath: "feeds/blog.xml" })) : []),
+        ...landed.flatMap(({ page, slug }) => page.wpId ? ["p", "page_id"].flatMap(key => ["", "index.php"].map(root => ({ fromPath: `${root}?${key}=${page.wpId}`, toPath: slug }))) : []),
+      ],
       menus,
       ...(blogIndexPageId ? { blogIndexPageId } : {}),
       ...(report ? { report } : {}),
@@ -1032,6 +1164,11 @@ export const rollbackImport = defineService({
         }
       }
     }
+    for (const snapshot of Array.isArray(checkpoint.postSnapshots) ? checkpoint.postSnapshots : []) {
+      await ctx.call(getService("cms.setPostMeta"), snapshot);
+    }
+    await ctx.call(getService("cms.rollbackImportedBlogProfiles"), { runId: before.id });
+    await ctx.call(getService("cms.rollbackImportedReaderComments"), { runId: before.id });
 
     for (const id of stringIds(checkpoint.redirectIds)) {
       try {
@@ -1267,6 +1404,37 @@ export const publishImport = defineService({
       });
     }
 
+    const pending = pendingBlogPost.array().parse(checkpoint.pendingBlogPosts ?? []);
+    let stagedCommentsImported = 0;
+    for (const post of pending) {
+      await ctx.call(getService("cms.setPostMeta"), post.meta);
+      stagedCommentsImported += await importPostComments(ctx, before.id, post.pageId, post.key, post.comments);
+    }
+
+    // Query-ID aliases are activated at cutover, never while imported content
+    // remains a private draft. Existing redirects are preserved and reported.
+    const aliasSchema = z.array(z.object({ fromPath: z.string(), toPath: z.string() }));
+    const aliases = aliasSchema.safeParse(checkpoint.legacyAliases);
+    const redirectIds = stringIds(checkpoint.redirectIds);
+    const skippedAliases: Array<{ fromPath: string; reason: string }> = [];
+    if (aliases.success) {
+      const landings = z.array(z.object({ path: z.string(), status: z.string() })).safeParse(checkpoint.landedPaths);
+      const draftPaths = new Set(landings.success ? landings.data.filter(page => page.status === "draft").map(page => page.path) : []);
+      const existing = z.array(z.object({ fromPath: z.string() })).parse(await ctx.call(getService("seo.listRedirects"), {}));
+      const occupied = new Set(existing.map(row => row.fromPath));
+      for (const alias of aliases.data) {
+        if (draftPaths.has(alias.toPath)) continue;
+        if (alias.toPath !== "feeds/blog.xml") {
+          const page = await ctx.call(getService("cms.resolvePage"), { slug: alias.toPath, locale: "en" });
+          const archive = page ? null : await ctx.call(getService("cms.resolveBlogArchive"), { path: alias.toPath });
+          if (!page && !archive) { skippedAliases.push({ fromPath: alias.fromPath, reason: "destination is not public" }); continue; }
+        }
+        if (occupied.has(alias.fromPath)) { skippedAliases.push({ fromPath: alias.fromPath, reason: "existing redirect preserved" }); continue; }
+        const created = z.object({ id: z.string() }).parse(await ctx.call(getService("seo.recordRedirect"), { ...alias, source: "import" }));
+        redirectIds.push(created.id); occupied.add(alias.fromPath);
+      }
+    }
+
     // One imported menu joins the site's nav section; the rest stay on record.
     let navApplied: z.infer<typeof navAppliedSchema> | undefined;
     const menus = resolvedMenusSchema.safeParse(checkpoint.menus);
@@ -1289,7 +1457,7 @@ export const publishImport = defineService({
     }
     const [row] = await ctx.tx
       .update(importRuns)
-      .set({ status: "published", checkpoint: { ...checkpoint, ...(navApplied ? { navApplied } : {}) } })
+      .set({ status: "published", counts: { ...checkpointOf(before.counts), commentsImported: Number(checkpointOf(before.counts).commentsImported ?? 0) + stagedCommentsImported, commentsStaged: 0 }, checkpoint: { ...checkpoint, pendingBlogPosts: [], redirectIds, skippedAliases, ...(navApplied ? { navApplied } : {}) } })
       .where(eq(importRuns.id, input.id))
       .returning();
     ctx.setSubject("import_run", row!.id);
@@ -1325,6 +1493,7 @@ export function stageWordpressExport(exported: WordpressExport, origin: string):
         menus: plan.menus,
         authors: plan.authors,
         taxonomy: plan.taxonomy,
+        attachments: exported.attachments.map(attachment => ({ wpId: attachment.wpId, parentWpId: attachment.parentWpId, path: attachment.url ? wordpressPath(attachment.url, plan.site.hosts, plan.site.basePath) ?? undefined : undefined })),
         report: plan.report,
       },
     },
@@ -1424,7 +1593,43 @@ export const previewFromSource = defineService({
   },
 });
 
+export const wordpressVerificationPlan = defineService({
+  name: "imports.wordpressVerificationPlan",
+  summary: "A read-only URL and metadata acceptance manifest for a committed WordPress migration; unresolved source features remain explicit.",
+  kind: "query", permission: "scoped", input: z.object({ id: uuid }),
+  output: z.object({ sourceOrigin: z.string(), status: z.string(), checks: z.array(z.object({ sourceUrl: z.string(), requestPath: z.string(), destinationPath: z.string(), redirect: z.boolean(), expected: z.record(z.string(), z.unknown()) })), warnings: z.array(z.string()) }),
+  handler: async (input, ctx) => {
+    const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
+    if (!run) throw new ServiceError("not_found", "No such import run.");
+    if (!run.kind?.startsWith("wordpress-")) throw new ServiceError("validation", "URL acceptance manifests apply to WordPress imports.");
+    const checkpoint = checkpointOf(run.checkpoint);
+    const landed = z.array(z.object({ sourceUrl: z.string(), path: z.string(), status: z.string(), seo: z.record(z.string(), z.unknown()) })).safeParse(checkpoint.landedPaths);
+    if (!landed.success) throw new ServiceError("conflict", "Commit a WordPress import with URL acceptance records before requesting verification.");
+    const published = landed.data.filter(page => page.status !== "draft");
+    const drafts = new Set(landed.data.filter(page => page.status === "draft").map(page => page.path));
+    const sourceOrigin = run.origin ?? "";
+    const checks = published.map(page => ({ sourceUrl: page.sourceUrl, requestPath: `/${page.path}`, destinationPath: `/${page.path}`, redirect: false, expected: page.seo }));
+    for (const page of published) {
+      const original = new URL(page.sourceUrl);
+      if (original.pathname !== `/${page.path}`) checks.push({ sourceUrl: page.sourceUrl, requestPath: `${original.pathname}${original.search}`, destinationPath: `/${page.path}`, redirect: true, expected: {} });
+    }
+    const aliases = z.array(z.object({ fromPath: z.string(), toPath: z.string() })).safeParse(checkpoint.legacyAliases);
+    const skipped = z.array(z.object({ fromPath: z.string(), reason: z.string() })).safeParse(checkpoint.skippedAliases);
+    const excluded = new Set(skipped.success ? skipped.data.map(alias => alias.fromPath) : []);
+    if (aliases.success) for (const alias of aliases.data) {
+      if (drafts.has(alias.toPath) || excluded.has(alias.fromPath)) continue;
+      checks.push({ sourceUrl: new URL(`/${alias.fromPath}`, sourceOrigin).href, requestPath: `/${alias.fromPath}`, destinationPath: `/${alias.toPath}`, redirect: true, expected: {} });
+    }
+    const report = checkpointOf(checkpoint.report);
+    const warnings = stringIds(report.notRecreated);
+    if (skipped.success) warnings.push(...skipped.data.map(alias => `${alias.fromPath}: ${alias.reason}`));
+    if (run.status !== "published") warnings.push("The import has not been published; draft privacy is expected and cutover acceptance cannot pass yet.");
+    return { sourceOrigin, status: run.status, checks, warnings };
+  },
+});
+
 export default [
+  wordpressVerificationPlan,
   startImport,
   previewImport,
   previewFromSource,

@@ -13,7 +13,7 @@ import {
   playgroundSharedCacheable,
 } from "@/core/demo/playground-cache";
 import { ANALYTICS_BOOTSTRAP_COOKIE } from "@/modules/analytics/visitor";
-import { proxy } from "../../proxy";
+import { requestContextProxy as proxy } from "../../proxy";
 
 const APP = join(__dirname, "..", "..", "app");
 

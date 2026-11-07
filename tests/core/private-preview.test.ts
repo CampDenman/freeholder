@@ -8,7 +8,7 @@
 // routes with the key set and unset.
 import { afterEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { proxy } from "../../proxy";
+import { requestContextProxy as proxy } from "../../proxy";
 import { resetEnvForTests } from "@/core/env";
 import {
   PREVIEW_COOKIE,

@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   // (MASTER.md §32: no build step between an owner and their site).
   reactStrictMode: true,
   poweredByHeader: false,
+  // Resolve an imported alias before trimming its slash, in one literal 301.
+  skipTrailingSlashRedirect: true,
   // Media renditions come from core/media (sharp), never next/image. With
   // the optimizer unused, Next answers /_next/image with a 404 instead of
   // exposing it (GHSA-2464-fhr4-w9xw was an unauthenticated RCE there).

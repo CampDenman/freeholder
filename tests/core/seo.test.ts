@@ -9,7 +9,7 @@
 // not break every link to it.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { proxy } from "../../proxy";
+import { requestContextProxy as proxy } from "../../proxy";
 import {
   breadcrumbJsonLd,
   humanizeSegment,

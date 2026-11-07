@@ -2095,8 +2095,9 @@ diff, then stage and commit a reversible import. Nothing is published and DNS
 never changes merely because the crawler finished.
 
 - **WordPress is the first importer, and the most complete:** the WXR export
-  path brings pages (keeping their paths), posts (under `blog/`, so the blog
-  listing shows them, keeping slugs and publication dates), attachments into
+  path brings pages and posts at their original paths, including the home
+  page and dated post permalinks; explicit blog metadata makes posts appear
+  in the listing without moving them. It also brings attachments into
   the media library through the ordinary upload pipeline (pinned SSRF-safe
   download, content-sniffed type, size limit, AVIF/WebP renditions, alt text
   and source-URL provenance kept, body captions kept as text), body images
@@ -2105,11 +2106,15 @@ never changes merely because the crawler finished.
   publish). Original URLs either survive or receive explicit `Redirect` rows.
   The REST path covers pages and posts with dates, Yoast fields and embedded
   terms; it carries no attachment list, so only same-site body images are
-  fetched. Not yet recreated, and said so in the run report: categories/tags
-  and authors are recorded on the import run because the blog has no taxonomy
-  and pages carry no author; reader comments are not imported because CMS
-  pages have no public thread; nested menu items are not applied (C3.22
-  open). An export file of up to 100 MB is reserved, sent in 4 MB chunks to
+  fetched. Categories, tags and authors become real blog records; ordinary
+  WXR reader comments preserve moderation state, dates and available parentage.
+  Replacing live content stages changed blog membership and comments until
+  publication; rollback restores prior metadata and retained comment history.
+  The report keeps remaining uncertainty explicit: nested menus, reserved
+  member-feed collisions, orphan attachments and metadata absent from WXR
+  require source-crawl review (C2.27–C2.29, C3.22 and C3.46 remain open until
+  their acceptance evidence is complete). An export file of up to 100 MB is
+  reserved, sent in 4 MB chunks to
   an import-only route that stores them in private object storage, and read
   back as a stream; the 1 MB JSON body limit and the request proxy's buffer
   stay as they are for every other route.
@@ -4889,6 +4894,44 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 - [x] **C2.26** Deliver a public blog index with published post discovery, pagination, locale-aware links and metadata, an editable index block and an owner publish workflow. Drafts and gated bodies remain private.
   *(Closed 2026-10-14 against `C2.26` on `main` (`f9b155be`, released as 0.2.0-beta.3 and live on freeholder.ai). Evidence: `tests/modules/customer-surfaces.test.ts` (published-only listing, drafts and working copies hidden, page 2 pagination, reviewed fr translation) and `tests/browser/customer-surfaces.spec.ts` (owner writes and publishes at /admin/blog; post appears on /blog only after publish; Axe light/dark); /blog serves 200 with a canonical link; scope and limits in `deploy/customer-surfaces-2026-10-07.md`; F01–F12 rows in `deploy/f-criteria-matrix.md`. **F04** `app/(admin)/admin/blog/page.tsx` and `/blog`. **F05** `cms.listBlogPosts` in `src/modules/cms/blog.tsx`, projected to HTTP/MCP and `packages/sdk/src/generated.ts`. **F07** customer ownership and privacy in `tests/modules/customer-surfaces.test.ts`. **F09** provider and deployment limits recorded in `deploy/customer-surfaces-2026-10-07.md`. **F12** `tests/browser/customer-surfaces.spec.ts` composed journey. Live payment-provider settlement stays with C11.05.)*
 
+- [ ] **C2.27** Blog categories and tags: hierarchical categories, flat tags,
+  owner CRUD, post assignment, public archive pages, sitemap and slug-move
+  redirects through the same scoped services on UI, HTTP and MCP.
+- [ ] **C2.28** Blog authors: account-linked or guest profiles, private email,
+  public bylines/bios and author archives; preserve WordPress authors, terms,
+  post dates and exact archive paths at import. Owner administration and
+  four-locale labels are required before checking this item.
+- [ ] **C2.29** Public blog comments: moderated threads with owner controls,
+  spam/honeypot and rate limits, unified contacts resolution/merge/privacy,
+  notifications and WordPress comment import. Never expose a comment email.
+  *(Implementation and qualification in progress 2026-11-07; owner: CMS/importer.
+  Reproductions: a live replacement exposed imported post metadata before
+  cutover; direct public metadata/comment queries could bypass a registered
+  publication veto; republishing reset an imported original date. Peer review
+  natively reproduced a same-slug locale row authorizing another vetoed ID,
+  and found post-to-ordinary-page replacement retaining the old blog marker.
+  Exact public page IDs now authorize reads, and kind changes hide retained
+  comment history at cutover while preserving rollback. The production-build
+  browser journey also reproduced a 500 on legacy redirects when CSP was
+  written to native immutable redirect headers; the adapter now constructs a
+  mutable framework response before applying the security policy; the HTTP
+  harness resolves Next’s valid relative Location before checking the exact
+  destination. Full CI also caught missing new-table policy decisions: reader
+  comments now explicitly stay in their scoped moderation queue and page/privacy
+  retention lifecycle; playground submission has a 200-row cap plus shared
+  contact/client limits. This is covered by
+  `tests/core/legacy-redirect-proxy.test.ts`. Reusable
+  fixes stage replacement metadata/comments until publication, reuse the
+  shared published-page resolver, retain first publication dates and restore
+  rollback dates/working copies. Regression evidence:
+  `tests/core/wordpress-import-flow.test.ts`,
+  `tests/core/blog-structure-comments.test.ts` and
+  `tests/core/wordpress-migration-verification.test.ts`. The browser's first
+  run reached moderation but its status selector also matched the filter nav;
+  the harness now selects the combobox by role. Production deployment and
+  deployed acceptance remain pending; operational limits and all evidence
+  are recorded in `deploy/blog-wordpress-2026-11-07.md`.)*
+
 ### 43.8 C3 — Living contract, plugins, packages, and portable operation
 
 #### One generated platform contract
@@ -5237,6 +5280,15 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   the generic sitemap/RSS/Atom/HTML importers still produce a heading plus one
   `html` block with no media or redirects; the `archive` kind has no archive
   reader of its own.)*
+  *(Update 2026-11-07: C2.27–C2.29/C3.46 add real taxonomy/author records,
+  moderated WXR comment import, original post/home paths and dates, one-hop
+  query/attachment redirects and URL/metadata verification. This supersedes
+  the earlier checkpoint's taxonomy/author/comment and post-relocation limits;
+  the remaining nested-menu, body/item-cap, pasted REST, generic importer and
+  archive-reader limits still keep C3.22 open. Code and source-crawl limits:
+  `src/core/import/service.ts`, `src/core/import/wordpress.ts`,
+  `deploy/blog-wordpress-2026-11-07.md`; composed regressions:
+  `tests/core/wordpress-import-flow.test.ts`.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,
@@ -5815,6 +5867,10 @@ deployments are portable, testable and incapable of silently forking the truth.
   next version is tagged.)*
 
 - [ ] **C3.45** — Managed preview assistant: launch-spec v3 preserves v1/v2 compatibility; PM-hosted previews use server-only scoped keys, cleared SFW Canon assets and revocation, AI/no-endorsement disclosure, owner settings and caps, visitor-bound queued voice/video with shared PM duplex transport and leases, and the existing assistant transcript for text; no chatbot age gate. Qualify the consumer, PM backend, deployed text fallback and a real approved call before closing. Peer source integration fixes include localized Contact media policy with controls suppressed elsewhere and existing signed-in chat text/assistant/End CSRF headers; mounted HTTP-guard regressions and source details live in deploy/managed-preview-assistant.md.
+- [ ] **C3.46** SEO-safe WordPress migration: original URLs or single-hop301s,
+  query-ID/feed/archive/attachment URL accounting, original SEO metadata,
+  sitemap/canonical/hreflang validation and an exportable URL/reconciliation
+  report. Publishing is explicit; imported drafts remain private.
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

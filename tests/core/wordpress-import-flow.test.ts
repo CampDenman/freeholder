@@ -22,7 +22,13 @@ import {
   reconcileImport,
   rollbackImport,
   startImport,
+  reviewImportConflicts,
+  wordpressVerificationPlan,
 } from "@/core/import/service";
+import { saveAuthor, setPostMeta, postMetaAt, resolveBlogArchive } from "@/modules/cms/blog-service";
+import { listReaderComments } from "@/modules/cms/blog-comments";
+import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
+import { resolveRedirect } from "@/core/seo/service";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const getPinnedBytes = vi.hoisted(() => vi.fn());
@@ -77,9 +83,9 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
     const started = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
     const previewed = await previewFromSource.call({ id: started.id, payload: FIXTURE }, OWNER);
     expect(previewed.status).toBe("previewed");
-    expect(previewed.counts).toMatchObject({ pages: 5, posts: 3, media: 2, redirects: 2, menus: 1, commentsSkipped: 2 });
+    expect(previewed.counts).toMatchObject({ pages: 5, posts: 3, media: 2, redirects: 0, menus: 1, commentsSkipped: 2 });
     // Nothing is written by a preview.
-    expect(await pageAt("blog/first-wood-firing")).toBeUndefined();
+    expect(await pageAt("2025/03/first-wood-firing")).toBeUndefined();
 
     const committed = await commitImport.call({ id: started.id }, OWNER);
     expect(committed.status).toBe("committed");
@@ -90,12 +96,13 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
       posts: 3,
       media: 2,
       mediaFailed: 0,
-      redirects: 2,
+      redirects: 0,
       menus: 1,
       categories: 2,
       tags: 1,
       authors: 1,
-      commentsSkipped: 2,
+      commentsImported: 2,
+      commentsSkipped: 0,
       skippedPages: 0,
     });
     // The external image is never fetched; only the two attachments are.
@@ -114,36 +121,45 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
       sourceUrl: "https://old.example.org/wp-content/uploads/2025/03/kiln.jpg",
     });
 
-    const post = (await pageAt("blog/first-wood-firing"))!;
+    const post = (await pageAt("2025/03/first-wood-firing"))!;
     expect(post.status).toBe("draft");
     expect(post.seo).toEqual({
       title: expect.stringMatching(/^Our First Wood Firing – Wood firing diary/) as unknown,
       description: "Three days of loading and two of stoking.",
+      preserveTitle: true,
+      preserveDescription: true,
     });
     const blocks = post.blocks as Array<{ type: string; props: Record<string, unknown> }>;
     expect(blocks.filter((block) => block.type === "image").map((block) => block.props.assetId)).toEqual([kiln.id]);
-    expect(JSON.stringify(blocks)).toContain('"href":"/blog/glaze-notes"');
+    expect(JSON.stringify(blocks)).toContain('"href":"/glaze-notes"');
     expect((await pageAt("about/team"))!.status).toBe("draft");
-    expect(JSON.stringify((await pageAt("about"))!.blocks)).toContain('"href":"/blog/first-wood-firing"');
+    expect(JSON.stringify((await pageAt("about"))!.blocks)).toContain('"href":"/2025/03/first-wood-firing"');
     expect((await pageAt("blog"))!.blocks).toEqual(expect.arrayContaining([expect.objectContaining({ type: "blogIndex" })]));
 
     const moved = await db().select().from(redirects);
-    expect(moved.map((row) => [row.fromPath, row.toPath, row.source]).sort()).toEqual([
-      ["2025/03/first-wood-firing", "blog/first-wood-firing", "import"],
-      ["glaze-notes", "blog/glaze-notes", "import"],
-    ]);
+    expect(moved).toEqual([]);
 
     const reconciled = await reconcileImport.call({ id: started.id }, OWNER);
     expect(reconciled.checkpoint).toMatchObject({
-      reconciliation: { found: { pages: 5, media: 2, redirects: 2 }, matches: true },
+      reconciliation: { found: { pages: 5, media: 2, redirects: 0 }, matches: true },
     });
 
     const published = await publishImport.call({ id: started.id }, OWNER);
     expect(published.status).toBe("published");
-    expect((await pageAt("blog/first-wood-firing"))!.publishedAt?.toISOString()).toBe("2025-03-14T18:00:00.000Z");
+    expect((await pageAt("2025/03/first-wood-firing"))!.publishedAt?.toISOString()).toBe("2025-03-14T18:00:00.000Z");
     expect((await pageAt("blog/upcoming-sale"))!.status).toBe("draft");
     const listing = await listBlogPosts.call({ locale: "en", prefix: "blog", page: 1, limit: 12 }, { kind: "anonymous" });
-    expect(listing.posts.map((entry) => entry.slug)).toEqual(["blog/glaze-notes", "blog/first-wood-firing"]);
+    expect(listing.posts.map((entry) => entry.slug)).toEqual(["glaze-notes", "2025/03/first-wood-firing"]);
+    expect(await resolveRedirect.call({ path: "?p=20" }, { kind: "anonymous" })).toEqual({ toPath: post.slug, status: "301" });
+    expect(await resolveRedirect.call({ path: "?attachment_id=10" }, { kind: "anonymous" })).toEqual({ toPath: post.slug, status: "301" });
+    expect(await resolveBlogArchive.call({ path: "author/maple" }, { kind: "anonymous" })).toMatchObject({ name: "Maple Rivers", posts: 2 });
+    expect(await resolveBlogArchive.call({ path: "2025/03" }, { kind: "anonymous" })).toMatchObject({ kind: "date", posts: 1 });
+    expect(await resolveRedirect.call({ path: "author/maple/page/1" }, { kind: "anonymous" })).toEqual({ toPath: "author/maple", status: "301" });
+    expect(await resolveRedirect.call({ path: "author/maple/page/9999" }, { kind: "anonymous" })).toBeNull();
+    expect(await listReaderComments.call({ pageId: post.id }, { kind: "anonymous" })).toHaveLength(1);
+    const verification = await wordpressVerificationPlan.call({ id: started.id }, OWNER);
+    expect(verification.checks.some(check => check.requestPath === "/?p=20" && check.redirect)).toBe(true);
+    expect(verification.checks.some(check => check.destinationPath.includes("upcoming-sale"))).toBe(false);
     const [nav] = await db()
       .select()
       .from(sections)
@@ -151,12 +167,12 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
     // Top-level items only: the nav block is flat, so "Team" stays on record.
     expect((nav!.blocks as Array<{ props: { links: unknown[] } }>)[0]!.props.links).toEqual([
       { label: "About", href: "/about" },
-      { label: "Journal", href: "/blog/first-wood-firing" },
+      { label: "Journal", href: "/2025/03/first-wood-firing" },
     ]);
 
     const rolled = await rollbackImport.call({ id: started.id }, OWNER);
     expect(rolled.status).toBe("rolled_back");
-    expect(await pageAt("blog/first-wood-firing")).toBeUndefined();
+    expect(await pageAt("2025/03/first-wood-firing")).toBeUndefined();
     expect((await pageAt("blog"))!.status).toBe("published");
     expect(await db().select().from(redirects)).toHaveLength(0);
     expect((await db().select().from(assets)).every((asset) => asset.status === "trashed")).toBe(true);
@@ -191,11 +207,11 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
       },
     });
     // The page still lands, without the picture it could not fetch.
-    const post = (await pageAt("blog/first-wood-firing"))!;
+    const post = (await pageAt("2025/03/first-wood-firing"))!;
     expect(JSON.stringify(post.blocks)).not.toContain('"type":"image"');
 
     await rollbackImport.call({ id: started.id }, OWNER);
-    expect(await pageAt("blog/first-wood-firing")).toBeUndefined();
+    expect(await pageAt("2025/03/first-wood-firing")).toBeUndefined();
     expect(await pageAt("blog")).toBeUndefined();
   });
 
@@ -212,5 +228,52 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
     const rolled = await rollbackImport.call({ id: started.id }, OWNER);
     expect(rolled.status).toBe("rolled_back");
     expect((await db().select().from(assets)).every((asset) => asset.status === "trashed")).toBe(true);
+  });
+
+  it("stages live replacement bylines and approved comments until cutover, then restores the original date and metadata on rollback", async () => {
+    const { createPage, publishPage } = await import("@/modules/cms/service");
+    const page = await createPage.call({ slug: "2025/03/first-wood-firing", title: "Original live title", blocks: [{ id: "original-h", type: "heading", props: { text: "Original live title", level: 1 } }] }, OWNER);
+    const author = await saveAuthor.call({ name: "Original Author" }, OWNER);
+    await setPostMeta.call({ pageId: page.id, isPost: true, authorId: author.id, commentsEnabled: false }, OWNER);
+    const originalDate = "2024-01-02T12:00:00.000Z";
+    await publishPage.call({ id: page.id, published: true, publishedAt: originalDate }, OWNER);
+    const started = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
+    await previewFromSource.call({ id: started.id, payload: FIXTURE }, OWNER);
+    await reviewImportConflicts.call({ id: started.id, conflicts: [{ slug: page.slug, resolution: "replace" }] }, OWNER);
+    const committed = await commitImport.call({ id: started.id }, OWNER);
+    expect(committed.counts).toMatchObject({ commentsImported: 0, commentsStaged: 2, commentsSkipped: 0 });
+    expect((await postMetaAt.call({ slug: page.slug }, { kind: "anonymous" }))?.author?.name).toBe("Original Author");
+    expect(await listReaderComments.call({ pageId: page.id }, { kind: "anonymous" })).toEqual([]);
+    await reconcileImport.call({ id: started.id }, OWNER);
+    await publishImport.call({ id: started.id }, OWNER);
+    expect((await postMetaAt.call({ slug: page.slug }, { kind: "anonymous" }))?.author?.name).toBe("Maple Rivers");
+    expect(await listReaderComments.call({ pageId: page.id }, { kind: "anonymous" })).toHaveLength(1);
+    await rollbackImport.call({ id: started.id }, OWNER);
+    const restored = await pageAt(page.slug);
+    expect(restored?.title).toBe("Original live title");
+    expect(restored?.publishedAt?.toISOString()).toBe(originalDate);
+    expect((await postMetaAt.call({ slug: page.slug }, { kind: "anonymous" }))?.author?.name).toBe("Original Author");
+    expect(await listReaderComments.call({ pageId: page.id }, { kind: "anonymous" })).toEqual([]);
+  });
+
+  it("hides an old blog thread when an ordinary page replaces it, and restores the same history on rollback", async () => {
+    const { createPage, publishPage } = await import("@/modules/cms/service");
+    const page = await createPage.call({ slug: "about", title: "An old blog post", blocks: [{ id: "old-h", type: "heading", props: { text: "An old blog post", level: 1 } }] }, OWNER);
+    await setPostMeta.call({ pageId: page.id, isPost: true }, OWNER);
+    await publishPage.call({ id: page.id, published: true }, OWNER);
+    const [comment] = await db().insert(blogReaderComments).values({ pageId: page.id, authorName: "Original Reader", body: "Original approved history", status: "approved" }).returning();
+    const started = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
+    await previewFromSource.call({ id: started.id, payload: FIXTURE }, OWNER);
+    await reviewImportConflicts.call({ id: started.id, conflicts: [{ slug: "about", resolution: "replace" }] }, OWNER);
+    await commitImport.call({ id: started.id }, OWNER);
+    expect(await listReaderComments.call({ pageId: page.id }, { kind: "anonymous" })).toHaveLength(1);
+    await reconcileImport.call({ id: started.id }, OWNER);
+    await publishImport.call({ id: started.id }, OWNER);
+    expect(await postMetaAt.call({ slug: page.slug }, { kind: "anonymous" })).toBeNull();
+    expect(await listReaderComments.call({ pageId: page.id }, { kind: "anonymous" })).toEqual([]);
+    expect((await db().select().from(blogReaderComments).where(eq(blogReaderComments.id, comment!.id)))[0]?.body).toBe("Original approved history");
+    await rollbackImport.call({ id: started.id }, OWNER);
+    expect((await postMetaAt.call({ slug: page.slug }, { kind: "anonymous" }))?.pageId).toBe(page.id);
+    expect((await listReaderComments.call({ pageId: page.id }, { kind: "anonymous" }))[0]?.id).toBe(comment!.id);
   });
 });

@@ -33,6 +33,8 @@ export default async function ImportRunPage({
     ["categories", t("imports.count.categories")],
     ["tags", t("imports.count.tags")],
     ["authors", t("imports.count.authors")],
+    ["commentsImported", t("imports.count.commentsImported")],
+    ["commentsStaged", t("imports.count.commentsStaged")],
     ["commentsSkipped", t("imports.count.commentsSkipped")],
     ["skippedPages", t("imports.count.skippedPages")],
   ];

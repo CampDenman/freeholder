@@ -444,17 +444,23 @@ export const SERVICE_NAMES = [
   "cms.addComment",
   "cms.applyDueSchedules",
   "cms.attachLayout",
+  "cms.authorAccounts",
+  "cms.blogArchivePaths",
+  "cms.blogSettings",
   "cms.compareRevisions",
   "cms.createFromTemplate",
   "cms.createPage",
+  "cms.createPost",
   "cms.createPreviewLink",
   "cms.createSection",
   "cms.createSectionLocale",
   "cms.decideApproval",
   "cms.decideReview",
+  "cms.deleteAuthor",
   "cms.deleteDraftPage",
   "cms.deleteHelpCategory",
   "cms.deleteSection",
+  "cms.deleteTerm",
   "cms.describeConflict",
   "cms.detachLayout",
   "cms.detachSection",
@@ -465,6 +471,7 @@ export const SERVICE_NAMES = [
   "cms.fileHelpArticle",
   "cms.getLayout",
   "cms.getPage",
+  "cms.getPostMeta",
   "cms.getSection",
   "cms.getTemplate",
   "cms.heartbeatPresence",
@@ -472,31 +479,40 @@ export const SERVICE_NAMES = [
   "cms.helpArticleFeedback",
   "cms.helpArticles",
   "cms.helpCategories",
+  "cms.importReaderComment",
   "cms.leavePresence",
+  "cms.listAuthors",
   "cms.listBlogPosts",
   "cms.listComments",
   "cms.listPages",
+  "cms.listPostPages",
   "cms.listPresence",
   "cms.listPreviewLinks",
+  "cms.listReaderComments",
   "cms.listRevisions",
   "cms.listSectionUsages",
   "cms.listSections",
   "cms.listTemplates",
+  "cms.listTerms",
   "cms.livePaths",
   "cms.loadDemoFixture",
   "cms.mergePage",
+  "cms.moderateReaderComment",
   "cms.nameRevision",
   "cms.pageAccessibilityReport",
   "cms.pageAuthorSummary",
   "cms.pageTranslationReport",
+  "cms.postMetaAt",
   "cms.previewEmail",
   "cms.previewSms",
   "cms.previewTemplate",
+  "cms.publicBlogCategories",
   "cms.publishPage",
   "cms.publishedPaths",
   "cms.purgeDemoFixture",
   "cms.purgePage",
   "cms.rateHelpArticle",
+  "cms.readerCommentsForOwner",
   "cms.rejoinLayout",
   "cms.releaseEditLease",
   "cms.reloadWorkingDraft",
@@ -505,25 +521,33 @@ export const SERVICE_NAMES = [
   "cms.requestApproval",
   "cms.requestReview",
   "cms.resetTemplate",
+  "cms.resolveBlogArchive",
   "cms.resolvePage",
   "cms.resolvePreviewLink",
   "cms.resolveThread",
   "cms.restorePage",
   "cms.restoreRevision",
   "cms.revokePreviewLink",
+  "cms.rollbackImportedBlogProfiles",
+  "cms.rollbackImportedReaderComments",
   "cms.saveAsSection",
+  "cms.saveAuthor",
   "cms.saveHelpCategory",
+  "cms.saveTerm",
   "cms.schedulePage",
   "cms.searchHelp",
   "cms.searchPublishedPages",
   "cms.sendSmsTemplate",
+  "cms.setPostMeta",
   "cms.snapshotRevision",
   "cms.submitQuoteRequest",
+  "cms.submitReaderComment",
   "cms.submitSiteChat",
   "cms.submitTipIntent",
   "cms.testSendEmail",
   "cms.testSendSms",
   "cms.touchEditLease",
+  "cms.updateBlogSettings",
   "cms.updatePage",
   "cms.updateSection",
   "cms.updateTemplate",
@@ -809,6 +833,7 @@ export const SERVICE_NAMES = [
   "imports.rollback",
   "imports.start",
   "imports.uploadSourceChunk",
+  "imports.wordpressVerificationPlan",
   "invitations.accept",
   "invitations.create",
   "invitations.inspect",
@@ -3337,6 +3362,18 @@ export interface ServiceCatalog {
     input: { pageId: string; entityType: "product" | "service" | "post" | "location" | "event" | "gallery" | "page"; entityId: string; templateKey: string; detached?: boolean };
     output: { id: string; pageId: string; entityType: "product" | "service" | "post" | "location" | "event" | "gallery" | "page"; entityId: string; templateKey: string; detached: boolean; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "cms.authorAccounts": {
+    input: Record<string, never>;
+    output: { id: string; email: string }[];
+  };
+  "cms.blogArchivePaths": {
+    input: { locale?: string };
+    output: { slug: string; title: string; description?: string; kind: string; priority: number; updatedAt?: string }[];
+  };
+  "cms.blogSettings": {
+    input: Record<string, never>;
+    output: { categoryBase: string; tagBase: string; authorBase: string; postsPerPage: number; commentsEnabled: boolean };
+  };
   "cms.compareRevisions": {
     input: { pageId?: string; fromRevisionId?: string; toRevisionId?: string };
     output: { earlier: { id: string; label: string; title: string }; later: { id: string; label: string; title: string }; titleChanged: boolean; blocks: { added: { id: string; type: string }[]; removed: { id: string; type: string }[]; changed: { id: string; type: string }[]; unchanged: number } };
@@ -3346,8 +3383,12 @@ export interface ServiceCatalog {
     output: { kind: "page" | "post" | "product" | "service" | "email" | "sms"; templateKey: string; blocks: unknown; page: { id: string; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; createdAt: string; updatedAt: string; [key: string]: unknown } | null };
   };
   "cms.createPage": {
-    input: { slug: string; locale?: string; title: string; blocks?: unknown; seo?: { title?: string; description?: string; ogImage?: string } };
+    input: { slug: string; locale?: string; title: string; blocks?: unknown; seo?: { title?: string; description?: string; preserveTitle?: boolean; preserveDescription?: boolean; noindex?: boolean; nofollow?: boolean; canonical?: string; ogTitle?: string; ogDescription?: string; ogImage?: string } };
     output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "cms.createPost": {
+    input: { title: string; slug: string; locale?: string };
+    output: { id: string };
   };
   "cms.createPreviewLink": {
     input: { pageId: string; expiresInHours?: number };
@@ -3369,6 +3410,10 @@ export interface ServiceCatalog {
     input: { id: string; approved: boolean; note?: string };
     output: { id: string; pageId: string; revisionId: string | null; blockId: string | null; parentId: string | null; body: string; mentions: string[]; kind: "comment" | "review_request"; reviewer: string | null; reviewState: "none" | "requested" | "approved" | "changes_requested"; resolvedAt: string | null; resolvedBy: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "cms.deleteAuthor": {
+    input: { id: string };
+    output: { ok: true };
+  };
   "cms.deleteDraftPage": {
     input: { id: string };
     output: { id: string; slug: string; [key: string]: unknown };
@@ -3380,6 +3425,10 @@ export interface ServiceCatalog {
   "cms.deleteSection": {
     input: { key: string };
     output: { key: string; deleted: number };
+  };
+  "cms.deleteTerm": {
+    input: { id: string };
+    output: { ok: true };
   };
   "cms.describeConflict": {
     input: { pageId: string; expectedVersion: number; title?: string; blocks?: unknown; seo?: unknown };
@@ -3421,6 +3470,10 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "cms.getPostMeta": {
+    input: { pageId: string };
+    output: { pageId: string; isPost: boolean; authorId: string | null; categoryIds: string[]; tagIds: string[]; commentsEnabled: boolean; sourceModifiedAt: string | null };
+  };
   "cms.getSection": {
     input: { key: string; locale?: string; fallback?: boolean };
     output: { id: string; key: string; locale: string; name: string; kind: "chrome" | "reusable"; blocks: unknown; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
@@ -3449,13 +3502,21 @@ export interface ServiceCatalog {
     input: { locale?: string };
     output: { id: string; slug: string; locale: string; name: string; description: string | null; position: number; articleCount: number; [key: string]: unknown }[];
   };
+  "cms.importReaderComment": {
+    input: { runId: string; externalId: string; pageId: string; parentId?: string | null; name: string; email: string | null; body: string; status: "pending" | "approved" | "spam" | "trash"; createdAt?: string };
+    output: { id: string; pageId: string; parentId: string | null; contactId: string | null; authorName: string; body: string; status: "pending" | "approved" | "spam" | "trash"; source: string; externalId: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
   "cms.leavePresence": {
     input: { pageId: string };
     output: { pageId: string };
   };
+  "cms.listAuthors": {
+    input: Record<string, never>;
+    output: { id: string; slug: string; path: string; name: string; bio: string | null; email: string | null; userId: string | null; seo: unknown; source: string; createdAt: string; updatedAt: string; posts: number; [key: string]: unknown }[];
+  };
   "cms.listBlogPosts": {
-    input: { locale?: string; prefix?: string; page?: number; limit?: number };
-    output: { total: number; page: number; pages: number; posts: { slug: string; title: string; description: string | null; updatedAt: string }[] };
+    input: { locale?: string; prefix?: string; page?: number; limit?: number; category?: string; tag?: string; author?: string; date?: string };
+    output: { total: number; page: number; pages: number; posts: { slug: string; title: string; description: string | null; updatedAt: string; author: { name: string; path: string } | null; categories: { name: string; path: string }[] }[] };
   };
   "cms.listComments": {
     input: { pageId: string; includeResolved?: boolean };
@@ -3465,6 +3526,10 @@ export interface ServiceCatalog {
     input: { trashedOnly?: boolean };
     output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
+  "cms.listPostPages": {
+    input: Record<string, never>;
+    output: { id: string; title: string; slug: string; status: string }[];
+  };
   "cms.listPresence": {
     input: { pageId: string };
     output: { actor: string; editing: boolean; lastSeenAt: string; [key: string]: unknown }[];
@@ -3472,6 +3537,10 @@ export interface ServiceCatalog {
   "cms.listPreviewLinks": {
     input: { pageId: string };
     output: { id: string; expiresAt: string; createdBy: string; revokedAt: string | null; createdAt: string; [key: string]: unknown }[];
+  };
+  "cms.listReaderComments": {
+    input: { pageId: string; limit?: number; page?: number };
+    output: { id: string; parentId: string | null; authorName: string; body: string; createdAt: string }[];
   };
   "cms.listRevisions": {
     input: { subjectType: "page" | "section"; subjectId: string; actor?: string; limit?: number };
@@ -3489,6 +3558,10 @@ export interface ServiceCatalog {
     input: { kind?: "page" | "post" | "product" | "service" | "email" | "sms"; preset?: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; locale?: string };
     output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
+  "cms.listTerms": {
+    input: { taxonomy?: "category" | "tag" };
+    output: { id: string; taxonomy: "category" | "tag"; slug: string; path: string; name: string; description: string | null; parentId: string | null; position: number; seo: unknown; source: string; createdAt: string; updatedAt: string; posts: number; [key: string]: unknown }[];
+  };
   "cms.livePaths": {
     input: { slugs: string[] };
     output: { slugs: string[] };
@@ -3498,8 +3571,12 @@ export interface ServiceCatalog {
     output: { records: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
   };
   "cms.mergePage": {
-    input: { id: string; expectedVersion: number; title?: string; blocks?: unknown; seo?: { title?: string; description?: string; ogImage?: string } };
+    input: { id: string; expectedVersion: number; title?: string; blocks?: unknown; seo?: { title?: string; description?: string; preserveTitle?: boolean; preserveDescription?: boolean; noindex?: boolean; nofollow?: boolean; canonical?: string; ogTitle?: string; ogDescription?: string; ogImage?: string } };
     output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "cms.moderateReaderComment": {
+    input: { id: string; status: "pending" | "approved" | "spam" | "trash" };
+    output: { id: string; pageId: string; parentId: string | null; contactId: string | null; authorName: string; body: string; status: "pending" | "approved" | "spam" | "trash"; source: string; externalId: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.nameRevision": {
     input: { revisionId: string; name: string };
@@ -3517,6 +3594,10 @@ export interface ServiceCatalog {
     input: { locale: string };
     output: { pageId: string; title: string; slug: string; status: "draft" | "machine" | "reviewed" | "missing"; seoComplete: boolean; [key: string]: unknown }[];
   };
+  "cms.postMetaAt": {
+    input: { slug: string };
+    output: { pageId: string; author: { name: string; path: string; bio: string | null } | null; categories: { name: string; path: string }[]; tags: { name: string; path: string }[]; commentsEnabled: boolean; publishedAt: string | null; modifiedAt: string | null } | null;
+  };
   "cms.previewEmail": {
     input: { key: string; locale?: string; subject?: string; variables?: { [key: string]: string } };
     output: { subject: string; html: string; text: string; variables: { [key: string]: string } };
@@ -3528,6 +3609,10 @@ export interface ServiceCatalog {
   "cms.previewTemplate": {
     input: { key: string; preset?: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; locale?: string };
     output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "cms.publicBlogCategories": {
+    input: Record<string, never>;
+    output: { slug: string; name: string; path: string; posts: number }[];
   };
   "cms.publishPage": {
     input: { id: string; published: boolean; expectedVersion?: number; publishedAt?: string };
@@ -3548,6 +3633,10 @@ export interface ServiceCatalog {
   "cms.rateHelpArticle": {
     input: { articleId: string; helpful: boolean };
     output: { helpfulYes: number; helpfulNo: number; [key: string]: unknown };
+  };
+  "cms.readerCommentsForOwner": {
+    input: { status?: "pending" | "approved" | "spam" | "trash"; limit?: number; page?: number };
+    output: { id: string; pageId: string; parentId: string | null; contactId: string | null; authorName: string; body: string; status: "pending" | "approved" | "spam" | "trash"; source: string; externalId: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
   "cms.rejoinLayout": {
     input: { pageId: string; bindings?: { title?: string; slug?: string; productId?: string; locationId?: string; eventId?: string }; locale?: string };
@@ -3581,6 +3670,10 @@ export interface ServiceCatalog {
     input: { key: string; preset?: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; locale?: string };
     output: { id: string; key: string; kind: "page" | "post" | "product" | "service" | "email" | "sms"; preset: "creator" | "service-business" | "shop" | "community" | "everything" | "custom"; name: string; locale: string; blocks: unknown; variables: string[]; origin: "system" | "owner"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "cms.resolveBlogArchive": {
+    input: { path: string };
+    output: { kind: "category" | "tag" | "author" | "date"; id: string; slug: string; path: string; name: string; description: string | null; seo: { title?: string; description?: string; noindex?: boolean }; trail: { name: string; path: string }[]; posts: number; updatedAt: string | null } | null;
+  };
   "cms.resolvePage": {
     input: { slug: string; locale?: string };
     output: { id: string; slug: string; locale: string; title: string; blocks: unknown; status: "published"; publishedAt: string | null; seo: unknown; createdAt: string; updatedAt: string } | null;
@@ -3605,13 +3698,29 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { id: string; revokedAt: string | null };
   };
+  "cms.rollbackImportedBlogProfiles": {
+    input: { runId: string };
+    output: { ok: true };
+  };
+  "cms.rollbackImportedReaderComments": {
+    input: { runId: string };
+    output: { removed: number };
+  };
   "cms.saveAsSection": {
     input: { name: string; locale?: string; nodes: { id: string; type: string; props: { [key: string]: unknown }; children?: unknown[] }[] };
     output: { section: { id: string; key: string; locale: string; name: string; kind: "chrome" | "reusable"; blocks: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }; instance: unknown };
   };
+  "cms.saveAuthor": {
+    input: { id?: string; name: string; slug?: string; bio?: string | null; email?: string | null; userId?: string | null; seo?: { title?: string; description?: string; noindex?: boolean }; path?: string; source?: string };
+    output: { id: string; slug: string; path: string; name: string; bio: string | null; email: string | null; userId: string | null; seo: unknown; source: string; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
   "cms.saveHelpCategory": {
     input: { id?: string; slug: string; locale?: string; name: string; description?: string | null; position?: number };
     output: { id: string; slug: string; [key: string]: unknown };
+  };
+  "cms.saveTerm": {
+    input: { id?: string; taxonomy: "category" | "tag"; name: string; slug?: string; description?: string | null; parentId?: string | null; position?: number; seo?: { title?: string; description?: string; noindex?: boolean }; path?: string; source?: string };
+    output: { id: string; taxonomy: "category" | "tag"; slug: string; path: string; name: string; description: string | null; parentId: string | null; position: number; seo: unknown; source: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.schedulePage": {
     input: { id: string; publishAt?: string | null; unpublishAt?: string | null };
@@ -3629,6 +3738,10 @@ export interface ServiceCatalog {
     input: { key: string; contactId: string; bookingId?: string; purpose?: "transactional" | "marketing" | "support"; variables?: { [key: string]: string }; mediaAssetIds?: string[]; idempotencyKey: string };
     output: { sent: boolean; providerRef: string | null; reason: string | null; messageId: string | null; [key: string]: unknown };
   };
+  "cms.setPostMeta": {
+    input: { pageId: string; isPost?: boolean; authorId?: string | null; categoryIds?: string[]; tagIds?: string[]; tagNames?: string[]; commentsEnabled?: boolean; sourceModifiedAt?: string | null; source?: string };
+    output: { pageId: string; isPost: boolean; authorId: string | null; categoryIds: string[]; tagIds: string[]; commentsEnabled: boolean; sourceModifiedAt: string | null };
+  };
   "cms.snapshotRevision": {
     input: { pageId: string; name: string };
     output: { id: string; subjectType: "page" | "section"; subjectId: string; title: string | null; blocks: unknown; seo: unknown; name: string | null; kind: "create" | "autosave" | "named" | "publish" | "unpublish" | "restore" | "schedule" | "approval"; actor: string; createdAt: string; [key: string]: unknown };
@@ -3636,6 +3749,10 @@ export interface ServiceCatalog {
   "cms.submitQuoteRequest": {
     input: { name: string; email: string; message: string };
     output: { ok: true };
+  };
+  "cms.submitReaderComment": {
+    input: { pageId: string; parentId?: string | null; name: string; email: string; body: string; website?: string };
+    output: { ok: true; id: string };
   };
   "cms.submitSiteChat": {
     input: { name: string; email: string; message: string; locale?: string };
@@ -3657,8 +3774,12 @@ export interface ServiceCatalog {
     input: { id: string; steal?: boolean };
     output: { held: boolean; by: string; until: string; mine: boolean };
   };
+  "cms.updateBlogSettings": {
+    input: { categoryBase?: string; tagBase?: string; authorBase?: string; postsPerPage?: number; commentsEnabled?: boolean };
+    output: { categoryBase: string; tagBase: string; authorBase: string; postsPerPage: number; commentsEnabled: boolean };
+  };
   "cms.updatePage": {
-    input: { id: string; expectedVersion?: number; slug?: string; title?: string; blocks?: unknown; seo?: { title?: string; description?: string; ogImage?: string } };
+    input: { id: string; expectedVersion?: number; slug?: string; title?: string; blocks?: unknown; seo?: { title?: string; description?: string; preserveTitle?: boolean; preserveDescription?: boolean; noindex?: boolean; nofollow?: boolean; canonical?: string; ogTitle?: string; ogDescription?: string; ogImage?: string } };
     output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.updateSection": {
@@ -4796,6 +4917,10 @@ export interface ServiceCatalog {
   "imports.uploadSourceChunk": {
     input: { id: string; uploadId: string; index: number; bytes: unknown };
     output: { received: number; chunks: number; complete: boolean };
+  };
+  "imports.wordpressVerificationPlan": {
+    input: { id: string };
+    output: { sourceOrigin: string; status: string; checks: { sourceUrl: string; requestPath: string; destinationPath: string; redirect: boolean; expected: { [key: string]: unknown } }[]; warnings: string[] };
   };
   "invitations.accept": {
     input: { token: string; password: string };
@@ -8343,17 +8468,23 @@ export interface FreeholderApi {
     addComment: (input: ServiceCatalog["cms.addComment"]["input"]) => Promise<ServiceCatalog["cms.addComment"]["output"]>;
     applyDueSchedules: (input?: ServiceCatalog["cms.applyDueSchedules"]["input"]) => Promise<ServiceCatalog["cms.applyDueSchedules"]["output"]>;
     attachLayout: (input: ServiceCatalog["cms.attachLayout"]["input"]) => Promise<ServiceCatalog["cms.attachLayout"]["output"]>;
+    authorAccounts: (input?: ServiceCatalog["cms.authorAccounts"]["input"]) => Promise<ServiceCatalog["cms.authorAccounts"]["output"]>;
+    blogArchivePaths: (input?: ServiceCatalog["cms.blogArchivePaths"]["input"]) => Promise<ServiceCatalog["cms.blogArchivePaths"]["output"]>;
+    blogSettings: (input?: ServiceCatalog["cms.blogSettings"]["input"]) => Promise<ServiceCatalog["cms.blogSettings"]["output"]>;
     compareRevisions: (input?: ServiceCatalog["cms.compareRevisions"]["input"]) => Promise<ServiceCatalog["cms.compareRevisions"]["output"]>;
     createFromTemplate: (input: ServiceCatalog["cms.createFromTemplate"]["input"]) => Promise<ServiceCatalog["cms.createFromTemplate"]["output"]>;
     createPage: (input: ServiceCatalog["cms.createPage"]["input"]) => Promise<ServiceCatalog["cms.createPage"]["output"]>;
+    createPost: (input: ServiceCatalog["cms.createPost"]["input"]) => Promise<ServiceCatalog["cms.createPost"]["output"]>;
     createPreviewLink: (input: ServiceCatalog["cms.createPreviewLink"]["input"]) => Promise<ServiceCatalog["cms.createPreviewLink"]["output"]>;
     createSection: (input: ServiceCatalog["cms.createSection"]["input"]) => Promise<ServiceCatalog["cms.createSection"]["output"]>;
     createSectionLocale: (input: ServiceCatalog["cms.createSectionLocale"]["input"]) => Promise<ServiceCatalog["cms.createSectionLocale"]["output"]>;
     decideApproval: (input: ServiceCatalog["cms.decideApproval"]["input"]) => Promise<ServiceCatalog["cms.decideApproval"]["output"]>;
     decideReview: (input: ServiceCatalog["cms.decideReview"]["input"]) => Promise<ServiceCatalog["cms.decideReview"]["output"]>;
+    deleteAuthor: (input: ServiceCatalog["cms.deleteAuthor"]["input"]) => Promise<ServiceCatalog["cms.deleteAuthor"]["output"]>;
     deleteDraftPage: (input: ServiceCatalog["cms.deleteDraftPage"]["input"]) => Promise<ServiceCatalog["cms.deleteDraftPage"]["output"]>;
     deleteHelpCategory: (input: ServiceCatalog["cms.deleteHelpCategory"]["input"]) => Promise<ServiceCatalog["cms.deleteHelpCategory"]["output"]>;
     deleteSection: (input: ServiceCatalog["cms.deleteSection"]["input"]) => Promise<ServiceCatalog["cms.deleteSection"]["output"]>;
+    deleteTerm: (input: ServiceCatalog["cms.deleteTerm"]["input"]) => Promise<ServiceCatalog["cms.deleteTerm"]["output"]>;
     describeConflict: (input: ServiceCatalog["cms.describeConflict"]["input"]) => Promise<ServiceCatalog["cms.describeConflict"]["output"]>;
     detachLayout: (input: ServiceCatalog["cms.detachLayout"]["input"]) => Promise<ServiceCatalog["cms.detachLayout"]["output"]>;
     detachSection: (input: ServiceCatalog["cms.detachSection"]["input"]) => Promise<ServiceCatalog["cms.detachSection"]["output"]>;
@@ -8364,6 +8495,7 @@ export interface FreeholderApi {
     fileHelpArticle: (input: ServiceCatalog["cms.fileHelpArticle"]["input"]) => Promise<ServiceCatalog["cms.fileHelpArticle"]["output"]>;
     getLayout: (input: ServiceCatalog["cms.getLayout"]["input"]) => Promise<ServiceCatalog["cms.getLayout"]["output"]>;
     getPage: (input: ServiceCatalog["cms.getPage"]["input"]) => Promise<ServiceCatalog["cms.getPage"]["output"]>;
+    getPostMeta: (input: ServiceCatalog["cms.getPostMeta"]["input"]) => Promise<ServiceCatalog["cms.getPostMeta"]["output"]>;
     getSection: (input: ServiceCatalog["cms.getSection"]["input"]) => Promise<ServiceCatalog["cms.getSection"]["output"]>;
     getTemplate: (input: ServiceCatalog["cms.getTemplate"]["input"]) => Promise<ServiceCatalog["cms.getTemplate"]["output"]>;
     heartbeatPresence: (input: ServiceCatalog["cms.heartbeatPresence"]["input"]) => Promise<ServiceCatalog["cms.heartbeatPresence"]["output"]>;
@@ -8371,31 +8503,40 @@ export interface FreeholderApi {
     helpArticleFeedback: (input?: ServiceCatalog["cms.helpArticleFeedback"]["input"]) => Promise<ServiceCatalog["cms.helpArticleFeedback"]["output"]>;
     helpArticles: (input?: ServiceCatalog["cms.helpArticles"]["input"]) => Promise<ServiceCatalog["cms.helpArticles"]["output"]>;
     helpCategories: (input?: ServiceCatalog["cms.helpCategories"]["input"]) => Promise<ServiceCatalog["cms.helpCategories"]["output"]>;
+    importReaderComment: (input: ServiceCatalog["cms.importReaderComment"]["input"]) => Promise<ServiceCatalog["cms.importReaderComment"]["output"]>;
     leavePresence: (input: ServiceCatalog["cms.leavePresence"]["input"]) => Promise<ServiceCatalog["cms.leavePresence"]["output"]>;
+    listAuthors: (input?: ServiceCatalog["cms.listAuthors"]["input"]) => Promise<ServiceCatalog["cms.listAuthors"]["output"]>;
     listBlogPosts: (input?: ServiceCatalog["cms.listBlogPosts"]["input"]) => Promise<ServiceCatalog["cms.listBlogPosts"]["output"]>;
     listComments: (input: ServiceCatalog["cms.listComments"]["input"]) => Promise<ServiceCatalog["cms.listComments"]["output"]>;
     listPages: (input?: ServiceCatalog["cms.listPages"]["input"]) => Promise<ServiceCatalog["cms.listPages"]["output"]>;
+    listPostPages: (input?: ServiceCatalog["cms.listPostPages"]["input"]) => Promise<ServiceCatalog["cms.listPostPages"]["output"]>;
     listPresence: (input: ServiceCatalog["cms.listPresence"]["input"]) => Promise<ServiceCatalog["cms.listPresence"]["output"]>;
     listPreviewLinks: (input: ServiceCatalog["cms.listPreviewLinks"]["input"]) => Promise<ServiceCatalog["cms.listPreviewLinks"]["output"]>;
+    listReaderComments: (input: ServiceCatalog["cms.listReaderComments"]["input"]) => Promise<ServiceCatalog["cms.listReaderComments"]["output"]>;
     listRevisions: (input: ServiceCatalog["cms.listRevisions"]["input"]) => Promise<ServiceCatalog["cms.listRevisions"]["output"]>;
     listSectionUsages: (input: ServiceCatalog["cms.listSectionUsages"]["input"]) => Promise<ServiceCatalog["cms.listSectionUsages"]["output"]>;
     listSections: (input?: ServiceCatalog["cms.listSections"]["input"]) => Promise<ServiceCatalog["cms.listSections"]["output"]>;
     listTemplates: (input?: ServiceCatalog["cms.listTemplates"]["input"]) => Promise<ServiceCatalog["cms.listTemplates"]["output"]>;
+    listTerms: (input?: ServiceCatalog["cms.listTerms"]["input"]) => Promise<ServiceCatalog["cms.listTerms"]["output"]>;
     livePaths: (input: ServiceCatalog["cms.livePaths"]["input"]) => Promise<ServiceCatalog["cms.livePaths"]["output"]>;
     loadDemoFixture: (input: ServiceCatalog["cms.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["cms.loadDemoFixture"]["output"]>;
     mergePage: (input: ServiceCatalog["cms.mergePage"]["input"]) => Promise<ServiceCatalog["cms.mergePage"]["output"]>;
+    moderateReaderComment: (input: ServiceCatalog["cms.moderateReaderComment"]["input"]) => Promise<ServiceCatalog["cms.moderateReaderComment"]["output"]>;
     nameRevision: (input: ServiceCatalog["cms.nameRevision"]["input"]) => Promise<ServiceCatalog["cms.nameRevision"]["output"]>;
     pageAccessibilityReport: (input: ServiceCatalog["cms.pageAccessibilityReport"]["input"]) => Promise<ServiceCatalog["cms.pageAccessibilityReport"]["output"]>;
     pageAuthorSummary: (input: ServiceCatalog["cms.pageAuthorSummary"]["input"]) => Promise<ServiceCatalog["cms.pageAuthorSummary"]["output"]>;
     pageTranslationReport: (input: ServiceCatalog["cms.pageTranslationReport"]["input"]) => Promise<ServiceCatalog["cms.pageTranslationReport"]["output"]>;
+    postMetaAt: (input: ServiceCatalog["cms.postMetaAt"]["input"]) => Promise<ServiceCatalog["cms.postMetaAt"]["output"]>;
     previewEmail: (input: ServiceCatalog["cms.previewEmail"]["input"]) => Promise<ServiceCatalog["cms.previewEmail"]["output"]>;
     previewSms: (input: ServiceCatalog["cms.previewSms"]["input"]) => Promise<ServiceCatalog["cms.previewSms"]["output"]>;
     previewTemplate: (input: ServiceCatalog["cms.previewTemplate"]["input"]) => Promise<ServiceCatalog["cms.previewTemplate"]["output"]>;
+    publicBlogCategories: (input?: ServiceCatalog["cms.publicBlogCategories"]["input"]) => Promise<ServiceCatalog["cms.publicBlogCategories"]["output"]>;
     publishPage: (input: ServiceCatalog["cms.publishPage"]["input"]) => Promise<ServiceCatalog["cms.publishPage"]["output"]>;
     publishedPaths: (input?: ServiceCatalog["cms.publishedPaths"]["input"]) => Promise<ServiceCatalog["cms.publishedPaths"]["output"]>;
     purgeDemoFixture: (input: ServiceCatalog["cms.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["cms.purgeDemoFixture"]["output"]>;
     purgePage: (input: ServiceCatalog["cms.purgePage"]["input"]) => Promise<ServiceCatalog["cms.purgePage"]["output"]>;
     rateHelpArticle: (input: ServiceCatalog["cms.rateHelpArticle"]["input"]) => Promise<ServiceCatalog["cms.rateHelpArticle"]["output"]>;
+    readerCommentsForOwner: (input?: ServiceCatalog["cms.readerCommentsForOwner"]["input"]) => Promise<ServiceCatalog["cms.readerCommentsForOwner"]["output"]>;
     rejoinLayout: (input: ServiceCatalog["cms.rejoinLayout"]["input"]) => Promise<ServiceCatalog["cms.rejoinLayout"]["output"]>;
     releaseEditLease: (input: ServiceCatalog["cms.releaseEditLease"]["input"]) => Promise<ServiceCatalog["cms.releaseEditLease"]["output"]>;
     reloadWorkingDraft: (input: ServiceCatalog["cms.reloadWorkingDraft"]["input"]) => Promise<ServiceCatalog["cms.reloadWorkingDraft"]["output"]>;
@@ -8404,25 +8545,33 @@ export interface FreeholderApi {
     requestApproval: (input: ServiceCatalog["cms.requestApproval"]["input"]) => Promise<ServiceCatalog["cms.requestApproval"]["output"]>;
     requestReview: (input: ServiceCatalog["cms.requestReview"]["input"]) => Promise<ServiceCatalog["cms.requestReview"]["output"]>;
     resetTemplate: (input: ServiceCatalog["cms.resetTemplate"]["input"]) => Promise<ServiceCatalog["cms.resetTemplate"]["output"]>;
+    resolveBlogArchive: (input: ServiceCatalog["cms.resolveBlogArchive"]["input"]) => Promise<ServiceCatalog["cms.resolveBlogArchive"]["output"]>;
     resolvePage: (input: ServiceCatalog["cms.resolvePage"]["input"]) => Promise<ServiceCatalog["cms.resolvePage"]["output"]>;
     resolvePreviewLink: (input: ServiceCatalog["cms.resolvePreviewLink"]["input"]) => Promise<ServiceCatalog["cms.resolvePreviewLink"]["output"]>;
     resolveThread: (input: ServiceCatalog["cms.resolveThread"]["input"]) => Promise<ServiceCatalog["cms.resolveThread"]["output"]>;
     restorePage: (input: ServiceCatalog["cms.restorePage"]["input"]) => Promise<ServiceCatalog["cms.restorePage"]["output"]>;
     restoreRevision: (input: ServiceCatalog["cms.restoreRevision"]["input"]) => Promise<ServiceCatalog["cms.restoreRevision"]["output"]>;
     revokePreviewLink: (input: ServiceCatalog["cms.revokePreviewLink"]["input"]) => Promise<ServiceCatalog["cms.revokePreviewLink"]["output"]>;
+    rollbackImportedBlogProfiles: (input: ServiceCatalog["cms.rollbackImportedBlogProfiles"]["input"]) => Promise<ServiceCatalog["cms.rollbackImportedBlogProfiles"]["output"]>;
+    rollbackImportedReaderComments: (input: ServiceCatalog["cms.rollbackImportedReaderComments"]["input"]) => Promise<ServiceCatalog["cms.rollbackImportedReaderComments"]["output"]>;
     saveAsSection: (input: ServiceCatalog["cms.saveAsSection"]["input"]) => Promise<ServiceCatalog["cms.saveAsSection"]["output"]>;
+    saveAuthor: (input: ServiceCatalog["cms.saveAuthor"]["input"]) => Promise<ServiceCatalog["cms.saveAuthor"]["output"]>;
     saveHelpCategory: (input: ServiceCatalog["cms.saveHelpCategory"]["input"]) => Promise<ServiceCatalog["cms.saveHelpCategory"]["output"]>;
+    saveTerm: (input: ServiceCatalog["cms.saveTerm"]["input"]) => Promise<ServiceCatalog["cms.saveTerm"]["output"]>;
     schedulePage: (input: ServiceCatalog["cms.schedulePage"]["input"]) => Promise<ServiceCatalog["cms.schedulePage"]["output"]>;
     searchHelp: (input: ServiceCatalog["cms.searchHelp"]["input"]) => Promise<ServiceCatalog["cms.searchHelp"]["output"]>;
     searchPublishedPages: (input: ServiceCatalog["cms.searchPublishedPages"]["input"]) => Promise<ServiceCatalog["cms.searchPublishedPages"]["output"]>;
     sendSmsTemplate: (input: ServiceCatalog["cms.sendSmsTemplate"]["input"]) => Promise<ServiceCatalog["cms.sendSmsTemplate"]["output"]>;
+    setPostMeta: (input: ServiceCatalog["cms.setPostMeta"]["input"]) => Promise<ServiceCatalog["cms.setPostMeta"]["output"]>;
     snapshotRevision: (input: ServiceCatalog["cms.snapshotRevision"]["input"]) => Promise<ServiceCatalog["cms.snapshotRevision"]["output"]>;
     submitQuoteRequest: (input: ServiceCatalog["cms.submitQuoteRequest"]["input"]) => Promise<ServiceCatalog["cms.submitQuoteRequest"]["output"]>;
+    submitReaderComment: (input: ServiceCatalog["cms.submitReaderComment"]["input"]) => Promise<ServiceCatalog["cms.submitReaderComment"]["output"]>;
     submitSiteChat: (input: ServiceCatalog["cms.submitSiteChat"]["input"]) => Promise<ServiceCatalog["cms.submitSiteChat"]["output"]>;
     submitTipIntent: (input: ServiceCatalog["cms.submitTipIntent"]["input"]) => Promise<ServiceCatalog["cms.submitTipIntent"]["output"]>;
     testSendEmail: (input: ServiceCatalog["cms.testSendEmail"]["input"]) => Promise<ServiceCatalog["cms.testSendEmail"]["output"]>;
     testSendSms: (input: ServiceCatalog["cms.testSendSms"]["input"]) => Promise<ServiceCatalog["cms.testSendSms"]["output"]>;
     touchEditLease: (input: ServiceCatalog["cms.touchEditLease"]["input"]) => Promise<ServiceCatalog["cms.touchEditLease"]["output"]>;
+    updateBlogSettings: (input?: ServiceCatalog["cms.updateBlogSettings"]["input"]) => Promise<ServiceCatalog["cms.updateBlogSettings"]["output"]>;
     updatePage: (input: ServiceCatalog["cms.updatePage"]["input"]) => Promise<ServiceCatalog["cms.updatePage"]["output"]>;
     updateSection: (input: ServiceCatalog["cms.updateSection"]["input"]) => Promise<ServiceCatalog["cms.updateSection"]["output"]>;
     updateTemplate: (input: ServiceCatalog["cms.updateTemplate"]["input"]) => Promise<ServiceCatalog["cms.updateTemplate"]["output"]>;
@@ -8748,6 +8897,7 @@ export interface FreeholderApi {
     rollback: (input: ServiceCatalog["imports.rollback"]["input"]) => Promise<ServiceCatalog["imports.rollback"]["output"]>;
     start: (input: ServiceCatalog["imports.start"]["input"]) => Promise<ServiceCatalog["imports.start"]["output"]>;
     uploadSourceChunk: (input: ServiceCatalog["imports.uploadSourceChunk"]["input"]) => Promise<ServiceCatalog["imports.uploadSourceChunk"]["output"]>;
+    wordpressVerificationPlan: (input: ServiceCatalog["imports.wordpressVerificationPlan"]["input"]) => Promise<ServiceCatalog["imports.wordpressVerificationPlan"]["output"]>;
   };
   invitations: {
     accept: (input: ServiceCatalog["invitations.accept"]["input"]) => Promise<ServiceCatalog["invitations.accept"]["output"]>;

@@ -10,7 +10,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
-import { proxy } from "../../proxy";
+import { requestContextProxy as proxy } from "../../proxy";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 

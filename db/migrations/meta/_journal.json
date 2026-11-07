@@ -428,6 +428,20 @@
       "when": 1793310000040,
       "tag": "0060_mail_preview_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1793310000041,
+      "tag": "0061_blog_structure",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1793310000042,
+      "tag": "0062_blog_reader_comments",
+      "breakpoints": true
     }
   ]
 }

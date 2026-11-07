@@ -28,6 +28,7 @@ import { resolveRedirect } from "@/core/seo/service";
 import {
   articleJsonLd,
   breadcrumbJsonLd,
+  breadcrumbTrailJsonLd,
   collectionPageJsonLd,
   creativeWorkJsonLd,
   eventJsonLd,
@@ -53,7 +54,8 @@ import { getLocale, getT, requestedLocale } from "../../i18n";
 import { alternatesFor, localePath, translatedLocales } from "./alternates";
 import { recordPageView } from "./pageview";
 import { currentBusiness } from "@/core/settings/read";
-import { publishedPage } from "@/modules/cms/read";
+import { blogArchiveAt, blogSettingsCached, postMetaFor, publishedPage } from "@/modules/cms/read";
+import { archiveBlocks, archiveEyebrow, PostByline, PostFooter, type BlogArchive, type PostMeta } from "./blog-parts";
 import { assignmentsFor } from "@/modules/cms/experiments";
 import { ANON_HEADER, SESSION_HEADER } from "@/modules/analytics/visitor";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
@@ -67,6 +69,7 @@ import {
 } from "@/core/http/csp";
 import { targetFor } from "@/modules/share/service";
 import { ShareBar } from "../ShareBar";
+import { ReaderComments } from "./ReaderComments";
 
 export const dynamic = "force-dynamic";
 
@@ -123,6 +126,8 @@ export async function generateMetadata({
     currentBusiness(),
   ]);
   if (!page) {
+    const archive = await blogArchiveAt(await pathFor(slug));
+    if (archive) return archiveMetadata(archive, business?.name, isFilterQuery(query));
     // The 404 still needs a document title: an empty <title> is the first
     // thing a screen reader announces (WCAG 2.4.2).
     const t = await getT();
@@ -139,15 +144,24 @@ export async function generateMetadata({
     title?: string;
     description?: string;
     ogImage?: string;
+    preserveTitle?: boolean;
+    preserveDescription?: boolean;
+    noindex?: boolean;
+    nofollow?: boolean;
+    canonical?: string;
+    ogTitle?: string;
+    ogDescription?: string;
   };
   const siteName = business?.name;
   const title = composeDocumentTitle(
     seo.title ?? page.title,
     siteName,
     page.slug === "",
+    seo.preserveTitle === true,
   );
   const description = composeDescription(
     seo.description ?? business?.tagline ?? undefined,
+    seo.preserveDescription === true,
   );
 
   // §5 wants the canonical *absolute*, and absolute means configured rather
@@ -170,7 +184,7 @@ export async function generateMetadata({
       ? locale
       : (business?.defaultLocale ?? locale);
 
-  const canonical = canonicalFor(origin, page.slug, servedLocale, business);
+  const canonical = seo.canonical ? new URL(seo.canonical, origin).href : canonicalFor(origin, page.slug, servedLocale, business);
 
   // §34: the `ShareTarget` is "canonical URL + auto-generated OG image", so
   // the social card is the share target's when the owner has written one. It
@@ -181,28 +195,45 @@ export async function generateMetadata({
   const share = await targetFor
     .call({ path: page.slug, locale: servedLocale }, ANONYMOUS)
     .catch(() => null);
-  const socialTitle = share?.socialTitle ?? title;
-  const socialDescription = share?.socialDescription ?? description;
+  const socialTitle = share?.socialTitle ?? seo.ogTitle ?? title;
+  const socialDescription = share?.socialDescription ?? seo.ogDescription ?? description;
   const ogImage =
     share?.imageUrl ?? seo.ogImage ?? `${origin}${ogImagePath(page.slug)}`;
   const filtered = isFilterQuery(query);
+  // C2.27: a post is an article to Open Graph, with its dates, author,
+  // section and tags, so a shared link reads as one.
+  const post = await postMetaFor(page.slug);
 
   return {
     title,
     description,
-    robots: filtered ? { index: false, follow: true } : undefined,
+    robots: filtered || seo.noindex || seo.nofollow ? { index: !(filtered || seo.noindex), follow: !seo.nofollow } : undefined,
     alternates: {
       canonical,
       ...(alternates ? { languages: alternates } : {}),
     },
-    openGraph: {
-      title: socialTitle,
-      description: socialDescription,
-      type: "website",
-      url: canonical,
-      siteName: siteName ?? undefined,
-      images: [{ url: ogImage, width: 1200, height: 630, alt: socialTitle }],
-    },
+    openGraph: post
+      ? {
+          title: socialTitle,
+          description: socialDescription,
+          type: "article",
+          url: canonical,
+          siteName: siteName ?? undefined,
+          images: [{ url: ogImage, width: 1200, height: 630, alt: socialTitle }],
+          ...(post.publishedAt ? { publishedTime: post.publishedAt.toISOString() } : {}),
+          ...(post.modifiedAt ? { modifiedTime: post.modifiedAt.toISOString() } : {}),
+          ...(post.author ? { authors: [`${origin}/${post.author.path}`] } : {}),
+          ...(post.categories[0] ? { section: post.categories[0].name } : {}),
+          ...(post.tags.length ? { tags: post.tags.map((tag) => tag.name) } : {}),
+        }
+      : {
+          title: socialTitle,
+          description: socialDescription,
+          type: "website",
+          url: canonical,
+          siteName: siteName ?? undefined,
+          images: [{ url: ogImage, width: 1200, height: 630, alt: socialTitle }],
+        },
     twitter: {
       card: "summary_large_image",
       title: socialTitle,
@@ -253,6 +284,11 @@ export default async function PublicPage({
   // intact, and search engines treat 308 as 301's equal. The redirect *row*
   // still records 301/302, so serving a literal 301 later is a change here and
   // nowhere else.
+  // C2.27: a category, tag or author archive answers at its own path.
+  const archive = page ? null : await blogArchiveAt(path);
+  if (archive) {
+    return renderArchive({ archive, path, locale, t, business, query, nonce });
+  }
   if (!page) {
     const moved = await resolveRedirect.call({ path, locale }, ANONYMOUS);
     if (moved) {
@@ -289,7 +325,8 @@ export default async function PublicPage({
   }
   const cookieJar = await cookies();
   const actor = await actorFromToken(cookieJar.get(SESSION_COOKIE)?.value);
-  const rendered = await renderBlocks(blocks, {
+  const post = await postMetaFor(page.slug);
+  const renderContext = {
     locale,
     t,
     business: business ? {
@@ -317,7 +354,21 @@ export default async function PublicPage({
     // a string, and a comparison with an array is simply false.
     query: { ...query },
     formReturn: decodeFormReturn(cookieJar.get(FORM_RETURN_COOKIE)?.value),
-  });
+  };
+  const localize = (href: string) => (business ? localizeCustomerHref(href, locale, business) : href);
+  // A post's byline sits under its title: render the leading H1 on its own,
+  // then the byline, then the rest of the body.
+  const titled = post && blocks[0]?.type === "heading" && blocks[0].props.level === 1;
+  const rendered = titled
+    ? [
+        ...(await renderBlocks([blocks[0]!], renderContext)),
+        <PostByline key="post-byline" meta={post} t={t} locale={locale} href={localize} />,
+        ...(await renderBlocks(blocks.slice(1), renderContext)),
+      ]
+    : [
+        ...(post ? [<PostByline key="post-byline" meta={post} t={t} locale={locale} href={localize} />] : []),
+        ...(await renderBlocks(blocks, renderContext)),
+      ];
 
   // Structured data comes from two places, and neither is a setting an owner
   // has to find: the page's own identity (§5 — WebSite and the business on the
@@ -348,7 +399,10 @@ export default async function PublicPage({
           localBusiness ?? organizationJsonLd(origin, facts),
         ]
       : []),
-    ...(path !== ""
+    ...(post
+      ? postJsonLd({ origin, path, title: page.title, seo: page.seo, post, publisher: facts?.name ?? null, t })
+      : []),
+    ...(path !== "" && !post
       ? [
           breadcrumbJsonLd(origin, path, (segmentPath) =>
             segmentPath === ""
@@ -359,7 +413,7 @@ export default async function PublicPage({
           ),
         ].filter((entry) => entry !== undefined)
       : []),
-    ...(await entityJsonLd({
+    ...(post ? [] : await entityJsonLd({
       origin,
       path,
       title: page.title,
@@ -382,7 +436,11 @@ export default async function PublicPage({
           dangerouslySetInnerHTML={{ __html: serializeJsonLd(entry) }}
         />
       ))}
-      <article className="grid gap-8">{rendered}</article>
+      <article className="grid gap-8">
+        {rendered}
+        {post ? <PostFooter meta={post} t={t} href={localize} /> : null}
+        {post ? <ReaderComments pageValue={typeof query.commentPage === "string" ? query.commentPage : undefined} pageId={page.id} enabled={post.commentsEnabled} returnTo={localize(`/${path}`)} result={typeof query.comment === "string" ? query.comment : undefined} locale={locale} t={t} /> : null}
+      </article>
       {/*
         §34: sharing is "a property of every entity with a public face", so it
         is rendered by the one public route rather than added per page. The
@@ -398,6 +456,112 @@ export default async function PublicPage({
       />
     </>
   );
+}
+
+/** Title, description, canonical and robots for a blog archive (C2.27). */
+function archiveMetadata(archive: BlogArchive, siteName: string | undefined, filtered: boolean): Metadata {
+  const origin = siteOrigin();
+  const canonical = `${origin}/${archive.path}`;
+  const title = composeDocumentTitle(archive.seo.title ?? archive.name, siteName, false);
+  const description = composeDescription(archive.seo.description ?? archive.description ?? undefined);
+  return {
+    title,
+    description,
+    robots: archive.seo.noindex || filtered ? { index: false, follow: true } : undefined,
+    alternates: { canonical },
+    openGraph: { title, description, type: "website", url: canonical, siteName },
+    twitter: { card: "summary", title, description },
+  };
+}
+
+async function renderArchive(input: {
+  archive: BlogArchive;
+  path: string;
+  locale: string;
+  t: Awaited<ReturnType<typeof getT>>;
+  business: Awaited<ReturnType<typeof currentBusiness>>;
+  query: Record<string, string | string[] | undefined>;
+  nonce: string | undefined;
+}) {
+  const { archive, path, locale, t, business, query, nonce } = input;
+  await recordPageView(`/${path}`, locale, query);
+  const settings = await blogSettingsCached();
+  const cookieJar = await cookies();
+  const actor = await actorFromToken(cookieJar.get(SESSION_COOKIE)?.value);
+  const rendered = await renderBlocks(archiveBlocks(archive, settings.postsPerPage), {
+    locale,
+    t,
+    business: business
+      ? { name: business.name, tagline: business.tagline, defaultLocale: business.defaultLocale, enabledLocales: business.enabledLocales }
+      : null,
+    path: `/${path}`,
+    actor,
+    query: { ...query },
+    cspNonce: nonce,
+    localizeHref: business ? (href: string) => localizeCustomerHref(href, locale, business) : undefined,
+  });
+  const origin = siteOrigin();
+  const blog = await publishedPage("blog", locale);
+  const jsonLd = [
+    collectionPageJsonLd({
+      name: archive.name,
+      url: `${origin}/${archive.path}`,
+      description: archive.seo.description ?? archive.description,
+    }),
+    breadcrumbTrailJsonLd([
+      { name: business?.name ?? t("home.brand"), item: `${origin}/` },
+      ...(blog ? [{ name: blog.title, item: `${origin}/blog` }] : []),
+      ...archive.trail.map((step) => ({ name: step.name, item: `${origin}/${step.path}` })),
+      { name: archive.name, item: `${origin}/${archive.path}` },
+    ]),
+  ].filter((entry) => entry !== undefined);
+  return (
+    <>
+      {jsonLd.map((entry, i) => (
+        <script key={i} nonce={nonce} type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(entry) }} />
+      ))}
+      <p className="text-sm font-semibold uppercase tracking-wide text-ink-muted">{archiveEyebrow(archive, t)}</p>
+      <div className="grid gap-8">{rendered}</div>
+    </>
+  );
+}
+
+/** BlogPosting and its breadcrumb: Home › Blog › primary category › post. */
+function postJsonLd(input: {
+  origin: string;
+  path: string;
+  title: string;
+  seo: unknown;
+  post: PostMeta;
+  publisher: string | null;
+  t: Awaited<ReturnType<typeof getT>>;
+}) {
+  const { origin, path, post } = input;
+  const seo = (input.seo ?? {}) as { title?: string; description?: string; ogImage?: string };
+  const url = `${origin}/${path}`;
+  const primary = post.categories[0];
+  return [
+    articleJsonLd({
+      type: "BlogPosting",
+      headline: input.title,
+      url,
+      description: seo.description ?? null,
+      datePublished: post.publishedAt,
+      dateModified: post.modifiedAt ?? post.publishedAt ?? undefined,
+      authorName: post.author?.name ?? input.publisher,
+      authorUrl: post.author ? `${origin}/${post.author.path}` : null,
+      section: primary?.name ?? null,
+      keywords: post.tags.map((tag) => tag.name),
+      image: seo.ogImage ?? null,
+      publisherName: input.publisher,
+    }),
+    breadcrumbTrailJsonLd([
+      { name: input.publisher ?? input.t("home.brand"), item: `${origin}/` },
+      { name: input.t("blog.title"), item: `${origin}/blog` },
+      ...(primary ? [{ name: primary.name, item: `${origin}/${primary.path}` }] : []),
+      { name: input.title, item: url },
+    ]),
+  ].filter((entry) => entry !== undefined);
 }
 
 /**

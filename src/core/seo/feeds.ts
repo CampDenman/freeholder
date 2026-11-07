@@ -13,6 +13,7 @@ import type { PublicEntity, PublicEntityKind } from "@/core/seo/entities";
 import { entitiesOfKind } from "@/core/seo/entities";
 
 export const FEED_KINDS = [
+  "blog",
   "products",
   "locations",
   "events",
@@ -22,6 +23,7 @@ export const FEED_KINDS = [
 export type FeedKind = (typeof FEED_KINDS)[number];
 
 const KIND_FOR_FEED: Record<FeedKind, PublicEntityKind> = {
+  blog: "article",
   products: "product",
   locations: "location",
   events: "event",

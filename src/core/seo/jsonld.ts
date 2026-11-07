@@ -213,21 +213,65 @@ export function articleJsonLd(input: {
   url: string;
   description?: string | null;
   dateModified?: Date;
+  /** C2.27: the original publication date, for posts. */
+  datePublished?: Date | null;
   authorName?: string | null;
+  /** The author's archive, so the Person is an entity rather than a string. */
+  authorUrl?: string | null;
+  /** `BlogPosting` for blog posts; plain `Article` otherwise. */
+  type?: "Article" | "BlogPosting";
+  section?: string | null;
+  keywords?: string[];
+  image?: string | null;
+  publisherName?: string | null;
+  commentCount?: number;
 }): JsonLd {
   return {
     "@context": CONTEXT,
-    "@type": "Article",
+    "@type": input.type ?? "Article",
     headline: input.headline,
     url: input.url,
     mainEntityOfPage: input.url,
     ...(input.description ? { description: input.description } : {}),
+    ...(input.datePublished
+      ? { datePublished: input.datePublished.toISOString() }
+      : {}),
     ...(input.dateModified
       ? { dateModified: input.dateModified.toISOString() }
       : {}),
     ...(input.authorName
-      ? { author: { "@type": "Person", name: input.authorName } }
+      ? {
+          author: {
+            "@type": "Person",
+            name: input.authorName,
+            ...(input.authorUrl ? { url: input.authorUrl } : {}),
+          },
+        }
       : {}),
+    ...(input.section ? { articleSection: input.section } : {}),
+    ...(input.keywords?.length ? { keywords: input.keywords.join(", ") } : {}),
+    ...(input.image ? { image: input.image } : {}),
+    ...(input.publisherName
+      ? { publisher: { "@type": "Organization", name: input.publisherName } }
+      : {}),
+    ...(input.commentCount !== undefined ? { commentCount: input.commentCount } : {}),
+  };
+}
+
+/** A breadcrumb from explicit steps, for pages whose path is not their place. */
+export function breadcrumbTrailJsonLd(
+  items: Array<{ name: string; item: string }>,
+): JsonLd | undefined {
+  if (items.length < 2) return undefined;
+  return {
+    "@context": CONTEXT,
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((entry, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: entry.name,
+      item: entry.item,
+    })),
   };
 }
 

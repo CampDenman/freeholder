@@ -24,7 +24,7 @@ import {
 import { setModuleConfig } from "@/core/settings/service";
 import { AnalyticsConsentControl } from "../../app/(public)/AnalyticsConsentControl";
 import { POST as chooseConsent } from "../../app/api/analytics/consent/route";
-import { proxy } from "../../proxy";
+import { requestContextProxy as proxy } from "../../proxy";
 import { auditHtml } from "../../scripts/a11y-smoke.mjs";
 import {
   closeDb,
