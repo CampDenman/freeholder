@@ -11,7 +11,7 @@ import { users } from "@/core/auth/schema";
 import { pages } from "./schema";
 import { blogPosts } from "./blog-schema";
 import { blogReaderComments as comments } from "./blog-comments-schema";
-import { loadBlogSettings } from "./blog-service";
+import { isPublicPage, loadBlogSettings } from "./blog-service";
 
 const state = z.enum(["pending", "approved", "spam", "trash"]);
 const privateRow = row({ id: uuid, pageId: uuid, parentId: uuid.nullable(), contactId: uuid.nullable(), authorName: z.string(), body: z.string(), status: state, source: z.string(), externalId: z.string().nullable(), createdAt: timestamp, updatedAt: timestamp });
@@ -41,7 +41,7 @@ export const listReaderComments = defineService({
   kind: "query", permission: "public", input: z.object({ pageId: uuid, limit: z.number().int().min(1).max(100).default(100), page: z.number().int().min(1).max(10000).default(1) }), output: listed(publicRow),
   handler: async (input, ctx) => {
     const [page] = await ctx.tx.select({ id: pages.id, slug: pages.slug }).from(pages).innerJoin(blogPosts, eq(blogPosts.pageId, pages.id)).where(and(eq(pages.id, input.pageId), eq(pages.status, "published"), isNull(pages.trashedAt))).limit(1);
-    if (!page || !await ctx.call(getService("cms.resolvePage"), { slug: page.slug })) return [];
+    if (!page || !await isPublicPage(ctx, page)) return [];
     return ctx.tx.select({ id: comments.id, parentId: comments.parentId, authorName: comments.authorName, body: comments.body, createdAt: comments.createdAt }).from(comments).where(and(eq(comments.pageId, page.id), eq(comments.status, "approved"))).orderBy(asc(comments.createdAt), asc(comments.id)).limit(input.limit).offset((input.page - 1) * input.limit);
   },
 });
@@ -56,7 +56,7 @@ export const submitReaderComment = defineService({
     if (input.website) return { ok: true as const, id: randomUUID() };
     const settings = await loadBlogSettings(ctx.tx);
     const [post] = await ctx.tx.select({ id: pages.id, slug: pages.slug, title: pages.title, enabled: blogPosts.commentsEnabled }).from(pages).innerJoin(blogPosts, eq(blogPosts.pageId, pages.id)).where(and(eq(pages.id, input.pageId), eq(pages.status, "published"), isNull(pages.trashedAt))).limit(1);
-    if (!post || !settings.commentsEnabled || !post.enabled || !await ctx.call(getService("cms.resolvePage"), { slug: post.slug })) throw new ServiceError("validation", "Comments are closed on this post.");
+    if (!post || !settings.commentsEnabled || !post.enabled || !await isPublicPage(ctx, post)) throw new ServiceError("validation", "Comments are closed on this post.");
     if (input.parentId) {
       const [parent] = await ctx.tx.select({ id: comments.id }).from(comments).where(and(eq(comments.id, input.parentId), eq(comments.pageId, post.id), eq(comments.status, "approved"))).limit(1);
       if (!parent) throw new ServiceError("validation", "That comment cannot be replied to.");

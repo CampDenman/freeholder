@@ -98,6 +98,12 @@ export const DEFAULT_BLOG_SETTINGS: BlogSettings = {
 
 /* --------------------------------------------------------------- helpers */
 
+/** A slug lookup must authorize this exact row, including legacy locale duplicates. */
+export async function isPublicPage(ctx: ServiceContext, page: { id: string; slug: string; locale?: string }): Promise<boolean> {
+  const resolved = z.object({ id: uuid }).nullable().parse(await ctx.call(getService("cms.resolvePage"), { slug: page.slug, ...(page.locale ? { locale: page.locale } : {}) }));
+  return resolved?.id === page.id;
+}
+
 export async function loadBlogSettings(tx: Tx): Promise<BlogSettings> {
   const [found] = await tx.select().from(blogSettings).where(eq(blogSettings.key, "site")).limit(1);
   return found
@@ -668,14 +674,15 @@ export const postMetaAt = defineService({
   output: publicPostMeta,
   handler: async (input, ctx) => {
     const slug = input.slug.replace(/^\/+|\/+$/g, "");
+    const resolved = z.object({ id: uuid }).nullable().parse(await ctx.call(getService("cms.resolvePage"), { slug }));
+    if (!resolved) return null;
     const [found] = await ctx.tx
       .select({ page: pages, post: blogPosts })
       .from(pages)
       .innerJoin(blogPosts, eq(blogPosts.pageId, pages.id))
-      .where(and(eq(pages.slug, slug), eq(pages.status, "published"), isNull(pages.trashedAt)))
+      .where(and(eq(pages.id, resolved.id), eq(pages.slug, slug), eq(pages.status, "published"), isNull(pages.trashedAt)))
       .limit(1);
     if (!found) return null;
-    if (!await ctx.call(getService("cms.resolvePage"), { slug: found.page.slug })) return null;
     const [author] = found.post.authorId
       ? await ctx.tx
           .select({ name: blogAuthors.name, path: blogAuthors.path, bio: blogAuthors.bio })
@@ -775,7 +782,7 @@ async function publishedPostDates(ctx: ServiceContext, ids: Set<string> | null):
       ),
     );
   const visible = [];
-  for (const post of found) if (await ctx.call(getService("cms.resolvePage"), { slug: post.slug, locale: post.locale })) visible.push(post);
+  for (const post of found) if (await isPublicPage(ctx, post)) visible.push(post);
   return visible;
 }
 

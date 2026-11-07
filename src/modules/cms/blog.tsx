@@ -49,7 +49,7 @@ export const listBlogPosts = defineService({
   }),
   handler: async (input, ctx) => {
     const { publishedPaths, resolvePage } = await import("./service");
-    const { postIdsMatching } = await import("./blog-service");
+    const { isPublicPage, postIdsMatching } = await import("./blog-service");
     const all = await ctx.call(publishedPaths, { locale: input.locale });
     const unprefixed = all.map((p) =>
       p.slug.startsWith(`${input.locale}/`) ? p.slug.slice(input.locale.length + 1) : p.slug,
@@ -80,6 +80,9 @@ export const listBlogPosts = defineService({
           .where(and(inArray(pages.slug, paths), eq(pages.status, "published"), isNull(pages.trashedAt)))
       : [];
     if (matching !== null) metadata = metadata.filter((row) => matching.has(row.id));
+    const visible = [];
+    for (const row of metadata) if (await isPublicPage(ctx, row)) visible.push(row);
+    metadata = visible;
     if (input.date) metadata = metadata.filter(row => row.publishedAt?.toISOString().startsWith(input.date!));
     metadata.sort(
       (a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0) || a.slug.localeCompare(b.slug),

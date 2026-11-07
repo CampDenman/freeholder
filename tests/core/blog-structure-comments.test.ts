@@ -10,7 +10,7 @@ import { contactPrivacySources } from "@/core/privacy/service";
 import { notifications } from "@/core/notifications/schema";
 import { registerPublishVeto } from "@/core/privacy/publish-veto";
 import { resolveRedirect } from "@/core/seo/service";
-import { createPage, publishPage, updatePage } from "@/modules/cms/service";
+import { createPage, publishPage, updatePage, resolvePage } from "@/modules/cms/service";
 import { saveAuthor, saveTerm, setPostMeta, postMetaAt, resolveBlogArchive, updateBlogSettings, publicBlogCategories } from "@/modules/cms/blog-service";
 import { listBlogPosts } from "@/modules/cms/blog";
 import { blogReaderComments as comments } from "@/modules/cms/blog-comments-schema";
@@ -139,5 +139,28 @@ describe.runIf(hasDatabase)("blog structure and moderated reader comments", () =
     expect(next.map(comment => comment.body)).toEqual(["Comment 3"]);
     expect((await listReaderCommentsForOwner.call({ limit: 2, page: 2 }, OWNER)).map(comment => comment.body)).toEqual(["Comment 1"]);
     await expect(listReaderCommentsForOwner.call({}, ANONYMOUS)).rejects.toMatchObject({ code: "permission" });
+  });
+
+  it("cannot use a visible same-slug locale row to authorize a different vetoed post ID", async () => {
+    const rows = [];
+    for (const locale of ["en", "fr"]) {
+      const page = await createPage.call({ slug: "parallel-locale-source", locale, title: `Post ${locale}`, blocks: [{ id: `heading-${locale}`, type: "heading", props: { text: `Post ${locale}`, level: 1 } }] }, OWNER);
+      await setPostMeta.call({ pageId: page.id, isPost: true }, OWNER);
+      await publishPage.call({ id: page.id, published: true }, OWNER);
+      rows.push(page);
+    }
+    const canonical = await resolvePage.call({ slug: "parallel-locale-source" }, ANONYMOUS);
+    const hidden = rows.find(page => page.id !== canonical?.id)!;
+    const category = await saveTerm.call({ taxonomy: "category", name: "Hidden parallel category" }, OWNER);
+    await setPostMeta.call({ pageId: hidden.id, isPost: true, categoryIds: [category.id] }, OWNER);
+    await db().insert(comments).values({ pageId: hidden.id, authorName: "Hidden reader", body: "A vetoed comment", status: "approved" });
+    registerPublishVeto({ id: "test.parallel-locale-source", appliesTo: page => page.id === hidden.id, blocks: () => Promise.resolve(true) });
+    expect((await resolvePage.call({ slug: hidden.slug }, ANONYMOUS))?.id).toBe(canonical?.id);
+    expect(await listReaderComments.call({ pageId: hidden.id }, ANONYMOUS)).toEqual([]);
+    expect(await resolveBlogArchive.call({ path: category.path }, ANONYMOUS)).toBeNull();
+    expect(await publicBlogCategories.call({}, ANONYMOUS)).toEqual([]);
+    expect((await postMetaAt.call({ slug: hidden.slug }, ANONYMOUS))?.pageId).toBe(canonical?.id);
+    expect((await listBlogPosts.call({}, ANONYMOUS)).posts.filter(post => post.slug === hidden.slug)).toHaveLength(1);
+    await expect(submitReaderComment.call({ pageId: hidden.id, name: "Reader", email: "parallel@example.test", body: "Must stay private" }, ANONYMOUS)).rejects.toMatchObject({ code: "validation" });
   });
 });

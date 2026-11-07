@@ -70,6 +70,12 @@ describe("WordPress WXR export (C3.22)", () => {
     expect(post?.comments.entries?.find(comment => comment.status === "approved")?.body).toBe("First paragraph.\n\nNext\nline.");
   });
 
+  it("preserves a source home page at the empty CMS path", () => {
+    const changed = FIXTURE.replace("<link>https://old.example.org/about/</link>", "<link>https://old.example.org/</link>");
+    const plan = planWordpressImport(parseWordpressExport(changed), ORIGIN);
+    expect(plan.pages.find(page => page.wpId === "30")?.slug).toBe("");
+  });
+
   it("keeps dates, terms, SEO, featured images and comment counts", () => {
     const post = exported.items.find((item) => item.slug === "first-wood-firing")!;
     expect(post.publishedAt).toBe("2025-03-14T18:00:00.000Z");

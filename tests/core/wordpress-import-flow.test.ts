@@ -27,6 +27,7 @@ import {
 } from "@/core/import/service";
 import { saveAuthor, setPostMeta, postMetaAt, resolveBlogArchive } from "@/modules/cms/blog-service";
 import { listReaderComments } from "@/modules/cms/blog-comments";
+import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { resolveRedirect } from "@/core/seo/service";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
@@ -253,5 +254,26 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
     expect(restored?.publishedAt?.toISOString()).toBe(originalDate);
     expect((await postMetaAt.call({ slug: page.slug }, { kind: "anonymous" }))?.author?.name).toBe("Original Author");
     expect(await listReaderComments.call({ pageId: page.id }, { kind: "anonymous" })).toEqual([]);
+  });
+
+  it("hides an old blog thread when an ordinary page replaces it, and restores the same history on rollback", async () => {
+    const { createPage, publishPage } = await import("@/modules/cms/service");
+    const page = await createPage.call({ slug: "about", title: "An old blog post", blocks: [{ id: "old-h", type: "heading", props: { text: "An old blog post", level: 1 } }] }, OWNER);
+    await setPostMeta.call({ pageId: page.id, isPost: true }, OWNER);
+    await publishPage.call({ id: page.id, published: true }, OWNER);
+    const [comment] = await db().insert(blogReaderComments).values({ pageId: page.id, authorName: "Original Reader", body: "Original approved history", status: "approved" }).returning();
+    const started = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
+    await previewFromSource.call({ id: started.id, payload: FIXTURE }, OWNER);
+    await reviewImportConflicts.call({ id: started.id, conflicts: [{ slug: "about", resolution: "replace" }] }, OWNER);
+    await commitImport.call({ id: started.id }, OWNER);
+    expect(await listReaderComments.call({ pageId: page.id }, { kind: "anonymous" })).toHaveLength(1);
+    await reconcileImport.call({ id: started.id }, OWNER);
+    await publishImport.call({ id: started.id }, OWNER);
+    expect(await postMetaAt.call({ slug: page.slug }, { kind: "anonymous" })).toBeNull();
+    expect(await listReaderComments.call({ pageId: page.id }, { kind: "anonymous" })).toEqual([]);
+    expect((await db().select().from(blogReaderComments).where(eq(blogReaderComments.id, comment!.id)))[0]?.body).toBe("Original approved history");
+    await rollbackImport.call({ id: started.id }, OWNER);
+    expect((await postMetaAt.call({ slug: page.slug }, { kind: "anonymous" }))?.pageId).toBe(page.id);
+    expect((await listReaderComments.call({ pageId: page.id }, { kind: "anonymous" }))[0]?.id).toBe(comment!.id);
   });
 });

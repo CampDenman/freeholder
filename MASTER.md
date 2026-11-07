@@ -2095,8 +2095,9 @@ diff, then stage and commit a reversible import. Nothing is published and DNS
 never changes merely because the crawler finished.
 
 - **WordPress is the first importer, and the most complete:** the WXR export
-  path brings pages (keeping their paths), posts (under `blog/`, so the blog
-  listing shows them, keeping slugs and publication dates), attachments into
+  path brings pages and posts at their original paths, including the home
+  page and dated post permalinks; explicit blog metadata makes posts appear
+  in the listing without moving them. It also brings attachments into
   the media library through the ordinary upload pipeline (pinned SSRF-safe
   download, content-sniffed type, size limit, AVIF/WebP renditions, alt text
   and source-URL provenance kept, body captions kept as text), body images
@@ -2105,11 +2106,15 @@ never changes merely because the crawler finished.
   publish). Original URLs either survive or receive explicit `Redirect` rows.
   The REST path covers pages and posts with dates, Yoast fields and embedded
   terms; it carries no attachment list, so only same-site body images are
-  fetched. Not yet recreated, and said so in the run report: categories/tags
-  and authors are recorded on the import run because the blog has no taxonomy
-  and pages carry no author; reader comments are not imported because CMS
-  pages have no public thread; nested menu items are not applied (C3.22
-  open). An export file of up to 100 MB is reserved, sent in 4 MB chunks to
+  fetched. Categories, tags and authors become real blog records; ordinary
+  WXR reader comments preserve moderation state, dates and available parentage.
+  Replacing live content stages changed blog membership and comments until
+  publication; rollback restores prior metadata and retained comment history.
+  The report keeps remaining uncertainty explicit: nested menus, reserved
+  member-feed collisions, orphan attachments and metadata absent from WXR
+  require source-crawl review (C2.27–C2.29, C3.22 and C3.46 remain open until
+  their acceptance evidence is complete). An export file of up to 100 MB is
+  reserved, sent in 4 MB chunks to
   an import-only route that stores them in private object storage, and read
   back as a stream; the 1 MB JSON body limit and the request proxy's buffer
   stay as they are for every other route.
@@ -4902,7 +4907,11 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   *(Implementation and qualification in progress 2026-11-07; owner: CMS/importer.
   Reproductions: a live replacement exposed imported post metadata before
   cutover; direct public metadata/comment queries could bypass a registered
-  publication veto; republishing reset an imported original date. Reusable
+  publication veto; republishing reset an imported original date. Peer review
+  natively reproduced a same-slug locale row authorizing another vetoed ID,
+  and found post-to-ordinary-page replacement retaining the old blog marker.
+  Exact public page IDs now authorize reads, and kind changes hide retained
+  comment history at cutover while preserving rollback. Reusable
   fixes stage replacement metadata/comments until publication, reuse the
   shared published-page resolver, retain first publication dates and restore
   rollback dates/working copies. Regression evidence:
@@ -5262,6 +5271,15 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   the generic sitemap/RSS/Atom/HTML importers still produce a heading plus one
   `html` block with no media or redirects; the `archive` kind has no archive
   reader of its own.)*
+  *(Update 2026-11-07: C2.27–C2.29/C3.46 add real taxonomy/author records,
+  moderated WXR comment import, original post/home paths and dates, one-hop
+  query/attachment redirects and URL/metadata verification. This supersedes
+  the earlier checkpoint's taxonomy/author/comment and post-relocation limits;
+  the remaining nested-menu, body/item-cap, pasted REST, generic importer and
+  archive-reader limits still keep C3.22 open. Code and source-crawl limits:
+  `src/core/import/service.ts`, `src/core/import/wordpress.ts`,
+  `deploy/blog-wordpress-2026-11-07.md`; composed regressions:
+  `tests/core/wordpress-import-flow.test.ts`.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,

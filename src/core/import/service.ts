@@ -873,8 +873,15 @@ const commitApply = defineService({
         id = created.id;
       }
       if (page.status === "draft") draftPageIds.push(id);
+      if (wordpress && placement.action === "replace") {
+        postSnapshots.push(await ctx.call(getService("cms.getPostMeta"), { pageId: id }));
+        if (page.kind !== "post") {
+          const meta = { pageId: id, isPost: false };
+          if (placement.current?.status === "published") pendingBlogPosts.push({ pageId: id, key: page.wpId ?? slug, meta, comments: [] });
+          else await ctx.call(getService("cms.setPostMeta"), meta);
+        }
+      }
       if (wordpress && page.kind === "post") {
-        if (placement.action === "replace") postSnapshots.push(await ctx.call(getService("cms.getPostMeta"), { pageId: id }));
         const meta = {
           pageId: id, isPost: true, authorId: page.author ? authorIds.get(page.author) ?? null : null,
           categoryIds: (page.categorySlugs ?? []).flatMap(slug => categoryIds.has(slug) ? [categoryIds.get(slug)!] : []),
@@ -1046,7 +1053,7 @@ const commitApply = defineService({
         ...archiveAliases,
         ...(wordpress?.attachments ?? []).flatMap(attachment => {
           const target = attachment.parentWpId ? slugByWpId.get(attachment.parentWpId) : undefined;
-          if (!target) return [];
+          if (target === undefined) return [];
           return [
             ...(attachment.path ? [{ fromPath: attachment.path, toPath: target }] : []),
             ...(attachment.wpId ? ["", "index.php"].map(root => ({ fromPath: `${root}?attachment_id=${attachment.wpId}`, toPath: target })) : []),

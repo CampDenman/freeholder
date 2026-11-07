@@ -5,10 +5,11 @@ import { sql } from "drizzle-orm";
 import { check, index, pgTable, text, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import { contacts } from "@/core/contacts/schema";
-import { blogPosts } from "./blog-schema";
+import { pages } from "./schema";
 export const blogReaderComments = pgTable("blog_reader_comments", {
   id: uuid("id").primaryKey().defaultRandom(),
-  pageId: uuid("page_id").notNull().references(() => blogPosts.pageId, { onDelete: "cascade" }),
+  // Changing a page's kind hides its thread, without deleting rollback history.
+  pageId: uuid("page_id").notNull().references(() => pages.id, { onDelete: "cascade" }),
   parentId: uuid("parent_id").references((): AnyPgColumn => blogReaderComments.id, { onDelete: "set null" }),
   contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
   authorName: text("author_name").notNull(),

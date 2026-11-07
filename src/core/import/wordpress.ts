@@ -925,7 +925,7 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
   const used = new Set<string>();
   const unique = (slug: string): string => {
     let candidate = slug;
-    for (let n = 2; used.has(candidate); n += 1) candidate = `${slug}-${n}`;
+    for (let n = 2; used.has(candidate); n += 1) candidate = `${slug || "home"}-${n}`;
     used.add(candidate);
     return candidate;
   };
@@ -941,7 +941,7 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
     const oldPath = wordpressPath(item.url, hosts, basePath);
     const wpSlug = toCmsSlug(item.slug || slugFromUrl(item.url));
     const slug = unique(
-      oldPath !== null && oldPath !== ""
+      oldPath !== null
           ? toCmsSlug(oldPath)
           : item.kind === "post" ? `blog/${(wpSlug.split("/").at(-1) ?? wpSlug) || "post"}` : wpSlug,
     );

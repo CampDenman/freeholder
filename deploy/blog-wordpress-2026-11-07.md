@@ -14,7 +14,10 @@ Rollback restores the prior publication date and working copy as well as post
 metadata; an imported draft must be renamed when it collides with a live page.
 Republishing an edit keeps the first publication date and updates the post’s
 modified date. Registered publication vetoes also hide bylines, comment threads
-and archives.
+and archives. A slug lookup must resolve to the exact selected page ID: a
+public row in another locale cannot authorize a hidden duplicate. Ordinary-page
+replacements remove the old blog marker only at cutover; comments reference
+the underlying page so kind changes hide history without deleting rollback data.
 
 The original WXR post permalink stays the CMS page address, including date
 segments. Blog membership is explicit metadata, so the blog listing does not
@@ -96,3 +99,13 @@ Disposable PostgreSQL 16 at a private loopback port, containing only fixtures,
 was used for migrations and importer/comment tests. No production database or
 personal browser state was used. Exact final commands and results are recorded
 in the pull request; browser, release and deployed acceptance remain separate.
+
+## Peer-review regressions
+
+A two-locale, same-slug fixture returned a vetoed row's approved comment before
+the exact-ID correction. The preserved failing result was a local fixture, not
+a production disclosure. The new regression verifies refused reads/submissions,
+no hidden archive/category, canonical byline identity and one visible listing.
+A second regression replaces a live post with an ordinary WordPress page, then
+rolls back, preserving the same approved comment ID and its privacy boundary.
+Both fixes belong to C2.29/C3.46; deployed acceptance remains pending.

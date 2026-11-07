@@ -5,7 +5,7 @@ ALTER TABLE blog_settings ADD COLUMN comments_enabled boolean NOT NULL DEFAULT t
 --> statement-breakpoint
 CREATE TABLE blog_reader_comments (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
- page_id uuid NOT NULL REFERENCES blog_posts(page_id) ON DELETE CASCADE,
+ page_id uuid NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
  parent_id uuid REFERENCES blog_reader_comments(id) ON DELETE SET NULL,
  contact_id uuid REFERENCES contacts(id) ON DELETE SET NULL,
  author_name text NOT NULL,
