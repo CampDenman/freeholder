@@ -1,6 +1,6 @@
 {
   "name": "@freeholder/cli",
-  "version": "0.2.0-beta.4",
+  "version": "0.2.0-beta.5",
   "description": "freeholder update and freeholder launch: keep a Freeholder site current, or stand up a new hosted one, from a terminal",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",

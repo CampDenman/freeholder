@@ -15,7 +15,7 @@ On a fresh Ubuntu 22.04+ or Debian 12+ server (2 GB of memory or more, ports
 80 and 443 open), as a user who can `sudo`:
 
 ```sh
-curl -fsSLO https://github.com/CampDenman/freeholder/releases/download/v0.2.0-beta.4/install.sh
+curl -fsSLO https://github.com/CampDenman/freeholder/releases/download/v0.2.0-beta.5/install.sh
 sudo sh install.sh                 # type your domain, or press Enter for a temporary https://<ip>.sslip.io address
 sudo freeholder claim-link         # open this link yourself and create your owner account
 sudo freeholder status             # health, HTTPS certificate, storage and backups
