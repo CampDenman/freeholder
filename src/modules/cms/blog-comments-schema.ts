@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Public reader comments are separate from private editorial annotations (C2.29).
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { check, index, pgTable, text, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import { contacts } from "@/core/contacts/schema";
 import { blogPosts } from "./blog-schema";
 export const blogReaderComments = pgTable("blog_reader_comments", {
@@ -15,8 +16,8 @@ export const blogReaderComments = pgTable("blog_reader_comments", {
   status: text("status", { enum: ["pending", "approved", "spam", "trash"] }).notNull().default("pending"),
   source: text("source").notNull().default("reader"),
   externalId: text("external_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: createdAtColumn(),
+  updatedAt: updatedAtColumn(),
 }, t => [
   check("blog_reader_comments_status_allowed", sql`${t.status} in ('pending','approved','spam','trash')`),
   index("blog_reader_comments_page_status_idx").on(t.pageId, t.status, t.createdAt),

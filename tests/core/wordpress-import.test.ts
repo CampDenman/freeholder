@@ -63,6 +63,13 @@ describe("WordPress WXR export (C3.22)", () => {
     expect(exported.skipped).toEqual({ "status: trash": 1, "post type: product": 1 });
   });
 
+  it("preserves reader paragraph boundaries while removing executable HTML", () => {
+    const changed = FIXTURE.replace("Lovely kiln!", "<p>First paragraph.</p><p>Next<br>line.</p><script>hidden()</script>");
+    const parsed = parseWordpressExport(changed);
+    const post = parsed.items.find(item => item.comments.entries?.length);
+    expect(post?.comments.entries?.find(comment => comment.status === "approved")?.body).toBe("First paragraph.\n\nNext\nline.");
+  });
+
   it("keeps dates, terms, SEO, featured images and comment counts", () => {
     const post = exported.items.find((item) => item.slug === "first-wood-firing")!;
     expect(post.publishedAt).toBe("2025-03-14T18:00:00.000Z");

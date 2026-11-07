@@ -138,6 +138,6 @@ describe.runIf(hasDatabase)("blog structure and moderated reader comments", () =
     expect(first.map(comment => comment.body)).toEqual(["Comment 1", "Comment 2"]);
     expect(next.map(comment => comment.body)).toEqual(["Comment 3"]);
     expect((await listReaderCommentsForOwner.call({ limit: 2, page: 2 }, OWNER)).map(comment => comment.body)).toEqual(["Comment 1"]);
-    await expect(listReaderCommentsForOwner.call({}, ANONYMOUS)).rejects.toMatchObject({ code: "forbidden" });
+    await expect(listReaderCommentsForOwner.call({}, ANONYMOUS)).rejects.toMatchObject({ code: "permission" });
   });
 });

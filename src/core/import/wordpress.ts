@@ -285,6 +285,23 @@ function htmlText(value: string): string {
   return textContentOf(parseFragment(value)).replace(/\s+/g, " ").trim();
 }
 
+/** Reader comments stay plain text without joining words across HTML paragraphs. */
+function commentText(value: string): string {
+  const parts: string[] = [];
+  const visit = (node: DefaultTreeAdapterTypes.Node) => {
+    if (node.nodeName === "#text") { parts.push((node as DefaultTreeAdapterTypes.TextNode).value); return; }
+    const tag = "tagName" in node ? node.tagName : "";
+    if (["script", "style"].includes(tag)) return;
+    if (tag === "br") { parts.push("\n"); return; }
+    const block = ["p", "div", "li", "blockquote", "pre"].includes(tag);
+    if (block) parts.push("\n");
+    if ("childNodes" in node) for (const child of node.childNodes) visit(child);
+    if (block) parts.push("\n");
+  };
+  visit(parseFragment(value));
+  return parts.join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function wordpressDate(value: string): string | undefined {
   const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(value.trim());
   if (!match || match[1] === "0000") return undefined;
@@ -590,7 +607,7 @@ export function wordpressExportBuilder() {
             parentId: child(inner, "wp:comment_parent", masked) !== "0" ? child(inner, "wp:comment_parent", masked) || undefined : undefined,
             name: htmlText(child(inner, "wp:comment_author", masked, "raw")) || "Reader",
             email: email.success ? email.data.toLowerCase() : null,
-            body: htmlText(child(inner, "wp:comment_content", masked, "raw")),
+            body: commentText(child(inner, "wp:comment_content", masked, "raw")),
             status: status === "1" ? "approved" as const : status === "spam" ? "spam" as const : status === "trash" ? "trash" as const : "pending" as const,
             createdAt: wordpressDate(child(inner, "wp:comment_date_gmt", masked)) ?? wordpressDate(child(inner, "wp:comment_date", masked)),
           };

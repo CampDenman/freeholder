@@ -10,7 +10,7 @@ CREATE TABLE blog_reader_comments (
  contact_id uuid REFERENCES contacts(id) ON DELETE SET NULL,
  author_name text NOT NULL,
  body text NOT NULL,
- status text NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','spam','trash')),
+ status text NOT NULL DEFAULT 'pending' CONSTRAINT blog_reader_comments_status_allowed CHECK(status IN ('pending','approved','spam','trash')),
  source text NOT NULL DEFAULT 'reader',
  external_id text,
  created_at timestamptz NOT NULL DEFAULT now(),
