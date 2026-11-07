@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 "use client";
 
+import { browserCsrfHeaders } from "@/core/http/csrf-client";
+import { isPreviewAssistantContactPath } from "@/core/http/csp";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { postSiteChatAction } from "../../../../app/(public)/inbound-actions";
 import { PreviewAssistantCall, type PreviewAssistantLabels } from "./PreviewAssistantCall";
@@ -47,7 +49,8 @@ function errorMessage(value: unknown, fallback: string): string {
   return fallback;
 }
 
-export function SiteChatClient({ locale, labels }: { locale: string; labels: Labels }) {
+export function SiteChatClient({ locale, labels, path }: { locale: string; labels: Labels; path: string }) {
+  const assistantCallSurface = isPreviewAssistantContactPath(path);
   const [chat, setChat] = useState<Transcript | null>(null);
   const [ended, setEnded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -93,7 +96,7 @@ export function SiteChatClient({ locale, labels }: { locale: string; labels: Lab
    */
   const askAssistant = useCallback(async () => {
     try {
-      const response = await fetch("/api/chat/assistant", { method: "POST" });
+      const response = await fetch("/api/chat/assistant", { method: "POST", headers: browserCsrfHeaders() });
       if (!response.ok) return;
       const body: unknown = await response.json().catch(() => ({}));
       if ((body as { status?: string }).status === "answered") await refresh();
@@ -117,7 +120,7 @@ export function SiteChatClient({ locale, labels }: { locale: string; labels: Lab
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...browserCsrfHeaders() },
         body: JSON.stringify({ message }),
       });
       const body: unknown = await response.json().catch(() => ({}));
@@ -138,7 +141,7 @@ export function SiteChatClient({ locale, labels }: { locale: string; labels: Lab
   async function end() {
     setBusy(true);
     try {
-      const response = await fetch("/api/chat", { method: "DELETE" });
+      const response = await fetch("/api/chat", { method: "DELETE", headers: browserCsrfHeaders() });
       if (!response.ok) {
         const body: unknown = await response.json().catch(() => ({}));
         setError(errorMessage(body, labels.failed));
@@ -159,7 +162,7 @@ export function SiteChatClient({ locale, labels }: { locale: string; labels: Lab
 
   return (
     <section aria-label={labels.message} className="grid max-w-xl gap-4 border-s-4 border-accent ps-4">
-      <PreviewAssistantCall ended={ended || chat?.state === "closed"} labels={labels.call} />
+      {assistantCallSurface ? <PreviewAssistantCall ended={ended || chat?.state === "closed"} labels={labels.call} /> : null}
       {chat?.escalated ? (
         <p role="status" className="rounded-md bg-warning-soft px-3 py-2 text-sm text-warning">
           {labels.escalated}

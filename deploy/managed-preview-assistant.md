@@ -51,7 +51,8 @@ No automatic retry, budget reset or unsupported reconciliation is performed.
 Voice/video use the byte-pinned PM duplex 0.1.10 distribution in
 `public/managed-assistant/0.1.10`, with same-origin codecs and preserved MIT/BSD
 notices. Their manifest digests are tested. The site opens only configured
-worker origins on Contact, asks for microphone access after a click, polls
+worker origins on Contact (including localized paths before locale rewrite),
+suppresses call controls on site-chat blocks placed elsewhere, asks for microphone access after a click, polls
 bounded queue tickets, renews leases within the server's hard deadline and
 always attempts End and local media cleanup. Browser captions are explicitly
 labeled browser observations and deduplicated onto the existing conversation;
@@ -70,3 +71,15 @@ call with media readiness, captions, ordinary End, worker stop and one durable
 settlement, plus cross-visitor refusals. Sienna's replacement voice still needs
 Tony's listening approval and exact-asset clearance. No live call is accepted
 from a fake grant or local test.
+
+Peer review qualified the multilingual CSP defect as source integration, not a
+live English-preview incident. Contact, /fr/contact and localized variants now
+share the exact media policy; unrelated pages retain their ordinary policy.
+Focused CSP/browser suites18 pass (7 database cases skipped in that invocation);
+native managed tests and full fast gates are recorded separately.
+
+Existing signed-in site-chat HTTP integration also omitted the double-submit
+CSRF header on message/assistant/End requests. All chat media/text actions now
+reuse a browser-safe token helper; a mounted browser regression runs those
+requests through the real requireCsrf guard with a simulated httpOnly login
+cookie. Anonymous visitor behavior and server CSRF requirements are preserved.

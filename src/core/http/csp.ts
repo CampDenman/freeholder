@@ -70,6 +70,11 @@ export interface ContentSecurityPolicyOptions {
  * inline style elements: React uses bounded style attributes for bar widths
  * and image crop anchors, while every `<style>` element still needs the nonce.
  */
+/** Calls are offered on Contact only, including the original path before locale rewrite. */
+export function isPreviewAssistantContactPath(path: string): boolean {
+  return /^\/(?:[a-z]{2,3}(?:-[a-z0-9]{2,8})*\/)?contact\/?$/i.test(path);
+}
+
 export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): string {
   const media = [...new Set(options.mediaOrigins ?? [])].sort();
   const upload = options.path.startsWith("/admin")
@@ -79,8 +84,8 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
     ? [...new Set(options.creativeOrigins ?? [])].sort()
     : [];
   const call = options.path.startsWith("/call/group/") ? [...new Set(options.callOrigins ?? [])].sort() : [];
-  const assistant = options.path === "/contact" ? [...new Set(options.assistantOrigins ?? [])].sort() : [];
-  const assistantWasm = options.path === "/contact" || options.path.startsWith("/managed-assistant/");
+  const assistant = isPreviewAssistantContactPath(options.path) ? [...new Set(options.assistantOrigins ?? [])].sort() : [];
+  const assistantWasm = isPreviewAssistantContactPath(options.path) || options.path.startsWith("/managed-assistant/");
   const measurement = options.path.startsWith("/admin")
     ? []
     : [...new Set(options.measurementOrigins ?? [])].sort();

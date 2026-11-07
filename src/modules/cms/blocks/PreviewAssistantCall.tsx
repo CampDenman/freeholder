@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 "use client";
 
+import { browserCsrfHeaders } from "@/core/http/csrf-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Config { enabled: boolean; modes: string[]; label: string; disclosure: string }
@@ -28,10 +29,9 @@ type SharedTransport = {
 
 /** The cookie stays httpOnly; the browser supplies only bounded call choices. */
 async function control(body: Record<string, unknown>, keepalive = false): Promise<Session & Partial<Config>> {
-  const csrf = document.cookie.split("; ").find(cookie => cookie.startsWith("freeholder_csrf="))?.split("=").slice(1).join("=");
   const response = await fetch("/api/chat/assistant/call", {
     method: "POST", cache: "no-store", keepalive,
-    headers: { "content-type": "application/json", ...(csrf ? { "x-csrf-token": decodeURIComponent(csrf) } : {}) },
+    headers: { "content-type": "application/json", ...browserCsrfHeaders() },
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error("The assistant could not connect. You can still send a message.");

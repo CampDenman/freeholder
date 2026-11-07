@@ -10,7 +10,7 @@ import { getSiteChat, startSiteChat } from "@/core/messaging/chat";
 import { assistantTurns } from "@/modules/assistant/schema";
 import { answer, updateSettings, previewCall, settings, managedDetails, syncManagedSettings } from "@/modules/assistant/service";
 import { setParadiseFetchForTests } from "@/adapters/paradise/http";
-import { contentSecurityPolicy } from "@/core/http/csp";
+import { contentSecurityPolicy, isPreviewAssistantContactPath } from "@/core/http/csp";
 import { installLaunch, launchPages, launchSpecSchema } from "@/modules/seed/launch";
 import { ANONYMOUS, OWNER, closeDb, failure, hasDatabase, truncateSpine } from "../helpers/spine";
 import { openTransactions } from "../helpers/open-transactions";
@@ -45,7 +45,15 @@ describe("managed preview consumer contracts", () => {
     const options = { nonce: "fixture", production: true, assistantOrigins: ["https://voice.test", "wss://voice.test"] };
     expect(contentSecurityPolicy({ ...options, path: "/contact" })).toContain("https://voice.test wss://voice.test");
     expect(contentSecurityPolicy({ ...options, path: "/contact" })).toContain("'wasm-unsafe-eval'");
-    expect(contentSecurityPolicy({ ...options, path: "/admin" })).not.toContain("voice.test");
+    for (const path of ["/fr/contact", "/ar/contact", "/en-CA/contact/"]) {
+      expect(isPreviewAssistantContactPath(path)).toBe(true);
+      expect(contentSecurityPolicy({ ...options, path })).toContain("https://voice.test wss://voice.test");
+      expect(contentSecurityPolicy({ ...options, path })).toContain("'wasm-unsafe-eval'");
+    }
+    for (const path of ["/", "/fr/services", "/admin", "/contact/other", "/fr/admin/contact"]) {
+      expect(isPreviewAssistantContactPath(path)).toBe(false);
+      expect(contentSecurityPolicy({ ...options, path })).not.toContain("voice.test");
+    }
   });
 });
 

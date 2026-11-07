@@ -864,6 +864,7 @@ export const siteChat = defineBlock({
       return (
         <div className="grid gap-4">
           <SiteChatClient
+            path={ctx.path}
             locale={ctx.locale}
             labels={{
               call: {
