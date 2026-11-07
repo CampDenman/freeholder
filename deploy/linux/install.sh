@@ -29,7 +29,7 @@ set -eu
 
 # Bumped with every release (tests/core/linux-install.test.ts checks it
 # matches package.json), so a downloaded install.sh installs its own release.
-FREEHOLDER_VERSION_DEFAULT="0.2.0-beta.4"
+FREEHOLDER_VERSION_DEFAULT="0.2.0-beta.5"
 REPOSITORY="CampDenman/freeholder"
 
 say() { printf 'freeholder: %s\n' "$*"; }

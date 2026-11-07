@@ -21,7 +21,7 @@ run it, open the link.
 ## Install
 
 ```sh
-curl -fsSLO https://github.com/CampDenman/freeholder/releases/download/v0.2.0-beta.4/install.sh
+curl -fsSLO https://github.com/CampDenman/freeholder/releases/download/v0.2.0-beta.5/install.sh
 less install.sh                      # optional: read what it does
 sudo sh install.sh                   # asks for your domain; Enter = temporary address
 ```

@@ -27,7 +27,7 @@ services:
   app:
     # The release this checkout belongs to (tests/core/linux-install.test.ts
     # keeps it equal to package.json). Update: selfhost.sh update VERSION.
-    image: ${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:0.2.0-beta.4}
+    image: ${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:0.2.0-beta.5}
     restart: unless-stopped
     # Not published to the host: Caddy is the only way in.
     expose:
