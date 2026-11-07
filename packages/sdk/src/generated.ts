@@ -121,12 +121,15 @@ export const SERVICE_NAMES = [
   "assistant.dismissGap",
   "assistant.knowledgeGapList",
   "assistant.knowledgeList",
+  "assistant.managedDetails",
+  "assistant.previewCall",
   "assistant.reindex",
   "assistant.saveGapAsKnowledge",
   "assistant.saveKnowledge",
   "assistant.scopes",
   "assistant.setScope",
   "assistant.settings",
+  "assistant.syncManagedSettings",
   "assistant.turns",
   "assistant.updateSettings",
   "attestations.correct",
@@ -2067,6 +2070,14 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { id: string; locale: string; kind: "qa" | "fact" | "policy"; title: string; body: string; enabled: boolean; updatedAt: string; [key: string]: unknown }[];
   };
+  "assistant.managedDetails": {
+    input: Record<string, never>;
+    output: { settings: { enabled: boolean; talentSlug: string; dailyCapUsd: number }; talent: { slug: string; name: string; style: string }[] };
+  };
+  "assistant.previewCall": {
+    input: { action: "config"; token: string } | { action: "start"; token: string; want: "voice" | "video" } | { action: "poll"; token: string; sessionId: string } | { action: "queued"; token: string; sessionId: string; want: "voice" | "video" } | { action: "lease"; token: string; sessionId: string; authorizedUntilMs: number } | { action: "end"; token: string; sessionId: string } | { action: "caption"; token: string; sessionId: string; caption: { speaker: "member" | "muse"; text: string; startedAt: number; endedAt: number } };
+    output: unknown;
+  };
   "assistant.reindex": {
     input: Record<string, never>;
     output: { chunks: number; [key: string]: unknown };
@@ -2089,15 +2100,19 @@ export interface ServiceCatalog {
   };
   "assistant.settings": {
     input: Record<string, never>;
-    output: { enabled: boolean; provider: "none" | "anthropic" | "openai"; model: string | null; baseUrl: string | null; credentialRef: string | null; credentialPresent: boolean; inputCentsPerMillion: number | null; outputCentsPerMillion: number | null; maxOutputTokens: number; displayName: string | null; spendCapCents: number; spendPeriod: "day" | "week" | "month"; repliesPerConversation: number; repliesPerHour: number; tone: "professional" | "friendly" | "brief"; refuseTopics: string[]; escalateTopics: string[]; contactFormPath: string | null; lastError: string | null; priced: boolean; spentCents: number; remainingCents: number; repliesThisHour: number; ready: boolean; [key: string]: unknown };
+    output: { enabled: boolean; provider: "none" | "anthropic" | "openai" | "paradise"; model: string | null; baseUrl: string | null; credentialRef: string | null; credentialPresent: boolean; inputCentsPerMillion: number | null; outputCentsPerMillion: number | null; maxOutputTokens: number; displayName: string | null; spendCapCents: number; spendPeriod: "day" | "week" | "month"; repliesPerConversation: number; repliesPerHour: number; tone: "professional" | "friendly" | "brief"; refuseTopics: string[]; escalateTopics: string[]; contactFormPath: string | null; lastError: string | null; priced: boolean; spentCents: number; remainingCents: number; repliesThisHour: number; ready: boolean; [key: string]: unknown };
+  };
+  "assistant.syncManagedSettings": {
+    input: { enabled: boolean; talentSlug: string; dailyCapUsd: number };
+    output: { settings: { enabled: boolean; talentSlug: string; dailyCapUsd: number } };
   };
   "assistant.turns": {
     input: { limit?: number };
     output: { id: string; conversationId: string; outcome: "answered" | "refused_scope" | "refused_spend" | "refused_rate" | "refused_conversation_cap" | "refused_topic" | "refused_invention" | "unconfigured" | "failed"; detail: string | null; model: string | null; costCents: number; action: string | null; actionAllowed: boolean | null; createdAt: string; [key: string]: unknown }[];
   };
   "assistant.updateSettings": {
-    input: { enabled: boolean; provider: "none" | "anthropic" | "openai"; model?: string | null; baseUrl?: string | null; credentialRef?: string | null; inputCentsPerMillion?: number | null; outputCentsPerMillion?: number | null; maxOutputTokens?: number; displayName?: string | null; spendCapCents?: number; spendPeriod?: "day" | "week" | "month"; repliesPerConversation?: number; repliesPerHour?: number; tone?: "professional" | "friendly" | "brief"; refuseTopics?: string[]; escalateTopics?: string[]; contactFormPath?: string | null };
-    output: { enabled: boolean; provider: "none" | "anthropic" | "openai"; model: string | null; baseUrl: string | null; credentialRef: string | null; credentialPresent: boolean; inputCentsPerMillion: number | null; outputCentsPerMillion: number | null; maxOutputTokens: number; displayName: string | null; spendCapCents: number; spendPeriod: "day" | "week" | "month"; repliesPerConversation: number; repliesPerHour: number; tone: "professional" | "friendly" | "brief"; refuseTopics: string[]; escalateTopics: string[]; contactFormPath: string | null; lastError: string | null; priced: boolean; spentCents: number; remainingCents: number; repliesThisHour: number; ready: boolean; [key: string]: unknown };
+    input: { enabled: boolean; provider: "none" | "anthropic" | "openai" | "paradise"; model?: string | null; baseUrl?: string | null; credentialRef?: string | null; inputCentsPerMillion?: number | null; outputCentsPerMillion?: number | null; maxOutputTokens?: number; displayName?: string | null; spendCapCents?: number; spendPeriod?: "day" | "week" | "month"; repliesPerConversation?: number; repliesPerHour?: number; tone?: "professional" | "friendly" | "brief"; refuseTopics?: string[]; escalateTopics?: string[]; contactFormPath?: string | null };
+    output: { enabled: boolean; provider: "none" | "anthropic" | "openai" | "paradise"; model: string | null; baseUrl: string | null; credentialRef: string | null; credentialPresent: boolean; inputCentsPerMillion: number | null; outputCentsPerMillion: number | null; maxOutputTokens: number; displayName: string | null; spendCapCents: number; spendPeriod: "day" | "week" | "month"; repliesPerConversation: number; repliesPerHour: number; tone: "professional" | "friendly" | "brief"; refuseTopics: string[]; escalateTopics: string[]; contactFormPath: string | null; lastError: string | null; priced: boolean; spentCents: number; remainingCents: number; repliesThisHour: number; ready: boolean; [key: string]: unknown };
   };
   "attestations.correct": {
     input: { key: string; subject?: { kind?: string; id?: string }; value: unknown; source: string; asOf: string; validUntil?: string; note: string };
@@ -5268,7 +5283,7 @@ export interface ServiceCatalog {
     output: { id: string; invoiceId: string; number: string | null; sequenceKey: string; idempotencyKey: string; requestHash: string; status: "draft" | "issued" | "void"; currency: string; reason: string; subtotalMinor: number; taxMinor: number; totalMinor: number; issuedAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "launch.install": {
-    input: { format: "freeholder-launch-spec"; version: 1 | 2; generator: string; business: { name: string; tagline: string; schemaType?: string; country?: string; baseCurrency?: string; timezone?: string }; brand?: { paper?: string; ink?: string; accent?: string }; status: { banner: string; summary: string; ready: string[]; planned: string[] }; home: { headline: string; promise: string; problem: string[]; steps: string[]; switchReasons?: string[]; seoDescription: string }; offer: { slug: string; name: string; summary: string; price: string; cadence: "one_time" | "monthly"; priceLabel: string; forWho: string; includes: string[]; faq?: { question: string; answer: string }[]; seoDescription: string }; intro?: { name: string; summary: string; durationMin: number }; contact: { intro: string; seoDescription: string }; about: { body: string[]; seoDescription: string }; accounts?: { enabled: boolean; members?: boolean; shop?: boolean }; intake?: { title: string; intro: string; projectTitle: string; fields: { key: string; label: string; kind: "text" | "email" | "multiline" | "select" | "file"; required?: boolean; help?: string; options?: string[]; accept?: ("audio" | "doc" | "image")[]; maxMb?: number }[] }; payments?: { mode: "test"; note: string } };
+    input: { format: "freeholder-launch-spec"; version: 1 | 2 | 3; generator: string; business: { name: string; tagline: string; schemaType?: string; country?: string; baseCurrency?: string; timezone?: string }; brand?: { paper?: string; ink?: string; accent?: string }; status: { banner: string; summary: string; ready: string[]; planned: string[] }; home: { headline: string; promise: string; problem: string[]; steps: string[]; switchReasons?: string[]; seoDescription: string }; offer: { slug: string; name: string; summary: string; price: string; cadence: "one_time" | "monthly"; priceLabel: string; forWho: string; includes: string[]; faq?: { question: string; answer: string }[]; seoDescription: string }; intro?: { name: string; summary: string; durationMin: number }; contact: { intro: string; seoDescription: string }; about: { body: string[]; seoDescription: string }; accounts?: { enabled: boolean; members?: boolean; shop?: boolean }; intake?: { title: string; intro: string; projectTitle: string; fields: { key: string; label: string; kind: "text" | "email" | "multiline" | "select" | "file"; required?: boolean; help?: string; options?: string[]; accept?: ("audio" | "doc" | "image")[]; maxMb?: number }[] }; payments?: { mode: "test"; note: string }; assistant?: { provider: "paradise"; enabled: boolean; dailyCapUsd: number; contentMode: "sfw" }; hours?: string[] };
     output: { business: string; pages: string[]; forms: string[]; intakeForms: string[]; callRequest: boolean; brandApplied: boolean };
   };
   "linkinbio.addLink": {
@@ -8102,12 +8117,15 @@ export interface FreeholderApi {
     dismissGap: (input: ServiceCatalog["assistant.dismissGap"]["input"]) => Promise<ServiceCatalog["assistant.dismissGap"]["output"]>;
     knowledgeGapList: (input?: ServiceCatalog["assistant.knowledgeGapList"]["input"]) => Promise<ServiceCatalog["assistant.knowledgeGapList"]["output"]>;
     knowledgeList: (input?: ServiceCatalog["assistant.knowledgeList"]["input"]) => Promise<ServiceCatalog["assistant.knowledgeList"]["output"]>;
+    managedDetails: (input?: ServiceCatalog["assistant.managedDetails"]["input"]) => Promise<ServiceCatalog["assistant.managedDetails"]["output"]>;
+    previewCall: (input?: ServiceCatalog["assistant.previewCall"]["input"]) => Promise<ServiceCatalog["assistant.previewCall"]["output"]>;
     reindex: (input?: ServiceCatalog["assistant.reindex"]["input"]) => Promise<ServiceCatalog["assistant.reindex"]["output"]>;
     saveGapAsKnowledge: (input: ServiceCatalog["assistant.saveGapAsKnowledge"]["input"]) => Promise<ServiceCatalog["assistant.saveGapAsKnowledge"]["output"]>;
     saveKnowledge: (input: ServiceCatalog["assistant.saveKnowledge"]["input"]) => Promise<ServiceCatalog["assistant.saveKnowledge"]["output"]>;
     scopes: (input?: ServiceCatalog["assistant.scopes"]["input"]) => Promise<ServiceCatalog["assistant.scopes"]["output"]>;
     setScope: (input: ServiceCatalog["assistant.setScope"]["input"]) => Promise<ServiceCatalog["assistant.setScope"]["output"]>;
     settings: (input?: ServiceCatalog["assistant.settings"]["input"]) => Promise<ServiceCatalog["assistant.settings"]["output"]>;
+    syncManagedSettings: (input: ServiceCatalog["assistant.syncManagedSettings"]["input"]) => Promise<ServiceCatalog["assistant.syncManagedSettings"]["output"]>;
     turns: (input?: ServiceCatalog["assistant.turns"]["input"]) => Promise<ServiceCatalog["assistant.turns"]["output"]>;
     updateSettings: (input: ServiceCatalog["assistant.updateSettings"]["input"]) => Promise<ServiceCatalog["assistant.updateSettings"]["output"]>;
   };

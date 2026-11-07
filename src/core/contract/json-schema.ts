@@ -31,6 +31,14 @@ export function toContractJsonSchema(
       },
     });
     const { $schema: _ignored, ...rest } = json as Record<string, unknown>;
+    // An object-only action union is still an object input. Preserve the
+    // canonical alternatives while giving object-only transports (MCP) an
+    // explicit root type; otherwise they erase every branch as non-object.
+    const alternatives = rest.oneOf ?? rest.anyOf;
+    if (!rest.type && Array.isArray(alternatives) && alternatives.length > 0
+      && alternatives.every(value => value && typeof value === "object" && (value as { type?: unknown }).type === "object")) {
+      return { type: "object", ...rest };
+    }
     return rest;
   } catch (error) {
     console.warn(`[contract] could not describe a ${io} schema`, error);

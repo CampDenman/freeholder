@@ -11,6 +11,9 @@ export interface AiGenerationRequest {
   maxOutputTokens: number;
   responseSchema?: Record<string, unknown>;
   idempotencyKey: string;
+  /** Server-derived visitor binding and a reservation held by the consumer. */
+  visitorRef?: string;
+  maxChargeCents?: number;
 }
 
 export interface AiGenerationResult {
@@ -19,6 +22,8 @@ export interface AiGenerationResult {
   provider: string;
   model: string;
   usage: { inputTokens: number; outputTokens: number; totalTokens: number };
+  /** A managed adapter's authoritative list-price receipt, already bounded at admission. */
+  meteredCents?: number;
 }
 
 export interface AiAdapter {

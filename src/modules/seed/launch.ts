@@ -38,6 +38,7 @@ import {
 import { FOOTER_KEY, HEADER_KEY, NAV_KEY } from "@/modules/cms/defaults";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { createForm } from "@/modules/forms/service";
+import { updateSettings as updateAssistantSettings } from "@/modules/assistant/service";
 
 // ── The spec ────────────────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ export const launchSpecSchema = z
      * onboarding intake on /start and payment-step copy; a version 1 spec
      * installs exactly as it always did.
      */
-    version: z.union([z.literal(1), z.literal(2)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     /** Who wrote the spec, for the audit trail: a planning tool or an agent. */
     generator: line(120),
     business: z
@@ -160,6 +161,14 @@ export const launchSpecSchema = z
       .optional(),
     /** Version 2: what the payment step says while payments run in test mode. */
     payments: z.object({ mode: z.literal("test"), note: line(300) }).strict().optional(),
+    /** Version 3 explicitly opts a PM-hosted preview into its managed assistant. */
+    assistant: z.object({
+      provider: z.literal("paradise"), enabled: z.boolean(),
+      dailyCapUsd: z.number().finite().min(0).max(10),
+      contentMode: z.literal("sfw"),
+    }).strict().optional(),
+    /** Owner-supplied facts only; absent hours must never be invented. */
+    hours: z.array(line(200)).max(14).optional(),
   })
   .strict()
   .superRefine((spec, ctx) => {
@@ -167,9 +176,11 @@ export const launchSpecSchema = z
     if (spec.version === 1 && v2.some(Boolean)) {
       ctx.addIssue({ code: "custom", message: "accounts, intake and payments need a version 2 spec" });
     }
-    if (spec.version === 2 && !v2.every(Boolean)) {
+    if (spec.version >= 2 && !v2.every(Boolean)) {
       ctx.addIssue({ code: "custom", message: "a version 2 spec states accounts, intake and payments" });
     }
+    if (spec.version < 3 && (spec.assistant || spec.hours)) ctx.addIssue({ code: "custom", message: "assistant and hours require a version 3 spec" });
+    if (spec.version === 3 && !spec.assistant) ctx.addIssue({ code: "custom", message: "a version 3 spec explicitly states its assistant settings" });
   });
 
 export type LaunchSpec = z.output<typeof launchSpecSchema>;
@@ -255,6 +266,14 @@ export function launchPages(spec: LaunchSpec): LaunchPage[] {
     { id: "contact-form", type: "form", props: { formSlug: LAUNCH_FORMS.contact } },
   ];
   if (intro) contactBlocks.push(button("contact-call", `Request a ${intro.durationMin}-minute call`, "/intro-call", "quiet"));
+  if (spec.version === 3) {
+    if (spec.hours?.length) contactBlocks.push(body("contact-hours", paragraphs(spec.hours.join("\n"))));
+    if (spec.assistant?.enabled) contactBlocks.push(
+      h("contact-assistant", "Ask our AI assistant", 2),
+      body("contact-ai-disclosure", paragraphs("AI assistant. Family-friendly. A character's appearance is not an endorsement of this business.")),
+      { id: "contact-chat", type: "siteChat", props: {} },
+    );
+  }
 
   const callPages: LaunchPage[] = intro
     ? [
@@ -544,9 +563,18 @@ export const installLaunch = defineService({
     // C3.39: My Account shows only what this business does with its
     // customers. The member network and shop pages stay off unless the spec
     // asks for them; the owner can turn either back on in Settings.
-    if (spec.version === 2 && spec.accounts?.enabled) {
+    if (spec.version >= 2 && spec.accounts?.enabled) {
       if (!spec.accounts.members) await ctx.callAsSystem(setModuleEnabled, { module: "members", enabled: false });
       if (!spec.accounts.shop) await ctx.callAsSystem(setModuleEnabled, { module: "catalog", enabled: false });
+    }
+    if (spec.version === 3 && spec.assistant) {
+      await ctx.callAsSystem(setModuleEnabled, { module: "assistant", enabled: spec.assistant.enabled });
+      await ctx.callAsSystem(updateAssistantSettings, {
+        enabled: spec.assistant.enabled, provider: "paradise", model: "paradise-managed-assistant",
+        credentialRef: "PARADISEMODERN_API_KEY", maxOutputTokens: 600,
+        spendCapCents: Math.round(spec.assistant.dailyCapUsd * 100), spendPeriod: "day",
+        displayName: "AI assistant", contactFormPath: "/contact",
+      });
     }
 
     await ctx.callAsSystem(completeSetup, {});

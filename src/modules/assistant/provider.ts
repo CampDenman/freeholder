@@ -26,11 +26,13 @@ import { env } from "@/core/env";
 import { createAnthropicAi, createOpenAiAi, type AiAdapter } from "@/adapters/ai";
 import type { AssistantProvider } from "./contract";
 import type { AssistantSettings } from "./schema";
+import { createParadiseAssistantAi } from "@/adapters/paradise/assistant";
 
 /** The conventional variable per provider, when the owner names none. */
 const DEFAULT_CREDENTIAL_REF: Record<Exclude<AssistantProvider, "none">, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
+  paradise: "PARADISEMODERN_API_KEY",
 };
 
 export function credentialRefFor(settings: {
@@ -79,6 +81,11 @@ export type AdapterResolution =
 export function assistantAdapter(settings: AssistantSettings): AdapterResolution {
   if (settings.provider === "none") {
     return { unconfigured: "No model provider is chosen for the assistant." };
+  }
+  if (settings.provider === "paradise") {
+    return credentialPresent(settings)
+      ? { adapter: createParadiseAssistantAi() }
+      : { unconfigured: "The managed assistant is not connected to this deployment." };
   }
   if (!settings.model?.trim()) {
     return { unconfigured: "No model is chosen for the assistant." };

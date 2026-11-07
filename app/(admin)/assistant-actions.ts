@@ -20,6 +20,7 @@ import {
   saveKnowledge,
   setScope,
   updateSettings,
+  syncManagedSettings,
 } from "@/modules/assistant/service";
 import { ownerFacing } from "./action-helpers";
 
@@ -62,20 +63,26 @@ function done(error?: unknown): never {
 export async function saveAssistantAction(form: FormData): Promise<void> {
   const provider = text(form, "provider");
   try {
+    const authorized = await actor();
+    if (provider === "paradise") await syncManagedSettings.call({
+      enabled: form.get("enabled") === "1",
+      talentSlug: optional(form, "managedTalent") ?? "sienna-rodriguez",
+      dailyCapUsd: digits(form, "spendCapCents", 0) / 100,
+    }, authorized);
     await updateSettings.call(
       {
         enabled: form.get("enabled") === "1",
-        provider: provider === "anthropic" || provider === "openai" ? provider : "none",
-        model: optional(form, "model"),
+        provider: provider === "anthropic" || provider === "openai" || provider === "paradise" ? provider : "none",
+        model: provider === "paradise" ? "paradise-managed-assistant" : optional(form, "model"),
         baseUrl: optional(form, "baseUrl"),
-        credentialRef: optional(form, "credentialRef"),
+        credentialRef: provider === "paradise" ? "PARADISEMODERN_API_KEY" : optional(form, "credentialRef"),
         inputCentsPerMillion: optionalDigits(form, "inputCentsPerMillion"),
         outputCentsPerMillion: optionalDigits(form, "outputCentsPerMillion"),
-        maxOutputTokens: digits(form, "maxOutputTokens", 700),
+        maxOutputTokens: provider === "paradise" ? Math.min(600, digits(form, "maxOutputTokens", 600)) : digits(form, "maxOutputTokens", 700),
         displayName: optional(form, "displayName"),
         spendCapCents: digits(form, "spendCapCents", 0),
         spendPeriod:
-          text(form, "spendPeriod") === "day"
+          provider === "paradise" || text(form, "spendPeriod") === "day"
             ? "day"
             : text(form, "spendPeriod") === "week"
               ? "week"
@@ -92,7 +99,7 @@ export async function saveAssistantAction(form: FormData): Promise<void> {
         escalateTopics: parseTopics(text(form, "escalateTopics")),
         contactFormPath: optional(form, "contactFormPath"),
       },
-      await actor(),
+      authorized,
     );
   } catch (error) {
     done(error);

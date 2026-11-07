@@ -1,0 +1,12 @@
+{
+  "version": "0.1.10",
+  "sourceSha256": "60ecc88da8ba87a78037d044e0385952103b461268c160a042c1cd75b765afcd",
+  "moduleSha256": "9492adcb44e3a8085a3ac2e09273c427f962a6a8c66962335686ac855ecb6381",
+  "codecs": {
+    "audio-output-processor.js": "7e8f5ace2c2b6239924819ea985d543dc033389a00d14bd2fdc9393581c86d53",
+    "decoderWorker.min.js": "4967ed1f2c7f702d16e83b54c79ce3b6e9b3e3fd686ba73cfe55d59f61b96aee",
+    "decoderWorker.min.wasm": "cd1d29c43b3fa05719c3d024ed9b9f1528be92415bd6d39d413b262a61d1891f",
+    "encoderWorker.min.js": "c3a64a87b2868e37c0387da45262900820ec85ab448869011247cbd351858a95",
+    "NOTICE.txt": "d26c71d3180f4b368b912eafbc0a3a1979eabacdcbc1bd985179cc90c1f3e303"
+  }
+}

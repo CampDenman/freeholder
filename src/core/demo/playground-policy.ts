@@ -36,6 +36,8 @@ const MUTATIONS = new Set([
   "cms.updateSection", "cms.createSectionLocale", "cms.restoreRevision",
   "cms.attachLayout", "cms.detachLayout", "cms.rejoinLayout", "cms.createSection",
   "cms.saveAsSection", "cms.detachSection", "cms.deleteSection", "cms.createFromTemplate",
+  "cms.createPost", "cms.setPostMeta", "cms.saveTerm", "cms.deleteTerm",
+  "cms.saveAuthor", "cms.deleteAuthor", "cms.updateBlogSettings", "cms.moderateReaderComment",
   "forms.create", "forms.update", "forms.delete", "forms.reviewSubmission",
   "contacts.create", "contacts.update", "contacts.merge", "contacts.undoMerge",
   "catalog.createProduct", "catalog.updateProduct", "catalog.updateProductDescription",
@@ -137,6 +139,8 @@ export const PLAYGROUND_PUBLIC_REFUSED: Readonly<Record<string, string>> = {
   "media.claimCaptureOriginal": "Uploads are refused on the bounded playground disk.",
   "media.applyCaptureOriginal": "Uploads are refused on the bounded playground disk.",
   "agents.proposeWriteGate": "Agent workers authenticate with keys the playground never issues.",
+  "assistant.previewCall": "Managed provider call controls are unavailable in the playground; no owner-issued preview key or media session is created.",
+  "assistant.saveCallCaption": "Private phase of a provider call the playground never admits.",
   "assistant.prepareAnswer": "Phase of the model-backed answer the playground refuses.",
   "assistant.applyAnswer": "Phase of the model-backed answer the playground refuses.",
   "media.upload": "Uploads are refused on the bounded playground disk.",
@@ -257,6 +261,9 @@ export interface PlaygroundRowCap {
 
 export const PLAYGROUND_ROW_CAPS: Readonly<Record<string, PlaygroundRowCap>> = {
   "cms.createPage": { table: "pages", limit: 50 },
+  "cms.createPost": { table: "pages", limit: 50 },
+  "cms.saveAuthor": { table: "blog_authors", limit: 50 },
+  "cms.saveTerm": { table: "blog_terms", limit: 100 },
   "cms.createFromTemplate": { table: "pages", limit: 50 },
   "linkinbio.setup": { table: "pages", limit: 50 },
   "cms.createSection": { table: "sections", limit: 100 },

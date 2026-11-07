@@ -43,6 +43,7 @@ import {
   scopes,
   settings,
   turns,
+  managedDetails,
 } from "@/modules/assistant/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
@@ -89,9 +90,10 @@ export default async function AssistantPage({
     domainOrNull(knowledgeGapList.call({ status: "open" }, actor)),
     searchParams,
   ]);
+  const managed = current?.provider === "paradise" ? await domainOrNull(managedDetails.call({}, actor)) : null;
 
   const locale = business?.defaultLocale ?? "en";
-  const currency = business?.baseCurrency ?? "USD";
+  const currency = current?.provider === "paradise" ? "USD" : business?.baseCurrency ?? "USD";
   const money = (cents: number) => formatMoney(cents, currency, locale);
   const when = (value: Date | string) =>
     new Intl.DateTimeFormat(locale, {
@@ -176,6 +178,12 @@ export default async function AssistantPage({
                 </label>
 
                 <div className="grid gap-4 sm:grid-cols-2">
+                  {current.provider === "paradise" && <Field label={t("assistant.managed.talent")} htmlFor="assistant-managed-talent" hint={t("assistant.managed.clearance")}>
+                    <Select id="assistant-managed-talent" name="managedTalent" defaultValue={managed?.settings.talentSlug ?? "sienna-rodriguez"}>
+                      {!managed?.talent.some(talent => talent.slug === "sienna-rodriguez") && <option value="sienna-rodriguez">{t("assistant.managed.textFallback")}</option>}
+                      {managed?.talent.map(talent => <option key={talent.slug} value={talent.slug}>{talent.name}</option>)}
+                    </Select>
+                  </Field>}
                   <Field
                     label={t("assistant.field.provider")}
                     htmlFor="assistant-provider"

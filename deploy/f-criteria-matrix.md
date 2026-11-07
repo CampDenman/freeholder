@@ -1907,21 +1907,20 @@ v2.
 - **F11** — `GETTING_STARTED.md`, `AGENTS.md`, `deploy/README.md`, `deploy/linux/README.md`; changeset `native-linux-install.md`.
 - **F12** — `.github/workflows/release-tarballs.yml`: Pending — a release carrying the tarballs, then the documented steps on a fresh server (HTTPS, claim, publish, backup, restore).
 
-## C3.45 — Managed preview assistant (open; separate branch)
+## C3.45 — Managed PM-hosted preview assistant
 
-- **F01** — N/A — preview-assistant implementation and acceptance are tracked in the separate consumer branch; `deploy/blog-wordpress-2026-11-07.md` reserves the canonical checklist item without claiming delivery.
-- **F02** — N/A — preview-assistant implementation and acceptance are tracked in the separate consumer branch; `deploy/blog-wordpress-2026-11-07.md` reserves the canonical checklist item without claiming delivery.
-- **F03** — N/A — preview-assistant implementation and acceptance are tracked in the separate consumer branch; `deploy/blog-wordpress-2026-11-07.md` reserves the canonical checklist item without claiming delivery.
-- **F04** — N/A — preview-assistant implementation and acceptance are tracked in the separate consumer branch; `deploy/blog-wordpress-2026-11-07.md` reserves the canonical checklist item without claiming delivery.
-- **F05** — N/A — preview-assistant implementation and acceptance are tracked in the separate consumer branch; `deploy/blog-wordpress-2026-11-07.md` reserves the canonical checklist item without claiming delivery.
-- **F06** — N/A — preview-assistant implementation and acceptance are tracked in the separate consumer branch; `deploy/blog-wordpress-2026-11-07.md` reserves the canonical checklist item without claiming delivery.
-- **F07** — N/A — preview-assistant implementation and acceptance are tracked in the separate consumer branch; `deploy/blog-wordpress-2026-11-07.md` reserves the canonical checklist item without claiming delivery.
-- **F08** — N/A — preview-assistant implementation and acceptance are tracked in the separate consumer branch; `deploy/blog-wordpress-2026-11-07.md` reserves the canonical checklist item without claiming delivery.
-- **F09** — N/A — preview-assistant implementation and acceptance are tracked in the separate consumer branch; `deploy/blog-wordpress-2026-11-07.md` reserves the canonical checklist item without claiming delivery.
-- **F10** — N/A — preview-assistant implementation and acceptance are tracked in the separate consumer branch; `deploy/blog-wordpress-2026-11-07.md` reserves the canonical checklist item without claiming delivery.
-- **F11** — N/A — preview-assistant implementation and acceptance are tracked in the separate consumer branch; `deploy/blog-wordpress-2026-11-07.md` reserves the canonical checklist item without claiming delivery.
-- **F12** — N/A — preview-assistant implementation and acceptance are tracked in the separate consumer branch; `deploy/blog-wordpress-2026-11-07.md` reserves the canonical checklist item without claiming delivery.
-
+- **F01** — N/A — no new Freeholder table; existing assistant settings/turns and canonical chat messages remain authoritative. PM owns the separate backend migration.
+- **F02** — `src/modules/assistant/preview.ts`, `src/modules/assistant/service.ts`, `src/adapters/paradise/assistant.ts`; visitor binding, owner permission and budget behavior in `tests/modules/preview-assistant.test.ts`.
+- **F03** — `src/modules/assistant/service.ts`, `src/modules/assistant/preview.ts`: text and explicitly browser-observed captions use existing conversation messages; actual managed list-price receipts settle the assistant turn meter. No invoice or consent is created by captions.
+- **F04** — `app/(admin)/admin/assistant/page.tsx`, `src/modules/cms/blocks/PreviewAssistantCall.tsx`; Pending — real approved media and owner-control acceptance.
+- **F05** — Registered `assistant.previewCall`, `assistant.managedDetails`, `assistant.syncManagedSettings`; HTTP uses the same service objects. `tests/core/registry-completeness.test.ts`, `tests/core/sdk.test.ts`.
+- **F06** — Four shipped locales, `tests/core/i18n-gate.test.ts`, `tests/core/locale-quality.test.ts`; Pending — dedicated keyboard/axe proof of the call widget.
+- **F07** — `tests/modules/preview-assistant.test.ts`: cross-visitor cookie binding, off/End, exact origins, unknown-charge holds and concurrent budget claims. No chatbot age gate.
+- **F08** — `tests/modules/preview-assistant.test.ts`, existing `tests/modules/assistant.test.ts`, `tests/core/launch-template.test.ts`; native PostgreSQL and pinned shared transport/codec hashes.
+- **F09** — `src/core/messaging/chat.ts`, `src/modules/assistant/preview.ts`: existing messaging privacy/retention spine applies; no separate transcript store. Pending — real call lifecycle and full product export/erase acceptance.
+- **F10** — `deploy/managed-preview-assistant.md`; scoped server-side integration and explicit text fallback. No unrelated page opens worker origins.
+- **F11** — `MASTER.md` C3.45 and `.changeset/managed-preview-assistant.md`; coordinated backend/consumer release order is documented.
+- **F12** — `deploy/managed-preview-assistant.md`: Pending — protected exact-head CI, deployed compatible consumer/backend, text fallback, owner controls, approved media readiness, ordinary End, worker stop and one settlement. Sienna listening/asset clearance is still required.
 ## C3.46 — SEO-safe WordPress migration
 
 - **F01** — Additive blog and reader-comment schema: `db/migrations/0061_blog_structure.sql`, `db/migrations/0062_blog_reader_comments.sql`.

@@ -128,3 +128,19 @@ through the scoped moderation queue; page deletion and `cms.readerComments`
 privacy erasure govern their discussion history instead of a notes TTL.
 Playground submissions use a 200-row comment cap and the existing shared
 contact/client limits, with external notification delivery still blocked.
+
+The new native playground regression first reproduced two content-service
+refusals, then called the actual create-blog server action using a genuine
+disposable session cookie and reproduced its redirect back with a refusal.
+The form unnecessarily invoked operator-only bootstrap even though playground
+startup already seeds chrome. It now uses that seeded chrome and explicit
+content permissions. Pages/authors/terms have limits; a shared transaction
+insert guard also covers inline tag batches and concurrent last-slot creators.
+The framework request context/redirect is simulated; actor resolution, grants,
+services and PostgreSQL are real. Deployed demo acceptance remains open.
+
+Separate source-review limitation (CMS/kernel, C1.38): the page cap remains a
+preflight outside `createPage`'s insertion transaction. These author/term and
+inline-tag tests do not qualify a strict concurrent page cap. Native race
+reproduction, shared page-insertion serialization and deployed acceptance are
+a scoped follow-up; no live page-overflow incident has been demonstrated.

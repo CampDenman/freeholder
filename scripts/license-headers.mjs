@@ -21,6 +21,9 @@ const fix = process.argv.includes("--fix");
 // rewrites migrations wholesale, and any dependency change rewrites the
 // lockfile. JSON has no comment syntax at all.
 const EXEMPT = [
+  // Redistributed, byte-pinned Opus/MIT/BSD codecs. Their original licenses
+  // live beside them in NOTICE.txt; never relabel these as Freeholder code.
+  /^public\/managed-assistant\/0\.1\.10\/duplex-codec\//,
   /^db\/migrations\//,
   /\.json$/,
   /^next-env\.d\.ts$/,
