@@ -5,7 +5,7 @@ independent security sign-off. Three adversarial agents reviewed separate
 customer, security and platform worktrees based on main
 `4ba5daac5eeea6a2202b1b3972defed13cb325a1`; the integrating agent reviewed
 public CMS delivery and editor concurrency. C11.10 remains unchecked, and
-Freeholder remains `0.2.0-beta.5` in active development.
+Freeholder remains `0.2.0-beta.6` in active development.
 
 ## Findings and repairs
 
