@@ -223,6 +223,10 @@ const CALLER_AUTHORIZED_PHASES = [
   // a provider (MASTER.md §11).
   "assistant.applyAnswer",
   "assistant.prepareAnswer",
+  // Validated private chat bearer and an already visitor-bound PM session;
+  // these phases are only reachable through assistant.previewCall.
+  "assistant.previewAccess",
+  "assistant.saveCallCaption",
   "assistant.settingsSnapshot",
   // C3.22: the halves of imports.commit around WordPress media downloads.
   "imports.commitApply",

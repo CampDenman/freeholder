@@ -121,12 +121,15 @@ export const SERVICE_NAMES = [
   "assistant.dismissGap",
   "assistant.knowledgeGapList",
   "assistant.knowledgeList",
+  "assistant.managedDetails",
+  "assistant.previewCall",
   "assistant.reindex",
   "assistant.saveGapAsKnowledge",
   "assistant.saveKnowledge",
   "assistant.scopes",
   "assistant.setScope",
   "assistant.settings",
+  "assistant.syncManagedSettings",
   "assistant.turns",
   "assistant.updateSettings",
   "attestations.correct",
@@ -2042,6 +2045,14 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { id: string; locale: string; kind: "qa" | "fact" | "policy"; title: string; body: string; enabled: boolean; updatedAt: string; [key: string]: unknown }[];
   };
+  "assistant.managedDetails": {
+    input: Record<string, never>;
+    output: { settings: { enabled: boolean; talentSlug: string; dailyCapUsd: number }; talent: { slug: string; name: string; style: string }[] };
+  };
+  "assistant.previewCall": {
+    input: { action: "config"; token: string } | { action: "start"; token: string; want: "voice" | "video" } | { action: "poll"; token: string; sessionId: string } | { action: "queued"; token: string; sessionId: string; want: "voice" | "video" } | { action: "lease"; token: string; sessionId: string; authorizedUntilMs: number } | { action: "end"; token: string; sessionId: string } | { action: "caption"; token: string; sessionId: string; caption: { speaker: "member" | "muse"; text: string; startedAt: number; endedAt: number } };
+    output: unknown;
+  };
   "assistant.reindex": {
     input: Record<string, never>;
     output: { chunks: number; [key: string]: unknown };
@@ -2065,6 +2076,10 @@ export interface ServiceCatalog {
   "assistant.settings": {
     input: Record<string, never>;
     output: { enabled: boolean; provider: "none" | "anthropic" | "openai" | "paradise"; model: string | null; baseUrl: string | null; credentialRef: string | null; credentialPresent: boolean; inputCentsPerMillion: number | null; outputCentsPerMillion: number | null; maxOutputTokens: number; displayName: string | null; spendCapCents: number; spendPeriod: "day" | "week" | "month"; repliesPerConversation: number; repliesPerHour: number; tone: "professional" | "friendly" | "brief"; refuseTopics: string[]; escalateTopics: string[]; contactFormPath: string | null; lastError: string | null; priced: boolean; spentCents: number; remainingCents: number; repliesThisHour: number; ready: boolean; [key: string]: unknown };
+  };
+  "assistant.syncManagedSettings": {
+    input: { enabled: boolean; talentSlug: string; dailyCapUsd: number };
+    output: { settings: { enabled: boolean; talentSlug: string; dailyCapUsd: number } };
   };
   "assistant.turns": {
     input: { limit?: number };
@@ -7977,12 +7992,15 @@ export interface FreeholderApi {
     dismissGap: (input: ServiceCatalog["assistant.dismissGap"]["input"]) => Promise<ServiceCatalog["assistant.dismissGap"]["output"]>;
     knowledgeGapList: (input?: ServiceCatalog["assistant.knowledgeGapList"]["input"]) => Promise<ServiceCatalog["assistant.knowledgeGapList"]["output"]>;
     knowledgeList: (input?: ServiceCatalog["assistant.knowledgeList"]["input"]) => Promise<ServiceCatalog["assistant.knowledgeList"]["output"]>;
+    managedDetails: (input?: ServiceCatalog["assistant.managedDetails"]["input"]) => Promise<ServiceCatalog["assistant.managedDetails"]["output"]>;
+    previewCall: (input?: ServiceCatalog["assistant.previewCall"]["input"]) => Promise<ServiceCatalog["assistant.previewCall"]["output"]>;
     reindex: (input?: ServiceCatalog["assistant.reindex"]["input"]) => Promise<ServiceCatalog["assistant.reindex"]["output"]>;
     saveGapAsKnowledge: (input: ServiceCatalog["assistant.saveGapAsKnowledge"]["input"]) => Promise<ServiceCatalog["assistant.saveGapAsKnowledge"]["output"]>;
     saveKnowledge: (input: ServiceCatalog["assistant.saveKnowledge"]["input"]) => Promise<ServiceCatalog["assistant.saveKnowledge"]["output"]>;
     scopes: (input?: ServiceCatalog["assistant.scopes"]["input"]) => Promise<ServiceCatalog["assistant.scopes"]["output"]>;
     setScope: (input: ServiceCatalog["assistant.setScope"]["input"]) => Promise<ServiceCatalog["assistant.setScope"]["output"]>;
     settings: (input?: ServiceCatalog["assistant.settings"]["input"]) => Promise<ServiceCatalog["assistant.settings"]["output"]>;
+    syncManagedSettings: (input: ServiceCatalog["assistant.syncManagedSettings"]["input"]) => Promise<ServiceCatalog["assistant.syncManagedSettings"]["output"]>;
     turns: (input?: ServiceCatalog["assistant.turns"]["input"]) => Promise<ServiceCatalog["assistant.turns"]["output"]>;
     updateSettings: (input: ServiceCatalog["assistant.updateSettings"]["input"]) => Promise<ServiceCatalog["assistant.updateSettings"]["output"]>;
   };

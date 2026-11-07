@@ -39,6 +39,7 @@
 // exactly the sentence a private transcript table would break.
 import { createHash } from "node:crypto";
 export { previewCall, managedDetails, syncManagedSettings } from "./preview";
+import previewServices from "./preview";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
@@ -1508,6 +1509,7 @@ registerContactPrivacySource({
 });
 
 export default [
+  ...previewServices,
   settings,
   updateSettings,
   scopes,

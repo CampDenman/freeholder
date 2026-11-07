@@ -120,3 +120,5 @@ export const syncManagedSettings = defineOrchestratedService({
   output: z.object({ settings: z.object({ enabled: z.boolean(), talentSlug: z.string(), dailyCapUsd: z.number() }) }),
   handler: async input => (await paradiseRequest<{ settings: typeof input }>("/v1/ai/assistant/settings", { method: "PATCH", body: input })).body,
 });
+
+export default [previewAccess, saveCaption, previewCall, managedDetails, syncManagedSettings];
