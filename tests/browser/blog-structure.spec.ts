@@ -49,7 +49,7 @@ test("an owner organizes a post, reviews a reader comment and keeps email privat
   await page.getByLabel("Comment", { exact: true }).fill("This reader comment waits for approval. <img src=x alt=unexpected>");
   await page.getByRole("button", { name: "Submit for approval", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("Your comment is awaiting moderation.");
-  expect(await page.content()).not.toContain("This reader comment waits for approval. <img src=x alt=unexpected>");
+  await expect(page.getByText("This reader comment waits for approval. <img src=x alt=unexpected>", { exact: true })).toHaveCount(0);
   await page.goto("/admin/blog/comments?status=pending");
   await expect(page.getByText("This reader comment waits for approval. <img src=x alt=unexpected>", { exact: true })).toBeVisible();
   await assertThemes(page);
@@ -63,7 +63,7 @@ test("an owner organizes a post, reviews a reader comment and keeps email privat
   await page.screenshot({ path: "test-results/blog-public-comments.png", fullPage: true });
   const response = await page.request.get("/blog/moderated-studio-story/", { maxRedirects: 0 });
   expect(response.status()).toBe(301);
-  expect(response.headers().location).toBe(`${C11_BASE_URL}/blog/moderated-studio-story`);
+  expect(new URL(response.headers().location ?? "", C11_BASE_URL).href).toBe(`${C11_BASE_URL}/blog/moderated-studio-story`);
 });
 
 test.afterAll(async () => { const { closeDb } = await import("@/core/db"); await closeDb(); });

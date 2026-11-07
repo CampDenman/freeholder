@@ -4914,7 +4914,9 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   comment history at cutover while preserving rollback. The production-build
   browser journey also reproduced a 500 on legacy redirects when CSP was
   written to native immutable redirect headers; the adapter now constructs a
-  mutable framework response before applying the security policy, covered by
+  mutable framework response before applying the security policy; the HTTP
+  harness resolves Next’s valid relative Location before checking the exact
+  destination. This is covered by
   `tests/core/legacy-redirect-proxy.test.ts`. Reusable
   fixes stage replacement metadata/comments until publication, reuse the
   shared published-page resolver, retain first publication dates and restore

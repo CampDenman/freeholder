@@ -115,3 +115,8 @@ privacy checks and eight light/dark Axe scans, then reproduced a redirect500:
 native Response.redirect headers are immutable. The proxy correction creates
 a mutable NextResponse before applying CSP; the full-proxy regression and the
 repeated real-browser literal301 assertion qualify that boundary separately.
+
+The next browser run returned the required301 and a valid relative Location;
+the overly strict absolute-header assertion was a harness defect. The harness
+now resolves that header against the trusted test origin before asserting the
+exact destination, retaining the one-hop and origin checks.
