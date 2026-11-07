@@ -24,7 +24,7 @@ moving from one to the other keeps your data.
 On a server with Docker and ports 80 and 443 open:
 
 ```sh
-git clone --depth 1 --branch v0.2.0-beta.5 https://github.com/CampDenman/freeholder.git
+git clone --depth 1 --branch v0.2.0-beta.6 https://github.com/CampDenman/freeholder.git
 cd freeholder
 deploy/docker-selfhost/selfhost.sh prepare        # or: prepare --domain example.com
 deploy/docker-selfhost/selfhost.sh start          # prints your private claim link
@@ -87,7 +87,7 @@ copy of `.env` too: `CREDENTIAL_KEY` is not in the backup.
 
 ```sh
 deploy/docker-selfhost/selfhost.sh check           # containers healthy, /api/health over HTTPS, latest backup
-deploy/docker-selfhost/selfhost.sh update 0.2.0-beta.6   # back up, switch image, roll back if unhealthy
+deploy/docker-selfhost/selfhost.sh update 0.2.0-beta.7   # back up, switch image, roll back if unhealthy
 deploy/docker-selfhost/selfhost.sh logs
 ```
 
