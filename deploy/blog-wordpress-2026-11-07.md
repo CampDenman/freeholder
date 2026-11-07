@@ -138,3 +138,9 @@ content permissions. Pages/authors/terms have limits; a shared transaction
 insert guard also covers inline tag batches and concurrent last-slot creators.
 The framework request context/redirect is simulated; actor resolution, grants,
 services and PostgreSQL are real. Deployed demo acceptance remains open.
+
+Separate source-review limitation (CMS/kernel, C1.38): the page cap remains a
+preflight outside `createPage`'s insertion transaction. These author/term and
+inline-tag tests do not qualify a strict concurrent page cap. Native race
+reproduction, shared page-insertion serialization and deployed acceptance are
+a scoped follow-up; no live page-overflow incident has been demonstrated.

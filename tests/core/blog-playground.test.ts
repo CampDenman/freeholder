@@ -51,7 +51,9 @@ describe.runIf(hasDatabase)("editable blog in the disposable playground", () => 
     const tag = await saveTerm.call({ taxonomy: "tag", name: "Demo tag" }, actor);
     const form = new FormData();
     form.set("title", "Demo post"); form.set("slug", "demo-post");
-    await expect(createBlogPostAction(form)).rejects.toMatchObject({ url: expect.stringMatching(/^\/admin\/pages\/[0-9a-f-]+$/) });
+    const redirected: unknown = await createBlogPostAction(form).catch((error: unknown) => error);
+    if (!(redirected instanceof Error) || !("url" in redirected)) throw new Error("Expected the editor redirect");
+    expect(redirected.url).toMatch(/^\/admin\/pages\/[0-9a-f-]+$/);
     const [post] = await db().select().from(pages).where(eq(pages.slug, "blog/demo-post"));
     if (!post) throw new Error("Blog action did not create its draft");
     await setPostMeta.call({ pageId: post.id, isPost: true, authorId: author.id, categoryIds: [category.id], tagIds: [tag.id] }, actor);

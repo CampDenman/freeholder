@@ -9,7 +9,7 @@ import { PLAYGROUND_BASELINE_MODULE, PLAYGROUND_ROW_CAPS } from "./playground-po
  * Check each new row inside its owning transaction. The service kernel's
  * preflight cannot see inserts already staged by another call in that same
  * transaction; bulk inline creation must count them before the next insert.
- * The table lock serializes concurrent creators without locking real sites.
+ * The advisory lock serializes concurrent creators without locking real sites.
  */
 export async function checkPlaygroundInsert(tx: Tx, actor: Actor, serviceName: string): Promise<void> {
   if (env().FREEHOLDER_PLAYGROUND !== "1" || actor.kind === "system") return;
