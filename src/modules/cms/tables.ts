@@ -12,3 +12,4 @@ export {
   contentLayouts,
   helpCategories,
 } from "./schema";
+export { blogSettings, blogAuthors, blogTerms, blogPosts, blogPostTerms } from "./blog-schema";

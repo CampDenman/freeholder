@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import { listBlogPosts } from "./blog";
+import blogServices from "./blog-service";
 // CMS services (MASTER.md §11, §32).
 //
 // The module's only entry points. The public route, the admin, the REST API
@@ -1873,6 +1874,7 @@ registerSearchSource({
 
 export default [
   listBlogPosts,
+  ...blogServices,
   resolvePage,
   resolvePageForRender,
   getPage,

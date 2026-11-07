@@ -59,6 +59,10 @@ export default defineModule({
       "cms.quoteRequested",
       "cms.siteChatStarted",
       "cms.tipIntended",
+      "cms.termCreated",
+      "cms.termUpdated",
+      "cms.termDeleted",
+      "cms.postMetaChanged",
     ],
     listens: {
       "settings.setupCompleted": "onSetupCompleted",
@@ -72,5 +76,5 @@ export default defineModule({
   // The public URLs this module puts in the sitemap (§5). The engine asks;
   // the module answers with a service name rather than a list, because the
   // list changes every time an owner publishes.
-  seo: { sitemapSources: ["cms.publishedPaths"] },
+  seo: { sitemapSources: ["cms.publishedPaths", "cms.blogArchivePaths"] },
 });
