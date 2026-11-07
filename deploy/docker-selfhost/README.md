@@ -87,7 +87,8 @@ copy of `.env` too: `CREDENTIAL_KEY` is not in the backup.
 
 ```sh
 deploy/docker-selfhost/selfhost.sh check           # containers healthy, /api/health over HTTPS, latest backup
-deploy/docker-selfhost/selfhost.sh update 0.2.0-beta.7   # back up, switch image, roll back if unhealthy
+# Replace VERSION with a published release, for example 0.2.0-beta.6.
+deploy/docker-selfhost/selfhost.sh update VERSION   # back up, switch image, roll back if unhealthy
 deploy/docker-selfhost/selfhost.sh logs
 ```
 
