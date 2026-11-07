@@ -96,7 +96,6 @@ export default async function EditPagePage({
 
   return (
     <div className="grid gap-6">
-      <BlogPostSettings pageId={page.id} actor={actor} />
       <div>
         <a href="/admin/pages" className="text-sm text-ink-muted">
           {t("cms.pages.back")}
@@ -156,6 +155,8 @@ export default async function EditPagePage({
           />
         </div>
       </div>
+
+      <BlogPostSettings pageId={page.id} actor={actor} />
 
       <PageEditor
         id={page.id}
