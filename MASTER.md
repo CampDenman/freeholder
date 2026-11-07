@@ -4911,7 +4911,11 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   natively reproduced a same-slug locale row authorizing another vetoed ID,
   and found post-to-ordinary-page replacement retaining the old blog marker.
   Exact public page IDs now authorize reads, and kind changes hide retained
-  comment history at cutover while preserving rollback. Reusable
+  comment history at cutover while preserving rollback. The production-build
+  browser journey also reproduced a 500 on legacy redirects when CSP was
+  written to native immutable redirect headers; the adapter now constructs a
+  mutable framework response before applying the security policy, covered by
+  `tests/core/legacy-redirect-proxy.test.ts`. Reusable
   fixes stage replacement metadata/comments until publication, reuse the
   shared published-page resolver, retain first publication dates and restore
   rollback dates/working copies. Regression evidence:

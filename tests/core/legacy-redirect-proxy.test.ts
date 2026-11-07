@@ -47,4 +47,13 @@ describe("legacy redirect HTTP projection", () => {
     expect(response.status).toBe(401);
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it("copies CSP onto a mutable response rather than mutating native redirect headers", async () => {
+    process.env.APP_URL = "https://destination.example.test";
+    resetEnvForTests();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ toPath: "new-address", status: "301" })));
+    const response = await proxy(new NextRequest("https://destination.example.test/old-address/"));
+    expect(response.status).toBe(301);
+    expect(response.headers.get("location")).toBe("https://destination.example.test/new-address");
+    expect(response.headers.get("content-security-policy")).toContain("default-src");
+  });
 });

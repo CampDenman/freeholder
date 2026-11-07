@@ -139,11 +139,12 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (context.status >= 300 || context.headers.has("X-Robots-Tag")) return context;
   const moved = await legacyRedirect(request);
   if (!moved) return context;
+  const response = new NextResponse(null, { status: moved.status, headers: new Headers(moved.headers) });
   for (const name of ["Content-Security-Policy", "Reporting-Endpoints"]) {
     const value = context.headers.get(name);
-    if (value) moved.headers.set(name, value);
+    if (value) response.headers.set(name, value);
   }
-  return new NextResponse(null, { status: moved.status, headers: moved.headers });
+  return response;
 }
 
 /** Request-context projection, independently testable without a running server. */

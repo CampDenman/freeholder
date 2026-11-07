@@ -109,3 +109,9 @@ no hidden archive/category, canonical byline identity and one visible listing.
 A second regression replaces a live post with an ordinary WordPress page, then
 rolls back, preserving the same approved comment ID and its privacy boundary.
 Both fixes belong to C2.29/C3.46; deployed acceptance remains pending.
+
+The standalone browser run completed owner/public functionality, email/XSS
+privacy checks and eight light/dark Axe scans, then reproduced a redirect500:
+native Response.redirect headers are immutable. The proxy correction creates
+a mutable NextResponse before applying CSP; the full-proxy regression and the
+repeated real-browser literal301 assertion qualify that boundary separately.
