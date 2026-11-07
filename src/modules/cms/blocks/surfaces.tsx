@@ -873,6 +873,7 @@ export const siteChat = defineBlock({
                 waiting: ctx.t("assistant.call.waiting"), unavailable: ctx.t("assistant.call.unavailable"),
                 connecting: ctx.t("assistant.call.connecting"), captionFailed: ctx.t("assistant.call.captionFailed"),
                 ended: ctx.t("assistant.call.ended"), lost: ctx.t("assistant.call.lost"), microphone: ctx.t("assistant.call.microphone"),
+                voiceFallback: ctx.t("assistant.call.voiceFallback"),
               },
               loading: ctx.t("cms.chat.loading"),
               ended: ctx.t("cms.chat.ended"),

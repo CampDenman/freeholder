@@ -796,6 +796,7 @@
   "assistant.provider.none": "No assistant",
   "assistant.provider.openai": "OpenAI, or anything that speaks its format",
   "assistant.provider.paradise": "Paradise Modern",
+  "assistant.call.voiceFallback": "Video is unavailable. Continuing by voice.",
   "assistant.call.label": "AI voice and video assistant",
   "assistant.call.captions": "Call captions appear in this chat and the business’s inbox.",
   "assistant.call.video": "Start video",

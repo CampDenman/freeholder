@@ -752,6 +752,7 @@
   "assistant.provider.none": "بلا مساعد",
   "assistant.provider.openai": "OpenAI أو أي شيء يتحدث بنسقه",
   "assistant.provider.paradise": "Paradise Modern",
+  "assistant.call.voiceFallback": "الفيديو غير متاح. تستمر المحادثة بالصوت.",
   "assistant.call.label": "مساعد ذكاء اصطناعي صوتي ومرئي",
   "assistant.call.captions": "تظهر نصوص المكالمة في هذه المحادثة وصندوق وارد النشاط التجاري.",
   "assistant.call.video": "بدء الفيديو",

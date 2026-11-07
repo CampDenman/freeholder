@@ -16,6 +16,7 @@ export interface PreviewAssistantLabels {
   label: string; captions: string; video: string; voice: string; leave: string; end: string;
   waiting: string; unavailable: string; connecting: string; captionFailed: string;
   ended: string; lost: string; microphone: string;
+  voiceFallback: string;
 }
 type SharedTransport = {
   startDuplexCall(started: unknown, transcript: (text: string) => void, deps: {
@@ -43,6 +44,7 @@ export function PreviewAssistantCall({ ended, labels }: { ended: boolean; labels
   const [state, setState] = useState("idle");
   const [notice, setNotice] = useState("");
   const [caption, setCaption] = useState("");
+  const [mode, setMode] = useState<"voice" | "video" | null>(null);
   const video = useRef<HTMLVideoElement>(null);
   const live = useRef<{ id?: string; handle?: Handle; audio?: AudioContext; mic?: MediaStream; controller?: AbortController; timer?: ReturnType<typeof setInterval>; until?: number; want?: "voice" | "video" }>({});
 
@@ -53,9 +55,9 @@ export function PreviewAssistantCall({ ended, labels }: { ended: boolean; labels
     if (current.timer) clearInterval(current.timer);
     current.handle?.stop();
     current.mic?.getTracks().forEach(track => track.stop());
+    if (!unmount) { setState("idle"); setCaption(""); setMode(null); }
     await current.audio?.close().catch(() => undefined);
     if (current.id) await control({ action: "end", sessionId: current.id }, unmount).catch(() => undefined);
-    if (!unmount) { setState("idle"); setCaption(""); }
   }, []);
 
   useEffect(() => {
@@ -66,6 +68,12 @@ export function PreviewAssistantCall({ ended, labels }: { ended: boolean; labels
     return () => { active = false; void stop(true); };
   }, [stop]);
   useEffect(() => { if (ended) void stop(); }, [ended, stop]);
+
+  async function finish(current: typeof live.current, message: string) {
+    if (live.current !== current) return;
+    await stop();
+    if (!live.current.controller) setNotice(message);
+  }
 
   async function attach(result: Session, current: typeof live.current) {
     if (live.current !== current || current.controller?.signal.aborted || !current.controller) {
@@ -78,33 +86,35 @@ export function PreviewAssistantCall({ ended, labels }: { ended: boolean; labels
       return;
     }
     if (result.status !== "live" || !result.call?.duplex || !current.id) {
-      await stop(); setNotice(labels.unavailable);
+      await finish(current, labels.unavailable);
       return;
     }
     current.until = result.hard_until_ms;
-    setState("connecting"); setNotice(result.disclosure ?? config?.disclosure ?? labels.connecting);
+    setMode(result.mode ?? null);
+    setState("connecting"); setNotice(current.want === "video" && result.mode === "voice" ? labels.voiceFallback : result.disclosure ?? config?.disclosure ?? labels.connecting);
     // This is a byte-pinned local distribution of the shared transport, not
     // another browser call implementation. Its codecs stay on this origin.
     const moduleUrl = "/managed-assistant/0.1.10/pm-ai-duplex-client.js";
     const sdk = await import(/* webpackIgnore: true */ moduleUrl) as SharedTransport;
-    if (current.controller.signal.aborted) return;
+    if (live.current !== current || current.controller.signal.aborted) return;
     const handle = await sdk.startDuplexCall({
       sessionId: result.call.duplex.session_id, callKind: result.mode, stack: "ditto-duplex",
       maxSeconds: result.max_seconds, duplex: result.call.duplex, iceServers: result.call.ice_servers,
-    }, setCaption, {
+    }, text => { if (live.current === current) setCaption(text); }, {
       audioContext: () => current.audio, microphone: async () => current.mic,
       codecBase: "/managed-assistant/0.1.10/duplex-codec/", signal: current.controller.signal,
       videoElement: video.current, report: () => undefined,
       endSession: async () => { if (live.current === current) await stop(); },
     }, { onTranscriptSegment: segment => {
-      if (!segment.final || !current.id) return;
+      if (live.current !== current || !segment.final || !current.id) return;
       const { speaker, text, startedAt, endedAt } = segment;
       void control({ action: "caption", sessionId: current.id, caption: { speaker, text, startedAt, endedAt } }).catch(() => {
-        setNotice(labels.captionFailed);
+        if (live.current === current) setNotice(labels.captionFailed);
       });
     } });
-    if (!handle || current.controller.signal.aborted) {
-      handle?.stop(); await stop(); setNotice(labels.unavailable);
+    if (live.current !== current || current.controller.signal.aborted) { handle?.stop(); return; }
+    if (!handle) {
+      await finish(current, labels.unavailable);
     } else current.handle = handle;
   }
 
@@ -112,6 +122,7 @@ export function PreviewAssistantCall({ ended, labels }: { ended: boolean; labels
     await stop();
     const current = { controller: new AbortController(), want } as typeof live.current;
     live.current = current;
+    setMode(want);
     setState("connecting"); setNotice(labels.connecting);
     try {
       // Unlock audio in the person's click, before a network round trip.
@@ -124,24 +135,26 @@ export function PreviewAssistantCall({ ended, labels }: { ended: boolean; labels
       let ticking = false;
       current.timer = setInterval(() => {
         if (ticking) return;
+        if (live.current !== current) return;
         ticking = true;
         void (async () => {
           if (current.until && Date.now() >= current.until || current.handle?.failed()) {
-            await stop(); setNotice(labels.ended); return;
+            await finish(current, labels.ended); return;
           }
           if (current.handle) {
             if (current.handle.isReady()) setState("live");
             await control({ action: "lease", sessionId: current.id, authorizedUntilMs: Math.min(Date.now() + 20000, current.until ?? 0) });
           } else {
             const status = await control({ action: "poll", sessionId: current.id });
+            if (live.current !== current) return;
             if (status.status === "queued" && status.ready) await attach(await control({ action: "queued", sessionId: current.id, want }), current);
-            else if (status.status !== "queued") { await stop(); setNotice(labels.ended); }
+            else if (status.status !== "queued") await finish(current, labels.ended);
           }
-        })().catch(async () => { await stop(); setNotice(labels.lost); })
+        })().catch(async () => { await finish(current, labels.lost); })
           .finally(() => { ticking = false; });
       }, 5000);
     } catch {
-      await stop(); setNotice(labels.microphone);
+      await finish(current, labels.microphone);
     }
   }
 
@@ -150,7 +163,7 @@ export function PreviewAssistantCall({ ended, labels }: { ended: boolean; labels
     <p className="text-sm font-semibold">{config.label}</p>
     <p className="text-xs text-ink-muted">{config.disclosure}</p>
     <p className="text-xs text-ink-muted">{labels.captions}</p>
-    <video ref={video} autoPlay playsInline muted className={state === "idle" || state === "queued" ? "hidden" : "max-h-72 w-full rounded-md bg-ink"} />
+    <video ref={video} autoPlay playsInline muted className={mode !== "video" || state === "idle" || state === "queued" ? "hidden" : "max-h-72 w-full rounded-md bg-ink"} />
     <div className="flex flex-wrap gap-3">
       {state === "idle" ? <>
         {config.modes.includes("video") && <button type="button" onClick={() => void start("video")} className="underline">{labels.video}</button>}

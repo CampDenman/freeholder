@@ -796,6 +796,7 @@
   "assistant.provider.none": "Sin asistente",
   "assistant.provider.openai": "OpenAI, o cualquier servicio que hable su formato",
   "assistant.provider.paradise": "Paradise Modern",
+  "assistant.call.voiceFallback": "El vídeo no está disponible. La conversación continúa por voz.",
   "assistant.call.label": "Asistente de IA por voz y vídeo",
   "assistant.call.captions": "Los subtítulos de la llamada aparecen en este chat y en la bandeja de entrada del negocio.",
   "assistant.call.video": "Iniciar vídeo",
