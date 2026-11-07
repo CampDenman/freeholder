@@ -29,7 +29,7 @@ process.env.STRIPE_WEBHOOK_SECRET = PAYMENTS_SECRET;
 process.env.STRIPE_CONNECT_WEBHOOK_SECRET = CONNECT_SECRET;
 const { resetEnvForTests } = await import("@/core/env");
 resetEnvForTests();
-const { proxy } = await import("../../proxy");
+const { requestContextProxy: proxy } = await import("../../proxy");
 const { previewGated } = await import("@/core/preview/private-preview");
 const { POST: payments } = await import("../../app/api/payments/webhooks/stripe/route");
 const { POST: payouts } = await import("../../app/api/payouts/[provider]/webhook/route");

@@ -1,6 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import { listBlogPosts } from "./blog";
+import blogServices from "./blog-service";
+import { blogPosts } from "./blog-schema";
+import blogCommentServices from "./blog-comments";
 // CMS services (MASTER.md §11, §32).
 //
 // The module's only entry points. The public route, the admin, the REST API
@@ -199,8 +202,15 @@ const lookupSlug = z
 
 const seo = z
   .object({
-    title: z.string().max(60).optional(),
-    description: z.string().max(155).optional(),
+    title: z.string().max(1000).optional(),
+    description: z.string().max(1000).optional(),
+    preserveTitle: z.boolean().optional(),
+    preserveDescription: z.boolean().optional(),
+    noindex: z.boolean().optional(),
+    nofollow: z.boolean().optional(),
+    canonical: z.string().max(2000).refine(value => /^\/(?!\/)/.test(value) || /^https?:\/\//.test(value), "use a site path or HTTP URL").optional(),
+    ogTitle: z.string().max(1000).optional(),
+    ogDescription: z.string().max(1000).optional(),
     ogImage: z.string().url().optional(),
   })
   .default({});
@@ -503,12 +513,15 @@ export const publishedPaths = defineService({
       .where(and(eq(pages.status, "published"), isNull(pages.trashedAt), visibleLocationPage))
       .orderBy(pages.slug);
 
+    const markedPosts = new Set((await ctx.tx.select({ pageId: blogPosts.pageId }).from(blogPosts)).map(post => post.pageId));
+
     // A sitemap advertises what may render. Registered vetoes re-derive that
     // from the owning ledger (C8.16), so a case study whose consent was
     // withdrawn leaves the sitemap with the page — even if the status flag
     // was put back by hand.
     const published: typeof candidates = [];
     for (const page of candidates) {
+      if ((page.seo as { noindex?: boolean } | null)?.noindex) continue;
       if ((await blockingVetoes(ctx.tx, { id: page.id, slug: page.slug })).length > 0) {
         continue;
       }
@@ -534,7 +547,7 @@ export const publishedPaths = defineService({
         title: fields.title ?? page.title,
         description: fields.description,
         imageUrl: fields.ogImage ?? null,
-        kind: kindFromSlug(page.slug),
+        kind: markedPosts.has(page.id) ? "article" as const : kindFromSlug(page.slug),
         priority: priorityFromSlug(page.slug),
         updatedAt: page.updatedAt,
       };
@@ -1213,7 +1226,7 @@ export const publishPage = defineService({
       .set({
         status: input.published ? "published" : "draft",
         publishedAt: input.published
-          ? (input.publishedAt ? new Date(input.publishedAt) : sql`now()`)
+          ? (input.publishedAt ? new Date(input.publishedAt) : before.publishedAt ?? sql`now()`)
           : null,
         ...(input.published
           ? {
@@ -1235,6 +1248,9 @@ export const publishPage = defineService({
       .where(eq(pages.id, input.id))
       .returning();
     if (!page) throw new ServiceError("not_found", `no page with id ${input.id}`);
+    if (input.published && before.status === "published" && !input.publishedAt) {
+      await ctx.tx.update(blogPosts).set({ sourceModifiedAt: sql`now()` }).where(eq(blogPosts.pageId, page.id));
+    }
     ctx.setSubject("page", page.id);
     ctx.queueEvent(input.published ? "cms.pagePublished" : "cms.pageUnpublished", {
       pageId: page.id,
@@ -1873,6 +1889,8 @@ registerSearchSource({
 
 export default [
   listBlogPosts,
+  ...blogServices,
+  ...blogCommentServices,
   resolvePage,
   resolvePageForRender,
   getPage,

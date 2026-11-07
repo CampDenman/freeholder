@@ -8,7 +8,7 @@
 // keep in step. Almost every assertion here is a consequence of that.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { proxy } from "../../proxy";
+import { requestContextProxy as proxy } from "../../proxy";
 import { LOCALE_HEADER } from "@/core/http/headers";
 import { localePath } from "../../app/(public)/[[...slug]]/alternates";
 import {

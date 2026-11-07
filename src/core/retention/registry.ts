@@ -156,6 +156,8 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   rental_agreements: "Hire documents; contractual hold.",
   time_entries: "Time against a project; business work record.",
   reviews: "Published review evidence, not a notes-style TTL.",
+  blog_reader_comments:
+    "Published discussion and moderation history belongs to its page; page purge and cms.readerComments privacy erasure govern it, not a notes-style TTL.",
   review_requests: "Solicitation workflow.",
   contact_stages: "Join table of a contact to a pipeline stage.",
   advertisers: "Ad-account counterparties.",

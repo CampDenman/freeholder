@@ -41,6 +41,7 @@ import { PagePresence } from "./PagePresence";
 import { PageComments } from "./PageComments";
 import { currentBusiness } from "@/core/settings/read";
 import { detachLayoutAction, fileHelpArticleAction, rejoinLayoutAction } from "../../../cms-actions";
+import { BlogPostSettings } from "../../blog/PostSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -154,6 +155,8 @@ export default async function EditPagePage({
           />
         </div>
       </div>
+
+      <BlogPostSettings pageId={page.id} actor={actor} />
 
       <PageEditor
         id={page.id}
