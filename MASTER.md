@@ -1635,6 +1635,17 @@ seam; built-in webhook fan-out enforces it with a unique database key.
 
 ## 12. Adapter Contract
 
+Optional hosted storage quotas are enforced at the shared storage adapter, so
+uploads, generated variants and background writes share one limit. A durable
+per-object reservation commits before provider I/O; ambiguous writes retain their
+reservation and refuse another write to that key until operator reconciliation.
+Enabling a quota requires a complete, verified object inventory bound to the
+exact storage namespace; it never assumes an existing bucket is empty. Scoped
+credentials are exclusive to this instance. Direct multipart upload is unavailable
+in this opt-in mode until signed parts can enforce the same byte reservation;
+the normal bounded proxy upload remains available and reports its actual limit.
+
+
 Adapters isolate vendors. Each adapter family has one interface in `src/adapters/<family>/types.ts`; implementations are selected by env/settings and instantiated once at boot.
 
 ```ts
@@ -9844,6 +9855,20 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   thumbnails and colours, and UTM tagging of outside addresses.)*
 
 ### 43.15 C10 — Ownership durability, self-update, and mobile applications
+
+- [ ] **C10.32** Enforce optional hosted storage byte quotas with durable,
+  serialized per-object reservations across all shared storage writes. Preserve
+  unknown provider outcomes, require exact-namespace inventory initialization,
+  and expose the actual bounded proxy capability. F01/F07: ledger, custody and
+  fail-closed authority; F05: all UI/HTTP/MCP writes use the same adapter;
+  F02/F03: short internal reservations, no contact or money mutations;
+  F04/F06: existing upload UI retains actionable English limit/errors;
+  F08/F09: real Postgres concurrency, provider-failure and restart controls;
+  F10: shared website adapter, no mobile-only surface;
+  F11: operator initialization/reconciliation guidance; F12: actual hosted
+  create/upload/derived-image/delete and over-quota refusal remain OPEN. Source
+  work initiated 2026-11-09 for Paradise Modern hosted launch; no deployed claim.
+
 
 #### Safe update system
 - [x] **C9.32** Build scheduled exports and the accounting export shapes
