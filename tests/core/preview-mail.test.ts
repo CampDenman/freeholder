@@ -15,6 +15,7 @@ import { db } from "@/core/db";
 import { resetEnvForTests } from "@/core/env";
 import { auditLog } from "@/core/events/schema";
 import { jobIdempotencyKeys } from "@/core/jobs/schema";
+import { prepareServiceJobRuntime, stopJobs } from "@/core/jobs";
 import { mailDeliveries, mailOutbox } from "@/core/mail/schema";
 import {
   listHeldMail,
@@ -110,7 +111,13 @@ describe("the preview allow-list", () => {
 });
 
 describe.runIf(hasDatabase)("preview mail", () => {
-  beforeAll(ready, 60_000);
+  beforeAll(async () => {
+    await ready();
+    // These controls deliberately call the low-level transactional mail API.
+    // Prepare its producer before opening any of those transactions, just as
+    // the shared service boundary does; do not mount a delivery worker.
+    await prepareServiceJobRuntime();
+  }, 60_000);
 
   beforeEach(async () => {
     await truncateSpine();
@@ -128,6 +135,7 @@ describe.runIf(hasDatabase)("preview mail", () => {
   });
 
   afterAll(async () => {
+    await stopJobs();
     await truncateSpine();
     await closeDb();
   });
