@@ -64,6 +64,7 @@
     "aws4fetch": "^1.0.20",
     "cron-parser": "5.10.2",
     "drizzle-orm": "^0.45.4",
+    "fast-xml-parser": "5.11.0",
     "intl-messageformat": "^12.1.4",
     "isbot": "^5.2.1",
     "livekit-client": "2.23.0",

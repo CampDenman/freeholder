@@ -34,10 +34,12 @@ import type { TimelineEventInput } from "@/core/events";
 import { anonymousClientKey, consume, rateLimitKey, TRUSTED_BACKSTOP_FACTOR, type RateLimitPolicy } from "@/core/security/rate-limit";
 import {
   enqueueJob,
+  prepareServiceJobRuntime,
   type EnqueuedJob,
   type EnqueueJobOptions,
 } from "@/core/jobs";
 import { ready } from "@/core/runtime";
+import {withDeploymentContinuation} from '@/core/runtime/deployment-admission';
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -665,7 +667,10 @@ export function defineService<In extends z.ZodType, Out>(
       // is the one place that cannot be forgotten — and only on the outermost
       // call, since a composed one is already inside a booted graph. See
       // core/runtime.ts for why boot cannot be left to instrumentation alone.
-      if (!inheritedTx) await ready();
+      if (!inheritedTx) {
+        await ready();
+        if(def.kind==='mutation')await prepareServiceJobRuntime();
+      }
 
       // Throttled *before* the transaction opens, and skipped for composed and
       // system calls. A composed call is one step of a mutation the outermost
@@ -756,6 +761,7 @@ export function defineService<In extends z.ZodType, Out>(
         return out;
       };
 
+      const complete=async()=>{
       const result = inheritedTx
         ? await run(inheritedTx)
         : await db().transaction(run);
@@ -772,6 +778,13 @@ export function defineService<In extends z.ZodType, Out>(
         );
       }
       return result;
+      };
+      // These services continue a call that was already durably admitted.
+      // The context also covers its same-transaction outbox and post-commit
+      // listener dispatch. No request/key option can create this exception.
+      return ['members.startCall','members.startGroupCall','members.answerCall','members.endCall','members.signal','members.takeSignals',
+        'members.joinGroupCall','members.leaveGroupCall','members.sendCallKey'].includes(def.name)
+        ? withDeploymentContinuation(complete) : complete();
     },
   };
 }

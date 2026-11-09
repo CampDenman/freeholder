@@ -9,11 +9,14 @@ import { createLocalStorage } from "@/adapters/storage/local";
 import { createReplitStorage } from "@/adapters/storage/replit";
 import { createS3Storage } from "@/adapters/storage/s3";
 import type { StorageAdapter } from "@/adapters/storage/types";
+import { withStorageQuota } from "@/adapters/storage/quota";
+import { postgresStorageQuota, storageNamespace, withVerifiedEmptyInitialization } from "@/core/media/storage-quota";
+import { verifyEmptyS3Inventory } from "@/adapters/storage/empty-inventory";
 
 /** Where the app serves stored objects from when the bucket is private. */
 export const MEDIA_PATH = "/media";
 
-function build(): StorageAdapter {
+function buildUnbounded(): StorageAdapter {
   const e = env();
   // Environment wins over the checked-in default, so one published image can
   // serve instances that store their media in different places (§17).
@@ -71,7 +74,20 @@ function build(): StorageAdapter {
 let instance: StorageAdapter | undefined;
 
 export function storage(): StorageAdapter {
-  instance ??= build();
+  if (!instance) {
+    const inner = buildUnbounded(), e = env();
+    if (e.FREEHOLDER_STORAGE_QUOTA_BYTES) {
+      // Hosted quota mode deliberately supports private S3 only. Switching
+      // buckets/endpoints changes the namespace and requires new inventory.
+      if (inner.id !== "s3" || inner.isPublic) throw new Error("Storage quota requires private S3 storage");
+      const namespace = storageNamespace({ id: inner.id, endpoint: e.S3_ENDPOINT, bucket: e.S3_BUCKET });
+      const max = Number(e.FREEHOLDER_STORAGE_QUOTA_BYTES);
+      const ledger = e.FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY === "true"
+        ? withVerifiedEmptyInitialization(namespace,max,() => verifyEmptyS3Inventory({ endpoint:e.S3_ENDPOINT!,region:e.S3_REGION!,bucket:e.S3_BUCKET!,accessKeyId:e.S3_ACCESS_KEY_ID!,secretAccessKey:e.S3_SECRET_ACCESS_KEY!,addressingStyle:e.S3_ADDRESSING_STYLE }))
+        : postgresStorageQuota(namespace,max);
+      instance = withStorageQuota(inner, ledger);
+    } else instance = inner;
+  }
   return instance;
 }
 
