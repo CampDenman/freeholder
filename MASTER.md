@@ -9868,6 +9868,39 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   F11: operator initialization/reconciliation guidance; F12: actual hosted
   create/upload/derived-image/delete and over-quota refusal remain OPEN. Source
   work initiated 2026-11-09 for Paradise Modern hosted launch; no deployed claim.
+  Delivery integration correction: normal quota-source CI found that the
+  generated changelog and C10.32 evidence row had not been included. Regenerate
+  `CHANGELOG.md` from the unchanged changeset inbox and map both C10.32 and
+  C10.33 in `deploy/f-criteria-matrix.md`; do not weaken those gates. This is a
+  source packaging/documentation defect, separate from storage runtime quality.
+  Focused source checks do not close hosted build or operational acceptance.
+
+
+- [ ] **C10.33** Make hosted cutover use a durable operation-owned app/DB
+  admission fence shared with member/group call starts and canonical jobs.
+  F01/F07: same-transaction admission, current operation/source ownership,
+  unknown/stale evidence held and history preserved; F05: shared services retain
+  UI/HTTP/MCP parity. F02/F03: maintenance does not grant ownership, keys,
+  payments or contact changes. F04/F06: new starts receive an actionable pause;
+  End/signaling and ongoing calls remain available. F08/F09: actual PostgreSQL
+  late-admission races and pg-boss wait-without-abort, startup, continuation and
+  resumption controls. F10: shared host operator, no app-only bypass. F11:
+  `deploy/hosted-deployment-admission.md`; F12: normal hosted build and actual
+  private/public deployment acceptance remain OPEN. Source initiated2026-11-09
+  after a fake-provider control proved two zero snapshots could miss a call
+  committing during awaited authority. This is a source defect reproduction,
+  not an observed production interrupted call. A host with no capability must
+  leave its running image alone.
+  A real PostgreSQL source control also reproduced a first-producer startup
+  wait cycle: an admitted transaction awaited another connection's registration
+  behind the exclusive hold. Shared services now prepare their producer before
+  the business transaction; direct transactional queue callers require that
+  resident graph. Local cold-graph End/signaling and exact lock ordering are
+  required controls. Neither this correction nor a passing test is a deployed
+  acceptance claim.
+  Existing C12.07/C12.24 member permissions, peer-to-peer/encrypted media and
+  consent rules stay in their canonical shared services; this adds no member
+  identity, media-recording, provider or grant path.
 
 
 #### Safe update system

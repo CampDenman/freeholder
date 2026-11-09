@@ -28,7 +28,9 @@ RUN pnpm build
 FROM node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS runtime
 LABEL io.freeholder.storage.quota.version="1" \
     io.freeholder.storage.quota.proxy_max_bytes="26214400" \
-    io.freeholder.storage.quota.unknown="reserved"
+    io.freeholder.storage.quota.unknown="reserved" \
+    io.freeholder.deployment.admission.version="1" \
+    io.freeholder.deployment.admission.operator="scripts/deployment-admission.mjs"
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_MANUAL_SIG_HANDLE=true \
@@ -46,6 +48,7 @@ COPY --from=build --chown=freeholder:freeholder /app/db ./db
 # The way back in when nobody can sign in. Needs only node:crypto, which is
 # why it can live in an image whose node_modules holds four packages.
 COPY --from=build --chown=freeholder:freeholder /app/scripts/owner-password.mjs ./scripts/owner-password.mjs
+COPY --from=build --chown=freeholder:freeholder /app/scripts/deployment-admission.mjs ./scripts/deployment-admission.mjs
 # C3.44: the docker-selfhost media volume mounts here. Docker copies this
 # directory's ownership into a new named volume, so the app can write to it.
 RUN mkdir -p /var/lib/freeholder/media && chown -R freeholder:freeholder /var/lib/freeholder

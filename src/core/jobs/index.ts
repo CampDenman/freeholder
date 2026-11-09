@@ -30,6 +30,16 @@ import {
 } from "@/core/jobs/health";
 import { jobIdempotencyKeys } from "@/core/jobs/schema";
 import { outsideSeeding } from "@/core/audit-origin";
+import {
+  readDeploymentHold,
+  newDeploymentWorkAllowed,
+  withDeploymentContinuation,
+  admitDeploymentRuntime,
+  acknowledgeDeploymentDrain,
+  markDeploymentRuntimeStopped,
+  deploymentWorkInventory,
+  ensureDeploymentCronFence,
+} from "@/core/runtime/deployment-admission";
 
 type JobTx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -302,6 +312,7 @@ function executionOptions(
 
 let boss: PgBoss | undefined;
 let producerStarting: Promise<PgBoss | undefined> | undefined;
+let workersStarting: Promise<PgBoss | undefined> | undefined;
 let runtimeInstanceId: string | undefined;
 let runtimeHeartbeatTimer: NodeJS.Timeout | undefined;
 let runtimePulseInFlight: Promise<void> | undefined;
@@ -311,6 +322,112 @@ let runtimeLastErrorAt: Date | undefined;
 let runtimeLastLogCode: string | undefined;
 let runtimeLastLogAt = 0;
 let runtimeLastAlert: "healthy" | "lag" | "dead_letters" = "healthy";
+
+// C1.09: a deployment drain is not the ordinary thirty-second shutdown grace.
+// Every module graph that can create a producer participates, including web
+// request graphs separate from the framework instrumentation graph.
+let deploymentPaused = false;
+let deploymentMonitor: NodeJS.Timeout | undefined;
+let deploymentReconcile: Promise<void> | undefined;
+let deploymentEpoch = 0;
+let deploymentStopping = false;
+let deploymentWantsWorkers = false;
+let deploymentWasStarted = false;
+let deploymentOperationId: string | undefined;
+
+function monitorDeploymentAdmission(): void {
+  if (deploymentMonitor || deploymentStopping) return;
+  deploymentMonitor = setInterval(() => {
+    void reconcileJobDeploymentAdmission().catch((error: unknown) =>
+      logRuntimeFailure("deployment-admission", error),
+    );
+  }, 1_000);
+  deploymentMonitor.unref();
+}
+
+/** Canonical poll hook. A timeout/error never produces a durable drain ack. */
+export function reconcileJobDeploymentAdmission(): Promise<void> {
+  deploymentReconcile ??= reconcileDeploymentAdmission().finally(() => {
+    deploymentReconcile = undefined;
+  });
+  return deploymentReconcile;
+}
+
+async function reconcileDeploymentAdmission(): Promise<void> {
+  if (deploymentStopping || !runtimeInstanceId) return;
+  const epoch = deploymentEpoch, instanceId = runtimeInstanceId;
+  const hold = await readDeploymentHold();
+  if (!hold || hold.phase === "resuming") {
+    if (!deploymentPaused) return;
+    deploymentPaused = false;
+    deploymentOperationId = undefined;
+    // Queue definitions registered during the hold deliberately skipped
+    // schedule(). Revisit them even when the producer survived a busy hold.
+    mountedQueues.clear();
+    const resumed = deploymentWantsWorkers ? await startJobs() : await startJobProducer();
+    if (resumed) for (const job of registry.values()) await ensureQueue(resumed, job);
+    return;
+  }
+  // Latch before awaiting startup/mount. A work() already awaiting a queue
+  // read may finish, but it is included in the drain before acknowledgement.
+  deploymentPaused = true;
+  if (deploymentOperationId !== hold.operationId) {
+    const admitted = await admitDeploymentRuntime(instanceId);
+    if (admitted.hold?.operationId !== hold.operationId) return;
+    deploymentOperationId = hold.operationId;
+  }
+  await producerStarting;
+  await workersStarting;
+  let instance = boss;
+  if (instance) {
+    if (deploymentWantsWorkers && workersEnabled()) await mountWorkers(instance, true);
+  }
+  for (;;) {
+    if (deploymentStopping || epoch !== deploymentEpoch) return;
+    const current = await readDeploymentHold();
+    if (!current || current.operationId !== hold.operationId || current.phase === "resuming") return;
+    const work = await deploymentWorkInventory();
+    if (work.calls || work.pendingJobs || work.activeJobs) return;
+    if (instance) {
+      // The canonical database cron fence blocks new schedule triggers while
+      // the ordinary dispatcher finishes all previously accepted ones. Only
+      // after inventory reaches zero may we stop that dispatcher. Timers are
+      // then stopped by public stop() after application handlers finish.
+      await instance.offWork("__pgboss__send-it", { wait: true });
+      // offWork also waits for a fetch already in flight, not only handlers
+      // visible to the inventory query. It never calls AbortController.abort.
+      await Promise.all([...mountedWorkers].map(name => instance!.offWork(name, { wait: true })));
+      mountedWorkers.clear();
+      if (runtimeHeartbeatTimer) clearInterval(runtimeHeartbeatTimer);
+      runtimeHeartbeatTimer = undefined;
+      await runtimePulseInFlight;
+      // There are now no accepted application/cron handlers to cancel. The
+      // normal finite stop is solely timer/producer/pool cleanup, not proof
+      // that a thirty-second handler grace was sufficient.
+      await instance.stop({ graceful: true, timeout: 30_000 });
+      boss = undefined;
+      producerStarting = undefined;
+      mountedQueues.clear();
+      instance = undefined;
+    }
+    const after = await deploymentWorkInventory();
+    if (after.calls || after.activeJobs) return;
+    if (after.pendingJobs) {
+      // A cron pass or an accepted handler may have committed a child during
+      // the last drain. Only a previously running worker graph may process
+      // that retained work, with schedule:false and the same durable hold.
+      if (!deploymentWasStarted || !deploymentWantsWorkers || !workersEnabled()) return;
+      instance = await startProducer(true);
+      if (instance) await mountWorkers(instance, true);
+      return;
+    }
+    const finalHold = await readDeploymentHold();
+    if (!deploymentStopping && epoch === deploymentEpoch && finalHold?.operationId === hold.operationId && finalHold.phase !== "resuming") {
+      await acknowledgeDeploymentDrain(instanceId, hold.operationId);
+    }
+    return;
+  }
+}
 
 const RUNTIME_ERROR_RECOVERY_MS = JOB_HEARTBEAT_INTERVAL_MS * 2;
 const RUNTIME_LOG_THROTTLE_MS = 60_000;
@@ -501,7 +618,7 @@ async function ensureQueue(instance: PgBoss, job: JobDefinition): Promise<void> 
     await instance.createQueue(job.name, options);
     await instance.updateQueue(job.name, { deadLetter: DEAD_LETTER_QUEUE });
   }
-  if (job.schedule && schedulesEnabled()) {
+  if (job.schedule && !deploymentPaused && schedulesEnabled()) {
     await instance.schedule(job.name, job.schedule, {}, executionOptions(job));
   }
   mountedQueues.add(job.name);
@@ -521,19 +638,45 @@ async function ensureDeadLetterQueue(instance: PgBoss): Promise<void> {
  * request transactions can enqueue work for the separate worker.
  */
 export async function startJobProducer(): Promise<PgBoss | undefined> {
+  return startProducer(false);
+}
+
+/** Called by the shared service boundary BEFORE opening a business transaction.
+ * A graph born into a hold registers durably but starts no producer. Pure End
+ * and signaling mutations may still finish; a queue write without a prepared
+ * resident producer fails closed rather than opening a second connection while
+ * its caller holds the shared admission transaction lock.
+ */
+export async function prepareServiceJobRuntime():Promise<void>{await startJobProducer();}
+function residentProducer():PgBoss{
+  if(!boss)throw new JobContractError('Background job runtime is not prepared. Retry after the deployment hold clears.');
+  return boss;
+}
+
+async function startProducer(drainExisting: boolean): Promise<PgBoss | undefined> {
   if (!producerEnabled()) return undefined;
   if (boss) return boss;
-  // The first enqueue may come from inside the demo seed (`runAsSeed`). The
+  if (deploymentPaused && !drainExisting) return undefined;
+  deploymentStopping = false;
+  // First preparation may come from inside the demo seed (`runAsSeed`). The
   // producer, its supervisor and schedule timers, error emitter and heartbeat
   // interval live for the whole process, so they are created outside that
   // scope: otherwise everything they later trigger would be marked as seed.
   producerStarting ??= outsideSeeding(() => (async () => {
+    runtimeInstanceId ??= randomUUID();
+    const admitted = await admitDeploymentRuntime(runtimeInstanceId);
+    monitorDeploymentAdmission();
+    if (admitted.hold) {
+      deploymentPaused = true;
+      deploymentOperationId = admitted.hold.operationId;
+      if (!drainExisting || !deploymentWasStarted) return undefined;
+    }
     const instance = new PgBoss({
       connectionString: databaseUrl(),
       schema: "pgboss",
       max: 2,
       supervise: workersEnabled(),
-      schedule: schedulesEnabled(),
+      schedule: !deploymentPaused && schedulesEnabled(),
     });
     instance.on("error", (error) => {
       rememberRuntimeFailure("pg-boss", error);
@@ -541,10 +684,12 @@ export async function startJobProducer(): Promise<PgBoss | undefined> {
     });
     try {
       await instance.start();
+      await ensureDeploymentCronFence();
       await ensureDeadLetterQueue(instance);
       for (const job of registry.values()) await ensureQueue(instance, job);
       await startRuntimeHeartbeat(instance);
       boss = instance;
+      deploymentWasStarted = true;
       return instance;
     } catch (error) {
       await instance.stop({ graceful: false }).catch(() => undefined);
@@ -553,6 +698,11 @@ export async function startJobProducer(): Promise<PgBoss | undefined> {
   })()).catch((error) => {
     producerStarting = undefined;
     throw error;
+  }).then((instance) => {
+    // A process born into a hold has no producer. Do not cache that absence
+    // forever: the same monitor must be able to resume after exact release.
+    if (!instance) producerStarting = undefined;
+    return instance;
   });
   return producerStarting;
 }
@@ -633,6 +783,9 @@ function validateEnqueueOptions(options: EnqueueJobOptions): void {
  * This is intentionally the only send primitive exported by core. A caller
  * that has no transaction opens one; it never gets a tempting best-effort
  * function capable of losing work between commit and enqueue.
+ * The shared service boundary prepares the resident runtime first. Standalone
+ * callers do the same BEFORE opening their transaction; enqueue never starts
+ * another connection while its caller holds the admission lock.
  */
 export async function enqueueJob(
   tx: JobTx,
@@ -642,9 +795,9 @@ export async function enqueueJob(
 ): Promise<EnqueuedJob> {
   validateEnqueueOptions(options);
   const job = definition(name);
-  const instance = await startJobProducer();
-  if (!instance) {
-    throw new JobContractError("Background job storage is unavailable because DATABASE_URL is not configured.");
+  const instance=residentProducer();
+  if (!(await newDeploymentWorkAllowed(tx))) {
+    throw new JobContractError("New background work is paused for deployment.");
   }
   await ensureQueue(instance, job);
 
@@ -725,15 +878,24 @@ function stateReader(instance: PgBoss, name: string, id: string) {
 export function startJobs(): Promise<PgBoss | undefined> {
   // Workers poll for the life of the process; like the producer, they never
   // inherit a seeding scope from whoever started them.
-  return outsideSeeding(() => startWorkers());
+  deploymentWantsWorkers ||= workersEnabled();
+  if (deploymentPaused) return Promise.resolve(boss);
+  workersStarting ??= outsideSeeding(() => startWorkers()).finally(() => {
+    workersStarting = undefined;
+  });
+  return workersStarting;
 }
 
 async function startWorkers(): Promise<PgBoss | undefined> {
   const instance = await startJobProducer();
-  if (!instance || !workersEnabled()) return instance;
+  if (!instance || !workersEnabled() || deploymentPaused) return instance;
+  return mountWorkers(instance, false);
+}
 
+async function mountWorkers(instance: PgBoss, drainExisting: boolean): Promise<PgBoss> {
   for (const job of registry.values()) {
     await ensureQueue(instance, job);
+    if (deploymentPaused && !drainExisting) return instance;
     if (mountedWorkers.has(job.name)) continue;
     const policy = resolvedJobPolicy(job);
     await instance.work<Record<string, unknown>>(
@@ -767,7 +929,7 @@ async function startWorkers(): Promise<PgBoss | undefined> {
             },
           };
           await context.throwIfCancelled();
-          await job.handler(message.data ?? {}, context);
+          await withDeploymentContinuation(() => job.handler(message.data ?? {}, context));
         }
       },
     );
@@ -786,8 +948,7 @@ async function startWorkers(): Promise<PgBoss | undefined> {
 /** Cancel queued/retrying work or mark active work for cooperative cancellation. */
 export async function cancelJob(tx: JobTx, name: string, id: string): Promise<boolean> {
   definition(name);
-  const instance = await startJobProducer();
-  if (!instance) throw new JobContractError("Background job storage is unavailable.");
+  const instance=residentProducer();
   const adapter = transactionDatabase(tx);
   const [current] = await instance.findJobs(name, { id, db: adapter });
   if (!current || ["completed", "failed", "cancelled"].includes(current.state)) return false;
@@ -798,8 +959,10 @@ export async function cancelJob(tx: JobTx, name: string, id: string): Promise<bo
 /** Requeue a retained failed/cancelled job; the handler remains idempotent. */
 export async function retryJob(tx: JobTx, name: string, id: string): Promise<boolean> {
   definition(name);
-  const instance = await startJobProducer();
-  if (!instance) throw new JobContractError("Background job storage is unavailable.");
+  const instance=residentProducer();
+  if (!(await newDeploymentWorkAllowed(tx))) {
+    throw new JobContractError("New background work is paused for deployment.");
+  }
   const adapter = transactionDatabase(tx);
   const [current] = await instance.findJobs(name, { id, db: adapter });
   if (!current || !["failed", "cancelled"].includes(current.state)) return false;
@@ -896,10 +1059,12 @@ export async function redriveDeadLetters(
   input: { sourceName?: string; limit?: number } = {},
 ): Promise<number> {
   if (input.sourceName) definition(input.sourceName);
+  const instance=residentProducer();
   const limit = input.limit ?? 1;
   integerInRange(limit, "limit", 1, 100);
-  const instance = await startJobProducer();
-  if (!instance) throw new JobContractError("Background job storage is unavailable.");
+  if (!(await newDeploymentWorkAllowed(tx))) {
+    throw new JobContractError("New background work is paused for deployment.");
+  }
   return instance.redrive(DEAD_LETTER_QUEUE, {
     sourceName: input.sourceName,
     limit,
@@ -916,6 +1081,10 @@ export async function pruneJobIdempotencyKeys(): Promise<number> {
 }
 
 export async function stopJobs(): Promise<void> {
+  deploymentStopping = true;
+  deploymentEpoch += 1;
+  if (deploymentMonitor) clearInterval(deploymentMonitor);
+  deploymentMonitor = undefined;
   const instance = boss ?? (await producerStarting?.catch(() => undefined));
   boss = undefined;
   producerStarting = undefined;
@@ -936,7 +1105,12 @@ export async function stopJobs(): Promise<void> {
   }
   mountedQueues.clear();
   mountedWorkers.clear();
+  if (runtimeInstanceId) await markDeploymentRuntimeStopped(runtimeInstanceId);
   runtimeInstanceId = undefined;
+  deploymentPaused = false;
+  deploymentWasStarted = false;
+  deploymentOperationId = undefined;
+  deploymentWantsWorkers = false;
   runtimeLastMetrics = { ...EMPTY_JOB_RUNTIME_METRICS };
   runtimeLastErrorCode = undefined;
   runtimeLastErrorAt = undefined;

@@ -19,6 +19,7 @@ import {
   registerJob,
   resolvedJobPolicy,
   startJobProducer,
+  prepareServiceJobRuntime,
   startJobs,
   stopJobs,
   workerPolling,
@@ -302,6 +303,7 @@ describe.runIf(hasDatabase)("transactional background work", () => {
     seedScopeObserved.length = 0;
     const receipt = await runAsSeed(async () => {
       expect(isSeeding()).toBe(true);
+      await prepareServiceJobRuntime();
       const queued = await db().transaction((tx) => ctxlessEnqueue(tx, seedScope.name));
       await startJobs();
       expect(isSeeding()).toBe(true);
@@ -316,7 +318,7 @@ describe.runIf(hasDatabase)("transactional background work", () => {
     // it: the same answer.
     await stopJobs();
     seedScopeObserved.length = 0;
-    const later = await runAsSeed(() => db().transaction((tx) => ctxlessEnqueue(tx, seedScope.name)));
+    const later = await runAsSeed(async () => {await prepareServiceJobRuntime();return db().transaction((tx) => ctxlessEnqueue(tx, seedScope.name));});
     await startJobs();
     await eventually(async () => (await getJob(seedScope.name, later.id))?.state === "completed");
     expect(seedScopeObserved).toEqual([false]);

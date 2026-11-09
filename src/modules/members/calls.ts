@@ -13,6 +13,7 @@
 // C12.24.
 import { createHmac } from "node:crypto";
 import { z } from "zod";
+import {newDeploymentCallAllowed} from "@/core/runtime/deployment-admission";
 import { and, asc, eq, inArray, lt, ne, or } from "drizzle-orm";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { env } from "@/core/env";
@@ -176,6 +177,7 @@ export const startCall = defineService({
   input: z.object({ handle: z.string().trim().toLowerCase().max(60), media: z.enum(["voice", "video"]) }),
   output: callShape,
   handler: async (input, ctx) => {
+    if(!(await newDeploymentCallAllowed(ctx.tx)))throw new ServiceError("conflict","This site is preparing an update. New calls are paused; existing calls can continue and end normally.");
     const me = await activeSelf(ctx);
     await expireRinging(ctx);
     const [callee] = await ctx.tx
