@@ -53,6 +53,15 @@ v2.
 - **Every `tests/…` file cited in this matrix was part of these runs.** The suite collects the whole `tests/` tree, and `tests/core/f-matrix.test.ts` independently fails if any cited test file is not in that tree — so a citation cannot point at a file the green run never executed.
 - **HEAD:** branch `docs/f-criteria-matrix`, parent `2d9cac8` (`origin/main`); the matrix and checker are part of the commit this header ships in.
 
+### C10.32/C10.33 source addendum — 2026-11-09
+
+The two new rows below are source evidence mappings, added after the historical
+full-suite run above. That run does not qualify these new files. Focused native
+matrix/changelog checks must pass on the combined source; normal hosted build
+and actual storage/deployment acceptance remain OPEN in `MASTER.md`. The first
+quota source CI exposed missing generated release notes and the C10.32 row;
+this addendum also includes C10.33 instead of weakening either gate.
+
 ## C0.01 — Consolidate product specification, current state, dependency
 
 - **F01** — N/A — no schema work in this item — it changes planning text, legal notices, CI or developer tooling, not tables.
@@ -4020,6 +4029,36 @@ v2.
 - **F10** — `seed/demo/content.ts` — the demo installs `/links` with six smart links, asserted live in `tests/core/seed-demo.test.ts`; the `page.link-in-bio` template is in `src/modules/cms/templates.ts`.
 - **F11** — `deploy/link-in-bio.md`, changeset `.changeset/link-in-bio.md`, `MASTER.md` §1, §3, §32 and the C9.39 annotation, reconciliation row in `deploy/spec-reconciliation.md`.
 - **F12** — `tests/modules/linkinbio.test.ts` composes `linkinbio.setup` → `linkinbio.addLink` → `cms.publishPage` → `linkinbio.follow` → `analytics.track` → `linkinbio.report`; `tests/browser/journeys.spec.ts` follows a link from `/links` to a published page and hides it again.
+
+## C10.32 — Optional hosted storage byte quotas
+
+- **F01** — Durable object reservations and exact-namespace inventory ledger: `db/migrations/0063_storage_quota.sql`, `src/core/media/storage-quota-schema.ts`.
+- **F02** — Short serialized reservations before provider I/O, with unknown outcomes retained: `src/core/media/storage-quota.ts`.
+- **F03** — N/A — the per-site storage ledger adds no contact, customer, money, ownership or grant records; object reservations do not authorize payments.
+- **F04** — Existing uploads use actionable storage-limit errors; no new owner claim or quota-reset screen: `src/core/media/storage-quota.ts`, `deploy/hosted-storage-quotas.md`.
+- **F05** — Shared storage writes, deletes and derived objects use the same reservation adapter: `src/adapters/storage/index.ts`, `tests/core/storage-quota.test.ts`.
+- **F06** — Partial, source only: storage errors remain in the existing English error path; this change adds no translated or independently accepted screen. `deploy/hosted-storage-quotas.md`.
+- **F07** — Unknown inventory/provider outcomes remain reserved; malformed or partial inventory refuses initialization. `tests/core/storage-quota.test.ts`.
+- **F08** — Real PostgreSQL concurrent reservation, rollback, restart and provider-failure controls: `tests/core/storage-quota.test.ts`.
+- **F09** — Apache-2.0 source and the existing license gate: `LICENSING.md`, `scripts/license-headers.mjs`.
+- **F10** — Opt-in host configuration preserves ordinary unmetered storage and seed behavior; it does not provision a bucket or key. `.env.example`, `deploy/hosted-storage-quotas.md`.
+- **F11** — Changeset input and generated release-note output: `.changeset/hosted-storage-quota.md`, `CHANGELOG.md`; operator contract: `deploy/hosted-storage-quotas.md`.
+- **F12** — OPEN: hosted build and actual upload/derived-object/delete/over-quota acceptance are required; source tests are not deployed acceptance. `MASTER.md`, `deploy/hosted-storage-quotas.md`.
+
+## C10.33 — Durable deployment admission and resident jobs drain
+
+- **F01** — Operation-owned durable holds and runtime acknowledgments: `db/migrations/0064_deployment_admission.sql`, `src/core/runtime/deployment-admission-schema.ts`.
+- **F02** — Shared transaction admission, scoped continuation lifetime and exact operator custody: `src/core/runtime/deployment-admission.ts`, `scripts/deployment-admission.mjs`.
+- **F03** — N/A — deployment maintenance creates no contact, ownership, API-key, payment or consent authority; existing member and group permissions remain in their shared services.
+- **F04** — New call starts receive the normal actionable pause while End/signaling remain available: `deploy/hosted-deployment-admission.md`, `tests/core/jobs-cold-producer-postgres.test.ts`.
+- **F05** — UI/HTTP/MCP keep the same shared services and transaction fence; no host-only bypass for accepted calls. `src/core/runtime/deployment-admission.ts`, `tests/core/deployment-admission-postgres.test.ts`.
+- **F06** — Partial, source only: existing error paths receive the maintenance refusal; no new translated screen is claimed. `deploy/hosted-deployment-admission.md`.
+- **F07** — Missing, foreign, stale or unhealthy runtime evidence retains the hold; released UUIDs cannot be reused. `tests/core/deployment-admission-postgres.test.ts`, `tests/core/deployment-cron-postgres.test.ts`.
+- **F08** — Actual PostgreSQL admission/cron races and canonical pg-boss long-handler, dynamic queue, cold startup and resume controls: `tests/core/deployment-cron-postgres.test.ts`, `tests/core/jobs-deployment-pgboss.test.ts`, `tests/core/jobs-deployment-drain.test.ts`, `tests/core/jobs-cold-producer-postgres.test.ts`.
+- **F09** — Apache-2.0 source, deterministic operator contract and normal license gate: `LICENSING.md`, `tests/core/deployment-operator.test.ts`, `scripts/license-headers.mjs`.
+- **F10** — The resident module graph prepares its producer before a service transaction; an unprepared transactional queue caller refuses. Seed/manual preparation is explicit. `src/core/jobs/index.ts`, `deploy/hosted-deployment-admission.md`.
+- **F11** — Changeset input and generated release-note output: `.changeset/deployment-admission-safety.md`, `CHANGELOG.md`; operator guidance: `deploy/hosted-deployment-admission.md`.
+- **F12** — OPEN: normal hosted build, actual owned private/public cutover, accepted End/signaling continuity and healthy job resumption remain required. `MASTER.md`, `deploy/hosted-deployment-admission.md`.
 
 ## C9.32 — Build scheduled exports and the accounting export shapes
 

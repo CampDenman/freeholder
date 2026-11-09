@@ -1013,7 +1013,7 @@ export const beginUpload = defineOrchestratedService({
     if (strategy === "proxy" && input.bytes > PROXY_UPLOAD_LIMIT) {
       throw new ServiceError(
         "validation",
-        "This storage adapter cannot accept that file through the 25 MB proxy. Configure S3-compatible storage for resumable direct uploads.",
+        "This storage accepts files up to 25 MB through its upload proxy. Choose a smaller file or ask the site owner about support for larger uploads.",
       );
     }
 

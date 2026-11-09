@@ -13,6 +13,7 @@
 // still waiting is not rung. Nothing is recorded.
 import { and, eq, isNull, lt, ne } from "drizzle-orm";
 import { z } from "zod";
+import {newDeploymentCallAllowed} from "@/core/runtime/deployment-admission";
 import { listed, okResult, row, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { activeSelf, participant } from "./messages";
@@ -66,6 +67,7 @@ export const startGroupCall = defineService({
   input: z.object({ conversationId: uuid, media: z.enum(["voice", "video"]) }),
   output: z.object({ id: uuid, started: z.boolean() }),
   handler: async (input, ctx) => {
+    if(!(await newDeploymentCallAllowed(ctx.tx)))throw new ServiceError("conflict","This site is preparing an update. New calls are paused; existing calls can continue and end normally.");
     const me = await activeSelf(ctx);
     await accepted(ctx, input.conversationId, me.userId);
     if (!sfu()) throw new ServiceError("validation", "This site does not host group calls.");

@@ -297,6 +297,12 @@ const envSchema = z.object({
    */
   FREEHOLDER_STORAGE: z.enum(["s3", "replit", "local"]).optional(),
 
+  /** C10.32: opt-in exact-namespace inventory is required before writes. */
+  FREEHOLDER_STORAGE_QUOTA_BYTES: z.string().regex(/^[1-9]\d{0,15}$/)
+    .refine(value => Number.isSafeInteger(Number(value)), "Storage quota must be a safe byte count")
+    .optional(),
+  FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY: z.enum(["true", "false"]).optional(),
+
   /** Optional self-hosted ClamAV seam for originals (C1.12). */
   MALWARE_SCANNER: z.enum(["none", "clamav"]).default("none"),
   CLAMAV_HOST: z.string().min(1).optional(),
