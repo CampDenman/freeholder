@@ -14,6 +14,9 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
+  /** The application's listening port, also used for internal loopback HTTP. */
+  PORT: z.string().regex(/^[1-9]\d{0,4}$/).transform(Number)
+    .pipe(z.number().int().min(1).max(65535)).optional(),
   /** Only for a separate disposable instance with blocked network egress. */
   FREEHOLDER_PLAYGROUND: z.enum(["0", "1"]).optional(),
   /** Public playground link on the main website; absent on ordinary client sites. */

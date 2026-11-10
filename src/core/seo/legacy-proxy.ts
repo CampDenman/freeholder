@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// This leaf adapter asks the public service over the configured origin. No
+// This leaf adapter asks the public service over the application's loopback. No
 // request cookies, forwarded headers or caller-supplied origin cross that seam.
-import { siteOrigin } from "./origin";
+import { internalSiteOrigin, siteOrigin } from "./origin";
 
 const INTERNAL = /^\/(?:_next|admin|login|setup|preview|portal|api|media|embed|og|go|ap|feeds|\.well-known)(?:\/|$)/;
 const FILE = /\.(?:css|js|map|json|xml|txt|ico|png|jpe?g|gif|svg|webp|avif|woff2?|mp[34]|pdf)$/i;
@@ -26,7 +26,7 @@ export async function legacyRedirect(request: Request): Promise<Response | null>
   const candidate = query && ["", "index.php"].includes(path)
     ? `${path}?${query}=${requestUrl.searchParams.get(query)}` : path;
   try {
-    const endpoint = new URL("/api/v1/seo.resolveRedirect", siteOrigin());
+    const endpoint = new URL("/api/v1/seo.resolveRedirect", internalSiteOrigin());
     endpoint.searchParams.set("path", candidate);
     endpoint.searchParams.set("locale", locale);
     const response = await fetch(endpoint, { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(1500), headers: { accept: "application/json" } });

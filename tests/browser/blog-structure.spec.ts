@@ -64,6 +64,16 @@ test("an owner organizes a post, reviews a reader comment and keeps email privat
   const response = await page.request.get("/blog/moderated-studio-story/", { maxRedirects: 0 });
   expect(response.status()).toBe(301);
   expect(new URL(response.headers().location ?? "", C11_BASE_URL).href).toBe(`${C11_BASE_URL}/blog/moderated-studio-story`);
+  await page.goto("/admin/blog/categories");
+  await page.getByRole("link", { name: "Studio Journal", exact: true }).click();
+  await page.getByLabel("Web address", { exact: true }).fill("studio-journal-revised");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status")).toBeVisible();
+  const moved = await page.request.get("/blog/category/studio-journal", { maxRedirects: 0 });
+  expect(moved.status()).toBe(301);
+  const destination = new URL(moved.headers().location ?? "", C11_BASE_URL);
+  expect(destination.href).toBe(`${C11_BASE_URL}/blog/category/studio-journal-revised`);
+  expect((await page.request.get(destination.href, { maxRedirects: 0 })).status()).toBe(200);
 });
 
 test.afterAll(async () => { const { closeDb } = await import("@/core/db"); await closeDb(); });
