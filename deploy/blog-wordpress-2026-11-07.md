@@ -148,3 +148,11 @@ preflight outside `createPage`'s insertion transaction. These author/term and
 inline-tag tests do not qualify a strict concurrent page cap. Native race
 reproduction, shared page-insertion serialization and deployed acceptance are
 a scoped follow-up; no live page-overflow incident has been demonstrated.
+
+The redirect repair's protected browser check also reproduced a listener-family
+mismatch: `localhost` may bind IPv6, while a fixed IPv4 resolver cannot reach it.
+The internal resolver now selects localhost for that configured listener and
+IPv6 loopback for `::`/`::1`; other listen hosts select IPv4 loopback. No request
+header or arbitrary configured hostname becomes an outbound destination. Real
+IPv4, IPv6 and localhost HTTP regression listeners all return the intended 301
+without receiving visitor credentials.

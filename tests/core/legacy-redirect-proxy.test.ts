@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createServer } from "node:http";
 import { NextRequest } from "next/server";
 import { legacyRedirect } from "@/core/seo/legacy-proxy";
 import { proxy } from "../../proxy";
@@ -8,9 +9,43 @@ import { resetEnvForTests } from "@/core/env";
 import { internalSiteOrigin } from "@/core/seo/origin";
 const originalOrigin = process.env.APP_URL;
 const originalPort = process.env.PORT;
-afterEach(() => { vi.unstubAllGlobals(); if (originalOrigin === undefined) delete process.env.APP_URL; else process.env.APP_URL = originalOrigin; if (originalPort === undefined) delete process.env.PORT; else process.env.PORT = originalPort; delete process.env.FREEHOLDER_PREVIEW_KEY; resetEnvForTests(); });
+const originalHostname = process.env.HOSTNAME;
+beforeEach(() => { delete process.env.HOSTNAME; resetEnvForTests(); });
+afterEach(() => { vi.unstubAllGlobals(); if (originalOrigin === undefined) delete process.env.APP_URL; else process.env.APP_URL = originalOrigin; if (originalPort === undefined) delete process.env.PORT; else process.env.PORT = originalPort; if (originalHostname === undefined) delete process.env.HOSTNAME; else process.env.HOSTNAME = originalHostname; delete process.env.FREEHOLDER_PREVIEW_KEY; resetEnvForTests(); });
 
 describe("legacy redirect HTTP projection", () => {
+  it.each(["127.0.0.1", "::1", "localhost"])("reaches a real local resolver bound to %s", async (hostname) => {
+    const server = createServer((request, response) => {
+      expect(request.headers.cookie).toBeUndefined();
+      expect(request.headers.authorization).toBeUndefined();
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ toPath: "moved", status: "301" }));
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, hostname, resolve);
+    });
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Expected TCP listener");
+      process.env.HOSTNAME = hostname;
+      process.env.PORT = String(address.port);
+      process.env.APP_URL = "https://destination.example.test";
+      resetEnvForTests();
+      const response = await legacyRedirect(new NextRequest("https://untrusted.example/old", { headers: { cookie: "private", authorization: "Bearer private" } }));
+      expect(response?.status).toBe(301);
+      expect(response?.headers.get("location")).toBe("https://destination.example.test/moved");
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+  it.each(["0.0.0.0", "container-name", "attacker.example", "127.0.0.1:443/path"])("never uses %s as an outbound host", hostname => {
+    process.env.HOSTNAME = hostname;
+    process.env.PORT = "3219";
+    resetEnvForTests();
+    expect(internalSiteOrigin()).toBe("http://127.0.0.1:3219");
+  });
   it("uses the default listening port and refuses malformed port configuration", () => {
     delete process.env.PORT;
     resetEnvForTests();
