@@ -27,6 +27,9 @@ jobs:
       - uses: ./.github/actions/setup-project
       - name: Fresh dependency audit
         run: pnpm dependency:audit -- --write-attestation=artifacts/dependency-audit.json
+      - name: Fresh customer app dependency audit
+        working-directory: apps/mobile
+        run: npm audit --package-lock-only --audit-level=moderate
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: scheduled-dependency-audit-${{ github.run_id }}

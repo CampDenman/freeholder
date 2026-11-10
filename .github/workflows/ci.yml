@@ -45,6 +45,9 @@ jobs:
       - name: Install the customer app
         working-directory: apps/mobile
         run: npm ci --no-audit --no-fund
+      - name: Audit the customer app dependency tree
+        working-directory: apps/mobile
+        run: npm audit --package-lock-only --audit-level=moderate
       - name: Typecheck the customer app
         working-directory: apps/mobile
         run: npx tsc -p tsconfig.json --noEmit

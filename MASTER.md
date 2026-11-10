@@ -11243,6 +11243,16 @@ schema they inherit reads as a designed thing rather than an excavation.
   stays an open residual. Evidence: `tests/core/runtime-version-integrity.test.ts`,
   `tests/core/deploy-recipe.test.ts`; notes `deploy/release-notes-2026-10-23.md`;
   changeset `node-22-23-4-october-2026-advisories.md`. Not independent review.
+  Security remediation 2026-11-10: the owner selected Tony Aly as reviewer and
+  required the full current specification before stable publication. The
+  refreshed `security/independent-review-packet.md` records the exact main CI
+  baseline and the source-specific false-positive dispositions of CodeQL
+  alerts 5 and 6; human password storage remains salted scrypt. Real Expo
+  dependency advisories are patched in the separate mobile lockfile, including
+  node-forge, decode-uri-component and fingerprint's glob/minimatch paths.
+  Both PR CI and scheduled security scans now audit that lockfile at the
+  moderate threshold. Changeset `customer-app-advisory-repairs.md`. These
+  repairs and the review assignment do not supply C11.10 or C11.17 sign-off.
 - [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.
