@@ -178,6 +178,7 @@ export {
 export {
   installedPlugins,
   pluginRegistries,
+  pluginPublisherKeys,
   pluginRetentions,
   importRuns,
 } from "@/core/plugins/schema";

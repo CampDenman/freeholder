@@ -1260,8 +1260,12 @@ export const SERVICE_NAMES = [
   "plugins.install",
   "plugins.list",
   "plugins.listCatalog",
+  "plugins.listPublisherKeys",
   "plugins.listRegistries",
+  "plugins.revokePublisherKey",
   "plugins.rollback",
+  "plugins.setRegistryPublisherKey",
+  "plugins.trustPublisherKey",
   "plugins.uninstall",
   "plugins.update",
   "popups.capture",
@@ -6595,11 +6599,11 @@ export interface ServiceCatalog {
     output: { version: string; contract: { openapi: string; mcpProtocol: string; webhookSchema: number }; exportFormat: string; targets: string[]; [key: string]: unknown };
   };
   "plugins.addRegistry": {
-    input: { name: string; url: string; tier?: "verified" | "community" | "private" | "local" };
+    input: { name: string; url: string; publisherKeyId?: string; tier?: "verified" | "community" | "private" | "local" };
     output: { id: string; name: string; url: string; tier: "verified" | "community" | "private" | "local"; [key: string]: unknown };
   };
   "plugins.cacheRegistry": {
-    input: { url: string; index: unknown; signature: string; signingSecret: string };
+    input: { url: string; index: { registry: string; updated: string; plugins: { name: string; version: string; tier: "verified" | "community" | "private" | "local"; license: string; permissions: string[]; freeholder: string; integrity: string; changelog: string; description?: string; repo?: string }[] }; signature: string };
     output: { id: string; name: string; url: string; plugins: number; [key: string]: unknown };
   };
   "plugins.disable": {
@@ -6615,7 +6619,7 @@ export interface ServiceCatalog {
     output: { id: string; name: string; version: string; status: "installed" | "enabled" | "disabled"; source: string; tier: "verified" | "community" | "private" | "local"; integrity: string; signature: string | null; license: string; freeholder: string; permissions: unknown; config: unknown; disabledReason: string | null; previousVersion: string | null; installedBy: string; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
   };
   "plugins.install": {
-    input: { path: string; expectedIntegrity?: string; signature?: string; signingSecret?: string };
+    input: { path: string; expectedIntegrity?: string; signature: string };
     output: { id: string; name: string; version: string; status: "installed" | "enabled" | "disabled"; source: string; tier: "verified" | "community" | "private" | "local"; integrity: string; signature: string | null; license: string; freeholder: string; permissions: unknown; config: unknown; disabledReason: string | null; previousVersion: string | null; installedBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "plugins.list": {
@@ -6626,20 +6630,36 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { name: string; version: string; tier: "verified" | "community" | "private" | "local"; license: string; permissions: unknown; freeholder: string; integrity: string; changelog: string; [key: string]: unknown }[];
   };
+  "plugins.listPublisherKeys": {
+    input: Record<string, never>;
+    output: { keyId: string; publisher: string; publicKey: string; trustedBy: string; createdAt: string; revokedAt: string | null; [key: string]: unknown }[];
+  };
   "plugins.listRegistries": {
     input: Record<string, never>;
-    output: { id: string; name: string; url: string; tier: "verified" | "community" | "private" | "local"; signature: string | null; cachedIndex: unknown; fetchedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+    output: { id: string; name: string; url: string; tier: "verified" | "community" | "private" | "local"; signature: string | null; publisherKeyId: string | null; cachedIndex: unknown; fetchedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+  };
+  "plugins.revokePublisherKey": {
+    input: { keyId: string; confirmation: true };
+    output: { ok: true; disabled: number };
   };
   "plugins.rollback": {
     input: { name: string };
     output: { id: string; name: string; version: string; status: "installed" | "enabled" | "disabled"; source: string; tier: "verified" | "community" | "private" | "local"; integrity: string; signature: string | null; license: string; freeholder: string; permissions: unknown; config: unknown; disabledReason: string | null; previousVersion: string | null; installedBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "plugins.setRegistryPublisherKey": {
+    input: { id: string; keyId: string };
+    output: { ok: true };
+  };
+  "plugins.trustPublisherKey": {
+    input: { publisher: string; publicKey: string; fingerprint: string; confirmation: true };
+    output: { keyId: string; publisher: string; publicKey: string; trustedBy: string; createdAt: string; revokedAt: string | null; [key: string]: unknown };
   };
   "plugins.uninstall": {
     input: { name: string; retention: "keep" | "purge" };
     output: { ok: true; name: string; retention: "keep" | "purge" };
   };
   "plugins.update": {
-    input: { path: string; expectedIntegrity?: string };
+    input: { path: string; expectedIntegrity?: string; signature: string };
     output: { id: string; name: string; version: string; status: "installed" | "enabled" | "disabled"; source: string; tier: "verified" | "community" | "private" | "local"; integrity: string; signature: string | null; license: string; freeholder: string; permissions: unknown; config: unknown; disabledReason: string | null; previousVersion: string | null; installedBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "popups.capture": {
@@ -9358,8 +9378,12 @@ export interface FreeholderApi {
     install: (input: ServiceCatalog["plugins.install"]["input"]) => Promise<ServiceCatalog["plugins.install"]["output"]>;
     list: (input?: ServiceCatalog["plugins.list"]["input"]) => Promise<ServiceCatalog["plugins.list"]["output"]>;
     listCatalog: (input?: ServiceCatalog["plugins.listCatalog"]["input"]) => Promise<ServiceCatalog["plugins.listCatalog"]["output"]>;
+    listPublisherKeys: (input?: ServiceCatalog["plugins.listPublisherKeys"]["input"]) => Promise<ServiceCatalog["plugins.listPublisherKeys"]["output"]>;
     listRegistries: (input?: ServiceCatalog["plugins.listRegistries"]["input"]) => Promise<ServiceCatalog["plugins.listRegistries"]["output"]>;
+    revokePublisherKey: (input: ServiceCatalog["plugins.revokePublisherKey"]["input"]) => Promise<ServiceCatalog["plugins.revokePublisherKey"]["output"]>;
     rollback: (input: ServiceCatalog["plugins.rollback"]["input"]) => Promise<ServiceCatalog["plugins.rollback"]["output"]>;
+    setRegistryPublisherKey: (input: ServiceCatalog["plugins.setRegistryPublisherKey"]["input"]) => Promise<ServiceCatalog["plugins.setRegistryPublisherKey"]["output"]>;
+    trustPublisherKey: (input: ServiceCatalog["plugins.trustPublisherKey"]["input"]) => Promise<ServiceCatalog["plugins.trustPublisherKey"]["output"]>;
     uninstall: (input: ServiceCatalog["plugins.uninstall"]["input"]) => Promise<ServiceCatalog["plugins.uninstall"]["output"]>;
     update: (input: ServiceCatalog["plugins.update"]["input"]) => Promise<ServiceCatalog["plugins.update"]["output"]>;
   };

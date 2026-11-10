@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Signed plugin registry index (MASTER.md §27, C3.11).
 import { z } from "zod";
-import { signIntegrity, verifySignature } from "./integrity";
+import type { KeyObject } from "node:crypto";
+import { signPublisherPayload, verifyPublisherPayload } from "./integrity.ts";
 
 export const registryPluginSchema = z.object({
   name: z.string().min(1),
@@ -11,8 +12,8 @@ export const registryPluginSchema = z.object({
   license: z.string().min(1),
   permissions: z.array(z.string()),
   freeholder: z.string().min(1),
-  integrity: z.string().min(1),
-  changelog: z.string().min(1),
+  integrity: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  changelog: z.string().min(1).refine(value => Boolean(value.trim())),
   description: z.string().optional(),
   repo: z.string().optional(),
 });
@@ -57,14 +58,19 @@ export function canonicalRegistryIndex(index: RegistryIndex): string {
   });
 }
 
-export function signRegistryIndex(index: RegistryIndex, secret: string): string {
-  return signIntegrity(canonicalRegistryIndex(index), secret);
+function registryPayload(index: RegistryIndex, url: string): string {
+  return JSON.stringify({ url: new URL(url).href, index: canonicalRegistryIndex(index) });
+}
+
+export function signRegistryIndex(index: RegistryIndex, url: string, privateKey: string | KeyObject): string {
+  return signPublisherPayload("registry", registryPayload(index, url), privateKey);
 }
 
 export function verifyRegistryIndex(
   index: RegistryIndex,
+  url: string,
   signature: string,
-  secret: string,
+  publicKey: string,
 ): boolean {
-  return verifySignature(canonicalRegistryIndex(index), signature, secret);
+  return verifyPublisherPayload("registry", registryPayload(index, url), signature, publicKey);
 }

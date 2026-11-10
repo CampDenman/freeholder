@@ -6,6 +6,7 @@ import {
   jsonb,
   pgTable,
   text,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -42,6 +43,7 @@ export const installedPlugins = pgTable(
     config: jsonb("config").notNull().default({}),
     disabledReason: text("disabled_reason"),
     previousVersion: text("previous_version"),
+    previousArtifact: jsonb("previous_artifact"),
     installedBy: text("installed_by").notNull(),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
@@ -52,6 +54,16 @@ export const installedPlugins = pgTable(
   ],
 );
 
+/** Public verification keys only. Revocations remain as security history. */
+export const pluginPublisherKeys = pgTable("plugin_publisher_keys", {
+  keyId: text("key_id").primaryKey(),
+  publisher: text("publisher").notNull(),
+  publicKey: text("public_key").notNull(),
+  trustedBy: text("trusted_by").notNull(),
+  createdAt: createdAtColumn(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+
 export const pluginRegistries = pgTable(
   "plugin_registries",
   {
@@ -60,6 +72,7 @@ export const pluginRegistries = pgTable(
     url: text("url").notNull(),
     tier: text("tier", { enum: PLUGIN_TIERS }).notNull().default("community"),
     signature: text("signature"),
+    publisherKeyId: text("publisher_key_id").references(() => pluginPublisherKeys.keyId),
     cachedIndex: jsonb("cached_index").notNull().default({}),
     fetchedAt: text("fetched_at"),
     createdAt: createdAtColumn(),

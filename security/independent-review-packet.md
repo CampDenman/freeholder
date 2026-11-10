@@ -56,8 +56,9 @@ and two identical fingerprint generations (65 sources) passed. The final npm
 audit reports zero vulnerabilities at every severity. This does not close the
 deferred mobile acceptance items.
 
-The reviewer must also examine the explicitly unfinished plugin permission,
-egress and publisher-signature controls (C3.40–C3.42), member cryptography
+The reviewer must also examine the explicitly unfinished plugin permission
+and egress controls (C3.40/C3.41), the newly implemented publisher-signature
+boundary (C3.42), member cryptography
 (C12.39), and current upload/payout/preview-assistant boundaries. A closed
 automated alert does not establish their security. Live provider acceptance,
 cross-target object-byte recovery and actual platform launches retain their
@@ -274,12 +275,30 @@ loader, permission contract, update/rollback.
 
 **Existing tests.** `tests/core/plugin-contract.test.ts`,
 `plugins-lifecycle.test.ts`, `first-party-plugins.test.ts`,
-`plugin-scaffold.test.ts`.
+`plugin-scaffold.test.ts`, `plugin-publisher-trust.test.ts`,
+`plugin-publisher-trust-postgres.test.ts`, and the real owner-browser
+`tests/browser/plugin-publisher-trust.spec.ts`.
 
 **Residuals for the reviewer.**
 
-- Install trusts a signed index and a directory hash. Confirm a mutated
-  file after install is refused on enable, not only on update.
+- Review owner-only, freshly verified trust roots; agents, personal API keys,
+  staff and system composition cannot add keys. Private PEM is rejected before
+  audit retention. Check that the independently obtained fingerprint identifies
+  the intended publisher, rather than trusting an artifact-supplied key.
+- Ed25519 signatures bind the complete length-framed artifact or a canonical
+  registry index plus its URL, with separate signing purposes. Review the
+  1 GiB/100,000-entry/64-level bounds, streaming file-change checks and refusal
+  of links, nonregular files and ambiguous names. Filesystem owners must keep
+  release folders immutable; signature checks do not sandbox in-process code.
+- Native tests prove modified bytes are refused on enable, confirmed revocation
+  disables matching registrations, retries preserve actual rollback history,
+  and revoked/modified previous artifacts cannot roll back. Doctor independently
+  checks enabled bytes and cached catalogue trust. Review these boundaries.
+- Migration 0065 disables every legacy registration without inventing trust.
+  A real 64→65 rehearsal preserved legacy metadata; review the migration and
+  owner recovery path in `deploy/plugin-publisher-trust.md`.
+- Successful mutations are audited transactionally. Refused calls leave state
+  unchanged; this feature does not add persistent denial logging.
 - Plugin permissions cannot mint `network:external` (or equivalent) without
   declaring it. Importers already require that; other plugin kinds may not.
 - Rollback of a plugin is not rollback of data it wrote. Call that out.

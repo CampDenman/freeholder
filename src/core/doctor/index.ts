@@ -847,10 +847,35 @@ async function checkManagedAgentConnections(): Promise<Check[]> {
   }
 }
 
-async function checkPlugins(): Promise<Check[]> {
+export async function checkPlugins(): Promise<Check[]> {
   try {
-    const { installedPlugins } = await import("@/core/plugins/schema");
+    const { installedPlugins, pluginPublisherKeys, pluginRegistries } = await import("@/core/plugins/schema");
+    const { hashDirectory, signatureKeyId, verifySignature } = await import("@/core/plugins/integrity");
+    const { registryIndexSchema, verifyRegistryIndex } = await import("@/core/plugins/registry");
     const rows = await db().select().from(installedPlugins);
+    const keys = await db().select().from(pluginPublisherKeys);
+    const registries = await db().select().from(pluginRegistries);
+    const activeKey = (id: string | null) => keys.find(key => key.keyId === id && !key.revokedAt);
+    let invalidArtifacts = 0;
+    for (const plugin of rows.filter(row => row.status === "enabled")) {
+      const key = activeKey(plugin.signature ? signatureKeyId(plugin.signature) : null);
+      try {
+        if (!key || !plugin.signature || !verifySignature(plugin.integrity, plugin.signature, key.publicKey)
+          || await hashDirectory(plugin.source) !== plugin.integrity) invalidArtifacts++;
+      } catch { invalidArtifacts++; }
+    }
+    let invalidCatalogs = 0;
+    for (const registry of registries.filter(row => row.fetchedAt !== null)) {
+      const key = activeKey(registry.publisherKeyId);
+      const index = registryIndexSchema.safeParse(registry.cachedIndex);
+      if (!key || !registry.signature || !index.success || !verifyRegistryIndex(index.data, registry.url, registry.signature, key.publicKey)) invalidCatalogs++;
+    }
+    if (invalidArtifacts || invalidCatalogs) {
+      return [{ ...fail("plugins.trust", "Plugin publisher trust",
+        `${invalidArtifacts} enabled artifact(s) and ${invalidCatalogs} cached catalog(s) failed current publisher verification.`,
+        "Disable affected plugins. In Admin → Plugins, verify publisher fingerprints, replace altered artifacts and refresh catalogs with trusted signatures. Revoked keys cannot be restored."),
+        message: { key: "doctor.pluginTrust.failed", params: { artifacts: String(invalidArtifacts), catalogs: String(invalidCatalogs) } } }];
+    }
     const disabled = rows.filter((row) => row.status === "disabled");
     if (disabled.length === 0) {
       return [

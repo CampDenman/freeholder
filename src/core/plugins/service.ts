@@ -3,7 +3,7 @@
 // Plugin install, enable, disable, update, uninstall (C3.09–C3.11).
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
@@ -12,14 +12,23 @@ import {
 } from "@/core/plugin";
 import { PLATFORM_VERSION } from "@/core/platform";
 import { validatePluginContract, type PluginContractInput } from "@freeholder/plugin-kit";
-import { installedPlugins, pluginRegistries, pluginRetentions } from "./schema";
-import { assertDirectory, hashDirectory, verifySignature } from "./integrity";
+import { installedPlugins, pluginPublisherKeys, pluginRegistries, pluginRetentions } from "./schema";
+import { assertDirectory, hashDirectory, signatureKeyId } from "./integrity";
+import publisherKeyServices, { assertTrustedArtifact, lockPublisherTrust, publisherKeyId, requirePublisherReviewer, trustedPublisherKey } from "./publisher-keys";
 import {
   parseRegistryIndex,
+  registryIndexSchema,
   verifyRegistryIndex,
   type RegistryIndex,
 } from "./registry";
 import { assertPublicHttpUrl } from "@/core/import/contract";
+
+const signatureInput = z.string().min(1).max(256);
+const registryUrl = z.string().url().transform(value => new URL(value).href);
+const artifactSnapshot = z.object({
+  version: z.string(), source: z.string(), integrity: z.string(), signature: z.string().nullable(),
+  license: z.string(), freeholder: z.string(), permissions: z.array(z.string()),
+});
 
 const pluginRow = row({
   id: uuid,
@@ -44,14 +53,25 @@ const pluginRow = row({
 async function readManifest(dir: string): Promise<PluginContractInput> {
   // The directory is owner-supplied at runtime. Tracing it at build time makes
   // Turbopack conservatively copy the entire repository into standalone.
-  const raw = JSON.parse(
-    await readFile(
-      join(/* turbopackIgnore: true */ dir, "plugin.json"),
-      "utf8",
-    ),
-  ) as PluginContractInput;
-  validatePluginContract(raw);
-  return raw;
+  try {
+    await assertDirectory(dir);
+    const path = join(/* turbopackIgnore: true */ dir, "plugin.json");
+    const info = await lstat(/* turbopackIgnore: true */ path);
+    if (!info.isFile() || info.size > 64 * 1024) throw new Error("manifest-type-or-size");
+    const raw = JSON.parse(await readFile(/* turbopackIgnore: true */ path, "utf8")) as PluginContractInput;
+    validatePluginContract(raw);
+    return raw;
+  } catch {
+    // JSON parse errors can echo file contents. Neither malformed manifests
+    // nor links to unrelated files may turn into a disclosure through HTTP.
+    throw new ServiceError("validation", "That plugin.json is unavailable or invalid. Use a regular file in the plugin folder.");
+  }
+}
+
+async function artifactIntegrity(path: string): Promise<string> {
+  try { return await hashDirectory(path); } catch {
+    throw new ServiceError("validation", "That artifact cannot be verified. Use a readable folder of regular files without symbolic links.");
+  }
 }
 
 export const listInstalledPlugins = defineService({
@@ -90,8 +110,7 @@ export const installPlugin = defineService({
   input: z.object({
     path: z.string().min(1),
     expectedIntegrity: z.string().optional(),
-    signature: z.string().optional(),
-    signingSecret: z.string().optional(),
+    signature: signatureInput,
   }),
   output: pluginRow,
   handler: async (input, ctx) => {
@@ -130,21 +149,15 @@ export const installPlugin = defineService({
         error instanceof Error ? error.message : "That plugin does not fit this instance.",
       );
     }
-    const integrity = await hashDirectory(input.path);
+    const integrity = await artifactIntegrity(input.path);
     if (input.expectedIntegrity && input.expectedIntegrity !== integrity) {
       throw new ServiceError(
         "conflict",
-        `Integrity mismatch for ${manifest.name}: expected ${input.expectedIntegrity}, got ${integrity}.`,
+        `Integrity mismatch for ${manifest.name}. Check the publisher's artifact hash.`,
       );
     }
-    if (input.signature) {
-      if (!input.signingSecret) {
-        throw new ServiceError("validation", "A signature needs the signing secret to check.");
-      }
-      if (!verifySignature(integrity, input.signature, input.signingSecret)) {
-        throw new ServiceError("permission", "That plugin signature does not match.");
-      }
-    }
+    await lockPublisherTrust(ctx.tx);
+    await assertTrustedArtifact(ctx.tx, integrity, input.signature);
     const [existing] = await ctx.tx
       .select({ id: installedPlugins.id })
       .from(installedPlugins)
@@ -162,7 +175,7 @@ export const installPlugin = defineService({
         source: input.path,
         tier: "local",
         integrity,
-        signature: input.signature ?? null,
+        signature: input.signature,
         license: manifest.license,
         freeholder: manifest.freeholder,
         permissions: manifest.permissions ?? [],
@@ -183,6 +196,13 @@ export const enablePlugin = defineService({
   input: z.object({ name: z.string().min(1) }),
   output: pluginRow,
   handler: async (input, ctx) => {
+    await lockPublisherTrust(ctx.tx);
+    const [stored] = await ctx.tx.select().from(installedPlugins).where(eq(installedPlugins.name, input.name)).limit(1);
+    if (!stored) throw new ServiceError("not_found", `No plugin named ${input.name}.`);
+    const integrity = await artifactIntegrity(stored.source);
+    if (integrity !== stored.integrity) throw new ServiceError("conflict", "The installed plugin files changed. Verify an update before enabling them.");
+    if (!stored.signature) throw new ServiceError("permission", "This plugin needs a trusted Ed25519 signature before it can be enabled.");
+    await assertTrustedArtifact(ctx.tx, integrity, stored.signature);
     const [row] = await ctx.tx
       .update(installedPlugins)
       .set({ status: "enabled", disabledReason: null })
@@ -223,19 +243,33 @@ export const updatePlugin = defineService({
   input: z.object({
     path: z.string().min(1),
     expectedIntegrity: z.string().optional(),
+    signature: signatureInput,
   }),
   output: pluginRow,
   handler: async (input, ctx) => {
     const manifest = await readManifest(input.path);
+    await lockPublisherTrust(ctx.tx);
     const [before] = await ctx.tx
       .select()
       .from(installedPlugins)
       .where(eq(installedPlugins.name, manifest.name))
       .limit(1);
     if (!before) throw new ServiceError("not_found", `${manifest.name} is not installed.`);
-    const integrity = await hashDirectory(input.path);
+    const integrity = await artifactIntegrity(input.path);
     if (input.expectedIntegrity && input.expectedIntegrity !== integrity) {
       throw new ServiceError("conflict", `Integrity mismatch for ${manifest.name}.`);
+    }
+    const publisher = await assertTrustedArtifact(ctx.tx, integrity, input.signature);
+    const previousKeyId = before.signature ? signatureKeyId(before.signature) : null;
+    const [previousKey] = previousKeyId ? await ctx.tx.select().from(pluginPublisherKeys).where(eq(pluginPublisherKeys.keyId, previousKeyId)).limit(1) : [];
+    if (!previousKey) requirePublisherReviewer(ctx.actor);
+    else if (previousKey.publisher !== publisher.publisher) throw new ServiceError("permission", "This update uses a different publisher. Review a separate installation instead.");
+    const replacement = artifactSnapshot.parse({ ...manifest, source: input.path, integrity, signature: input.signature, permissions: manifest.permissions ?? [] });
+    // A lost response followed by an identical retry must preserve the real
+    // rollback artifact, rather than replacing it with the current version.
+    if (JSON.stringify(artifactSnapshot.parse(before)) === JSON.stringify(replacement)) {
+      ctx.setSubject("plugin", before.id);
+      return before;
     }
     const [row] = await ctx.tx
       .update(installedPlugins)
@@ -243,7 +277,9 @@ export const updatePlugin = defineService({
         version: manifest.version,
         source: input.path,
         integrity,
+        signature: input.signature,
         previousVersion: before.version,
+        previousArtifact: artifactSnapshot.parse(before),
         license: manifest.license,
         freeholder: manifest.freeholder,
         permissions: manifest.permissions ?? [],
@@ -264,18 +300,28 @@ export const rollbackPlugin = defineService({
   input: z.object({ name: z.string().min(1) }),
   output: pluginRow,
   handler: async (input, ctx) => {
+    await lockPublisherTrust(ctx.tx);
     const [before] = await ctx.tx
       .select()
       .from(installedPlugins)
       .where(eq(installedPlugins.name, input.name))
       .limit(1);
     if (!before) throw new ServiceError("not_found", `No plugin named ${input.name}.`);
-    if (!before.previousVersion) {
+    const previous = artifactSnapshot.safeParse(before.previousArtifact);
+    if (!before.previousVersion || !previous.success) {
       throw new ServiceError("conflict", `${input.name} has no previous version to restore.`);
     }
+    const artifact = previous.data;
+    const manifest = await readManifest(artifact.source);
+    const integrity = await artifactIntegrity(artifact.source);
+    if (manifest.name !== input.name || manifest.version !== artifact.version || integrity !== artifact.integrity) {
+      throw new ServiceError("conflict", "The previous artifact is unavailable or changed. Install a verified copy instead.");
+    }
+    if (!artifact.signature) throw new ServiceError("permission", "A plugin cannot roll back to an unsigned artifact.");
+    await assertTrustedArtifact(ctx.tx, integrity, artifact.signature);
     const [row] = await ctx.tx
       .update(installedPlugins)
-      .set({ version: before.previousVersion, previousVersion: before.version })
+      .set({ ...artifact, previousVersion: before.version, previousArtifact: artifactSnapshot.parse(before) })
       .where(eq(installedPlugins.id, before.id))
       .returning();
     ctx.setSubject("plugin", row!.id);
@@ -327,6 +373,7 @@ export const listPluginRegistries = defineService({
       url: z.string(),
       tier: z.enum(["verified", "community", "private", "local"]),
       signature: z.string().nullable(),
+      publisherKeyId: publisherKeyId.nullable(),
       cachedIndex: z.unknown(),
       fetchedAt: z.string().nullable(),
       createdAt: timestamp,
@@ -344,7 +391,8 @@ export const addPluginRegistry = defineService({
   permission: "scoped",
   input: z.object({
     name: z.string().min(1).max(80),
-    url: z.string().url(),
+    url: registryUrl,
+    publisherKeyId: publisherKeyId.optional(),
     tier: z.enum(["verified", "community", "private", "local"]).default("community"),
   }),
   output: row({
@@ -354,6 +402,12 @@ export const addPluginRegistry = defineService({
     tier: z.enum(["verified", "community", "private", "local"]),
   }),
   handler: async (input, ctx) => {
+    assertPublicHttpUrl(input.url);
+    if (input.publisherKeyId) {
+      requirePublisherReviewer(ctx.actor);
+      await lockPublisherTrust(ctx.tx);
+      await trustedPublisherKey(ctx.tx, input.publisherKeyId);
+    }
     const [row] = await ctx.tx
       .insert(pluginRegistries)
       .values(input)
@@ -381,10 +435,9 @@ export const cachePluginRegistry = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({
-    url: z.string().url(),
-    index: z.unknown(),
-    signature: z.string().min(1),
-    signingSecret: z.string().min(1),
+    url: registryUrl,
+    index: registryIndexSchema,
+    signature: z.string().min(1).max(256),
   }),
   output: row({
     id: uuid,
@@ -395,33 +448,26 @@ export const cachePluginRegistry = defineService({
   handler: async (input, ctx) => {
     assertPublicHttpUrl(input.url);
     const index = parseRegistryIndex(input.index);
-    if (!verifyRegistryIndex(index, input.signature, input.signingSecret)) {
-      throw new ServiceError("permission", "That registry signature does not match.");
-    }
+    await lockPublisherTrust(ctx.tx);
     const [existing] = await ctx.tx
       .select()
       .from(pluginRegistries)
       .where(eq(pluginRegistries.url, input.url))
       .limit(1);
+    if (!existing?.publisherKeyId) throw new ServiceError("permission", "The owner must pin this registry to a trusted publisher key before caching its catalog.");
+    const key = await trustedPublisherKey(ctx.tx, existing.publisherKeyId);
+    if (signatureKeyId(input.signature) !== key.keyId || !verifyRegistryIndex(index, input.url, input.signature, key.publicKey)) {
+      throw new ServiceError("permission", "That registry signature does not match its pinned publisher key and URL.");
+    }
     const values = {
       cachedIndex: index,
       signature: input.signature,
       fetchedAt: new Date().toISOString(),
     };
-    const [row] = existing
-      ? await ctx.tx
+    const [row] = await ctx.tx
           .update(pluginRegistries)
           .set(values)
           .where(eq(pluginRegistries.id, existing.id))
-          .returning()
-      : await ctx.tx
-          .insert(pluginRegistries)
-          .values({
-            name: index.registry,
-            url: input.url,
-            tier: "community",
-            ...values,
-          })
           .returning();
     ctx.setSubject("plugin_registry", row!.id);
     ctx.queueEvent("plugin.registryCached", { url: row!.url });
@@ -438,10 +484,12 @@ export const listPluginCatalog = defineService({
   output: listed(catalogPlugin),
   handler: async (_input, ctx) => {
     const registries = await ctx.tx.select().from(pluginRegistries);
+    const keys = await ctx.tx.select().from(pluginPublisherKeys);
     const catalog = [];
     for (const registry of registries) {
       const parsed = registryIndexSchemaSafe(registry.cachedIndex);
-      if (!parsed) continue;
+      const key = keys.find(item => item.keyId === registry.publisherKeyId && !item.revokedAt);
+      if (!parsed || !key || !registry.signature || !verifyRegistryIndex(parsed, registry.url, registry.signature, key.publicKey)) continue;
       catalog.push(...parsed.plugins);
     }
     return catalog;
@@ -469,4 +517,5 @@ export default [
   addPluginRegistry,
   cachePluginRegistry,
   listPluginCatalog,
+  ...publisherKeyServices,
 ];
