@@ -19,6 +19,7 @@ import {
 } from "@/core/media/service";
 import { contactPrivacySources } from "@/core/privacy/service";
 import { formSubmissionFiles, formSubmissions } from "@/modules/forms/schema";
+import { getProject, linkToProject, listProjects } from "@/modules/projects/service";
 import {
   createForm,
   listSubmissionFiles,
@@ -172,6 +173,70 @@ describe.runIf(hasDatabase)("file answers in forms.submit (C3.38)", () => {
       .from(formSubmissionFiles)
       .where(eq(formSubmissionFiles.submissionId, sent.submissionId));
     expect(links.map((link) => [link.fieldKey, link.assetId])).toEqual([["episode", asset.id]]);
+  });
+
+  it("shows an intake's private files on its project through the same attachment", async () => {
+    await createForm.call({
+      slug: "episode-work", name: "Episode work", fields: FIELDS,
+      intake: { projectTitle: "Prepare the episode" },
+    }, OWNER);
+    const asset = await episode(RAE);
+    const sent = await submitForm.call({
+      slug: "episode-work", values: answers({ episode: asset.id }),
+    }, RAE);
+    const [project] = await listProjects.call({}, OWNER);
+    const [attachment] = await listSubmissionFiles.call({ submissionIds: [sent.submissionId] }, OWNER);
+    const found = await getProject.call({ id: project!.id }, OWNER);
+    expect(found!.intakeFiles).toEqual([expect.objectContaining({
+      id: attachment!.id, submissionId: sent.submissionId, assetId: asset.id,
+      fieldKey: "episode", filename: "episode-12.wav", mime: "audio/wav", bytes: 4096,
+    })]);
+    // Private inputs never become portfolio files or acquire a public URL.
+    expect(found!.files).toHaveLength(0);
+    expect(JSON.stringify(found!.intakeFiles)).not.toContain("storageKey");
+    expect(await resolveAsset.call({ id: asset.id }, ANONYMOUS)).toBeNull();
+  });
+
+  it("keeps a project-only agent out of intake files and permits the exact read scopes", async () => {
+    await createForm.call({
+      slug: "episode-work", name: "Episode work", fields: FIELDS,
+      intake: { projectTitle: "Prepare the episode" },
+    }, OWNER);
+    const asset = await episode(RAE);
+    await submitForm.call({ slug: "episode-work", values: answers({ episode: asset.id }) }, RAE);
+    const [project] = await listProjects.call({}, OWNER);
+    const projectOnly = { kind: "agent" as const, keyName: "project-reader", scopes: ["projects.get"] };
+    expect((await getProject.call({ id: project!.id }, projectOnly))!.intakeFiles).toEqual([]);
+    const withFiles = { ...projectOnly, scopes: ["projects.get", "forms.listSubmissionFiles"] };
+    expect((await getProject.call({ id: project!.id }, withFiles))!.intakeFiles)
+      .toEqual([expect.objectContaining({ assetId: asset.id, filename: "episode-12.wav" })]);
+    const [attachment] = (await getProject.call({ id: project!.id }, withFiles))!.intakeFiles;
+    expect((await failure(openSubmissionFile.call({ id: attachment!.id }, withFiles))).code)
+      .toBe("permission");
+  });
+
+  it("does not expose another contact's files through a manually linked submission", async () => {
+    await createForm.call({
+      slug: "episode-work", name: "Episode work", fields: FIELDS,
+      intake: { projectTitle: "Prepare the episode" },
+    }, OWNER);
+    const mine = await episode(RAE);
+    const ownSubmission = await submitForm.call({ slug: "episode-work", values: answers({ episode: mine.id }) }, RAE);
+    const [project] = await listProjects.call({}, OWNER);
+    const theirs = await episode(SAM);
+    const otherSubmission = await submitForm.call({
+      slug: "show-notes", values: answers({ email: "sam@example.test", episode: theirs.id }),
+    }, SAM);
+    await linkToProject.call({
+      projectId: project!.id, kind: "form_submission", targetId: otherSubmission.submissionId,
+    }, OWNER);
+    expect((await getProject.call({ id: project!.id }, OWNER))!.intakeFiles.map((file) => file.assetId))
+      .toEqual([mine.id]);
+    const [submission] = await db().select().from(formSubmissions)
+      .where(eq(formSubmissions.id, ownSubmission.submissionId));
+    const source = contactPrivacySources().find((one) => one.scope === "forms.submissions")!;
+    await db().transaction((tx) => source.erase(tx, submission!.contactId!, { requestId: "test" }));
+    expect((await getProject.call({ id: project!.id }, OWNER))!.intakeFiles).toEqual([]);
   });
 
   it("refuses a file whose sniffed kind the question does not accept", async () => {

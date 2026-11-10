@@ -5830,8 +5830,17 @@ deployments are portable, testable and incapable of silently forking the truth.
   changeset `form-file-fields.md`. Uploads are bound to a signed-in customer
   session only: the capture-token upload links are owner-issued capabilities
   for a media capture session, so no per-render anonymous grant was added.
-  Not yet done: attaching the file to an intake's project (with C3.37) and
-  the hosted-preview acceptance.)*
+  Source repair 2026-11-10: `projects.get` composes
+  `forms.listSubmissionFiles` through the original intake-submission link,
+  with the caller's forms-read authority and the project's contact filter.
+  The owner downloads from the project through the existing private
+  attachment route; inputs do not become portfolio media. Exact scoped
+  agents can read projects, with intake-file metadata separately scoped.
+  Regressions in `tests/modules/form-file-fields.test.ts` reproduced the
+  absent attachment and agent refusal before repair and cover other-contact
+  links and erasure; `tests/browser/intake-project-files.spec.ts` covers the
+  owner view, private bytes, quarantine and both themes. Changeset
+  `intake-files-on-projects.md`. The hosted-preview acceptance remains open.)*
 - [ ] **C3.39** Launch spec version 2 for a working preview. It adds customer
   accounts in the navigation (sign in, My Account), an onboarding intake
   form with optional file fields on `/start`, intake on offer requests, and

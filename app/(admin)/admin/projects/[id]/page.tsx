@@ -399,6 +399,17 @@ export default async function ProjectPage({
                       {t("projects.action.detach")}
                     </Button>
                   </form>
+                  {link.kind === "form_submission" ? (
+                    <ul className="m-0 grid w-full list-none gap-1 p-0">
+                      {project.intakeFiles.filter((file) => file.submissionId === link.targetId).map((file) => (
+                        <li key={file.id}>
+                          <a href={`/admin/forms/files/${file.id}`} className="underline" download>
+                            {file.filename}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </li>
               ))}
             </ul>

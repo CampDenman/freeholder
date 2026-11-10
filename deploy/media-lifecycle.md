@@ -91,6 +91,15 @@ data: the `forms.submissions` privacy source exports each attachment's
 facts beside the answers, and erasure trashes the asset with an immediate
 purge date so the media purge removes the bytes.
 
+For an intake, the project lists the same attachment beneath its linked form
+submission. `projects.get` reads those facts through
+`forms.listSubmissionFiles`, with the caller's existing forms authority and
+the project's current contact. A project-only scope reveals no file facts;
+opening bytes still needs `forms.openSubmissionFile`. Inputs stay outside
+portfolio media. Files for another contact, quarantined files and erased
+attachments do not appear. Removing the project's submission link removes
+its file links from that view without deleting the original submission.
+
 ## Malware scanner
 
 Structural validation always runs. With no antivirus engine, assets record
