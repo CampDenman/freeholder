@@ -8,6 +8,61 @@ one.
 Prepared 2026-09-12 from the tree at this change. Threat surfaces, existing
 tests, and known residuals only — no claim that the list is empty.
 
+## 2026-11-10 review assignment and alert remediation
+
+Tony Aly selected himself to perform the review and requested completion of
+the full current specification before stable publication. This records the
+review assignment, not a completed review or owner signature. `MASTER.md`
+§43 remains the status authority; C11.10 and C11.17 are open.
+
+The audited baseline is main `4d86abc06db4345da37346e18b7918a516e681c6`.
+[Its protected main CI](https://github.com/CampDenman/freeholder/actions/runs/42596963219)
+passed, including database tests, browser journeys/accessibility, CodeQL,
+dependency evidence, and the backup/restore and image/upgrade jobs. Local fast
+gates passed 367 contract tests in 40 files, with one test skipped. These runs
+are supporting evidence for the review.
+
+The two remaining CodeQL password-hashing alerts were traced to their exact
+sources and dispositioned as false positives, with the rationale retained on
+each alert:
+
+- [Alert 5](https://github.com/CampDenman/freeholder/security/code-scanning/5):
+  `mintApiKey` generates 32 cryptographically random bytes. `hashApiKey` uses
+  keyed HMAC-SHA256 for indexed token lookup. It does not store a human password
+  verifier. The reported source was a minted token in `apikeys.test.ts`.
+- [Alert 6](https://github.com/CampDenman/freeholder/security/code-scanning/6):
+  `equalSecretText` hashes two transient Basic authorization values to equal
+  lengths for `timingSafeEqual`. Neither hash is persisted as a password
+  verifier. `verifyPostmarkAuthorization` refuses a mismatch before parsing or
+  recording a delivery event.
+
+Human passwords use salted scrypt in `src/core/auth/passwords.ts`. The local
+API-key, mail-webhook and password suites passed 23 tests; their 22
+database-dependent tests skipped locally and are covered by the baseline's
+protected main CI. This classification must be revisited if token generation,
+credential storage or the comparison data flow changes. The CodeQL rule
+[addresses stored password hashes](https://codeql.github.com/codeql-query-help/javascript/js-insufficient-password-hash/).
+The rule and security scan remain enabled.
+
+The separate Expo lockfile had real dependency vulnerabilities. Its patch
+updates node-forge to 1.4.3 and decode-uri-component to 0.5.1, removes the
+vulnerable zod/deepmerge paths through compatible dependency updates, and
+overrides only `@expo/fingerprint`'s glob/minimatch dependencies to patched
+14.0.4/11.0.5 releases. Expo's major version is unchanged. Pull-request CI and
+the scheduled security workflow now audit `apps/mobile/package-lock.json`
+independently at the moderate threshold. Native compatibility checks belong
+to the repair PR: a clean `npm ci`, TypeScript check, Android and iOS exports,
+and two identical fingerprint generations (65 sources) passed. The final npm
+audit reports zero vulnerabilities at every severity. This does not close the
+deferred mobile acceptance items.
+
+The reviewer must also examine the explicitly unfinished plugin permission,
+egress and publisher-signature controls (C3.40–C3.42), member cryptography
+(C12.39), and current upload/payout/preview-assistant boundaries. A closed
+automated alert does not establish their security. Live provider acceptance,
+cross-target object-byte recovery and actual platform launches retain their
+own open checklist items.
+
 ## 2026-10-03 automated-alert triage (preliminary)
 
 This update is preparation for C11.10, not independent sign-off. GitHub CodeQL
