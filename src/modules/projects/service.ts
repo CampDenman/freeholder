@@ -187,6 +187,17 @@ const fileRow = row({
   position: z.number().int(),
 });
 
+/** Private intake inputs stay on their submission, outside portfolio media. */
+const intakeFileRow = row({
+  id: uuid,
+  submissionId: uuid,
+  fieldKey: z.string(),
+  assetId: uuid,
+  filename: z.string(),
+  mime: z.string(),
+  bytes: z.number(),
+});
+
 const testimonialRow = row({
   id: uuid,
   projectId: uuid,
@@ -726,11 +737,11 @@ export const getProject = defineService({
       tasks: listed(taskRow),
       outcomes: listed(outcomeRow),
       files: listed(fileRow),
+      intakeFiles: listed(intakeFileRow),
       testimonials: listed(testimonialRow),
     })
     .nullable(),
   handler: async (input, ctx) => {
-    requirePerson(ctx.actor);
     const [found] = await ctx.tx
       .select({ project: projects, contactName: contacts.name })
       .from(projects)
@@ -766,6 +777,19 @@ export const getProject = defineService({
         .where(eq(projectTestimonials.projectId, input.id))
         .orderBy(asc(projectTestimonials.createdAt)),
     ]);
+    const intakeFiles: z.infer<typeof intakeFileRow>[] = [];
+    const fileService = "forms.listSubmissionFiles";
+    if (found.project.contactId && listServices().has(fileService)
+      && permits(ctx.actor, "scoped", fileService, "query")) {
+      const submissionIds = links.filter((link) => link.kind === "form_submission")
+        .map((link) => link.targetId);
+      for (let offset = 0; offset < submissionIds.length; offset += 200) {
+        intakeFiles.push(...intakeFileRow.array().parse(await ctx.call(getService(fileService), {
+          submissionIds: submissionIds.slice(offset, offset + 200),
+          contactId: found.project.contactId,
+        })));
+      }
+    }
     return {
       ...found.project,
       contactName: found.contactName,
@@ -773,6 +797,7 @@ export const getProject = defineService({
       links,
       outcomes,
       files,
+      intakeFiles,
       testimonials,
     };
   },

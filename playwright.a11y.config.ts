@@ -10,6 +10,7 @@
 // check still applies. A development database can therefore never be reached
 // by accidentally running a browser gate.
 import { defineConfig } from "@playwright/test";
+import { resolve } from "node:path";
 
 if (typeof process.loadEnvFile === "function") {
   try {
@@ -64,7 +65,7 @@ Object.assign(process.env, {
   // manufacture a schema race that no browser behaviour depends on.
   FREEHOLDER_SKIP_MIGRATE: "1",
   FREEHOLDER_UNSAFE_LOCAL_STORAGE: "1",
-  LOCAL_STORAGE_ROOT: "test-results/browser-media",
+  LOCAL_STORAGE_ROOT: resolve("test-results/browser-media"),
   SESSION_SECRET: sessionSecret,
   BOOTSTRAP_SECRET: "browser-test-only-bootstrap-secret-32-characters",
   // Campaign journeys need a delivering bulk route. Readiness stays false

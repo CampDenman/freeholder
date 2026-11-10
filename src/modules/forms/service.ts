@@ -773,13 +773,20 @@ export const listSubmissionFiles = defineService({
   summary: "Files attached to form submissions.",
   kind: "query",
   permission: "scoped",
-  input: z.object({ submissionIds: z.array(z.string().uuid()).max(200) }),
+  input: z.object({
+    submissionIds: z.array(z.string().uuid()).max(200),
+    /** A project may show only attachments belonging to its own contact. */
+    contactId: uuid.optional(),
+  }),
   output: listed(
     row({
       id: uuid,
       submissionId: uuid,
       fieldKey: z.string(),
       assetId: uuid,
+      filename: z.string(),
+      mime: z.string(),
+      bytes: z.number(),
     }),
   ),
   handler: (input, ctx) =>
@@ -791,9 +798,19 @@ export const listSubmissionFiles = defineService({
             submissionId: formSubmissionFiles.submissionId,
             fieldKey: formSubmissionFiles.fieldKey,
             assetId: formSubmissionFiles.assetId,
+            filename: assets.filename,
+            mime: assets.mime,
+            bytes: assets.bytes,
           })
           .from(formSubmissionFiles)
-          .where(inArray(formSubmissionFiles.submissionId, input.submissionIds)),
+          .innerJoin(formSubmissions, eq(formSubmissions.id, formSubmissionFiles.submissionId))
+          .innerJoin(assets, eq(assets.id, formSubmissionFiles.assetId))
+          .where(and(
+            inArray(formSubmissionFiles.submissionId, input.submissionIds),
+            input.contactId ? eq(formSubmissions.contactId, input.contactId) : undefined,
+            eq(assets.status, "ready"),
+          ))
+          .orderBy(formSubmissionFiles.createdAt, formSubmissionFiles.id),
 });
 
 /**
