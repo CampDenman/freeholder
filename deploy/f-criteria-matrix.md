@@ -1224,13 +1224,13 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F03** — Contact resolution, merge/undo, export and erasure: `src/modules/cms/blog-comments.ts`, `tests/core/blog-structure-comments.test.ts`; author contact details stay private.
 - **F04** — Owner blog, taxonomy, author and moderation screens: `app/(admin)/admin/blog/page.tsx`, `app/(admin)/admin/blog/[kind]/page.tsx`, `app/(admin)/admin/blog/comments/page.tsx`.
 - **F05** — Registry HTTP/MCP projections and generated SDK: `src/modules/cms/service.ts`, `packages/sdk/src/generated.ts`.
-- **F06** — Four locale catalogs and semantic tokens: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; browser acceptance remains pending in `deploy/blog-wordpress-2026-11-07.md`.
+- **F06** — Four locale catalogs and semantic tokens: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; production-build browser coverage and hosted light/dark Axe acceptance are recorded in `deploy/blog-wordpress-2026-11-07.md`.
 - **F07** — Public email exclusion, moderated publication, honeypot, closed comments, contact merge and erasure: `tests/core/blog-structure-comments.test.ts`.
 - **F08** — Migration/rollback regressions: `tests/core/wordpress-import-flow.test.ts`; parser regressions: `tests/core/wordpress-import.test.ts`; redirect projection: `tests/core/legacy-redirect-proxy.test.ts`.
 - **F09** — Explicit operational limits, source crawl and cutover review: `deploy/blog-wordpress-2026-11-07.md`.
 - **F10** — Bounded redirect lookup, no cookie forwarding and outage fallback: `src/core/seo/legacy-proxy.ts`, `tests/core/legacy-redirect-proxy.test.ts`; scale acceptance remains pending.
 - **F11** — Release notes and qualified claims: `.changeset/blog-wordpress-structure.md`, `deploy/blog-wordpress-2026-11-07.md`.
-- **F12** — Partial software evidence: `tests/core/wordpress-import-flow.test.ts`, `tests/core/blog-structure-comments.test.ts`; deployment and source URL acceptance remain open in `deploy/blog-wordpress-2026-11-07.md`.
+- **F12** — Native import/privacy regressions: `tests/core/wordpress-import-flow.test.ts`, `tests/core/blog-structure-comments.test.ts`; the production-build browser and ten hosted demo checks passed, including the single 301. Production and actual source URL acceptance remain open in `deploy/blog-wordpress-2026-11-07.md`.
 
 ## C2.28 — Blog author profiles
 
@@ -1239,13 +1239,13 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F03** — Contact resolution, merge/undo, export and erasure: `src/modules/cms/blog-comments.ts`, `tests/core/blog-structure-comments.test.ts`; author contact details stay private.
 - **F04** — Owner blog, taxonomy, author and moderation screens: `app/(admin)/admin/blog/page.tsx`, `app/(admin)/admin/blog/[kind]/page.tsx`, `app/(admin)/admin/blog/comments/page.tsx`.
 - **F05** — Registry HTTP/MCP projections and generated SDK: `src/modules/cms/service.ts`, `packages/sdk/src/generated.ts`.
-- **F06** — Four locale catalogs and semantic tokens: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; browser acceptance remains pending in `deploy/blog-wordpress-2026-11-07.md`.
+- **F06** — Four locale catalogs and semantic tokens: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; production-build browser coverage and hosted light/dark Axe acceptance are recorded in `deploy/blog-wordpress-2026-11-07.md`.
 - **F07** — Public email exclusion, moderated publication, honeypot, closed comments, contact merge and erasure: `tests/core/blog-structure-comments.test.ts`.
 - **F08** — Migration/rollback regressions: `tests/core/wordpress-import-flow.test.ts`; parser regressions: `tests/core/wordpress-import.test.ts`; redirect projection: `tests/core/legacy-redirect-proxy.test.ts`.
 - **F09** — Explicit operational limits, source crawl and cutover review: `deploy/blog-wordpress-2026-11-07.md`.
 - **F10** — Bounded redirect lookup, no cookie forwarding and outage fallback: `src/core/seo/legacy-proxy.ts`, `tests/core/legacy-redirect-proxy.test.ts`; scale acceptance remains pending.
 - **F11** — Release notes and qualified claims: `.changeset/blog-wordpress-structure.md`, `deploy/blog-wordpress-2026-11-07.md`.
-- **F12** — Partial software evidence: `tests/core/wordpress-import-flow.test.ts`, `tests/core/blog-structure-comments.test.ts`; deployment and source URL acceptance remain open in `deploy/blog-wordpress-2026-11-07.md`.
+- **F12** — Native import/privacy regressions: `tests/core/wordpress-import-flow.test.ts`, `tests/core/blog-structure-comments.test.ts`; the production-build browser and ten hosted demo checks passed, including the single 301. Production and actual source URL acceptance remain open in `deploy/blog-wordpress-2026-11-07.md`.
 
 ## C2.29 — Moderated public reader comments
 
@@ -1254,13 +1254,13 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F03** — Contact resolution, merge/undo, export and erasure: `src/modules/cms/blog-comments.ts`, `tests/core/blog-structure-comments.test.ts`; author contact details stay private.
 - **F04** — Owner blog, taxonomy, author and moderation screens: `app/(admin)/admin/blog/page.tsx`, `app/(admin)/admin/blog/[kind]/page.tsx`, `app/(admin)/admin/blog/comments/page.tsx`.
 - **F05** — Registry HTTP/MCP projections and generated SDK: `src/modules/cms/service.ts`, `packages/sdk/src/generated.ts`.
-- **F06** — Four locale catalogs and semantic tokens: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; browser acceptance remains pending in `deploy/blog-wordpress-2026-11-07.md`.
+- **F06** — Four locale catalogs and semantic tokens: `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`; production-build browser coverage and hosted light/dark Axe acceptance are recorded in `deploy/blog-wordpress-2026-11-07.md`.
 - **F07** — Public email exclusion, moderated publication, honeypot, closed comments, contact merge and erasure: `tests/core/blog-structure-comments.test.ts`.
 - **F08** — Migration/rollback regressions: `tests/core/wordpress-import-flow.test.ts`; parser regressions: `tests/core/wordpress-import.test.ts`; redirect projection: `tests/core/legacy-redirect-proxy.test.ts`.
 - **F09** — Explicit operational limits, source crawl and cutover review: `deploy/blog-wordpress-2026-11-07.md`.
 - **F10** — Bounded redirect lookup, no cookie forwarding and outage fallback: `src/core/seo/legacy-proxy.ts`, `tests/core/legacy-redirect-proxy.test.ts`; scale acceptance remains pending.
 - **F11** — Release notes and qualified claims: `.changeset/blog-wordpress-structure.md`, `deploy/blog-wordpress-2026-11-07.md`.
-- **F12** — Partial software evidence: `tests/core/wordpress-import-flow.test.ts`, `tests/core/blog-structure-comments.test.ts`; deployment and source URL acceptance remain open in `deploy/blog-wordpress-2026-11-07.md`.
+- **F12** — Native import/privacy regressions: `tests/core/wordpress-import-flow.test.ts`, `tests/core/blog-structure-comments.test.ts`; the production-build browser and ten hosted demo checks passed, including the single 301. Production and actual source URL acceptance remain open in `deploy/blog-wordpress-2026-11-07.md`.
 
 ## C3.01 — Add required output schemas to every service and validate
 
