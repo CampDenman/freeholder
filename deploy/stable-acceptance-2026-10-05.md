@@ -166,3 +166,57 @@ the mutation proof. A browser carrying the old session was redirected to the
 playground entry, the test page returned 404, and a fresh visitor could enter
 the reseeded admin. Eight documentation/reconciliation assertions and the plan
 and license gates passed for this evidence update.
+
+## 2026-11-10 launch audit and recovery rehearsal
+
+This is additional evidence, not a stable sign-off. The owner selected completion
+of the full current specification before stable and accepted assignment of the
+independent security review. The review, final candidate and owner signature
+remain pending in MASTER.md §43.
+
+PR #638 repaired the separate customer-app dependency graph and added its audit
+to protected and scheduled CI. A clean install, TypeScript, both Expo exports
+and repeatable native fingerprint generation passed. Both dependency graphs
+audited clean, and GitHub reported zero open Dependabot and CodeQL alerts after
+merge. The two CodeQL findings were reviewed as token-MAC and transient webhook
+comparison uses, rather than password storage; the independent review packet
+records that evidence. These checks do not replace C11.10.
+
+PR #639 repaired project access to original private intake attachments, retaining
+the caller's form permissions and contact boundary. Native database tests passed
+(37 assertions); a production-build browser verified identical downloaded bytes,
+attachment/no-store headers, anonymous refusal, public-media refusal and
+quarantine refusal. Hosted private-preview acceptance remains C3.38.
+
+An existing production database snapshot was restored into an isolated,
+network-restricted fixture on the existing host. The archive was 66,592,540 bytes;
+its SHA-256 was
+`e50e715de829847c8cde95be8ce462f07129dd1b1ae72fe9d4daf4f47fd503c8`.
+Verified candidate `4d86abc06db4345da37346e18b7918a516e681c6`
+(`sha256:13c959ee655168aadaf09d83c4e3df1d5da1fc90e01a472a7dd5386fd31081da`)
+migrated the restored database and reached readiness. Counts remained zero
+contacts, five pages, one user and zero assets; the homepage, login, OpenAPI and
+blog routes returned 200. A fresh restore of the same archive then booted the
+previous production image
+(`sha256:a19b3f57e3ea162f9cc1fd08fc623e59c443d39d620b70b7c09781ab4b4839af`)
+with matching counts and passing homepage/login/blog checks. Fixture containers
+and their network were removed. The archive and private receipts remain on the
+host; no database contents or credentials were committed.
+
+This was a same-host database rehearsal with no source object bytes. It does
+not prove cross-target media recovery or rollback of the eventual final
+candidate. C11.08 remains open. Production was not restarted or changed.
+
+The disposable demo alone was moved to verified main
+`24933e2488ba424f4d4c4c84a511fa4ae677d5e9`, image
+`sha256:75a4fcb6548f8e91747e34e66be6c16938cb32f961a7812534d9112e6f902a9d`.
+The running image label matched; public health reported ready workers and no
+failed or dead-letter jobs. Hosted browser checks published a post with a guest
+author, nested category and tag, verified all four public archives and sitemap
+entries, and verified that the author's private email was absent. Renaming the
+parent category exposed a 308 fallback instead of the required 301. C2.27 stays
+open while the redirect repair and hosted recheck proceed.
+
+Actual provider credentials, settlement, owner sign-in and Replit/Lovable
+account launches were not supplied by these rehearsals. Their acceptance gates
+remain open. The revised local LinkedIn draft is prepared but unpublished.
