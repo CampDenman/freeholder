@@ -3549,7 +3549,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-10 at main `1c6c0e70`: 34 live C-items remained unchecked. Security repairs #638 and private project-attachment repair #639 passed protected checks and merged. GitHub reported zero open CodeQL/Dependabot alerts; both dependency audits were clean. The disposable demo runs verified main `24933e24`; production remains on `c3215f63`. The hosted redirect check reproduced a 308 fallback; source repair and hosted recheck are C2.27/C3.46. Same-host database upgrade/recovery rehearsals passed with zero source media assets; cross-target object-byte proof remains C11.08. This snapshot does not supply stable or platform-launch acceptance. |
+| Latest launch audit | 2026-11-10: 34 live C-items remain unchecked. Repairs #638/#639/#640 passed protected checks and merged; GitHub reported zero open CodeQL/Dependabot alerts and both dependency audits were clean. The disposable demo runs verified main `e6577345`; production remains on `c3215f63`. Ten hosted blog checks passed, including one literal 301 to a working archive, moderation, email privacy and both-theme Axe scans; see `deploy/blog-wordpress-2026-11-07.md`. Same-host database upgrade/recovery rehearsals passed with zero source media assets; cross-target object-byte proof remains C11.08. This evidence does not supply stable or platform-launch acceptance. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -4923,7 +4923,13 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   uses the app's validated local `PORT`, while destinations retain `APP_URL`.
   `tests/core/legacy-redirect-proxy.test.ts` reproduces blocked public egress
   and tests credentials/Host isolation and invalid ports; changeset
-  `redirect-loopback-lookup.md`. The hosted 301 recheck remains pending.
+  `redirect-loopback-lookup.md`. The hosted recheck on verified main
+  `e6577345` passed: one literal 301 reached the descendant archive with no
+  second redirect. Ten hosted checks also covered author/tag edits, moderation,
+  private-email exclusion, safe text rendering and both-theme Axe scans;
+  `deploy/blog-wordpress-2026-11-07.md` records the exact image and limits.
+  Scale and source-specific qualification remain open; this is not stable
+  or production acceptance.
 - [ ] **C2.28** Blog authors: account-linked or guest profiles, private email,
   public bylines/bios and author archives; preserve WordPress authors, terms,
   post dates and exact archive paths at import. Owner administration and
@@ -4955,7 +4961,9 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   serializes concurrent creators; an over-limit batch rolls back atomically.
   `tests/core/blog-playground.test.ts` exercises the real server action with
   a genuine disposable visitor session and verifies moderation and caps.
-  Deployed demo acceptance remains open. Redirect coverage is in
+  Deployed demo qualification passed 2026-11-10 on verified `e6577345`;
+  the ten-check receipt is summarized in `deploy/blog-wordpress-2026-11-07.md`.
+  Redirect coverage is in
   `tests/core/legacy-redirect-proxy.test.ts`. Reusable
   fixes stage replacement metadata/comments until publication, reuse the
   shared published-page resolver, retain first publication dates and restore
@@ -4965,7 +4973,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `tests/core/wordpress-migration-verification.test.ts`. The browser's first
   run reached moderation but its status selector also matched the filter nav;
   the harness now selects the combobox by role. Production deployment and
-  deployed acceptance remain pending; operational limits and all evidence
+  source-specific acceptance remain pending; operational limits and all evidence
   are recorded in `deploy/blog-wordpress-2026-11-07.md`.)*
 
 ### 43.8 C3 — Living contract, plugins, packages, and portable operation

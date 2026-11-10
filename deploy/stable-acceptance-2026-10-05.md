@@ -220,3 +220,21 @@ open while the redirect repair and hosted recheck proceed.
 Actual provider credentials, settlement, owner sign-in and Replit/Lovable
 account launches were not supplied by these rehearsals. Their acceptance gates
 remain open. The revised local LinkedIn draft is prepared but unpublished.
+
+### Hosted redirect repair verified
+
+After #640 passed protected PR, merge-queue and main CI, the demo alone was
+updated to verified source `e65773459a9e1d8cde977a0e16432e91bf65d796`, image
+`sha256:1146f32c8fbe68c55c6610c6d4bb2daef7f01d647289d41594d0b343717e4192`.
+The image's signed provenance and actual running source label matched. Ten
+hosted browser checks passed, including the literal single 301, its direct 200
+destination, author/taxonomy edits, moderation, private-email exclusion, safe
+text rendering and both-theme Axe scans. The exact scope and remaining
+qualification are in `deploy/blog-wordpress-2026-11-07.md`.
+
+The demo was reset afterwards. Its discarded qualification post returned 404,
+a fresh visitor entered the reseeded admin, and public health was ready with
+no failed jobs or dead letters. The receipt and reset log are retained
+privately on the host. Production's image/source remained unchanged and its
+health was ready. This adds demo evidence; it supplies no stable signature,
+cross-target media recovery, production cutover or live-provider acceptance.

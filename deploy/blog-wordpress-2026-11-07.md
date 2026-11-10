@@ -156,3 +156,39 @@ IPv6 loopback for `::`/`::1`; other listen hosts select IPv4 loopback. No reques
 header or arbitrary configured hostname becomes an outbound destination. Real
 IPv4, IPv6 and localhost HTTP regression listeners all return the intended 301
 without receiving visitor credentials.
+
+## Hosted qualification, 2026-11-10
+
+Protected PR, merge-queue and main CI passed for #640. The main workflow's
+signed candidate was verified against its exact source and trusted workflow:
+
+- Source: `e65773459a9e1d8cde977a0e16432e91bf65d796`.
+- Image: `ghcr.io/campdenman/freeholder@sha256:1146f32c8fbe68c55c6610c6d4bb2daef7f01d647289d41594d0b343717e4192`.
+- Main CI: https://github.com/CampDenman/freeholder/actions/runs/42897693255.
+
+Only the disposable demo was updated. Docker's running image and source label
+matched the verified candidate. Production remained on `c3215f63`, with ready
+workers, zero failed jobs and zero dead letters.
+
+A real Chromium browser completed ten checks on `demo.freeholder.ai` using
+fictional records: playground entry; guest author creation with private email;
+parent/child category and flat tag creation; published post and all three
+archives; sitemap inclusion; one literal 301 after moving the parent category,
+followed by a direct 200 for its descendant archive; author biography and tag
+edits; a pending anonymous comment becoming public only after moderation,
+rendering markup as text without the reader's private email; WCAG AA Axe scans
+in both actual cookie-selected themes; and deletion of an unused tag. The
+run started at 2026-11-10T21:13Z and completed with no browser page errors. Its
+private copy is retained on the deployment host; no cookies or credentials are
+in it.
+
+The demo was reset after qualification. A subsequent read-only check confirmed
+the same running image/source, ready public health, no failed/dead-letter jobs,
+and 404 for the discarded post. A fresh Chromium visitor could enter the
+reseeded admin. The receipt and reset log are retained privately on the host.
+
+This qualifies those deployed demo paths. It does not qualify production
+deployment, actual WordPress source-crawl/cutover parity, scale acceptance,
+private hosted previews, owner/agent acceptance in Replit or Lovable, provider
+settlement, independent review or the final stable candidate. The C2.27–C2.29
+boxes remain open for their remaining criteria.
