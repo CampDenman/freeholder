@@ -31,6 +31,15 @@ export function siteOrigin(): string {
   return env().APP_URL.replace(/\/+$/, "");
 }
 
+/** The same Node server, without public DNS, TLS or outbound-network access. */
+export function internalSiteOrigin(): string {
+  const runtime = env();
+  const host = runtime.HOSTNAME === "localhost" ? "localhost"
+    : ["::", "::1"].includes(runtime.HOSTNAME ?? "") ? "[::1]"
+    : "127.0.0.1";
+  return `http://${host}:${runtime.PORT ?? 3000}`;
+}
+
 /**
  * The same origin, plus a check against where the request actually arrived.
  *

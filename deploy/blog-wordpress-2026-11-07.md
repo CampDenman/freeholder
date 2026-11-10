@@ -49,10 +49,14 @@ comment reference. Rollback removes this import's comments and unused profiles,
 retaining profiles and ancestors used elsewhere.
 
 Publication activates query-ID and parented attachment aliases. The proxy asks
-the public redirect service at configured APP_URL without forwarding cookies,
+the public redirect service over loopback at the application's `PORT` (3000
+by default), without forwarding cookies,
 credentials or request headers, follows stored chains in the service and emits
 a literal 301 before slash normalization. It performs one bounded (1.5 second)
 internal request per public GET/HEAD page; internal routes and assets bypass it.
+A network-isolated demo therefore needs no outbound exception to ask its own
+service. Public redirect destinations still use the configured `APP_URL`, never
+the loopback address or the request's Host header.
 A resolver outage preserves content availability, but may degrade historical
 redirects: the verification must fail that path rather than accept it.
 
@@ -144,3 +148,11 @@ preflight outside `createPage`'s insertion transaction. These author/term and
 inline-tag tests do not qualify a strict concurrent page cap. Native race
 reproduction, shared page-insertion serialization and deployed acceptance are
 a scoped follow-up; no live page-overflow incident has been demonstrated.
+
+The redirect repair's protected browser check also reproduced a listener-family
+mismatch: `localhost` may bind IPv6, while a fixed IPv4 resolver cannot reach it.
+The internal resolver now selects localhost for that configured listener and
+IPv6 loopback for `::`/`::1`; other listen hosts select IPv4 loopback. No request
+header or arbitrary configured hostname becomes an outbound destination. Real
+IPv4, IPv6 and localhost HTTP regression listeners all return the intended 301
+without receiving visitor credentials.

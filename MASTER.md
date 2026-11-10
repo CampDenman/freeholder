@@ -4914,6 +4914,15 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 - [ ] **C2.27** Blog categories and tags: hierarchical categories, flat tags,
   owner CRUD, post assignment, public archive pages, sitemap and slug-move
   redirects through the same scoped services on UI, HTTP and MCP.
+  Hosted qualification 2026-11-10 on `demo.freeholder.ai` at main
+  `24933e24` created a parent/child category, tag and author, assigned them to
+  a published post, and verified their public archives and sitemap entries.
+  A category move reproduced a 308 fallback: the network-isolated app could
+  not reach its own public origin for the redirect lookup. The lookup now
+  uses the app's validated local `PORT`, while destinations retain `APP_URL`.
+  `tests/core/legacy-redirect-proxy.test.ts` reproduces blocked public egress
+  and tests credentials/Host isolation and invalid ports; changeset
+  `redirect-loopback-lookup.md`. The hosted 301 recheck remains pending.
 - [ ] **C2.28** Blog authors: account-linked or guest profiles, private email,
   public bylines/bios and author archives; preserve WordPress authors, terms,
   post dates and exact archive paths at import. Owner administration and
