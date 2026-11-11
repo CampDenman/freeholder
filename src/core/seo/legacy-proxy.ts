@@ -14,7 +14,7 @@ export async function legacyRedirect(request: Request): Promise<Response | null>
   const pathname = requestUrl.pathname;
   if (INTERNAL.test(pathname) || FILE.test(pathname)) return null;
   const prefix = PREFIX.exec(pathname);
-  const locale = prefix?.[1] ?? "en";
+  const locale = prefix?.[1];
   const localPath = prefix ? prefix[2] ?? "/" : pathname;
   if (INTERNAL.test(localPath)) return null;
   let path = localPath.replace(/^\/+|\/+$/g, "");
@@ -28,7 +28,9 @@ export async function legacyRedirect(request: Request): Promise<Response | null>
   try {
     const endpoint = new URL("/api/v1/seo.resolveRedirect", internalSiteOrigin());
     endpoint.searchParams.set("path", candidate);
-    endpoint.searchParams.set("locale", locale);
+    // An unprefixed URL belongs to the business's default language. The
+    // shared resolver reads that setting; the edge cannot safely assume en.
+    if (locale) endpoint.searchParams.set("locale", locale);
     const response = await fetch(endpoint, { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(1500), headers: { accept: "application/json" } });
     if (response.ok) {
       const moved: unknown = await response.json();

@@ -37,12 +37,14 @@ export const resolveRedirect = defineService({
   summary: "Where an old path now leads.",
   kind: "query",
   permission: "public",
-  input: z.object({ path, locale: z.string().default("en") }),
+  input: z.object({ path, locale: z.string().optional() }),
   output: row({
     toPath: z.string(),
     status: z.enum(["301", "302"]),
   }).nullable(),
   handler: async (input, ctx) => {
+    const locale = input.locale ?? z.object({ defaultLocale: z.string() }).nullable()
+      .parse(await ctx.call(getService("settings.getBusiness"), {}))?.defaultLocale ?? "en";
     let current = input.path;
     let status: "301" | "302" = "301";
 
@@ -53,7 +55,7 @@ export const resolveRedirect = defineService({
         .where(
           and(
             eq(redirects.fromPath, current),
-            eq(redirects.locale, input.locale),
+            eq(redirects.locale, locale),
           ),
         )
         .limit(1);
@@ -62,12 +64,12 @@ export const resolveRedirect = defineService({
           const pagination = /^(.*)\/page\/([1-9]\d*)$/.exec(current);
           if (pagination && !/\/page\/\d+$/.test(pagination[1]!) && Number(pagination[2]) <= 10000) {
             const originalRoot = pagination[1]!;
-            const movedRoot = z.object({ toPath: z.string(), status: z.enum(["301", "302"]) }).nullable().parse(await ctx.call(getService("seo.resolveRedirect"), { path: originalRoot, locale: input.locale }));
+            const movedRoot = z.object({ toPath: z.string(), status: z.enum(["301", "302"]) }).nullable().parse(await ctx.call(getService("seo.resolveRedirect"), { path: originalRoot, locale }));
             const root = movedRoot?.toPath ?? originalRoot;
             const archive = z.object({ posts: z.number() }).nullable().parse(await ctx.call(getService("cms.resolveBlogArchive"), { path: root }));
-            const listing = root === "blog" ? await ctx.call(getService("cms.resolvePage"), { slug: root, locale: input.locale }) : null;
+            const listing = root === "blog" ? await ctx.call(getService("cms.resolvePage"), { slug: root, locale }) : null;
             const settings = z.object({ postsPerPage: z.number() }).parse(await ctx.call(getService("cms.blogSettings"), {}));
-            const count = listing ? z.object({ pages: z.number() }).parse(await ctx.call(getService("cms.listBlogPosts"), { locale: input.locale, limit: settings.postsPerPage })).pages : Math.ceil((archive?.posts ?? 0) / settings.postsPerPage);
+            const count = listing ? z.object({ pages: z.number() }).parse(await ctx.call(getService("cms.listBlogPosts"), { locale, limit: settings.postsPerPage })).pages : Math.ceil((archive?.posts ?? 0) / settings.postsPerPage);
             if ((archive || listing) && Number(pagination[2]) <= count) return { toPath: Number(pagination[2]) === 1 ? root : `${root}?page=${pagination[2]}`, status: movedRoot?.status ?? "301" as const };
           }
         }

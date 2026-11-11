@@ -67,7 +67,8 @@ test.describe("static archive owner journey (C3.22)", () => {
       await expect(page.getByRole("heading", { name: "Northstar", level: 1 })).toBeVisible();
       await page.getByRole("link", { name: "Our team", exact: true }).focus(); await page.keyboard.press("Enter");
       await expect(page).toHaveURL(/\/about\/team#people$/);
-      await expect(page.getByRole("heading", { name: "Our people", level: 1 })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "The team", level: 1 })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Our people", level: 2 })).toBeVisible();
       const image = page.getByRole("img", { name: "Synthetic blue square", exact: true });
       await expect(image).toBeVisible();
       await expect.poll(() => image.evaluate(element => element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0)).toBe(true);
