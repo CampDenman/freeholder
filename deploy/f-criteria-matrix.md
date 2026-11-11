@@ -1737,11 +1737,14 @@ Legacy retention increment (2026-11-11): `deploy/mail-record-retention.md` and
 `tests/core/mail-record-retention.test.ts` cover policy kinds, private receipts,
 active blocks, ownership review, merge/undo, holds after anonymization, pending
 physical outcomes, linked staff copies, retained minimal exports and old-writer
-snapshot fences. Combined routing/privacy/populated-upgrade53, two additional system-refusal
-controls, earlier SDK8/audit7 and first four-locale320px review browsers passed.
+snapshot fences. Final actual-main composition passed 96 actual controls across
+eight suites (including both system-refusal controls), no database skips,
+SDK 8/audit 7 and full fast 373 plus one documented exclusion. Production scrub
+passed 20,330 files / 242,415,563 bytes; four fresh-database locale 320px review
+browsers passed in both themes with keyboard, Axe, bounds and service/audit checks.
 Address generations, current supporting facts and original pending receipts
-remain distinct; a completed replay cannot act on a new holder. Final
-composed build/browser and protected integration remain in progress. Required
+remain distinct; a completed replay cannot act on a new holder.
+Protected integration remains required. The required
 transactional/SMTP physical-dispatch recovery, live-provider acceptance and
 independent human review stay open before stable.
 

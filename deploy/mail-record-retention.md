@@ -86,14 +86,16 @@ Local evidence (2026-11-11): actual initial and peer failures reproduced missing
 policy kinds, retained personal fields, loss of multiple-attempt evidence,
 callback plaintext restoration, uncertain derived mail copies, hidden retained
 block exports, stale snapshot writes and nullable reviewer metadata refusal.
-The combined mail routing/privacy/populated-upgrade run passed53 controls;
-two additional actual system-actor refusal controls passed after the narrow
-human-only guards. TypeScript and focused lint are clean. Exact SDK8, audit7
-and the373-contract inventory passed earlier; final composed55/SDK/static
-confirmation is pending. First artifact scrub passed20,500 files /242,750,885
-bytes and four locale owner review browser journeys passed at320px in both
-themes with keyboard, accessibility and real service/audit assertions. The final
-composed production build/browser and protected integration remain pending.
+The final actual-main composition, based on migration 70 main `1ffec6fa`, passed
+96 actual controls across eight mail routing/privacy/populated-upgrade/adjacent
+suites, with no database skips. Those 96 include both system-actor refusal
+controls; they are not an additional count. SDK generation passed all eight
+catalog checks without drift. TypeScript, lint, licensing, plan checks and the
+373-contract inventory passed, with its one documented exclusion. The production
+artifact scrub passed 20,330 files /242,415,563 bytes. All four fresh-database
+English/Spanish/French/Arabic owner review browser journeys passed at 320px in
+both themes with keyboard, Axe, actual element bounds and real service/audit
+assertions. Protected PR/merge integration remains required.
 
 C3.31/C11.08 also require the separate enabled transactional/SMTP physical-send
 recovery increment: freeze original route/request identities, journal each
