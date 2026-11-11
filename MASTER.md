@@ -5347,7 +5347,12 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `deploy/blog-wordpress-2026-11-07.md`.)*
   *(Nested navigation source increment 2026-11-11: menus reconstruct their
   source parent/child order, retain grandchildren, taxonomy targets, ordinary
-  query/fragment intent and WordPress query-ID links. CMS navigation stores
+  query/fragment intent and WordPress query-ID links. Raw custom URLs validate
+  before rewriting or supplying a fallback label; credentials remain unresolved
+  and safe same-host links outside the imported frontend retain their original
+  URL. Two pure repros failed before this peer-review repair; nine permanent
+  controls cover refusal, valid query IDs and subdirectory ownership.
+  CMS navigation stores
   editable bounded levels and renders semantic nested lists; merge keeps the
   owner's labels/order and attaches children to their matching parent. Stable
   import identities let rollback remove only that import's additions while
@@ -5358,7 +5363,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   Cutover selects the business default locale and records the actual CMS
   fallback section locale for reversal; three real localized publish/rollback
   regressions failed before the repair and pass afterward.
-  Fifty-nine integrated PostgreSQL/native controls and a final 52-check
+  Fifty-nine integrated PostgreSQL/native controls and a final 63-check
   menu/WordPress/chrome/SDK run passed (overlapping counts); eight Chromium
   journeys passed at 320px in all four locales with keyboard, actual bounds
   and both-theme Axe. Build/artifact and fast gates passed. Evidence:

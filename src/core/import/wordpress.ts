@@ -1085,9 +1085,13 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
       visited.add(item.wpId);
       const depth = Math.min(actualDepth, MAX_NAV_DEPTH);
       if (actualDepth > MAX_NAV_DEPTH) bump(report.skipped, "menu depth beyond four: link retained at level four");
-      const path = item.url ? wordpressPath(item.url, hosts, basePath) : null;
+      // Validate the original address before dropping its origin/userinfo or
+      // interpreting WordPress query IDs. A rewritten local path cannot prove
+      // that the original URL was safe to publish.
+      const sourceHref = safeMenuHref(item.url?.trim());
+      const path = sourceHref ? wordpressPath(sourceHref, hosts, basePath) : null;
       let query = "", fragment = "";
-      try { if (item.url) { const url = new URL(item.url, origin); query = url.search; fragment = url.hash; } } catch { /* Invalid source address stays unresolved. */ }
+      try { if (sourceHref) { const url = new URL(sourceHref, origin); query = url.search; fragment = url.hash; } } catch { /* Invalid source address stays unresolved. */ }
       if (item.type === "post_type" && item.objectId) {
         const target = exported.items.find(candidate => candidate.wpId === item.objectId);
         planned.push({ label: item.label || target?.title || "", depth, targetWpId: item.objectId, note: target ? undefined : "target not in this export", ...(fragment ? { fragment } : {}) });
@@ -1099,11 +1103,20 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
         planned.push({ label: item.label || item.object, depth, ...(item.object === "post" ? { href: "/blog" } : { note: "unsupported post-type archive" }) });
       } else {
         let targetWpId: string | undefined;
+        let href: string | undefined;
         try {
-          const url = item.url ? new URL(item.url, origin) : undefined;
-          if (url && hosts.includes(url.host.toLowerCase())) targetWpId = url.searchParams.get("p") ?? url.searchParams.get("page_id") ?? undefined;
+          const url = sourceHref ? new URL(sourceHref, origin) : undefined;
+          if (url && sourceHref) {
+            const sameHost = hosts.includes(url.host.toLowerCase());
+            const sourcePath = url.pathname.replace(/^\/+|\/+$/g, "");
+            const inSource = sameHost && (!basePath || sourcePath === basePath || sourcePath.startsWith(`${basePath}/`));
+            if (inSource) targetWpId = url.searchParams.get("p") ?? url.searchParams.get("page_id") ?? undefined;
+            href = sourceHref.startsWith("#") ? sourceHref : inSource && path !== null
+              ? `${`/${toCmsSlug(path)}`.replace(/\/$/, "") || "/"}${query}${fragment}`
+              : sameHost && !inSource ? url.href : sourceHref;
+          }
         } catch { /* Malformed source links are reported, never made executable. */ }
-        planned.push({ label: item.label || item.url || "", depth, ...(targetWpId ? { targetWpId, ...(fragment ? { fragment } : {}) } : { href: safeMenuHref(item.url?.trim().startsWith("#") ? item.url.trim() : path !== null ? `${`/${toCmsSlug(path)}`.replace(/\/$/, "") || "/"}${query}${fragment}` : item.url) }) });
+        planned.push({ label: item.label || sourceHref || "", depth, ...(targetWpId ? { targetWpId, ...(fragment ? { fragment } : {}) } : { href }), ...(!sourceHref ? { note: "unsafe or invalid source link" } : {}) });
       }
       for (const child of children.get(item.wpId) ?? []) walk(child, actualDepth + 1);
     };

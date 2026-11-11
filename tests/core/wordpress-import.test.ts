@@ -303,6 +303,40 @@ describe("WordPress menu hierarchy and target intent (C3.22)", () => {
     expect(planned[5]?.href).toBe("#section");
   });
 
+  it.each(["/about/", "/?p=20"])("refuses raw credentialed custom URLs before rewriting %s", (path) => {
+    const exported = parseWordpressExport(FIXTURE);
+    const address = new URL(path, ORIGIN);
+    address.username = "synthetic-owner";
+    address.password = "synthetic-proof";
+    exported.menuItems = [{ ...exported.menuItems[0]!, wpId: "review", label: "", type: "custom", url: address.href }];
+    const planned = planWordpressImport(exported, ORIGIN).menus[0]!.items[0]!;
+    expect(planned.href).toBeUndefined();
+    expect(planned.targetWpId).toBeUndefined();
+    expect(planned.note).toBe("unsafe or invalid source link");
+    expect(planned.label).toBe("");
+  });
+
+  it.each([
+    { base: "", path: "/?p=20", target: "20" },
+    { base: "", path: "/index.php?page_id=1", target: "1" },
+    { base: "/legacy", path: "/legacy/?p=20", target: "20" },
+    { base: "/legacy", path: "/legacy/index.php?page_id=1", target: "1" },
+  ])("maps valid query-ID targets within the source base $base: $path", ({ base, path, target }) => {
+    const exported = parseWordpressExport(FIXTURE);
+    exported.site.baseUrl = `${ORIGIN}${base}`;
+    exported.menuItems = [{ ...exported.menuItems[0]!, wpId: "review", label: "Valid", type: "custom", url: `${ORIGIN}${path}` }];
+    expect(planWordpressImport(exported, ORIGIN).menus[0]!.items[0]!.targetWpId).toBe(target);
+  });
+
+  it.each(["/elsewhere/?p=20", "/legacy-other/?page_id=1", "/elsewhere/about/"])("preserves same-host links outside the source base: %s", (path) => {
+    const exported = parseWordpressExport(FIXTURE);
+    exported.site.baseUrl = `${ORIGIN}/legacy`;
+    exported.menuItems = [{ ...exported.menuItems[0]!, wpId: "review", label: "Elsewhere", type: "custom", url: `${ORIGIN}${path}` }];
+    const planned = planWordpressImport(exported, ORIGIN).menus[0]!.items[0]!;
+    expect(planned.targetWpId).toBeUndefined();
+    expect(planned.href).toBe(`${ORIGIN}${path}`);
+  });
+
   it("retains disconnected/cyclic links with an explicit warning instead of losing or hanging them", () => {
     const exported = parseWordpressExport(FIXTURE);
     const base = { menu: "primary-menu", order: 0, type: "custom", object: "custom", url: "/about" };

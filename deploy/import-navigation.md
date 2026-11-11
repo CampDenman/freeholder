@@ -16,7 +16,12 @@ A matching owner parent keeps its own label and position; its source children
 are merged below it. Repeated destinations under different parents remain
 separate links. Category/tag targets use their imported archive paths, ordinary
 query strings and fragments remain meaningful, and WordPress query-ID links
-resolve to the imported page. Executable/credentialed links are not published.
+resolve to the imported page. Custom source addresses are validated before any
+local-path or query-ID rewriting. Credentialed/invalid addresses stay unresolved
+and cannot supply a fallback label; safe same-host links outside the imported
+frontend base remain their original absolute URLs. Two pure controls reproduced
+the raw-address bypass before repair; nine permanent controls include root and
+index.php query links plus subdirectory ownership.
 
 Missing parents and hierarchy cycles retain links as roots with a warning.
 Links deeper than four nested levels remain in source order at the fourth
@@ -40,7 +45,9 @@ run, and successful retries leave the same stored result.
 Local source qualification passed 59 integrated PostgreSQL/native checks for
 menu planning, source discovery, exact import scopes, ownership, public privacy
 and SDK consistency. After adding the translated owner warning report, the
-final 52-check menu/WordPress/chrome/SDK run passed; these counts overlap.
+final 63-check menu/WordPress/chrome/SDK qualification passed across three
+sequential runs after the raw-URL repair and main integration; these counts
+overlap the earlier run.
 The additional three actual publish/rollback controls first failed because
 Spanish, French and Arabic businesses received English menu changes. Cutover
 now selects the business default language and records the actual CMS fallback
@@ -54,8 +61,8 @@ source forms. The warning-only fixture seeds report metadata; the native tests
 exercise actual private-target cutover. English light, Arabic dark and Arabic
 owner-warning screenshots were visually inspected.
 
-The final production build and artifact scrub passed (18,783 files,
-228,090,157 bytes), along with type/lint/license/notes/plan and 368 contract
+The final production build and artifact scrub passed (19,380 files,
+228,952,691 bytes), along with type/lint/license/notes/plan and 368 contract
 checks (one deliberate skip). Protected PR and merge-queue qualification are
 still required. No live WordPress cutover, production rollout or stable
 acceptance is claimed by this record.
