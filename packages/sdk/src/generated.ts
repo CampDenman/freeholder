@@ -4949,7 +4949,7 @@ export interface ServiceCatalog {
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "imports.start": {
-    input: { origin: string; kind: "wordpress-rest" | "wordpress-wxr" | "sitemap" | "rss" | "atom" | "html" | "archive" };
+    input: { origin: string; kind: "wordpress-rest" | "wordpress-wxr" | "sitemap" | "rss" | "atom" | "html" | "archive"; approvedMediaOrigins?: string[] };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "imports.uploadSourceChunk": {

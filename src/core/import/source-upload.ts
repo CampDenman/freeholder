@@ -28,6 +28,7 @@ import { deleteUnownedPendingObjects, reservePendingMediaObject } from "@/core/m
 import { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES, importSourceObjectKeys, importSourceWrites, makeRetainedImportSource, readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceChunkKey, retainedSourceFromRun, type RetainedImportSource } from "./retained-source";
 export { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES } from "./retained-source";
 import { DEFAULT_IMPORTER_LIMITS } from "./contract";
+import { approvedMediaOrigins, approvedMediaOriginsSchema } from "./media-origins";
 import { stageImportSource, stageWordpressExport } from "./service";
 import { assertSourceStageable } from "./source-lifecycle";
 import { assertReaderUploadWindow, bindReaderSources, ReaderSourceErasureError } from "./privacy";
@@ -401,7 +402,7 @@ const uploadSource = defineService({
   permission: "scoped",
   external: false,
   input: z.object({ id: z.string().uuid(), uploadId: z.string().uuid() }),
-  output: z.object({ kind: z.string(), origin: z.string(), keys: z.array(z.string()), bytes: z.number().int(), source: retainedImportSourceSchema }),
+  output: z.object({ kind: z.string(), origin: z.string(), keys: z.array(z.string()), bytes: z.number().int(), source: retainedImportSourceSchema, approvedMediaOrigins: approvedMediaOriginsSchema }),
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
@@ -416,7 +417,7 @@ const uploadSource = defineService({
         `Only ${upload.received.length} of ${upload.chunks} chunks have arrived. Send the rest first.`,
       );
     }
-    return { kind: run.kind ?? "html", origin: run.origin ?? "https://example.com", keys: allKeys(upload), bytes: upload.bytes, source: makeRetainedImportSource(run.id, upload) };
+    return { kind: run.kind ?? "html", origin: run.origin ?? "https://example.com", keys: allKeys(upload), bytes: upload.bytes, source: makeRetainedImportSource(run.id, upload), approvedMediaOrigins: approvedMediaOrigins(run.checkpoint) };
   },
 });
 
@@ -512,7 +513,7 @@ const releaseErasedUpload = defineService({
  * the importer's byte limit.
  */
 async function stageStoredSource(
-  state: { kind: string; origin: string; keys: string[]; source: RetainedImportSource },
+  state: { kind: string; origin: string; keys: string[]; source: RetainedImportSource; approvedMediaOrigins: string[] },
 ): Promise<{ preview: Record<string, unknown>; counts: Record<string, number>; archivePreviewDigest?: string }> {
   if (state.kind === "archive") {
     const staged = await stageStaticArchive(archiveRangeSource(state.source, index => readRetainedSourceChunk(state.source, index)), state.origin);
@@ -545,7 +546,7 @@ async function stageStoredSource(
     reader.end();
     return stageWordpressExport(wxr.finish(), state.origin);
   }
-  return stageImportSource(state.kind, text + tail, state.origin);
+  return stageImportSource(state.kind, text + tail, state.origin, "", state.approvedMediaOrigins);
 }
 
 export const previewFromUpload = defineOrchestratedService({

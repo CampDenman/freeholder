@@ -58,6 +58,7 @@ const steps = [
       "tests/core/cms-fields.test.ts",
       "tests/core/cms-a11y.test.ts",
       "tests/core/a11y-smoke.test.ts",
+      "tests/core/audit-labels.test.ts",
       "tests/core/internal-services.test.ts",
       "tests/core/service-composition.test.ts",
       "tests/core/social-http.test.ts",

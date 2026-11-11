@@ -29,6 +29,8 @@ export default async function ImportsPage() {
             labels={{
               origin: t("imports.origin"),
               kind: t("imports.kind"),
+              mediaOrigins: t("imports.mediaOrigins"),
+              mediaOriginsHint: t("imports.mediaOriginsHint"),
               kinds: [
                 { value: "html", label: t("imports.kind.html") },
                 { value: "archive", label: t("imports.kind.archive") },

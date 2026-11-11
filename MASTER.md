@@ -5467,6 +5467,18 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   See `deploy/generic-site-import.md`. C3.22 remains open for full page-query
   intent, durable large-source resumption, hosted/CDN paths and actual
   source-specific acceptance.)*
+  *(Hosted-media increment 2026-11-11: an approved-CDN fixture reproduced
+  lost media and an actual accepted asset then reproduced a source-only
+  conversion assumption. Explicit per-run approval now accepts up to eight
+  public file origins while page discovery remains same-origin. Exact origin
+  snapshots, pinned transport, per-origin fresh robots, ordinary scans and
+  independent actor/media grants remain enforced. Nine focused boundary
+  controls, ten generic planning controls, eight SDK controls and four real
+  owner browser journeys pass; a staged-cancellation report failure is repaired
+  with the explicit prior phase. Final build/artifact scrub passes. See
+  `deploy/hosted-source-media.md`. Actual hosted-provider accounts, dynamic
+  builder content, large-source resumption and source-specific cutover remain
+  required; C3.22 is not closed.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,
@@ -11710,6 +11722,9 @@ schema they inherit reads as a designed thing rather than an excavation.
   complete unique coverage and stable required `checks`/DCO gates. The exact
   topology contract is included in local fast gates; evidence and unchanged
   constraints are recorded in `deploy/ci-release-gate.md`.)*
+  *(Cheap audit-label follow-up: CI on the card-setup increment caught missing
+  owner activity labels. The existing seven-control mutation/locale inventory
+  now also runs in local fast gates so this omission is caught before pushing.)*
 - [x] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.

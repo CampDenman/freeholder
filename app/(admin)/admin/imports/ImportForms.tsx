@@ -27,12 +27,15 @@ export function StartImportForm({
   labels: {
     origin: string;
     kind: string;
+    mediaOrigins: string;
+    mediaOriginsHint: string;
     kinds: Array<{ value: string; label: string }>;
     submit: string;
     error: string;
   };
 }) {
   const [state, action] = useActionState(startImportAction, empty);
+  const [kind, setKind] = useState("html");
   return (
     <form action={action} className="grid min-w-0 gap-4">
       {state.error ? (
@@ -44,7 +47,7 @@ export function StartImportForm({
         <Input id="origin" name="origin" type="url" dir="ltr" required />
       </Field>
       <Field htmlFor="kind" label={labels.kind}>
-        <Select id="kind" name="kind" defaultValue="html" required>
+        <Select id="kind" name="kind" value={kind} onChange={event => setKind(event.target.value)} required>
           {labels.kinds.map((kind) => (
             <option key={kind.value} value={kind.value}>
               {kind.label}
@@ -52,6 +55,9 @@ export function StartImportForm({
           ))}
         </Select>
       </Field>
+      {["html", "sitemap", "rss", "atom"].includes(kind) ? <Field htmlFor="approvedMediaOrigins" label={labels.mediaOrigins} hint={labels.mediaOriginsHint}>
+        <textarea id="approvedMediaOrigins" name="approvedMediaOrigins" dir="ltr" rows={3} maxLength={16_392} aria-describedby="approvedMediaOrigins-hint" className="w-full min-w-0 rounded-md border border-rule-strong bg-field px-3 py-2 text-base text-ink focus-visible:border-accent" />
+      </Field> : null}
       <Button type="submit">{labels.submit}</Button>
     </form>
   );

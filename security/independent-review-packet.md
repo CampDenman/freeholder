@@ -908,3 +908,12 @@ covers actual CMS/media/redirect/replay/rollback and future-entry refusal.
 `tests/browser/import-generic-content.spec.ts` follows the real native fragment
 target in all four locales. See `deploy/generic-site-import.md`; these controls
 do not supply the independent review or source-specific production acceptance.
+
+For additional hosted media origins, inspect `src/core/import/media-origins.ts`
+and the generic commit policy: exact origin approval must never widen page
+crawling, stale previews must fail before I/O, and each used CDN needs its own
+fresh pinned robots policy. `tests/core/import-hosted-media-flow.test.ts`
+exercises actual local asset acceptance, exact grants and refusal/retry.
+`deploy/hosted-source-media.md` records the current evidence and open provider
+acceptance boundary. Ordinary content scanning and receipt authorization remain
+required for every approved origin.

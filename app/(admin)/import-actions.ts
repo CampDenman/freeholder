@@ -40,6 +40,7 @@ export async function startImportAction(
     started = await startImport.call(
       {
         origin: text(form, "origin"),
+        approvedMediaOrigins: text(form, "approvedMediaOrigins").split(/\r?\n/).map(value => value.trim()).filter(Boolean),
         kind: text(form, "kind") as
           | "wordpress-rest"
           | "wordpress-wxr"

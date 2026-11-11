@@ -8683,5 +8683,7 @@
   "cms.block.anchor": "Destino del enlace",
   "imports.count.pagesStaged": "Páginas preparadas",
   "imports.count.mediaFound": "Archivos encontrados",
-  "imports.count.redirectsProposed": "Redirecciones propuestas"
+  "imports.count.redirectsProposed": "Redirecciones propuestas",
+  "imports.mediaOrigins": "Orígenes de archivos adicionales (opcional)",
+  "imports.mediaOriginsHint": "Para HTML, mapas del sitio y feeds, autoriza hasta ocho orígenes públicos de imágenes o archivos, uno por línea, como https://images.example.com. Déjalo vacío para importar archivos solo del sitio de origen. Los enlaces de páginas siguen en ese sitio; cada origen de archivos debe permitir la lectura."
 }

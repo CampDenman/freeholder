@@ -278,7 +278,7 @@ test.describe("members (C12.01)", () => {
     await samSide.page.goto("/messages");
     const raeSide = await open(rae!.token);
     await raeSide.page.goto("/messages?to=sam");
-    await expect.poll(async () => (await db().select().from(memberDevices)).length).toBe(1);
+    await expect.poll(async () => (await db().select({ userId: memberDevices.userId }).from(memberDevices)).map((device) => device.userId).sort()).toEqual([MEMBER_ID, SAM_ID].sort());
     await raeSide.page.getByLabel("Message", { exact: true }).fill("The spare key is under the blue pot");
     await raeSide.page.getByRole("button", { name: "Send" }).click();
     await expect(raeSide.page.getByText("End-to-end encrypted. Only the devices of the people here can read these messages.", { exact: true })).toBeVisible();

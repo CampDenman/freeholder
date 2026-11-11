@@ -8683,5 +8683,7 @@
   "cms.block.anchor": "Cible de lien",
   "imports.count.pagesStaged": "Pages préparées",
   "imports.count.mediaFound": "Fichiers trouvés",
-  "imports.count.redirectsProposed": "Redirections proposées"
+  "imports.count.redirectsProposed": "Redirections proposées",
+  "imports.mediaOrigins": "Origines de fichiers supplémentaires (facultatif)",
+  "imports.mediaOriginsHint": "Pour HTML, les plans de site et les flux, autorisez jusqu’à huit origines publiques d’images ou de fichiers, une par ligne, comme https://images.example.com. Laissez vide pour importer uniquement les fichiers du site source. Les liens de pages restent sur le site source ; chaque origine de fichiers doit autoriser ces lectures."
 }

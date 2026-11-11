@@ -1592,6 +1592,16 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F11** — `MASTER.md` C3.22, `deploy/blog-wordpress-2026-11-07.md`, `deploy/import-navigation.md` and `deploy/static-archive-import.md` retain exact limits and unfinished criteria. Original ZIP cleanup/rebind and atomic Asset/receipt acceptance reuse the shared ownership ledger; this does not complete durable imports above the finite batch limits.
 - **F12** — `tests/core/import-crawl-flow.test.ts` composes public REST discovery → draft → publish with original date → rollback. Generic content/media/SEO and feed dates compose through `tests/core/generic-import-flow.test.ts`; `tests/browser/import-generic-content.spec.ts` proves actual public redirects, fragment scrolling, translated source review and rollback. `deploy/generic-site-import.md` records finite limits and exact runs. Recorded HTTP fixtures are not live-source cutover acceptance.
 
+Additional hosted media origins use the same run checkpoint and shared services,
+with no new database or actor capability. `tests/core/import-approved-media.test.ts`
+and `import-hosted-media-flow.test.ts` cover bounded exact origin approval,
+unchanged page origin, stale/expanded snapshot refusal, fresh per-CDN robots,
+actual typed assets and independent permission/receipt checks.
+`tests/browser/import-hosted-media.spec.ts` covers the translated owner field,
+320px bounds, both-theme Axe, keyboard, staging and truthful cancellation in all
+four locales. `deploy/hosted-source-media.md` retains the actual-provider and
+larger-source acceptance limits.
+
 ## C3.23 — Build the owner import studio and resumable run ledger
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/plugins-lifecycle.test.ts`.
