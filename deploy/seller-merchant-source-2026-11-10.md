@@ -324,3 +324,13 @@ all 373 contracts with one exclusion, full fast gates and a fresh production
 scrub of 20,327 files / 242,796,086 bytes. Migration70 remains byte-identical at the
 SHA-256 above. Fresh exact-head protected checks govern requeue; no gate is
 inherited from a differently composed head.
+
+The final integration cleanup moves only the 37 owned setup keys in each
+locale beside the existing subscription messages and places the complete
+owned review section beside the financial review chapters. Exact key/value
+equality is asserted for all four catalogs; runtime code, SQL and SDK are
+unchanged. Actual merge-tree checks now compose cleanly with the frozen generic
+import, erased-contact and refund PRs without a new dependency rebase. All 43
+i18n/activity/live-SDK controls, full fast gates and four owner locale journeys
+passed. The production artifact still has 20,327 files / 242,796,086 bytes with
+a clean scrub. This cleanup changes no message, outcome or authorization.
