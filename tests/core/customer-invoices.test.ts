@@ -17,7 +17,8 @@ import { beginCustomerCheckout, confirmCustomerPayment, customerInvoiceLink, cus
 import { invoiceAccessToken, paymentReturnToken, validInvoiceToken, validPaymentReturnToken } from "@/modules/invoicing/customer-tokens";
 import { createDraftInvoice, getInvoice, issueInvoice, markInvoiceOverdue, voidInvoice } from "@/modules/invoicing/invoice-service";
 import { recordOfflinePayment } from "@/modules/invoicing/payment-provider-service";
-import { invoices, payments } from "@/modules/invoicing/schema";
+import { invoices, payments, invoiceMarketPolicies } from "@/modules/invoicing/schema";
+import { memberPayoutAccounts, memberProfiles } from "@/modules/members/schema";
 import { addTaxRate, createTaxZone, setTaxRegistration } from "@/modules/invoicing/tax-service";
 import { invoiceLineAmounts } from "../../app/(admin)/admin/invoices/format";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
@@ -63,9 +64,40 @@ describe.runIf(hasDatabase)("customer invoices", () => {
     return { createCheckout, captureCheckout };
   }
 
+  async function merchantInvoice(){
+    const context=await fixture("original-merchant-invoice"),sellerId=randomUUID();
+    await db().insert(users).values({id:sellerId,email:"original-merchant@example.test",role:"customer"});
+    await db().insert(memberProfiles).values({userId:sellerId,handle:"invoice_merchant",displayName:"Current seller profile",status:"active",ageAttestedAt:new Date()});
+    await db().insert(memberPayoutAccounts).values({userId:sellerId,adapter:"stripe_connect",externalAccountId:"acct_OriginalInvoice",status:"ready",chargesReady:true,merchantName:"Original Merchant Studio"});
+    // The direct mode stays unavailable to owner configuration. This synthetic
+    // frozen-invoice fixture exercises its required customer read boundary.
+    await db().insert(invoiceMarketPolicies).values({invoiceId:context.invoice.id,model:"seller_merchant",adapter:"stripe_connect",sellerUserId:sellerId,merchantName:"Original Merchant Studio",providerAccountId:"acct_OriginalInvoice",siteFeeBps:1000,feeMinor:1000,holdDays:0});
+    return {...context,sellerId};
+  }
+
+  it.each([{available:true,canCharge:true},{available:false,canCharge:true},{available:true,canCharge:false}])("shows the original public issuer with Stripe availability=$available/direct-capability=$canCharge",async({available,canCharge})=>{
+    const {invoice,token}=await merchantInvoice(),manual=adapters.createManualPayments();
+    const original={...manual,id:"stripe",status:{...manual.status,available},capabilities:()=>({...manual.capabilities(),sellerMerchantCharges:canCharge})};
+    vi.spyOn(adapters,"paymentAdapter").mockImplementation(id=>id==="stripe"?original:manual);
+    const result=await getCustomerInvoice.call({id:invoice.id,token},ANON);
+    expect(result).toMatchObject({issuerName:"Original Merchant Studio",paymentMode:available&&canCharge?"hosted":"unavailable"});
+    for(const privateValue of ["acct_OriginalInvoice","providerAccountId","siteFeeBps","feeMinor","sellerUserId"])expect(JSON.stringify(result)).not.toContain(privateValue);
+    expect(await getCustomerInvoice.call({id:invoice.id},CUSTOMER)).toMatchObject({issuerName:"Original Merchant Studio"});
+    expect(await failure(getCustomerInvoice.call({id:invoice.id,token:"0".repeat(64)},ANON))).toMatchObject({code:"not_found"});
+    expect(await failure(getCustomerInvoice.call({id:invoice.id},OWNER))).toMatchObject({code:"not_found"});
+  });
+
+  it("keeps the frozen issuer visible while a changed merchant account cannot collect",async()=>{
+    const {invoice,sellerId}=await merchantInvoice(),manual=adapters.createManualPayments();
+    vi.spyOn(adapters,"paymentAdapter").mockImplementation(id=>id==="stripe"?{...manual,id:"stripe",capabilities:()=>({...manual.capabilities(),sellerMerchantCharges:true})}:manual);
+    await db().update(memberPayoutAccounts).set({merchantName:"Replacement Merchant Studio",externalAccountId:"acct_ReplacementInvoice"}).where(eq(memberPayoutAccounts.userId,sellerId));
+    expect(await getCustomerInvoice.call({id:invoice.id},CUSTOMER)).toMatchObject({issuerName:"Original Merchant Studio",paymentMode:"unavailable"});
+    expect(await db().select().from(payments)).toHaveLength(0);
+  });
+
   it("serves only the linked contact or exact token and exposes a safe customer projection", async () => {
     const { invoice, token } = await fixture();
-    expect(await getCustomerInvoice.call({ id: invoice.id }, CUSTOMER)).toMatchObject({ number: invoice.number, totalMinor: 10_000 });
+    expect(await getCustomerInvoice.call({ id: invoice.id }, CUSTOMER)).toMatchObject({ number: invoice.number, totalMinor: 10_000, issuerName: null });
     const publicInvoice = await getCustomerInvoice.call({ id: invoice.id, token }, ANON);
     expect(publicInvoice).not.toHaveProperty("contactId");
     expect(publicInvoice).not.toHaveProperty("requestHash");

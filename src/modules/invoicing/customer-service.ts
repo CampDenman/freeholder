@@ -15,7 +15,7 @@ import { actorString, defineOrchestratedService, defineService, ServiceError, ty
 import { customerCheckoutAllowed, requiresSavedMethod } from "./checkout-requirements";
 import { invoiceRow, paymentRow } from "./contract";
 import { assertChargeEvidence, assertProviderAccount, paymentRouting, routingForPayment, verifiedCheckoutSession } from "./merchant-charge";
-import { getInvoiceMarketPolicy } from "./market-policy";
+import { getInvoiceMarketPolicy, verifyInvoiceMerchant } from "./market-policy";
 import { createPayment, failPayment, markInvoiceViewed, settlePayment, startPayment } from "./invoice-service";
 import { invoiceLines, invoices, payments, paymentPlans, paymentPlanInstallments, paymentProviderCustomers } from "./schema";
 import { orderPaymentMilestones, orders } from "@/modules/catalog/schema";
@@ -83,6 +83,8 @@ async function authorizedInvoice(input: z.infer<typeof access>, ctx: ServiceCont
 
 const customerInvoice = z.object({
   id: z.string().uuid(), number: z.string(), status: z.string(), currency: z.string(),
+  // Only public invoice identity is projected; routing and fees stay private.
+  issuerName: z.string().min(1).max(200).nullable(),
   subtotalMinor: z.number().int(), discountMinor: z.number().int(), shippingMinor: z.number().int(),
   taxMinor: z.number().int(), totalMinor: z.number().int(), paidMinor: z.number().int(),
   dueAt: z.date().nullable(), memo: z.string().nullable(), requiredTaxLegend: z.string().nullable(),
@@ -110,15 +112,28 @@ export const getCustomerInvoice = defineService({
       quantityMicros: invoiceLines.quantityMicros, amountMinor: invoiceLines.subtotalMinor,
       totalMinor: invoiceLines.totalMinor })
       .from(invoiceLines).where(eq(invoiceLines.invoiceId, invoice.id)).orderBy(asc(invoiceLines.position)));
-    const adapter = paymentAdapter();
+    const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: invoice.id });
+    const direct = policy?.model === "seller_merchant";
+    const issuerName = direct ? policy.merchantName : null;
+    if (direct && !issuerName?.trim()) throw new ServiceError("conflict", "This invoice's original issuer needs the business to review it.");
+    const adapter = paymentAdapter(direct ? "stripe" : undefined);
+    let merchantAvailable = !direct || adapter.capabilities().sellerMerchantCharges === true;
+    if (direct && merchantAvailable) {
+      // Keep the original invoice readable when collection needs review.
+      try { await verifyInvoiceMerchant(invoice.id, ctx); }
+      catch (error) {
+        if (error instanceof ServiceError && error.code === "conflict") merchantAvailable = false;
+        else throw error;
+      }
+    }
     const nextPaymentMinor = payable(invoice) ? await customerCheckoutAmount(invoice, ctx) : null;
-    return { id: invoice.id, number: invoice.number!, status: invoice.status, currency: invoice.currency,
+    return { id: invoice.id, number: invoice.number!, status: invoice.status, currency: invoice.currency, issuerName,
       subtotalMinor: invoice.subtotalMinor, discountMinor: invoice.discountMinor, shippingMinor: invoice.shippingMinor,
       taxMinor: invoice.taxMinor, totalMinor: invoice.totalMinor, paidMinor: invoice.paidMinor,
       dueAt: invoice.dueAt, memo: invoice.memo, requiredTaxLegend: invoice.requiredTaxLegend, lines, canPay: nextPaymentMinor !== null,
       saveMethodRequired: await requiresSavedMethod(ctx, invoice),
       nextPaymentMinor, awaitingRelease: payable(invoice) && nextPaymentMinor === null,
-      paymentMode: !adapter.status.available || adapter.id === "none" ? "unavailable" as const :
+      paymentMode: !merchantAvailable || !adapter.status.available || adapter.id === "none" ? "unavailable" as const :
         adapter.id === "manual" ? "manual" as const : "hosted" as const };
   },
 });

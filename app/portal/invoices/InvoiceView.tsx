@@ -20,7 +20,7 @@ export function InvoiceView({ invoice, token, t, locale, timezone, businessName,
       <SkipLink target="main">{t("a11y.skipToContent")}</SkipLink>
       <main id="main" tabIndex={-1} className="grid gap-6">
         <header className="grid gap-2">
-          <p className="text-sm text-ink-muted">{businessName}</p>
+          <p className="[overflow-wrap:anywhere] text-sm text-ink-muted"><bdi>{invoice.issuerName ?? businessName}</bdi></p>
           <h1 className="text-2xl font-bold">{t("customerInvoice.title", { number: invoice.number })}</h1>
           <div><Pill tone={invoice.status === "paid" ? "success" : "neutral"}>{t(`invoices.status.${invoice.status}`)}</Pill></div>
           {due ? <p className="text-sm text-ink-muted">{t("customerInvoice.due", { date: due })}</p> : null}
