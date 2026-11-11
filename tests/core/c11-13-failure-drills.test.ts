@@ -272,7 +272,7 @@ describe.runIf(hasDatabase)("C11.13 recovery drills", { timeout: 90_000 }, () =>
     await expect(db().execute(sql`select 1`)).resolves.toBeTruthy();
   });
 
-  it("keeps a retryable mail delivery queued until the provider recovers", async () => {
+  it("retains an earlier unknown mail attempt when a later provider request succeeds", async () => {
     process.env.MAIL_BULK_ADAPTER = "resend";
     process.env.MAIL_BULK_FROM = "news@example.test";
     process.env.RESEND_API_KEY = "test-key";
@@ -305,13 +305,18 @@ describe.runIf(hasDatabase)("C11.13 recovery drills", { timeout: 90_000 }, () =>
         senderId: sender!.id,
       }),
     );
+    const [original] = await db().select().from(mailOutbox).where(eq(mailOutbox.deliveryId, queued.id));
     await expect(deliverQueuedMail(queued.id)).rejects.toThrow(/could not be reached/);
     expect(
       (await db().select().from(mailDeliveries).where(eq(mailDeliveries.id, queued.id)))[0],
     ).toMatchObject({ status: "queued" });
     expect(await db().select().from(mailOutbox)).toHaveLength(1);
     await expect(deliverQueuedMail(queued.id)).resolves.toEqual({ status: "submitted" });
-    expect(await db().select().from(mailOutbox)).toEqual([]);
+    expect(await db().select().from(mailOutbox)).toEqual([original]);
+    const [submitted] = await db().select().from(mailDeliveries).where(eq(mailDeliveries.id, queued.id));
+    expect(submitted?.attempts).toBe(2);
+    expect(submitted?.status).toBe("submitted");
+    expect(submitted?.providerRef).toBe("provider-message-1");
   });
 
   it("settles a payment webhook once and counts the replay as a duplicate", async () => {

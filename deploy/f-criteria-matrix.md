@@ -1733,6 +1733,21 @@ larger-source acceptance limits.
 
 ## C3.31 — Offer Paradise Modern as one more transactional and bulk mail adapter
 
+Legacy retention increment (2026-11-11): `deploy/mail-record-retention.md` and
+`tests/core/mail-record-retention.test.ts` cover policy kinds, private receipts,
+active blocks, ownership review, merge/undo, holds after anonymization, pending
+physical outcomes, linked staff copies, retained minimal exports and old-writer
+snapshot fences. Final actual-main composition passed 97 actual controls across
+eight suites (including both system-refusal controls), no database skips,
+SDK 8/audit 7 and full fast 373 plus one documented exclusion. Production scrub
+passed 20,330 files / 242,435,915 bytes; four fresh-database locale 320px review
+browsers passed in both themes with keyboard, Axe, bounds and service/audit checks.
+Address generations, current supporting facts and original pending receipts
+remain distinct; a completed replay cannot act on a new holder.
+Protected integration remains required. The required
+transactional/SMTP physical-dispatch recovery, live-provider acceptance and
+independent human review stay open before stable.
+
 - **F01** — `tests/core/paradise-mail.test.ts`: Pending — adapter wire shape, permission declaration, refusals before any request, consent recording, withdrawal mirror and sender verification are covered with mocked HTTP, and the delivery worker's declared basis plus the widened `db/migrations/0057_paradise_mail_provider.sql` constraint by `tests/core/mail-service.test.ts`; a live send of each kind against the provider has not been run.
 - **F02** — `tests/core/paradise-mail.test.ts`: Pending — adapter wire shape, permission declaration, refusals before any request, consent recording, withdrawal mirror and sender verification are covered with mocked HTTP, and the delivery worker's declared basis plus the widened `db/migrations/0057_paradise_mail_provider.sql` constraint by `tests/core/mail-service.test.ts`; a live send of each kind against the provider has not been run.
 - **F03** — `tests/core/paradise-mail.test.ts`: Pending — adapter wire shape, permission declaration, refusals before any request, consent recording, withdrawal mirror and sender verification are covered with mocked HTTP, and the delivery worker's declared basis plus the widened `db/migrations/0057_paradise_mail_provider.sql` constraint by `tests/core/mail-service.test.ts`; a live send of each kind against the provider has not been run.

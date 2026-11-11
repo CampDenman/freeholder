@@ -8685,5 +8685,22 @@
   "imports.count.mediaFound": "Fichiers trouvés",
   "imports.count.redirectsProposed": "Redirections proposées",
   "imports.mediaOrigins": "Origines de fichiers supplémentaires (facultatif)",
-  "imports.mediaOriginsHint": "Pour HTML, les plans de site et les flux, autorisez jusqu’à huit origines publiques d’images ou de fichiers, une par ligne, comme https://images.example.com. Laissez vide pour importer uniquement les fichiers du site source. Les liens de pages restent sur le site source ; chaque origine de fichiers doit autoriser ces lectures."
+  "imports.mediaOriginsHint": "Pour HTML, les plans de site et les flux, autorisez jusqu’à huit origines publiques d’images ou de fichiers, une par ligne, comme https://images.example.com. Laissez vide pour importer uniquement les fichiers du site source. Les liens de pages restent sur le site source ; chaque origine de fichiers doit autoriser ces lectures.",
+  "admin.retention.mail.title": "Vérifier le titulaire du courrier",
+  "admin.retention.mail.intro": "Les anciens courriers peuvent précéder les liens aux contacts. Vérifiez la personne et la date d’origine à partir de correspondances fiables. Une adresse identique ne suffit pas. Seule une preuve privée de votre vérification est conservée. Les envois non résolus et les historiques non vérifiés maintiennent l’effacement en attente.",
+  "admin.retention.mail.saved": "Vérification enregistrée. Relancez la tâche de confidentialité en attente.",
+  "admin.retention.mail.failed": "La vérification n’a pas pu être enregistrée. Rechargez le dossier, vérifiez vos droits sur les contacts et effectuez une nouvelle vérification de sécurité.",
+  "admin.retention.mail.address": "Adresse électronique historique",
+  "admin.retention.mail.search": "Rechercher un contact par nom ou adresse",
+  "admin.retention.mail.find": "Rechercher les dossiers",
+  "admin.retention.mail.unavailable": "Vos droits actuels ne permettent pas cette vérification.",
+  "admin.retention.mail.empty": "Aucun dossier non vérifié ne correspond.",
+  "admin.retention.mail.contact": "Contact d’origine vérifié",
+  "admin.retention.mail.choose": "Choisir un contact",
+  "admin.retention.mail.evidence": "Comment avez-vous vérifié le titulaire d’origine ?",
+  "admin.retention.mail.confirm": "J’ai vérifié que ce dossier appartenait à la personne sélectionnée à la date indiquée.",
+  "admin.retention.mail.review": "Enregistrer la vérification",
+  "mail.retainedAddress": "Adresse supprimée ; le blocage reste actif. Saisissez l’adresse d’origine vérifiée indépendamment pour lever le blocage.",
+  "admin.retention.mail.record": "Fait historique du courrier",
+  "admin.activity.mailOwnershipReviewed": "Le titulaire du courrier a été vérifié"
 }

@@ -273,6 +273,7 @@ export default async function AdminSettingsPage({
             reason: t("mail.reason"),
             release: t("mail.release"),
             releaseHint: t("mail.releaseHint"),
+            retainedAddress: t("mail.retainedAddress"),
             confirmation: t("mail.confirmation"),
             readOnly: t("mail.readOnly"),
             actionDone: t("mail.actionDone"),
@@ -435,6 +436,7 @@ async function loadMailAccess(actor: Actor, locale: string) {
     })),
     suppressions: status.suppressions.map((suppression) => ({
       email: suppression.email,
+      redacted: Boolean(suppression.redactedAt),
       reason: suppression.reason,
       provider: suppression.provider,
       detail: suppression.detail,

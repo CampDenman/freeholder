@@ -46,6 +46,7 @@ function humanizeAction(action: string): string {
  * wrong for an owner's "What changed".
  */
 export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
+  "mail.reviewLegacyOwnership": "admin.activity.mailOwnershipReviewed",
   "forms.submit": "admin.activity.formSubmitted",
   "forms.reviewSubmission": "admin.activity.formReviewed",
   "catalog.getOrCreateCart": "admin.activity.cartStarted",

@@ -436,6 +436,20 @@ export const eraseImportSourceObjects = defineJob({
   },
 });
 
+/** Mail receipts stay pending until ownership and physical-send evidence settle. */
+export const eraseMailRecords = defineJob({
+  name: "core.eraseMailRecords",
+  summary: "Minimize owned mail records after outstanding delivery evidence settles.",
+  retry: { limit: 40, delaySeconds: 60, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 1,
+  handler: async (data, context) => {
+    if (!context) throw new Error("Mail-record erasure requires a durable worker identity.");
+    await context.throwIfCancelled();
+    const { eraseMailRecords: erase } = await import("@/core/mail/record-privacy");
+    return erase(data);
+  },
+});
+
 /** Unconfirmed recordings and leftover chunks must not outlive the session. */
 export const expireCaptureSessions = defineJob({
   name: "core.expireCaptureSessions",
@@ -1071,6 +1085,7 @@ export default [
   expireCaptureSessions,
   deleteCaptureObjects,
   eraseImportSourceObjects,
+  eraseMailRecords,
   expireAgentApprovals,
   runPlaybooks,
   assembleBriefings,

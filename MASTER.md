@@ -5802,9 +5802,26 @@ deployments are portable, testable and incapable of silently forking the truth.
   whichever adapter carries campaigns, and never deleted unwithdrawn:
   without credentials they wait (doctor `mail.providerGrants` warns, the
   erasure stays pending); finished grants age out under the
-  `mail_provider_grants` retention kind. Known gap, not addressed here: the
-  older mail tables (`mail_deliveries`, `mail_suppressions`,
-  `mail_provider_events`) hold addresses but are in no retention kind.
+  `mail_provider_grants` retention kind. *(Legacy mail-record repair,
+  2026-11-11: `0071_mail_record_retention.sql` adds private keyed receipts and
+  contact ownership for `mail_deliveries`, `mail_suppressions` and
+  `mail_provider_events`, three retention kinds and `mail.records` privacy
+  participation. Active blocks survive address removal; holds survive
+  anonymization and merge/undo. Unresolved sends and uncertain ownership keep
+  erasure pending. Fresh human attribution lives at `/admin/retention/mail`.
+  `deploy/mail-record-retention.md` names the model, breaking writer fence and
+  exact-backup recovery. Final actual-main composition passed 97 actual mail
+  routing/privacy/populated-upgrade/adjacent controls, including both
+  background-system refusals, with no database skips. Address generations and original pending receipts remain
+  separate; current-fact ownership prevents cross-holder erasure or export.
+  SDK 8, audit labels 7, full fast 373 plus one documented exclusion and production
+  scrub 20,330 files / 242,435,915 bytes passed. All four fresh-database locale
+  owner-browser journeys passed at 320px in both themes with keyboard, Axe,
+  bounds and service/audit assertions. Protected integration remains required. The required
+  enabled transactional/SMTP per-dispatch provenance and unknown-outcome
+  recovery (C11.08) continue as a separate source increment; no old account or
+  physical-attempt facts are invented. This supplies neither independent
+  review nor live provider acceptance.)*
   Unchecked: no live send against the provider.)*
 - [ ] **C3.32** Add a measurement-provider category (`MEASUREMENT_PROVIDER`,
   default `none`) with Paradise Modern as its first adapter (§12, C1.18):

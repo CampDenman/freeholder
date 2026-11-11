@@ -93,6 +93,7 @@ export interface MailDeliveryView {
 
 export interface MailSuppressionView {
   email: string;
+  redacted?: boolean;
   reason: string;
   provider: string;
   detail: string | null;
@@ -100,6 +101,7 @@ export interface MailSuppressionView {
 }
 
 export interface MailLabels {
+  retainedAddress?: string;
   title: string;
   intro: string;
   route: string;
@@ -703,7 +705,7 @@ function SuppressionList({
           {suppressions.map((suppression) => (
             <li key={suppression.email} className="grid gap-2 rounded-md border border-rule p-3 md:grid-cols-[1fr_auto] md:items-start">
               <div className="min-w-0">
-                <span className="break-all font-mono text-sm text-ink">{suppression.email}</span>
+                <span className="break-all font-mono text-sm text-ink">{suppression.redacted ? labels.retainedAddress : suppression.email}</span>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
                   <Pill tone="danger">
                     {labels.suppressionReasons[suppression.reason] ?? suppression.reason}
@@ -738,7 +740,7 @@ function ReleaseSuppressionForm({
   const id = `release-${suppression.email.replace(/[^a-z0-9]+/gi, "-")}`;
   return (
     <form action={action} className="grid w-full gap-2 md:w-72">
-      <input type="hidden" name="email" value={suppression.email} />
+      <input type="hidden" name="email" value={suppression.redacted ? "" : suppression.email} />
       <Field label={labels.confirmation} htmlFor={id} hint={labels.releaseHint}>
         <Input
           id={id}
@@ -746,7 +748,7 @@ function ReleaseSuppressionForm({
           type="email"
           autoComplete="off"
           required
-          placeholder={suppression.email}
+          placeholder={suppression.redacted ? undefined : suppression.email}
         />
       </Field>
       <div>

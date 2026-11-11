@@ -1,5 +1,27 @@
 # C11.10 independent security-review packet
 
+C3.31 mail-record increment (2026-11-11, agent evidence only): review
+`deploy/mail-record-retention.md`, `src/core/mail/record-retention.ts`,
+`record-privacy.ts`, `record-services.ts`, `ownership.ts`, `receipts.ts` and
+`db/migrations/0071_mail_record_retention.sql`. The random encrypted site key,
+private HMAC receipts, statement-before-row stale-writer fences, immutable
+contact ownership, nullable metadata cleanup, holds and original pending receipt
+form one boundary. Actual peer failures cover callback resurrection, uncertain
+derived physical attempts, hidden retained block exports and stale snapshot
+writes. Final actual-main composition passed 97 actual controls across eight
+native suites, including both system-refusal controls, without database skips.
+Address reassignment, current supporting-fact ownership and
+original pending job identities are separate; completed replays are no-ops and
+missing originals require exact backup. SDK 8/audit 7, full fast 373 plus its one
+documented exclusion and production scrub 20,330 files / 242,435,915 bytes passed.
+Four fresh-database locale 320px owner-browser journeys passed in both themes
+with keyboard, Axe, bounds and service/audit assertions. Protected integration
+remains required. Required enabled
+SMTP/transactional physical-dispatch recovery continues separately without
+inventing old route/attempt facts or clearing unknowns on elapsed time. All live
+mail provider acceptance and Tony's independent review remain open. No launch
+approval is inferred from agent checks.
+
 This is a briefing packet for an independent reviewer. It is **not** the
 review. C11.10 stays open until a reviewer who did not author the surfaces
 below has resolved every critical/high finding and dispositioned every lower

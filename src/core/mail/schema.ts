@@ -20,6 +20,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { users } from "@/core/auth/schema";
+import { contacts } from "@/core/contacts/schema";
 import { connectedAccounts } from "@/core/connections/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import { consentRecords } from "@/core/privacy/schema";
@@ -201,6 +202,11 @@ export const mailDeliveries = pgTable(
     providerRef: text("provider_ref"),
     /** Stable caller key. Null for one-off sends that cannot be retried safely. */
     idempotencyKey: text("idempotency_key"),
+    /** Private keyed lookups survive removal of the original personal fields. */
+    recipientDigest: text("recipient_digest"),
+    idempotencyDigest: text("idempotency_digest"),
+    providerRefDigest: text("provider_ref_digest"),
+    redactedAt: timestamp("redacted_at", { withTimezone: true }),
     requestedBy: text("requested_by").notNull(),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
@@ -219,6 +225,8 @@ export const mailDeliveries = pgTable(
     uniqueIndex("mail_deliveries_idempotency_idx")
       .on(t.idempotencyKey)
       .where(sql`${t.idempotencyKey} is not null`),
+    uniqueIndex("mail_deliveries_receipt_digest_idx").on(t.idempotencyDigest).where(sql`${t.idempotencyDigest} is not null`),
+    index("mail_deliveries_provider_digest_idx").on(t.provider, t.providerRefDigest),
     index("mail_deliveries_provider_ref_idx").on(t.provider, t.providerRef),
     index("mail_deliveries_recipient_idx").on(t.recipient, t.createdAt),
     index("mail_deliveries_status_idx").on(t.status, t.createdAt),
@@ -279,6 +287,10 @@ export const mailProviderEvents = pgTable(
       enum: ["resend", "postmark", "ses"],
     }).notNull(),
     externalEventId: text("external_event_id").notNull(),
+    externalEventDigest: text("external_event_digest"),
+    recipientDigest: text("recipient_digest"),
+    providerRefDigest: text("provider_ref_digest"),
+    redactedAt: timestamp("redacted_at", { withTimezone: true }),
     deliveryId: uuid("delivery_id").references(() => mailDeliveries.id, {
       onDelete: "set null",
     }),
@@ -307,6 +319,7 @@ export const mailProviderEvents = pgTable(
       t.provider,
       t.externalEventId,
     ),
+    uniqueIndex("mail_provider_events_receipt_digest_idx").on(t.provider, t.externalEventDigest).where(sql`${t.externalEventDigest} is not null`),
     index("mail_provider_events_delivery_idx").on(t.deliveryId, t.occurredAt),
     index("mail_provider_events_recipient_idx").on(t.recipient, t.occurredAt),
     check(
@@ -329,7 +342,11 @@ export const mailProviderEvents = pgTable(
 export const mailSuppressions = pgTable(
   "mail_suppressions",
   {
+    /** Stable identity remains when the email primary key is minimized. */
+    id: uuid("id").notNull().defaultRandom(),
     email: text("email").primaryKey(),
+    emailDigest: text("email_digest"),
+    redactedAt: timestamp("redacted_at", { withTimezone: true }),
     reason: text("reason", {
       enum: ["hard_bounce", "complaint", "provider", "manual"],
     }).notNull(),
@@ -350,6 +367,8 @@ export const mailSuppressions = pgTable(
     updatedAt: updatedAtColumn(),
   },
   (t) => [
+    uniqueIndex("mail_suppressions_id_idx").on(t.id),
+    uniqueIndex("mail_suppressions_receipt_digest_idx").on(t.emailDigest).where(sql`${t.emailDigest} is not null`),
     index("mail_suppressions_active_idx")
       .on(t.createdAt)
       .where(sql`${t.active} = true`),
@@ -373,6 +392,31 @@ export const mailSuppressions = pgTable(
     ),
   ],
 );
+
+/** One immutable per-site HMAC key, encrypted with existing credential wrapping. */
+export const mailReceiptKeys = pgTable("mail_receipt_keys", {
+  id: integer("id").primaryKey().default(1),
+  encryptedKey: text("encrypted_key").notNull(),
+  wrappingFingerprint: text("wrapping_fingerprint").notNull(),
+  sealedAt: timestamp("sealed_at", { withTimezone: true }),
+  createdAt: createdAtColumn(),
+}, t => [check("mail_receipt_keys_singleton", sql`${t.id} = 1`)]);
+
+/** A record can legitimately span address lifetimes; no second contact store. */
+export const mailRecordSubjects = pgTable("mail_record_subjects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  kind: text("kind", { enum: ["delivery", "event", "suppression"] }).notNull(),
+  recordId: uuid("record_id").notNull(),
+  contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+  basis: text("basis", { enum: ["automatic", "owner_review"] }).notNull().default("automatic"),
+  evidenceDigest: text("evidence_digest"),
+  verifiedBy: uuid("verified_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: createdAtColumn(),
+}, t => [
+  index("mail_record_subjects_owned_idx").on(t.kind, t.recordId, t.contactId),
+  index("mail_record_subjects_contact_idx").on(t.contactId, t.kind, t.recordId),
+  check("mail_record_subjects_kind", sql`${t.kind} in ('delivery','event','suppression')`),
+]);
 
 /**
  * Marketing grants Freeholder has recorded at a permission-checking campaign

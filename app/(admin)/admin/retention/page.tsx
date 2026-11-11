@@ -46,6 +46,7 @@ export default async function AdminRetentionPage({
       <div>
         <h1 className="text-xl font-bold tracking-tight">{t("admin.retention.title")}</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("admin.retention.intro")}</p>
+        <a href="/admin/retention/mail" className="mt-3 inline-block text-sm underline">{t("admin.retention.mail.title")}</a>
       </div>
 
       {query.saved === "policy" ? (

@@ -93,6 +93,7 @@ export async function purgeAgedContactRows(
  * asserted in `tests/core/c11-14-retention.test.ts`.
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+  mail_record_subjects: "Mail receipt ownership follows the receipt; personal fields use the three mail retention kinds.",
   contact_relationships: "Join table of two contacts; not a TTL store.",
   customer_magic_links: "Credential bearer hashes; never a product TTL.",
   merge_candidates: "Derived review metadata for merge, not disposable content.",

@@ -69,6 +69,7 @@ export function clipSnippet(value: string | null | undefined): string | null {
  * Completeness is asserted in `tests/core/c11-14-search.test.ts`.
  */
 export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
+  mail_record_subjects: "Private ownership join; mail status uses its own scoped service and receipt identities are not searchable titles.",
   contact_relationships:
     "Join table of two contacts; find each person through the contact source.",
   customer_magic_links:
