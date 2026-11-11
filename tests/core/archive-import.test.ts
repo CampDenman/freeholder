@@ -3,7 +3,7 @@
 // C3.22: real ZIP fixtures, bounded random access and no filesystem extraction.
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readStaticArchive, type ArchiveSource } from "@/core/import/archive";
 import { archivePreviewDigest, archiveSourcePath, stageStaticArchive } from "@/core/import/archive-plan";
 import { archiveRangeSource } from "@/core/import/archive-source";
@@ -32,7 +32,7 @@ describe("bounded static archives", () => {
     expect(retained).toHaveLength(1);
     expect(archive.report.ignored).toEqual(["site/css/site.css", "site/js/site.js"]);
   });
-  it.each(["traversal", "backslash", "absolute", "duplicates", "symlink", "foreign-base", "damaged-checksum", "oversized", "unsupported-compression", "encrypted", "truncated", "prototype", "constructor"])("refuses hostile or damaged %s ZIPs before retaining any asset", async (name) => {
+  it.each(["traversal", "backslash", "absolute", "duplicates", "symlink", "foreign-base", "damaged-checksum", "oversized", "unsupported-compression", "encrypted", "truncated", "prototype", "constructor", "empty-media"])("refuses hostile or damaged %s ZIPs before retaining any asset", async (name) => {
     let retained = 0;
     await expect(readStaticArchive(source(name), "https://archive.example/", async () => { retained++; })).rejects.toThrow();
     expect(retained).toBe(0);
@@ -95,5 +95,13 @@ describe("bounded static archives", () => {
     const changed = structuredClone(plan); changed.media[0]!.digest = "0".repeat(64);
     await expect(restoreStaticArchive(source("site"), "https://archive.example/", { plan: changed, previewDigest: archivePreviewDigest(staged.preview) }, new Set(), async () => { uploads++; })).rejects.toThrow("differs");
     expect(uploads).toBe(1);
+  });
+  it("keeps provider callback time outside the ZIP decoding budget", async () => {
+    let clock = Date.now(), accepted = 0;
+    const time = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      await readStaticArchive(source("two-images"), "https://archive.example/", async () => { accepted++; clock += 65_000; });
+      expect(accepted).toBe(2);
+    } finally { time.mockRestore(); }
   });
 });

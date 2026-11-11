@@ -31,7 +31,7 @@ describe.runIf(hasDatabase)("static archive import studio (C3.22)", { timeout: 6
   afterAll(closeDb);
 
   it("imports original private ZIP bytes as typed media/content and locale-correct redirects, then recovers", async () => {
-    await updateBusiness.call({ defaultLocale: "fr", enabledLocales: ["en", "es", "fr", "ar"] }, OWNER);
+    await updateBusiness.call({ name: "Fictional archive", country: "CA", baseCurrency: "CAD", timezone: "America/Vancouver", defaultLocale: "fr", enabledLocales: ["en", "es", "fr", "ar"] }, OWNER);
     const source = await stage("https://archive.example/legacy/");
     expect(await storage().get(source.key)).toEqual(ZIP);
     const committed = await commitImport.call({ id: source.id }, OWNER);

@@ -80,13 +80,13 @@ function regularEntry(entry: Entry): void {
 class SourceReader extends RandomAccessReader {
   private readBytes = 0;
   private reads = 0;
-  constructor(private readonly source: ArchiveSource, private readonly deadline: number) { super(); }
+  constructor(private readonly source: ArchiveSource, private readonly budget: { deadline: number }) { super(); }
   override _readStreamForRange(start: number, end: number): Readable {
     const source = this.source;
     const checked = async (from: number, to: number) => {
       if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to < from || to > source.bytes) throw new Error("The ZIP refers to bytes outside the uploaded file.");
       this.readBytes += to - from;
-      if (++this.reads > 20_000 || this.readBytes > source.bytes * 3 + 8 * 1024 * 1024 || Date.now() > this.deadline) throw new Error("The ZIP exceeds its bounded read budget.");
+      if (++this.reads > 20_000 || this.readBytes > source.bytes * 3 + 8 * 1024 * 1024 || Date.now() > this.budget.deadline) throw new Error("The ZIP exceeds its bounded read budget.");
       const bytes = await source.readRange(from, to);
       if (bytes.byteLength !== to - from) throw new Error("Part of the uploaded ZIP is missing or changed.");
       return Buffer.from(bytes);
@@ -150,14 +150,14 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
   const base = assertPublicHttpUrl(origin);
   if (base.search || base.hash) throw new Error("An archive source must be a public site URL without a query or fragment.");
   if (!base.pathname.endsWith("/")) base.pathname += "/";
-  const deadline = Date.now() + ARCHIVE_LIMITS.timeoutMs;
-  const zip = await fromRandomAccessReaderPromise(new SourceReader(source, deadline), source.bytes, { autoClose: false, lazyEntries: true, decodeStrings: true, strictFileNames: true, validateEntrySizes: true });
+  const budget = { deadline: Date.now() + ARCHIVE_LIMITS.timeoutMs };
+  const zip = await fromRandomAccessReaderPromise(new SourceReader(source, budget), source.bytes, { autoClose: false, lazyEntries: true, decodeStrings: true, strictFileNames: true, validateEntrySizes: true });
   try {
     const entries: Array<{ entry: Entry; path: string }> = [];
     const paths = new Set<string>();
     let expandedBytes = 0, count = 0;
     for await (const entry of zip.eachEntry()) {
-      if (++count > ARCHIVE_LIMITS.entries || Date.now() > deadline) throw new Error("The ZIP exceeds the entry or time limit.");
+      if (++count > ARCHIVE_LIMITS.entries || Date.now() > budget.deadline) throw new Error("The ZIP exceeds the entry or time limit.");
       regularEntry(entry);
       const path = safePath(entry.fileName);
       const folded = path.toLocaleLowerCase("en");
@@ -174,6 +174,7 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
     const first = useful[0]!.path.split("/")[0]!;
     const root = useful.every(({ path }) => path.includes("/") && path.startsWith(`${first}/`)) && useful.some(({ path }) => /^index\.html?$/i.test(path.slice(first.length + 1))) ? `${first}/` : "";
     const assetEntries = entries.filter(({ path }) => MEDIA.test(path));
+    if (assetEntries.some(({ entry }) => entry.uncompressedSize === 0)) throw new Error("The ZIP contains an empty media file.");
     if (assetEntries.length > ARCHIVE_LIMITS.mediaFiles) throw new Error("This ZIP exceeds the current 500-file media batch. No pages were staged.");
     const assetByUrl = new Map<string, ArchiveAsset>();
     for (const { path, entry } of assetEntries) {
@@ -185,7 +186,7 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
     const pages: ArchivePage[] = [], used = new Set<string>(), unresolvedImages = new Set<string>();
     let bodyBytes = 0;
     for (const { path, entry } of html) {
-      const bytes = await readEntry(zip, entry, ARCHIVE_LIMITS.pageBytes, deadline);
+      const bytes = await readEntry(zip, entry, ARCHIVE_LIMITS.pageBytes, budget.deadline);
       bodyBytes += bytes.byteLength;
       if (bodyBytes > ARCHIVE_LIMITS.bodyBytes) throw new Error("This ZIP exceeds the current 20 MB HTML batch. No pages were staged.");
       const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -252,9 +253,13 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
     for (const { path, entry } of assetEntries) {
       const url = new URL(archiveUrl(path.slice(root.length), base));
       const asset = assetByUrl.get(url.host.toLowerCase() + url.pathname)!;
-      const bytes = await readEntry(zip, entry, ARCHIVE_LIMITS.mediaBytes, deadline);
+      const bytes = await readEntry(zip, entry, ARCHIVE_LIMITS.mediaBytes, budget.deadline);
       asset.digest = createHash("sha256").update(bytes).digest("hex");
+      const beforeApply = Date.now();
       await retain(asset, new Uint8Array(bytes));
+      // Provider scanning/upload time is governed by that service. It must
+      // not consume the ZIP decoding budget of the next unrelated entry.
+      budget.deadline += Date.now() - beforeApply;
     }
     return { pages, assets: [...assetByUrl.values()], site: { url: base.href, hosts: [base.host.toLowerCase()], basePath: base.pathname.replace(/^\/+|\/+$/g, "") }, report: { entries: count, expandedBytes, ignored: entries.filter(({ path }) => !HTML.test(path) && !MEDIA.test(path)).slice(0, 100).map(({ path }) => path), unresolvedImages: [...unresolvedImages], root } };
   } finally { zip.close(); }

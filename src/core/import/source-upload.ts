@@ -25,13 +25,15 @@ import {
 import { importRuns } from "@/core/plugins/schema";
 import { storage } from "@/adapters/storage";
 import { deleteUnownedPendingObjects, reservePendingMediaObject } from "@/core/media/object-ledger";
-import { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES, makeRetainedImportSource, readRetainedSourceChunk, retainedImportSourceSchema, importSourceWrites, type RetainedImportSource } from "./retained-source";
+import { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES, importSourceObjectKeys, importSourceWrites, makeRetainedImportSource, readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceChunkKey, retainedSourceFromRun, type RetainedImportSource } from "./retained-source";
 export { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES } from "./retained-source";
 import { DEFAULT_IMPORTER_LIMITS } from "./contract";
 import { stageImportSource, stageWordpressExport } from "./service";
 import { assertSourceStageable } from "./source-lifecycle";
 import { assertReaderUploadWindow, bindReaderSources, ReaderSourceErasureError } from "./privacy";
 import { wordpressExportBuilder } from "./wordpress";
+import { archivePreviewDigest, stageStaticArchive } from "./archive-plan";
+import { archiveRangeSource } from "./archive-source";
 
 /**
  * One export file. WordPress's own exporter has no size cap, and real WXR
@@ -85,6 +87,7 @@ function expectedChunkSize(upload: UploadRecord, index: number): number {
  * parsers check the rest; this stops an image or an archive at the door.
  */
 export function sourceLooksRight(kind: string, prefix: string): boolean {
+  if (kind === "archive") return prefix.startsWith("PK\u0003\u0004") || prefix.startsWith("PK\u0005\u0006");
   if (prefix.includes("\u0000")) return false;
   const start = prefix.replace(/^﻿/, "").trimStart();
   if (kind === "wordpress-rest") return start.startsWith("[") || start.startsWith("{");
@@ -95,6 +98,20 @@ export function sourceLooksRight(kind: string, prefix: string): boolean {
 
 function sameUploader(upload: UploadRecord, actor: Actor): boolean {
   return actor.kind === "system" || upload.createdBy === actorString(actor);
+}
+
+type SourceRun = typeof importRuns.$inferSelect;
+function archiveRebinding(run: SourceRun): boolean {
+  if (run.kind !== "archive" || !["previewed", "failed"].includes(run.status)) return false;
+  const checkpoint = checkpointOf(run.checkpoint);
+  if (!["media", "mediaClaims"].some(key => Array.isArray(checkpoint[key]) && checkpoint[key].length > 0)) return false;
+  if (["createdPageIds", "replacedPages", "pageIds", "redirectIds", "displacedRedirects", "postSnapshots", "pendingBlogPosts"].some(key => checkpoint[key] !== undefined && (!Array.isArray(checkpoint[key]) || checkpoint[key].length > 0)) || checkpoint.navApplied || checkpoint.blogIndexPageId) return false;
+  const source = retainedSourceFromRun(run);
+  const binding = z.object({ source: retainedImportSourceSchema, previewDigest: z.string() }).safeParse(checkpoint.archiveSource);
+  return Boolean(source && binding.success && source.runId === run.id && archivePreviewDigest(source) === archivePreviewDigest(binding.data.source) && binding.data.previewDigest === archivePreviewDigest(run.preview));
+}
+function assertSourceUploadStageable(run: SourceRun): void {
+  if (!archiveRebinding(run)) assertSourceStageable(run, true);
 }
 
 const beginApply = defineService({
@@ -125,12 +142,18 @@ const beginApply = defineService({
       .limit(1)
       .for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
-    assertSourceStageable(run, true);
+    const rebind = archiveRebinding(run);
+    assertSourceUploadStageable(run);
     const checkpoint = checkpointOf(run.checkpoint);
-    if (Array.isArray(checkpoint.media) && checkpoint.media.length > 0) {
+    if (!rebind && Array.isArray(checkpoint.media) && checkpoint.media.length > 0) {
       throw new ServiceError("conflict", "Files from this import were already fetched. Roll it back before staging another export.");
     }
     const previous = uploadOf(checkpoint);
+    const previousKeys = rebind ? previous ? allKeys(previous) : [] : [...new Set([...importSourceObjectKeys(run), ...(previous ? allKeys(previous) : [])])];
+    if (!rebind) {
+      await releaseImportSources(ctx, run, checkpoint);
+      delete checkpoint.archiveSource;
+    }
     const uploadId = randomUUID();
     const upload: UploadRecord = {
       uploadId,
@@ -147,13 +170,13 @@ const beginApply = defineService({
     // Reserve cleanup before the first provider write. Abandoned uploads and
     // lost acknowledgements still have an exact durable deletion task.
     await ctx.queueJob("core.deleteCaptureObjects", { keys: allKeys(upload) }, { startAfter: new Date(upload.expiresAt) });
-    if (previous) await ctx.queueJob("core.deleteCaptureObjects", { keys: allKeys(previous) });
+    if (previousKeys.length) await ctx.queueJob("core.deleteCaptureObjects", { keys: previousKeys });
     await ctx.tx
       .update(importRuns)
       .set({ checkpoint: { ...checkpoint, sourceUpload: upload } })
       .where(eq(importRuns.id, run.id));
     ctx.setSubject("import_run", run.id);
-    return { upload, previousKeys: previous ? allKeys(previous) : [] };
+    return { upload, previousKeys };
   },
 });
 
@@ -207,6 +230,8 @@ const claimChunk = defineService({
     index: z.number().int().nonnegative(),
     size: z.number().int().nonnegative(),
     digest: z.string().regex(/^[a-f0-9]{64}$/),
+    // Samples can contain private text or binary NUL. Existing audit
+    // redaction excludes secret fields while retaining IDs/size/digest.
     prefixSecret: z.string().max(8_192).optional(),
   }),
   output: z.object({ key: z.string(), received: z.number().int(), chunks: z.number().int(), alreadyReceived: z.boolean(), attemptId: z.uuid().nullable() }),
@@ -218,7 +243,7 @@ const claimChunk = defineService({
     if (!upload || upload.uploadId !== input.uploadId || !sameUploader(upload, ctx.actor)) {
       throw new ServiceError("not_found", "That upload is not here.");
     }
-    assertSourceStageable(run, true);
+    assertSourceUploadStageable(run);
     if (Date.parse(upload.expiresAt) <= Date.now()) {
       throw new ServiceError("conflict", "That upload has expired. Start the upload again.");
     }
@@ -304,7 +329,7 @@ const recordChunk = defineService({
       .limit(1)
       .for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
-    assertSourceStageable(run, true);
+    assertSourceUploadStageable(run);
     const checkpoint = checkpointOf(run.checkpoint);
     const upload = uploadOf(checkpoint);
     if (!upload || upload.uploadId !== input.uploadId) {
@@ -384,7 +409,7 @@ const uploadSource = defineService({
     if (!upload || upload.uploadId !== input.uploadId || !sameUploader(upload, ctx.actor)) {
       throw new ServiceError("not_found", "That upload is not here.");
     }
-    assertSourceStageable(run, true);
+    assertSourceUploadStageable(run);
     if (upload.received.length !== upload.chunks) {
       throw new ServiceError(
         "conflict",
@@ -420,7 +445,8 @@ const applyUploaded = defineService({
       .limit(1)
       .for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
-    assertSourceStageable(run, true);
+    const rebind = archiveRebinding(run);
+    assertSourceUploadStageable(run);
     const checkpoint = checkpointOf(run.checkpoint);
     const upload = uploadOf(checkpoint);
     if (!upload || upload.uploadId !== input.uploadId) {
@@ -432,10 +458,18 @@ const applyUploaded = defineService({
     // remains an optimization; an outage never forgets the source bytes.
     await ctx.queueJob("core.deleteCaptureObjects", { keys: allKeys(upload) });
     if (input.preview?.sourceFormat === "static-archive") {
-      if (!input.archivePreviewDigest) throw new ServiceError("conflict", "The archive preview has no verified identity.");
+      if (!input.archivePreviewDigest || input.archivePreviewDigest !== archivePreviewDigest(input.preview)) throw new ServiceError("conflict", "The archive preview has no verified identity.");
       const source = makeRetainedImportSource(run.id, upload);
+      if (rebind) {
+        const previousSource = retainedSourceFromRun(run)!;
+        const binding = z.object({ previewDigest: z.string() }).parse(checkpoint.archiveSource);
+        if (source.revision !== previousSource.revision || input.archivePreviewDigest !== binding.previewDigest) throw new ServiceError("conflict", "Use the original ZIP to resume this import. A changed source needs a new run.");
+        await ctx.queueJob("core.deleteCaptureObjects", { keys: previousSource.chunkDigests.map((_, index) => retainedSourceChunkKey(previousSource, index)) });
+      }
       checkpoint.retainedSource = source;
       checkpoint.archiveSource = { source, previewDigest: input.archivePreviewDigest };
+    } else if (rebind) {
+      throw new ServiceError("validation", input.error ?? "Use the original ZIP to resume this import.");
     }
     delete checkpoint.sourceUpload;
     checkpoint.source = { filename: upload.filename, bytes: upload.bytes, stagedAt: new Date().toISOString() };
@@ -480,6 +514,10 @@ const releaseErasedUpload = defineService({
 async function stageStoredSource(
   state: { kind: string; origin: string; keys: string[]; source: RetainedImportSource },
 ): Promise<{ preview: Record<string, unknown>; counts: Record<string, number>; archivePreviewDigest?: string }> {
+  if (state.kind === "archive") {
+    const staged = await stageStaticArchive(archiveRangeSource(state.source, index => readRetainedSourceChunk(state.source, index)), state.origin);
+    return { ...staged, archivePreviewDigest: archivePreviewDigest(staged.preview) };
+  }
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const wxr = state.kind === "wordpress-wxr" ? wordpressExportBuilder() : undefined;
   const reader = wxr?.reader();

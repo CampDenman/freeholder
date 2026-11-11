@@ -37,8 +37,11 @@ import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS } from "./contract";
 import { crawlPublicSource, type CrawlKind } from "./crawl";
 import { assertSourceStageable, assertNoPendingSourceUpload } from "./source-lifecycle";
 import { assertLegacyReaderSafety, bindReaderSources, publicImportRun, stripReaderCopies } from "./privacy";
-import { archivePreviewDigest, archiveSourcePath, staticArchivePlan } from "./archive-plan";
+import { archivePlanSchema, archivePreviewDigest, archiveSourcePath, staticArchivePlan } from "./archive-plan";
 import { archiveBodyToBlocks, type ArchiveMediaMatch } from "./archive-content";
+import { archiveRangeSource } from "./archive-source";
+import { restoreStaticArchive } from "./archive-commit";
+import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
 import importMediaReceiptServices, { bindImportMediaBytes, claimImportMedia } from "./media-receipts";
 import {
   discoverFromPublicOrigin,
@@ -486,6 +489,16 @@ const mediaToFetch = z.object({
   wpId: z.string().optional(),
 });
 
+const archiveCommitSourceSchema = z.object({ source: retainedImportSourceSchema, plan: archivePlanSchema, previewDigest: z.string().regex(/^[a-f0-9]{64}$/), completedKeys: z.array(z.string()) });
+function archiveCommitSource(run: { id: string; preview: unknown; checkpoint: unknown }) {
+  const plan = staticArchivePlan(run.preview);
+  if (!plan) return undefined;
+  const binding = z.object({ source: retainedImportSourceSchema, previewDigest: z.string() }).safeParse(checkpointOf(run.checkpoint).archiveSource);
+  const active = retainedSourceFromRun(run);
+  if (!binding.success || !active || active.runId !== run.id || archivePreviewDigest(active) !== archivePreviewDigest(binding.data.source) || binding.data.previewDigest !== archivePreviewDigest(run.preview)) throw new ServiceError("conflict", "The archive preview no longer matches its retained private source.");
+  return { source: active, plan, previewDigest: binding.data.previewDigest, completedKeys: mediaRecordsFrom(run.checkpoint).filter(record => record.assetId).map(record => record.key) };
+}
+
 /** The read half of a commit: what still has to be fetched. */
 const commitSource = defineService({
   name: "imports.commitSource",
@@ -495,7 +508,7 @@ const commitSource = defineService({
   permission: "scoped",
   external: false,
   input: z.object({ id: z.string().uuid() }),
-  output: z.object({ media: z.array(mediaToFetch), delayMs: z.number().int().nonnegative(), previewDigest: z.string(), completed: runRow.optional() }),
+  output: z.object({ media: z.array(mediaToFetch), delayMs: z.number().int().nonnegative(), previewDigest: z.string(), archive: archiveCommitSourceSchema.optional(), completed: runRow.optional() }),
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
@@ -506,6 +519,8 @@ const commitSource = defineService({
       throw new ServiceError("conflict", "Preview the import before committing it.");
     }
     const wordpress = wordpressPreview(run.preview);
+    const archive = archiveCommitSource(run);
+    if (run.kind === "archive" && !archive) throw new ServiceError("conflict", "Upload and preview a ZIP before committing this archive import.");
     const done = new Set(
       mediaRecordsFrom(run.checkpoint)
         .filter((record) => record.assetId)
@@ -513,6 +528,7 @@ const commitSource = defineService({
     );
     return {
       previewDigest,
+      archive,
       media: (wordpress?.media ?? [])
         .filter((media) => !done.has(media.key))
         .map(({ key, sourceUrl, filename, altText, wpId }) => ({ key, sourceUrl, filename, altText, wpId })),
@@ -701,6 +717,7 @@ const commitApply = defineService({
     const staged = previewPages(before.preview);
     const wordpress = wordpressPreview(before.preview);
     const archive = staticArchivePlan(before.preview);
+    if (archive) archiveCommitSource(before);
     const typedContent = Boolean(wordpress || archive);
     const decisions = conflictDecisions(before.conflicts);
     const existing = listedCmsPages(await ctx.call(getService("cms.listPages"), {}));
@@ -1158,6 +1175,7 @@ const commitApply = defineService({
       ...(blogIndexPageId ? { blogIndexPageId } : {}),
       ...(report ? { report } : {}),
     });
+    await releaseImportSources(ctx, before, checkpoint);
     const [row] = await ctx.tx
       .update(importRuns)
       .set({ status: "committed", checkpoint, counts, preview: stripReaderCopies(before.preview) })
@@ -1180,6 +1198,26 @@ export const commitImport = defineOrchestratedService({
   handler: async (input, actor) => {
     const source = await commitSource.call({ id: input.id }, actor);
     if (source.completed) return source.completed;
+    if (source.archive) {
+      const archive = source.archive, completed = new Set(archive.completedKeys);
+      if (archive.plan.media.some(item => !completed.has(item.key))) await restoreStaticArchive(
+        archiveRangeSource(archive.source, index => readRetainedSourceChunk(archive.source, index)),
+        archive.plan.site.url,
+        { plan: archive.plan, previewDigest: archive.previewDigest },
+        completed,
+        async (item, bytes) => {
+          const claim = await claimImportMedia.call({ id: input.id, key: item.key, previewDigest: archive.previewDigest }, actor);
+          if (claim.assetId) return;
+          const receipt = await bindImportMediaBytes.call({ runId: input.id, key: item.key, token: claim.token, previewDigest: archive.previewDigest, digest: item.digest, bytes: bytes.byteLength }, actor);
+          try {
+            await uploadAsset.call({ filename: item.filename, contentType: "application/octet-stream", bytes, altText: item.altText, source: "import", importReceipt: receipt, provenance: { ...(item.sourceUrl.length <= 2_048 ? { sourceUrl: item.sourceUrl } : {}), note: claim.note }, metadata: {} }, actor);
+          } catch (error) {
+            if (error instanceof ServiceError && ["validation", "permission", "not_found", "conflict"].includes(error.code)) await recordImportMedia.call({ id: input.id, key: item.key, previewDigest: archive.previewDigest, claimToken: claim.token, error: fetchFailure(error) }, actor);
+            throw error;
+          }
+        },
+      );
+    }
     for (const [index, item] of source.media.entries()) {
       if (index > 0) await pause(source.delayMs);
       const claim = await claimImportMedia.call({ id: input.id, key: item.key, previewDigest: source.previewDigest }, actor);
@@ -1301,6 +1339,7 @@ export const rollbackImport = defineService({
       mediaClaims: [],
       rolledBack: { keptMedia },
     });
+    await releaseImportSources(ctx, before, next);
     const [row] = await ctx.tx
       .update(importRuns)
       .set({ status: "rolled_back", checkpoint: next, preview: stripReaderCopies(before.preview) })
@@ -1630,6 +1669,7 @@ export function stageWordpressExport(exported: WordpressExport, origin: string):
 
 /** Any supported source text as a staged preview. Throws when it cannot be read. */
 export function stageImportSource(kind: string, payload: string, origin: string, robotsTxt = ""): StagedPreview {
+  if (kind === "archive") throw new ServiceError("validation", "A static archive needs a ZIP source upload.");
   if (kind === "wordpress-wxr") return stageWordpressExport(parseWordpressExport(payload), origin);
   if (kind === "wordpress-rest") {
     return stageWordpressExport(wordpressExportFromRest(JSON.parse(payload) as unknown, origin), origin);
