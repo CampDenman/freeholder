@@ -34,14 +34,14 @@ import {
   setPriceListEntry,
   shipFulfillment,
 } from "@/modules/catalog/service";
-import { createPayment, getInvoice, settlePayment } from "@/modules/invoicing/invoice-service";
+import { createPayment, createRefund, getInvoice, settlePayment, settleRefund, startRefund } from "@/modules/invoicing/invoice-service";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
   beforeEach(truncateSpine);
   afterAll(closeDb);
 
-  async function paidPhysical() {
+  async function paidPhysical(split = false) {
     const studio = await createLocationService.call(
       { name: "Studio", slug: "ful-studio", city: "Courtenay", country: "CA" },
       OWNER,
@@ -73,15 +73,89 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
         invoiceId: placed.order.invoiceId!,
         provider: "manual",
         method: "bank_transfer",
-        amountMinor: placed.order.totalMinor,
+        amountMinor: split ? 1_000 : placed.order.totalMinor,
         idempotencyKey: `pay-${placed.order.id}`,
       },
       OWNER,
     );
     await settlePayment.call({ id: payment.id, providerRef: `manual:${placed.order.id}` }, OWNER);
+    if (split) {
+      const second = await createPayment.call({invoiceId:placed.order.invoiceId!,provider:"manual",method:"cash",amountMinor:placed.order.totalMinor-1_000,idempotencyKey:`pay-rest-${placed.order.id}`},OWNER);
+      await settlePayment.call({id:second.id,providerRef:`manual:rest:${placed.order.id}`},OWNER);
+    }
     const paid = await payOrder.call({ id: placed.order.id }, OWNER);
-    return { studio, variant, contact, paid, item };
+    return { studio, variant, contact, paid, item, payment };
   }
+
+  async function receivedReturn(paid: Awaited<ReturnType<typeof paidPhysical>>["paid"]) {
+    const requested=await requestReturn.call({orderId:paid.order.id,reason:"Damaged in transit",restock:false,items:[{orderItemId:paid.lines[0]!.id,quantity:2}]},OWNER);
+    await decideReturn.call({id:requested.return.id,decision:"approved"},OWNER);
+    return receiveReturn.call({id:requested.return.id},OWNER);
+  }
+
+  it("does not invent a hosted-provider refund when recording a returned item", async () => {
+    const {paid,payment}=await paidPhysical();
+    const {payments}=await import("@/modules/invoicing/schema");
+    await db().update(payments).set({provider:"stripe",providerRef:"pi_real_return_payment"}).where(eq(payments.id,payment.id));
+    const received=await receivedReturn(paid);
+    const before=await getInvoice.call({id:paid.order.invoiceId!},OWNER);
+    await expect(refundReturn.call({id:received.return.id,idempotencyKey:`rma-provider-${received.return.id}`,offlineRefundConfirmed:true},OWNER)).rejects.toMatchObject({code:"conflict"});
+    const after=await getInvoice.call({id:paid.order.invoiceId!},OWNER);
+    expect(after.invoice.refundedMinor).toBe(before.invoice.refundedMinor);
+    expect(after.creditNotes).toHaveLength(before.creditNotes.length);
+    expect(after.refunds).toHaveLength(before.refunds.length);
+  });
+
+  it.each(["created","processing","succeeded"] as const)("refuses an incomplete refund instead of closing the whole return with a %s reservation", async status => {
+    const {paid,payment}=await paidPhysical();
+    const received=await receivedReturn(paid);
+    const previous=await createRefund.call({paymentId:payment.id,amountMinor:3_500,reason:"Previous offline refund",idempotencyKey:`prior-${payment.id}`},OWNER);
+    if(status==="processing") await startRefund.call({id:previous.id,providerRef:`manual:prior:${payment.id}`},OWNER);
+    if(status==="succeeded") await settleRefund.call({id:previous.id,providerRef:`manual:prior:${payment.id}`},OWNER);
+    const before=await getInvoice.call({id:paid.order.invoiceId!},OWNER);
+    await expect(refundReturn.call({id:received.return.id,idempotencyKey:`rma-short-${received.return.id}`,offlineRefundConfirmed:true},OWNER)).rejects.toMatchObject({code:"conflict"});
+    const after=await getInvoice.call({id:paid.order.invoiceId!},OWNER);
+    expect(after.invoice.refundedMinor).toBe(status==="succeeded" ? 3_500 : 0);
+    expect(after.creditNotes).toHaveLength(before.creditNotes.length);
+    expect(after.refunds).toHaveLength(before.refunds.length);
+  });
+
+  it("records the full attested offline amount across original installments exactly once", async () => {
+    const {paid}=await paidPhysical(true);
+    const received=await receivedReturn(paid);
+    const input={id:received.return.id,idempotencyKey:`rma-split-${received.return.id}`,offlineRefundConfirmed:true};
+    expect((await refundReturn.call(input,OWNER)).return.status).toBe("refunded");
+    const invoice=await getInvoice.call({id:paid.order.invoiceId!},OWNER);
+    expect(invoice.invoice.refundedMinor).toBe(4_000);
+    expect(invoice.refunds.map(refund=>refund.amountMinor).sort((a,b)=>a-b)).toEqual([1_000,3_000]);
+    expect(invoice.refunds.every(refund=>refund.status==="succeeded" && refund.provider==="manual")).toBe(true);
+    expect((await refundReturn.call({...input,idempotencyKey:`retry-${received.return.id}`},OWNER)).return.status).toBe("refunded");
+    expect((await getInvoice.call({id:paid.order.invoiceId!},OWNER)).refunds).toHaveLength(2);
+  });
+
+  it("requires fresh human offline attestation and refuses keys or plugins", async () => {
+    const input={id:crypto.randomUUID(),idempotencyKey:"return-actor-boundary",offlineRefundConfirmed:true};
+    for(const actor of [
+      {kind:"agent" as const,keyName:"Return bot",scopes:["catalog.*"]},
+      {...OWNER,keyScopes:["catalog.*"]},
+      {kind:"plugin" as const,name:"returns",grants:[{module:"catalog",access:"manage" as const}]},
+    ]) await expect(refundReturn.call(input,actor)).rejects.toMatchObject({code:"permission"});
+    await expect(refundReturn.call(input,{...OWNER,security:{twoFactorRequired:true,twoFactorEnrolled:true,twoFactorVerified:true,stepUpValid:false}})).rejects.toMatchObject({code:"step_up_required"});
+    await expect(refundReturn.call({...input,offlineRefundConfirmed:undefined},OWNER)).rejects.toMatchObject({code:"validation"});
+  });
+
+  it("bounds requested quantities across duplicate lines and earlier returns", async () => {
+    const {paid}=await paidPhysical();
+    const line={orderItemId:paid.lines[0]!.id,quantity:2};
+    await expect(requestReturn.call({orderId:paid.order.id,reason:"Duplicate lines",items:[line,line]},OWNER)).rejects.toMatchObject({code:"validation"});
+    const attempts=await Promise.allSettled([
+      requestReturn.call({orderId:paid.order.id,reason:"First whole return",items:[line]},OWNER),
+      requestReturn.call({orderId:paid.order.id,reason:"Concurrent whole return",items:[line]},OWNER),
+    ]);
+    expect(attempts.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    expect(attempts.filter(result=>result.status==="rejected")).toHaveLength(1);
+    await expect(requestReturn.call({orderId:paid.order.id,reason:"Second whole return",items:[line]},OWNER)).rejects.toMatchObject({code:"validation"});
+  });
 
   it("ships a split carton, writes the sale on ship, and grants digital lines on pay", async () => {
     const { studio, variant, paid } = await paidPhysical();
@@ -159,7 +233,7 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
     expect(restocked).toMatchObject({ tracked: true, onHand: 5, reserved: 0 });
 
     const refunded = await refundReturn.call(
-      { id: requested.return.id, idempotencyKey: `rma-${requested.return.id}` },
+      { id: requested.return.id, idempotencyKey: `rma-${requested.return.id}`, offlineRefundConfirmed: true },
       OWNER,
     );
     expect(refunded.return.status).toBe("refunded");

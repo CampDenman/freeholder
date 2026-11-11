@@ -217,7 +217,7 @@ describe.runIf(hasDatabase)("C11.02 catalog browse to refund", { timeout: 60_000
     }
     expect(restocked.onHand).toBeGreaterThan(beforeRestock.onHand);
     const refunded = await refundReturn.call(
-      { id: requested.return.id, idempotencyKey: `rma-${requested.return.id}` },
+      { id: requested.return.id, idempotencyKey: `rma-${requested.return.id}`, offlineRefundConfirmed: true },
       OWNER,
     );
     expect(refunded.return.status).toBe("refunded");

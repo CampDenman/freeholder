@@ -2565,7 +2565,7 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F01** — `db/migrations/0000_reviewed-baseline.sql` — reviewed baseline (C10.19) folding the item's migration tag `0057_rare_gladiator.sql`; table invariants asserted in `tests/core/catalog-fulfillment.test.ts`.
 - **F02** — `tests/core/catalog-fulfillment.test.ts` — typed-service coverage including permission and refusal assertions.
 - **F03** — `tests/core/merge-completeness.test.ts` — merge repointing is enforced by reflection over every module's tables, so any contact reference this item stores is covered; its contact-facing behaviour is exercised in `tests/core/catalog-fulfillment.test.ts`.
-- **F04** — /admin/price-lists price lists. — screen file `app/(admin)/admin/price-lists/page.tsx`.
+- **F04** — Partial — `app/(admin)/admin/returns/page.tsx` distinguishes a human-attested offline refund from the original provider's refund path. Complete provider-to-return integration remains open in `MASTER.md` C5.19.
 - **F05** — `catalog.createFulfillment`/`shipFulfillment`/`grantDigitalFulfillment`/`requestReturn`/`listFulfillments` at /api/v1/catalog.*, MCP `catalog_*`. — surface equivalence: `tests/core/api.test.ts` (every service has an endpoint, spec schema is the validator), `tests/core/sdk-schema.test.ts` (generated client contract) and `tests/core/mcp.test.ts` (registry-derived MCP tools)..
 - **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG over the surfaces the browser suite visits in `tests/browser/accessibility.spec.ts`.
 - **F07** — `tests/core/catalog-fulfillment.test.ts` covers permission, refusal and recovery.
@@ -2573,7 +2573,7 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared audit/outbox participation it rides on: `tests/core/record-participation.test.ts`.
 - **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; per-item contextual help is not separately evidenced.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping). Changeset `commerce-fulfillment.md` named in §43.
-- **F12** — `tests/core/catalog-fulfillment.test.ts` is the composition proof.
+- **F12** — Partial — `tests/core/catalog-fulfillment.test.ts` and `tests/core/c11-02-catalog-journey.test.ts` cover original offline refunds, full installment allocation, safe replay and refusal of fabricated provider settlement. Actual provider-to-return and localized owner/customer journeys remain open in `MASTER.md` C5.19.
 
 ## C5.20 — Build persistent/contact-attached carts, saved carts/wishlists
 

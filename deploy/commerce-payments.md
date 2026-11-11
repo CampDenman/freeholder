@@ -215,6 +215,26 @@ Repeat the checklist for each provider an instance plans to enable. The
 repository tests use deterministic mocked provider HTTP only. They never make a
 real, billable, sandbox, or live provider request.
 
+## Returned-item refunds (C5.19/C11.10, source repair)
+
+`catalog.refundReturn` records only a full offline refund already returned
+to the customer. It requires a person with fresh verification and an explicit
+`offlineRefundConfirmed: true`; API keys and plugins cannot attest. The
+original successful payments must all be manual, and their unreserved balance
+must cover the entire return. It records across original installments in one
+transaction, with identities bound to the return and payment rather than a
+new caller key on every click. A shortage leaves the return, credits and
+refund ledger untouched. A completed return replays without sending or
+recording more money. Return requests cannot duplicate a line or exceed the
+order's quantities across earlier non-rejected returns.
+
+For a card/provider payment, use the original payment's provider-refund path;
+the return action refuses to fabricate settlement evidence. Complete automatic
+provider-to-return reconciliation and correct discounted/taxed return amounts
+remain open in MASTER.md C5.19. The old manual-only C11.02 journey does not
+prove that integration. No existing ledger entries are rewritten, and no
+external provider request is made by these source tests.
+
 ## Rollback
 
 C5.08 migration `0047_fantastic_miss_america.sql` is additive except for safely

@@ -815,7 +815,7 @@ export async function productAction(form: FormData): Promise<void> {
         destination = `/admin/returns?id=${field(form, "id")}&saved=receiveReturn`;
       } else if (intent === "refundReturn") {
         await refundReturn.call(
-          { id: field(form, "id"), idempotencyKey: field(form, "idempotencyKey") },
+          { id: field(form, "id"), idempotencyKey: field(form, "idempotencyKey"), offlineRefundConfirmed: field(form,"offlineRefundConfirmed")==="yes" ? true : undefined },
           actor,
         );
         destination = `/admin/returns?id=${field(form, "id")}&saved=refundReturn`;

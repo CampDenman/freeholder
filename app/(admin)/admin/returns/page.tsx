@@ -125,11 +125,13 @@ export default async function ReturnsPage({
               </form>
             ) : null}
             {canManage && selected.return.status === "received" ? (
-              <form action={productAction}>
+              <form action={productAction} className="grid gap-3">
                 <input type="hidden" name="intent" value="refundReturn" />
                 <input type="hidden" name="id" value={selected.return.id} />
                 <input type="hidden" name="idempotencyKey" value={randomUUID()} />
                 <input type="hidden" name="returnTo" value={`/admin/returns?id=${selected.return.id}`} />
+                <p className="text-sm text-ink-muted">{t("catalog.returns.refundHelp")}</p>
+                <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="offlineRefundConfirmed" value="yes" required className="mt-1" />{t("catalog.returns.confirmOfflineRefund")}</label>
                 <Button type="submit">{t("catalog.returns.refund")}</Button>
               </form>
             ) : null}

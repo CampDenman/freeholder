@@ -3161,7 +3161,7 @@ export interface ServiceCatalog {
     output: { sent: number };
   };
   "catalog.refundReturn": {
-    input: { id: string; idempotencyKey: string };
+    input: { id: string; idempotencyKey: string; offlineRefundConfirmed: true };
     output: { return: { id: string; orderId: string; contactId: string; status: "requested" | "approved" | "received" | "refunded" | "rejected"; reason: string; restock: boolean; labelUrl: string | null; creditNoteId: string | null; refundId: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; items: { id: string; returnId: string; orderItemId: string; quantity: number; restockedQuantity: number; createdAt: string; [key: string]: unknown }[] };
   };
   "catalog.releaseOrderPaymentMilestone": {
