@@ -230,7 +230,7 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     await beginCustomerCheckout.call({id:joined.invoiceId!,saveMethodConsent:true},CUSTOMER);
     expect(mocks.createCheckout.mock.calls[0]![0].saveMethod).toBe(true);
     const [invoice]=await db().select().from(invoices).where(eq(invoices.id,joined.invoiceId!));
-    await processPaymentProviderEvents.call({provider:"stripe",bodySha256:"a".repeat(64),receivedAt:new Date().toISOString(),events:[{id:"evt_signup",kind:"payment_succeeded",providerRef:"pi_signup",checkoutRef:"cs_signup",invoiceId:invoice!.id,amountMinor:invoice!.totalMinor,currency:"CAD",occurredAt:new Date().toISOString(),savedMethod:{providerRef:"pm_signup",providerCustomerRef:"cus_signup",kind:"card",label:"card ending 4242",last4:"4242"}}]},OWNER);
+    await processPaymentProviderEvents.call({provider:"stripe",bodySha256:"a".repeat(64),receivedAt:new Date().toISOString(),events:[{id:"evt_signup",kind:"payment_succeeded",providerRef:"pi_signup",checkoutRef:"cs_signup",invoiceId:invoice!.id,amountMinor:invoice!.totalMinor,currency:"CAD",occurredAt:new Date().toISOString(),savedMethod:{providerRef:"pm_signup",providerCustomerRef:"cus_signup",kind:"card",label:"card ending 4242",last4:"4242"}}]}, { kind: "system" });
     await activatePaidSignup.call({invoiceId:invoice!.id},{kind:"system"});
     const [sub]=await db().select().from(subscriptions).where(eq(subscriptions.id,joined.id));
     const [method]=await db().select().from(paymentMethods).where(eq(paymentMethods.providerMethodRef,"pm_signup"));
@@ -300,7 +300,7 @@ describe.runIf(hasDatabase)("subscription billing", () => {
         occurredAt: new Date().toISOString(),
         method: { providerRef: "pm_trial", providerCustomerRef: "cus_setup", kind: "card", label: "card ending 4242", last4: "4242" },
       }],
-    }, OWNER);
+    }, { kind: "system" });
     const [method] = await db().select().from(paymentMethods).where(eq(paymentMethods.providerMethodRef, "pm_trial"));
     const started = await startCardTrial.call({ subscriptionId: joined.id, paymentMethodId: method!.id }, CUSTOMER);
     expect(started).toEqual({ id: joined.id, started: true });
@@ -346,7 +346,7 @@ describe.runIf(hasDatabase)("subscription billing", () => {
         occurredAt: new Date().toISOString(),
         savedMethod: { providerRef: "pm_fee", providerCustomerRef: "cus_fee", kind: "card", label: "card ending 4242", last4: "4242" },
       }],
-    }, OWNER);
+    }, { kind: "system" });
     // invoice.paid already opened the trial. Calling activation again must not move the window.
     expect((await activatePaidSignup.call({ invoiceId: invoice!.id }, { kind: "system" })).activated).toBe(false);
     const [trial] = await db().select().from(subscriptions).where(eq(subscriptions.id, joined.id));

@@ -78,6 +78,22 @@ an authorized merchant. `deploy/seller-merchant-source-2026-11-10.md` records
 the limited source evidence and remaining integration. The direct model stays
 unavailable; this packet supplies neither activation nor independent sign-off.
 
+## Authenticated provider-evidence boundary (C11.10)
+
+The audit found that `invoicing.processPaymentProviderEvents` was declared as
+financially scoped and appeared in generated external discovery despite its
+intended webhook-only contract. The repair makes it system-only and explicitly
+private. Financial administrators, API keys and invoicing-capable plugins must
+be refused before ledger access; HTTP, OpenAPI, MCP and SDK projections must
+omit it. `tests/core/internal-services.test.ts` exercises these boundaries.
+Existing signed-webhook, provider-ledger and subscription regressions keep
+the actual verification path working. The reviewer should verify both the
+refusals and the positive signed route. On the merged merchant-policy baseline,
+54 focused financial/discovery regressions and all eight live SDK checks
+passed. Required local fast gates passed 368 contract checks with one deliberate
+skip, plus typechecking, lint, licensing, release notes and plan consistency.
+These results do not supply live-provider acceptance or independent sign-off.
+
 ## Newly published XML parser advisory
 
 The 2026-11-10 C3.42 protected CI run independently caught

@@ -889,7 +889,6 @@ export const SERVICE_NAMES = [
   "invoicing.markOverdue",
   "invoicing.markOverdueSweep",
   "invoicing.markViewed",
-  "invoicing.processPaymentProviderEvents",
   "invoicing.purgeDemoFixture",
   "invoicing.quoteTax",
   "invoicing.receipt",
@@ -5149,10 +5148,6 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
-  "invoicing.processPaymentProviderEvents": {
-    input: { provider: "stripe" | "paypal" | "square" | "mollie" | "razorpay" | "paystack" | "flutterwave"; bodySha256: string; receivedAt: string; events: ({ providerAccountId?: string; id: string; kind: "payment_processing" | "payment_succeeded" | "payment_failed" | "payment_cancelled"; providerRef: string; checkoutRef?: string; amountMinor?: number; currency?: string; occurredAt: string; invoiceId?: string; contactId?: string; providerCustomerRef?: string; savedMethod?: { providerRef: string; providerCustomerRef?: string; kind: "card" | "wallet" | "bank_debit" | "bank_redirect" | "buy_now_pay_later" | "cash" | "bank_transfer" | "other"; label: string; brand?: string; last4?: string; expiryMonth?: number; expiryYear?: number }; applicationFeeMinor?: number } | { providerAccountId?: string; id: string; kind: "refund_processing" | "refund_succeeded" | "refund_failed"; providerRef: string; paymentProviderRef: string; amountMinor?: number; currency?: string; occurredAt: string } | { providerAccountId?: string; id: string; kind: "dispute_opened" | "dispute_won" | "dispute_lost"; providerRef: string; paymentProviderRef: string; amountMinor?: number; currency?: string; occurredAt: string; reason?: string; evidenceDueAt?: string } | { providerAccountId?: string; id: string; kind: "saved_method_added" | "saved_method_removed"; providerCustomerRef?: string; contactId?: string; method: { providerRef: string; providerCustomerRef?: string; kind: "card" | "wallet" | "bank_debit" | "bank_redirect" | "buy_now_pay_later" | "cash" | "bank_transfer" | "other"; label: string; brand?: string; last4?: string; expiryMonth?: number; expiryYear?: number }; occurredAt: string } | { providerAccountId?: string; id: string; kind: "payout_pending" | "payout_in_transit" | "payout_paid" | "payout_failed" | "payout_cancelled"; providerRef: string; amountMinor: number; currency: string; occurredAt: string; expectedAt?: string; statementRef?: string; failureReason?: string } | { providerAccountId?: string; id: string; kind: "subscription_period_paid" | "subscription_period_failed" | "subscription_cancelled"; providerRef: string; occurredAt: string; amountMinor?: number; currency?: string; periodStart?: string; periodEnd?: string; invoiceProviderRef?: string })[] };
-    output: { processed: number; duplicates: number };
-  };
   "invoicing.purgeDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { purged: { subjectType: string; subjectId: string }[] };
@@ -8992,7 +8987,6 @@ export interface FreeholderApi {
     markOverdue: (input: ServiceCatalog["invoicing.markOverdue"]["input"]) => Promise<ServiceCatalog["invoicing.markOverdue"]["output"]>;
     markOverdueSweep: (input?: ServiceCatalog["invoicing.markOverdueSweep"]["input"]) => Promise<ServiceCatalog["invoicing.markOverdueSweep"]["output"]>;
     markViewed: (input: ServiceCatalog["invoicing.markViewed"]["input"]) => Promise<ServiceCatalog["invoicing.markViewed"]["output"]>;
-    processPaymentProviderEvents: (input: ServiceCatalog["invoicing.processPaymentProviderEvents"]["input"]) => Promise<ServiceCatalog["invoicing.processPaymentProviderEvents"]["output"]>;
     purgeDemoFixture: (input: ServiceCatalog["invoicing.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["invoicing.purgeDemoFixture"]["output"]>;
     quoteTax: (input: ServiceCatalog["invoicing.quoteTax"]["input"]) => Promise<ServiceCatalog["invoicing.quoteTax"]["output"]>;
     receipt: (input: ServiceCatalog["invoicing.receipt"]["input"]) => Promise<ServiceCatalog["invoicing.receipt"]["output"]>;

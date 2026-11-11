@@ -11067,6 +11067,12 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.10** Complete independent security review of auth, payments,
   webhooks, MCP/agents, OAuth, plugins, updater, uploads and customer privacy;
   resolve every critical/high and disposition every lower finding.
+  Payment boundary repair 2026-11-10: authenticated provider-event processing
+  is system-only and explicitly private; financial management scope does not
+  authorize callers to submit provider evidence. Internal-discovery and actor
+  refusal regressions cover owner/staff, keys and plugins; signed webhook routes
+  continue to verify raw bytes before using the shared processor. This source
+  repair does not supply the independent review or close C11.10.
   Audit follow-up 2026-10-08: three adversarial agents plus integration review
   repaired reproducible CMS, reset, customer privacy, gallery, booking, billing,
   MCP, consent and installer failures. `security/adversarial-audit-2026-10-08.md`

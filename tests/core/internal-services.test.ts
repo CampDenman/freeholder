@@ -22,6 +22,8 @@ const INTERNAL = [
   "subscriptions.captureMarketPolicy",
   "subscriptions.marketPolicy",
   "members.resolveSubscriptionMarketPolicy",
+
+  "invoicing.processPaymentProviderEvents",
   "invoicing.reconcilePluginRefund",
   "invoicing.captureInvoiceMarketPolicy",
   "invoicing.marketPolicy",
@@ -212,6 +214,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "subscriptions.marketPolicy",
   "members.resolveSubscriptionMarketPolicy",
   "invoicing.providerPaymentSource",
+
+  "invoicing.processPaymentProviderEvents",
   "invoicing.reconcilePluginRefund",
   "invoicing.captureInvoiceMarketPolicy",
   "invoicing.marketPolicy",
@@ -419,6 +423,22 @@ describe("the system-service boundary", () => {
       .map((service) => service.def.name)
       .sort();
     expect(actual).toEqual([...INTERNAL].sort());
+  });
+
+  it("refuses fabricated provider evidence from financial administrators, keys and plugins before ledger access (C11.10)", async () => {
+    const processor = getService("invoicing.processPaymentProviderEvents");
+    const input = { provider: "stripe", bodySha256: "a".repeat(64), receivedAt: new Date().toISOString(), events: [] };
+    const callers: Actor[] = [
+      wildcard,
+      { kind: "anonymous" },
+      { kind: "user", userId: "00000000-0000-4000-8000-000000000001", role: "owner", grants: [{ module: "*", access: "manage" }] },
+      { kind: "user", userId: "00000000-0000-4000-8000-000000000002", role: "staff", grants: [{ module: "invoicing", access: "manage" }], keyScopes: ["invoicing.*"] },
+      { kind: "plugin", name: "financial-plugin", grants: [{ module: "invoicing", access: "manage" }] },
+    ];
+    for (const actor of callers) {
+      await expect(processor.call(input, actor)).rejects.toMatchObject({ code: "permission" });
+    }
+    expect(() => getExternalService(processor.def.name)).toThrow(/no service/);
   });
 
   it("keeps an explicit reviewed inventory of caller-authorized phases", () => {
