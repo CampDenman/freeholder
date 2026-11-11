@@ -82,6 +82,14 @@ those overlapping checks are not a second current exact-tree run.
 The pinned MIT runtime dependencies retain their upstream copyright/license
 texts in `public/_freeholder/imports/NOTICE.txt`, distributed with public assets.
 
+After raw-source privacy merged as `952bc31f`, archive-only commits rebased
+onto that protected main tree. Import, media and owner import UI source files
+remain byte-identical to qualified head `61175737`; the parent integration
+adds the independently qualified payment/privacy guards and 32-shard capacity.
+Eleven focused actual archive/receipt controls, eight SDK controls and the full
+373-contract fast gates (one deliberate skip) pass on this composition.
+Fresh exact-head protected CI remains required before queueing this PR.
+
 C3.22 remains unchecked. Durable cross-batch imports beyond these finite limits,
 arbitrary hosted-builder exports, template/theme conversion and full generic
 parity remain required. CSS and JavaScript are reported as omitted. Source-specific
