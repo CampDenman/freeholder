@@ -65,7 +65,11 @@ test.describe("original merchant invoice identity (C12.38)",()=>{
     await expect(page.locator("main#main > header").getByText(originalName,{exact:true})).toBeVisible();
     await expect(page.locator("main#main > header")).not.toContainText("Replacement");
     expect(await db().select().from(payments)).toHaveLength(0);
-    expect((await page.goto(`${path}?token=${"0".repeat(64)}`))?.status()).toBe(404);
+    await page.goto(`${path}?token=${"0".repeat(64)}`);
+    // The streamed route can commit its HTTP status before notFound renders.
+    // Assert the actual refusal and absence of the private document instead.
+    await expect(page.getByRole("heading",{name:messages[locale]["notFound.title"],exact:true})).toBeVisible();
+    await expect(page.locator("main#main > header")).toHaveCount(0);
     expect(await page.content()).not.toContain(originalName);
    }finally{await context.close();}
   });
