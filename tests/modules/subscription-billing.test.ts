@@ -1177,4 +1177,30 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     }
   });
 
+
+  it("does not leave human recovery evidence in global audit copies after setup erasure finishes",async()=>{
+    const {contact,joined}=await pausedCardTrial("setup-recovery-audit-subject");
+    mocks.createSetupCustomer.mockRejectedValueOnce(new Error("Synthetic unknown customer operation"));
+    await expect(beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER)).rejects.toMatchObject({code:"conflict"});
+    const [dispatch]=await db().select().from(subscriptionSetupDispatches);
+    const request=await createDataRequest.call({contactId:contact.id,request:{kind:"erasure"}},OWNER);
+    await verifyDataRequest.call({id:request.id,method:"Synthetic original identity verification"},OWNER);
+    const erased=await fulfillDataRequest.call({id:request.id,confirmation:"ERASE"},OWNER);
+    mocks.recoverMethodSetup.mockResolvedValueOnce({state:"customer_only",providerCustomerRef:"cus_AuditCleanup"});
+    const evidence=`Synthetic exact provider log for ${contact.email} guarantees final completion of the original customer operation.`;
+    await reconcileTrialSetupDispatch.call({dispatchId:dispatch!.id,outcome:"completed",providerOperationRef:"synthetic-case-audit-123",providerEvidence:evidence,callerStopEvidence:"Synthetic original caller and all retries stopped before the provider confirmed final completion.",confirmation:"PROVIDER OUTCOME CONFIRMED",providerCustomerRef:"cus_AuditCleanup"},OWNER);
+    const body=erased.artifact.body as {outcomes:Array<{scope:string;pendingJobs?:string[]}>};
+    const id=body.outcomes.find(item=>item.scope==="subscriptions.cardSetups")!.pendingJobs![0]!;
+    const job=await getJob(eraseTrialSetupCustomers.name,id);
+    const context:JobExecutionContext={id:randomUUID(),name:eraseTrialSetupCustomers.name,attempt:1,signal:new AbortController().signal,leaseSeconds:300,heartbeat:async()=>true,isCancelled:async()=>false,throwIfCancelled:async()=>{}};
+    await eraseTrialSetupCustomers.handler(job!.data,context);
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id,request.id)))[0]!.status).toBe("completed");
+    const entries=await db().select().from(auditLog);
+    const recovery=entries.filter(item=>item.action.includes("TrialSetupReconciliation"));
+    expect(recovery).toHaveLength(2);
+    expect(recovery.every(item=>item.actor===`user:${OWNER.userId}` && item.subjectType==="subscription" && item.subjectId===joined.id)).toBe(true);
+    expect(JSON.stringify(recovery.map(item=>item.diff))).not.toContain(contact.email!);
+    expect(JSON.stringify(recovery.map(item=>item.diff))).not.toContain(evidence);
+  });
+
 });
