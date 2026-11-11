@@ -24,7 +24,8 @@ export default async function ImportRunPage({
   const run = runs.find((item) => item.id === id);
   if (!run) notFound();
   const counts = run.counts && typeof run.counts === "object" ? (run.counts as Record<string, unknown>) : {};
-  const staged = ["discover", "mapped", "previewed", "failed"].includes(run.status);
+  const checkpoint = run.checkpoint && typeof run.checkpoint === "object" ? run.checkpoint as Record<string, unknown> : {};
+  const staged = ["discover", "mapped", "previewed", "failed"].includes(run.status) || run.status === "rolled_back" && !Array.isArray(checkpoint.createdPageIds);
   const countLabels: Array<[string, string]> = [
     ["pages", t(staged ? "imports.count.pagesStaged" : "imports.count.pages")],
     ["crawlBlocked", t("imports.count.crawlBlocked")],
@@ -50,7 +51,6 @@ export default async function ImportRunPage({
   ];
   const shown = countLabels.filter(([key]) => typeof counts[key] === "number");
   const wordpress = run.source.startsWith("wordpress-");
-  const checkpoint = run.checkpoint && typeof run.checkpoint === "object" ? run.checkpoint as Record<string, unknown> : {};
   const preview = run.preview && typeof run.preview === "object" ? run.preview as Record<string, unknown> : {};
   const archive = preview.archive && typeof preview.archive === "object" ? preview.archive as Record<string, unknown> : {};
   const generic = preview.generic && typeof preview.generic === "object" ? preview.generic as Record<string, unknown> : {};

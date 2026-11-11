@@ -3,6 +3,7 @@
 // C3.22: source HTML/feed content keeps its own identity and typed media plan.
 import { parse, type DefaultTreeAdapterTypes } from "parse5";
 import { z } from "zod";
+import { allowedMediaOrigins, mediaOriginSchema } from "./media-origins";
 import { assertPublicHttpUrl, enforceImporterLimits, robotsDisallow } from "./contract";
 import { safeImportHref } from "./content-links";
 import { sourceContentBody } from "./archive-content";
@@ -60,6 +61,7 @@ export const genericPlanSchema = z.object({
   version: z.literal(1),
   site: z.object({ url: z.string().url(), hosts: z.array(z.string()), basePath: z.string() }),
   robotsTxt: z.string().max(512 * 1024),
+  mediaOrigins: z.array(mediaOriginSchema).max(9).optional(),
   media: z.array(z.object({ key: z.string(), sourceUrl: z.string().url(), filename: z.string(), aliases: z.array(z.string()), referenced: z.boolean(), altText: z.string().optional() })).max(500),
   report: z.object({ unresolvedMedia: z.array(z.string()), sourceWarnings: z.array(z.object({ code: z.enum(["query-address", "discovery-only"]), url: z.string().max(2_048) })).max(100) }),
 });
@@ -131,8 +133,9 @@ export function parseGenericHtml(html: string, raw: string): GenericPage {
   };
 }
 
-export function stageGenericPages(pages: GenericPage[], origin: string, robotsTxt = "") {
+export function stageGenericPages(pages: GenericPage[], origin: string, robotsTxt = "", approved: string[] = []) {
   const site = assertPublicHttpUrl(origin), media = new Map<string, GenericPlan["media"][number]>();
+  const mediaOrigins = allowedMediaOrigins(origin, approved);
   const unresolved = new Set<string>(), warnings: GenericPlan["report"]["sourceWarnings"] = [], paths = new Set<string>();
   let bytes = 0;
   const accepted = pages.map(page => {
@@ -152,7 +155,7 @@ export function stageGenericPages(pages: GenericPage[], origin: string, robotsTx
       let target: URL;
       try { target = assertPublicHttpUrl(new URL(value, url).href); } catch { unresolved.add(value.slice(0, 2_048)); continue; }
       target.hash = "";
-      if (target.href.length > 2_048 || target.origin !== site.origin || robotsDisallow(robotsTxt, `${target.pathname}${target.search}`)) { unresolved.add(target.href.slice(0, 2_048)); continue; }
+      if (target.href.length > 2_048 || !mediaOrigins.has(target.origin) || target.origin === site.origin && robotsDisallow(robotsTxt, `${target.pathname}${target.search}`)) { unresolved.add(target.href.slice(0, 2_048)); continue; }
       const key = target.href;
       let filename = target.pathname.split("/").at(-1) || "source-file";
       try { filename = decodeURIComponent(filename); } catch { /* Keep literal invalid escapes. */ }
@@ -166,7 +169,7 @@ export function stageGenericPages(pages: GenericPage[], origin: string, robotsTx
     const slug = toCmsSlug(sourcePath.replace(/(?:^|\/)index\.html?$/i, "").replace(/\.html?$/i, ""));
     return { ...page, body, slug, seo: page.seo ?? { ...parsed.seo, title: page.title, preserveTitle: true }, ...(sourcePath !== slug ? { redirectFrom: sourcePath } : {}) };
   });
-  const plan = genericPlanSchema.parse({ version: 1, site: { url: site.origin, hosts: [site.host.toLowerCase()], basePath: "" }, robotsTxt, media: [...media.values()], report: { unresolvedMedia: [...unresolved].slice(0, 100), sourceWarnings: warnings } });
+  const plan = genericPlanSchema.parse({ version: 1, site: { url: site.origin, hosts: [site.host.toLowerCase()], basePath: "" }, robotsTxt, ...(approved.length ? { mediaOrigins: [...mediaOrigins] } : {}), media: [...media.values()], report: { unresolvedMedia: [...unresolved].slice(0, 100), sourceWarnings: warnings } });
   return { preview: { sourceFormat: "generic-site", pages: accepted, generic: plan }, counts: { pages: accepted.length, media: media.size, redirects: accepted.filter(page => page.redirectFrom).length, mediaWarnings: unresolved.size, sourceWarnings: warnings.length } };
 }
 

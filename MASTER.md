@@ -5456,6 +5456,12 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   See `deploy/generic-site-import.md`. C3.22 remains open for full page-query
   intent, durable large-source resumption, hosted/CDN paths and actual
   source-specific acceptance.)*
+  *(Hosted-media work in progress: an actual approved-CDN fixture still loses
+  its image while the unapproved-origin control stays refused. The next
+  C3.22 increment adds a bounded, explicit per-run media-origin approval;
+  page discovery remains same-origin and media retains pinned public transport,
+  per-origin fresh robots checks and ordinary upload/actor permissions.
+  No hosted provider account or source-specific acceptance is claimed.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,

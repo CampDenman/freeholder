@@ -44,6 +44,7 @@ import { archiveRangeSource } from "./archive-source";
 import { restoreStaticArchive } from "./archive-commit";
 import { safeImportHref } from "./content-links";
 import { genericPreview, genericPlanSchema, parseGenericHtml, stageGenericPages } from "./generic-plan";
+import { approvedMediaOrigins, approvedMediaOriginsSchema, allowedMediaOrigins } from "./media-origins";
 import { parseGenericFeed } from "./generic-feed";
 import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
 import importMediaReceiptServices, { bindImportMediaBytes, claimImportMedia } from "./media-receipts";
@@ -412,6 +413,7 @@ export const startImport = defineService({
   input: z.object({
     origin: z.string().url(),
     kind: z.enum(["wordpress-rest", "wordpress-wxr", "sitemap", "rss", "atom", "html", "archive"]),
+    approvedMediaOrigins: approvedMediaOriginsSchema.default([]),
   }),
   output: runRow,
   handler: async (input, ctx) => {
@@ -425,6 +427,7 @@ export const startImport = defineService({
       );
     }
     if (input.kind === "archive" && (url.search || url.hash)) throw new ServiceError("validation", "An archive source URL cannot contain a query or fragment.");
+    if (input.approvedMediaOrigins.length && !["html", "rss", "atom", "sitemap"].includes(input.kind)) throw new ServiceError("validation", "Additional media origins apply to generic public sources.");
     const origin = input.kind === "archive" || ["html", "rss", "atom", "sitemap"].includes(input.kind) && (url.pathname !== "/" || url.search) ? url.href : url.origin;
     const [row] = await ctx.tx
       .insert(importRuns)
@@ -433,7 +436,7 @@ export const startImport = defineService({
         origin,
         kind: input.kind,
         status: "discover",
-        checkpoint: { origin, kind: input.kind, limits: DEFAULT_IMPORTER_LIMITS },
+        checkpoint: { origin, kind: input.kind, limits: DEFAULT_IMPORTER_LIMITS, ...(input.approvedMediaOrigins.length ? { approvedMediaOrigins: [...new Set(input.approvedMediaOrigins)] } : {}) },
         createdBy: actorString(ctx.actor),
       })
       .returning();
@@ -492,6 +495,16 @@ const mediaToFetch = z.object({
 });
 
 const archiveCommitSourceSchema = z.object({ source: retainedImportSourceSchema, plan: archivePlanSchema, previewDigest: z.string().regex(/^[a-f0-9]{64}$/), completedKeys: z.array(z.string()) });
+function genericCommitPlan(run: { origin: string | null; preview: unknown; checkpoint: unknown }) {
+  const generic = genericPreview(run.preview);
+  if (!generic) return null;
+  if (!run.origin || new URL(run.origin).origin !== new URL(generic.site.url).origin) throw new ServiceError("conflict", "The generic preview no longer matches its source origin.");
+  const allowed = allowedMediaOrigins(run.origin, approvedMediaOrigins(run.checkpoint));
+  const declared = new Set(generic.mediaOrigins ?? [new URL(generic.site.url).origin]);
+  if (allowed.size !== declared.size || [...declared].some(origin => !allowed.has(origin)) || generic.media.some(item => !allowed.has(assertPublicHttpUrl(item.sourceUrl).origin))) throw new ServiceError("conflict", "The generic preview no longer matches its approved media origins.");
+  return generic;
+}
+
 function archiveCommitSource(run: { id: string; preview: unknown; checkpoint: unknown }) {
   const plan = staticArchivePlan(run.preview);
   if (!plan) return undefined;
@@ -521,7 +534,7 @@ const commitSource = defineService({
       throw new ServiceError("conflict", "Preview the import before committing it.");
     }
     const wordpress = wordpressPreview(run.preview);
-    const generic = genericPreview(run.preview);
+    const generic = genericCommitPlan(run);
     if (generic?.report.sourceWarnings.some(warning => warning.code === "discovery-only")) throw new ServiceError("validation", "This sitemap contains addresses without their page content. Read its public source URL before committing these pages.");
     const archive = archiveCommitSource(run);
     if (run.kind === "archive" && !archive) throw new ServiceError("conflict", "Upload and preview a ZIP before committing this archive import.");
@@ -616,17 +629,17 @@ async function fetchImportMedia(
   item: z.infer<typeof mediaToFetch>,
   actor: Actor,
   claim: { id: string; previewDigest: string; token: string },
-  generic?: { origin: string; robotsTxt: string },
+  generic?: Map<string, string>,
 ): Promise<{ assetId: string } | { error: string }> {
   let uploadStarted = false;
   try {
     const target = assertPublicHttpUrl(item.sourceUrl);
-    if (generic && (target.origin !== generic.origin || robotsDisallow(generic.robotsTxt, `${target.pathname}${target.search}`))) return { error: "The source origin or its current robots policy blocks this file." };
+    if (generic && (!generic.has(target.origin) || robotsDisallow(generic.get(target.origin)!, `${target.pathname}${target.search}`))) return { error: "The approved media origin or its current robots policy blocks this file." };
     const downloaded = await getPinnedBytes(item.sourceUrl, {
       maxBytes: WORDPRESS_MEDIA_LIMITS.maxBytesPerFile,
       timeoutMs: WORDPRESS_MEDIA_LIMITS.timeoutMs,
       allowLocal: false,
-      headers: { accept: "image/avif,image/webp,image/*,video/*,audio/*,application/pdf;q=0.8,*/*;q=0.1" },
+      headers: { accept: "image/avif,image/webp,image/*,video/*,audio/*,application/pdf;q=0.8,*/*;q=0.1", ...(generic ? { "User-Agent": "Freeholder-Importer/1.0", "Accept-Encoding": "identity" } : {}) },
     });
     if (downloaded.status < 200 || downloaded.status >= 300) {
       return { error: `The old site answered HTTP ${downloaded.status}.` };
@@ -724,7 +737,7 @@ const commitApply = defineService({
     const staged = previewPages(before.preview);
     const wordpress = wordpressPreview(before.preview);
     const archive = staticArchivePlan(before.preview);
-    const generic = genericPreview(before.preview);
+    const generic = genericCommitPlan(before);
     const nonWordpress = archive ?? generic;
     if (archive) archiveCommitSource(before);
     const typedContent = Boolean(wordpress || nonWordpress);
@@ -843,8 +856,9 @@ const commitApply = defineService({
       let key: string | undefined;
       try {
         const parsed = new URL(src, `https://${hosts[0] ?? "invalid.invalid"}/`);
-        if (nonWordpress && (parsed.username || parsed.password || parsed.origin !== new URL(nonWordpress.site.url).origin)) return undefined;
+        if (nonWordpress && (parsed.username || parsed.password)) return undefined;
         if (generic) { parsed.hash = ""; return keyByAlias.get(parsed.href); }
+        if (archive && parsed.origin !== new URL(archive.site.url).origin) return undefined;
         const base = `${parsed.host.toLowerCase()}${parsed.pathname}`;
         if (archive) return keyByAlias.get(base);
         const sized = base.replace(/-\d+x\d+(\.[a-z0-9]+)$/i, "$1");
@@ -1214,12 +1228,17 @@ export const commitImport = defineOrchestratedService({
   handler: async (input, actor) => {
     const source = await commitSource.call({ id: input.id }, actor);
     if (source.completed) return publicImportRun(source.completed);
-    let genericPolicy: { origin: string; robotsTxt: string } | undefined;
+    let genericPolicy: Map<string, string> | undefined;
     if (source.generic && source.media.length) {
-      const origin = assertPublicHttpUrl(source.generic.site.url).origin;
-      const robots = await getPinnedBytes(new URL("/robots.txt", origin).href, { maxBytes: 512 * 1024, timeoutMs: 30_000, allowLocal: false, headers: { "User-Agent": "Freeholder-Importer/1.0", "Accept-Encoding": "identity", accept: "text/plain" } });
-      if (robots.status !== 404 && (robots.status !== 200 || (robots.contentType ?? "").split(";", 1)[0]!.trim().toLowerCase() !== "text/plain")) throw new ServiceError("conflict", "The source robots policy could not be verified before fetching media.");
-      genericPolicy = { origin, robotsTxt: robots.status === 404 ? "" : new TextDecoder("utf-8", { fatal: true }).decode(robots.bytes) };
+      genericPolicy = new Map();
+      const allowed = new Set(source.generic.mediaOrigins ?? [assertPublicHttpUrl(source.generic.site.url).origin]);
+      for (const origin of new Set(source.media.map(item => assertPublicHttpUrl(item.sourceUrl).origin))) {
+        if (!allowed.has(origin)) throw new ServiceError("conflict", "This source file is outside the approved media origins.");
+        if (genericPolicy.size) await pause(source.delayMs);
+        const robots = await getPinnedBytes(new URL("/robots.txt", origin).href, { maxBytes: 512 * 1024, timeoutMs: 30_000, allowLocal: false, headers: { "User-Agent": "Freeholder-Importer/1.0", "Accept-Encoding": "identity", accept: "text/plain" } });
+        if (robots.status !== 404 && (robots.status !== 200 || (robots.contentType ?? "").split(";", 1)[0]!.trim().toLowerCase() !== "text/plain")) throw new ServiceError("conflict", "The media origin's robots policy could not be verified before fetching media.");
+        genericPolicy.set(origin, robots.status === 404 ? "" : new TextDecoder("utf-8", { fatal: true }).decode(robots.bytes));
+      }
     }
     if (source.archive) {
       const archive = source.archive, completed = new Set(archive.completedKeys);
@@ -1691,7 +1710,7 @@ export function stageWordpressExport(exported: WordpressExport, origin: string):
 }
 
 /** Any supported source text as a staged preview. Throws when it cannot be read. */
-export function stageImportSource(kind: string, payload: string, origin: string, robotsTxt = ""): StagedPreview {
+export function stageImportSource(kind: string, payload: string, origin: string, robotsTxt = "", mediaOrigins: string[] = []): StagedPreview {
   if (kind === "archive") throw new ServiceError("validation", "A static archive needs a ZIP source upload.");
   if (kind === "wordpress-wxr") return stageWordpressExport(parseWordpressExport(payload), origin);
   if (kind === "wordpress-rest") {
@@ -1714,7 +1733,7 @@ export function stageImportSource(kind: string, payload: string, origin: string,
   }
   const discovered = discoverFromPublicOrigin(origin, parsed, robotsTxt);
   const allowed = new Set(discovered.pages.map(page => page.url));
-  return stageGenericPages(parsed.filter(page => allowed.has(page.url)), origin, robotsTxt);
+  return stageGenericPages(parsed.filter(page => allowed.has(page.url)), origin, robotsTxt, mediaOrigins);
 }
 
 export const previewFromSource = defineService({
@@ -1738,7 +1757,7 @@ export const previewFromSource = defineService({
     let preview: Record<string, unknown>;
     let counts: Record<string, number>;
     try {
-      ({ preview, counts } = stageImportSource(kind, input.payload, origin, input.robotsTxt ?? ""));
+      ({ preview, counts } = stageImportSource(kind, input.payload, origin, input.robotsTxt ?? "", approvedMediaOrigins(before.checkpoint)));
     } catch (error) {
       const [failed] = await ctx.tx
         .update(importRuns)
@@ -1779,7 +1798,7 @@ const crawlSource = defineService({
   permission: "scoped",
   external: false,
   input: z.object({ id: uuid, url: z.string().url() }),
-  output: z.object({ id: uuid, revision: z.string(), kind: z.string(), origin: z.string(), url: z.string() }),
+  output: z.object({ id: uuid, revision: z.string(), kind: z.string(), origin: z.string(), url: z.string(), approvedMediaOrigins: approvedMediaOriginsSchema }),
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
@@ -1789,7 +1808,7 @@ const crawlSource = defineService({
     let url: URL;
     try { url = assertPublicHttpUrl(input.url); } catch { throw new ServiceError("validation", "Use a public HTTP or HTTPS source URL without credentials."); }
     if (url.origin !== new URL(run.origin).origin) throw new ServiceError("validation", "The source URL must belong to this import's origin.");
-    return { id: run.id, revision: sourceRevision(run), kind: run.kind!, origin: run.origin, url: url.href };
+    return { id: run.id, revision: sourceRevision(run), kind: run.kind!, origin: run.origin, url: url.href, approvedMediaOrigins: approvedMediaOrigins(run.checkpoint) };
   },
 });
 
@@ -1833,7 +1852,7 @@ export const previewFromUrl = defineOrchestratedService({
       const discovered = await crawlPublicSource(source.kind as CrawlKind, source.url);
       staged = discovered.wordpress
         ? stageWordpressExport(wordpressExportFromRest(discovered.wordpress, source.origin), source.origin)
-        : stageGenericPages(discovered.pages, source.origin, discovered.robotsTxt);
+        : stageGenericPages(discovered.pages, source.origin, discovered.robotsTxt, source.approvedMediaOrigins);
       staged.counts = { ...staged.counts, crawlBlocked: discovered.report.blocked.length, crawlRequests: discovered.report.requests, crawlBytes: discovered.report.bytes };
       report = { sourceUrl: discovered.sourceUrl, ...discovered.report };
     } catch (error) {

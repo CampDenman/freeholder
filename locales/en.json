@@ -8639,5 +8639,7 @@
   "cms.block.anchor": "Link target",
   "imports.count.pagesStaged": "Pages staged",
   "imports.count.mediaFound": "Files found",
-  "imports.count.redirectsProposed": "Redirects proposed"
+  "imports.count.redirectsProposed": "Redirects proposed",
+  "imports.mediaOrigins": "Additional media origins (optional)",
+  "imports.mediaOriginsHint": "For HTML, sitemap and feeds, approve up to eight public image or file origins, one per line, such as https://images.example.com. Leave empty to import media only from the source site. Page links stay on the source site; each media origin must allow these reads."
 }

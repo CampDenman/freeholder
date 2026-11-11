@@ -8639,5 +8639,7 @@
   "cms.block.anchor": "هدف الرابط",
   "imports.count.pagesStaged": "الصفحات المُجهّزة",
   "imports.count.mediaFound": "الملفات المكتشفة",
-  "imports.count.redirectsProposed": "عمليات إعادة التوجيه المقترحة"
+  "imports.count.redirectsProposed": "عمليات إعادة التوجيه المقترحة",
+  "imports.mediaOrigins": "مصادر ملفات إضافية (اختياري)",
+  "imports.mediaOriginsHint": "لصفحات HTML وخرائط المواقع والخلاصات، اسمح بما يصل إلى ثمانية مصادر عامة للصور أو الملفات، مصدر واحد في كل سطر، مثل https://images.example.com. اتركه فارغًا لاستيراد ملفات الموقع الأصلي فقط. تبقى روابط الصفحات في الموقع الأصلي؛ ويجب أن يسمح كل مصدر ملفات بهذه القراءة."
 }
