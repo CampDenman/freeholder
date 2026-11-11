@@ -408,9 +408,12 @@ export const mailRecordSubjects = pgTable("mail_record_subjects", {
   kind: text("kind", { enum: ["delivery", "event", "suppression"] }).notNull(),
   recordId: uuid("record_id").notNull(),
   contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+  basis: text("basis", { enum: ["automatic", "owner_review"] }).notNull().default("automatic"),
+  evidenceDigest: text("evidence_digest"),
+  verifiedBy: uuid("verified_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: createdAtColumn(),
 }, t => [
-  uniqueIndex("mail_record_subjects_owned_idx").on(t.kind, t.recordId, t.contactId),
+  index("mail_record_subjects_owned_idx").on(t.kind, t.recordId, t.contactId),
   index("mail_record_subjects_contact_idx").on(t.contactId, t.kind, t.recordId),
   check("mail_record_subjects_kind", sql`${t.kind} in ('delivery','event','suppression')`),
 ]);

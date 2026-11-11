@@ -11,7 +11,7 @@ import { decryptMailOutbox, encryptMailOutbox } from "./outbox-crypto";
 const KEY_CONTEXT = "00000000-0000-4000-8000-000000000071";
 const CAPABILITY = "freeholder.mail_receipts_v1";
 const SEAL_LOCK = "freeholder-mail-receipt-seal-v1";
-export type MailReceiptKind = "address" | "send" | `event:${string}` | `provider:${string}`;
+export type MailReceiptKind = "address" | "send" | "ownership-evidence" | `event:${string}` | `provider:${string}`;
 export type MailReceipts = { digest(kind: MailReceiptKind, value: string): string };
 
 function wrappingFingerprint(): string {
@@ -30,6 +30,7 @@ export async function mailReceipts(tx: Tx): Promise<MailReceipts> {
       select 1 from mail_deliveries where recipient_digest is not null or idempotency_digest is not null or provider_ref_digest is not null
       union all select 1 from mail_provider_events where recipient_digest is not null or external_event_digest is not null or provider_ref_digest is not null
       union all select 1 from mail_suppressions where email_digest is not null
+      union all select 1 from mail_record_subjects where evidence_digest is not null
     ) as present`);
     if (existing?.present) throw new ServiceError("conflict", "The original mail receipt key is missing. Restore its exact database backup before retrying.");
     await tx.insert(mailReceiptKeys).values({ id: 1, encryptedKey: encryptMailOutbox(randomBytes(32).toString("base64url"), KEY_CONTEXT), wrappingFingerprint: fingerprint }).onConflictDoNothing();
@@ -51,8 +52,13 @@ export async function mailReceipts(tx: Tx): Promise<MailReceipts> {
 
 /** Serialize first redaction against legacy SQL writers before raw keys vanish. */
 export async function sealMailReceipts(tx: Tx): Promise<MailReceipts> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${SEAL_LOCK}))`);
-  const receipts = await mailReceipts(tx);
+  const receipts = await lockMailReceiptWrites(tx);
   await tx.update(mailReceiptKeys).set({ sealedAt: sql`coalesce(${mailReceiptKeys.sealedAt}, clock_timestamp())` }).where(eq(mailReceiptKeys.id, 1));
   return receipts;
+}
+
+/** Take the seal lock before any mail row lock; legacy writers take its shared side. */
+export async function lockMailReceiptWrites(tx: Tx): Promise<MailReceipts> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${SEAL_LOCK}))`);
+  return mailReceipts(tx);
 }

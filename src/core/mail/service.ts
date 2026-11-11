@@ -32,6 +32,11 @@ import {
 } from "@/core/mail/schema";
 import { oauthAccessTokenOutsideTransaction } from "@/core/mail/oauth";
 import { decryptMailOutbox, encryptMailOutbox } from "@/core/mail/outbox-crypto";
+import { mailReceipts } from "@/core/mail/receipts";
+import { bindMailRecord } from "@/core/mail/ownership";
+import { lockMailHolds, mailRecordIsUnheld } from "@/core/mail/record-retention";
+import mailRecordServices from "@/core/mail/record-services";
+import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import {
   PREVIEW_BULK_REFUSAL,
   previewMailActive,
@@ -124,6 +129,7 @@ const mailDeliveryRow = row({
   providerStatusAt: timestamp.nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
+  redactedAt: timestamp.nullable(),
 });
 
 const mailSuppressionRow = row({
@@ -137,7 +143,18 @@ const mailSuppressionRow = row({
   releasedBy: uuid.nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
+  redactedAt: timestamp.nullable(),
 });
+
+/** Explicit DTOs remain private even if production output validation falls back. */
+export function publicMailDelivery(value: typeof mailDeliveries.$inferSelect) {
+  const { id, senderId, purpose, provider, recipient, subject, status, holdReason, providerRef, idempotencyKey, requestedBy, attempts, lastError, submittedAt, deliveredAt, providerStatusAt, createdAt, updatedAt, redactedAt } = value;
+  return { id, senderId, purpose, provider, recipient, subject, status, holdReason, providerRef, idempotencyKey, requestedBy, attempts, lastError, submittedAt, deliveredAt, providerStatusAt, createdAt, updatedAt, redactedAt };
+}
+export function publicMailSuppression(value: typeof mailSuppressions.$inferSelect) {
+  const { email, reason, provider, sourceEventId, detail, active, releasedAt, releasedBy, createdAt, updatedAt, redactedAt } = value;
+  return { email, reason, provider, sourceEventId, detail, active, releasedAt, releasedBy, createdAt, updatedAt, redactedAt };
+}
 
 const mailConfiguration = z.object({
   transactional: z.object({
@@ -439,12 +456,16 @@ export async function sendMail(
   if (preview && purpose === "bulk") throw new ServiceError("conflict", PREVIEW_BULK_REFUSAL);
   const prepared = stagedMessage.parse({ ...message, to: message.to, marketingContactId: options.marketingContactId });
   const recipient = prepared.to;
+  if (recipient.endsWith("@retained.invalid")) throw new ServiceError("validation", "A retained receipt address is not a mail recipient.");
+  await lockContactIdentityForRead(tx);
+  const receipts = await mailReceipts(tx);
+  const recipientDigest = receipts.digest("address", recipient);
   const [suppressed] = await tx
     .select({ email: mailSuppressions.email, reason: mailSuppressions.reason })
     .from(mailSuppressions)
     .where(
       and(
-        eq(mailSuppressions.email, recipient),
+        or(and(isNull(mailSuppressions.redactedAt), eq(mailSuppressions.email, recipient)), eq(mailSuppressions.emailDigest, recipientDigest)),
         eq(mailSuppressions.active, true),
       ),
     )
@@ -508,8 +529,10 @@ export async function sendMail(
         purpose,
         provider: route.provider,
         recipient,
+        recipientDigest,
         subject: prepared.subject,
         idempotencyKey: options.idempotencyKey,
+        idempotencyDigest: receipts.digest("send", options.idempotencyKey),
         requestedBy: options.requestedBy ?? "system",
         ...(holdReason ? { status: "held" as const, holdReason } : {}),
       })
@@ -524,7 +547,7 @@ export async function sendMail(
           status: mailDeliveries.status,
         })
         .from(mailDeliveries)
-        .where(eq(mailDeliveries.idempotencyKey, options.idempotencyKey))
+        .where(or(eq(mailDeliveries.idempotencyKey, options.idempotencyKey), eq(mailDeliveries.idempotencyDigest, receipts.digest("send", options.idempotencyKey))))
         .limit(1);
       if (!existing) {
         throw new Error("Mail delivery idempotency conflict could not be resolved.");
@@ -551,6 +574,7 @@ export async function sendMail(
         purpose,
         provider: route.provider,
         recipient,
+        recipientDigest,
         subject: prepared.subject,
         requestedBy: options.requestedBy ?? "system",
         ...(holdReason ? { status: "held" as const, holdReason } : {}),
@@ -560,6 +584,7 @@ export async function sendMail(
   if (!inserted) {
     throw new Error("The queued mail delivery could not be created.");
   }
+  await bindMailRecord(tx, "delivery", inserted.id, { email: recipient, contactId: options.marketingContactId });
 
   const finalMessage: StagedMessage = {
     ...prepared,
@@ -628,16 +653,19 @@ async function finishQueuedMail(
 ): Promise<void> {
   const events: Array<{ id: string; eventName: string; payload: unknown }> = [];
   await db().transaction(async (tx) => {
+    const receipts = await mailReceipts(tx);
+    const [current] = await tx.select().from(mailDeliveries).where(eq(mailDeliveries.id, deliveryId)).limit(1).for("update");
+    if (!current) return;
     const [delivery] = await tx
       .update(mailDeliveries)
-      .set({ ...values, updatedAt: new Date() })
+      .set({ ...values, ...(values.providerRef ? { providerRefDigest: receipts.digest(`provider:${current.provider}`, values.providerRef) } : {}), updatedAt: new Date() })
       .where(eq(mailDeliveries.id, deliveryId))
       .returning({ recipient: mailDeliveries.recipient });
     if (alsoRecord) await alsoRecord(tx);
     await tx.delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
     if (delivery && (values.status === "suppressed" || values.status === "failed")) {
       const eventName = "mail.deliveryUpdated";
-      const payload = { deliveryId, recipient: delivery.recipient, type: values.status };
+      const payload = { deliveryId, type: values.status };
       events.push({ id: await enqueue(tx, eventName, payload), eventName, payload });
     }
   });
@@ -662,7 +690,8 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
   // the owner, so a stray job for it must leave the outbox row alone.
   if (queued.delivery.status === "held") return { status: "held" };
   if (!["queued", "failed"].includes(queued.delivery.status)) {
-    await db().delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
+    // A stray/replayed job does not settle a previous physical attempt.
+    // Preserve the outstanding body/evidence rather than guessing its result.
     return { status: "missing" };
   }
   if (playgroundBlocksExternalDelivery(env())) {
@@ -691,16 +720,12 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
     return { status: "failed" };
   }
 
-  const [suppressed] = await db()
-    .select({ reason: mailSuppressions.reason })
-    .from(mailSuppressions)
-    .where(
-      and(
-        eq(mailSuppressions.email, queued.delivery.recipient),
-        eq(mailSuppressions.active, true),
-      ),
-    )
-    .limit(1);
+  const [suppressed] = await db().transaction(async tx => {
+    const receipts = await mailReceipts(tx);
+    return tx.select({ reason: mailSuppressions.reason }).from(mailSuppressions).where(and(
+      or(and(isNull(mailSuppressions.redactedAt), eq(mailSuppressions.email, queued.delivery.recipient)), eq(mailSuppressions.emailDigest, receipts.digest("address", queued.delivery.recipient))), eq(mailSuppressions.active, true),
+    )).limit(1);
+  });
   if (suppressed) {
     await finishQueuedMail(deliveryId, {
       status: "suppressed",
@@ -718,10 +743,15 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
     }
   }
 
-  await db()
-    .update(mailDeliveries)
-    .set({ attempts: sql`${mailDeliveries.attempts} + 1`, updatedAt: new Date() })
-    .where(eq(mailDeliveries.id, deliveryId));
+  const claimed = await db().transaction(async tx => {
+    await mailReceipts(tx);
+    const [row] = await tx.update(mailDeliveries).set({ attempts: sql`${mailDeliveries.attempts} + 1`, updatedAt: new Date() }).where(and(
+      eq(mailDeliveries.id, deliveryId), inArray(mailDeliveries.status, ["queued", "failed"]), isNull(mailDeliveries.redactedAt),
+      sql`exists(select 1 from ${mailOutbox} where ${mailOutbox.deliveryId}=${mailDeliveries.id} and ${mailOutbox.createdAt} >= clock_timestamp()-interval '30 days')`,
+    )).returning({ id: mailDeliveries.id });
+    return row;
+  });
+  if (!claimed) return { status: "missing" };
 
   try {
     const sender = queued.delivery.senderId
@@ -774,25 +804,32 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
       error instanceof MailAdapterError
         ? error.retryable
         : !(error instanceof ServiceError);
-    await db()
-      .update(mailDeliveries)
-      .set({
+    await db().transaction(async tx => {
+      await mailReceipts(tx);
+      await tx.update(mailDeliveries).set({
         status: retryable ? "queued" : "failed",
         lastError: safeDeliveryError(error),
         updatedAt: new Date(),
       })
       .where(eq(mailDeliveries.id, deliveryId));
+    });
     if (retryable) throw error;
-    await db().delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
+    // An adapter's non-retryable error can still have an unknown provider
+    // outcome. Keep its original private evidence until it is settled.
     return { status: "failed" };
   }
 }
 
 export async function pruneExpiredMailOutbox(): Promise<number> {
   const expired = await db().transaction(async (tx) => {
+    await lockContactIdentityForRead(tx);
+    const held = await lockMailHolds(tx);
+    await mailReceipts(tx);
     const rows = await tx
       .delete(mailOutbox)
-      .where(sql`${mailOutbox.createdAt} < now() - interval '30 days'`)
+      .where(sql`${mailOutbox.createdAt} < now() - interval '30 days' and exists(
+        select 1 from ${mailDeliveries} where ${mailDeliveries.id}=${mailOutbox.deliveryId} and ${mailDeliveries.attempts}=0 and ${mailRecordIsUnheld("delivery", mailDeliveries.id, held) ?? sql`true`}
+      )`)
       .returning({ deliveryId: mailOutbox.deliveryId });
     if (rows.length > 0) {
       const ids = rows.map((row) => row.deliveryId);
@@ -910,8 +947,8 @@ export const mailStatus = defineService({
     return {
       configuration: mailConfigurationStatus(),
       senders,
-      deliveries,
-      suppressions,
+      deliveries: deliveries.map(publicMailDelivery),
+      suppressions: suppressions.map(publicMailSuppression),
     };
   },
 });
@@ -1336,6 +1373,7 @@ export const testMailSender = defineService({
 
 export const releaseMailSuppression = defineService({
   name: "mail.releaseSuppression",
+  auditInputFields: [],
   summary: "Release an address after its correction or explicit verification.",
   kind: "mutation",
   permission: "scoped",
@@ -1348,6 +1386,8 @@ export const releaseMailSuppression = defineService({
     if (input.confirmation !== input.email) {
       throw new ServiceError("validation", "Type the exact email address to release it.");
     }
+    await lockContactIdentityForRead(ctx.tx);
+    const receipts = await mailReceipts(ctx.tx);
     const [row] = await ctx.tx
       .update(mailSuppressions)
       .set({
@@ -1355,12 +1395,12 @@ export const releaseMailSuppression = defineService({
         releasedAt: new Date(),
         releasedBy: ctx.actor.kind === "user" ? ctx.actor.userId : null,
       })
-      .where(and(eq(mailSuppressions.email, input.email), eq(mailSuppressions.active, true)))
+      .where(and(or(and(isNull(mailSuppressions.redactedAt), eq(mailSuppressions.email, input.email)), eq(mailSuppressions.emailDigest, receipts.digest("address", input.email))), eq(mailSuppressions.active, true)))
       .returning();
     if (!row) throw new ServiceError("not_found", "That address is not suppressed.");
-    ctx.setSubject("mail_suppression", input.email);
-    ctx.queueEvent("mail.suppressionReleased", { email: input.email });
-    return row;
+    ctx.setSubject("mail_suppression", row.id);
+    ctx.queueEvent("mail.suppressionReleased", { id: row.id });
+    return publicMailSuppression(row);
   },
 });
 
@@ -1407,6 +1447,7 @@ export const recordMailProviderEvent = defineService({
     rawDigest: z.string().length(64),
     occurredAt: z.iso.datetime(),
   }),
+  auditInputFields: ["provider", "eventType", "occurredAt"],
   output: z.union([
     z.object({ duplicate: z.literal(true) }),
     z.object({ id: uuid, duplicate: z.literal(false) }),
@@ -1415,24 +1456,37 @@ export const recordMailProviderEvent = defineService({
     if (ctx.actor.kind !== "system") {
       throw new ServiceError("permission", "Only an authenticated provider webhook may record this event.");
     }
+    await lockContactIdentityForRead(ctx.tx);
+    const receipts = await mailReceipts(ctx.tx);
+    const recipientDigest = receipts.digest("address", input.recipient);
+    const providerRefDigest = input.providerRef ? receipts.digest(`provider:${input.provider}`, input.providerRef) : undefined;
     const [delivery] = input.providerRef
       ? await ctx.tx
-          .select({ id: mailDeliveries.id })
+          .select({ id: mailDeliveries.id, redactedAt: mailDeliveries.redactedAt })
           .from(mailDeliveries)
           .where(
             and(
               eq(mailDeliveries.provider, input.provider),
-              eq(mailDeliveries.providerRef, input.providerRef),
+              or(eq(mailDeliveries.providerRef, input.providerRef), eq(mailDeliveries.providerRefDigest, providerRefDigest!)),
             ),
           )
           .limit(1)
       : [];
     const occurredAt = new Date(input.occurredAt);
+    const [priorMinimized] = await ctx.tx.execute<{ present: boolean }>(sql`select exists(
+      select 1 from ${mailDeliveries} where ${mailDeliveries.recipientDigest}=${recipientDigest} and ${mailDeliveries.redactedAt} is not null
+      union all select 1 from ${mailProviderEvents} where ${mailProviderEvents.recipientDigest}=${recipientDigest} and ${mailProviderEvents.redactedAt} is not null
+      union all select 1 from ${mailSuppressions} where ${mailSuppressions.emailDigest}=${recipientDigest} and ${mailSuppressions.redactedAt} is not null
+    ) as present`);
     const [event] = await ctx.tx
       .insert(mailProviderEvents)
       .values({
         ...input,
+        recipientDigest,
+        externalEventDigest: receipts.digest(`event:${input.provider}`, input.externalEventId),
+        providerRefDigest,
         deliveryId: delivery?.id,
+        redactedAt: priorMinimized?.present ? new Date() : null,
         occurredAt,
       })
       .onConflictDoNothing()
@@ -1440,6 +1494,7 @@ export const recordMailProviderEvent = defineService({
     if (!event) {
       return { duplicate: true } as const;
     }
+    await bindMailRecord(ctx.tx, "event", event.id, { email: input.recipient, at: occurredAt, ...(delivery ? { parent: { kind: "delivery", id: delivery.id } } : {}) });
     const status =
       input.eventType === "delivered"
         ? "delivered"
@@ -1510,18 +1565,30 @@ export const recordMailProviderEvent = defineService({
           : input.eventType === "complaint"
             ? "complaint"
             : "provider";
-      await ctx.tx
+      // Upgrade a legacy raw-address row under its own lock before using the
+      // new keyed conflict target. No contact is created by a provider fact.
+      const [legacy] = await ctx.tx.select().from(mailSuppressions).where(or(eq(mailSuppressions.email, input.recipient), eq(mailSuppressions.emailDigest, recipientDigest))).limit(1).for("update");
+      if (legacy && !legacy.emailDigest) await ctx.tx.update(mailSuppressions).set({ emailDigest: recipientDigest }).where(eq(mailSuppressions.id, legacy.id));
+      const suppressionId = legacy?.id ?? randomUUID();
+      const minimized = legacy?.redactedAt ?? delivery?.redactedAt ?? null;
+      const [suppression] = await ctx.tx
         .insert(mailSuppressions)
         .values({
-          email: input.recipient,
+          id: suppressionId,
+          email: minimized ? `redacted-${suppressionId}@retained.invalid` : input.recipient,
+          redactedAt: minimized,
+          emailDigest: recipientDigest,
           reason,
           provider: input.provider,
           sourceEventId: event.id,
           detail: input.detail,
         })
         .onConflictDoUpdate({
-          target: mailSuppressions.email,
+          target: mailSuppressions.emailDigest,
+          targetWhere: sql`${mailSuppressions.emailDigest} is not null`,
           set: {
+            email: sql`case when ${mailSuppressions.redactedAt} is not null then ${mailSuppressions.email} else excluded.email end`,
+            redactedAt: sql`coalesce(${mailSuppressions.redactedAt},excluded.redacted_at)`,
             reason,
             provider: input.provider,
             sourceEventId: event.id,
@@ -1535,20 +1602,21 @@ export const recordMailProviderEvent = defineService({
             isNull(mailSuppressions.releasedAt),
             lte(mailSuppressions.releasedAt, occurredAt),
           ),
-        });
+        }).returning({ id: mailSuppressions.id });
+      if (suppression) await bindMailRecord(ctx.tx, "suppression", suppression.id, { parent: { kind: "event", id: event.id } });
     }
     ctx.setSubject("mail_provider_event", event.id);
     ctx.queueEvent("mail.deliveryUpdated", {
       eventId: event.id,
       deliveryId: delivery?.id,
       type: input.eventType,
-      recipient: input.recipient,
     });
     return { id: event.id, duplicate: false } as const;
   },
 });
 
 export default [
+  ...mailRecordServices,
   mailStatus,
   mailReadiness,
   registerMailSender,

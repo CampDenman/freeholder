@@ -17,6 +17,8 @@ import { consentRecords } from "@/core/privacy/schema";
 import { db } from "@/core/db";
 import { registerRetentionSource, RETENTION_PURGE_BATCH } from "@/core/retention/registry";
 import type { Tx } from "@/core/service";
+import "./record-retention";
+import "./record-privacy";
 
 export const PROVIDER_GRANTS_SCOPE = "mail.provider_grants";
 

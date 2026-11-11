@@ -8685,5 +8685,21 @@
   "imports.count.mediaFound": "Archivos encontrados",
   "imports.count.redirectsProposed": "Redirecciones propuestas",
   "imports.mediaOrigins": "Orígenes de archivos adicionales (opcional)",
-  "imports.mediaOriginsHint": "Para HTML, mapas del sitio y feeds, autoriza hasta ocho orígenes públicos de imágenes o archivos, uno por línea, como https://images.example.com. Déjalo vacío para importar archivos solo del sitio de origen. Los enlaces de páginas siguen en ese sitio; cada origen de archivos debe permitir la lectura."
+  "imports.mediaOriginsHint": "Para HTML, mapas del sitio y feeds, autoriza hasta ocho orígenes públicos de imágenes o archivos, uno por línea, como https://images.example.com. Déjalo vacío para importar archivos solo del sitio de origen. Los enlaces de páginas siguen en ese sitio; cada origen de archivos debe permitir la lectura.",
+  "admin.retention.mail.title": "Revisar la titularidad del correo",
+  "admin.retention.mail.intro": "El correo antiguo puede ser anterior a los registros de titularidad. Verifica la persona original y la fecha mediante correspondencia fiable. La coincidencia de dirección no es suficiente. Solo se conserva un comprobante privado de la revisión. Los envíos sin resolver y el historial sin revisar mantienen pendiente la eliminación.",
+  "admin.retention.mail.saved": "Revisión registrada. Reintenta la tarea de privacidad pendiente.",
+  "admin.retention.mail.failed": "No se pudo guardar la revisión. Recarga el registro, comprueba los permisos de contactos y completa una verificación de seguridad reciente.",
+  "admin.retention.mail.address": "Dirección de correo histórica",
+  "admin.retention.mail.search": "Buscar contacto por nombre o correo",
+  "admin.retention.mail.find": "Buscar registros",
+  "admin.retention.mail.unavailable": "Tus permisos actuales no permiten esta revisión.",
+  "admin.retention.mail.empty": "No hay registros pendientes que coincidan.",
+  "admin.retention.mail.contact": "Contacto original verificado",
+  "admin.retention.mail.choose": "Elige un contacto",
+  "admin.retention.mail.evidence": "¿Cómo verificaste la titularidad original?",
+  "admin.retention.mail.confirm": "Verifiqué que este registro pertenecía a la persona seleccionada en la fecha indicada.",
+  "admin.retention.mail.review": "Registrar titularidad verificada",
+  "mail.retainedAddress": "Dirección eliminada; el bloqueo sigue activo. Introduce la dirección original verificada de forma independiente para liberarla.",
+  "admin.retention.mail.record": "Registro histórico de correo"
 }

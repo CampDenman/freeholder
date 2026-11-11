@@ -17,6 +17,7 @@ import resetServices from "@/core/auth/reset";
 import "@/core/runs/spine";
 // The same for the mail carrier grants (C3.31): export, erasure, retention.
 import "@/core/mail/privacy";
+import "@/core/mail/ownership";
 import agentServices from "@/core/agents/service";
 import agentExecution from "@/core/agents/execution";
 import agentWrites from "@/core/agents/writes";

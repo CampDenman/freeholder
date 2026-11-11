@@ -1524,7 +1524,7 @@ export async function releaseMailSuppressionAction(
   try {
     await releaseMailSuppression.call(
       {
-        email: field(form, "email"),
+        email: field(form, "email") || field(form, "confirmation"),
         confirmation: field(form, "confirmation"),
       },
       await currentActor(),

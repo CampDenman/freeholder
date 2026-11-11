@@ -8685,5 +8685,21 @@
   "imports.count.mediaFound": "Files found",
   "imports.count.redirectsProposed": "Redirects proposed",
   "imports.mediaOrigins": "Additional media origins (optional)",
-  "imports.mediaOriginsHint": "For HTML, sitemap and feeds, approve up to eight public image or file origins, one per line, such as https://images.example.com. Leave empty to import media only from the source site. Page links stay on the source site; each media origin must allow these reads."
+  "imports.mediaOriginsHint": "For HTML, sitemap and feeds, approve up to eight public image or file origins, one per line, such as https://images.example.com. Leave empty to import media only from the source site. Page links stay on the source site; each media origin must allow these reads.",
+  "admin.retention.mail.title": "Mail ownership review",
+  "admin.retention.mail.intro": "Old mail may predate contact ownership records. Verify the original person and record date using authoritative correspondence. An address match alone is insufficient. Only a private receipt of your review is retained. Unresolved sends and unreviewed history keep erasure pending.",
+  "admin.retention.mail.saved": "Ownership review recorded. Retry the pending privacy job.",
+  "admin.retention.mail.failed": "The review could not be saved. Reload the record, check your contact permissions and complete fresh security verification before retrying.",
+  "admin.retention.mail.address": "Historical email address",
+  "admin.retention.mail.search": "Find contact by name or email",
+  "admin.retention.mail.find": "Find records",
+  "admin.retention.mail.unavailable": "This review is unavailable with your current permissions.",
+  "admin.retention.mail.empty": "No unreviewed records match.",
+  "admin.retention.mail.contact": "Verified original contact",
+  "admin.retention.mail.choose": "Choose a contact",
+  "admin.retention.mail.evidence": "How did you verify original ownership?",
+  "admin.retention.mail.confirm": "I verified this record belonged to the selected person at the recorded date.",
+  "admin.retention.mail.review": "Record verified ownership",
+  "mail.retainedAddress": "Address removed; the block remains active. Enter the independently verified original address to release it.",
+  "admin.retention.mail.record": "Historical mail fact"
 }
