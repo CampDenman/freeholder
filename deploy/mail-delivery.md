@@ -78,6 +78,14 @@ configured. It does not prove domain ownership, SPF, DKIM, DMARC or inbox
 placement; use **Send test** to your own account and confirm those records with
 the mailbox provider.
 
+SMTP now requires verified TLS: port 465 selects implicit TLS; other ports
+require STARTTLS. Set `SMTP_SECURE=true` for implicit TLS on a custom port.
+`SMTP_TLS_CA` may contain a private server's public CA; verification stays on.
+Unknown physical outcomes cannot be retried automatically. Use the fresh-human
+review under **Admin → Retention → Mail recovery**, with original-server and
+stopped-caller evidence. See `mail-dispatch-recovery.md` for migration 72,
+original-route binding, legal holds and matching-backup recovery.
+
 ### Paradise Modern
 
 `MAIL_ADAPTER=paradise` sends account mail through Paradise Modern, one

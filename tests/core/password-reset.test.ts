@@ -23,6 +23,7 @@ import {
   truncateSpine,
 } from "../helpers/spine";
 import { flushQueuedMail } from "../helpers/mail";
+import { historicalMailFixture } from "../helpers/mail-fixture";
 
 const EMAIL = "owner@example.test";
 const OLD = "the-original-owner-password";
@@ -79,11 +80,11 @@ describe.runIf(hasDatabase)("asking for a reset", () => {
   });
 
   it("does not reveal a known account when delivery is suppressed", async () => {
-    await db().insert(mailSuppressions).values({
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({
       email: EMAIL,
       reason: "manual",
       provider: "manual",
-    });
+    }));
     const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const known = await requestPasswordReset.call({ email: EMAIL }, ANONYMOUS);
     const unknown = await requestPasswordReset.call(

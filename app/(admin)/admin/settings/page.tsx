@@ -16,6 +16,7 @@ import { currentBusiness } from "@/core/settings/read";
 import { listModules } from "@/core/settings/service";
 import { hasModuleAccess, type Actor } from "@/core/service";
 import { mailStatus } from "@/core/mail/service";
+import { MAIL_RECIPIENT_RETIRED, MAIL_ROUTE_CHANGED } from "@/core/mail/dispatch-state";
 import { previewMailActive } from "@/core/mail/preview";
 import { MailSettingsCard } from "./MailSettingsCard";
 import { ready } from "@/core/runtime";
@@ -68,7 +69,7 @@ export default async function AdminSettingsPage({
     webhooks: hasModuleAccess(actor, "webhooks", "manage"),
   });
   const mailAccess = hasModuleAccess(actor, "mail", "view")
-    ? await loadMailAccess(actor, locale)
+    ? await loadMailAccess(actor, locale, t)
     : null;
 
   return (
@@ -198,6 +199,7 @@ export default async function AdminSettingsPage({
       {mailAccess && previewMailActive() ? (
         <a className="text-sm font-medium text-accent underline" href="/admin/mail">{t("mail.preview.link")}</a>
       ) : null}
+      {mailAccess && hasModuleAccess(actor, "mail", "manage") ? <a className="text-sm font-medium text-accent underline" href="/admin/retention/mail/recovery">{t("mail.recovery.link")}</a> : null}
       {mailAccess ? (
         <MailSettingsCard
           {...mailAccess}
@@ -281,6 +283,7 @@ export default async function AdminSettingsPage({
             deliveryStatuses: {
               queued: t("mail.delivery.queued"),
               submitted: t("mail.delivery.submitted"),
+              unknown: t("mail.delivery.unknown"),
               delivered: t("mail.delivery.delivered"),
               bounced: t("mail.delivery.bounced"),
               complained: t("mail.delivery.complained"),
@@ -404,7 +407,7 @@ function mailNotice(
   }
 }
 
-async function loadMailAccess(actor: Actor, locale: string) {
+async function loadMailAccess(actor: Actor, locale: string, t: Awaited<ReturnType<typeof getT>>) {
   const status = await mailStatus.call({ limit: 25 }, actor);
   const exact = new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
@@ -431,7 +434,7 @@ async function loadMailAccess(actor: Actor, locale: string) {
       subject: delivery.subject,
       status: delivery.status,
       attempts: delivery.attempts,
-      detail: delivery.lastError,
+      detail: delivery.status === "unknown" ? t("mail.recovery.pending") : delivery.lastError === MAIL_ROUTE_CHANGED ? t("mail.recovery.routeChanged") : delivery.lastError === MAIL_RECIPIENT_RETIRED ? t("mail.recovery.recipientRetired") : delivery.lastError,
       when: exact.format(delivery.createdAt),
     })),
     suppressions: status.suppressions.map((suppression) => ({

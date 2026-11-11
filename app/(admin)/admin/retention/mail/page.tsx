@@ -25,6 +25,7 @@ export default async function MailOwnershipPage({ searchParams }: { searchParams
   const date = (value: Date) => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(value);
   return <div className="grid gap-6">
     <div><h1 className="text-xl font-bold">{t("admin.retention.mail.title")}</h1><p className="mt-2 max-w-prose text-sm text-ink-muted">{t("admin.retention.mail.intro")}</p></div>
+    <a className="text-sm underline" href="/admin/retention/mail/recovery">{t("mail.recovery.link")}</a>
     {query.saved ? <p role="status">{t("admin.retention.mail.saved")}</p> : null}
     {query.error ? <p role="alert" className="text-danger">{t("admin.retention.mail.failed")}</p> : null}
     {!canReview ? <a className="text-sm underline" href={`/security/verify?returnTo=${encodeURIComponent(reviewPath)}`}>{t("security.verify.title")}</a> : null}

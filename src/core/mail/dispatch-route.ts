@@ -10,13 +10,15 @@ import type { MailProvider } from "@/adapters/mail/types";
 import { paradiseBaseUrl } from "@/adapters/paradise/config";
 import { mailReceipts, type MailReceipts } from "./receipts";
 import { decryptMailOutbox, encryptMailOutbox } from "./outbox-crypto";
-import { mailDispatchRequests, mailSenders } from "./schema";
+import { mailDispatchRequests } from "./schema";
+import type { mailSenders } from "./schema";
 
 export const dispatchRouteSchema = z.object({
   provider: z.string().min(1).max(40), purpose: z.enum(["transactional", "bulk"]),
   from: z.string().max(998), senderId: z.uuid().nullable(),
   connectionId: z.uuid().nullable(), providerAccountId: z.string().max(2_000).nullable(),
   host: z.string().max(2_000).nullable(), port: z.number().int().nullable(),
+  tlsMode: z.enum(["implicit_tls", "required_starttls"]).nullable(),
   user: z.string().max(2_000).nullable(), providerIdentity: z.string().max(2_000).nullable(),
   authorizationDigest: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
@@ -31,7 +33,7 @@ export async function originalMailRoute(tx: Tx, input: MailRouteInput, receipts:
     ? await tx.select({ providerAccountId: connectedAccounts.providerAccountId }).from(connectedAccounts).where(eq(connectedAccounts.id, sender.connectedAccountId)).limit(1)
     : [];
   if (sender?.connectedAccountId && !account) throw new ServiceError("conflict", "The original connected mail account is unavailable.");
-  const credentials = input.provider === "smtp" ? [current.SMTP_USER ?? null, current.SMTP_PASSWORD ?? null]
+  const credentials = input.provider === "smtp" ? [current.SMTP_USER ?? null, current.SMTP_PASSWORD ?? null, current.SMTP_TLS_CA ?? null]
     : input.provider === "resend" ? [current.RESEND_API_KEY ?? null]
       : input.provider === "postmark" ? [current.POSTMARK_SERVER_TOKEN ?? null, current.POSTMARK_MESSAGE_STREAM ?? null]
         : input.provider === "ses" ? [current.SES_ACCESS_KEY_ID ?? null, current.SES_SECRET_ACCESS_KEY ?? null, current.SES_REGION ?? null, current.SES_CONFIGURATION_SET ?? null]
@@ -49,6 +51,7 @@ export async function originalMailRoute(tx: Tx, input: MailRouteInput, receipts:
               : input.provider === "postmark" ? "https://api.postmarkapp.com/email"
                 : input.provider === "ses" ? `https://email.${current.SES_REGION ?? ""}.amazonaws.com/v2/email/outbound-emails` : null,
     port: input.provider === "smtp" ? Number(current.SMTP_PORT ?? "587") : null,
+    tlsMode: input.provider === "smtp" ? (current.SMTP_SECURE === "true" || (current.SMTP_SECURE === undefined && Number(current.SMTP_PORT ?? "587") === 465) ? "implicit_tls" : "required_starttls") : null,
     user: input.provider === "smtp" ? current.SMTP_USER ?? null : null,
     providerIdentity: sender?.providerIdentity ?? null,
     authorizationDigest: receipts.digest("dispatch-authorization", JSON.stringify(credentials)),
@@ -66,6 +69,6 @@ export function readOriginalMailRoute(encrypted: string, deliveryId: string): Di
 }
 /** No hashes, credentials or private lookup authority in operator DTOs. */
 export function publicOriginalMailRoute(route: DispatchRoute) {
-  const { provider, purpose, from, senderId, connectionId, providerAccountId, host, port, user, providerIdentity } = route;
-  return { provider, purpose, from, senderId, connectionId, providerAccountId, host, port, user, providerIdentity };
+  const { provider, purpose, from, senderId, connectionId, providerAccountId, host, port, tlsMode, user, providerIdentity } = route;
+  return { provider, purpose, from, senderId, connectionId, providerAccountId, host, port, tlsMode, user, providerIdentity };
 }

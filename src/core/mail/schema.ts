@@ -184,6 +184,7 @@ export const mailDeliveries = pgTable(
       enum: [
         "queued",
         "submitted",
+        "unknown",
         "delivered",
         "bounced",
         "complained",
@@ -237,7 +238,7 @@ export const mailDeliveries = pgTable(
     ),
     check(
       "mail_deliveries_status_allowed",
-      sql`${t.status} in ('queued', 'submitted', 'delivered', 'bounced', 'complained', 'failed', 'suppressed', 'held')`,
+      sql`${t.status} in ('queued', 'submitted', 'unknown', 'delivered', 'bounced', 'complained', 'failed', 'suppressed', 'held')`,
     ),
     check(
       "mail_deliveries_hold_reason_allowed",
@@ -300,6 +301,10 @@ export const mailDispatches = pgTable("mail_dispatches", {
   attempt: integer("attempt").notNull(),
   state: text("state", { enum: ["running", "unknown", "submitted", "not_submitted"] }).notNull(),
   providerRef: text("provider_ref"),
+  replyProviderRef: text("reply_provider_ref"),
+  replyEvidenceDigest: text("reply_evidence_digest"),
+  initialReviewDigest: text("initial_review_digest"),
+  initialReviewedAt: timestamp("initial_reviewed_at", { withTimezone: true }),
   /** Private keyed evidence receipt; operator prose is never persisted. */
   resolutionDigest: text("resolution_digest"),
   resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
@@ -323,6 +328,8 @@ export const mailLegacyResolutions = pgTable("mail_legacy_resolutions", {
   originalDigest: text("original_digest").notNull(),
   outcome: text("outcome", { enum: ["submitted", "not_submitted"] }).notNull(),
   evidenceDigest: text("evidence_digest").notNull(),
+  providerRef: text("provider_ref"),
+  redactedAt: timestamp("redacted_at", { withTimezone: true }),
   resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: createdAtColumn(),
 }, t => [check("mail_legacy_resolutions_outcome", sql`${t.outcome} in ('submitted','not_submitted')`)]);

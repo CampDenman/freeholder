@@ -46,6 +46,7 @@ import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 import { flushQueuedMail } from "../helpers/mail";
 import { waitForBlockedQuery } from "../helpers/database-lock";
 import { POST as unsubscribePost } from "../../app/unsubscribe/route";
+import { historicalMailFixture } from "../helpers/mail-fixture";
 
 const BUSINESS = {
   name: "Aurora Coast Studio",
@@ -246,12 +247,12 @@ describe.runIf(hasDatabase)("broadcasts", () => {
       OWNER,
     );
     // Reason and provider have to agree: an owner suppression names itself.
-    await db().insert(mailSuppressions).values({
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({
       email: "blocked@example.test",
       reason: "manual",
       provider: "manual",
       active: true,
-    });
+    }));
     const [noAddress] = await db().insert(contacts).values({ name: "No Address" }).returning();
 
     const segment = await saveSegment.call(
@@ -462,11 +463,11 @@ describe.runIf(hasDatabase)("broadcasts", () => {
     const { segment } = await audience(3);
     // An owner marking somebody do-not-email: the schema insists reason and
     // provider agree, so a manual suppression names itself as one.
-    await db().insert(mailSuppressions).values({
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({
       email: "person1@example.com",
       reason: "manual",
       provider: "manual",
-    });
+    }));
     const template = await ready_();
     const saved = await saveBroadcast.call(
       { name: "Resilient", templateId: template.id, segmentId: segment.id },

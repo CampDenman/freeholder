@@ -21,6 +21,7 @@ import { startJobProducer, stopJobs } from "@/core/jobs";
 import { ready } from "@/core/runtime";
 import {
   mailDeliveries,
+  mailDispatches,
   mailOutbox,
   mailProviderEvents,
   mailProviderGrants,
@@ -47,6 +48,7 @@ import {
   STAFF,
   truncateSpine,
 } from "../helpers/spine";
+import { historicalMailFixture } from "../helpers/mail-fixture";
 
 const changedEnvironment = new Map<string, string | undefined>();
 
@@ -319,10 +321,11 @@ describe.runIf(hasDatabase)("mail services", () => {
     // The widened constraint accepts the new provider on the delivery row.
     expect(queued).toMatchObject({ provider: "paradise", delivers: true });
     await expect(deliverQueuedMail(queued.id)).resolves.toEqual({ status: "submitted" });
+    const [dispatch] = await db().select().from(mailDispatches).where(eq(mailDispatches.deliveryId, queued.id));
     expect(bodies[0]).toMatchObject({
       to: "person@example.test",
       permission: { purpose: "transactional", reason: "authentication", eventRef: "password-reset:abc" },
-      requestId: `freeholder:${queued.id}`,
+      requestId: `freeholder:${dispatch!.id}`,
     });
     // Staging fields never reach the provider as content.
     expect(bodies[0]).not.toHaveProperty("transactionalReason");
@@ -599,7 +602,7 @@ describe.runIf(hasDatabase)("mail services", () => {
     expect(await db().select().from(mailOutbox)).toEqual([]);
   });
 
-  it("keeps ciphertext and queued status while a retryable provider failure recovers", async () => {
+  it("retains an unknown outcome without retrying when the original provider reply is lost", async () => {
     environment({
       MAIL_BULK_ADAPTER: "resend",
       MAIL_BULK_FROM: "news@example.test",
@@ -635,30 +638,26 @@ describe.runIf(hasDatabase)("mail services", () => {
       ),
     );
 
-    await expect(deliverQueuedMail(queued.id)).rejects.toThrow(
-      "mail provider could not be reached",
-    );
+    const [original] = await db().select().from(mailOutbox);
+    await expect(deliverQueuedMail(queued.id)).resolves.toEqual({ status: "unknown" });
     let [delivery] = await db()
       .select()
       .from(mailDeliveries)
       .where(eq(mailDeliveries.id, queued.id));
-    expect(delivery).toMatchObject({ status: "queued", attempts: 1 });
-    expect(await db().select().from(mailOutbox)).toHaveLength(1);
+    expect(delivery).toMatchObject({ status: "unknown", attempts: 1 });
+    expect(await db().select().from(mailOutbox)).toEqual([original]);
 
-    await expect(deliverQueuedMail(queued.id)).resolves.toEqual({ status: "submitted" });
+    await expect(deliverQueuedMail(queued.id)).resolves.toEqual({ status: "missing" });
     [delivery] = await db()
       .select()
       .from(mailDeliveries)
       .where(eq(mailDeliveries.id, queued.id));
     expect(delivery).toMatchObject({
-      status: "submitted",
-      attempts: 2,
-      providerRef: "provider-message-1",
-      lastError: null,
+      status: "unknown",
+      attempts: 1,
+      providerRef: null,
     });
-    expect(providerCall).toHaveBeenCalledTimes(2);
-    // The second request's success is not a final outcome for the first
-    // request whose response was lost. Its private original stays pending.
+    expect(providerCall).toHaveBeenCalledTimes(1);
     expect(await db().select().from(mailOutbox)).toHaveLength(1);
   });
 
@@ -685,11 +684,11 @@ describe.runIf(hasDatabase)("mail services", () => {
       ),
     ).rejects.toThrow("default bulk sender");
 
-    await db().insert(mailSuppressions).values({
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({
       email: "person@example.test",
       reason: "manual",
       provider: "manual",
-    });
+    }));
     await expect(
       db().transaction((tx) =>
         sendMail(tx, {
@@ -736,7 +735,7 @@ describe.runIf(hasDatabase)("mail services", () => {
 
   it("records provider effects once and prevents late status regression", async () => {
     const deliveryId = crypto.randomUUID();
-    await db().insert(mailDeliveries).values({
+    await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({
       id: deliveryId,
       purpose: "bulk",
       provider: "resend",
@@ -747,7 +746,7 @@ describe.runIf(hasDatabase)("mail services", () => {
       requestedBy: "system",
       attempts: 1,
       submittedAt: new Date("2026-08-12T15:59:00.000Z"),
-    });
+    }));
     const delivered = {
       provider: "resend" as const,
       externalEventId: "event-delivered",
@@ -822,11 +821,11 @@ describe.runIf(hasDatabase)("mail services", () => {
   });
 
   it("requires an exact typed address before releasing a suppression", async () => {
-    await db().insert(mailSuppressions).values({
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({
       email: "blocked@example.test",
       reason: "manual",
       provider: "manual",
-    });
+    }));
     expect(
       (
         await failure(

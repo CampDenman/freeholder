@@ -14,6 +14,7 @@ describe.runIf(hasDatabase)("populated mail record upgrade (C3.31)", () => {
   it("preserves old active blocks and unresolved evidence without inferring historical ownership", async () => {
     const rollback = new Error("rollback synthetic N-1 upgrade fixture");
     await expect(db().transaction(async tx => {
+      await tx.execute(sql.raw("drop function freeholder_mail_dispatch_admission() cascade; drop function freeholder_mail_dispatch_writer() cascade; drop function freeholder_mail_dispatch_metadata() cascade; drop table mail_dispatches,mail_dispatch_requests,mail_legacy_resolutions;"));
       for (const [trigger, table] of [
         ["mail_deliveries_receipt_writer", "mail_deliveries"], ["mail_provider_events_receipt_writer", "mail_provider_events"],
         ["mail_suppressions_receipt_writer", "mail_suppressions"], ["mail_outbox_receipt_writer", "mail_outbox"],

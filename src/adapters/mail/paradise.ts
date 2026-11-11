@@ -115,8 +115,8 @@ export function createParadiseMail(options: ParadiseMailOptions): MailAdapter {
           // The provider's idempotency key: a retried job converges on one
           // message. A permission refusal is kept as that key's final answer,
           // so the send after recording consent is a second, distinct request.
-          ...(message.deliveryId
-            ? { requestId: `freeholder:${message.deliveryId}${attempt === "consented" ? ":consented" : ""}` }
+          ...(message.dispatchId || message.deliveryId
+            ? { requestId: `freeholder:${message.dispatchId ?? message.deliveryId}${attempt === "consented" ? ":consented" : ""}` }
             : {}),
         },
       },

@@ -22,6 +22,7 @@ import { emailTemplates } from "@/modules/newsletters/template-schema";
 import { newsletterIssues, newsletters } from "@/modules/newsletters/schema";
 import { closeDb } from "../helpers/spine";
 import { C11_BASE_URL, C11_OWNER, seedC11Owner, useOwnerSession } from "./owner-session";
+import { historicalMailFixture } from "../helpers/mail-fixture";
 
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
@@ -87,12 +88,12 @@ test("an owner sees who can be mailed, sends a test, and starts with the skip co
       actor: "browser-fixture",
     },
   ]);
-  await db().insert(mailSuppressions).values({
+  await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({
     email: "blocked@example.test",
     reason: "manual",
     provider: "manual",
     active: true,
-  });
+  }));
   const [segment] = await db()
     .insert(segments)
     .values({
