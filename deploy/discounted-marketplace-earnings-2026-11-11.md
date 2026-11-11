@@ -55,8 +55,14 @@ not been claimed as native passes.
 
 The eleven distinct original native controls passed across the documented
 two-, three-, five- and one-case compositions, not one combined final run.
-TypeScript and touched-file lint passed before the final test assertions;
-the internal-service projection and composition checks passed 10/10. Final
-static gates and protected CI remain required. These are bounded local source
-checks, not platform launch acceptance, independent security review or a
-stable-release sign-off.
+Full TypeScript, lint, licensing, release notes, plan and playground policy
+passed. The explicit no-database fast gates passed 42 static contract files:
+380 controls and one explicit exclusion. The F-matrix passed 369 rows × 12
+criteria. After rebasing onto protected main mail72 (`dba1b242`), TypeScript
+and the ten internal-service projection/composition controls passed again.
+Required live-registry SDK generation passed eight controls in 3.51 seconds
+against the owned disposable mail72 database and produced no artifact diff.
+The original native business compositions preceded that rebase; protected
+CI remains required for the final complete composition. These are bounded
+local source checks, not platform launch acceptance, independent security
+review or a stable-release sign-off.
