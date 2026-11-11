@@ -6839,9 +6839,11 @@ owner operations, never substitute for them.
   lines keep their photo identity; quantity/removal controls select a line.
   Expired carts remain editable without releasing another cart's units.
   Contact callbacks receive the real parent context for same-transaction stock
-  composition. Ten new controls and 113 PostgreSQL integration cases, eight
-  SDK checks, type/lint and 368 contracts pass; production/browser qualification
-  remains in progress in `deploy/cart-photo-stock-2026-11-11.md`.
+  composition. 113 PostgreSQL integration cases (including ten new controls),
+  eight SDK checks, production/artifact and fast gates pass. Ten Chromium
+  journeys pass, including selected-photo shopper/owner updates and checkout
+  in all four locales with keyboard, 320px and both-theme Axe scans. See
+  `deploy/cart-photo-stock-2026-11-11.md`; protected checks remain required.
 - [x] **C5.21** Build checkout identity/address, fulfillment, tax, discounts,
   consent, payment, idempotency, failure recovery and accessible confirmation.
   *(Evidence: `catalog.checkoutCart` attaches the guest cart, requires
@@ -13148,8 +13150,9 @@ whatever is best for the people using the site.
   generation-specific rooms; an actual cached removed credential reaches only
   the abandoned room while remaining peers keep decoding. The complete member
   browser suite and final four affected reruns passed; renewed qualification
-  is recorded in the evidence document. Final protected
-  checks and independent review remain required. A historical OpenMLS
+  is recorded in the evidence document. Protected checks and the merge group
+  passed; PR #653 merged as `20dc07ba` on 2026-11-11. Independent review
+  remains required. A historical OpenMLS
   audit does not audit this revision or integration; members are still not told
   their messages are safe against a compromised server.
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member

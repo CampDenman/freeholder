@@ -1,8 +1,8 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
 # C12.39 OpenMLS migration source evidence — 2026-11-11
 
-`MASTER.md` §43 is the status authority. C12.39 and C11.10 remain open while
-protected checks and independent review are completed. No production deployment,
+`MASTER.md` §43 is the status authority. C12.39 and C11.10 remain open for
+independent review; protected checks and the merge group passed. No production deployment,
 provider acceptance, stable publication or independent signature is claimed.
 
 ## Delivered boundary
@@ -106,9 +106,11 @@ data still loses that device's local history. No SQL migration is introduced.
 
 The initial protected run passed, including its pinned native build:
 [OpenMLS checks](https://github.com/CampDenman/freeholder/actions/runs/42994883626/job/130436369666).
-The erasure/delivery and interrupted-send corrections have also passed the
-renewed qualification below. Updated-head protected checks remain required
-before returning the PR to the merge queue.
+The erasure/delivery and interrupted-send corrections also passed renewed
+qualification. All forty exact-head protected jobs, DCO and the merge group
+passed; [PR #653](https://github.com/CampDenman/freeholder/pull/653) merged as
+`20dc07ba` on 2026-11-11. Its [final native reproduction/audit job](https://github.com/CampDenman/freeholder/actions/runs/43008386793/job/130481506560)
+passed in 4m46s. Independent acceptance remains open.
 
 - Fourteen native Rust tests cover package/signature validation, fallback reuse
   across groups, joined-device Welcomes, state substitution, replay/ratchets,
@@ -163,8 +165,8 @@ before returning the PR to the merge queue.
 
 ## Remaining acceptance
 
-Final protected pull-request/merge-group checks and the independent security
-review remain required before completion. The local SFU proof uses synthetic
+The independent security review remains required before completion. Protected
+pull-request/merge-group checks passed. The local SFU proof uses synthetic
 members and fake test camera/microphone media on loopback; it is not hosted-
 instance or external-provider acceptance. No production deployment or stable
 announcement follows from this source evidence alone.

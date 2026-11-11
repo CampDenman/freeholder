@@ -113,12 +113,30 @@ regression uses only the synthetic loopback SFU.
 core, twenty-nine PostgreSQL, eight SDK and twenty-five actual browser journeys,
 plus the final four affected reruns, eight locale/theme variants, transient-WASM
 retry, accepted-response loss and cached-old-credential SFU isolation.
-Final protected checks and independent acceptance remain open. RustSec reports zero vulnerabilities with a visible informational
+Protected PR/merge-group checks passed and #653 merged as `20dc07ba`;
+independent acceptance remains open. RustSec reports zero vulnerabilities with a visible informational
 maintenance warning for an uncompiled verification dependency; no advisory is
 ignored. OpenMLS's historical audit does not audit this upstream revision,
 binding or Freeholder's directory/history protocol. The compromised-server
 warning remains. Coding-agent tests and this packet do not supply independent
 review, a completed C11.10 sign-off or C11.17 release approval.
+
+## Shared cart stock and photograph identity (C5.16/C5.20/C8.08)
+
+Review `catalog/cart-stock.ts`, cart/order mutations and the optional real
+parent context supplied to contact-reference repoint callbacks. A reservation
+belongs to its actual cart/order holder and stock item; a supplied line pointer
+must not authorize releasing a different buyer's units. Multiple photographs
+keep separate line identities while their quantities share one reservation.
+Check variant/line/cart matching, ordered cart/reservation/inventory locks,
+guest/contact merging, saved snapshots, expired demand and shipment accounting.
+
+The contact callback verifies the same transaction and composes stock services
+through the genuine merge context. Existing three-argument callbacks remain
+compatible; no key scope is added. A contacts.merge-only staff actor can merge
+through the authorized spine while direct stock reservation remains refused.
+113 PostgreSQL controls and ten actual browser journeys pass; evidence and
+remaining protected qualification are in `deploy/cart-photo-stock-2026-11-11.md`.
 
 ## Seller collection-policy and original-account boundary (C12.38, partial)
 

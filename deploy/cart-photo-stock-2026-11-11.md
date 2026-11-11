@@ -40,7 +40,14 @@ context, additional API-key scope, extra transaction or SQL migration is used.
 113 PostgreSQL cases across ten adjacent suites pass, including ten new
 shared-stock controls. Eight regenerated SDK checks, TypeScript, ESLint,
 license/plan checks and 368 contracts (one deliberate skip) pass. Production
-build and actual browser qualification remain in progress.
+build and artifact scrub pass (19,389 files, 236,281,477 bytes). Ten actual
+Chromium journeys pass: the four new photograph flows, four existing owner
+stock flows, cart capability refusal and the guest storefront checkout.
+Shopper and owner update the selected photo and preserve both identities into
+one complete order reservation. English/Spanish/French/Arabic RTL run at 320px
+with keyboard and both-theme WCAG A/AA scans. English light and Arabic dark
+screenshots were visually inspected. Protected PR/merge-group checks remain
+required.
 The new service suite covers add/checkout, exact line selection, guest/contact
 merge, contact-only staff authority, expired/foreign holds, concurrency,
 checkout replay/cancellation, saved snapshots and separate physical shipments.
