@@ -29,7 +29,7 @@ export { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES } from "./retained-s
 import { DEFAULT_IMPORTER_LIMITS } from "./contract";
 import { stageImportSource, stageWordpressExport } from "./service";
 import { assertSourceStageable } from "./source-lifecycle";
-import { assertReaderUploadWindow, bindReaderSources } from "./privacy";
+import { assertReaderUploadWindow, bindReaderSources, ReaderSourceErasureError } from "./privacy";
 import { wordpressExportBuilder } from "./wordpress";
 
 /**
@@ -446,6 +446,26 @@ const applyUploaded = defineService({
   },
 });
 
+/** A typed privacy refusal retires only its rejected raw upload, never assets. */
+const releaseErasedUpload = defineService({
+  name: "imports.releaseErasedSourceUpload", orchestratedBy: "imports.previewFromUpload",
+  summary: "Release a rejected pre-erasure source upload for private cleanup.",
+  kind: "mutation", permission: "scoped", external: false,
+  input: z.object({ id: z.uuid(), uploadId: z.uuid() }), output: z.object({ ok: z.literal(true) }),
+  handler: async (input, ctx) => {
+    const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
+    if (!run) throw new ServiceError("not_found", "No such import run.");
+    assertSourceStageable(run, true);
+    const checkpoint = checkpointOf(run.checkpoint), upload = uploadOf(checkpoint);
+    if (!upload || upload.uploadId !== input.uploadId || !sameUploader(upload, ctx.actor)) throw new ServiceError("conflict", "The rejected source upload was replaced.");
+    delete checkpoint.sourceUpload;
+    await ctx.queueJob("core.deleteCaptureObjects", { keys: allKeys(upload) });
+    await ctx.tx.update(importRuns).set({ checkpoint, status: "failed", error: new ReaderSourceErasureError().message }).where(eq(importRuns.id, run.id));
+    ctx.setSubject("import_run", run.id);
+    return { ok: true as const };
+  },
+});
+
 /**
  * Read the stored chunks in order. A WXR export streams through the item
  * reader; the other sources are small by nature and are read whole, within
@@ -505,6 +525,7 @@ export const previewFromUpload = defineOrchestratedService({
       await applyUploaded.call({ ...input, preview: staged.preview, counts: staged.counts, archivePreviewDigest: staged.archivePreviewDigest }, actor);
       return { id: input.id, status: "previewed", error: null, counts: staged.counts };
     } catch (error) {
+      if (error instanceof ReaderSourceErasureError) await releaseErasedUpload.call(input, actor);
       if (error instanceof ServiceError) throw error;
       const message = error instanceof Error ? error.message.slice(0, 2_000) : "That file could not be read.";
       await applyUploaded.call({ ...input, error: message }, actor);
@@ -525,5 +546,6 @@ export default [
   uploadSourceChunk,
   uploadSource,
   applyUploaded,
+  releaseErasedUpload,
   previewFromUpload,
 ];

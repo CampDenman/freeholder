@@ -20,3 +20,8 @@ outside the service transaction; preview acceptance checks expiry again.
 A provider write completing after the original reservation was swept now commits
 a fresh cleanup witness on both success and ambiguous error before expired
 uploads are refused. The follow-up closes a peer-reproduced late-write gap.
+
+An erasure-refused WXR releases only that rejected raw upload through a typed,
+private, original-parent phase. Ownership removal and cleanup commit together
+before the refusal is returned, preserving existing immediate byte removal
+without releasing active archives or unrelated retry state.

@@ -60,3 +60,12 @@ cleanup nor privacy acknowledgement can infer that proof from elapsed time.
 The source ledger bounds outstanding attempts to 100 per import and refuses new
 writes until recovery makes room. This is a fail-closed recovery state, not a
 claim that a hung provider request has been cancelled.
+
+The merged reader-privacy window can refuse a pre-erasure WXR after parsing.
+That typed refusal now releases only the matching rejected raw upload in a
+private caller-authorized phase, committing durable deletion before rethrowing.
+Its audit contains IDs, never the rejected preview. A protected-CI regression
+first reproduced the keeper retaining those bytes; the repaired exact public
+preview-key control proves immediate removal with the original agent audit and
+continued CRM refusal. Other transient/stale-source conflicts do not release
+retained archive/media ownership.

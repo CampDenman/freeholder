@@ -280,6 +280,7 @@ const CALLER_AUTHORIZED_PHASES = [
   "imports.beginSourceUploadApply",
   "imports.claimSourceChunk",
   "imports.recordSourceChunk",
+      "imports.releaseErasedSourceUpload",
       "imports.rememberSourceWrite",
   "imports.sourceUploadState",
   "builder.recordCodeProposal",

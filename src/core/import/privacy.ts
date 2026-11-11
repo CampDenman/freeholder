@@ -42,6 +42,10 @@ export async function bindReaderSources(tx: Tx, preview: unknown): Promise<Json>
   return copy;
 }
 
+export class ReaderSourceErasureError extends ServiceError {
+  constructor() { super("conflict", "A reader erasure completed while this source upload was pending. Review the source for erased readers and upload a fresh file before importing comments."); }
+}
+
 /** Opaque chunks cannot be matched to a contact until parsing has completed. */
 export async function assertReaderUploadWindow(tx: Tx, preview: unknown, startedAt: Date): Promise<void> {
   if (!items(object(preview).pages).some(page => items(page.readerComments).length > 0)) return;
@@ -49,7 +53,7 @@ export async function assertReaderUploadWindow(tx: Tx, preview: unknown, started
     eq(dataRequests.kind, "erasure"), inArray(dataRequests.status, ["completed", "partially_completed"]),
     gte(dataRequests.fulfilledAt, startedAt),
   )).limit(1);
-  if (erasure) throw new ServiceError("conflict", "A reader erasure completed while this source upload was pending. Review the source for erased readers and upload a fresh file before importing comments.");
+  if (erasure) throw new ReaderSourceErasureError();
 }
 
 /** Old checkpoints cannot prove whether a previously erased reader was cached. */

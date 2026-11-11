@@ -5,6 +5,8 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { resolveContact, getContact } from "@/core/contacts/service";
+import { createDataRequest, verifyDataRequest, fulfillDataRequest } from "@/core/privacy/service";
 import { auditLog } from "@/core/events/schema";
 import { db } from "@/core/db";
 import { importRuns } from "@/core/plugins/schema";
@@ -199,6 +201,23 @@ describe.runIf(hasDatabase)("raw import-source byte cleanup", () => {
     expect(claim?.actor).toBe(`user:${OWNER.userId}`);
     expect(claim?.diff).toMatchObject({ id: run.id, prefixSecret: "[redacted]" });
     expect(JSON.stringify(audit)).not.toContain(EMAIL);
+  });
+
+  it("releases an erasure-refused file under its exact public preview key and original audit actor", async () => {
+    const reader = await resolveContact.call({ email: EMAIL }, OWNER);
+    const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
+    const actor = { kind: "agent" as const, keyName: "exact-private-source", scopes: ["imports.beginSourceUpload", "imports.uploadSourceChunk", "imports.previewFromUpload"] };
+    await expect(getContact.call({ id: reader.contact.id }, actor)).rejects.toMatchObject({ code: "permission" });
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "source.xml", bytes: source.byteLength }, actor);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes: source }, actor);
+    const request = await createDataRequest.call({ contactId: reader.contact.id, request: { kind: "erasure" } }, OWNER);
+    await verifyDataRequest.call({ id: request.id, method: "Synthetic exact-key reader verification" }, OWNER);
+    await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER);
+    await expect(previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, actor)).rejects.toThrow(/reader erasure/);
+    expect(await storage().get(`imports/${run.id}/${upload.uploadId}/00000.part`)).toBeUndefined();
+    const rows = await db().select().from(auditLog).where(eq(auditLog.subjectId, run.id));
+    expect(rows.find(row => row.action === "imports.releaseErasedSourceUpload")).toMatchObject({ actor: `agent:${actor.keyName}`, diff: { id: run.id, uploadId: upload.uploadId } });
+    expect(JSON.stringify(rows)).not.toContain(EMAIL);
   });
 
 });
