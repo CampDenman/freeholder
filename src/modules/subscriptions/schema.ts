@@ -314,3 +314,64 @@ export const dunningPolicies = pgTable(
     check("dunning_policies_grace_nonnegative", sql`${t.graceDays} >= 0`),
   ],
 );
+
+/** C12.38: the exact first card-setup request commits before provider I/O.
+ * Identity follows the parent subscription's existing contact merge reference.
+ */
+export const subscriptionCardSetups = pgTable("subscription_card_setups", {
+  id:uuid("id").primaryKey().defaultRandom(),
+  subscriptionId:uuid("subscription_id").notNull().references(()=>subscriptions.id,{onDelete:"cascade"}),
+  provider:text("provider").notNull(),
+  providerAccountId:text("provider_account_id").notNull().default(""),
+  request:jsonb("request").$type<Record<string,unknown>>().notNull(),
+  requestHash:text("request_hash").notNull(),
+  providerCheckoutRef:text("provider_checkout_ref"),
+  providerCustomerRef:text("provider_customer_ref"),
+  providerSetupIntentRef:text("provider_setup_intent_ref"),
+  checkoutUrl:text("checkout_url"),
+  expiresAt:timestamp("expires_at",{withTimezone:true}),
+  // Historical proof survives card erasure; activation still joins the exact live method.
+  confirmedMethodId:uuid("confirmed_method_id"),
+  confirmedAt:timestamp("confirmed_at",{withTimezone:true}),
+  closedAt:timestamp("closed_at",{withTimezone:true}),
+  closedReason:text("closed_reason"),
+  erasureRequestId:uuid("erasure_request_id"),
+  erasureJobId:uuid("erasure_job_id"),
+  cleanupCompletedAt:timestamp("cleanup_completed_at",{withTimezone:true}),
+  createdAt:createdAtColumn(),
+},t=>[
+  uniqueIndex("subscription_card_setups_pending_idx").on(t.subscriptionId).where(sql`${t.confirmedAt} is null and ${t.closedAt} is null`),
+  uniqueIndex("subscription_card_setups_checkout_idx").on(t.provider,t.providerAccountId,t.providerCheckoutRef),
+  check("subscription_card_setups_provider_check",sql`length(trim(${t.provider})) between 1 and 100`),
+  check("subscription_card_setups_account_check",sql`${t.providerAccountId}='' or (${t.provider}='stripe' and ${t.providerAccountId} ~ '^acct_[A-Za-z0-9]+$')`),
+  check("subscription_card_setups_request_check",sql`jsonb_typeof(${t.request})='object' and length(${t.requestHash})=64`),
+  check("subscription_card_setups_erasure_pair_check",sql`(${t.erasureRequestId} is null and ${t.erasureJobId} is null) or (${t.erasureRequestId} is not null and ${t.erasureJobId} is not null)`),
+  check("subscription_card_setups_cleanup_check",sql`${t.cleanupCompletedAt} is null or (${t.erasureRequestId} is not null and ${t.erasureJobId} is not null)`),
+  check("subscription_card_setups_closure_check",sql`(${t.closedAt} is null and ${t.closedReason} is null) or (${t.closedAt} is not null and ${t.confirmedAt} is null and ${t.closedReason} is not null and ((${t.closedReason}='expired' and ${t.providerCheckoutRef} is not null and ${t.providerCustomerRef} is not null) or ${t.closedReason}='provider_cancelled'))`),
+  check("subscription_card_setups_confirmation_check",sql`(${t.confirmedMethodId} is null and ${t.confirmedAt} is null) or (${t.confirmedMethodId} is not null and ${t.confirmedAt} is not null and ${t.providerCheckoutRef} is not null and ${t.providerCustomerRef} is not null and ${t.providerSetupIntentRef} is not null)`),
+]);
+
+/** Every physical provider POST remains visible until its actual outcome settles. */
+export const subscriptionSetupDispatches=pgTable("subscription_setup_dispatches",{
+ id:uuid("id").primaryKey().defaultRandom(),
+ setupId:uuid("setup_id").notNull().references(()=>subscriptionCardSetups.id,{onDelete:"cascade"}),
+ kind:text("kind",{enum:["customer","session"]}).notNull(),
+ state:text("state",{enum:["running","succeeded","unknown","provider_completed","provider_cancelled"]}).notNull().default("running"),
+ requestHash:text("request_hash").notNull(),
+ customerAtStart:text("customer_at_start"),
+ initiatedBy:text("initiated_by").notNull(),
+ providerRef:text("provider_ref"),
+ providerCustomerRef:text("provider_customer_ref"),
+ unverifiedEvidence:jsonb("unverified_evidence").$type<Record<string,unknown>>().notNull().default({}),
+ resolution:jsonb("resolution").$type<Record<string,unknown>>().notNull().default({}),
+ startedAt:timestamp("started_at",{withTimezone:true}).notNull().default(sql`clock_timestamp()`),
+ finishedAt:timestamp("finished_at",{withTimezone:true}),
+},t=>[
+ index("subscription_setup_dispatches_setup_idx").on(t.setupId,t.startedAt,t.id),
+ check("subscription_setup_dispatches_kind_check",sql`${t.kind} in ('customer','session')`),
+ check("subscription_setup_dispatches_state_check",sql`${t.state} in ('running','succeeded','unknown','provider_completed','provider_cancelled')`),
+ check("subscription_setup_dispatches_request_check",sql`${t.requestHash} ~ '^[a-f0-9]{64}$'`),
+ check("subscription_setup_dispatches_resolution_check",sql`${t.state} not in ('provider_completed','provider_cancelled') or coalesce((jsonb_typeof(${t.resolution})='object' and ${t.resolution}->>'source'='human_provider_confirmation' and length(${t.resolution}->>'providerOperationRef')>=8 and length(${t.resolution}->>'providerEvidence')>=20 and length(${t.resolution}->>'callerStopEvidence')>=20 and ${t.resolution}->>'originalRequestHash'=${t.requestHash} and ${t.resolution}->>'actor' like 'user:%'),false)`),
+ check("subscription_setup_dispatches_completion_check",sql`(${t.state}='running' and ${t.finishedAt} is null) or (${t.state}<>'running' and ${t.finishedAt} is not null)`),
+ check("subscription_setup_dispatches_success_check",sql`${t.state} not in ('succeeded','provider_completed') or (${t.providerCustomerRef} is not null and (${t.kind}='customer' or ${t.providerRef} is not null))`),
+]);

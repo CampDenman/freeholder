@@ -1737,10 +1737,16 @@ export {
 };
 
 import publicMembershipServices, { activatePaidSignup } from "./public-signup";
+import setupErasureServices from "./setup-erasure";
+import setupDispatchServices from "./setup-dispatch";
+import setupReconciliationServices from "./setup-reconciliation";
 
 export default [
   ...marketPolicyServices,
   ...publicMembershipServices,
+  ...setupErasureServices,
+  ...setupDispatchServices,
+  ...setupReconciliationServices,
   savePlan,
   listPlans,
   listOfferedPlans,

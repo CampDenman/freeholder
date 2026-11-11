@@ -176,6 +176,7 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
         id,
         kind: "saved_method_added",
         contactId,
+        ...(text(metadata?.freeholder_setup_attempt_id) ? {setup:{attemptId:text(metadata?.freeholder_setup_attempt_id)!,subscriptionId:text(metadata?.freeholder_subscription_id)!,checkoutRef,setupIntentRef:text(setupIntent?.id)!}} : {}),
         providerCustomerRef: customer ?? method.providerCustomerRef,
         method: { ...method, providerCustomerRef: method.providerCustomerRef ?? customer },
         occurredAt: created,
@@ -304,6 +305,44 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     return providerJson("stripe", response);
   }
 
+  async function provenSetup(value:Record<string,unknown>,account?:string):Promise<Record<string,unknown>>{
+    const metadata=object(value.metadata);
+        const unproven=()=>new AdapterError("payments","stripe","provider_failure","Stripe did not prove this saved payment method on its original account.",true);
+        const setupRef=text(value.setup_intent) ?? text(object(value.setup_intent)?.id);
+        const customer=text(value.customer) ?? text(object(value.customer)?.id);
+        if(!setupRef || !/^seti_[A-Za-z0-9]+$/.test(setupRef) || setupRef.length>200 || !customer) throw unproven();
+        const query=new URLSearchParams({"expand[]":"payment_method"});
+        const intent=await api(`/v1/setup_intents/${encodeURIComponent(setupRef)}?${query}`,{method:"GET"},account);
+        const actualCustomer=text(intent.customer) ?? text(object(intent.customer)?.id);
+        const actualMetadata=object(intent.metadata);
+        const method=object(intent.payment_method);
+        const methodCustomer=text(method?.customer) ?? text(object(method?.customer)?.id);
+        if(intent.id!==setupRef || intent.status!=="succeeded" || intent.usage!=="off_session" || actualCustomer!==customer || methodCustomer!==customer
+          || text(actualMetadata?.freeholder_contact_id)!==text(metadata?.freeholder_contact_id)
+          || text(actualMetadata?.freeholder_subscription_id)!==text(metadata?.freeholder_subscription_id)
+          || text(actualMetadata?.freeholder_setup_attempt_id)!==text(metadata?.freeholder_setup_attempt_id)
+          || !method || !stripeMethod(method)) throw unproven();
+        return {...value,setup_intent:{...intent,payment_method:{...method,customer}}};
+  }
+  async function matchingSetupObject(path:string,account:string|undefined,matches:(value:Record<string,unknown>)=>boolean){
+    let cursor:string|undefined;
+    const found:Record<string,unknown>[]=[];
+    for(let page=0;page<10;page++){
+      const separator=path.includes("?")?"&":"?";
+      const response=await api(`${path}${separator}limit=100${cursor?`&starting_after=${encodeURIComponent(cursor)}`:""}`,{method:"GET"},account);
+      if(!Array.isArray(response.data) || typeof response.has_more!=="boolean")throw new AdapterError("payments","stripe","provider_failure","Stripe did not return a complete setup lookup.",true);
+      const rows=response.data.map(object);
+      if(rows.some(row=>!row || !text(row.id)))throw new AdapterError("payments","stripe","provider_failure","Stripe returned an invalid setup lookup.",true);
+      found.push(...rows.filter((row):row is Record<string,unknown>=>!!row&&matches(row)));
+      if(found.length>1)throw new AdapterError("payments","stripe","provider_failure","More than one provider resource matches this original setup; reconcile it before retrying.",true);
+      if(!response.has_more)return found[0];
+      const next=text(rows.at(-1)?.id);
+      if(!next || next===cursor)break;
+      cursor=next;
+    }
+    throw new AdapterError("payments","stripe","provider_failure","The setup lookup exceeds its bounded recovery window; reconcile it before retrying.",true);
+  }
+
   return {
     id: "stripe",
     status: {
@@ -360,9 +399,22 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         expiresAt: number(value.expires_at) === undefined ? undefined : stripeTime(value.expires_at),
       };
     },
+    async createSetupCustomer(request) {
+      const form = new URLSearchParams({email:request.customer.email,"metadata[freeholder_contact_id]":request.contactId,"metadata[freeholder_subscription_id]":request.subscriptionId});
+      if(request.customer.name)form.set("name",request.customer.name.slice(0,200));
+      if(request.setupAttemptId)form.set("metadata[freeholder_setup_attempt_id]",request.setupAttemptId);
+      const customer=await api("/v1/customers",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded","idempotency-key":`${request.idempotencyKey}:customer`},body:form},request.providerAccountId);
+      const providerCustomerRef=text(customer.id);
+      if(!providerCustomerRef || !/^cus_[A-Za-z0-9]+$/.test(providerCustomerRef) || providerCustomerRef.length>200)throw new AdapterError("payments","stripe","provider_failure","Stripe did not return the original setup customer.",true);
+      return {providerCustomerRef,...(request.providerAccountId?{providerAccountId:request.providerAccountId}:{})};
+    },
     async createMethodSetup(request) {
+      const customerRef=request.providerCustomerRef;
+      if(!customerRef)throw new AdapterError("payments","stripe","invalid_request","Commit the original setup customer before opening Checkout.");
       const form = new URLSearchParams({
         mode: "setup",
+        currency:request.currency.toLowerCase(),
+        customer:customerRef,
         client_reference_id: request.subscriptionId,
         success_url: request.successUrl,
         cancel_url: request.cancelUrl,
@@ -371,12 +423,10 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         "setup_intent_data[metadata][freeholder_contact_id]": request.contactId,
         "setup_intent_data[metadata][freeholder_subscription_id]": request.subscriptionId,
       });
-      if (request.providerCustomerRef) form.set("customer", request.providerCustomerRef);
-      else {
-        form.set("customer_email", request.customer.email);
-        form.set("customer_creation", "always");
+      if(request.setupAttemptId){
+        form.set("metadata[freeholder_setup_attempt_id]",request.setupAttemptId);
+        form.set("setup_intent_data[metadata][freeholder_setup_attempt_id]",request.setupAttemptId);
       }
-      if (request.customer.name) form.set("metadata[freeholder_customer_name]", request.customer.name.slice(0, 200));
       const value = await api("/v1/checkout/sessions", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": request.idempotencyKey },
@@ -385,7 +435,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       const providerRef = text(value.id);
       const url = text(value.url);
       const providerCustomerRef = typeof value.customer === "string" ? value.customer : text(object(value.customer)?.id);
-      if (!providerRef || !url || !providerCustomerRef) {
+      if (!providerRef || !url || providerCustomerRef!==customerRef) {
         throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return a card-setup address.");
       }
       return {
@@ -395,6 +445,47 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         expiresAt: number(value.expires_at) === undefined ? undefined : stripeTime(value.expires_at),
         providerCustomerRef,
       };
+    },
+    async recoverMethodSetup(request) {
+      const failed=()=>new AdapterError("payments","stripe","provider_failure","Stripe did not reconcile this original setup on its original account.",true);
+      if(!request.setupAttemptId || !Number.isFinite(Date.parse(request.createdAt)))throw failed();
+      const sameMetadata=(value:Record<string,unknown>)=>{
+        const metadata=object(value.metadata);
+        return text(metadata?.freeholder_setup_attempt_id)===request.setupAttemptId && text(metadata?.freeholder_subscription_id)===request.subscriptionId && text(metadata?.freeholder_contact_id)===request.contactId;
+      };
+      const since=Math.max(0,Math.floor(Date.parse(request.createdAt)/1000)-120);
+      let customer=request.providerCustomerRef;
+      if(!customer){
+        const found=await matchingSetupObject(`/v1/customers?created%5Bgte%5D=${since}`,request.providerAccountId,sameMetadata);
+        if(!found)return {state:"unresolved",...(request.providerAccountId?{providerAccountId:request.providerAccountId}:{})};
+        customer=text(found.id);
+        if(!customer || !/^cus_[A-Za-z0-9]+$/.test(customer) || found.deleted===true)throw failed();
+      }
+      if(request.verifyCustomerCreation){
+        if(!customer || !/^cus_[A-Za-z0-9]+$/.test(customer))throw failed();
+        const original=await api(`/v1/customers/${encodeURIComponent(customer)}`,{method:"GET"},request.providerAccountId);
+        if(original.id!==customer || original.deleted===true || !sameMetadata(original))throw failed();
+      }
+      const base={providerCustomerRef:customer,...(request.providerAccountId?{providerAccountId:request.providerAccountId}:{})};
+      const session=request.providerRef
+        ? await api(`/v1/checkout/sessions/${encodeURIComponent(request.providerRef)}`,{method:"GET"},request.providerAccountId)
+        : await matchingSetupObject(`/v1/checkout/sessions?customer=${encodeURIComponent(customer)}&created%5Bgte%5D=${since}`,request.providerAccountId,sameMetadata);
+      if(!session)return {state:"customer_only",...base};
+      const providerRef=text(session.id),actualCustomer=text(session.customer)??text(object(session.customer)?.id);
+      if(!providerRef || (request.providerRef && providerRef!==request.providerRef) || session.mode!=="setup" || actualCustomer!==customer || !sameMetadata(session) || text(session.currency)?.toUpperCase()!==request.currency)throw failed();
+      if(session.status==="expired")return {state:"expired",providerRef,...base};
+      if(session.status==="open"){
+        const url=text(session.url),expires=number(session.expires_at);
+        if(!url || !expires || expires*1000<=Date.now())throw failed();
+        return {state:"open",providerRef,url,expiresAt:stripeTime(expires),...base};
+      }
+      if(session.status!=="complete" || session.payment_status!=="no_payment_required")throw failed();
+      const proven=await provenSetup(session,request.providerAccountId);
+      const intent=object(proven.setup_intent),created=number(intent?.created)??number(session.created);
+      if(!created || created*1000<Date.parse(request.createdAt)-120_000)throw failed();
+      const [event]=stripePaymentEvents({id:`setup-retrieved:${providerRef}:${text(intent?.id)}`,type:"checkout.session.completed",created,...(request.providerAccountId?{account:request.providerAccountId}:{}),data:{object:proven}});
+      if(!event || event.kind!=="saved_method_added")throw failed();
+      return {state:"complete",providerRef,event,...base};
     },
     async captureCheckout(request): Promise<CheckoutCaptureResult> {
       const expansion = request.providerAccountId ? "?expand%5B%5D=payment_intent" : "";
@@ -598,21 +689,8 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         // Real Checkout events normally contain a SetupIntent ID, not its
         // expanded payment method. Retrieve only after exact-byte HMAC and
         // account validation, outside any business-service transaction.
-        const unproven=()=>new AdapterError("payments","stripe","provider_failure","Stripe did not prove this saved payment method on its original account.",true);
-        const setupRef=text(value.setup_intent) ?? text(object(value.setup_intent)?.id);
-        const customer=text(value.customer) ?? text(object(value.customer)?.id);
-        if(!setupRef || !/^seti_[A-Za-z0-9]+$/.test(setupRef) || setupRef.length>200 || !customer) throw unproven();
-        const query=new URLSearchParams({"expand[]":"payment_method"});
-        const intent=await api(`/v1/setup_intents/${encodeURIComponent(setupRef)}?${query}`,{method:"GET"},text(parsed.account));
-        const actualCustomer=text(intent.customer) ?? text(object(intent.customer)?.id);
-        const actualMetadata=object(intent.metadata);
-        const method=object(intent.payment_method);
-        const methodCustomer=text(method?.customer) ?? text(object(method?.customer)?.id);
-        if(intent.id!==setupRef || intent.status!=="succeeded" || intent.usage!=="off_session" || actualCustomer!==customer || methodCustomer!==customer
-          || text(actualMetadata?.freeholder_contact_id)!==text(metadata?.freeholder_contact_id)
-          || text(actualMetadata?.freeholder_subscription_id)!==text(metadata?.freeholder_subscription_id)
-          || !method || !stripeMethod(method)) throw unproven();
-        return stripePaymentEvents({...parsed,data:{...object(parsed.data),object:{...value,setup_intent:{...intent,payment_method:{...method,customer}}}}});
+        const proven=await provenSetup(value,text(parsed.account));
+        return stripePaymentEvents({...parsed,data:{...object(parsed.data),object:proven}});
       }
       // A signed invoice says that its balance is paid. It does not prove
       // which connected PaymentIntent paid it or the fee actually taken.

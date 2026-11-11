@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
+import {reconcileTrialSetupDispatch} from "@/modules/subscriptions/setup-reconciliation";
 import {
   cancelAgreement,
   changePlan,
@@ -151,4 +152,16 @@ export async function cancelSubscriptionAction(form: FormData): Promise<void> {
     done(error);
   }
   done(undefined, "cancelled");
+}
+
+export async function reconcileTrialSetupDispatchAction(form:FormData):Promise<void>{
+ const back=`/admin/subscriptions/${encodeURIComponent(text(form,"subscriptionId"))}`;
+ try{
+  await reconcileTrialSetupDispatch.call({dispatchId:text(form,"dispatchId"),outcome:text(form,"outcome") as "completed"|"cancelled",providerOperationRef:text(form,"providerOperationRef"),providerEvidence:text(form,"providerEvidence"),callerStopEvidence:text(form,"callerStopEvidence"),confirmation:text(form,"confirmation") as "PROVIDER OUTCOME CONFIRMED",providerCustomerRef:text(form,"providerCustomerRef")||undefined,providerRef:text(form,"providerRef")||undefined},await actor());
+ }catch(error){
+  if(error instanceof ServiceError && error.code==="step_up_required")redirect(`/security/verify?returnTo=${encodeURIComponent(back)}`);
+  if(error instanceof ServiceError)redirect(`${back}?setupError=${["validation","permission","conflict"].includes(error.code)?error.code:"conflict"}`);
+  throw error;
+ }
+ redirect(`${back}?setupReconciled=1`);
 }

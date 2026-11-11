@@ -23,7 +23,7 @@ import { attachProviderSchedule, cancelAgreement, changePlan } from "@/modules/s
 import { getSubscription, renewDue, savePlan, subscribe } from "@/modules/subscriptions/service";
 import { getSubscriptionMarketPolicy } from "@/modules/subscriptions/market-policy";
 import { beginTrialCardSetup, myMembershipPaymentMethods, startCardTrial } from "@/modules/subscriptions/public-signup";
-import { plans, subscriptions } from "@/modules/subscriptions/schema";
+import { plans,subscriptionCardSetups,subscriptions } from "@/modules/subscriptions/schema";
 import { closeDb, CUSTOMER, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const SYSTEM = { kind: "system" } as const;
@@ -147,7 +147,8 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
     await expect(startCardTrial.call({ subscriptionId: started.subscription.id, paymentMethodId: methods[0]!.id }, BUYER)).rejects.toMatchObject({ code: "conflict" });
     await expect(startCardTrial.call({ subscriptionId: started.subscription.id, paymentMethodId: methods[2]!.id }, BUYER)).rejects.toMatchObject({ code: "conflict" });
     const receivedAt = new Date().toISOString();
-    await processPaymentProviderEvents.call({ provider: "stripe", bodySha256: "b".repeat(64), receivedAt, events: [{ id: "evt_trial_card", kind: "saved_method_added", providerAccountId: "acct_original", providerCustomerRef: "cus_original", occurredAt: receivedAt, method: { providerRef: "pm_trial", providerCustomerRef: "cus_original", kind: "card", label: "Trial card ending 4242" } }] }, SYSTEM);
+    const [attempt]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,started.subscription.id));
+    await processPaymentProviderEvents.call({ provider: "stripe", bodySha256: "b".repeat(64), receivedAt, events: [{contactId,setup:{attemptId:attempt!.id,subscriptionId:started.subscription.id,checkoutRef:"cs_trial",setupIntentRef:"seti_trial"},id: "evt_trial_card", kind: "saved_method_added", providerAccountId: "acct_original", providerCustomerRef: "cus_original", occurredAt: receivedAt, method: { providerRef: "pm_trial", providerCustomerRef: "cus_original", kind: "card", label: "Trial card ending 4242" } }] }, SYSTEM);
     const [saved] = await db().select().from(paymentMethods).where(eq(paymentMethods.providerMethodRef,"pm_trial"));
     expect(await myMembershipPaymentMethods.call({ subscriptionId: started.subscription.id }, BUYER)).toEqual([{ id: saved!.id, label: "Trial card ending 4242" }]);
     expect(await startCardTrial.call({ subscriptionId: started.subscription.id, paymentMethodId: saved!.id }, BUYER)).toEqual({ id: started.subscription.id, started: true });
@@ -157,7 +158,7 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
   it("keeps an automatic trial's original provider when the default changes before its card is saved", async () => {
     const manual = adapters.createManualPayments();
     const createMethodSetup = vi.fn<NonNullable<adapters.PaymentAdapter["createMethodSetup"]>>().mockResolvedValue({providerRef:"cs_platform_trial",providerCustomerRef:"cus_platform_trial",url:"https://checkout.example.test/setup"});
-    const stripe = {...manual,id:"stripe",createMethodSetup,capabilities:()=>({...manual.capabilities(),offSessionCharges:true,savedMethods:true})};
+    const stripe = {...manual,id:"stripe",createMethodSetup,createSetupCustomer:async()=>({providerCustomerRef:"cus_platform_trial"}),capabilities:()=>({...manual.capabilities(),offSessionCharges:true,savedMethods:true})};
     let defaultStripe=true;
     vi.spyOn(adapters,"paymentAdapter").mockImplementation(id=>id==="stripe" || id===undefined && defaultStripe ? stripe : manual);
     const planId=await offer("platform");
@@ -169,7 +170,8 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
     expect(createMethodSetup).toHaveBeenCalledOnce();
     expect(createMethodSetup.mock.calls[0]![0].providerAccountId).toBeUndefined();
     const receivedAt=new Date().toISOString();
-    await processPaymentProviderEvents.call({provider:"stripe",bodySha256:"d".repeat(64),receivedAt,events:[{id:"evt_platform_trial_card",kind:"saved_method_added",providerCustomerRef:"cus_platform_trial",occurredAt:receivedAt,method:{providerRef:"pm_platform_trial",providerCustomerRef:"cus_platform_trial",kind:"card",label:"Trial card"}}]},SYSTEM);
+    const [attempt]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,started.subscription.id));
+    await processPaymentProviderEvents.call({provider:"stripe",bodySha256:"d".repeat(64),receivedAt,events:[{contactId,setup:{attemptId:attempt!.id,subscriptionId:started.subscription.id,checkoutRef:"cs_platform_trial",setupIntentRef:"seti_platform_trial"},id:"evt_platform_trial_card",kind:"saved_method_added",providerCustomerRef:"cus_platform_trial",occurredAt:receivedAt,method:{providerRef:"pm_platform_trial",providerCustomerRef:"cus_platform_trial",kind:"card",label:"Trial card"}}]},SYSTEM);
     const [method]=await db().select().from(paymentMethods).where(eq(paymentMethods.providerMethodRef,"pm_platform_trial"));
     expect(await myMembershipPaymentMethods.call({subscriptionId:started.subscription.id},BUYER)).toEqual([{id:method!.id,label:"Trial card"}]);
     expect(await startCardTrial.call({subscriptionId:started.subscription.id,paymentMethodId:method!.id},BUYER)).toEqual({id:started.subscription.id,started:true});

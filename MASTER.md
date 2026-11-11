@@ -13264,6 +13264,28 @@ whatever is best for the people using the site.
   `payment-provider-customer-erasure.md`; `deploy/privacy-rights.md`.
   Actual provider acceptance and independent review remain open; this source
   increment closes no C-item and does not enable direct seller collection.
+  Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
+  freezes each original Customer/Checkout request and records every physical
+  dispatch before I/O. Exact current-attempt proof replaces card-age inference;
+  original account and metadata survive default/contact changes. Unknown calls
+  remain pending independently of time or search absence. Durable privacy work
+  waits for all physical outcomes and actual original-account customer deletion.
+  Fresh-human recovery records concrete final-provider and stopped-caller
+  evidence separately from machine responses; completed resources also undergo
+  positive original-account checks. Merge undo fingerprints private setup and
+  dispatch state without copying inputs and refuses later provider work crossing
+  separated identities; unchanged requests stay undoable. Setup plus physical
+  dispatch history is bounded to 5,000 records; overflow is non-undoable and
+  later overflow refuses separation without comparing a partial prefix. Legacy merge records
+  receive the new undo witness. SQL fences old-image trial/erasure shortcuts.
+  Four-locale owner recovery and customer exact-card journeys use shared
+  services. `tests/modules/subscription-billing.test.ts`,
+  `tests/core/stripe-setup-recovery.test.ts`,
+  `tests/browser/trial-setup-recovery.spec.ts`; changeset
+  `trial-card-setup-dispatches.md`; `deploy/seller-merchant-source-2026-11-10.md`.
+  Full rollback needs the pre-upgrade database/object snapshot. Actual provider
+  acceptance, independent review and the remaining full C12.38 integration stay
+  required; no direct collection model is enabled and no open row is closed.
 - [ ] **C12.39** Move end-to-end encryption from `ts-mls` (not independently
   audited) to OpenMLS (audited historically by SRLabs), compiled to WebAssembly
   in pinned CI and committed so deploys stay Node-only. The owner's 2026-11-10

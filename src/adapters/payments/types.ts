@@ -75,6 +75,9 @@ export interface CheckoutSession extends PaymentAccountScope {
  * the plan stays unavailable rather than starting an unverified trial.
  */
 export interface MethodSetupRequest extends PaymentAccountScope {
+  /** Durable first-request witness, copied to provider metadata. */
+  setupAttemptId?: string;
+  currency: string;
   contactId: string;
   subscriptionId: string;
   customer: { email: string; name?: string };
@@ -90,6 +93,16 @@ export interface MethodSetupSession extends PaymentAccountScope {
   url: string;
   expiresAt?: string;
   providerCustomerRef?: string;
+}
+
+/** Actual account-scoped reads of a durable setup request, never caller attestations. */
+export interface MethodSetupRecovery extends PaymentAccountScope {
+  state: "unresolved" | "customer_only" | "open" | "expired" | "complete";
+  providerCustomerRef?: string;
+  providerRef?: string;
+  url?: string;
+  expiresAt?: string;
+  event?: PaymentProviderEvent;
 }
 
 export interface CheckoutCaptureRequest extends PaymentAccountScope {
@@ -238,6 +251,7 @@ export type PaymentProviderEvent = PaymentAccountScope & (
   | {
       id: string;
       kind: "saved_method_added" | "saved_method_removed";
+      setup?: { attemptId: string; subscriptionId: string; checkoutRef: string; setupIntentRef: string };
       providerCustomerRef?: string;
       contactId?: string;
       method: SavedPaymentMethodEvidence;
@@ -283,7 +297,10 @@ export interface PaymentAdapter {
    * Optional. A missing method means this provider cannot save a card without
    * a charge. Callers must check before offering a zero-fee card trial.
    */
+  /** Create the customer separately so its actual reference commits before Checkout I/O. */
+  createSetupCustomer?(request: MethodSetupRequest): Promise<{ providerCustomerRef: string; providerAccountId?: string }>;
   createMethodSetup?(request: MethodSetupRequest): Promise<MethodSetupSession>;
+  recoverMethodSetup?(request: MethodSetupRequest & { createdAt: string; providerRef?: string; verifyCustomerCreation?: boolean }): Promise<MethodSetupRecovery>;
   captureCheckout(request: CheckoutCaptureRequest): Promise<CheckoutCaptureResult>;
   refund(request: RefundRequest): Promise<RefundResult>;
   /** Erase the merchant-owned customer and its saved methods on the original account. */
