@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Media services (MASTER.md §3 core/media, §4.5, §18).
 //
-// The only door to the asset library. Uploading writes bytes to the storage
-// adapter and a row to the database, in that order and deliberately: an object
-// with no row is litter a sweep can find, whereas a row with no object is a
-// broken image on a customer's screen.
+// The only door to the asset library. Reserve physical-operation ownership
+// before storage I/O; attach a library asset only after accepted bytes and
+// validation. Failed acknowledgements keep their original pending witnesses.
 import { z } from "zod";
 import { and, count, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { pendingObjectIsOwned } from "./object-ledger";
+import { putWithReceipt, deleteWithReceipt, discardUnwrittenProxyReservation, type TrackedPut } from "./write-ledger";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { db, type Database } from "@/core/db";
 import {
@@ -242,87 +242,14 @@ const verifyCaptureUpload = defineService({
   },
 });
 
-async function trackPendingObject(input: {
-  key: string;
-  contentType: string;
-  role: "original" | "variant" | "staged";
-  bytes?: number;
-  uploadId?: string;
-}): Promise<void> {
-  await db()
-    .insert(mediaObjects)
-    .values({
-      key: input.key,
-      contentType: input.contentType,
-      role: input.role,
-      bytes: input.bytes,
-      uploadId: input.uploadId,
-      state: "pending",
-    })
-    .onConflictDoUpdate({
-      target: mediaObjects.key,
-      set: {
-        contentType: input.contentType,
-        role: input.role,
-        bytes: input.bytes,
-        uploadId: input.uploadId,
-        state: "pending",
-        assetId: null,
-        updatedAt: new Date(),
-      },
-    });
+async function putTrackedObject(input: TrackedPut, actor: Actor): Promise<void> {
+  await putWithReceipt(input, actor);
 }
 
-async function putTrackedObject(input: {
-  key: string;
-  body: Uint8Array<ArrayBuffer>;
-  contentType: string;
-  role: "original" | "variant";
-  uploadId?: string;
-}): Promise<void> {
-  await trackPendingObject({ ...input, bytes: input.body.byteLength });
-  try {
-    await storage().put(input.key, input.body, input.contentType);
-  } catch (error) {
-    await db().delete(mediaObjects).where(eq(mediaObjects.key, input.key));
-    throw error;
-  }
-}
-
-async function putTrackedObjects(
-  inputs: Array<{
-    key: string;
-    body: Uint8Array<ArrayBuffer>;
-    contentType: string;
-    role: "variant";
-    uploadId?: string;
-  }>,
-): Promise<void> {
-  if (inputs.length === 0) return;
-  const keys = inputs.map((input) => input.key);
-  await db()
-    .insert(mediaObjects)
-    .values(
-      inputs.map((input) => ({
-        key: input.key,
-        contentType: input.contentType,
-        role: input.role,
-        bytes: input.body.byteLength,
-        uploadId: input.uploadId,
-        state: "pending" as const,
-      })),
-    )
-    .onConflictDoNothing();
-  try {
-    await Promise.all(
-      inputs.map((input) =>
-        storage().put(input.key, input.body, input.contentType),
-      ),
-    );
-  } catch (error) {
-    await db().delete(mediaObjects).where(inArray(mediaObjects.key, keys));
-    throw error;
-  }
+async function putTrackedObjects(inputs: TrackedPut[], actor: Actor, ownerAssetId?: string): Promise<void> {
+  const outcomes = await Promise.allSettled(inputs.map(input => putWithReceipt({ ...input, ownerAssetId }, actor)));
+  const failure = outcomes.find(result => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
 }
 
 async function attachObjects(
@@ -509,11 +436,13 @@ async function prepareDerivedObjects(
     uploadId?: string;
   },
   mark: WatermarkMark | undefined,
+  actor: Actor,
 ): Promise<PreparedOriginal> {
   const scan = scanFields(input.scan);
   const trackedKeys = [input.key];
   let facts: Awaited<ReturnType<typeof readImageFacts>>;
   let variants: VariantSet = {};
+  const renditionVersion = randomUUID();
   if (input.kind === "image" && scan.status === "ready") {
     const body = input.body ?? (await storage().get(input.key));
     if (!body) throw new Error(`storage: ${input.key} disappeared during processing`);
@@ -531,7 +460,7 @@ async function prepareDerivedObjects(
       );
     }
     const built = await buildRenditions(body, facts, (format, width) =>
-      `${input.key}.${width}.${format}`,
+      `${input.key}.r-${renditionVersion}.${width}.${format}`,
     );
     await putTrackedObjects(
       built.map((rendition) => ({
@@ -540,7 +469,7 @@ async function prepareDerivedObjects(
         contentType: rendition.contentType,
         role: "variant" as const,
         uploadId: input.uploadId,
-      })),
+      })), actor,
     );
     trackedKeys.push(...built.map((rendition) => rendition.key));
     variants = toVariantSet(built);
@@ -549,7 +478,7 @@ async function prepareDerivedObjects(
     // is a key lookup rather than an image job on the client's first view.
     const marked = mark
       ? await buildWatermarked(body, facts, mark, (format, width) =>
-          `${input.key}.wm.${width}.${format}`,
+          `${input.key}.r-${renditionVersion}.wm.${width}.${format}`,
         )
       : [];
     if (marked.length) {
@@ -560,7 +489,7 @@ async function prepareDerivedObjects(
           contentType: rendition.contentType,
           role: "variant" as const,
           uploadId: input.uploadId,
-        })),
+        })), actor,
       );
       trackedKeys.push(...marked.map((rendition) => rendition.key));
       variants = withWatermarked(variants, marked);
@@ -856,7 +785,7 @@ export const uploadAsset = defineOrchestratedService({
             : new Uint8Array(),
         ),
       });
-      let key = storageKey(input.filename, new Date(), randomUUID().slice(0, 8));
+      let key = storageKey(input.filename, new Date(), randomUUID());
       let uploadId = input.uploadId;
       if (input.uploadId) {
         const claimed = await claimProxyUpload.call(
@@ -887,7 +816,7 @@ export const uploadAsset = defineOrchestratedService({
         contentType: validated.mime,
         role: "original",
         uploadId,
-      });
+      }, actor);
       const prepared = await prepareDerivedObjects(
         {
           key,
@@ -896,7 +825,7 @@ export const uploadAsset = defineOrchestratedService({
           body,
           uploadId,
         },
-        await loadWatermarkMark(),
+        await loadWatermarkMark(), actor,
       );
       return applyStoredOriginal.call(
         {
@@ -1040,7 +969,7 @@ export const beginUpload = defineOrchestratedService({
       );
     }
 
-    const key = storageKey(input.filename, new Date(), randomUUID().slice(0, 8));
+    const key = storageKey(input.filename, new Date(), randomUUID());
     let providerUploadId: string | undefined;
     try {
       if (store.directMultipart) {
@@ -1576,7 +1505,7 @@ export const completeUpload = defineOrchestratedService({
           scan: verified.scan,
           uploadId: source.id,
         },
-        await loadWatermarkMark(),
+        await loadWatermarkMark(), actor,
       );
       const asset = await applyStoredOriginal.call(
         {
@@ -1656,7 +1585,7 @@ export const registerStoredOriginal = defineOrchestratedService({
           kind: validated.kind,
           scan: verified.scan,
         },
-        await loadWatermarkMark(),
+        await loadWatermarkMark(), actor,
       );
       return applyStoredOriginal.call(
         {
@@ -1702,7 +1631,7 @@ const abortUploadClaim = defineService({
     const session = await lockedUploadSession(ctx.tx, input.id);
     if (!session) throw new ServiceError("not_found", "That upload is not here.");
     requireUploadAccess(ctx.actor, session.uploadedBy);
-    if (["complete", "failed", "aborted", "expired"].includes(session.state)) {
+    if (session.state === "complete") {
       return {
         alreadyTerminal: true,
         storageKey: session.storageKey,
@@ -1732,7 +1661,8 @@ const abortUploadApply = defineService({
   input: z.object({ id: z.string().uuid(), storageKey: z.string().min(1) }),
   output: okResult,
   handler: async (input, ctx) => {
-    await ctx.tx.delete(mediaObjects).where(eq(mediaObjects.key, input.storageKey));
+    const remaining = await ctx.tx.select({ key: mediaObjects.key }).from(mediaObjects).where(eq(mediaObjects.key, input.storageKey)).limit(1);
+    if (remaining.length) throw new ServiceError("conflict", "The upload is stopped, but its original storage cleanup still needs recovery.");
     ctx.setSubject("mediaUpload", input.id);
     return { ok: true };
   },
@@ -1749,11 +1679,8 @@ export const abortUpload = defineOrchestratedService({
   handler: async (input, actor) => {
     const claimed = await abortUploadClaim.call(input, actor);
     if (claimed.alreadyTerminal) return { ok: true };
-    const multipart = storage().directMultipart;
-    if (multipart && claimed.providerUploadId) {
-      await multipart.abort(claimed.storageKey, claimed.providerUploadId);
-    }
-    await storage().delete(claimed.storageKey);
+    if (claimed.providerUploadId) throw new ServiceError("conflict", "Confirm this multipart upload's original storage resource before aborting it.");
+    if (!await discardUnwrittenProxyReservation(input.id, claimed.storageKey) && !await deleteWithReceipt(claimed.storageKey)) throw new ServiceError("conflict", "The upload is stopped, but its original storage operation remains unresolved.");
     return abortUploadApply.call(
       { id: input.id, storageKey: claimed.storageKey },
       actor,
@@ -2207,6 +2134,7 @@ export const backfillWatermarks = defineOrchestratedService({
     let marked = 0;
     let skipped = 0;
     for (const asset of candidates) {
+      const renditionVersion = randomUUID();
       const body = isRasterImage(asset.mime)
         ? await storage().get(asset.storageKey)
         : undefined;
@@ -2214,7 +2142,7 @@ export const backfillWatermarks = defineOrchestratedService({
       const built =
         body && facts
           ? await buildWatermarked(body, facts, mark, (format, width) =>
-              `${asset.storageKey}.wm.${width}.${format}`,
+              `${asset.storageKey}.r-${renditionVersion}.wm.${width}.${format}`,
             )
           : [];
       if (built.length > 0) {
@@ -2224,7 +2152,7 @@ export const backfillWatermarks = defineOrchestratedService({
             body: rendition.body,
             contentType: rendition.contentType,
             role: "variant" as const,
-          })),
+          })), actor, asset.id,
         );
       }
       const result = await applyWatermarkBackfill.call(
@@ -2969,7 +2897,7 @@ async function claimPurge(
 async function deleteStoredKeys(keys: string[]): Promise<void> {
   for (const key of keys) {
     try {
-      await storage().delete(key);
+      await deleteWithReceipt(key);
     } catch {
       // The row is already gone. A failed delete stays as a pending object
       // the orphan sweep can finish; throwing here would look like the
@@ -3077,11 +3005,9 @@ const purgeApply = defineService({
   output: okResult,
   handler: async (input, ctx) => {
     if (input.keys.length === 0) return { ok: true as const };
-    await ctx.tx
-      .delete(mediaObjects)
-      .where(
-        and(inArray(mediaObjects.key, input.keys), eq(mediaObjects.state, "pending")),
-      );
+    const outstanding = await ctx.tx.select({ key: mediaObjects.key }).from(mediaObjects)
+      .where(and(inArray(mediaObjects.key, input.keys), eq(mediaObjects.state, "pending"))).limit(1);
+    if (outstanding.length) throw new ServiceError("conflict", "The file is hidden, but its original storage cleanup still needs recovery.");
     return { ok: true as const };
   },
 });
@@ -3310,8 +3236,9 @@ export const rescanAsset = defineOrchestratedService({
           "The original image is missing or damaged and cannot be released.",
         );
       }
+      const renditionVersion = randomUUID();
       const built = await buildRenditions(body, facts, (format, size) =>
-        `${asset.storageKey}.${size}.${format}`,
+        `${asset.storageKey}.r-${renditionVersion}.${size}.${format}`,
       );
       await putTrackedObjects(
         built.map((rendition) => ({
@@ -3319,7 +3246,7 @@ export const rescanAsset = defineOrchestratedService({
           body: rendition.body,
           contentType: rendition.contentType,
           role: "variant" as const,
-        })),
+        })), actor, asset.id,
       );
       variantKeys.push(...built.map((rendition) => rendition.key));
       variants = toVariantSet(built);
@@ -3383,21 +3310,22 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
       ),
     )
     .limit(100);
+  let expiredUploads = 0;
   for (const upload of expired) {
     if (store.directMultipart && upload.providerUploadId) {
-      await store.directMultipart.abort(
-        upload.storageKey,
-        upload.providerUploadId,
-      );
+      // A legacy multipart ID carries no original resource binding. Keep its
+      // ownership until the original upload has been reviewed; never abort
+      // that ID in a replacement bucket merely because its timer expired.
+      continue;
     }
-    await store.delete(upload.storageKey);
+    if (!await deleteWithReceipt(upload.storageKey)) continue;
     await db().transaction(async (tx) => {
-      await tx.delete(mediaObjects).where(eq(mediaObjects.uploadId, upload.id));
       await tx
         .update(mediaUploads)
         .set({ state: "expired", completedAt: now, updatedAt: now })
         .where(eq(mediaUploads.id, upload.id));
     });
+    expiredUploads += 1;
   }
 
   const cutoff = new Date(now.getTime() - UPLOAD_TTL_MS);
@@ -3411,9 +3339,7 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
   let orphanedObjects = 0;
   for (const object of orphans) {
     if (await pendingObjectIsOwned(object.key, now)) continue;
-    await store.delete(object.key);
-    await db().delete(mediaObjects).where(eq(mediaObjects.key, object.key));
-    orphanedObjects += 1;
+    if (await deleteWithReceipt(object.key)) orphanedObjects += 1;
   }
   const terminalCutoff = new Date(now.getTime() - TRASH_RETENTION_MS);
   const pruned = await db()
@@ -3426,7 +3352,7 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
     )
     .returning({ id: mediaUploads.id });
   return {
-    expiredUploads: expired.length,
+    expiredUploads,
     orphanedObjects,
     prunedSessions: pruned.length,
   };

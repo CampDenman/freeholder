@@ -18,6 +18,8 @@ import "@/core/runs/spine";
 // The same for the mail carrier grants (C3.31): export, erasure, retention.
 import "@/core/mail/privacy";
 import "@/core/mail/ownership";
+import "@/core/media/write-ownership";
+import "@/core/media/write-privacy";
 import agentServices from "@/core/agents/service";
 import agentExecution from "@/core/agents/execution";
 import agentWrites from "@/core/agents/writes";
@@ -60,6 +62,7 @@ import coverageServices from "@/core/locations/coverage";
 import mailServices from "@/core/mail/service";
 import mailOAuthServices from "@/core/mail/oauth";
 import mediaServices from "@/core/media/service";
+import mediaRecoveryServices from "@/core/media/write-recovery";
 import notificationServices from "@/core/notifications/service";
 import taskServices from "@/core/tasks/service";
 import noteServices from "@/core/notes/service";
@@ -170,6 +173,7 @@ const services: Service[] = [
   ...mailServices,
   ...mailOAuthServices,
   ...mediaServices,
+  ...mediaRecoveryServices,
   ...notificationServices,
   ...schedulingServices,
   ...availabilityServices,

@@ -4,11 +4,12 @@
 // freeholder.config.ts, the credentials from env. Instantiated once at first
 // use, like the database pool — importing this module connects to nothing.
 import config from "../../../freeholder.config";
+import { resolve } from "node:path";
 import { env } from "@/core/env";
 import { createLocalStorage } from "@/adapters/storage/local";
 import { createReplitStorage } from "@/adapters/storage/replit";
 import { createS3Storage } from "@/adapters/storage/s3";
-import type { StorageAdapter } from "@/adapters/storage/types";
+import type { StorageAdapter, StorageBinding } from "@/adapters/storage/types";
 import { withStorageQuota } from "@/adapters/storage/quota";
 import { postgresStorageQuota, storageNamespace, withVerifiedEmptyInitialization } from "@/core/media/storage-quota";
 import { verifyEmptyS3Inventory } from "@/adapters/storage/empty-inventory";
@@ -87,8 +88,23 @@ export function storage(): StorageAdapter {
         : postgresStorageQuota(namespace,max);
       instance = withStorageQuota(inner, ledger);
     } else instance = inner;
+    if (!instance.binding && inner.id !== "replit") {
+      const location: Record<string, string> = inner.id === "local"
+        ? { root: resolve(e.LOCAL_STORAGE_ROOT ?? ".data/media") }
+        : { endpoint: e.S3_ENDPOINT!, bucket: e.S3_BUCKET! };
+      const namespace = storageNamespace({ id: inner.id, ...location });
+      const binding: StorageBinding = Object.freeze({ kind: inner.id, namespace, location: Object.freeze(location) });
+      instance.binding = async () => binding;
+    }
   }
   return instance;
+}
+
+/** The adapter and its resource identity are captured together before I/O. */
+export async function boundStorage(): Promise<{ store: StorageAdapter; binding: StorageBinding }> {
+  const store = storage();
+  if (!store.binding) throw new Error("Storage has no verified resource identity. Restore its original configuration before writing or deleting objects.");
+  return { store, binding: await store.binding() };
 }
 
 export function resetStorageForTests(): void {

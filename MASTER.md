@@ -3943,7 +3943,7 @@ reading chat logs.
   step-up, typed confirmation and audit evidence in `tests/core/outbox.test.ts`;
   webhook replay convergence in `tests/core/webhooks.test.ts`; changeset
   `outbox-dead-letters.md`; operator runbook `deploy/event-outbox.md` **F04** `/admin/jobs/outbox` redacted replay with step-up. **F05** `platform.listOutboxEvents`/`getOutboxEvent`/`replayOutboxEvent`/`outboxSummary` at `/api/v1/platform.*`, MCP `platform_*` (replay is step-up). **F07** `tests/core/outbox.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/event-outbox.md`. **F12** `tests/core/outbox.test.ts` is the composition proof.)
-- [x] **C1.12** Complete media support for video, audio and documents,
+- [ ] **C1.12** Complete media support for video, audio and documents,
   resumable/presigned direct uploads, validation, malware scanning seam,
   metadata/provenance, focal points, lifecycle and orphan cleanup.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
@@ -3953,6 +3953,23 @@ reading chat logs.
   quarantine/rescan; 30-day trash, restore, owner-confirmed purge and scheduled
   cleanup; admin/API/MCP parity; 83 focused media/storage/scanner/MCP tests;
   changeset `media-lifecycle.md`; runbook `deploy/media-lifecycle.md` **F04** `/admin/media` upload, trash, restore, purge. **F05** `media.upload`/`beginUpload`/`completeUpload`/`abortUpload`/`trash`/`restore`/`purge` at `/api/v1/media.*` and `/api/media/uploads`; OpenAPI/SDK, MCP `media_*`. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/media-lifecycle.md`. **F12** changeset `media-lifecycle.md` landed with the rest of the spine.)
+  Reopened 2026-11-11 by five real private-storage regressions: a completed
+  PUT with a lost acknowledgement lost its tracking row; a rejected request
+  could finish writing later; one failed parallel rendition dropped sibling
+  witnesses; the orphan timer forgot an unresolved writer; and replacement
+  storage acknowledged cleanup while the original bytes remained. All five
+  now pass locally in `tests/core/media-write-ownership.test.ts` against the
+  receipt-based PUT/DELETE repair under qualification (explicit local SQL75,
+  not a contiguous migration or release claim). Original intent, resource
+  namespace and positive observations survive failures. Unknown operations
+  block automatic retries and cleanup. Fresh human recovery, bounded contact
+  merge/undo witnesses and truthful pending erasure are being qualified in
+  `tests/core/media-write-recovery.test.ts`; `/admin/media/recovery` and all
+  four locale strings are implemented but not yet production-browser accepted.
+  Direct multipart/capture adoption, contiguous upgrade/older-writer proof,
+  original-byte cross-target recovery and live storage acceptance remain
+  required before this item can close. C3.22/C11.08 and independent C11.10
+  remain open. This introduces no scope deferral.
 - [x] **C1.13** Add generated image alt-text suggestions with explicit human
   review and never silently overwrite authored alt text.
   (`0030_tired_northstar.sql`; normalized proposal/review ledger separate from

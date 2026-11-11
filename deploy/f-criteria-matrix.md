@@ -411,8 +411,8 @@ this addendum also includes C10.33 instead of weakening either gate.
 
 - **F01** — `db/migrations/0000_reviewed-baseline.sql` — reviewed baseline (C10.19) folding the item's migration tag `0029_closed_rockslide.sql`; table invariants asserted in `tests/core/media.test.ts`.
 - **F02** — `tests/core/media.test.ts` — typed media service boundary: validation, quarantine, controlled downloads and refusal assertions against the live registry.
-- **F03** — N/A — the item touches no contact, money or audit surface — nothing to wire into the spine.
-- **F04** — /admin/media upload, trash, restore, purge. — screen file `app/(admin)/admin/media/page.tsx`.
+- **F03** — Physical operation ownership follows existing unified contacts. `src/core/media/write-ownership.ts` records bounded pointer/hash merge witnesses; `write-privacy.ts` exports receipts and keeps original cleanup pending. New controls in `tests/core/media-write-recovery.test.ts` are in qualification.
+- **F04** — /admin/media upload, trash, restore, purge and /admin/media/recovery original-operation review. Recovery screen is implemented in all four locales; production browser acceptance remains open.
 - **F05** — `media.upload`/`beginUpload`/`completeUpload`/`abortUpload`/`trash`/`restore`/`purge` at /api/v1/media.* and /api/media/uploads; OpenAPI/SDK, MCP `media_*`. — surface equivalence: `tests/core/api.test.ts` (every service has an endpoint, spec schema is the validator), `tests/core/sdk-schema.test.ts` (generated client contract) and `tests/core/mcp.test.ts` (registry-derived MCP tools)..
 - **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG over the surfaces the browser suite visits in `tests/browser/accessibility.spec.ts`.
 - **F07** — service permission checks and destructive confirmation on the caller. — `tests/core/media.test.ts`.

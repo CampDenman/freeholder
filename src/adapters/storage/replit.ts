@@ -11,6 +11,7 @@
 // shape a private S3 bucket takes, which is why the contract makes `url` async
 // and `isPublic` explicit rather than assuming either.
 import type { StorageAdapter, StoredObject } from "@/adapters/storage/types";
+import { storageNamespace } from "@/core/media/storage-quota";
 
 export interface ReplitConfig {
   /** Omitted on Replit, where the default bucket is discovered from the env. */
@@ -23,11 +24,11 @@ interface ReplitClient {
   uploadFromBytes(
     name: string,
     contents: Buffer,
-  ): Promise<{ ok: boolean; error?: { message: string } }>;
+  ): Promise<{ ok: boolean; error?: { message: string; statusCode?: number } }>;
   downloadAsBytes(
     name: string,
-  ): Promise<{ ok: boolean; value?: Buffer[]; error?: { message: string } }>;
-  delete(name: string): Promise<{ ok: boolean; error?: { message: string } }>;
+  ): Promise<{ ok: boolean; value?: Buffer[]; error?: { message: string; statusCode?: number } }>;
+  delete(name: string): Promise<{ ok: boolean; error?: { message: string; statusCode?: number } }>;
 }
 
 async function connect(config: ReplitConfig): Promise<ReplitClient> {
@@ -51,13 +52,43 @@ async function connect(config: ReplitConfig): Promise<ReplitClient> {
 }
 
 export function createReplitStorage(config: ReplitConfig): StorageAdapter {
+  // Resolve the same default-bucket protocol used by pinned official SDK1.0.0
+  // once, then give the SDK that explicit ID. A later default cannot silently
+  // become evidence about an older bucket.
+  let bucket: Promise<string> | undefined;
+  const bucketOnce = () => (bucket ??= (async () => {
+    if (config.bucketId) return config.bucketId;
+    const response = await fetch("http://127.0.0.1:1106/object-storage/default-bucket", { signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) throw new Error("Replit's original object-storage bucket is unavailable.");
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("Replit returned an empty bucket response.");
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    try {
+      for (;;) {
+        const part = await reader.read();
+        if (part.done) break;
+        bytes += part.value.byteLength;
+        if (bytes > 8_192) throw new Error("Replit's bucket response exceeded its bound.");
+        chunks.push(part.value);
+      }
+    } finally { await reader.cancel().catch(() => {}); }
+    const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const id = value && typeof value === "object" && "bucketId" in value ? value.bucketId : undefined;
+    if (typeof id !== "string" || !/^[a-zA-Z0-9._-]{1,255}$/.test(id)) throw new Error("Replit did not return a valid original bucket ID.");
+    return id;
+  })());
   let client: Promise<ReplitClient> | undefined;
-  const clientOnce = () => (client ??= connect(config));
+  const clientOnce = () => (client ??= bucketOnce().then(bucketId => connect({ ...config, bucketId })));
 
   return {
     id: "replit",
     // Objects are not reachable without going through the app.
     isPublic: false,
+    async binding() {
+      const bucketId = await bucketOnce();
+      return { kind: "replit", namespace: storageNamespace({ id: "replit", bucket: bucketId }), location: { bucket: bucketId } };
+    },
 
     async put(key, body, contentType): Promise<StoredObject> {
       const result = await (
@@ -73,8 +104,12 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
 
     async get(key): Promise<Uint8Array<ArrayBuffer> | undefined> {
       const result = await (await clientOnce()).downloadAsBytes(key);
-      if (!result.ok || !result.value?.length) return undefined;
-      return new Uint8Array(result.value[0]!);
+      if (!result.ok) {
+        if (result.error?.statusCode === 404) return undefined;
+        throw new Error(`storage: read of ${key} failed`);
+      }
+      if (!result.value) throw new Error("storage: provider omitted the successful read result");
+      return new Uint8Array(Buffer.concat(result.value));
     },
 
     async head(key) {
@@ -100,7 +135,7 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
     async delete(key): Promise<void> {
       const result = await (await clientOnce()).delete(key);
       // Deleting what is not there already satisfies the caller.
-      if (!result.ok && !/not found/i.test(result.error?.message ?? "")) {
+      if (!result.ok && result.error?.statusCode !== 404) {
         throw new Error(
           `storage: delete of ${key} failed — ${result.error?.message ?? "unknown error"}`,
         );

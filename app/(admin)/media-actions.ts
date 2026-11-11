@@ -19,11 +19,29 @@ import {
   updateAssetDetails,
 } from "@/core/media/service";
 import { ServiceError } from "@/core/service";
+import { reconcileStorageOperation } from "@/core/media/write-recovery";
 import { getT } from "../i18n";
 
 export interface MediaActionState {
   error?: string;
   saved?: boolean;
+}
+
+export async function reconcileStorageAction(_previous: MediaActionState, form: FormData): Promise<MediaActionState> {
+  const t = await getT();
+  try {
+    const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+    await reconcileStorageOperation.call({ id: text(form, "id"), expectedUpdatedAt: text(form, "expectedUpdatedAt"),
+      originalNamespace: text(form, "originalNamespace"), outcome: text(form, "outcome"), sha256: text(form, "sha256") || undefined,
+      bytes: text(form, "bytes") ? Number(text(form, "bytes")) : undefined,
+      providerFinalReference: text(form, "providerFinalReference"), providerEvidence: text(form, "providerEvidence"),
+      stoppedWriterEvidence: text(form, "stoppedWriterEvidence"), confirmation: text(form, "confirmation") }, actor);
+    revalidatePath("/admin/media/recovery");
+    return { saved: true };
+  } catch {
+    // Provider errors and private evidence must never appear in the page/log.
+    return { error: t("media.recovery.failed") };
+  }
 }
 
 function text(form: FormData, key: string): string {

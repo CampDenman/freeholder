@@ -450,6 +450,20 @@ export const eraseMailRecords = defineJob({
   },
 });
 
+/** Original object operations must settle before their erasure is acknowledged. */
+export const eraseMediaStorageOperations = defineJob({
+  name: "core.eraseMediaStorageOperations",
+  summary: "Clean up original objects and minimize their settled storage-operation receipts.",
+  retry: { limit: 40, delaySeconds: 60, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 1,
+  handler: async (data, context) => {
+    if (!context) throw new Error("Media-operation erasure requires a durable worker identity.");
+    await context.throwIfCancelled();
+    const { eraseMediaStorageOperations: erase } = await import("@/core/media/write-privacy");
+    return erase(data);
+  },
+});
+
 /** Unconfirmed recordings and leftover chunks must not outlive the session. */
 export const expireCaptureSessions = defineJob({
   name: "core.expireCaptureSessions",
@@ -1086,6 +1100,7 @@ export default [
   deleteCaptureObjects,
   eraseImportSourceObjects,
   eraseMailRecords,
+  eraseMediaStorageOperations,
   expireAgentApprovals,
   runPlaybooks,
   assembleBriefings,

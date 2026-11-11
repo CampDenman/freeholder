@@ -11,6 +11,13 @@
 
 export type StorageId = "s3" | "replit" | "local";
 
+/** Stable resource names only; no credentials or bearer capabilities. */
+export interface StorageBinding {
+  kind: StorageId;
+  namespace: string;
+  location: Readonly<Record<string, string>>;
+}
+
 export interface StoredObject {
   key: string;
   bytes: number;
@@ -59,6 +66,8 @@ export interface SignedUrlOptions {
 
 export interface StorageAdapter {
   readonly id: StorageId;
+  /** Resolve before admission/provider writes, never inside a business TX. */
+  binding?(): Promise<StorageBinding>;
 
   /**
    * Whether objects are reachable without a signature. Client galleries and

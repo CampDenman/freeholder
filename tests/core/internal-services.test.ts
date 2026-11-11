@@ -384,6 +384,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "media.applyStoredOriginal",
   "media.beginUploadApply",
   "media.claimProxyUpload",
+  "media.claimStorageRecovery",
+  "media.applyStorageRecovery",
   "media.completeUploadSource",
   "media.confirmCaptureApply",
   "media.confirmCaptureSource",

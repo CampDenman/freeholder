@@ -148,6 +148,7 @@ export {
   mediaUploads,
 } from "@/core/media/schema";
 export { abuseReports } from "@/core/media/abuse-schema";
+export { mediaObjectWrites } from "@/core/media/write-schema";
 export { redirects } from "@/core/seo/schema";
 export { cspViolations, rateLimitCounters } from "@/core/security/schema";
 export { businessProfile, moduleSettings } from "@/core/settings/schema";
