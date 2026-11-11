@@ -672,6 +672,7 @@ export async function productAction(form: FormData): Promise<void> {
           {
             cartId: field(form, "cartId"),
             variantId: field(form, "variantId"),
+            lineId: field(form, "lineId") || undefined,
             quantity: Number(field(form, "quantity") || "0"),
           },
           actor,
@@ -682,6 +683,7 @@ export async function productAction(form: FormData): Promise<void> {
           {
             cartId: field(form, "cartId"),
             variantId: field(form, "variantId"),
+            lineId: field(form, "lineId") || undefined,
           },
           actor,
         );

@@ -157,6 +157,7 @@ export default async function CartPage({ searchParams }: { searchParams: Promise
               <div className="flex flex-wrap items-center gap-3 sm:justify-end">
                 <form action={updateCartLineAction} className="flex items-center gap-2">
                   <input type="hidden" name="variantId" value={line.variantId} />
+                  <input type="hidden" name="lineId" value={line.id} />
                   <label className="flex items-center gap-2 text-sm text-ink-muted">
                     {t("store.cart.quantity")}
                     <input
@@ -176,6 +177,7 @@ export default async function CartPage({ searchParams }: { searchParams: Promise
                 {signedIn ? (
                   <form action={saveForLaterAction}>
                     <input type="hidden" name="variantId" value={line.variantId} />
+                    <input type="hidden" name="lineId" value={line.id} />
                     <Button type="submit" variant="quiet" className="px-3 py-1.5 text-xs">
                       {t("store.cart.saveForLater")}
                     </Button>
@@ -183,6 +185,7 @@ export default async function CartPage({ searchParams }: { searchParams: Promise
                 ) : null}
                 <form action={removeCartLineAction}>
                   <input type="hidden" name="variantId" value={line.variantId} />
+                  <input type="hidden" name="lineId" value={line.id} />
                   <Button type="submit" variant="quiet" className="px-3 py-1.5 text-xs">
                     {t("store.cart.remove")}
                   </Button>

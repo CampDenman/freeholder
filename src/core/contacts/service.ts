@@ -33,7 +33,7 @@ import {
 } from "@/core/contacts/relationships";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
-import { defineService, ServiceError, type Tx } from "@/core/service";
+import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 // "Lead" means one thing, and core says what (§4.7, C9.07).
 import "./funnel";
 
@@ -439,6 +439,8 @@ export interface ContactReference {
     tx: Tx,
     duplicateId: string,
     survivingId: string,
+    /** Production supplies the real parent context for same-transaction composition. */
+    context?: ServiceContext,
   ) => Promise<unknown>;
   /** State before/after repointing, plus whether exact recovery is safe. */
   captureForUndo: (
@@ -918,7 +920,7 @@ export const mergeContacts = defineService({
           before.blocker ?? `${reference.table} cannot be restored safely.`,
         );
       }
-      await reference.repoint(ctx.tx, duplicate.id, surviving.id);
+      await reference.repoint(ctx.tx, duplicate.id, surviving.id, ctx);
       referenceState.push({ table: reference.table, before: before.state, after: null });
     }
 
