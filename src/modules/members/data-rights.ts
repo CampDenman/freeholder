@@ -193,9 +193,6 @@ async function eraseMember(tx: Tx, userId: string, service?: ServiceContext): Pr
 
   // Everything else that is theirs goes. Rows keyed to the login would also
   // cascade when it is deleted; deleting them here makes the count honest.
-  // A separate credentials hold can retain the inert login parent. That hold
-  // does not retain this unheld mutable provider account or its public details.
-  count(await tx.delete(memberPayoutAccounts).where(eq(memberPayoutAccounts.userId, userId)).returning({ userId: memberPayoutAccounts.userId }));
   count(await tx.delete(memberReviews).where(or(eq(memberReviews.authorId, userId), eq(memberReviews.subjectId, userId))).returning({ id: memberReviews.id }));
   count(await tx.update(memberReports).set({ state: "dismissed", resolutionNote: "The member left the site.", resolvedAt: now }).where(and(eq(memberReports.subjectId, userId), eq(memberReports.state, "open"))).returning({ id: memberReports.id }));
   count(await tx.delete(memberReports).where(eq(memberReports.subjectId, userId)).returning({ id: memberReports.id }));
