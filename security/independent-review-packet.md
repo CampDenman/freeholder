@@ -304,6 +304,26 @@ Review token retirement, other-customer refusals, original provider capability,
 account replacement and the four-locale browser controls. This source slice
 does not enable direct collection or supply independent/provider acceptance.
 
+### Public commercial support and financial identity ownership (in progress)
+
+Review `src/core/commerce/merchant-identity.ts`, the Stripe Connect public-only
+normalizer, `members/merchant-identity-privacy.ts`, and migration74. Customer
+invoice/receipt DTOs may expose only the frozen public supplier name and support
+details, after existing ownership or exact payment-token validation. The
+provider response must name the original account; private representative/home
+fields, current defaults and current seller details must not fill missing
+historical values. An erased merchant stays visibly unavailable rather than
+being relabelled as the platform.
+
+The new private contact FK must follow real merge/undo, export, active named
+holds and erasure even after login deletion. Review the bounded SQL-row hash
+witnesses, conservative pre74 undo fence, old-writer completion fence and
+credential-only versus member-wide holds. Opaque financial routing and actor
+identities remain accounting evidence; support values must not acquire extra
+audit/recovery copies. Migration74 is reserved after71–73; contiguous upgrade,
+final native/browser qualification and protected checks remain required. This
+section records review targets, not acceptance or independent sign-off.
+
 The later Stripe card-setup increment resolves an unexpanded SetupIntent only
 after raw signature/account validation, on the same account. Review succeeded
 off-session status, original reference, customer/method binding and matching

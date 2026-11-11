@@ -13264,6 +13264,15 @@ whatever is best for the people using the site.
   `merchant-customer-invoice-identity.md`; `deploy/commerce-payments.md`.
   Full C12.38 integration and actual acceptance remain required; this source
   slice enables no direct collection model and supplies no stable sign-off.
+  Commercial-identity work in progress 2026-11-11: the next source slice freezes
+  explicitly public provider support details on the original agreement,
+  invoice and receipt, and exposes the seller's current public details on
+  their own payout page. Financial identity follows its persistent contact
+  owner through export, named holds, erasure and bounded merge undo. Migration74
+  conservatively fences legacy merges whose history predates that ownership;
+  historical support is never guessed from today's account. Qualification and
+  the contiguous migration71→74 chain remain pending. This work does not enable
+  direct collection, close C12.38 or supply actual provider acceptance.
   *(In progress 2026-11-10: an immutable internal invoice market-policy
   snapshot freezes collection model and fees at issue; subscription agreements
   capture seller terms before trials and preserve them on renewal. Existing held/instant

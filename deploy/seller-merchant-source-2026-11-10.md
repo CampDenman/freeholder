@@ -334,3 +334,32 @@ import, erased-contact and refund PRs without a new dependency rebase. All 43
 i18n/activity/live-SDK controls, full fast gates and four owner locale journeys
 passed. The production artifact still has 20,327 files / 242,796,086 bytes with
 a clean scrub. This cleanup changes no message, outcome or authorization.
+
+Commercial support identity is the next bounded source integration. Stripe
+refresh reads only the original account's public business-profile support
+email, phone, URL and address, and rejects a response naming another account.
+It never substitutes a representative's email or home address. The seller's
+own payout view can inspect the current public details and refresh them after
+updating their Express settings. New direct agreements require public support;
+existing agreements, invoices and payment receipts keep their original copy
+when the current account or site changes. This does not activate direct
+collection or establish provider acceptance.
+
+Migration74 adds a private contact owner to those financial identity copies.
+Only the existing unique login/contact relationship supplies legacy ownership;
+it does not invent historical support details. A legacy merge without the new
+financial witness becomes non-undoable instead of guessing a before-image.
+New merge witnesses contain bounded row fingerprints, not another copy of the
+public details; changed or oversized identity sets refuse separation. The
+`members.merchantIdentity` privacy source exports and erases these copies,
+honours the existing `members` and `commerce.money` holds, and preserves the
+original opaque financial routing. The persistent contact remains authoritative
+after login deletion. The SQL completion fence refuses an older writer's
+false erasure acknowledgement. Full rollback requires the pre-upgrade database
+and object snapshot.
+
+This slice is still undergoing native and four-locale browser qualification.
+Migration74 must follow the reserved mail71, physical-mail72 and import-graph73
+changes; the contiguous empty and populated upgrade checks remain required.
+Recorded HTTP, database fixtures, browser presentation and agent review do not
+supply live provider acceptance, independent security review or stable sign-off.
