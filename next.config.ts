@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
   // exposing it (GHSA-2464-fhr4-w9xw was an unauthenticated RCE there).
   images: { unoptimized: true },
   transpilePackages: ["@freeholder/templates"],
+  // Full source, test and tooling checks run through pnpm typecheck. The
+  // production build separately checks runtime source and generated routes;
+  // package verification's generated dist declarations are not new roots.
+  typescript: { tsconfigPath: "tsconfig.build.json" },
   // Ships a self-contained server with only the files it actually imports, so
   // the production image carries neither node_modules nor the build toolchain
   // (§14: one-command deploy, and a droplet with 4GB has better uses for it).

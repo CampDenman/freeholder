@@ -107,6 +107,17 @@ replacement comments keep their existing privacy-controlled cutover checkpoint.
   source-attested `dba1b242` image: that worktree's head was `6dabec18`, before
   the held-member fix. The disposable server was stopped and its database had
   no active writers before the shared PostgreSQL slot was returned.
+- Initial protected CI at `0261a1fd` passed every application-behavior, browser,
+  security and recipe job but its application build exhausted Node 22's 4 GiB
+  TypeScript heap. Reproducing its package-build ordering added 41 generated
+  declaration roots and measured 4,226,377 KiB of compiler memory locally.
+  Next now uses a production TypeScript configuration covering every one of
+  the 1,627 tracked runtime TypeScript files and generated route types. The
+  unchanged full-project typecheck still checks tests and tooling separately.
+  Production compiler memory fell to 3,440,838 KiB; a complete Node 22.23.2
+  build and scrub passed with 20,362 files and 243,617,631 bytes. Full typecheck
+  and all 25 focused artifact/schema/topology/merge contracts passed. No heap,
+  deadline or assertion was relaxed; renewed protected CI is still required.
 
 The opt-in older-artifact fixture is `tests/fixtures/import-old-image.probe.ts`.
 After the ordinary browser owner fixture exists in an explicitly named test
