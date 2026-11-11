@@ -10,6 +10,7 @@ import { and, eq, isNull, or, gt, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { env } from "@/core/env";
 import { apiKeys } from "@/core/apikeys/schema";
+import { contacts } from "@/core/contacts/schema";
 
 /**
  * The visible prefix. `fh` names the platform in somebody's environment file,
@@ -96,6 +97,7 @@ export async function verifyApiKey(
         eq(apiKeys.tokenHash, hashApiKey(token)),
         isNull(apiKeys.revokedAt),
         or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, sql`now()`)),
+        sql`not exists(select 1 from ${contacts} where ${contacts.userId}=${apiKeys.actsAsUserId} and ${contacts.source}='privacy-erasure')`,
       ),
     )
     .limit(1);

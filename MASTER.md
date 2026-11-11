@@ -12643,6 +12643,23 @@ whatever is best for the people using the site.
   service sells or shares member data. **F09** N/A — runs inside the existing
   privacy request. **F12** the journey checks origins and reaches the
   privacy centre from member settings. Changeset `member-data-rights.md`.)*
+  *(Held-parent repair 2026-11-11, C1.08/C12.15/C11.10: a real named
+  members hold reproduced login deletion failing on a retained seller product.
+  Sources can declare their required login parent. Held member records now
+  retain an inert login and minimal contact linkage for later erasure, with
+  password, factors, sessions, reset/recovery challenges and personal keys
+  revoked. Held profiles are suspended, historical conversation seats remain
+  recorded as left, and active calls rotate their generation through the real
+  privacy context. New sessions, personal keys and reactivation refuse the
+  erased identity. Active holds follow the unified contact across requests,
+  with their original exception/request preserved in retention and receipts;
+  a new request cannot bypass them. Independent key verification also rejects
+  late prior-image credentials for the retained erased parent.
+  Releasing the named hold permits a fresh verified request to find and erase
+  the original records. Native evidence is in
+  `tests/modules/member-held-login.test.ts`; operator limits are in
+  `deploy/privacy-rights.md`. This source repair does not supply independent
+  C11.10 review or final C11.17 acceptance.)*
 - [x] **C12.16** Make it a starter: seeded demo members, posts, listings and
   conversations; the playground shows the member features; vibe-coding guides
   for Replit, Lovable and coding agents. A dedicated community new-site

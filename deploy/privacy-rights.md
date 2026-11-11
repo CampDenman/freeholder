@@ -308,3 +308,41 @@ Recovery's full provider/stopped-caller evidence stays in that private source
 until its hold or completed cleanup permits deletion. Typed audit projection
 keeps only operation identities/outcomes in the generic audit copy, preserving
 actor/action/subject history without recreating erased evidence after cutover.
+
+## Held member parents (C1.08/C12.15, 2026-11-11)
+
+A named `members` hold preserves the original member records and their inert
+login parent. Erasure still removes ordinary contact details and all sign-in
+material: sessions, password, TOTP/passkeys, reset/recovery challenges and
+personal API-key access. The original contact retains only its login ID so
+later owner-driven erasure can find those held records. The login's email is
+replaced by a non-deliverable erased identity. This does not create another CRM
+contact or transfer ownership to a later holder of the original email address.
+
+Active named holds apply across this contact's requests. Creating another
+request does not release or bypass an earlier hold. The request detail lists
+those inherited holds; the receipt identifies the original exception/request,
+and storage retain callbacks keep that originating hold identity. Explicit
+removal or expiry is still required before held data can be erased.
+
+Session and personal-key issuance lock the parent before consulting its erased
+contact marker. An authenticated request already in flight cannot issue a new
+credential after cutover. Verification also refuses a late personal key written
+by an older image, even though the inert login parent still exists.
+
+The retained profile is suspended, conversation seats remain as historical
+`left` rows, and active call seats end with the existing generation rotation
+and after-commit SFU retirement. Held content is not deleted by that access
+revocation. A new session or owner reactivation cannot reopen an erased login.
+
+The request remains partially completed and names its retained scope. After
+resolving and removing the specific hold, the owner creates and verifies a new
+erasure request; it follows the preserved contact/login link and applies the
+normal member erasure before deleting the parent. A hold is never released
+merely because time passed or an unrelated request completed. Staff-capable
+logins retain the existing refusal and require deliberate reassignment first.
+
+`tests/modules/member-held-login.test.ts` contains actual PostgreSQL controls
+for retained seller products/accounts, revoked login routes, released-hold
+redrive and preserved call history with removed call/MLS entitlement. These
+coding-agent checks do not supply the independent review or live SFU acceptance.

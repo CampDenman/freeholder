@@ -32,6 +32,7 @@ import { registerContactPrivacySource } from "@/core/privacy/service";
 import { ServiceError, type Tx, type ServiceContext } from "@/core/service";
 import { dropFromCalls } from "./call-seats";
 import { lockMemberProfiles, lockMemberConversations } from "./authority-locks";
+import { applyMemberStatus } from "./status";
 import { products } from "@/modules/catalog/schema";
 import { assets } from "@/core/media/schema";
 import { openMessage, sealMessage } from "./message-crypto";
@@ -213,6 +214,7 @@ async function eraseMember(tx: Tx, userId: string, service?: ServiceContext): Pr
 
 registerContactPrivacySource({
   scope: "members",
+  requiresLogin: true,
   tables: [
     "member_profiles",
     "member_profile_sections",
@@ -251,6 +253,21 @@ registerContactPrivacySource({
     "member_remote_follows",
   ],
   eraseOrder: 10,
+  retain: async (tx, contactId, context) => {
+    const userId = await loginOf(tx, contactId);
+    if (!userId) return;
+    if (!context.service || context.service.tx !== tx) throw new ServiceError("internal", "Held member suspension requires its transactional service context.");
+    await lockMemberProfiles(tx, [userId], "update");
+    await lockMemberConversations(tx, userId);
+    const losingSeats = await tx.select({ id: memberConversationParticipants.conversationId }).from(memberConversationParticipants)
+      .where(and(eq(memberConversationParticipants.userId, userId), ne(memberConversationParticipants.state, "left")));
+    const [profile] = await tx.select({ id: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.userId, userId));
+    if (profile) await applyMemberStatus(context.service, userId, "suspended", "Account erased; original records retained under a named privacy hold.");
+    await dropFromCalls(context.service, losingSeats.map(seat => seat.id), userId);
+    // Retain historical seats as evidence while removing outgoing MLS/call
+    // entitlement. Suspension alone does not change the delivery witness.
+    await tx.update(memberConversationParticipants).set({ state: "left" }).where(eq(memberConversationParticipants.userId, userId));
+  },
   exportData: async (tx, contactId) => {
     const userId = await loginOf(tx, contactId);
     return userId ? exportMember(tx, userId) : null;

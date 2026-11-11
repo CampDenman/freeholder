@@ -13,6 +13,7 @@ import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, listExternalServices, ServiceError, type Actor } from "@/core/service";
 import { mintApiKey } from "./tokens";
 import { apiKeys } from "./schema";
+import { requireActiveAccount } from "@/core/auth/active-account";
 
 const MAX_DAYS = 90;
 
@@ -64,6 +65,7 @@ export const createMyKey = defineService({
   output: keyRow.extend({ token: z.string() }),
   handler: async (input, ctx) => {
     const userId = person(ctx.actor);
+    await requireActiveAccount(ctx.tx, userId);
     assertPersonalScopes(input.scopes);
     const minted = mintApiKey();
     const [created] = await ctx.tx

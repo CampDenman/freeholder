@@ -953,3 +953,26 @@ exercises actual local asset acceptance, exact grants and refusal/retry.
 `deploy/hosted-source-media.md` records the current evidence and open provider
 acceptance boundary. Ordinary content scanning and receipt authorization remain
 required for every approved origin.
+
+## Held member login parents (C1.08/C12.15/C11.10)
+
+Review the `requiresLogin` privacy-source metadata and inherited parent hold in
+`core/privacy/service.ts`, the inert credential-retention path, and the
+preserved contact/login ID. All customer credential families and personal keys
+must stop authorizing access, while held member rows remain discoverable for
+a later verified erasure after hold release. Staff-capable accounts must keep
+the existing refusal. Check concurrent session issuance against the locked
+parent and the erased-contact session validation predicate.
+
+Check actual later-request hold bypass and late personal-key creation/verification
+controls. Holds apply through the unified contact across requests; retained
+callbacks receive the original hold request ID and receipts retain its origin.
+Both credential issuers share the locked parent/tombstone guard, and API-key
+verification independently refuses an erased parent from an older writer.
+
+Review the members retain callback's ordered profile/conversation locks,
+suspension, preserved-left seats and real-context call generation retirement.
+A status change alone does not remove a device from the MLS authority witness.
+Reactivation must refuse the erased identity. The PostgreSQL before-failure and
+regressions in `tests/modules/member-held-login.test.ts` support this repair;
+they do not provide an independent sign-off or actual hosted-SFU acceptance.

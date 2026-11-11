@@ -16,7 +16,8 @@ import {
 } from "drizzle-orm";
 import { z } from "zod";
 import { registerSearchSource, matchesIlike } from "@/core/search/registry";
-import { roleGrants, sessions, users } from "@/core/auth/schema";
+import { loginSecurityEvents, passwordResets, roleGrants, sessions, totpFactors, twoFactorChallenges, twoFactorRecoveryCodes, users, webauthnCredentials } from "@/core/auth/schema";
+import { apiKeys } from "@/core/apikeys/schema";
 import {
   contactMergeOperations,
   contactRelationships,
@@ -137,13 +138,15 @@ export interface ContactPrivacySource {
   tables: readonly string[];
   /** Parent stores inherit holds for children they would cascade-delete. */
   retentionScopes?: readonly string[];
+  /** A held source needs its inert login parent and contact link for later erasure. */
+  requiresLogin?: boolean;
   /**
    * Erasure order, lowest first (default 100). A source whose rows the login
    * deletion would cascade over or be blocked by runs before it.
    */
   eraseOrder?: number;
   exportData: (tx: Tx, contactId: string) => Promise<unknown>;
-  /** Protect existing external/temporary copies when an explicit hold skips erase. */
+  /** Protect held copies; context.requestId identifies the hold's originating request. */
   retain?: (tx: Tx, contactId: string, context: { requestId: string; exceptionId: string; service?: ServiceContext }) => Promise<void>;
   erase: (
     tx: Tx,
@@ -713,6 +716,13 @@ export const createMyDataRequest = defineService({
   },
 });
 
+async function contactRetentionExceptions(tx: Tx, contactId: string) {
+  return tx.select(getTableColumns(privacyRetentionExceptions)).from(privacyRetentionExceptions)
+    .innerJoin(dataRequests, eq(dataRequests.id, privacyRetentionExceptions.dataRequestId))
+    .where(eq(dataRequests.contactId, contactId))
+    .orderBy(asc(privacyRetentionExceptions.scope), asc(privacyRetentionExceptions.createdAt), asc(privacyRetentionExceptions.id));
+}
+
 async function requestWithDetails(tx: Tx, id: string) {
   const [request] = await tx
     .select()
@@ -721,11 +731,7 @@ async function requestWithDetails(tx: Tx, id: string) {
     .limit(1);
   if (!request) throw new ServiceError("not_found", "That privacy request is not here.");
   const [exceptions, artifact] = await Promise.all([
-    tx
-      .select()
-      .from(privacyRetentionExceptions)
-      .where(eq(privacyRetentionExceptions.dataRequestId, id))
-      .orderBy(asc(privacyRetentionExceptions.scope)),
+    contactRetentionExceptions(tx, request.contactId),
     tx
       .select({
         id: dataRequestArtifacts.id,
@@ -1151,6 +1157,22 @@ registerContactPrivacySource({
 registerContactPrivacySource({
   scope: "contact.credentials",
   tables: ["customer_magic_links"],
+  retain: async (tx, contactId) => {
+    const contact = await requireContact(tx, contactId);
+    await tx.delete(customerMagicLinks).where(eq(customerMagicLinks.contactId, contactId));
+    if (!contact.userId) return;
+    const [account] = await tx.select().from(users).where(eq(users.id, contact.userId)).limit(1).for("update");
+    if (!account) return;
+    const grants = await tx.select({ module: roleGrants.module }).from(roleGrants).where(eq(roleGrants.roleKey, account.role));
+    if (account.role !== "customer" || grants.length > 0) throw new ServiceError("conflict", "This contact is linked to a staff-capable login. Unlink or reassign that login before erasure.");
+    // Keep only the parent identity needed by explicitly held children. No
+    // password, device proof, recovery token or agent credential stays usable.
+    for (const table of [sessions, passwordResets, totpFactors, webauthnCredentials, twoFactorRecoveryCodes, twoFactorChallenges, loginSecurityEvents]) {
+      await tx.delete(table).where(eq(table.userId, account.id));
+    }
+    await tx.update(apiKeys).set({ revokedAt: sql`coalesce(${apiKeys.revokedAt}, clock_timestamp())`, updatedAt: new Date() }).where(eq(apiKeys.actsAsUserId, account.id));
+    await tx.update(users).set({ email: `erased-${account.id}@erased.invalid`, passwordHash: null, otpSecret: null, lastLoginAt: null, updatedAt: new Date() }).where(eq(users.id, account.id));
+  },
   exportData: async (tx, contactId) => {
     const contact = await requireContact(tx, contactId);
     const links = await tx
@@ -1456,22 +1478,26 @@ async function eraseContact(
   const tx = ctx.tx;
   await lockContactIdentity(tx);
   const now = new Date();
-  const exceptions = (
-    await tx
-      .select()
-      .from(privacyRetentionExceptions)
-      .where(eq(privacyRetentionExceptions.dataRequestId, request.id))
-  ).filter((item) => !item.expiresAt || item.expiresAt > now);
+  const exceptions = (await contactRetentionExceptions(tx, request.contactId))
+    .filter((item) => !item.expiresAt || item.expiresAt > now);
   const byScope = new Map(exceptions.map((item) => [item.scope, item]));
   const outcomes: Array<Record<string, unknown>> = [];
   const ordered = [...privacySourceRegistry].sort((a, b) => (a.eraseOrder ?? 100) - (b.eraseOrder ?? 100));
+  const loginException = ordered.filter(source => source.requiresLogin)
+    .flatMap(source => [source.scope, ...(source.retentionScopes ?? [])])
+    .map(scope => byScope.get(scope)).find(Boolean);
+  let retainedLogin = false;
   for (const source of ordered) {
-    const exception = [source.scope, ...(source.retentionScopes ?? [])].map(scope => byScope.get(scope)).find(Boolean);
+    const exception = [source.scope, ...(source.retentionScopes ?? [])].map(scope => byScope.get(scope)).find(Boolean)
+      ?? (source.scope === "contact.credentials" ? loginException : undefined);
     if (exception) {
-      await source.retain?.(tx, request.contactId, { requestId: request.id, exceptionId: exception.id, service: ctx });
+      await source.retain?.(tx, request.contactId, { requestId: exception.dataRequestId, exceptionId: exception.id, service: ctx });
+      if (source.scope === "contact.credentials") retainedLogin = true;
       outcomes.push({
         scope: source.scope,
         outcome: "retained",
+        exceptionId: exception.id,
+        retentionRequestId: exception.dataRequestId,
         reason: exception.reason,
         legalBasis: exception.legalBasis,
         expiresAt: exception.expiresAt,
@@ -1492,7 +1518,7 @@ async function eraseContact(
   const [contact] = await tx
     .update(contacts)
     .set({
-      userId: null,
+      ...(retainedLogin ? {} : { userId: null }),
       name: "Erased contact",
       email: null,
       phone: null,

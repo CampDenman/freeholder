@@ -6,7 +6,8 @@
 // session. Sliding expiration: validating within the renewal window extends
 // the session rather than logging the user out mid-work.
 import { createHmac, randomBytes } from "node:crypto";
-import { count, eq } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
+import { contacts } from "@/core/contacts/schema";
 import {
   roleGrants,
   sessions,
@@ -16,6 +17,7 @@ import {
 } from "@/core/auth/schema";
 import { env } from "@/core/env";
 import type { ModuleGrant, RequestMetadata, Tx } from "@/core/service";
+import { requireActiveAccount } from "./active-account";
 import { isPrivilegedGrants } from "@/core/auth/two-factor-crypto";
 
 export const SESSION_COOKIE = "freeholder_session";
@@ -169,6 +171,9 @@ export async function createSession(
     twoFactorVerified?: boolean;
   } = {},
 ): Promise<{ token: string; sessionId: string; expiresAt: Date }> {
+  // Erasure can retain an inert parent for held records. Serialize issuance
+  // with that parent update; an old verified factor cannot reopen its login.
+  await requireActiveAccount(tx, userId);
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
   const [row] = await tx
@@ -205,7 +210,7 @@ export async function validateSession(
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
-    .where(eq(sessions.tokenHash, hashSessionToken(token)))
+    .where(and(eq(sessions.tokenHash, hashSessionToken(token)), sql`not exists(select 1 from ${contacts} where ${contacts.userId}=${users.id} and ${contacts.source}='privacy-erasure')`))
     .limit(1);
   const row = rows[0];
   if (!row) return undefined;
