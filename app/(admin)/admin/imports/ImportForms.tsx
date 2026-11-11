@@ -103,7 +103,7 @@ export function ImportStepForms({
       {status === "discover" || status === "mapped" || status === "failed" || status === "previewed" ? (
         <div className="grid min-w-0 gap-6">
           {["wordpress-rest", "sitemap", "rss", "atom", "html"].includes(sourceKind) ? <CrawlSourceForm id={id} origin={origin} labels={labels} /> : null}
-          <SourceUploadForm id={id} labels={labels} />
+          <SourceUploadForm id={id} labels={labels} sourceKind={sourceKind} />
         </div>
       ) : null}
       {status === "discover" ? (
@@ -198,8 +198,10 @@ export function ImportStepForms({
 function SourceUploadForm({
   id,
   labels,
+  sourceKind,
 }: {
   id: string;
+  sourceKind: string;
   labels: {
     upload: string;
     uploadHint: string;
@@ -265,7 +267,7 @@ function SourceUploadForm({
           id="source-file"
           name="file"
           type="file"
-          accept=".xml,.json,.html,.htm,.rss,.atom,application/xml,text/xml,application/json,text/html"
+          accept={sourceKind === "archive" ? ".zip,application/zip,application/x-zip-compressed" : ".xml,.json,.html,.htm,.rss,.atom,application/xml,text/xml,application/json,text/html"}
           required
           disabled={progress !== null}
           className="w-full min-w-0 max-w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"

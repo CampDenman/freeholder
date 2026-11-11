@@ -691,6 +691,32 @@ export const video = defineBlock({
   },
 });
 
+/** C3.22: imported documents and audio keep a typed, revocable asset reference. */
+export const file = defineBlock({
+  type: "file",
+  labelKey: "cms.block.file",
+  contexts: ["page", "chrome"],
+  schema: z.object({ assetId: z.string().uuid().optional(), label: z.string().max(200).optional() }),
+  starter: () => ({}),
+  fieldHints: { assetId: { control: "asset" } },
+  resolve: async (props) => {
+    if (!props.assetId) return null;
+    const { authorizeAssetDownload, resolveAsset } = await import("@/core/media/service");
+    const asset = await resolveAsset.call({ id: props.assetId }, { kind: "anonymous" });
+    if (asset) return asset;
+    const download = await authorizeAssetDownload.call({ id: props.assetId }, { kind: "anonymous" });
+    return download ? { kind: "doc" as const, filename: download.filename, src: `/media/download/${props.assetId}` } : null;
+  },
+  render: ({ props, resolved }) => {
+    if (!resolved) return null;
+    const label = props.label || resolved.filename;
+    return <div className="grid min-w-0 gap-2">
+      {resolved.kind === "audio" ? <audio controls preload="metadata" src={resolved.src} aria-label={label} className="w-full max-w-full" /> : null}
+      <a href={resolved.src} className="break-words underline" download={resolved.kind === "doc" || undefined}>{label}</a>
+    </div>;
+  },
+});
+
 /**
  * Admin-only custom HTML (C2.07).
  *

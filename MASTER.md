@@ -2453,7 +2453,7 @@ One block editor for **everything with a public face** — pages, posts, email t
 
 **Structure is data; code is vocabulary.** The governing rule of the whole editing surface: rearranging the site — any page, the chrome around it, the look of it — is a database write, live on next request, never a build. Only extending the *vocabulary* (a new block type, a new behavior) is code, which arrives via plugin and its rebuild-on-install. There is no build step between an owner and their site.
 
-- **Block library v1:** text, heading, image (auto alt-text suggestion), gallery embed, video, button/CTA, columns, divider, FAQ (emits FAQPage schema), testimonial (pulls from reviews), product/service card (live from catalog), booking widget, form embed, quote-request, map (from locations), social embed, share block (§34), link-in-bio profile (ordered, hideable, scheduled smart links; C9.39), tip/support (pay-what-you-want with preset amounts), paywall gate (wraps any blocks behind a one-time unlock or subscription — server-rendered teaser, gated content never present in the HTML), ad slot (names an `AdSlot`; reserves its declared size at every breakpoint so nothing shifts when a creative arrives), custom HTML (admin-only permission).
+- **Block library v1:** text, heading, image (auto alt-text suggestion), gallery embed, video, file/audio (a typed asset reference through the ordinary ready/private/trash checks), button/CTA, columns, divider, FAQ (emits FAQPage schema), testimonial (pulls from reviews), product/service card (live from catalog), booking widget, form embed, quote-request, map (from locations), social embed, share block (§34), link-in-bio profile (ordered, hideable, scheduled smart links; C9.39), tip/support (pay-what-you-want with preset amounts), paywall gate (wraps any blocks behind a one-time unlock or subscription — server-rendered teaser, gated content never present in the HTML), ad slot (names an `AdSlot`; reserves its declared size at every breakpoint so nothing shifts when a creative arrives), custom HTML (admin-only permission).
 - **Editing model:** drag to reorder, slash-command insertion, inline editing, autosave with visible version history and one-click restore (`ContentRevision` rows — normalized, in the database, per the mandate). Live responsive preview (desktop/mobile) and — for emails — inbox preview with the test-send button adjacent.
 - **Templates & sections:** any block arrangement can be saved as a reusable Section (synced or detached copies), and full-page templates ship per business preset. Plugins register new block types through the manifest (§24) and they appear in the palette with zero editor changes.
 - **Site chrome is Sections:** the header, footer, nav, and announcement bar are synced Sections — block trees in the database, edited in the same editor, server-rendered on every page. Menus are rows, not JSX. `app/(public)/layout.tsx` is a thin shell that renders the chrome Sections; it contains no hardcoded site structure.
@@ -5421,6 +5421,17 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `tests/core/import-source-object-cleanup.test.ts`. This foundation does not
   complete archive admission, large-source resumption, historical provider
   inventory or source-specific acceptance; C3.22 remains open.)*
+  *(Static archive work in progress 2026-11-11: a bounded ZIP reader validates
+  paths, CRC/SHA identities, decompression, entry/body/media budgets and UTF-8
+  without filesystem extraction. Static pages retain their own metadata and
+  encoded URL identities rather than inventing WordPress authors/feed/query
+  semantics. Shared typed conversion now has file/audio asset references as
+  well as images/video, and owner ZIP selection uses existing import services.
+  Twenty-four focused real-ZIP/content/manifest controls pass; three real
+  upload-to-CMS controls reproduce the missing binary admission before the
+  transport integration. Original private ZIP ownership, media retries,
+  cleanup and full browser/CI qualification are still being completed. This
+  progress does not close C3.22 or its larger-source resumability gate.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,

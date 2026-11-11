@@ -31,6 +31,7 @@ export default async function ImportsPage() {
               kind: t("imports.kind"),
               kinds: [
                 { value: "html", label: t("imports.kind.html") },
+                { value: "archive", label: t("imports.kind.archive") },
                 { value: "sitemap", label: t("imports.kind.sitemap") },
                 { value: "rss", label: t("imports.kind.rss") },
                 { value: "atom", label: t("imports.kind.atom") },

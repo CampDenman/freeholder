@@ -45,6 +45,7 @@ export type ArchiveAsset = {
   sourceUrl: string;
   filename: string;
   digest: string;
+  crc32: number;
   bytes: number;
   aliases: string[];
   referenced: boolean;
@@ -64,7 +65,7 @@ const BIDI_OR_CONTROL = /[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]/;
 function safePath(path: string): string {
   if (!path || path.length > 1_024 || path.includes("\\") || BIDI_OR_CONTROL.test(path) || /^(?:\/|[a-z]:)/i.test(path)) throw new Error("The ZIP contains an unsafe entry path.");
   const parts = path.replace(/\/$/, "").split("/");
-  if (parts.length > ARCHIVE_LIMITS.depth || parts.some((part) => !part || part === "." || part === "..")) throw new Error("The ZIP contains an unsafe or excessively deep entry path.");
+  if (parts.length > ARCHIVE_LIMITS.depth || parts.some((part) => !part || part === "." || part === ".." || ["__proto__", "prototype", "constructor"].includes(part.toLowerCase()))) throw new Error("The ZIP contains an unsafe or excessively deep entry path.");
   return path.normalize("NFC");
 }
 function regularEntry(entry: Entry): void {
@@ -134,6 +135,7 @@ function attr(node: DefaultTreeAdapterTypes.Element | undefined, name: string): 
 function setAttr(node: DefaultTreeAdapterTypes.Element, name: string, value: string): void {
   const attribute = node.attrs.find((attribute) => attribute.name === name);
   if (attribute) attribute.value = value;
+  else node.attrs.push({ name, value });
 }
 function archiveUrl(path: string, base: URL): string {
   return new URL(path.split("/").map((part) => encodeURIComponent(part)).join("/"), base).href;
@@ -178,7 +180,7 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
       const relative = path.slice(root.length);
       const sourceUrl = archiveUrl(relative, base);
       const key = new URL(sourceUrl).host.toLowerCase() + new URL(sourceUrl).pathname;
-      assetByUrl.set(key, { path, key, sourceUrl, filename: relative.split("/").at(-1)!, digest: "", bytes: entry.uncompressedSize, aliases: [key], referenced: false });
+      assetByUrl.set(key, { path, key, sourceUrl, filename: relative.split("/").at(-1)!, digest: "", crc32: entry.crc32 >>> 0, bytes: entry.uncompressedSize, aliases: [key], referenced: false });
     }
     const pages: ArchivePage[] = [], used = new Set<string>(), unresolvedImages = new Set<string>();
     let bodyBytes = 0;
@@ -195,17 +197,40 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
       if (documentBase.origin !== base.origin || documentBase.username || documentBase.password) throw new Error("An archive page declares a base outside the approved source origin.");
       const meta = (name: string) => nodes.find((node) => node.tagName === "meta" && [attr(node, "name")?.toLowerCase(), attr(node, "property")?.toLowerCase()].includes(name));
       for (const node of nodes) {
-        for (const name of node.tagName === "a" ? ["href"] : node.tagName === "img" || node.tagName === "source" ? ["src"] : []) {
+        for (const name of node.tagName === "a" ? ["href"] : node.tagName === "img" ? ["src", "data-src", "data-lazy-src", "data-original"] : ["source", "video", "audio", "embed"].includes(node.tagName) ? ["src"] : node.tagName === "object" ? ["data"] : []) {
           const value = attr(node, name);
           if (!value) continue;
           let resolved: URL;
           try { resolved = new URL(value, documentBase); } catch { continue; }
           if (!["http:", "https:"].includes(resolved.protocol) || resolved.username || resolved.password) continue;
           setAttr(node, name, resolved.href);
-          if (name === "src") {
+          if (name !== "href") {
             const asset = resolved.origin === base.origin ? assetByUrl.get(resolved.host.toLowerCase() + resolved.pathname) : undefined;
             if (asset) { asset.referenced = true; asset.altText ??= attr(node, "alt")?.slice(0, 500); }
             else if (unresolvedImages.size < 100) unresolvedImages.add(resolved.href);
+          }
+        }
+        if (node.tagName === "img") {
+          // Lazy-load and responsive markup often has no usable src. Pick an
+          // actually owned archive image, never fetch an external candidate.
+          const candidates = [attr(node, "src"), attr(node, "data-src"), attr(node, "data-lazy-src"), attr(node, "data-original")];
+          for (const set of [attr(node, "srcset"), attr(node, "data-srcset")]) {
+            for (const candidate of (set ?? "").split(",")) {
+              const match = /^\s*(\S+)(?:\s+\d+(?:\.\d+)?[wx])?\s*$/.exec(candidate);
+              if (match) candidates.push(match[1]);
+            }
+          }
+          for (const candidate of candidates) {
+            if (!candidate) continue;
+            let resolved: URL;
+            try { resolved = new URL(candidate, documentBase); } catch { continue; }
+            if (resolved.origin !== base.origin || resolved.username || resolved.password) continue;
+            const asset = assetByUrl.get(resolved.host.toLowerCase() + resolved.pathname);
+            if (!asset) continue;
+            setAttr(node, "src", resolved.href);
+            asset.referenced = true;
+            asset.altText ??= attr(node, "alt")?.slice(0, 500);
+            break;
           }
         }
       }
@@ -214,7 +239,8 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
       // source tree for the typed CMS converter, which owns final sanitizing.
       const content = nodes.find((node) => node.tagName === "article") ?? nodes.find((node) => node.tagName === "main") ?? nodes.find((node) => node.tagName === "body") ?? document;
       const sourcePath = new URL(url).pathname;
-      let slug = toCmsSlug(sourcePath.replace(/(?:^|\/)index\.html?$/i, "").replace(/\.html?$/i, ""));
+      const relativePath = sourcePath.slice(base.pathname.length - 1);
+      let slug = toCmsSlug(relativePath.replace(/(?:^|\/)index\.html?$/i, "").replace(/\.html?$/i, ""));
       const originalSlug = slug;
       for (let n = 2; used.has(slug); n++) slug = `${originalSlug || "home"}-${n}`;
       used.add(slug);
@@ -230,6 +256,6 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
       asset.digest = createHash("sha256").update(bytes).digest("hex");
       await retain(asset, new Uint8Array(bytes));
     }
-    return { pages, assets: [...assetByUrl.values()], site: { url: base.href, hosts: [base.host.toLowerCase()], basePath: "" }, report: { entries: count, expandedBytes, ignored: entries.filter(({ path }) => !HTML.test(path) && !MEDIA.test(path)).slice(0, 100).map(({ path }) => path), unresolvedImages: [...unresolvedImages], root } };
+    return { pages, assets: [...assetByUrl.values()], site: { url: base.href, hosts: [base.host.toLowerCase()], basePath: base.pathname.replace(/^\/+|\/+$/g, "") }, report: { entries: count, expandedBytes, ignored: entries.filter(({ path }) => !HTML.test(path) && !MEDIA.test(path)).slice(0, 100).map(({ path }) => path), unresolvedImages: [...unresolvedImages], root } };
   } finally { zip.close(); }
 }

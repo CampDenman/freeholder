@@ -37,6 +37,8 @@ import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS } from "./contract";
 import { crawlPublicSource, type CrawlKind } from "./crawl";
 import { assertSourceStageable, assertNoPendingSourceUpload } from "./source-lifecycle";
 import { assertLegacyReaderSafety, bindReaderSources, publicImportRun, stripReaderCopies } from "./privacy";
+import { archiveSourcePath, staticArchivePlan } from "./archive-plan";
+import { archiveBodyToBlocks, type ArchiveMediaMatch } from "./archive-content";
 import {
   discoverFromPublicOrigin,
   parseRssOrAtom,
@@ -416,14 +418,16 @@ export const startImport = defineService({
         error instanceof Error ? error.message : "That origin is not allowed.",
       );
     }
+    if (input.kind === "archive" && (url.search || url.hash)) throw new ServiceError("validation", "An archive source URL cannot contain a query or fragment.");
+    const origin = input.kind === "archive" ? url.href : url.origin;
     const [row] = await ctx.tx
       .insert(importRuns)
       .values({
         source: `${input.kind}:${url.origin}`,
-        origin: url.origin,
+        origin,
         kind: input.kind,
         status: "discover",
-        checkpoint: { origin: url.origin, kind: input.kind, limits: DEFAULT_IMPORTER_LIMITS },
+        checkpoint: { origin, kind: input.kind, limits: DEFAULT_IMPORTER_LIMITS },
         createdBy: actorString(ctx.actor),
       })
       .returning();
@@ -539,7 +543,7 @@ const recordImportMedia = defineService({
     if (run.status !== "previewed") {
       throw new ServiceError("conflict", "This import is no longer waiting to be committed.");
     }
-    const planned = wordpressPreview(run.preview)?.media.find((media) => media.key === input.key);
+    const planned = (staticArchivePlan(run.preview)?.media ?? wordpressPreview(run.preview)?.media)?.find((media) => media.key === input.key);
     if (!planned) throw new ServiceError("validation", "That file is not part of this import.");
     const records = mediaRecordsFrom(run.checkpoint).filter((record) => record.key !== input.key);
     records.push({
@@ -679,6 +683,8 @@ const commitApply = defineService({
     await assertLegacyReaderSafety(ctx.tx, before);
     const staged = previewPages(before.preview);
     const wordpress = wordpressPreview(before.preview);
+    const archive = staticArchivePlan(before.preview);
+    const typedContent = Boolean(wordpress || archive);
     const decisions = conflictDecisions(before.conflicts);
     const existing = listedCmsPages(await ctx.call(getService("cms.listPages"), {}));
     const bySlug = new Map(existing.map((page) => [page.slug, page]));
@@ -763,27 +769,40 @@ const commitApply = defineService({
       }
     }
 
-    // Media and links, for WordPress bodies.
+    // Typed bodies share media/link conversion, without inventing WordPress
+    // author, taxonomy, feed, query-ID or comment records for a static export.
     const records = mediaRecordsFrom(before.checkpoint);
     const assetByKey = new Map(
       records.filter((record) => record.assetId).map((record) => [record.key, record.assetId!]),
     );
-    const plannedMedia = wordpress?.media ?? [];
+    const archiveAssets = new Map<string, ArchiveMediaMatch>();
+    if (archive) {
+      for (const media of archive.media) {
+        const assetId = assetByKey.get(media.key);
+        if (!assetId) throw new ServiceError("conflict", "An archive file has not been imported. Retry the commit before publishing pages.");
+        const asset = z.object({ id: uuid, kind: z.enum(["image", "video", "audio", "doc"]), filename: z.string(), status: z.string() }).parse(await ctx.call(getService("media.get"), { id: assetId }));
+        if (asset.status !== "ready") throw new ServiceError("conflict", "An archive file is not ready. Resolve its media warning before committing the pages.");
+        archiveAssets.set(asset.id, { assetId: asset.id, kind: asset.kind, filename: asset.filename });
+      }
+    }
+    const plannedMedia = archive?.media ?? wordpress?.media ?? [];
     const keyByAlias = new Map<string, string>();
     const keyByWpId = new Map<string, string>();
     for (const media of plannedMedia) {
       for (const alias of media.aliases) if (!keyByAlias.has(alias)) keyByAlias.set(alias, media.key);
-      if (media.wpId) keyByWpId.set(media.wpId, media.key);
+      if ("wpId" in media && typeof media.wpId === "string") keyByWpId.set(media.wpId, media.key);
     }
     const altByKey = new Map(plannedMedia.map((media) => [media.key, media.altText]));
-    const hosts = wordpress?.site.hosts ?? [];
-    const basePath = wordpress?.site.basePath ?? "";
+    const hosts = archive?.site.hosts ?? wordpress?.site.hosts ?? [];
+    const basePath = archive?.site.basePath ?? wordpress?.site.basePath ?? "";
     const resolveMediaKey = (src: string, wpId?: string): string | undefined => {
       if (wpId && keyByWpId.has(wpId)) return keyByWpId.get(wpId);
       let key: string | undefined;
       try {
         const parsed = new URL(src, `https://${hosts[0] ?? "invalid.invalid"}/`);
+        if (archive && (parsed.username || parsed.password || parsed.origin !== new URL(archive.site.url).origin)) return undefined;
         const base = `${parsed.host.toLowerCase()}${parsed.pathname}`;
+        if (archive) return keyByAlias.get(base);
         const sized = base.replace(/-\d+x\d+(\.[a-z0-9]+)$/i, "$1");
         for (const alias of [base, sized, sized.replace(/-(?:scaled|rotated)(\.[a-z0-9]+)$/i, "$1")]) {
           key ??= keyByAlias.get(alias);
@@ -796,27 +815,37 @@ const commitApply = defineService({
     const resolveImage = (src: string, wpId?: string): ImageMatch | null => {
       const key = resolveMediaKey(src, wpId);
       const assetId = key ? assetByKey.get(key) : undefined;
+      if (archive && assetId && archiveAssets.get(assetId)?.kind !== "image") return null;
       return assetId ? { assetId, alt: key ? altByKey.get(key) : undefined } : null;
     };
     const linkMap = new Map<string, string>(archiveAliases.map(alias => [alias.fromPath, alias.toPath]));
     for (const { page, slug } of placements) {
       const target = slug;
       if (page.redirectFrom) linkMap.set(page.redirectFrom, target);
-      const path = wordpressPath(page.url, hosts, basePath);
+      const path = archive ? archiveSourcePath(page.url, archive.site) : wordpressPath(page.url, hosts, basePath);
       if (path !== null) linkMap.set(path, target);
     }
     const rewriteHref = (href: string): string => {
-      if (!wordpress) return href;
-      const path = wordpressPath(href, hosts, basePath);
+      if (!typedContent) return href;
+      if (archive) {
+        const mediaKey = resolveMediaKey(href);
+        const assetId = mediaKey ? assetByKey.get(mediaKey) : undefined;
+        if (assetId) return `/media/download/${assetId}`;
+      }
+      const path = archive ? archiveSourcePath(href, archive.site) : wordpressPath(href, hosts, basePath);
       if (path === null) return href;
       let hash = "";
+      let search = "";
       try {
-        hash = new URL(href, `https://${hosts[0] ?? "invalid.invalid"}/`).hash;
+        const url = new URL(href, archive?.site.url ?? `https://${hosts[0] ?? "invalid.invalid"}/`);
+        hash = url.hash;
+        if (archive) search = url.search;
       } catch {
         /* keep no fragment */
       }
       const mapped = linkMap.get(path);
-      return `/${mapped ?? path}${hash}`;
+      if (archive && mapped === undefined) return href;
+      return `/${mapped ?? path}${search}${hash}`;
     };
     const hasPosts = written.some((placement) => placement.page.kind === "post");
 
@@ -841,17 +870,25 @@ const commitApply = defineService({
       }
       let blocks: unknown[];
       let seo: WordpressSeo = {};
-      if (wordpress) {
+      if (typedContent) {
         const featuredKey = page.featuredMedia;
         const featuredAsset = featuredKey ? assetByKey.get(featuredKey) : undefined;
-        const converted = wordpressBodyToBlocks(page.body, {
+        const context = {
           slug,
           title: page.title,
           featured: featuredAsset ? { assetId: featuredAsset, alt: altByKey.get(featuredKey!) } : undefined,
           resolveImage,
           rewriteHref,
-        });
+        };
+        const converted = archive ? archiveBodyToBlocks(page.body, {
+          ...context,
+          resolveMedia(src) {
+            const key = resolveMediaKey(src), assetId = key ? assetByKey.get(key) : undefined;
+            return assetId ? archiveAssets.get(assetId) ?? null : null;
+          },
+        }) : wordpressBodyToBlocks(page.body, context);
         if (converted.overBudget) {
+          if (archive) throw new ServiceError("validation", converted.overBudget);
           skippedPages.push({ url: page.url, slug, reason: converted.overBudget });
           continue;
         }
@@ -876,7 +913,7 @@ const commitApply = defineService({
           id: placement.current!.id,
           title: page.title,
           blocks,
-          ...(wordpress ? { seo } : {}),
+          ...(typedContent ? { seo } : {}),
         });
         replacedPages.push(placement.current!);
         id = placement.current!.id;
@@ -943,7 +980,8 @@ const commitApply = defineService({
     const redirectIds: string[] = [];
     const displacedRedirects: Array<z.infer<typeof redirectSnapshot>> = [];
     const skippedRedirects: Array<{ fromPath: string; reason: string }> = [];
-    if (wordpress) {
+    if (typedContent) {
+      const redirectLocale = z.object({ defaultLocale: z.string() }).parse(await ctx.call(getService("settings.getBusiness"), {})).defaultLocale;
       const existingRedirects = z
         .array(redirectSnapshot.extend({ id: z.string() }))
         .parse(await ctx.call(getService("seo.listRedirects"), {}));
@@ -956,22 +994,22 @@ const commitApply = defineService({
           skippedRedirects.push({ fromPath, reason: "a page already lives there" });
           continue;
         }
-        if (byFrom.has(`en:${fromPath}`)) {
+        if (byFrom.has(`${redirectLocale}:${fromPath}`)) {
           skippedRedirects.push({ fromPath, reason: "an existing redirect was kept" });
           continue;
         }
         // seo.recordRedirect removes a redirect *from* the new page's path,
         // because the page now answers there. Keep it so rollback can restore it.
-        const displaced = byFrom.get(`en:${slug}`);
+        const displaced = byFrom.get(`${redirectLocale}:${slug}`);
         if (displaced) {
           displacedRedirects.push(redirectSnapshot.parse(displaced));
-          byFrom.delete(`en:${slug}`);
+          byFrom.delete(`${redirectLocale}:${slug}`);
         }
         const recorded = z.object({ id: z.string() }).parse(
-          await ctx.call(getService("seo.recordRedirect"), { fromPath, toPath: slug, source: "import" }),
+          await ctx.call(getService("seo.recordRedirect"), { fromPath, toPath: slug, locale: redirectLocale, source: "import" }),
         );
         redirectIds.push(recorded.id);
-        byFrom.set(`en:${fromPath}`, { id: recorded.id, fromPath, toPath: slug, status: "301", locale: "en", source: "import" });
+        byFrom.set(`${redirectLocale}:${fromPath}`, { id: recorded.id, fromPath, toPath: slug, status: "301", locale: redirectLocale, source: "import" });
       }
     }
 
@@ -1048,7 +1086,14 @@ const commitApply = defineService({
           ],
           commentsImported, commentsStaged,
         }
-      : undefined;
+      : archive ? {
+          ...archive.report,
+          sourceFormat: "static-archive",
+          skippedPages, skippedRedirects,
+          unresolvedImages: [...new Set([...archive.report.unresolvedImages, ...unresolvedImages])].slice(0, REPORT_LIST_MAX),
+          mediaFailures: mediaFailures.slice(0, REPORT_LIST_MAX).map(({ sourceUrl, error }) => ({ sourceUrl, error })),
+          droppedEmbeds, flattenedHtml,
+        } : undefined;
     const counts = wordpress
       ? {
           pages: createdPageIds.length + replacedPages.length,
@@ -1065,7 +1110,9 @@ const commitApply = defineService({
           commentsSkipped: Math.max(0, Number((wordpress.report.comments as { total?: number } | undefined)?.total ?? 0) - commentsImported - commentsStaged),
           skippedPages: skippedPages.length,
         }
-      : { pages: createdPageIds.length + replacedPages.length, media: 0, redirects: 0 };
+      : archive
+        ? { pages: createdPageIds.length + replacedPages.length, media: mediaImported, mediaFailed: mediaFailures.length, redirects: redirectIds.length, skippedPages: skippedPages.length }
+        : { pages: createdPageIds.length + replacedPages.length, media: 0, redirects: 0 };
 
     const checkpoint = withImportPages(before.checkpoint, createdPageIds, replacedPages);
     Object.assign(checkpoint, {
