@@ -5247,7 +5247,7 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F09** — Partial — focused PostgreSQL and provider-edge commands and their limits are recorded in `deploy/seller-merchant-source-2026-11-10.md`; no live provider acceptance is claimed.
 - **F10** — Pending — exact integer fee arithmetic is covered in `tests/adapters/payout-providers.test.ts`; direct-mode operating/load qualification remains open in `deploy/seller-merchant-source-2026-11-10.md`.
 - **F11** — Partial — `.changeset/seller-invoice-policy.md` and `.changeset/seller-account-integration.md` describe the delivered protection and the disabled model; `deploy/seller-merchant-source-2026-11-10.md` lists the remaining full integration without new deferrals.
-- **F12** — Partial — `tests/browser/merchant-trial.spec.ts` covers original-account card selection, keyboard submission, 320px, English/Arabic RTL and both-theme accessibility with seeded setup. Complete seller/buyer invoice, refund, recurring and dispute browser/provider journeys remain required in `deploy/seller-merchant-source-2026-11-10.md`; internal controls do not close C12.38.
+- **F12** — Partial — `tests/browser/merchant-trial.spec.ts` covers original-account card selection, keyboard submission, 320px, English/Spanish/French/Arabic RTL and both-theme accessibility with seeded setup. Complete seller/buyer invoice, refund, recurring and dispute browser/provider journeys remain required in `deploy/seller-merchant-source-2026-11-10.md`; internal controls do not close C12.38.
 
 ## C12.39 — Move end-to-end encryption from ts-mls to OpenMLS
 

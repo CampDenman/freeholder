@@ -22,7 +22,7 @@ test.describe("original merchant trial cards (C12.38)", () => {
   test.setTimeout(180_000);
   test.afterAll(closeDb);
 
-  for (const locale of ["en","ar"] as const) {
+  for (const locale of ["en","es","fr","ar"] as const) {
     test(`${locale}: original-account card only, keyboard, 320px and both themes`, async ({browser}) => {
       await seedC11Owner("Merchant trial proof");
       await db().update(businessProfile).set({enabledLocales:["en","es","fr","ar"]}).where(eq(businessProfile.id,1));
@@ -59,7 +59,7 @@ test.describe("original merchant trial cards (C12.38)", () => {
       const context=await browser.newContext({baseURL:C11_BASE_URL,viewport:{width:320,height:900}});
       await context.addCookies([{name:SESSION_COOKIE,value:buyer.token,url:C11_BASE_URL}]);
       const page=await context.newPage();
-      await page.goto(`${locale==="ar"?"/ar":""}/memberships/trial-return?subscription=${subscriptionId}`);
+      await page.goto(`${locale==="en"?"":`/${locale}`}/memberships/trial-return?subscription=${subscriptionId}`);
       await expect(page.locator("html")).toHaveAttribute("lang",locale);
       if(locale==="ar") await expect(page.locator("html")).toHaveAttribute("dir","rtl");
       const select=page.locator("#trial-method");
@@ -73,6 +73,7 @@ test.describe("original merchant trial cards (C12.38)", () => {
         expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth)).toBe(true);
         expect(await page.content()).not.toContain("acct_trial_original");
         expect(await page.content()).not.toContain("cus_trial_original");
+        await page.screenshot({path:test.info().outputPath(`${locale}-${theme}-trial.png`),fullPage:true});
       }
       await select.focus();
       await page.keyboard.press("Tab");

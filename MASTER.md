@@ -13006,8 +13006,8 @@ whatever is best for the people using the site.
   charges only with actual PaymentIntent/fee/period proof. Direct earnings
   are already paid and cannot trigger a second payout; order and invoice
   recorders cannot both pay an order. Eighty-one PostgreSQL financial controls,
-  40 provider/private-service checks, eight SDK checks and a production build
-  passed. Two Chromium journeys passed at 320px in English and Arabic RTL
+  41 provider/private-service checks, eight SDK checks and a production build
+  passed. Four Chromium journeys passed at 320px in English, Spanish, French and Arabic RTL
   with keyboard submission and both-theme Axe scans; setup evidence is seeded,
   not live Stripe acceptance. Seller invoice identity, mixed-seller/site carts,
   exact recurring tax/fee rounding, full setup/refund/recovery/erasure integration,

@@ -108,14 +108,22 @@ subscription/booking recorder cannot both pay the same order.
 
 Source qualification for this increment: 81 PostgreSQL financial cases passed
 across merchant agreements, existing held/instant payouts, subscription billing
-and payment-provider services. Forty native provider/private-service/audit
+and payment-provider services. Forty-one native provider/private-service/audit
 checks and all eight live SDK checks passed. A production build and standalone
-artifact scrub passed. Two actual Chromium journeys passed at 320px in English
-and Arabic RTL, with keyboard submission, both-theme Axe scans, original-account
+artifact scrub passed. Four actual Chromium journeys passed at 320px in English,
+Spanish, French and Arabic RTL, with keyboard submission, both-theme Axe scans, original-account
 card selection and other-person refusal. Provider setup in those journeys is
 seeded; these are not real Stripe acceptance. A subsequent focused renewal
 run also qualifies changing from a monthly to an annual plan at renewal,
-including rollback of a paid event with the old interval.
+including rollback of a paid event with the old interval. All 35 financial
+renewal/billing cases passed; a duplicate private-service inventory entry from
+the rebase was repaired and all 41 provider/private-service checks then passed.
+Required fast gates passed 368 contract checks with one deliberate skip,
+typechecking, lint, licensing, release notes and plan consistency. The evidence
+matrix covers 369 rows × 12 criteria. The final standalone artifact scrub
+checked 18,777 files and 226,573,806 bytes. This increment leaves migration 67
+unchanged. GitHub reported zero open CodeQL and Dependabot alerts on 2026-11-10;
+that is not independent review.
 
 Still required: seller branding/support and commercial identity on invoices
 and receipts; complete mixed-seller/site carts; exact recurring tax, fee and
