@@ -63,6 +63,15 @@ describe.runIf(hasDatabase)("static archive import studio (C3.22)", { timeout: 6
     expect(await storage().get(source.key)).toBeUndefined();
     expect((await db().select().from(dataRequests).where(eq(dataRequests.id, request.id)))[0]?.status).toBe("completed");
   });
+  it("imports supported source content while reporting SVG under the ordinary upload refusal", async () => {
+    const source = await stageBytes(new Uint8Array(readFileSync("tests/fixtures/static-archive/unsupported-svg.zip")), { pages: 1, media: 1 });
+    const committed = await commitImport.call({ id: source.id }, OWNER);
+    expect(committed.counts).toMatchObject({ pages: 1, media: 1, filesNotImported: 1, mediaWarnings: 1 });
+    expect((await db().select().from(assets)).map(asset => asset.filename)).toEqual(["picture.png"]);
+    const report = committed.checkpoint as { report: { ignored: string[]; unresolvedImages: string[] } };
+    expect(report.report.ignored).toEqual(["logo.svg"]);
+    expect(report.report.unresolvedImages).toContain("https://archive.example/logo.svg");
+  });
 
   it("imports original private ZIP bytes as typed media/content and locale-correct redirects, then recovers", async () => {
     await updateBusiness.call({ name: "Fictional archive", country: "CA", baseCurrency: "CAD", timezone: "America/Vancouver", defaultLocale: "fr", enabledLocales: ["en", "es", "fr", "ar"] }, OWNER);

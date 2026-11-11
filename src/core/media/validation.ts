@@ -210,6 +210,20 @@ export function detectMediaMime(
   return undefined;
 }
 
+/** URL endpoints often have no file extension. Imports may name strongly
+ * identified bytes; the ordinary upload validator still checks that name.
+ * SVG refusal and unidentifiable/container formats keep their original name. */
+export function importedMediaFilename(filename: string, prefix: Uint8Array): string {
+  const extension = extname(filename).toLowerCase();
+  if (extension === ".svg") return filename;
+  const mime = detectMediaMime(prefix, filename, "application/octet-stream");
+  const type = mime ? TYPE_BY_MIME.get(mime) : undefined;
+  if (!type || type.extensions.includes(extension)) return filename;
+  const suffix = type.extensions[0]!;
+  const stem = filename.slice(0, filename.length - extension.length).trim() || "source-file";
+  return `${stem.slice(0, 255 - suffix.length)}${suffix}`;
+}
+
 /** The raster formats uploads accept; the only bytes ever handed to sharp. */
 const RASTER_IMAGE_MIMES: ReadonlySet<string> = new Set(
   TYPES.filter((type) => type.kind === "image").map((type) => type.mime),

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { readStaticArchive, type ArchiveResult, type ArchiveSource } from "./archive";
 
 export const archivePlanSchema = z.object({
-  version: z.literal(1),
+  version: z.union([z.literal(1), z.literal(2)]),
   site: z.object({ url: z.string().url(), hosts: z.array(z.string()), basePath: z.string() }),
   media: z.array(z.object({
     path: z.string(), key: z.string(), sourceUrl: z.string(), filename: z.string(),
@@ -19,7 +19,7 @@ export const archivePlanSchema = z.object({
 export type ArchivePlan = z.infer<typeof archivePlanSchema>;
 
 export function archivePlan(result: ArchiveResult): ArchivePlan {
-  return archivePlanSchema.parse({ version: 1, site: result.site, media: result.assets, report: result.report });
+  return archivePlanSchema.parse({ version: result.contentVersion, site: result.site, media: result.assets, report: result.report });
 }
 
 /** This binds a private checkpoint to the server-generated staged content. */

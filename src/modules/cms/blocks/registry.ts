@@ -12,6 +12,7 @@ import { selectAssignedVariants } from "../experiments";
 import { deriveFields, type FieldDescriptor } from "./fields";
 import type { BlockContext, BlockDefinition, BlockNode } from "./types";
 import {
+  anchor,
   announcement,
   brand,
   button,
@@ -66,6 +67,7 @@ import { helpFeedback, knowledge } from "./help";
 import { blogIndex } from "../blog";
 
 const definitions: BlockDefinition<z.ZodType, never>[] = [
+  anchor,
   heading,
   blogIndex,
   text,

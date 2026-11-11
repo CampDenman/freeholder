@@ -8401,7 +8401,7 @@
   "cms.field.style": "Estilo de botón",
   "cms.field.socials": "Perfiles sociales",
   "cms.field.kind": "Enlaza a",
-  "cms.field.target": "Dirección o página",
+  "cms.field.target": "Nombre del destino",
   "cms.field.hidden": "Oculto",
   "cms.field.startsAt": "Mostrar desde",
   "cms.field.endsAt": "Mostrar hasta",
@@ -8631,5 +8631,10 @@
   "privacy.system.identityBeforeErasure": "Identidad verificada antes de la eliminación",
   "privacy.system.providerPending": "Esperando la eliminación requerida del proveedor.",
   "privacy.system.completed": "Solicitud completada.",
-  "privacy.system.retained": "Completada con excepciones de conservación documentadas."
+  "privacy.system.retained": "Completada con excepciones de conservación documentadas.",
+  "imports.count.sourceWarnings": "Advertencias de la fuente",
+  "imports.note.generic": "Revisa los medios, enlaces y metadatos antes de publicar. Los medios ajenos a esta fuente o bloqueados por su política de acceso necesitan revisión.",
+  "imports.sourceWarning.query-address": "Revisa esta dirección con parámetros antes de cambiar el sitio; no se crea automáticamente una redirección específica para sus parámetros.",
+  "imports.sourceWarning.discovery-only": "Solo se proporcionó la dirección de la página. Lee la URL pública de origen para obtener su contenido antes de confirmar.",
+  "cms.block.anchor": "Destino del enlace"
 }

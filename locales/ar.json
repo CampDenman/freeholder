@@ -8401,7 +8401,7 @@
   "cms.field.style": "نمط الأزرار",
   "cms.field.socials": "الحسابات الاجتماعية",
   "cms.field.kind": "يؤدي إلى",
-  "cms.field.target": "العنوان أو الصفحة",
+  "cms.field.target": "اسم الهدف",
   "cms.field.hidden": "مخفي",
   "cms.field.startsAt": "يظهر من",
   "cms.field.endsAt": "يظهر حتى",
@@ -8631,5 +8631,10 @@
   "privacy.system.identityBeforeErasure": "تم التحقق من الهوية قبل المحو",
   "privacy.system.providerPending": "بانتظار إتمام الحذف المطلوب لدى المزوّد.",
   "privacy.system.completed": "اكتمل الطلب.",
-  "privacy.system.retained": "اكتمل الطلب مع استثناءات الاحتفاظ الموثّقة."
+  "privacy.system.retained": "اكتمل الطلب مع استثناءات الاحتفاظ الموثّقة.",
+  "imports.count.sourceWarnings": "تنبيهات المصدر",
+  "imports.note.generic": "راجع الوسائط والروابط والبيانات الوصفية قبل النشر. تحتاج الوسائط الخارجية أو المحظورة بسياسة الوصول إلى مراجعتك.",
+  "imports.sourceWarning.query-address": "راجع هذا العنوان الذي يتضمن معاملات قبل نقل الموقع؛ لا تُنشأ إعادة توجيه خاصة بمعاملاته تلقائيًا.",
+  "imports.sourceWarning.discovery-only": "تم تقديم عنوان الصفحة فقط. اقرأ رابط المصدر العام لجلب محتواها قبل تثبيت الاستيراد.",
+  "cms.block.anchor": "هدف الرابط"
 }

@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { readStaticArchive, type ArchiveSource } from "@/core/import/archive";
-import { archivePreviewDigest, archiveSourcePath, stageStaticArchive } from "@/core/import/archive-plan";
+import { archivePlan, archivePreviewDigest, archiveSourcePath, stageStaticArchive } from "@/core/import/archive-plan";
 import { archiveRangeSource } from "@/core/import/archive-source";
 import { restoreStaticArchive } from "@/core/import/archive-commit";
 import { staticArchivePlan } from "@/core/import/archive-plan";
@@ -103,5 +103,26 @@ describe("bounded static archives", () => {
       await readStaticArchive(source("two-images"), "https://archive.example/", async () => { accepted++; clock += 65_000; });
       expect(accepted).toBe(2);
     } finally { time.mockRestore(); }
+  });
+  it("preserves outer content targets in new plans while resuming an exact version-one preview", async () => {
+    const legacy = await readStaticArchive(source("root-target"), "https://archive.example/", async () => {}, { preserveRootTarget: false });
+    const oldPlan = archivePlan(legacy), oldPreview = { sourceFormat: "static-archive", pages: legacy.pages, archive: oldPlan };
+    expect(oldPlan.version).toBe(1);
+    expect(legacy.pages[0]!.body).not.toContain('id="source-root"');
+    await expect(restoreStaticArchive(source("root-target"), "https://archive.example/", { plan: oldPlan, previewDigest: archivePreviewDigest(oldPreview) }, new Set(), async () => {})).resolves.toBeUndefined();
+    const current = await stageStaticArchive(source("root-target"), "https://archive.example/"), plan = staticArchivePlan(current.preview)!;
+    expect(plan.version).toBe(2);
+    expect(JSON.stringify(current.preview)).toContain('id=\\"source-root\\"');
+    expect(archivePreviewDigest(current.preview)).not.toBe(archivePreviewDigest(oldPreview));
+    await expect(restoreStaticArchive(source("root-target"), "https://archive.example/", { plan, previewDigest: archivePreviewDigest(current.preview) }, new Set(), async () => {})).resolves.toBeUndefined();
+  });
+  it("reports unsupported SVG without making allowed pages and raster media impossible to commit", async () => {
+    const staged = await stageStaticArchive(source("unsupported-svg"), "https://archive.example/");
+    expect(staged.counts).toMatchObject({ pages: 1, media: 1, filesNotImported: 1, mediaWarnings: 1 });
+    expect(staticArchivePlan(staged.preview)).toMatchObject({ media: [{ filename: "picture.png" }], report: { ignored: ["logo.svg"], unresolvedImages: ["https://archive.example/logo.svg"] } });
+    const legacy = await readStaticArchive(source("unsupported-svg"), "https://archive.example/", async () => {}, { preserveRootTarget: false });
+    const plan = archivePlan(legacy), preview = { sourceFormat: "static-archive", pages: legacy.pages, archive: plan };
+    expect(plan.media).toHaveLength(2);
+    await expect(restoreStaticArchive(source("unsupported-svg"), "https://archive.example/", { plan, previewDigest: archivePreviewDigest(preview) }, new Set(), async () => {})).resolves.toBeUndefined();
   });
 });

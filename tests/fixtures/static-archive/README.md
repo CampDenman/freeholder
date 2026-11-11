@@ -12,3 +12,7 @@ ZIP bytes come from an independent standard-library writer, not the reader.
 `ignored-reader.zip` stores a synthetic reader address in an unimported text
 entry. It proves that private-original erasure cannot infer absence of personal
 data from the public HTML preview or the archive's imported content.
+
+`root-target.zip` covers versioned outer-fragment preservation and exact legacy
+manifest recovery. `unsupported-svg.zip` keeps the ordinary SVG upload refusal
+while proving supported raster content can finish with a visible omission report.

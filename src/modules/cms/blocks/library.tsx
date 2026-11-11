@@ -39,6 +39,16 @@ import { CollectionGrid } from "../../../../app/(public)/c/[slug]/CollectionGrid
 
 /* ------------------------------------------------------------------ text */
 
+/** C3.22: retain a source document's addressable fragment without raw markup. */
+export const anchor = defineBlock({
+  type: "anchor",
+  labelKey: "cms.block.anchor",
+  contexts: ["page"],
+  schema: z.object({ target: z.string().min(1).max(200).regex(/^[^\s\x00-\x1f\x7f]+$/).refine(value => value !== "main-content", "That target is reserved for the page's main content.") }),
+  starter: () => ({ target: `section-${crypto.randomUUID().slice(0, 8)}` }),
+  render: ({ props }) => <span id={props.target} className="block scroll-mt-6" aria-hidden="true" />,
+});
+
 export const heading = defineBlock({
   type: "heading",
   labelKey: "cms.block.heading",

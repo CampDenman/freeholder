@@ -45,16 +45,19 @@ export default async function ImportRunPage({
     ["filesNotImported", t("imports.count.filesNotImported")],
     ["mediaWarnings", t("imports.count.mediaWarnings")],
     ["elementsNotImported", t("imports.count.elementsNotImported")],
+    ["sourceWarnings", t("imports.count.sourceWarnings")],
   ];
   const shown = countLabels.filter(([key]) => typeof counts[key] === "number");
   const wordpress = run.source.startsWith("wordpress-");
   const checkpoint = run.checkpoint && typeof run.checkpoint === "object" ? run.checkpoint as Record<string, unknown> : {};
   const preview = run.preview && typeof run.preview === "object" ? run.preview as Record<string, unknown> : {};
   const archive = preview.archive && typeof preview.archive === "object" ? preview.archive as Record<string, unknown> : {};
-  const reportValue = checkpoint.report ?? archive.report;
+  const generic = preview.generic && typeof preview.generic === "object" ? preview.generic as Record<string, unknown> : {};
+  const reportValue = checkpoint.report ?? archive.report ?? generic.report;
   const report = reportValue && typeof reportValue === "object" ? reportValue as Record<string, unknown> : {};
   const filesNotImported = z.array(z.string()).safeParse(report.ignored);
-  const mediaWarnings = z.array(z.string()).safeParse(report.unresolvedImages);
+  const mediaWarnings = z.array(z.string()).safeParse(report.unresolvedImages ?? report.unresolvedMedia);
+  const sourceWarnings = z.array(z.object({ code: z.enum(["query-address", "discovery-only"]), url: z.string() })).safeParse(report.sourceWarnings);
   const parsedIssues = z.array(z.object({ menu: z.string(), label: z.string(), reason: z.enum(["target", "private"]) })).safeParse(report.menuIssues);
   const menuIssues = parsedIssues.success ? parsedIssues.data.slice(0, 100) : [];
 
@@ -136,8 +139,8 @@ export default async function ImportRunPage({
                 </li>)}
               </ul>
             </div> : null}
-            {run.kind === "archive" ? <div className="mt-4 grid min-w-0 gap-3">
-              <p className="max-w-prose text-sm text-ink-muted">{t("imports.note.archive")}</p>
+            {run.kind === "archive" || preview.sourceFormat === "generic-site" ? <div className="mt-4 grid min-w-0 gap-3">
+              <p className="max-w-prose text-sm text-ink-muted">{t(run.kind === "archive" ? "imports.note.archive" : "imports.note.generic")}</p>
               {[
                 { label: t("imports.count.filesNotImported"), values: filesNotImported.success ? filesNotImported.data : [] },
                 { label: t("imports.count.mediaWarnings"), values: mediaWarnings.success ? mediaWarnings.data : [] },
@@ -145,6 +148,9 @@ export default async function ImportRunPage({
                 <h3 className="text-sm font-semibold">{group.label}</h3>
                 <ul className="grid min-w-0 list-none gap-1 p-0">{group.values.slice(0, 100).map((value, index) => <li key={index} className="min-w-0 break-all text-sm text-ink-muted">{value.startsWith("data:") ? t("imports.mediaWarning.inline") : value.slice(0, 2_048)}</li>)}</ul>
               </div>)}
+              {sourceWarnings.success && sourceWarnings.data.length ? <ul className="grid min-w-0 list-none gap-3 p-0">{sourceWarnings.data.map((warning, index) => <li key={index} className="min-w-0 break-all text-sm">
+                <p>{t(`imports.sourceWarning.${warning.code}`)}</p><p className="text-ink-muted">{warning.url}</p>
+              </li>)}</ul> : null}
             </div> : null}
             {wordpress ? (
               <p className="mt-4 max-w-prose text-sm text-ink-muted">{t("imports.note.wordpress")}</p>

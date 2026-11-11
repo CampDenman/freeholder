@@ -9,6 +9,7 @@ import { parse, serialize, type DefaultTreeAdapterTypes } from "parse5";
 import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS } from "./contract";
 import { parseSemanticHtml } from "./parsers";
 import { toCmsSlug, type WordpressSeo } from "./wordpress";
+import { sourceContentBody } from "./archive-content";
 
 export const ARCHIVE_LIMITS = {
   compressedBytes: 100 * 1024 * 1024,
@@ -52,6 +53,7 @@ export type ArchiveAsset = {
   altText?: string;
 };
 export type ArchiveResult = {
+  contentVersion: 1 | 2;
   pages: ArchivePage[];
   assets: ArchiveAsset[];
   site: { url: string; hosts: string[]; basePath: string };
@@ -59,7 +61,8 @@ export type ArchiveResult = {
 };
 
 const HTML = /\.html?$/i;
-const MEDIA = /\.(?:avif|gif|jpe?g|png|webp|svg|mp4|webm|mp3|wav|ogg|m4a|pdf)$/i;
+const LEGACY_MEDIA = /\.(?:avif|gif|jpe?g|png|webp|svg|mp4|webm|mp3|wav|ogg|m4a|pdf)$/i;
+const MEDIA = /\.(?:avif|gif|jpe?g|png|webp|mp4|webm|mp3|wav|ogg|m4a|pdf)$/i;
 const BIDI_OR_CONTROL = /[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]/;
 
 function safePath(path: string): string {
@@ -145,7 +148,9 @@ function archiveUrl(path: string, base: URL): string {
  * Read all directory metadata before retaining any asset. Imported asset bytes
  * go only through the supplied private-storage sink, never archive filenames.
  */
-export async function readStaticArchive(source: ArchiveSource, origin: string, retain: (asset: ArchiveAsset, bytes: Uint8Array<ArrayBuffer>) => Promise<void>): Promise<ArchiveResult> {
+export async function readStaticArchive(source: ArchiveSource, origin: string, retain: (asset: ArchiveAsset, bytes: Uint8Array<ArrayBuffer>) => Promise<void>, options: { preserveRootTarget?: boolean } = {}): Promise<ArchiveResult> {
+  const preserveRootTarget = options.preserveRootTarget !== false;
+  const mediaPath = (path: string) => (preserveRootTarget ? MEDIA : LEGACY_MEDIA).test(path);
   if (!Number.isSafeInteger(source.bytes) || source.bytes < 22 || source.bytes > ARCHIVE_LIMITS.compressedBytes) throw new Error("The ZIP is empty or exceeds the 100 MB upload limit.");
   const base = assertPublicHttpUrl(origin);
   if (base.search || base.hash) throw new Error("An archive source must be a public site URL without a query or fragment.");
@@ -170,10 +175,10 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
     const html = entries.filter(({ path }) => HTML.test(path));
     if (!html.length) throw new Error("The ZIP contains no static HTML pages.");
     if (html.length > ARCHIVE_LIMITS.pages) throw new Error("This ZIP exceeds the current 500-page import batch. No pages were staged.");
-    const useful = entries.filter(({ path }) => HTML.test(path) || MEDIA.test(path));
+    const useful = entries.filter(({ path }) => HTML.test(path) || mediaPath(path));
     const first = useful[0]!.path.split("/")[0]!;
     const root = useful.every(({ path }) => path.includes("/") && path.startsWith(`${first}/`)) && useful.some(({ path }) => /^index\.html?$/i.test(path.slice(first.length + 1))) ? `${first}/` : "";
-    const assetEntries = entries.filter(({ path }) => MEDIA.test(path));
+    const assetEntries = entries.filter(({ path }) => mediaPath(path));
     if (assetEntries.some(({ entry }) => entry.uncompressedSize === 0)) throw new Error("The ZIP contains an empty media file.");
     if (assetEntries.length > ARCHIVE_LIMITS.mediaFiles) throw new Error("This ZIP exceeds the current 500-file media batch. No pages were staged.");
     const assetByUrl = new Map<string, ArchiveAsset>();
@@ -247,7 +252,7 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
       used.add(slug);
       const robots = attr(meta("robots"), "content") ?? "";
       const description = meta("description");
-      pages.push({ url, slug, sourcePath, title: parsed.title, body: serialize(content), kind: "page", status: "publish", ...(sourcePath !== `/${slug}` ? { redirectFrom: sourcePath.slice(1) } : {}), seo: { title: parsed.title.slice(0, 1_000), preserveTitle: true, ...(description ? { description: (attr(description, "content") ?? "").slice(0, 1_000), preserveDescription: true } : {}), ...(parsed.canonical ? { canonical: parsed.canonical } : {}), noindex: /(?:^|[\s,])noindex(?:[\s,]|$)/i.test(robots), nofollow: /(?:^|[\s,])nofollow(?:[\s,]|$)/i.test(robots) } });
+      pages.push({ url, slug, sourcePath, title: parsed.title, body: preserveRootTarget ? sourceContentBody(content) : serialize(content), kind: "page", status: "publish", ...(sourcePath !== `/${slug}` ? { redirectFrom: sourcePath.slice(1) } : {}), seo: { title: parsed.title.slice(0, 1_000), preserveTitle: true, ...(description ? { description: (attr(description, "content") ?? "").slice(0, 1_000), preserveDescription: true } : {}), ...(parsed.canonical ? { canonical: parsed.canonical } : {}), noindex: /(?:^|[\s,])noindex(?:[\s,]|$)/i.test(robots), nofollow: /(?:^|[\s,])nofollow(?:[\s,]|$)/i.test(robots) } });
     }
     // Every retained byte is validated and hashed before entering the manifest.
     for (const { path, entry } of assetEntries) {
@@ -261,6 +266,6 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
       // not consume the ZIP decoding budget of the next unrelated entry.
       budget.deadline += Date.now() - beforeApply;
     }
-    return { pages, assets: [...assetByUrl.values()], site: { url: base.href, hosts: [base.host.toLowerCase()], basePath: base.pathname.replace(/^\/+|\/+$/g, "") }, report: { entries: count, expandedBytes, ignored: entries.filter(({ path }) => !HTML.test(path) && !MEDIA.test(path)).slice(0, 100).map(({ path }) => path), unresolvedImages: [...unresolvedImages], root } };
+    return { contentVersion: preserveRootTarget ? 2 : 1, pages, assets: [...assetByUrl.values()], site: { url: base.href, hosts: [base.host.toLowerCase()], basePath: base.pathname.replace(/^\/+|\/+$/g, "") }, report: { entries: count, expandedBytes, ignored: entries.filter(({ path }) => !HTML.test(path) && !mediaPath(path)).slice(0, 100).map(({ path }) => path), unresolvedImages: [...unresolvedImages], root } };
   } finally { zip.close(); }
 }

@@ -5443,6 +5443,14 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   bounds. Protected CI remains pending. Limits and
   evidence: `deploy/static-archive-import.md`. This does not close C3.22,
   large-source resumption or source-specific cutover.)*
+  *(Generic parity work in progress: the heading/raw-HTML path reproduced
+  missing media, metadata and source-path identity. New typed generic plans
+  use the shared media receipts and CMS converter without WordPress records;
+  actual draft/publish/replay/rollback and fresh robots refusal/retry controls
+  pass, retaining the independent media-read permission. RSS/Atom XML content,
+  dates/enclosures and visible source warnings are under qualification. This
+  does not close C3.22, query-address intent, large-source resumption or live
+  source-specific acceptance.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,

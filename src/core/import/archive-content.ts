@@ -15,14 +15,39 @@ function words(node: Node): string {
   return node.nodeName === "#text" ? (node as DefaultTreeAdapterTypes.TextNode).value : "childNodes" in node ? node.childNodes.map(words).join(" ") : "";
 }
 
+/** serialize(element) omits its own id; keep that first content target too. */
+export function sourceContentBody(content: DefaultTreeAdapterTypes.ParentNode): string {
+  const target = "tagName" in content ? attr(content, "id") : undefined;
+  const body = serialize(content);
+  if (!target || target === "main-content") return body;
+  if (target.length > 200 || !/^[^\s\x00-\x1f\x7f]+$/.test(target)) throw new Error("The source content target exceeds its supported name limit.");
+  const escaped = target.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return `<span id="${escaped}"></span>${body}`;
+}
+
 export function archiveBodyToBlocks(body: string, context: BodyContext & { resolveMedia(src: string): ArchiveMediaMatch | null }): BodyConversion {
   const document = parseFragment(body);
   const referenceBase = `https://${randomUUID()}.static-archive.invalid/`;
   const references = new Map<string, { media: ArchiveMediaMatch; presentation: "video" | "file"; label: string }>();
+  const anchors = new Map<string, string>(), targets = new Set<string>();
+  let omittedAnchors = 0;
   const walk = (parent: DefaultTreeAdapterTypes.ParentNode) => {
     for (let index = 0; index < parent.childNodes.length; index++) {
       const node = parent.childNodes[index]!;
       if (!("tagName" in node)) continue;
+      const target = attr(node, "id") ?? (node.tagName === "a" ? attr(node, "name") : undefined);
+      if (target && !targets.has(target)) {
+        targets.add(target);
+        if (target !== "main-content") {
+          if (target.length <= 200 && /^[^\s\x00-\x1f\x7f]+$/.test(target)) {
+            const token = `archive-anchor-${anchors.size}`;
+            anchors.set(token, target);
+            const marker = parseFragment("<img>").childNodes[0] as Element;
+            marker.attrs = [{ name: "src", value: `${referenceBase}${token}` }]; marker.parentNode = parent;
+            parent.childNodes.splice(index, 0, marker); index++;
+          } else omittedAnchors++;
+        }
+      }
       const source = node.tagName === "a" ? attr(node, "href") : node.tagName === "object" ? attr(node, "data") : ["video", "audio", "embed"].includes(node.tagName) ? attr(node, "src") ?? node.childNodes.flatMap(child => "tagName" in child && child.tagName === "source" ? [attr(child, "src")] : []).find(Boolean) : undefined;
       const media = source ? context.resolveMedia(source) : null;
       if (media && media.kind !== "image") {
@@ -41,23 +66,25 @@ export function archiveBodyToBlocks(body: string, context: BodyContext & { resol
     resolveImage(src, wpId) {
       if (src.startsWith(referenceBase)) {
         const token = src.slice(referenceBase.length);
-        if (references.has(token)) return { assetId: token };
+        if (references.has(token) || anchors.has(token)) return { assetId: token };
       }
       return context.resolveImage(src, wpId);
     },
   });
   const replace = (node: BlockNode): BlockNode[] => {
     if (node.type === "image" && typeof node.props.assetId === "string") {
+      const target = anchors.get(node.props.assetId);
+      if (target) return [{ id: node.id, type: "anchor", props: { target } }];
       const reference = references.get(node.props.assetId);
       if (reference) return [{ id: node.id, type: reference.presentation, props: { assetId: reference.media.assetId, ...(reference.presentation === "video" ? { caption: reference.label } : { label: reference.label }) } }];
     }
     if (node.type === "gallery" && Array.isArray(node.props.items)) {
       const values: unknown[] = node.props.items;
       const items = values.filter((item): item is { assetId: string; caption?: string } => item !== null && typeof item === "object" && "assetId" in item && typeof item.assetId === "string" && (!("caption" in item) || typeof item.caption === "string"));
-      if (items.some(item => references.has(item.assetId))) return items.flatMap((item, index) => replace({ id: `${node.id}-${index}`, type: "image", props: { assetId: item.assetId, ...(item.caption ? { alt: item.caption } : {}) } }));
+      if (items.some(item => references.has(item.assetId) || anchors.has(item.assetId))) return items.flatMap((item, index) => replace({ id: `${node.id}-${index}`, type: "image", props: { assetId: item.assetId, ...(item.caption ? { alt: item.caption } : {}) } }));
     }
     return [{ ...node, ...(node.children ? { children: node.children.flatMap(replace) } : {}) }];
   };
   const blocks = converted.blocks.flatMap(replace);
-  return { ...converted, blocks, overBudget: converted.overBudget ?? budgetMessage(blocks) };
+  return { ...converted, blocks, droppedEmbeds: converted.droppedEmbeds + omittedAnchors, overBudget: converted.overBudget ?? budgetMessage(blocks) };
 }
