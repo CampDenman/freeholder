@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: immutable first requests and agreement-specific saved-method proof.
 import {createHash,randomUUID} from "node:crypto";
-import {and,asc,desc,eq,sql} from "drizzle-orm";
+import {and,asc,desc,eq,inArray,sql} from "drizzle-orm";
 import {z} from "zod";
 import {registerContactPrivacySource} from "@/core/privacy/service";
+import {registerContactReference} from "@/core/contacts/service";
 import {ServiceError,type ServiceContext,type Tx} from "@/core/service";
 import {paymentMethods} from "@/modules/invoicing/schema";
 import {subscriptionCardSetups,subscriptionSetupDispatches,subscriptions} from "./schema";
@@ -76,6 +77,27 @@ export async function bindSetupEvidence(ctx:ServiceContext,input:{provider:strin
 export async function applySetupEvidence(tx:Tx,input:{attemptId:string;methodId:string;customerRef:string;checkoutRef:string;setupIntentRef:string;occurredAt:Date}){
  await tx.update(subscriptionCardSetups).set({providerCustomerRef:input.customerRef,providerCheckoutRef:input.checkoutRef,providerSetupIntentRef:input.setupIntentRef,confirmedMethodId:input.methodId,confirmedAt:sql`coalesce(${subscriptionCardSetups.confirmedAt},${input.occurredAt.toISOString()}::timestamptz)`}).where(eq(subscriptionCardSetups.id,input.attemptId));
 }
+
+
+const setupUndoState=z.array(z.object({id:z.uuid(),fingerprint:z.string().regex(/^[a-f0-9]{64}$/)}));
+async function setupIdentityState(tx:Tx,duplicateId:string,survivingId:string){
+ const rows=await tx.select({id:subscriptionCardSetups.id,material:sql<string>`jsonb_build_object(
+  'setup',to_jsonb(${subscriptionCardSetups}),
+  'dispatches',coalesce((select jsonb_agg(to_jsonb(dispatch) order by dispatch.id) from ${subscriptionSetupDispatches} dispatch where dispatch.setup_id=${subscriptionCardSetups.id}),'[]'::jsonb)
+ )::text`}).from(subscriptionCardSetups).innerJoin(subscriptions,eq(subscriptions.id,subscriptionCardSetups.subscriptionId)).where(inArray(subscriptions.contactId,[duplicateId,survivingId])).orderBy(subscriptionCardSetups.id).for("update",{of:subscriptionCardSetups});
+ // Never copy frozen customer inputs or provider evidence into merge history.
+ return rows.map(row=>({id:row.id,fingerprint:createHash("sha256").update(row.material).digest("hex")}));
+}
+registerContactReference({
+ table:"subscription_card_setups",columns:[],
+ // The subscription owns the pointer. Original provider metadata is immutable.
+ repoint:async()=>{},
+ captureForUndo:async(tx,duplicateId,survivingId)=>({state:await setupIdentityState(tx,duplicateId,survivingId),undoable:true}),
+ restoreAfterUndo:async(tx,_before,after,duplicateId,survivingId)=>{
+  const expected=setupUndoState.parse(after),current=await setupIdentityState(tx,duplicateId,survivingId);
+  if(JSON.stringify(current)!==JSON.stringify(expected))throw new ServiceError("conflict","A card-setup request changed after this merge. Leave the merge in place and reconcile its original provider work before separating identities.");
+ },
+});
 
 registerContactPrivacySource({
  scope:"subscriptions.cardSetups",tables:["subscription_card_setups","subscription_setup_dispatches"],retentionScopes:["commerce.money"],eraseOrder:5,

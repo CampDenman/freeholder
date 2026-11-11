@@ -13237,7 +13237,10 @@ whatever is best for the people using the site.
   waits for all physical outcomes and actual original-account customer deletion.
   Fresh-human recovery records concrete final-provider and stopped-caller
   evidence separately from machine responses; completed resources also undergo
-  positive original-account checks. SQL fences old-image trial/erasure shortcuts.
+  positive original-account checks. Merge undo fingerprints private setup and
+  dispatch state without copying inputs and refuses later provider work crossing
+  separated identities; unchanged requests stay undoable. Legacy merge records
+  receive the new undo witness. SQL fences old-image trial/erasure shortcuts.
   Four-locale owner recovery and customer exact-card journeys use shared
   services. `tests/modules/subscription-billing.test.ts`,
   `tests/core/stripe-setup-recovery.test.ts`,

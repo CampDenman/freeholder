@@ -1,6 +1,6 @@
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
--- freeholder:schema-breaking New zero-fee card trials require exact setup proof; old images cannot start them from an unrelated fresh card. Restore the pre-upgrade database and objects for full rollback.
+-- freeholder:schema-breaking New zero-fee card trials require exact setup proof, durable provider outcomes and setup-aware merge undo. Prior images fail closed at these boundaries. Restore the pre-upgrade database and objects for full rollback.
 -- C12.38: freeze customer/setup input before any provider creation request.
 CREATE TABLE subscription_card_setups (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -174,3 +174,25 @@ $$;
 --> statement-breakpoint
 CREATE TRIGGER subscription_setup_privacy_completion BEFORE UPDATE ON data_requests
  FOR EACH ROW EXECUTE FUNCTION guard_pending_setup_privacy_completion();
+
+--> statement-breakpoint
+CREATE FUNCTION guard_setup_merge_witness() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ -- A prior application image cannot omit this family's undo boundary. A
+ -- current image supplies its exact fingerprint witness and keeps it intact.
+ IF NOT (NEW.reference_state @> '[{"table":"subscription_card_setups"}]'::jsonb) THEN
+  NEW.reference_state=NEW.reference_state || jsonb_build_array(jsonb_build_object('table','subscription_card_setups','before','[]'::jsonb,'after','[]'::jsonb));
+ END IF;
+ RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER subscription_setup_merge_witness BEFORE INSERT ON contact_merge_operations
+ FOR EACH ROW EXECUTE FUNCTION guard_setup_merge_witness();
+
+--> statement-breakpoint
+-- Install the INSERT fence first: its DDL lock drains prior writers before
+-- this backfill observes every still-active merge. No provider rows existed.
+UPDATE contact_merge_operations
+ SET reference_state=reference_state || jsonb_build_array(jsonb_build_object('table','subscription_card_setups','before','[]'::jsonb,'after','[]'::jsonb))
+ WHERE undone_at IS NULL AND NOT (reference_state @> '[{"table":"subscription_card_setups"}]'::jsonb);

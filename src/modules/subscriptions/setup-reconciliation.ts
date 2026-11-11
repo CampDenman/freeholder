@@ -5,7 +5,7 @@ import {and,eq,gt,sql} from "drizzle-orm";
 import {z} from "zod";
 import {paymentAdapter} from "@/adapters/payments";
 import {lockContactIdentity} from "@/core/contacts/identity-lock";
-import {actorString,defineOrchestratedService,defineService,ServiceError,type Actor,type Tx} from "@/core/service";
+import {actorString,defineOrchestratedService,defineService,hasModuleAccess,ServiceError,type Actor,type Tx} from "@/core/service";
 import {dispatchRequestHash} from "./setup-dispatch";
 import {originalSetupRequest,setupRequest} from "./card-setup";
 import {subscriptionCardSetups,subscriptionSetupDispatches} from "./schema";
@@ -19,8 +19,12 @@ const confirmation=z.object({
  providerCustomerRef:z.string().min(1).max(500).optional(),
  providerRef:z.string().min(1).max(500).optional(),
 });
-function requireHuman(actor:Actor):void{if(actor.kind!=="user" || actor.keyScopes)throw new ServiceError("permission","Sign in as a person to record actual provider and stopped-caller evidence.");}
+function requireRecoveryManager(actor:Actor):void{
+ if(actor.kind!=="user" || actor.keyScopes)throw new ServiceError("permission","Sign in as a person to record actual provider and stopped-caller evidence.");
+ if(!hasModuleAccess(actor,"subscriptions","manage"))throw new ServiceError("permission","Managing card setup recovery requires permission to manage subscriptions.");
+}
 const state=z.enum(["running","unknown","succeeded","provider_completed","provider_cancelled"]);
+const recordedEvidence=z.object({source:z.literal("human_provider_confirmation").optional(),providerOperationRef:z.string().optional(),providerEvidence:z.string().optional(),callerStopEvidence:z.string().optional()});
 const result=z.object({dispatchId:z.uuid(),state,source:z.enum(["provider_response","human_provider_confirmation"])});
 async function locked(ctx:{tx:Tx},id:string){
  const [found]=await ctx.tx.select({setupId:subscriptionSetupDispatches.setupId}).from(subscriptionSetupDispatches).where(eq(subscriptionSetupDispatches.id,id));
@@ -38,7 +42,7 @@ export const claimTrialSetupReconciliation=defineService({
  kind:"mutation",permission:"scoped",external:false,agentCallable:false,stepUp:true,writeClass:"money",
  input:confirmation,output:z.object({provider:z.string(),request:setupRequest,kind:z.enum(["customer","session"]),state,createdAt:z.string(),customerAtStart:z.string().nullable()}),
  handler:async(input,ctx)=>{
-  requireHuman(ctx.actor);
+  requireRecoveryManager(ctx.actor);
   await lockContactIdentity(ctx.tx);
   const current=await locked(ctx,input.dispatchId);
   ctx.setSubject("subscription",current.attempt.subscriptionId);
@@ -51,7 +55,7 @@ export const applyTrialSetupReconciliation=defineService({
  kind:"mutation",permission:"scoped",external:false,agentCallable:false,stepUp:true,writeClass:"money",
  input:confirmation.extend({requestHash:z.string().length(64),providerAccountId:z.string().optional(),verifiedCustomerRef:z.string().optional(),verifiedProviderRef:z.string().optional()}),output:result,
  handler:async(input,ctx)=>{
-  requireHuman(ctx.actor);
+  requireRecoveryManager(ctx.actor);
   await lockContactIdentity(ctx.tx);
   const {attempt,dispatch,request}=await locked(ctx,input.dispatchId);
   if(dispatch.requestHash!==input.requestHash)throw new ServiceError("conflict","The original request changed during provider reconciliation.");
@@ -81,7 +85,7 @@ export const reconcileTrialSetupDispatch=defineOrchestratedService({
  name:"subscriptions.reconcileTrialSetupDispatch",auditInputFields:["dispatchId","outcome"],summary:"Record a human's exact final provider guarantee and stopped-caller evidence; unresolved work stays pending.",
  kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,writeClass:"money",input:confirmation,output:result,
  handler:async(input,actor)=>{
-  requireHuman(actor);
+  requireRecoveryManager(actor);
   if(input.outcome==="cancelled" && (input.providerCustomerRef || input.providerRef))throw new ServiceError("validation","A guaranteed no-resource cancellation must leave resource fields empty.");
   const claimed=await claimTrialSetupReconciliation.call(input,actor);
   if(!["running","unknown"].includes(claimed.state))return applyTrialSetupReconciliation.call({...input,requestHash:dispatchRequestHash(claimed.request)},actor);
@@ -100,12 +104,12 @@ export const reconcileTrialSetupDispatch=defineOrchestratedService({
 
 export const listTrialSetupDispatches=defineService({
  name:"subscriptions.listTrialSetupDispatches",summary:"Inspect the original account and physical request identities needed for human provider recovery.",kind:"query",permission:"scoped",agentCallable:false,stepUp:true,
- input:z.object({subscriptionId:z.uuid(),afterId:z.uuid().optional(),limit:z.number().int().min(1).max(100).default(50)}),output:z.object({rows:z.array(z.object({id:z.uuid(),attemptId:z.uuid(),kind:z.enum(["customer","session"]),state,provider:z.string(),providerAccountId:z.string(),idempotencyKey:z.string(),requestHash:z.string(),providerCustomerRef:z.string().nullable(),providerRef:z.string().nullable(),startedAt:z.date(),privacyPending:z.boolean(),resolution:z.unknown()})),nextCursor:z.uuid().nullable()}),
+ input:z.object({subscriptionId:z.uuid(),afterId:z.uuid().optional(),limit:z.number().int().min(1).max(100).default(50)}),output:z.object({rows:z.array(z.object({id:z.uuid(),attemptId:z.uuid(),kind:z.enum(["customer","session"]),state,provider:z.string(),providerAccountId:z.string(),idempotencyKey:z.string(),requestHash:z.string(),providerCustomerRef:z.string().nullable(),providerRef:z.string().nullable(),startedAt:z.date(),privacyPending:z.boolean(),resolution:recordedEvidence})),nextCursor:z.uuid().nullable()}),
  handler:async(input,ctx)=>{
-  requireHuman(ctx.actor);
+  requireRecoveryManager(ctx.actor);
   const rows=await ctx.tx.select({dispatch:subscriptionSetupDispatches,attempt:subscriptionCardSetups}).from(subscriptionSetupDispatches).innerJoin(subscriptionCardSetups,eq(subscriptionCardSetups.id,subscriptionSetupDispatches.setupId)).where(and(eq(subscriptionCardSetups.subscriptionId,input.subscriptionId),input.afterId?gt(subscriptionSetupDispatches.id,input.afterId):undefined)).orderBy(subscriptionSetupDispatches.id).limit(input.limit+1);
   const page=rows.slice(0,input.limit);
-  return {rows:page.map(({dispatch,attempt})=>({id:dispatch.id,attemptId:attempt.id,kind:dispatch.kind,state:dispatch.state,provider:attempt.provider,providerAccountId:attempt.providerAccountId,idempotencyKey:originalSetupRequest(attempt).idempotencyKey+(dispatch.kind==="customer"?":customer":""),requestHash:dispatch.requestHash,providerCustomerRef:dispatch.providerCustomerRef,providerRef:dispatch.providerRef,startedAt:dispatch.startedAt,privacyPending:!!attempt.erasureRequestId,resolution:dispatch.resolution})),nextCursor:rows.length>input.limit?page.at(-1)!.dispatch.id:null};
+  return {rows:page.map(({dispatch,attempt})=>({id:dispatch.id,attemptId:attempt.id,kind:dispatch.kind,state:dispatch.state,provider:attempt.provider,providerAccountId:attempt.providerAccountId,idempotencyKey:originalSetupRequest(attempt).idempotencyKey+(dispatch.kind==="customer"?":customer":""),requestHash:dispatch.requestHash,providerCustomerRef:dispatch.providerCustomerRef,providerRef:dispatch.providerRef,startedAt:dispatch.startedAt,privacyPending:!!attempt.erasureRequestId,resolution:recordedEvidence.parse(dispatch.resolution)})),nextCursor:rows.length>input.limit?page.at(-1)!.dispatch.id:null};
  },
 });
 

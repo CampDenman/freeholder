@@ -7,13 +7,13 @@ import { db } from "@/core/db";
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import {createStripePayments} from "@/adapters/payments/stripe";
 import type { PaymentAdapter } from "@/adapters/payments";
-import { contacts } from "@/core/contacts/schema";
+import { contacts,contactMergeOperations } from "@/core/contacts/schema";
 import { beginCustomerCheckout, getCustomerInvoice } from "@/modules/invoicing/customer-service";
 import { processPaymentProviderEvents } from "@/modules/invoicing/payment-provider-service";
 import { publicMembershipPlans, joinMembership, activatePaidSignup, beginTrialCardSetup, startCardTrial,claimTrialCardSetup,applyTrialCardSetup } from "@/modules/subscriptions/public-signup";
 import { createPayment, settlePayment } from "@/modules/invoicing/invoice-service";
 import { users } from "@/core/auth/schema";
-import { mergeContacts,updateContact,resolveContact } from "@/core/contacts/service";
+import { mergeContacts,undoContactMerge,updateContact,resolveContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
 import { invoiceLines, invoices, paymentMethods,paymentProviderCustomers,payments } from "@/modules/invoicing/schema";
 import {
@@ -44,7 +44,7 @@ import { env } from "@/core/env";
 import {createDataRequest,verifyDataRequest,fulfillDataRequest,completeErasureJob,addRetentionException} from "@/core/privacy/service";
 import {dataRequests} from "@/core/privacy/schema";
 import {auditLog} from "@/core/events/schema";
-import {reconcileTrialSetupDispatch} from "@/modules/subscriptions/setup-reconciliation";
+import {reconcileTrialSetupDispatch,listTrialSetupDispatches} from "@/modules/subscriptions/setup-reconciliation";
 import {setupRequest} from "@/modules/subscriptions/card-setup";
 import {getJob,type JobExecutionContext} from "@/core/jobs";
 import {eraseTrialSetupCustomers} from "@/modules/subscriptions/setup-erasure";
@@ -1088,6 +1088,9 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     expect(mocks.recoverMethodSetup.mock.calls.at(-1)![0]).toMatchObject({providerCustomerRef:"cus_Confirmed",verifyCustomerCreation:true});
     const [resolved]=await db().select().from(subscriptionSetupDispatches);
     expect(resolved!.resolution).toMatchObject({source:"human_provider_confirmation",actor:`user:${OWNER.userId}`,providerOperationRef:input.providerOperationRef,providerEvidence:input.providerEvidence,callerStopEvidence:input.callerStopEvidence,originalRequestHash:dispatch!.requestHash});
+    const viewer={...OWNER,role:"subscription-reader",grants:[{module:"subscriptions",access:"view" as const}],security:{twoFactorRequired:true,twoFactorEnrolled:true,twoFactorVerified:true,stepUpValid:true}};
+    await expect(listTrialSetupDispatches.call({subscriptionId:joined.id},viewer)).rejects.toMatchObject({code:"permission"});
+    expect((await listTrialSetupDispatches.call({subscriptionId:joined.id},OWNER)).rows[0]!.resolution).toMatchObject({providerEvidence:input.providerEvidence});
     const entries=await db().select().from(auditLog);
     expect(entries.find(entry=>entry.action==="subscriptions.applyTrialSetupReconciliation")?.actor).toBe(`user:${OWNER.userId}`);
     const count=mocks.recoverMethodSetup.mock.calls.length;
@@ -1202,6 +1205,30 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     expect(recovery.map(item=>item.diff)).toEqual([{dispatchId:dispatch!.id,outcome:"completed"},{dispatchId:dispatch!.id,outcome:"completed"}]);
     expect(JSON.stringify(recovery.map(item=>item.diff))).not.toContain(contact.email!);
     expect(JSON.stringify(recovery.map(item=>item.diff))).not.toContain(evidence);
+  });
+
+
+  it.each(["before","after","changed"] as const)("allows identity separation only when original setup evidence was unchanged (%s merge)",async phase=>{
+    const {contact,joined}=await pausedCardTrial(`setup-undo-${phase}`),survivor=await person(`setup-other-${phase}`);
+    mocks.createSetupCustomer.mockRejectedValue(new Error("Synthetic unresolved provider creation"));
+    if(phase!=="after")await expect(beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER)).rejects.toMatchObject({code:"conflict"});
+    const merged=await mergeContacts.call({survivingId:survivor.id,duplicateId:contact.id},OWNER);
+    const [operation]=await db().select().from(contactMergeOperations).where(eq(contactMergeOperations.id,merged.mergeOperationId));
+    const witness=(operation!.referenceState as Array<{table:string;before:unknown;after:unknown}>).find(item=>item.table==="subscription_card_setups")!;
+    expect(witness).toBeDefined();
+    expect(JSON.stringify(witness)).not.toContain(contact.email!);
+    expect(JSON.stringify(witness)).not.toContain(survivor.email!);
+    if(phase!=="before")await expect(beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER)).rejects.toMatchObject({code:"conflict"});
+    if(phase!=="before"){
+      await expect(undoContactMerge.call({operationId:merged.mergeOperationId},OWNER)).rejects.toMatchObject({code:"conflict"});
+      expect((await db().select().from(subscriptions).where(eq(subscriptions.id,joined.id)))[0]!.contactId).toBe(survivor.id);
+      expect((await db().select().from(subscriptionCardSetups))[0]!.request).toMatchObject({contactId:phase==="after"?survivor.id:contact.id,customer:{email:phase==="after"?survivor.email:contact.email}});
+      expect(await db().select().from(contacts).where(eq(contacts.id,contact.id))).toHaveLength(0);
+    }else{
+      expect(await undoContactMerge.call({operationId:merged.mergeOperationId},OWNER)).toMatchObject({restoredContact:{id:contact.id}});
+      expect((await db().select().from(subscriptions).where(eq(subscriptions.id,joined.id)))[0]!.contactId).toBe(contact.id);
+      expect((await db().select().from(subscriptionCardSetups))[0]!.request).toMatchObject({contactId:contact.id,customer:{email:contact.email}});
+    }
   });
 
 });

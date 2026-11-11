@@ -853,3 +853,19 @@ the setup consumers of the existing `auditInputFields` seam: generic copies
 retain operation IDs/outcomes, private dispatches retain concrete evidence
 until cleanup/hold resolution, and original actor/action/subject remain intact.
 The regression requires exact minimal audit diff equality after erasure.
+
+An actual least-privilege control also reproduced a freshly verified view-only
+subscription role reading the private recovery record through the API. The
+shared service now requires subscription management for both inspection and
+confirmation, matching the owner UI. The response projects concrete evidence
+fields, and authorized managers can review the recorded evidence in the page.
+Agents, personal keys and view-only roles remain refused.
+
+The setup-aware merge witness repairs an actual before-failing undo that moved
+a new merged-identity customer snapshot back to a separated subscription. Read
+the parent-owned `columns: []` reference: it locks setup rows in ID order and
+stores only SHA-256 fingerprints of exact SQL setup/dispatch JSON. It refuses
+new or changed evidence without copying PII into merge history. Unchanged
+pre-merge undo still passes. Review migration70's legacy witness backfill and
+prior-image INSERT fence, plus the populated69→70 rehearsal and adjacent
+lineage controls.

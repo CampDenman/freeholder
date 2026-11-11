@@ -77,6 +77,9 @@ test.describe("trial setup recovery (C12.38)",()=>{
     await expect(page.getByRole("button",{name:text["subscriptions.setup.submit"],exact:true})).toBeFocused();await page.keyboard.press("Enter");
     await expect(page.getByText(text["subscriptions.setup.saved"],{exact:true})).toBeVisible();
     await expect(page.getByText(text["subscriptions.setup.state.provider_cancelled"],{exact:true})).toBeVisible();
+    await page.locator("summary").filter({hasText:text["subscriptions.setup.providerEvidence"]}).click();
+    await expect(page.getByText("Synthetic original-account support record guarantees this exact operation was cancelled and cannot complete later.",{exact:true})).toBeVisible();
+    await expect(page.getByText("Synthetic original caller and every retry stopped before the provider issued its final cancellation guarantee.",{exact:true})).toBeVisible();
     expect((await db().select().from(subscriptionSetupDispatches).where(eq(subscriptionSetupDispatches.id,source.dispatchId!)))[0]).toMatchObject({state:"provider_cancelled",resolution:{source:"human_provider_confirmation",providerOperationRef:"synthetic-provider-support-case-123"}});
     expect((await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.id,source.attemptId)))[0]!.closedReason).toBe("provider_cancelled");
    }finally{await context.close();}

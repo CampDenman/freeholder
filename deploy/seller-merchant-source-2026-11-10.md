@@ -267,6 +267,23 @@ A populated schema69→70 rehearsal preserved the existing paused agreement,
 customer and unrelated saved card, inserted zero setup/dispatch evidence, and
 refused a prior-image trial activation with
 `subscription_trial_setup_confirmation`. Migration70 SHA-256:
-`baddb276d83d472d58413ed119e4e3ef30a24b6cf376b3caf49474448b344e9b`.
+`11ca773e5a0aa938a913698fd38a78d3bd9f1eb0af3d3e0facd27c54831aebb8`.
 This is upgrade/source refusal evidence; actual full restore acceptance remains
 required under C11.08.
+
+An actual least-privilege control also reproduced a freshly verified view-only
+subscription role reading the private recovery record through the API. The
+shared service now requires subscription management for both inspection and
+confirmation, matching the owner UI. The response projects concrete evidence
+fields, and authorized managers can review the recorded evidence in the page.
+Agents, personal keys and view-only roles remain refused.
+
+A merge/undo control reproduced a newly frozen merged-identity customer snapshot
+following a subscription back to the separated person. Setup/dispatch state now
+participates in the parent's undo boundary through exact locked fingerprints;
+merge history stores only IDs/hashes, never another copy of customer inputs.
+Unchanged pre-merge requests remain undoable, while new or changed provider
+work refuses separation. Migration70 seeds empty witnesses for pre-existing
+active operations and fences prior-image inserts that omit the new family;
+the populated upgrade rehearsal verifies both protections without inventing
+any provider records.

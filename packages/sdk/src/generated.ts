@@ -7750,7 +7750,7 @@ export interface ServiceCatalog {
   };
   "subscriptions.listTrialSetupDispatches": {
     input: { subscriptionId: string; afterId?: string; limit?: number };
-    output: { rows: { id: string; attemptId: string; kind: "customer" | "session"; state: "running" | "unknown" | "succeeded" | "provider_completed" | "provider_cancelled"; provider: string; providerAccountId: string; idempotencyKey: string; requestHash: string; providerCustomerRef: string | null; providerRef: string | null; startedAt: string; privacyPending: boolean; resolution: unknown }[]; nextCursor: string | null };
+    output: { rows: { id: string; attemptId: string; kind: "customer" | "session"; state: "running" | "unknown" | "succeeded" | "provider_completed" | "provider_cancelled"; provider: string; providerAccountId: string; idempotencyKey: string; requestHash: string; providerCustomerRef: string | null; providerRef: string | null; startedAt: string; privacyPending: boolean; resolution: { source?: "human_provider_confirmation"; providerOperationRef?: string; providerEvidence?: string; callerStopEvidence?: string } }[]; nextCursor: string | null };
   };
   "subscriptions.mine": {
     input: { id: string };
