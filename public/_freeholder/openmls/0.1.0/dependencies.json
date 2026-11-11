@@ -1,0 +1,1304 @@
+[
+  {
+    "name": "aead",
+    "version": "0.6.1",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/traits",
+    "source": "https://static.crates.io/crates/aead/aead-0.6.1.crate"
+  },
+  {
+    "name": "aes",
+    "version": "0.9.4",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/block-ciphers",
+    "source": "https://static.crates.io/crates/aes/aes-0.9.4.crate"
+  },
+  {
+    "name": "aes-gcm",
+    "version": "0.11.1",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/AEADs",
+    "source": "https://static.crates.io/crates/aes-gcm/aes-gcm-0.11.1.crate"
+  },
+  {
+    "name": "autocfg",
+    "version": "1.5.1",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "Josh Stone <cuviper@gmail.com>"
+    ],
+    "repository": "https://github.com/cuviper/autocfg",
+    "source": "https://static.crates.io/crates/autocfg/autocfg-1.5.1.crate"
+  },
+  {
+    "name": "base16ct",
+    "version": "1.0.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats",
+    "source": "https://static.crates.io/crates/base16ct/base16ct-1.0.0.crate"
+  },
+  {
+    "name": "base64",
+    "version": "0.22.1",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "Marshall Pierce <marshall@mpierce.org>"
+    ],
+    "repository": "https://github.com/marshallpierce/rust-base64",
+    "source": "https://static.crates.io/crates/base64/base64-0.22.1.crate"
+  },
+  {
+    "name": "base64ct",
+    "version": "1.8.3",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats",
+    "source": "https://static.crates.io/crates/base64ct/base64ct-1.8.3.crate"
+  },
+  {
+    "name": "block-buffer",
+    "version": "0.10.4",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/utils",
+    "source": "https://static.crates.io/crates/block-buffer/block-buffer-0.10.4.crate"
+  },
+  {
+    "name": "block-buffer",
+    "version": "0.12.1",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/utils",
+    "source": "https://static.crates.io/crates/block-buffer/block-buffer-0.12.1.crate"
+  },
+  {
+    "name": "bumpalo",
+    "version": "3.20.3",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "Nick Fitzgerald <fitzgen@gmail.com>"
+    ],
+    "repository": "https://github.com/fitzgen/bumpalo",
+    "source": "https://static.crates.io/crates/bumpalo/bumpalo-3.20.3.crate"
+  },
+  {
+    "name": "cfg-if",
+    "version": "1.0.5",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "Alex Crichton <alex@alexcrichton.com>"
+    ],
+    "repository": "https://github.com/rust-lang/cfg-if",
+    "source": "https://static.crates.io/crates/cfg-if/cfg-if-1.0.5.crate"
+  },
+  {
+    "name": "chacha20",
+    "version": "0.10.2",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/stream-ciphers",
+    "source": "https://static.crates.io/crates/chacha20/chacha20-0.10.2.crate"
+  },
+  {
+    "name": "chacha20poly1305",
+    "version": "0.11.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/AEADs",
+    "source": "https://static.crates.io/crates/chacha20poly1305/chacha20poly1305-0.11.0.crate"
+  },
+  {
+    "name": "cipher",
+    "version": "0.5.2",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/traits",
+    "source": "https://static.crates.io/crates/cipher/cipher-0.5.2.crate"
+  },
+  {
+    "name": "cmov",
+    "version": "0.5.4",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/utils",
+    "source": "https://static.crates.io/crates/cmov/cmov-0.5.4.crate"
+  },
+  {
+    "name": "const-oid",
+    "version": "0.10.3",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats",
+    "source": "https://static.crates.io/crates/const-oid/const-oid-0.10.3.crate"
+  },
+  {
+    "name": "const-oid",
+    "version": "0.9.6",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats/tree/master/const-oid",
+    "source": "https://static.crates.io/crates/const-oid/const-oid-0.9.6.crate"
+  },
+  {
+    "name": "cpubits",
+    "version": "0.1.1",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/utils",
+    "source": "https://static.crates.io/crates/cpubits/cpubits-0.1.1.crate"
+  },
+  {
+    "name": "crossbeam-deque",
+    "version": "0.8.8",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/crossbeam-rs/crossbeam",
+    "source": "https://static.crates.io/crates/crossbeam-deque/crossbeam-deque-0.8.8.crate"
+  },
+  {
+    "name": "crossbeam-epoch",
+    "version": "0.9.21",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/crossbeam-rs/crossbeam",
+    "source": "https://static.crates.io/crates/crossbeam-epoch/crossbeam-epoch-0.9.21.crate"
+  },
+  {
+    "name": "crossbeam-utils",
+    "version": "0.8.23",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/crossbeam-rs/crossbeam",
+    "source": "https://static.crates.io/crates/crossbeam-utils/crossbeam-utils-0.8.23.crate"
+  },
+  {
+    "name": "crypto-bigint",
+    "version": "0.7.11",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/crypto-bigint",
+    "source": "https://static.crates.io/crates/crypto-bigint/crypto-bigint-0.7.11.crate"
+  },
+  {
+    "name": "crypto-common",
+    "version": "0.1.7",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/traits",
+    "source": "https://static.crates.io/crates/crypto-common/crypto-common-0.1.7.crate"
+  },
+  {
+    "name": "crypto-common",
+    "version": "0.2.2",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/traits",
+    "source": "https://static.crates.io/crates/crypto-common/crypto-common-0.2.2.crate"
+  },
+  {
+    "name": "ctr",
+    "version": "0.10.1",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/block-modes",
+    "source": "https://static.crates.io/crates/ctr/ctr-0.10.1.crate"
+  },
+  {
+    "name": "ctutils",
+    "version": "0.4.8",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/utils",
+    "source": "https://static.crates.io/crates/ctutils/ctutils-0.4.8.crate"
+  },
+  {
+    "name": "curve25519-dalek",
+    "version": "4.1.3",
+    "license": "BSD-3-Clause",
+    "authors": [
+      "Isis Lovecruft <isis@patternsinthevoid.net>",
+      "Henry de Valence <hdevalence@hdevalence.ca>"
+    ],
+    "repository": "https://github.com/dalek-cryptography/curve25519-dalek/tree/main/curve25519-dalek",
+    "source": "https://static.crates.io/crates/curve25519-dalek/curve25519-dalek-4.1.3.crate"
+  },
+  {
+    "name": "curve25519-dalek",
+    "version": "5.0.0",
+    "license": "BSD-3-Clause",
+    "authors": [
+      "Isis Lovecruft <isis@patternsinthevoid.net>",
+      "Henry de Valence <hdevalence@hdevalence.ca>"
+    ],
+    "repository": "https://github.com/dalek-cryptography/curve25519-dalek/tree/main/curve25519-dalek",
+    "source": "https://static.crates.io/crates/curve25519-dalek/curve25519-dalek-5.0.0.crate"
+  },
+  {
+    "name": "der",
+    "version": "0.7.10",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats/tree/master/der",
+    "source": "https://static.crates.io/crates/der/der-0.7.10.crate"
+  },
+  {
+    "name": "der",
+    "version": "0.8.3",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats",
+    "source": "https://static.crates.io/crates/der/der-0.8.3.crate"
+  },
+  {
+    "name": "digest",
+    "version": "0.10.7",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/traits",
+    "source": "https://static.crates.io/crates/digest/digest-0.10.7.crate"
+  },
+  {
+    "name": "digest",
+    "version": "0.11.3",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/traits",
+    "source": "https://static.crates.io/crates/digest/digest-0.11.3.crate"
+  },
+  {
+    "name": "ecdsa",
+    "version": "0.17.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/signatures",
+    "source": "https://static.crates.io/crates/ecdsa/ecdsa-0.17.0.crate"
+  },
+  {
+    "name": "ed25519",
+    "version": "2.2.3",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/signatures/tree/master/ed25519",
+    "source": "https://static.crates.io/crates/ed25519/ed25519-2.2.3.crate"
+  },
+  {
+    "name": "ed25519",
+    "version": "3.0.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/signatures",
+    "source": "https://static.crates.io/crates/ed25519/ed25519-3.0.0.crate"
+  },
+  {
+    "name": "ed25519-dalek",
+    "version": "2.2.0",
+    "license": "BSD-3-Clause",
+    "authors": [
+      "isis lovecruft <isis@patternsinthevoid.net>",
+      "Tony Arcieri <bascule@gmail.com>",
+      "Michael Rosenberg <michael@mrosenberg.pub>"
+    ],
+    "repository": "https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek",
+    "source": "https://static.crates.io/crates/ed25519-dalek/ed25519-dalek-2.2.0.crate"
+  },
+  {
+    "name": "ed25519-dalek",
+    "version": "3.0.0",
+    "license": "BSD-3-Clause",
+    "authors": [
+      "isis lovecruft <isis@patternsinthevoid.net>",
+      "Tony Arcieri <bascule@gmail.com>",
+      "Michael Rosenberg <michael@mrosenberg.pub>"
+    ],
+    "repository": "https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek",
+    "source": "https://static.crates.io/crates/ed25519-dalek/ed25519-dalek-3.0.0.crate"
+  },
+  {
+    "name": "either",
+    "version": "1.19.0",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/rayon-rs/either",
+    "source": "https://static.crates.io/crates/either/either-1.19.0.crate"
+  },
+  {
+    "name": "elliptic-curve",
+    "version": "0.14.3",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/traits",
+    "source": "https://static.crates.io/crates/elliptic-curve/elliptic-curve-0.14.3.crate"
+  },
+  {
+    "name": "ff",
+    "version": "0.14.0",
+    "license": "MIT/Apache-2.0",
+    "authors": [
+      "Sean Bowe <ewillbefull@gmail.com>",
+      "Jack Grigg <thestr4d@gmail.com>"
+    ],
+    "repository": "https://github.com/zkcrypto/ff",
+    "source": "https://static.crates.io/crates/ff/ff-0.14.0.crate"
+  },
+  {
+    "name": "futures-core",
+    "version": "0.3.34",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/rust-lang/futures-rs",
+    "source": "https://static.crates.io/crates/futures-core/futures-core-0.3.34.crate"
+  },
+  {
+    "name": "futures-task",
+    "version": "0.3.34",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/rust-lang/futures-rs",
+    "source": "https://static.crates.io/crates/futures-task/futures-task-0.3.34.crate"
+  },
+  {
+    "name": "futures-util",
+    "version": "0.3.34",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/rust-lang/futures-rs",
+    "source": "https://static.crates.io/crates/futures-util/futures-util-0.3.34.crate"
+  },
+  {
+    "name": "generic-array",
+    "version": "0.14.7",
+    "license": "MIT",
+    "authors": [
+      "Bartłomiej Kamiński <fizyk20@gmail.com>",
+      "Aaron Trent <novacrazy@gmail.com>"
+    ],
+    "repository": "https://github.com/fizyk20/generic-array.git",
+    "source": "https://static.crates.io/crates/generic-array/generic-array-0.14.7.crate"
+  },
+  {
+    "name": "getrandom",
+    "version": "0.2.17",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The Rand Project Developers"
+    ],
+    "repository": "https://github.com/rust-random/getrandom",
+    "source": "https://static.crates.io/crates/getrandom/getrandom-0.2.17.crate"
+  },
+  {
+    "name": "getrandom",
+    "version": "0.4.3",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The Rand Project Developers"
+    ],
+    "repository": "https://github.com/rust-random/getrandom",
+    "source": "https://static.crates.io/crates/getrandom/getrandom-0.4.3.crate"
+  },
+  {
+    "name": "ghash",
+    "version": "0.6.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/universal-hashes",
+    "source": "https://static.crates.io/crates/ghash/ghash-0.6.0.crate"
+  },
+  {
+    "name": "group",
+    "version": "0.14.0",
+    "license": "MIT/Apache-2.0",
+    "authors": [
+      "Sean Bowe <ewillbefull@gmail.com>",
+      "Jack Grigg <jack@z.cash>"
+    ],
+    "repository": "https://github.com/zkcrypto/group",
+    "source": "https://static.crates.io/crates/group/group-0.14.0.crate"
+  },
+  {
+    "name": "hkdf",
+    "version": "0.13.0",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/KDFs/",
+    "source": "https://static.crates.io/crates/hkdf/hkdf-0.13.0.crate"
+  },
+  {
+    "name": "hmac",
+    "version": "0.13.0",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/MACs",
+    "source": "https://static.crates.io/crates/hmac/hmac-0.13.0.crate"
+  },
+  {
+    "name": "hpke-rs",
+    "version": "0.8.0",
+    "license": "MPL-2.0",
+    "authors": [
+      "Franziskus Kiefer <franziskuskiefer@gmail.com>"
+    ],
+    "repository": "https://github.com/celabshq/libcrux",
+    "source": "https://static.crates.io/crates/hpke-rs/hpke-rs-0.8.0.crate",
+    "sourceArchive": "hpke-rs-0.8.0.crate"
+  },
+  {
+    "name": "hpke-rs-crypto",
+    "version": "0.8.0",
+    "license": "MPL-2.0",
+    "authors": [
+      "Franziskus Kiefer <franziskuskiefer@gmail.com>"
+    ],
+    "repository": "https://github.com/celabshq/libcrux",
+    "source": "https://static.crates.io/crates/hpke-rs-crypto/hpke-rs-crypto-0.8.0.crate",
+    "sourceArchive": "hpke-rs-crypto-0.8.0.crate"
+  },
+  {
+    "name": "hpke-rs-rust-crypto",
+    "version": "0.8.0",
+    "license": "MPL-2.0",
+    "authors": [
+      "Franziskus Kiefer <franziskuskiefer@gmail.com>"
+    ],
+    "repository": "https://github.com/celabshq/libcrux",
+    "source": "https://static.crates.io/crates/hpke-rs-rust-crypto/hpke-rs-rust-crypto-0.8.0.crate",
+    "sourceArchive": "hpke-rs-rust-crypto-0.8.0.crate"
+  },
+  {
+    "name": "hybrid-array",
+    "version": "0.4.15",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/hybrid-array",
+    "source": "https://static.crates.io/crates/hybrid-array/hybrid-array-0.4.15.crate"
+  },
+  {
+    "name": "inout",
+    "version": "0.2.6",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/utils",
+    "source": "https://static.crates.io/crates/inout/inout-0.2.6.crate"
+  },
+  {
+    "name": "itoa",
+    "version": "1.0.19",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/dtolnay/itoa",
+    "source": "https://static.crates.io/crates/itoa/itoa-1.0.19.crate"
+  },
+  {
+    "name": "js-sys",
+    "version": "0.3.107",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The wasm-bindgen Developers"
+    ],
+    "repository": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys",
+    "source": "https://static.crates.io/crates/js-sys/js-sys-0.3.107.crate"
+  },
+  {
+    "name": "k256",
+    "version": "0.14.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/elliptic-curves",
+    "source": "https://static.crates.io/crates/k256/k256-0.14.0.crate"
+  },
+  {
+    "name": "libc",
+    "version": "0.2.191",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/rust-lang/libc",
+    "source": "https://static.crates.io/crates/libc/libc-0.2.191.crate"
+  },
+  {
+    "name": "libcrux-intrinsics",
+    "version": "0.0.9",
+    "license": "Apache-2.0",
+    "authors": [
+      "Cryspen"
+    ],
+    "repository": "https://github.com/cryspen/libcrux",
+    "source": "https://static.crates.io/crates/libcrux-intrinsics/libcrux-intrinsics-0.0.9.crate"
+  },
+  {
+    "name": "libcrux-platform",
+    "version": "0.0.4",
+    "license": "Apache-2.0",
+    "authors": [
+      "Cryspen"
+    ],
+    "repository": "https://github.com/cryspen/libcrux",
+    "source": "https://static.crates.io/crates/libcrux-platform/libcrux-platform-0.0.4.crate"
+  },
+  {
+    "name": "libcrux-secrets",
+    "version": "0.0.7",
+    "license": "Apache-2.0",
+    "authors": [
+      "Cryspen"
+    ],
+    "repository": "https://github.com/cryspen/libcrux",
+    "source": "https://static.crates.io/crates/libcrux-secrets/libcrux-secrets-0.0.7.crate"
+  },
+  {
+    "name": "libcrux-sha3",
+    "version": "0.0.11",
+    "license": "Apache-2.0",
+    "authors": [
+      "Cryspen"
+    ],
+    "repository": "https://github.com/cryspen/libcrux",
+    "source": "https://static.crates.io/crates/libcrux-sha3/libcrux-sha3-0.0.11.crate"
+  },
+  {
+    "name": "libcrux-traits",
+    "version": "0.0.9",
+    "license": "Apache-2.0",
+    "authors": [
+      "Cryspen"
+    ],
+    "repository": "https://github.com/cryspen/libcrux",
+    "source": "https://static.crates.io/crates/libcrux-traits/libcrux-traits-0.0.9.crate"
+  },
+  {
+    "name": "log",
+    "version": "0.4.35",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The Rust Project Developers"
+    ],
+    "repository": "https://github.com/rust-lang/log",
+    "source": "https://static.crates.io/crates/log/log-0.4.35.crate"
+  },
+  {
+    "name": "maybe-async",
+    "version": "0.2.11",
+    "license": "MIT",
+    "authors": [
+      "Guoli Lyu <guoli-lv@hotmail.com>"
+    ],
+    "repository": "https://github.com/fMeow/maybe-async-rs",
+    "source": "https://static.crates.io/crates/maybe-async/maybe-async-0.2.11.crate"
+  },
+  {
+    "name": "memchr",
+    "version": "2.8.3",
+    "license": "Unlicense OR MIT",
+    "authors": [
+      "Andrew Gallant <jamslam@gmail.com>",
+      "bluss"
+    ],
+    "repository": "https://github.com/BurntSushi/memchr",
+    "source": "https://static.crates.io/crates/memchr/memchr-2.8.3.crate"
+  },
+  {
+    "name": "num-traits",
+    "version": "0.2.19",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The Rust Project Developers"
+    ],
+    "repository": "https://github.com/rust-num/num-traits",
+    "source": "https://static.crates.io/crates/num-traits/num-traits-0.2.19.crate"
+  },
+  {
+    "name": "openmls",
+    "version": "0.9.0",
+    "license": "MIT",
+    "authors": [
+      "OpenMLS Authors"
+    ],
+    "repository": "https://github.com/openmls/openmls/",
+    "source": "https://github.com/openmls/openmls/tree/6100df3fb1d8c3eeab53e349fcbd621f98c44fe2"
+  },
+  {
+    "name": "openmls_basic_credential",
+    "version": "0.6.0",
+    "license": "MIT",
+    "authors": [
+      "OpenMLS Authors"
+    ],
+    "repository": "https://github.com/openmls/openmls/tree/main/basic_credential",
+    "source": "https://github.com/openmls/openmls/tree/6100df3fb1d8c3eeab53e349fcbd621f98c44fe2"
+  },
+  {
+    "name": "openmls_memory_storage",
+    "version": "0.6.0",
+    "license": "MIT",
+    "authors": [
+      "OpenMLS Authors"
+    ],
+    "repository": "https://github.com/openmls/openmls/tree/main/memory_storage",
+    "source": "https://github.com/openmls/openmls/tree/6100df3fb1d8c3eeab53e349fcbd621f98c44fe2"
+  },
+  {
+    "name": "openmls_rust_crypto",
+    "version": "0.6.0",
+    "license": "MIT",
+    "authors": [
+      "OpenMLS Authors"
+    ],
+    "repository": "https://github.com/openmls/openmls/tree/main/openmls_rust_crypto",
+    "source": "https://github.com/openmls/openmls/tree/6100df3fb1d8c3eeab53e349fcbd621f98c44fe2"
+  },
+  {
+    "name": "openmls_serialization_helpers",
+    "version": "0.1.0",
+    "license": "MIT",
+    "authors": [
+      "OpenMLS Authors"
+    ],
+    "repository": "https://github.com/openmls/openmls/tree/main/serialization_helpers",
+    "source": "https://github.com/openmls/openmls/tree/6100df3fb1d8c3eeab53e349fcbd621f98c44fe2"
+  },
+  {
+    "name": "openmls_traits",
+    "version": "0.6.0",
+    "license": "MIT",
+    "authors": [
+      "OpenMLS Authors"
+    ],
+    "repository": "https://github.com/openmls/openmls/tree/main/traits",
+    "source": "https://github.com/openmls/openmls/tree/6100df3fb1d8c3eeab53e349fcbd621f98c44fe2"
+  },
+  {
+    "name": "p256",
+    "version": "0.14.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/elliptic-curves",
+    "source": "https://static.crates.io/crates/p256/p256-0.14.0.crate"
+  },
+  {
+    "name": "p384",
+    "version": "0.14.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers",
+      "Frank Denis <github@pureftpd.org>"
+    ],
+    "repository": "https://github.com/RustCrypto/elliptic-curves",
+    "source": "https://static.crates.io/crates/p384/p384-0.14.0.crate"
+  },
+  {
+    "name": "pem-rfc7468",
+    "version": "1.0.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats",
+    "source": "https://static.crates.io/crates/pem-rfc7468/pem-rfc7468-1.0.0.crate"
+  },
+  {
+    "name": "pin-project-lite",
+    "version": "0.2.17",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [],
+    "repository": "https://github.com/taiki-e/pin-project-lite",
+    "source": "https://static.crates.io/crates/pin-project-lite/pin-project-lite-0.2.17.crate"
+  },
+  {
+    "name": "pkcs8",
+    "version": "0.10.2",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats/tree/master/pkcs8",
+    "source": "https://static.crates.io/crates/pkcs8/pkcs8-0.10.2.crate"
+  },
+  {
+    "name": "pkcs8",
+    "version": "0.11.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats",
+    "source": "https://static.crates.io/crates/pkcs8/pkcs8-0.11.0.crate"
+  },
+  {
+    "name": "poly1305",
+    "version": "0.9.1",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/universal-hashes",
+    "source": "https://static.crates.io/crates/poly1305/poly1305-0.9.1.crate"
+  },
+  {
+    "name": "polyval",
+    "version": "0.7.3",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/universal-hashes",
+    "source": "https://static.crates.io/crates/polyval/polyval-0.7.3.crate"
+  },
+  {
+    "name": "ppv-lite86",
+    "version": "0.2.21",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The CryptoCorrosion Contributors"
+    ],
+    "repository": "https://github.com/cryptocorrosion/cryptocorrosion",
+    "source": "https://static.crates.io/crates/ppv-lite86/ppv-lite86-0.2.21.crate"
+  },
+  {
+    "name": "primefield",
+    "version": "0.14.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/elliptic-curves",
+    "source": "https://static.crates.io/crates/primefield/primefield-0.14.0.crate"
+  },
+  {
+    "name": "primeorder",
+    "version": "0.14.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/elliptic-curves",
+    "source": "https://static.crates.io/crates/primeorder/primeorder-0.14.0.crate"
+  },
+  {
+    "name": "proc-macro2",
+    "version": "1.0.107",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "David Tolnay <dtolnay@gmail.com>",
+      "Alex Crichton <alex@alexcrichton.com>"
+    ],
+    "repository": "https://github.com/dtolnay/proc-macro2",
+    "source": "https://static.crates.io/crates/proc-macro2/proc-macro2-1.0.107.crate"
+  },
+  {
+    "name": "quote",
+    "version": "1.0.47",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/dtolnay/quote",
+    "source": "https://static.crates.io/crates/quote/quote-1.0.47.crate"
+  },
+  {
+    "name": "rand",
+    "version": "0.10.3",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The Rand Project Developers",
+      "The Rust Project Developers"
+    ],
+    "repository": "https://github.com/rust-random/rand",
+    "source": "https://static.crates.io/crates/rand/rand-0.10.3.crate"
+  },
+  {
+    "name": "rand_chacha",
+    "version": "0.10.0",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The Rand Project Developers",
+      "The Rust Project Developers",
+      "The CryptoCorrosion Contributors"
+    ],
+    "repository": "https://github.com/rust-random/rand",
+    "source": "https://static.crates.io/crates/rand_chacha/rand_chacha-0.10.0.crate"
+  },
+  {
+    "name": "rand_core",
+    "version": "0.10.1",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The Rand Project Developers"
+    ],
+    "repository": "https://github.com/rust-random/rand_core",
+    "source": "https://static.crates.io/crates/rand_core/rand_core-0.10.1.crate"
+  },
+  {
+    "name": "rayon",
+    "version": "1.12.0",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/rayon-rs/rayon",
+    "source": "https://static.crates.io/crates/rayon/rayon-1.12.0.crate"
+  },
+  {
+    "name": "rayon-core",
+    "version": "1.13.0",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/rayon-rs/rayon",
+    "source": "https://static.crates.io/crates/rayon-core/rayon-core-1.13.0.crate"
+  },
+  {
+    "name": "rfc6979",
+    "version": "0.6.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/signatures",
+    "source": "https://static.crates.io/crates/rfc6979/rfc6979-0.6.0.crate"
+  },
+  {
+    "name": "rustc_version",
+    "version": "0.4.1",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/djc/rustc-version-rs",
+    "source": "https://static.crates.io/crates/rustc_version/rustc_version-0.4.1.crate"
+  },
+  {
+    "name": "rustversion",
+    "version": "1.0.23",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/dtolnay/rustversion",
+    "source": "https://static.crates.io/crates/rustversion/rustversion-1.0.23.crate"
+  },
+  {
+    "name": "sec1",
+    "version": "0.8.1",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats",
+    "source": "https://static.crates.io/crates/sec1/sec1-0.8.1.crate"
+  },
+  {
+    "name": "semver",
+    "version": "1.0.28",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/dtolnay/semver",
+    "source": "https://static.crates.io/crates/semver/semver-1.0.28.crate"
+  },
+  {
+    "name": "serde",
+    "version": "1.0.229",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "Erick Tryzelaar <erick.tryzelaar@gmail.com>",
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/serde-rs/serde",
+    "source": "https://static.crates.io/crates/serde/serde-1.0.229.crate"
+  },
+  {
+    "name": "serde_bytes",
+    "version": "0.11.19",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/serde-rs/bytes",
+    "source": "https://static.crates.io/crates/serde_bytes/serde_bytes-0.11.19.crate"
+  },
+  {
+    "name": "serde_core",
+    "version": "1.0.229",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "Erick Tryzelaar <erick.tryzelaar@gmail.com>",
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/serde-rs/serde",
+    "source": "https://static.crates.io/crates/serde_core/serde_core-1.0.229.crate"
+  },
+  {
+    "name": "serde_derive",
+    "version": "1.0.229",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "Erick Tryzelaar <erick.tryzelaar@gmail.com>",
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/serde-rs/serde",
+    "source": "https://static.crates.io/crates/serde_derive/serde_derive-1.0.229.crate"
+  },
+  {
+    "name": "serde_json",
+    "version": "1.0.154",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/serde-rs/json",
+    "source": "https://static.crates.io/crates/serde_json/serde_json-1.0.154.crate"
+  },
+  {
+    "name": "sha2",
+    "version": "0.10.9",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/hashes",
+    "source": "https://static.crates.io/crates/sha2/sha2-0.10.9.crate"
+  },
+  {
+    "name": "sha2",
+    "version": "0.11.1",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/hashes",
+    "source": "https://static.crates.io/crates/sha2/sha2-0.11.1.crate"
+  },
+  {
+    "name": "signature",
+    "version": "2.2.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/traits/tree/master/signature",
+    "source": "https://static.crates.io/crates/signature/signature-2.2.0.crate"
+  },
+  {
+    "name": "signature",
+    "version": "3.0.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/traits",
+    "source": "https://static.crates.io/crates/signature/signature-3.0.0.crate"
+  },
+  {
+    "name": "slab",
+    "version": "0.4.12",
+    "license": "MIT",
+    "authors": [
+      "Carl Lerche <me@carllerche.com>"
+    ],
+    "repository": "https://github.com/tokio-rs/slab",
+    "source": "https://static.crates.io/crates/slab/slab-0.4.12.crate"
+  },
+  {
+    "name": "spki",
+    "version": "0.7.3",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats/tree/master/spki",
+    "source": "https://static.crates.io/crates/spki/spki-0.7.3.crate"
+  },
+  {
+    "name": "spki",
+    "version": "0.8.1",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats",
+    "source": "https://static.crates.io/crates/spki/spki-0.8.1.crate"
+  },
+  {
+    "name": "subtle",
+    "version": "2.6.1",
+    "license": "BSD-3-Clause",
+    "authors": [
+      "Isis Lovecruft <isis@patternsinthevoid.net>",
+      "Henry de Valence <hdevalence@hdevalence.ca>"
+    ],
+    "repository": "https://github.com/dalek-cryptography/subtle",
+    "source": "https://static.crates.io/crates/subtle/subtle-2.6.1.crate"
+  },
+  {
+    "name": "syn",
+    "version": "2.0.119",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/dtolnay/syn",
+    "source": "https://static.crates.io/crates/syn/syn-2.0.119.crate"
+  },
+  {
+    "name": "syn",
+    "version": "3.0.10",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/dtolnay/syn",
+    "source": "https://static.crates.io/crates/syn/syn-3.0.10.crate"
+  },
+  {
+    "name": "thiserror",
+    "version": "2.0.21",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/dtolnay/thiserror",
+    "source": "https://static.crates.io/crates/thiserror/thiserror-2.0.21.crate"
+  },
+  {
+    "name": "thiserror-impl",
+    "version": "2.0.21",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/dtolnay/thiserror",
+    "source": "https://static.crates.io/crates/thiserror-impl/thiserror-impl-2.0.21.crate"
+  },
+  {
+    "name": "tls_codec",
+    "version": "0.5.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats",
+    "source": "https://static.crates.io/crates/tls_codec/tls_codec-0.5.0.crate"
+  },
+  {
+    "name": "tls_codec_derive",
+    "version": "0.5.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/formats",
+    "source": "https://static.crates.io/crates/tls_codec_derive/tls_codec_derive-0.5.0.crate"
+  },
+  {
+    "name": "typenum",
+    "version": "1.20.1",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/paholg/typenum",
+    "source": "https://static.crates.io/crates/typenum/typenum-1.20.1.crate"
+  },
+  {
+    "name": "unicode-ident",
+    "version": "1.0.27",
+    "license": "(MIT OR Apache-2.0) AND Unicode-3.0",
+    "authors": [
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/dtolnay/unicode-ident",
+    "source": "https://static.crates.io/crates/unicode-ident/unicode-ident-1.0.27.crate"
+  },
+  {
+    "name": "universal-hash",
+    "version": "0.6.1",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/traits",
+    "source": "https://static.crates.io/crates/universal-hash/universal-hash-0.6.1.crate"
+  },
+  {
+    "name": "version_check",
+    "version": "0.9.5",
+    "license": "MIT/Apache-2.0",
+    "authors": [
+      "Sergio Benitez <sb@sergio.bz>"
+    ],
+    "repository": "https://github.com/SergioBenitez/version_check",
+    "source": "https://static.crates.io/crates/version_check/version_check-0.9.5.crate"
+  },
+  {
+    "name": "wasm-bindgen",
+    "version": "0.2.130",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The wasm-bindgen Developers"
+    ],
+    "repository": "https://github.com/wasm-bindgen/wasm-bindgen",
+    "source": "https://static.crates.io/crates/wasm-bindgen/wasm-bindgen-0.2.130.crate"
+  },
+  {
+    "name": "wasm-bindgen-macro",
+    "version": "0.2.130",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The wasm-bindgen Developers"
+    ],
+    "repository": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro",
+    "source": "https://static.crates.io/crates/wasm-bindgen-macro/wasm-bindgen-macro-0.2.130.crate"
+  },
+  {
+    "name": "wasm-bindgen-macro-support",
+    "version": "0.2.130",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The wasm-bindgen Developers"
+    ],
+    "repository": "https://github.com/wasm-bindgen/wasm-bindgen/tree/main/crates/macro-support",
+    "source": "https://static.crates.io/crates/wasm-bindgen-macro-support/wasm-bindgen-macro-support-0.2.130.crate"
+  },
+  {
+    "name": "wasm-bindgen-shared",
+    "version": "0.2.130",
+    "license": "MIT OR Apache-2.0",
+    "authors": [
+      "The wasm-bindgen Developers"
+    ],
+    "repository": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/shared",
+    "source": "https://static.crates.io/crates/wasm-bindgen-shared/wasm-bindgen-shared-0.2.130.crate"
+  },
+  {
+    "name": "web-time",
+    "version": "1.1.0",
+    "license": "MIT OR Apache-2.0",
+    "authors": [],
+    "repository": "https://github.com/daxpedda/web-time",
+    "source": "https://static.crates.io/crates/web-time/web-time-1.1.0.crate"
+  },
+  {
+    "name": "wnaf",
+    "version": "0.14.1",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "RustCrypto Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/elliptic-curves",
+    "source": "https://static.crates.io/crates/wnaf/wnaf-0.14.1.crate"
+  },
+  {
+    "name": "x25519-dalek",
+    "version": "3.0.0",
+    "license": "BSD-3-Clause",
+    "authors": [
+      "Isis Lovecruft <isis@patternsinthevoid.net>",
+      "DebugSteven <debugsteven@gmail.com>",
+      "Henry de Valence <hdevalence@hdevalence.ca>"
+    ],
+    "repository": "https://github.com/dalek-cryptography/curve25519-dalek/tree/main/x25519-dalek",
+    "source": "https://static.crates.io/crates/x25519-dalek/x25519-dalek-3.0.0.crate"
+  },
+  {
+    "name": "zerocopy",
+    "version": "0.8.63",
+    "license": "BSD-2-Clause OR Apache-2.0 OR MIT",
+    "authors": [],
+    "repository": "https://github.com/google/zerocopy",
+    "source": "https://static.crates.io/crates/zerocopy/zerocopy-0.8.63.crate"
+  },
+  {
+    "name": "zeroize",
+    "version": "1.9.1",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "The RustCrypto Project Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/utils",
+    "source": "https://static.crates.io/crates/zeroize/zeroize-1.9.1.crate"
+  },
+  {
+    "name": "zeroize_derive",
+    "version": "1.5.0",
+    "license": "Apache-2.0 OR MIT",
+    "authors": [
+      "The RustCrypto Project Developers"
+    ],
+    "repository": "https://github.com/RustCrypto/utils",
+    "source": "https://static.crates.io/crates/zeroize_derive/zeroize_derive-1.5.0.crate"
+  },
+  {
+    "name": "zmij",
+    "version": "1.0.23",
+    "license": "MIT",
+    "authors": [
+      "David Tolnay <dtolnay@gmail.com>"
+    ],
+    "repository": "https://github.com/dtolnay/zmij",
+    "source": "https://static.crates.io/crates/zmij/zmij-1.0.23.crate"
+  }
+]

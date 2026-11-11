@@ -9,7 +9,12 @@ use openmls::messages::group_info::VerifiableGroupInfo;
 use openmls::prelude::*;
 use openmls_basic_credential::SignatureKeyPair;
 use openmls_rust_crypto::OpenMlsRustCrypto;
-use openmls_traits::{OpenMlsProvider, random::OpenMlsRand, types::SignatureScheme};
+use openmls_traits::{
+    OpenMlsProvider,
+    crypto::OpenMlsCrypto,
+    random::OpenMlsRand,
+    types::{HpkeCiphertext, SignatureScheme},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
@@ -42,11 +47,14 @@ struct Context {
     identity: Identity,
     directory: Vec<DirectoryEntry>,
     expected_roster: Option<Vec<String>>,
+    entitled: Vec<String>,
+    server_epoch: u64,
 }
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct Pending {
     from_epoch: u64,
+    roster: Vec<String>,
     commit: String,
     welcome: Option<String>,
 }
@@ -59,12 +67,40 @@ struct Snapshot {
     public_key: String,
     values: Vec<(String, String)>,
     pending: Option<Pending>,
+    known_keys: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase")]
 enum Request {
     GenerateKeys,
+    Sign {
+        #[serde(rename = "privateKey")]
+        private_key: String,
+        message: String,
+    },
+    Verify {
+        #[serde(rename = "publicKey")]
+        public_key: String,
+        message: String,
+        signature: String,
+    },
+    GenerateHpkeKeys,
+    SealHistory {
+        #[serde(rename = "publicKey")]
+        public_key: String,
+        message: String,
+        info: String,
+        aad: String,
+    },
+    OpenHistory {
+        #[serde(rename = "privateKey")]
+        private_key: String,
+        enc: String,
+        ciphertext: String,
+        info: String,
+        aad: String,
+    },
     MakeKeyPackage {
         identity: Identity,
         #[serde(rename = "lastResort")]
@@ -146,9 +182,8 @@ fn identity_name(identity: &Identity) -> Result<String> {
     }
     Ok(format!("{}:{}", identity.user_id, identity.device_id))
 }
-fn signer(identity: &Identity, provider: &OpenMlsRustCrypto) -> Result<SignatureKeyPair> {
-    identity_name(identity)?;
-    let private = bytes(&identity.private_key)?;
+fn signing_secret(encoded: &str) -> Result<SigningKey> {
+    let private = bytes(encoded)?;
     let secret = if private.len() == 32 {
         SigningKey::from_bytes(
             private
@@ -162,6 +197,11 @@ fn signer(identity: &Identity, provider: &OpenMlsRustCrypto) -> Result<Signature
         }
         SigningKey::from_pkcs8_der(&private).map_err(|_| "invalid_identity")?
     };
+    Ok(secret)
+}
+fn signer(identity: &Identity, provider: &OpenMlsRustCrypto) -> Result<SignatureKeyPair> {
+    identity_name(identity)?;
+    let secret = signing_secret(&identity.private_key)?;
     let public = bytes(&identity.public_key)?;
     if secret.verifying_key().to_bytes().as_slice() != public {
         return Err("identity_key_mismatch");
@@ -209,7 +249,11 @@ fn provider(
     kind: &str,
     identity: &Identity,
     group_id: Option<&str>,
-) -> Result<(OpenMlsRustCrypto, Option<Pending>)> {
+) -> Result<(
+    OpenMlsRustCrypto,
+    Option<Pending>,
+    BTreeMap<String, Vec<u8>>,
+)> {
     let decoded = bytes(state)?;
     let snapshot: Snapshot = serde_json::from_slice(&decoded).map_err(|_| "invalid_state")?;
     if snapshot.version != 1
@@ -233,7 +277,18 @@ fn provider(
             }
         }
     }
-    Ok((provider, snapshot.pending))
+    let mut known = BTreeMap::new();
+    for (identity, key) in snapshot.known_keys {
+        let Some((user, device)) = identity.split_once(':') else {
+            return Err("invalid_state");
+        };
+        let key = bytes(&key)?;
+        if !uuid(user) || !uuid(device) || key.len() != 32 {
+            return Err("invalid_state");
+        }
+        known.insert(identity, key);
+    }
+    Ok((provider, snapshot.pending, known))
 }
 fn snapshot(
     provider: &OpenMlsRustCrypto,
@@ -241,6 +296,7 @@ fn snapshot(
     identity: &Identity,
     group_id: Option<&str>,
     pending: Option<Pending>,
+    known: &BTreeMap<String, Vec<u8>>,
 ) -> Result<String> {
     let store = provider
         .storage()
@@ -259,6 +315,10 @@ fn snapshot(
         public_key: identity.public_key.clone(),
         values,
         pending,
+        known_keys: known
+            .iter()
+            .map(|(identity, key)| (identity.clone(), B64.encode(key)))
+            .collect(),
     })
     .map_err(|_| "invalid_state")?;
     if encoded.len() > MAX_BYTES {
@@ -267,6 +327,13 @@ fn snapshot(
     Ok(B64.encode(encoded))
 }
 fn members(group: &MlsGroup, context: &Context) -> Result<Vec<String>> {
+    members_with_known(group, context, &BTreeMap::new())
+}
+fn members_with_known(
+    group: &MlsGroup,
+    context: &Context,
+    known: &BTreeMap<String, Vec<u8>>,
+) -> Result<Vec<String>> {
     if group.group_id().as_slice() != context.group_id.as_bytes() || group.ciphersuite() != SUITE {
         return Err("wrong_group");
     }
@@ -278,7 +345,11 @@ fn members(group: &MlsGroup, context: &Context) -> Result<Vec<String>> {
         }
         let identity = std::str::from_utf8(member.credential.serialized_content())
             .map_err(|_| "untrusted_member")?;
-        if trusted.get(identity).map(Vec::as_slice) != Some(member.signature_key.as_slice())
+        if trusted
+            .get(identity)
+            .or_else(|| known.get(identity))
+            .map(Vec::as_slice)
+            != Some(member.signature_key.as_slice())
             || !members.insert(identity.to_owned())
         {
             return Err("untrusted_member");
@@ -287,11 +358,10 @@ fn members(group: &MlsGroup, context: &Context) -> Result<Vec<String>> {
     Ok(members.into_iter().collect())
 }
 fn exact_roster(group: &MlsGroup, context: &Context) -> Result<()> {
-    let expected = context
-        .expected_roster
-        .as_ref()
-        .ok_or("missing_roster_proof")?;
-    let actual: BTreeSet<_> = members(group, context)?
+    same_roster(members(group, context)?, &context.entitled)
+}
+fn same_roster(members: Vec<String>, expected: &[String]) -> Result<()> {
+    let actual: BTreeSet<_> = members
         .into_iter()
         .map(|id| id.rsplit(':').next().unwrap_or("").to_owned())
         .collect();
@@ -335,8 +405,71 @@ struct Loaded {
     group: MlsGroup,
     signer: SignatureKeyPair,
     pending: Option<Pending>,
+    known: BTreeMap<String, Vec<u8>>,
 }
 impl Loaded {
+    fn new(
+        provider: OpenMlsRustCrypto,
+        group: MlsGroup,
+        signer: SignatureKeyPair,
+        pending: Option<Pending>,
+        context: &Context,
+    ) -> Result<Self> {
+        let mut loaded = Self {
+            provider,
+            group,
+            signer,
+            pending,
+            known: BTreeMap::new(),
+        };
+        loaded.learn_history(context)?;
+        Ok(loaded)
+    }
+    // A valid incoming Welcome/commit can contain people erased since it was
+    // written. These bindings remain ONLY on the recipient's device for old
+    // reads and removal. They never authorize a new data-bearing ciphertext.
+    fn learn_history(&mut self, context: &Context) -> Result<()> {
+        let fresh = directory(context)?;
+        for member in self.group.members() {
+            if member.credential.credential_type() != CredentialType::Basic {
+                return Err("untrusted_member");
+            }
+            let identity = std::str::from_utf8(member.credential.serialized_content())
+                .map_err(|_| "untrusted_member")?;
+            let Some((user, device)) = identity.split_once(':') else {
+                return Err("untrusted_member");
+            };
+            if !uuid(user) || !uuid(device) || member.signature_key.len() != 32 {
+                return Err("untrusted_member");
+            }
+            if fresh
+                .get(identity)
+                .or_else(|| self.known.get(identity))
+                .is_some_and(|key| key.as_slice() != member.signature_key.as_slice())
+            {
+                return Err("untrusted_member");
+            }
+            self.known.insert(identity.to_owned(), member.signature_key);
+        }
+        members_with_known(&self.group, context, &self.known)?;
+        Ok(())
+    }
+    fn historical_roster(&self, context: &Context, expected: &[String]) -> Result<()> {
+        same_roster(
+            members_with_known(&self.group, context, &self.known)?,
+            expected,
+        )
+    }
+    fn current_epoch(&self, context: &Context) -> Result<()> {
+        if self.group.epoch().as_u64() != context.server_epoch {
+            return Err("stale_epoch");
+        }
+        Ok(())
+    }
+    fn current_access(&self, context: &Context) -> Result<()> {
+        self.current_epoch(context)?;
+        exact_roster(&self.group, context)
+    }
     fn own_identity(&self, context: &Context) -> Result<()> {
         if self.group.is_active() && self.pending.is_none() {
             let own = self.group.own_leaf_node().ok_or("wrong_device_state")?;
@@ -349,7 +482,7 @@ impl Loaded {
         Ok(())
     }
     fn load(context: &Context, state: &str) -> Result<Self> {
-        let (provider, pending) =
+        let (provider, pending, known) =
             provider(state, "group", &context.identity, Some(&context.group_id))?;
         let signer = signer(&context.identity, &provider)?;
         let group = MlsGroup::load(
@@ -358,19 +491,27 @@ impl Loaded {
         )
         .map_err(|_| "invalid_state")?
         .ok_or("invalid_state")?;
-        members(&group, context)?;
+        members_with_known(&group, context, &known)?;
         let loaded = Self {
             provider,
             group,
             signer,
             pending,
+            known,
         };
         loaded.own_identity(context)?;
         Ok(loaded)
     }
     fn response(&self, context: &Context, extra: Value) -> Result<Value> {
         self.own_identity(context)?;
-        let mut output = json!({"state":snapshot(&self.provider,"group",&context.identity,Some(&context.group_id),self.pending.clone())?,"epoch":self.group.epoch().as_u64(),"members":members(&self.group,context)?,"pending":self.pending,"active":self.group.is_active()});
+        let members = members_with_known(&self.group, context, &self.known)?;
+        let devices: Vec<_> = self.group.members().map(|member| {
+            let identity = std::str::from_utf8(member.credential.serialized_content())
+                .map_err(|_| "untrusted_member")?;
+            let (user_id, device_id) = identity.split_once(':').ok_or("untrusted_member")?;
+            Ok(json!({"userId":user_id,"deviceId":device_id,"signatureKey":B64.encode(member.signature_key)}))
+        }).collect::<Result<Vec<_>>>()?;
+        let mut output = json!({"state":snapshot(&self.provider,"group",&context.identity,Some(&context.group_id),self.pending.clone(),&self.known)?,"epoch":self.group.epoch().as_u64(),"members":members,"devices":devices,"pending":self.pending,"active":self.group.is_active()});
         if let (Some(output), Some(extra)) = (output.as_object_mut(), extra.as_object()) {
             output.extend(extra.clone());
         }
@@ -380,6 +521,109 @@ impl Loaded {
 
 fn run(request: Request) -> Result<Value> {
     match request {
+        Request::Sign {
+            private_key,
+            message,
+        } => {
+            let provider = OpenMlsRustCrypto::default();
+            let secret = signing_secret(&private_key)?;
+            let signature = provider
+                .crypto()
+                .sign(
+                    SignatureScheme::ED25519,
+                    &bytes(&message)?,
+                    secret.as_bytes(),
+                )
+                .map_err(|_| "signing_failed")?;
+            Ok(json!({"signature":B64.encode(signature)}))
+        }
+        Request::Verify {
+            public_key,
+            message,
+            signature,
+        } => {
+            let provider = OpenMlsRustCrypto::default();
+            let key = bytes(&public_key)?;
+            let signature = bytes(&signature)?;
+            let valid = key.len() == 32
+                && signature.len() == 64
+                && provider
+                    .crypto()
+                    .verify_signature(
+                        SignatureScheme::ED25519,
+                        &bytes(&message)?,
+                        &key,
+                        &signature,
+                    )
+                    .is_ok();
+            Ok(json!({"valid":valid}))
+        }
+        Request::GenerateHpkeKeys => {
+            let provider = OpenMlsRustCrypto::default();
+            let seed = provider
+                .rand()
+                .random_vec(32)
+                .map_err(|_| "randomness_unavailable")?;
+            let key = provider
+                .crypto()
+                .derive_hpke_keypair(SUITE.hpke_config(), &seed)
+                .map_err(|_| "key_generation_failed")?;
+            Ok(json!({"privateKey":B64.encode(&*key.private),"publicKey":B64.encode(key.public)}))
+        }
+        Request::SealHistory {
+            public_key,
+            message,
+            info,
+            aad,
+        } => {
+            let provider = OpenMlsRustCrypto::default();
+            let key = bytes(&public_key)?;
+            if key.len() != 32 {
+                return Err("invalid_history_key");
+            }
+            let sealed = provider
+                .crypto()
+                .hpke_seal(
+                    SUITE.hpke_config(),
+                    &key,
+                    &bytes(&info)?,
+                    &bytes(&aad)?,
+                    &bytes(&message)?,
+                )
+                .map_err(|_| "history_encryption_failed")?;
+            Ok(
+                json!({"enc":B64.encode(sealed.kem_output.as_slice()),"ciphertext":B64.encode(sealed.ciphertext.as_slice())}),
+            )
+        }
+        Request::OpenHistory {
+            private_key,
+            enc,
+            ciphertext,
+            info,
+            aad,
+        } => {
+            let provider = OpenMlsRustCrypto::default();
+            let key = bytes(&private_key)?;
+            let enc = bytes(&enc)?;
+            if key.len() != 32 || enc.len() != 32 {
+                return Err("invalid_history_key");
+            }
+            let sealed = HpkeCiphertext {
+                kem_output: enc.into(),
+                ciphertext: bytes(&ciphertext)?.into(),
+            };
+            let message = provider
+                .crypto()
+                .hpke_open(
+                    SUITE.hpke_config(),
+                    &sealed,
+                    &key,
+                    &bytes(&info)?,
+                    &bytes(&aad)?,
+                )
+                .map_err(|_| "invalid_history_ciphertext")?;
+            Ok(json!({"message":B64.encode(message)}))
+        }
         Request::GenerateKeys => {
             let provider = OpenMlsRustCrypto::default();
             let seed = provider
@@ -398,7 +642,16 @@ fn run(request: Request) -> Result<Value> {
         } => {
             let provider = OpenMlsRustCrypto::default();
             let signer = signer(&identity, &provider)?;
-            let builder = KeyPackage::builder();
+            // LastResort is not a default extension: its support must also be
+            // declared in the leaf capabilities, or a conforming reader rejects
+            // the package that the upstream builder otherwise produces.
+            let builder = KeyPackage::builder().leaf_node_capabilities(Capabilities::new(
+                Some(&[ProtocolVersion::Mls10]),
+                Some(&[SUITE]),
+                Some(&[ExtensionType::LastResort]),
+                None,
+                Some(&[CredentialType::Basic]),
+            ));
             let builder = if last_resort {
                 builder.mark_as_last_resort()
             } else {
@@ -409,7 +662,7 @@ fn run(request: Request) -> Result<Value> {
                 .map_err(|_| "key_package_failed")?;
             let message: MlsMessageOut = bundle.key_package().clone().into();
             Ok(
-                json!({"publicPackage":B64.encode(message.tls_serialize_detached().map_err(|_|"invalid_message")?),"state":snapshot(&provider,"keyPackage",&identity,None,None)?}),
+                json!({"publicPackage":B64.encode(message.tls_serialize_detached().map_err(|_|"invalid_message")?),"state":snapshot(&provider,"keyPackage",&identity,None,None,&BTreeMap::new())?}),
             )
         }
         Request::ReadKeyPackage { encoded } => {
@@ -428,20 +681,14 @@ fn run(request: Request) -> Result<Value> {
                 .with_group_id(GroupId::from_slice(context.group_id.as_bytes()))
                 .build(&provider, &signer, credential(&context.identity, &signer)?)
                 .map_err(|_| "group_failed")?;
-            Loaded {
-                provider,
-                group,
-                signer,
-                pending: None,
-            }
-            .response(&context, json!({}))
+            Loaded::new(provider, group, signer, None, &context)?.response(&context, json!({}))
         }
         Request::Join {
             context,
             state,
             welcome,
         } => {
-            let (provider, pending) = provider(&state, "keyPackage", &context.identity, None)?;
+            let (provider, pending, _) = provider(&state, "keyPackage", &context.identity, None)?;
             if pending.is_some() {
                 return Err("invalid_state");
             }
@@ -453,21 +700,17 @@ fn run(request: Request) -> Result<Value> {
             };
             let group = StagedWelcome::new_from_welcome(
                 &provider,
-                &MlsGroupJoinConfig::builder().build(),
+                &MlsGroupJoinConfig::builder()
+                    .use_ratchet_tree_extension(true)
+                    .build(),
                 welcome,
                 None,
             )
             .map_err(|_| "invalid_welcome")?
             .into_group(&provider)
             .map_err(|_| "invalid_welcome")?;
-            exact_roster(&group, &context)?;
-            Loaded {
-                provider,
-                group,
-                signer,
-                pending: None,
-            }
-            .response(&context, json!({}))
+            // Reading a historical Welcome does not grant current sharing.
+            Loaded::new(provider, group, signer, None, &context)?.response(&context, json!({}))
         }
         Request::Migrate {
             context,
@@ -483,7 +726,15 @@ fn run(request: Request) -> Result<Value> {
                 return Err("wrong_group");
             }
             let from_epoch = info.epoch().as_u64();
+            if from_epoch != context.server_epoch {
+                return Err("stale_epoch");
+            }
             let (group, bundle) = MlsGroup::external_commit_builder()
+                .with_config(
+                    MlsGroupJoinConfig::builder()
+                        .use_ratchet_tree_extension(true)
+                        .build(),
+                )
                 .build_group(&provider, info, credential(&context.identity, &signer)?)
                 .map_err(|_| "invalid_group_info")?
                 .load_psks(provider.storage())
@@ -495,6 +746,10 @@ fn run(request: Request) -> Result<Value> {
             let (commit, _, _) = bundle.into_messages();
             let pending = Pending {
                 from_epoch,
+                roster: context
+                    .expected_roster
+                    .clone()
+                    .ok_or("missing_roster_proof")?,
                 commit: B64.encode(
                     commit
                         .tls_serialize_detached()
@@ -502,17 +757,17 @@ fn run(request: Request) -> Result<Value> {
                 ),
                 welcome: None,
             };
-            let loaded = Loaded {
-                provider,
-                group,
-                signer,
-                pending: Some(pending),
-            };
+            let loaded = Loaded::new(provider, group, signer, Some(pending), &context)?;
             // Preserve the canonical roster and this device's pinned key.
-            if !members(&loaded.group, &context)?.contains(&identity_name(&context.identity)?) {
+            if !members_with_known(&loaded.group, &context, &loaded.known)?
+                .contains(&identity_name(&context.identity)?)
+            {
                 return Err("untrusted_identity");
             }
-            exact_roster(&loaded.group, &context)?;
+            loaded.historical_roster(
+                &context,
+                &loaded.pending.as_ref().ok_or("invalid_state")?.roster,
+            )?;
             let response = loaded.response(&context, json!({}))?;
             let encoded = response
                 .get("state")
@@ -525,7 +780,10 @@ fn run(request: Request) -> Result<Value> {
                 .map_err(|_| "invalid_commit")?;
             check.pending = None;
             check.own_identity(&context)?;
-            exact_roster(&check.group, &context)?;
+            check.historical_roster(
+                &context,
+                &loaded.pending.as_ref().ok_or("invalid_state")?.roster,
+            )?;
             Ok(response)
         }
         Request::Encrypt {
@@ -537,7 +795,7 @@ fn run(request: Request) -> Result<Value> {
             if loaded.pending.is_some() {
                 return Err("pending_commit");
             }
-            exact_roster(&loaded.group, &context)?;
+            loaded.current_access(&context)?;
             let message = loaded
                 .group
                 .create_message(&loaded.provider, &loaded.signer, &bytes(&message)?)
@@ -575,13 +833,13 @@ fn run(request: Request) -> Result<Value> {
                         .merge_staged_commit(&loaded.provider, *commit)
                         .map_err(|_| "invalid_commit")?;
                     loaded.pending = None;
-                    exact_roster(&loaded.group, &context)?;
                 }
                 ProcessedMessageContent::OwnPendingCommit => return Err("use_pending_receipt"),
                 // This delivery contract carries complete commits, not a
                 // separately authorized queue of proposals.
                 _ => return Err("unsupported_message"),
             }
+            loaded.learn_history(&context)?;
             loaded.response(
                 &context,
                 json!({"payload":payload,"sender":sender,"messageEpoch":message_epoch}),
@@ -597,6 +855,7 @@ fn run(request: Request) -> Result<Value> {
             if loaded.pending.is_some() {
                 return Err("pending_commit");
             }
+            loaded.current_epoch(&context)?;
             let trusted = directory(&context)?;
             let mut packages = Vec::new();
             for encoded in add {
@@ -644,6 +903,7 @@ fn run(request: Request) -> Result<Value> {
             let (commit, welcome, _) = bundle.into_messages();
             loaded.pending = Some(Pending {
                 from_epoch,
+                roster: context.entitled.clone(),
                 commit: B64.encode(
                     commit
                         .tls_serialize_detached()
@@ -671,7 +931,9 @@ fn run(request: Request) -> Result<Value> {
                 .merge_pending_commit(&check.provider)
                 .map_err(|_| "invalid_commit")?;
             exact_roster(&check.group, &context)?;
-            Ok(response)
+            check.learn_history(&context)?;
+            loaded.known.extend(check.known);
+            loaded.response(&context, json!({}))
         }
         Request::AcceptPending {
             context,
@@ -679,6 +941,7 @@ fn run(request: Request) -> Result<Value> {
             commit,
         } => {
             let mut loaded = Loaded::load(&context, &state)?;
+            let receipt = loaded.pending.clone().ok_or("wrong_pending_receipt")?;
             if loaded
                 .pending
                 .as_ref()
@@ -703,7 +966,7 @@ fn run(request: Request) -> Result<Value> {
                 return Err("invalid_commit");
             }
             loaded.pending = None;
-            exact_roster(&loaded.group, &context)?;
+            loaded.historical_roster(&context, &receipt.roster)?;
             loaded.response(&context, json!({}))
         }
         Request::AbandonPending { context, state } => {
@@ -726,7 +989,7 @@ fn run(request: Request) -> Result<Value> {
             if loaded.pending.is_some() || length > 1024 || label.len() > 256 {
                 return Err("invalid_export");
             }
-            exact_roster(&loaded.group, &context)?;
+            loaded.current_access(&context)?;
             let secret = loaded
                 .group
                 .export_secret(loaded.provider.crypto(), &label, &bytes(&info)?, length)
@@ -760,7 +1023,7 @@ mod tests {
         json!({"userId":format!("00000000-0000-4000-8000-{n:012x}"),"deviceId":format!("00000000-0000-4000-8000-{:012x}",n+100),"privateKey":keys["privateKey"],"publicKey":keys["publicKey"]})
     }
     fn context(who: &Value, people: &[&Value], roster: &[&Value]) -> Value {
-        json!({"groupId":"00000000-0000-4000-8000-000000000033","identity":who,"directory":people.iter().map(|p|json!({"userId":p["userId"],"deviceId":p["deviceId"],"signatureKey":p["publicKey"]})).collect::<Vec<_>>(),"expectedRoster":roster.iter().map(|p|p["deviceId"].clone()).collect::<Vec<_>>()})
+        json!({"groupId":"00000000-0000-4000-8000-000000000033","identity":who,"directory":people.iter().map(|p|json!({"userId":p["userId"],"deviceId":p["deviceId"],"signatureKey":p["publicKey"]})).collect::<Vec<_>>(),"expectedRoster":roster.iter().map(|p|p["deviceId"].clone()).collect::<Vec<_>>(),"entitled":roster.iter().map(|p|p["deviceId"].clone()).collect::<Vec<_>>(),"serverEpoch":1})
     }
     fn key_package(who: &Value, last_resort: bool) -> Value {
         invoke(json!({"op":"makeKeyPackage","identity":who,"lastResort":last_resort})).unwrap()
@@ -769,7 +1032,8 @@ mod tests {
         invoke(json!({"op":"acceptPending","context":context,"state":pending["state"],"commit":pending["pending"]["commit"]})).unwrap()
     }
     fn group(a: &Value, b: &Value) -> (Value, Value) {
-        let ca = context(a, &[a, b], &[a, b]);
+        let mut ca = context(a, &[a, b], &[a, b]);
+        ca["serverEpoch"] = json!(0);
         let cb = context(b, &[a, b], &[a, b]);
         let created = invoke(json!({"op":"create","context":ca})).unwrap();
         let kp = key_package(b, false);
@@ -777,6 +1041,43 @@ mod tests {
         let alice = accept(&ca, &pending);
         let bob=invoke(json!({"op":"join","context":cb,"state":kp["state"],"welcome":pending["pending"]["welcome"]})).unwrap();
         (alice, bob)
+    }
+
+    #[test]
+    fn signatures_bind_the_message_and_accept_existing_pkcs8_device_keys() {
+        use ed25519_dalek::pkcs8::EncodePrivateKey;
+        let a = person(1);
+        let b = person(2);
+        let message = B64.encode(b"freeholder:payload:v1\noriginal body");
+        let signed =
+            invoke(json!({"op":"sign","privateKey":a["privateKey"],"message":message})).unwrap();
+        let secret = signing_secret(a["privateKey"].as_str().unwrap()).unwrap();
+        let der = B64.encode(secret.to_pkcs8_der().unwrap().as_bytes());
+        let existing = invoke(json!({"op":"sign","privateKey":der,"message":message})).unwrap();
+        assert_eq!(existing, signed);
+        assert_eq!(invoke(json!({"op":"verify","publicKey":a["publicKey"],"message":message,"signature":signed["signature"]})).unwrap()["valid"],true);
+        assert_eq!(invoke(json!({"op":"verify","publicKey":b["publicKey"],"message":message,"signature":signed["signature"]})).unwrap()["valid"],false);
+        assert_eq!(invoke(json!({"op":"verify","publicKey":a["publicKey"],"message":B64.encode(b"changed body"),"signature":signed["signature"]})).unwrap()["valid"],false);
+    }
+
+    #[test]
+    fn sealed_history_binds_its_recipient_request_and_conversation() {
+        let key = invoke(json!({"op":"generateHpkeKeys"})).unwrap();
+        let other = invoke(json!({"op":"generateHpkeKeys"})).unwrap();
+        let info = B64.encode(b"freeholder:history:v1");
+        let aad = B64.encode(b"request-1\nconversation-1");
+        let sealed=invoke(json!({"op":"sealHistory","publicKey":key["publicKey"],"message":B64.encode(b"readable historical messages"),"info":info,"aad":aad})).unwrap();
+        let request = json!({"op":"openHistory","privateKey":key["privateKey"],"enc":sealed["enc"],"ciphertext":sealed["ciphertext"],"info":info,"aad":aad});
+        assert_eq!(
+            invoke(request.clone()).unwrap()["message"],
+            B64.encode(b"readable historical messages")
+        );
+        let mut wrong = request.clone();
+        wrong["privateKey"] = other["privateKey"].clone();
+        assert_eq!(invoke(wrong), Err("invalid_history_ciphertext"));
+        let mut wrong = request;
+        wrong["aad"] = json!(B64.encode(b"request-1\nconversation-2"));
+        assert_eq!(invoke(wrong), Err("invalid_history_ciphertext"));
     }
 
     #[test]
@@ -797,6 +1098,50 @@ mod tests {
             invoke(json!({"op":"readKeyPackage","encoded":B64.encode(&encoded)})),
             Err("invalid_key_package")
         );
+    }
+
+    #[test]
+    fn last_resort_packages_validate_and_join_two_distinct_conversations() {
+        let a = person(1);
+        let b = person(2);
+        let kp = key_package(&b, true);
+        assert_eq!(
+            invoke(json!({"op":"readKeyPackage","encoded":kp["publicPackage"]})).unwrap()["signatureKey"],
+            b["publicKey"]
+        );
+        for n in [33, 34] {
+            let group_id = format!("00000000-0000-4000-8000-{n:012x}");
+            let mut ca = context(&a, &[&a, &b], &[&a, &b]);
+            ca["serverEpoch"] = json!(0);
+            ca["groupId"] = json!(group_id);
+            let mut cb = context(&b, &[&a, &b], &[&a, &b]);
+            cb["groupId"] = json!(group_id);
+            let initial = invoke(json!({"op":"create","context":ca})).unwrap();
+            let pending = invoke(json!({"op":"commit","context":ca,"state":initial["state"],"add":[kp["publicPackage"]],"remove":[]})).unwrap();
+            let accepted = accept(&ca, &pending);
+            ca["serverEpoch"] = json!(1);
+            let joined = invoke(json!({"op":"join","context":cb,"state":kp["state"],"welcome":pending["pending"]["welcome"]})).unwrap();
+            let sent = invoke(json!({"op":"encrypt","context":ca,"state":accepted["state"],"message":B64.encode(group_id.as_bytes())})).unwrap();
+            assert_eq!(invoke(json!({"op":"process","context":cb,"state":joined["state"],"message":sent["message"]})).unwrap()["payload"], B64.encode(group_id.as_bytes()));
+        }
+    }
+
+    #[test]
+    fn a_joined_member_can_add_another_device_with_a_self_contained_welcome() {
+        let a = person(1);
+        let b = person(2);
+        let c = person(3);
+        let (alice, bob) = group(&a, &b);
+        let ca = context(&a, &[&a, &b, &c], &[&a, &b, &c]);
+        let cb = context(&b, &[&a, &b, &c], &[&a, &b, &c]);
+        let kp = key_package(&c, false);
+        let pending = invoke(json!({"op":"commit","context":cb,"state":bob["state"],"add":[kp["publicPackage"]],"remove":[]})).unwrap();
+        let mut cc = context(&c, &[&a, &b, &c], &[&a, &b, &c]);
+        cc["serverEpoch"] = json!(2);
+        let joined = invoke(json!({"op":"join","context":cc,"state":kp["state"],"welcome":pending["pending"]["welcome"]})).unwrap();
+        let applied = invoke(json!({"op":"process","context":ca,"state":alice["state"],"message":pending["pending"]["commit"]})).unwrap();
+        let sent = invoke(json!({"op":"encrypt","context":cc,"state":joined["state"],"message":B64.encode(b"third device joined")})).unwrap();
+        assert_eq!(invoke(json!({"op":"process","context":ca,"state":applied["state"],"message":sent["message"]})).unwrap()["payload"], B64.encode(b"third device joined"));
     }
 
     #[test]
@@ -834,10 +1179,11 @@ mod tests {
         let a = person(1);
         let b = person(2);
         let (alice, bob) = group(&a, &b);
-        let ca = context(&a, &[&a, &b], &[&a]);
+        let mut ca = context(&a, &[&a, &b], &[&a]);
         let cb = context(&b, &[&a, &b], &[&a]);
         let pending=invoke(json!({"op":"commit","context":ca,"state":alice["state"],"add":[],"remove":[b["deviceId"]]})).unwrap();
         let next = accept(&ca, &pending);
+        ca["serverEpoch"] = json!(2);
         let removed=invoke(json!({"op":"process","context":cb,"state":bob["state"],"message":pending["pending"]["commit"]})).unwrap();
         assert_eq!(removed["active"], false);
         let message=invoke(json!({"op":"encrypt","context":ca,"state":next["state"],"message":B64.encode(b"after removal")})).unwrap();
@@ -865,7 +1211,8 @@ mod tests {
     fn pending_commits_need_the_exact_receipt_and_cannot_send_application_messages() {
         let a = person(1);
         let b = person(2);
-        let ca = context(&a, &[&a, &b], &[&a, &b]);
+        let mut ca = context(&a, &[&a, &b], &[&a, &b]);
+        ca["serverEpoch"] = json!(0);
         let created = invoke(json!({"op":"create","context":ca})).unwrap();
         let kp = key_package(&b, false);
         let pending=invoke(json!({"op":"commit","context":ca,"state":created["state"],"add":[kp["publicPackage"]],"remove":[]})).unwrap();
@@ -905,6 +1252,97 @@ mod tests {
                 json!({"op":"encrypt","context":cb,"state":alice["state"],"message":B64.encode(b"wrong device")})
             ),
             Err("invalid_state")
+        );
+    }
+
+    #[test]
+    fn erased_public_keys_remain_local_history_pins_and_cannot_authorize_new_sharing() {
+        let a = person(1);
+        let b = person(2);
+        let c = person(3);
+        let (alice, bob) = group(&a, &b);
+        let ca = context(&a, &[&a, &b, &c], &[&a, &b, &c]);
+        let cb = context(&b, &[&a, &b, &c], &[&a, &b, &c]);
+        let kp = key_package(&c, false);
+        let added=invoke(json!({"op":"commit","context":ca,"state":alice["state"],"add":[kp["publicPackage"]],"remove":[]})).unwrap();
+        let alice = accept(&ca, &added);
+        let bob=invoke(json!({"op":"process","context":cb,"state":bob["state"],"message":added["pending"]["commit"]})).unwrap();
+        // The server has erased C's key and seat; this device's already
+        // authenticated old group still contains C until a removal commit.
+        let mut ca = context(&a, &[&a, &b], &[&a, &b]);
+        ca["serverEpoch"] = json!(2);
+        let mut cb = context(&b, &[&a, &b], &[&a, &b]);
+        cb["serverEpoch"] = json!(2);
+        assert_eq!(
+            invoke(
+                json!({"op":"encrypt","context":ca,"state":alice["state"],"message":B64.encode(b"do not share")})
+            ),
+            Err("untrusted_member")
+        );
+        assert_eq!(
+            invoke(
+                json!({"op":"export","context":ca,"state":alice["state"],"label":"freeholder-call","info":"","length":32})
+            ),
+            Err("untrusted_member")
+        );
+        let removed=invoke(json!({"op":"commit","context":ca,"state":alice["state"],"add":[],"remove":[c["deviceId"]]})).unwrap();
+        let alice = accept(&ca, &removed);
+        let bob=invoke(json!({"op":"process","context":cb,"state":bob["state"],"message":removed["pending"]["commit"]})).unwrap();
+        ca["serverEpoch"] = json!(3);
+        cb["serverEpoch"] = json!(3);
+        let message=invoke(json!({"op":"encrypt","context":ca,"state":alice["state"],"message":B64.encode(b"only current members")})).unwrap();
+        let opened = invoke(
+            json!({"op":"process","context":cb,"state":bob["state"],"message":message["message"]}),
+        )
+        .unwrap();
+        assert_eq!(opened["payload"], B64.encode(b"only current members"));
+    }
+
+    #[test]
+    fn an_old_welcome_can_be_read_after_erasure_but_must_be_reconciled_before_sending() {
+        let a = person(1);
+        let b = person(2);
+        let c = person(3);
+        let mut ca = context(&a, &[&a, &b, &c], &[&a, &b, &c]);
+        ca["serverEpoch"] = json!(0);
+        let created = invoke(json!({"op":"create","context":ca})).unwrap();
+        let kb = key_package(&b, false);
+        let kc = key_package(&c, false);
+        let pending=invoke(json!({"op":"commit","context":ca,"state":created["state"],"add":[kb["publicPackage"],kc["publicPackage"]],"remove":[]})).unwrap();
+        // B opens its original encrypted Welcome after C was erased. No
+        // deleted public key is restored to the server's directory.
+        let cb = context(&b, &[&a, &b], &[&a, &b]);
+        let joined=invoke(json!({"op":"join","context":cb,"state":kb["state"],"welcome":pending["pending"]["welcome"]})).unwrap();
+        assert_eq!(joined["members"].as_array().unwrap().len(), 3);
+        assert_eq!(
+            invoke(
+                json!({"op":"encrypt","context":cb,"state":joined["state"],"message":B64.encode(b"too soon")})
+            ),
+            Err("untrusted_member")
+        );
+        let cleanup=invoke(json!({"op":"commit","context":cb,"state":joined["state"],"add":[],"remove":[c["deviceId"]]})).unwrap();
+        let current = accept(&cb, &cleanup);
+        assert_eq!(current["members"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn knowingly_stale_epochs_cannot_encrypt_or_export_new_secrets() {
+        let a = person(1);
+        let b = person(2);
+        let (alice, _) = group(&a, &b);
+        let mut ca = context(&a, &[&a, &b], &[&a, &b]);
+        ca["serverEpoch"] = json!(2);
+        assert_eq!(
+            invoke(
+                json!({"op":"encrypt","context":ca,"state":alice["state"],"message":B64.encode(b"stale")})
+            ),
+            Err("stale_epoch")
+        );
+        assert_eq!(
+            invoke(
+                json!({"op":"export","context":ca,"state":alice["state"],"label":"freeholder-call","info":"","length":32})
+            ),
+            Err("stale_epoch")
         );
     }
 

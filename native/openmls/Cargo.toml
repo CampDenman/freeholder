@@ -12,10 +12,13 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-openmls = { version = "=0.9.0", features = ["js"] }
-openmls_traits = "=0.6.0"
-openmls_rust_crypto = "=0.6.0"
-openmls_basic_credential = "=0.6.0"
+# The published provider 0.6.0 retains crypto-bigint 0.5.5. Pin the official
+# upstream patch revision that migrates both providers/credentials to the
+# patched RustCrypto dependency generation; never waive its advisory.
+openmls = { git = "https://github.com/openmls/openmls", rev = "6100df3fb1d8c3eeab53e349fcbd621f98c44fe2", features = ["js"] }
+openmls_traits = { git = "https://github.com/openmls/openmls", rev = "6100df3fb1d8c3eeab53e349fcbd621f98c44fe2" }
+openmls_rust_crypto = { git = "https://github.com/openmls/openmls", rev = "6100df3fb1d8c3eeab53e349fcbd621f98c44fe2" }
+openmls_basic_credential = { git = "https://github.com/openmls/openmls", rev = "6100df3fb1d8c3eeab53e349fcbd621f98c44fe2" }
 tls_codec = { version = "=0.5.0", features = ["derive", "serde", "mls"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
