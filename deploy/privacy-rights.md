@@ -318,6 +318,9 @@ personal API-key access. The original contact retains only its login ID so
 later owner-driven erasure can find those held records. The login's email is
 replaced by a non-deliverable erased identity. This does not create another CRM
 contact or transfer ownership to a later holder of the original email address.
+Keeping only the login parent does not preserve an unheld payout-account copy;
+member erasure explicitly removes that mutable account without relying on a
+later login-deletion cascade.
 
 Active named holds apply across this contact's requests. Creating another
 request does not release or bypass an earlier hold. The request detail lists

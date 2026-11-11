@@ -54,6 +54,7 @@ import {
   memberMessages,
   memberMlsLog,
   memberPayouts,
+  memberPayoutAccounts,
   memberPosts,
   memberProfiles,
   memberProfileSections,
@@ -208,6 +209,9 @@ async function eraseMember(tx: Tx, userId: string, service?: ServiceContext): Pr
   count(await tx.update(assets).set({ status: "trashed", deletedAt: now, purgeAfter: now, updatedAt: now }).where(and(eq(assets.uploadedBy, `user:${userId}`), ne(assets.status, "trashed"))).returning({ id: assets.id }));
   count(await tx.delete(memberProfileSections).where(eq(memberProfileSections.userId, userId)).returning({ id: memberProfileSections.id }));
   count(await tx.delete(memberListings).where(eq(memberListings.sellerId, userId)).returning({ productId: memberListings.productId }));
+  // An unrelated hold may keep the login parent alive; do not rely on its
+  // eventual FK cascade to erase this unheld mutable account copy.
+  count(await tx.delete(memberPayoutAccounts).where(eq(memberPayoutAccounts.userId, userId)).returning({ userId: memberPayoutAccounts.userId }));
   if (profile) count(await tx.delete(memberProfiles).where(eq(memberProfiles.userId, userId)).returning({ userId: memberProfiles.userId }));
   return affected;
 }

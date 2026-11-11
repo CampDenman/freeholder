@@ -12655,6 +12655,8 @@ whatever is best for the people using the site.
   with their original exception/request preserved in retention and receipts;
   a new request cannot bypass them. Independent key verification also rejects
   late prior-image credentials for the retained erased parent.
+  A login-only hold does not retain an unheld payout-account copy; member
+  erasure removes it explicitly rather than relying on the parent's FK cascade.
   Releasing the named hold permits a fresh verified request to find and erase
   the original records. Native evidence is in
   `tests/modules/member-held-login.test.ts`; operator limits are in

@@ -110,6 +110,16 @@ describe.runIf(hasDatabase)("held member login (C1.08/C12.15)", () => {
     expect((await db().select().from(contacts).where(eq(contacts.id, contactId)))[0]?.userId).toBeNull();
   });
 
+  it("erases an unheld payout account when only the login parent is held", async () => {
+    const id = await request();
+    await addRetentionException.call({ dataRequestId: id, scope: "contact.credentials", reason: "legal_claim", legalBasis: "Retain only the inert original login parent for this specific identity dispute." }, OWNER);
+    const result = await fulfillDataRequest.call({ id, confirmation: "ERASE" }, OWNER);
+    expect(result.request.status).toBe("partially_completed");
+    expect(await db().select().from(users).where(eq(users.id, CUSTOMER.userId))).toHaveLength(1);
+    expect(await db().select().from(memberProfiles).where(eq(memberProfiles.userId, CUSTOMER.userId))).toHaveLength(0);
+    expect(await db().select().from(memberPayoutAccounts).where(eq(memberPayoutAccounts.userId, CUSTOMER.userId))).toHaveLength(0);
+  });
+
   it("retains call history while removing current call and MLS entitlement", async () => {
     const [conversation] = await db().insert(memberConversations).values({ kind: "group", title: "Held historical conversation", createdBy: CUSTOMER.userId }).returning();
     await db().insert(memberConversationParticipants).values({ conversationId: conversation!.id, userId: CUSTOMER.userId, state: "active" });
