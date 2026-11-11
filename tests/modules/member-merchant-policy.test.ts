@@ -213,6 +213,19 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
     await processPaymentProviderEvents.call({provider:"stripe",bodySha256:"e".repeat(64),receivedAt,events:[{id:"evt_direct_period_refund",kind:"refund_succeeded",providerRef:"re_direct_period",paymentProviderRef:"pi_direct_period",providerAccountId:"acct_original",amountMinor:1000,currency:"CAD",occurredAt:receivedAt}]},SYSTEM);
     expect(await reversePayouts.call({invoiceId:payment!.invoiceId,amountMinor:1000},SYSTEM)).toEqual({changed:1});
     expect((await db().select().from(memberPayouts))[0]!.state).toBe("cancelled");
+    // A scheduled interval change takes effect on the paid renewal, including
+    // canonical date validation. The old monthly interval must not survive it.
+    const annual = await createMemberPlan.call({ name: "Original merchant annual", price: "10" }, CUSTOMER);
+    const [annualPlan] = await db().select().from(plans).where(eq(plans.id,annual.planId));
+    await savePlan.call({id:annual.planId,productId:annualPlan!.productId,name:annualPlan!.name,interval:"year",status:"active",billingMode:"provider"},OWNER);
+    await db().update(subscriptions).set({pendingPlanId:annual.planId}).where(eq(subscriptions.id,started.subscription.id));
+    const annualEvent = {...event,id:"evt_direct_annual",paymentProviderRef:"pi_direct_annual",periodStart:"2026-03-01T00:00:00.000Z",periodEnd:"2027-03-01T00:00:00.000Z"};
+    await expect(deliver({...annualEvent,periodEnd:"2026-04-01T00:00:00.000Z"})).rejects.toMatchObject({code:"conflict"});
+    const [pending] = await db().select().from(subscriptions).where(eq(subscriptions.id,started.subscription.id));
+    expect(pending).toMatchObject({planId,pendingPlanId:annual.planId});
+    expect(await deliver(annualEvent)).toEqual({processed:1,duplicates:0});
+    const [renewed] = await db().select().from(subscriptions).where(eq(subscriptions.id,started.subscription.id));
+    expect(renewed).toMatchObject({planId:annual.planId,pendingPlanId:null,currentPeriodEnd:new Date(annualEvent.periodEnd)});
     await cancelAgreement.call({ id:started.subscription.id,immediately:true },OWNER);
     expect(cancelRecurringSchedule.mock.calls[0]![0]).toMatchObject({providerAccountId:"acct_original",providerRef:"sub_direct"});
   });

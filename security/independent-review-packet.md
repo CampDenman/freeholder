@@ -78,6 +78,15 @@ an authorized merchant. `deploy/seller-merchant-source-2026-11-10.md` records
 the limited source evidence and remaining integration. The direct model stays
 unavailable; this packet supplies neither activation nor independent sign-off.
 
+The continuation also needs review of signed Connect-to-payment forwarding,
+account-scoped trial setup and card selectors, recurring InvoicePayment and
+PaymentIntent enrichment outside database transactions, canonical period/fee
+checks, and `src/modules/invoicing/merchant-settlement.ts`. Check that a direct
+seller earning cannot trigger a second transfer, owner settlement cannot invent
+a direct charge/refund, and order/invoice recorders cannot duplicate earnings.
+Synthetic provider evidence and seeded browser setup are explicitly limited
+in the source document; they are not live-provider or independent acceptance.
+
 ## Authenticated provider-evidence boundary (C11.10)
 
 The audit found that `invoicing.processPaymentProviderEvents` was declared as

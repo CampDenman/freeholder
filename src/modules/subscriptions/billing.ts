@@ -1074,7 +1074,7 @@ export const reconcileProviderPeriod = defineService({
     const routing = await subscriptionPaymentScope(ctx, found.id);
     assertProviderAccount(routing, { providerAccountId: input.providerAccountId || undefined });
     let subscription = found;
-    const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
+    let [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
     if (input.kind === "subscription_cancelled") {
       if (subscription.status === "cancelled" || subscription.status === "expired") return { applied: false };
       const now = new Date();
@@ -1097,15 +1097,16 @@ export const reconcileProviderPeriod = defineService({
     const end = input.periodEnd
       ? new Date(input.periodEnd)
       : periodEnd(start, plan?.interval ?? "month", plan?.intervalCount ?? 1);
+    const renewing = end > subscription.currentPeriodEnd && subscription.currentPeriodEnd <= now;
+    if (renewing) {
+      subscription = await applyPendingPlan(ctx, subscription);
+      [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
+    }
     if (routing.providerAccountId) {
       if (input.provider !== "stripe" || !input.paymentProviderRef || input.applicationFeeMinor === undefined || !input.periodStart || !input.periodEnd) throw new ServiceError("conflict", "The provider must prove this seller period's actual charge, fee and dates.");
       const expectedStart = end > subscription.currentPeriodEnd && subscription.currentPeriodEnd <= now ? subscription.currentPeriodEnd : subscription.currentPeriodStart;
       const expectedEnd = expectedStart === subscription.currentPeriodEnd ? periodEnd(expectedStart, plan?.interval ?? "month", plan?.intervalCount ?? 1) : subscription.currentPeriodEnd;
       if (Math.floor(start.getTime()/1000) !== Math.floor(expectedStart.getTime()/1000) || Math.floor(end.getTime()/1000) !== Math.floor(expectedEnd.getTime()/1000)) throw new ServiceError("conflict", "The seller payment dates do not match the original membership period.");
-    }
-    const renewing = end > subscription.currentPeriodEnd && subscription.currentPeriodEnd <= now;
-    if (renewing) {
-      subscription = await applyPendingPlan(ctx, subscription);
     }
     const invoiceId = await settlePeriodInvoice(ctx, subscription, {
       amountMinor: input.amountMinor,
