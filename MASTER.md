@@ -13032,9 +13032,18 @@ whatever is best for the people using the site.
   See the source evidence document for the precise limits; C12.38 stays open.)*
 - [ ] **C12.39** Move end-to-end encryption from `ts-mls` (not independently
   audited) to OpenMLS (audited by SRLabs), compiled to WebAssembly in CI and
-  committed so deploys stay Node-only. Deferred by Tony on 2026-10-15; until
-  then members are not told their messages are safe against a compromised
-  server.
+  committed so deploys stay Node-only. The owner's 2026-11-10 full-scope
+  stable decision includes this item. In progress 2026-11-11: isolated native,
+  Node WebAssembly and Chromium WebAssembly probes moved a legacy two-device
+  group from epoch 1 to 2 while preserving both device identities; the legacy
+  recipient accepted the external resync commit and decrypted the OpenMLS
+  application message. These use synthetic probe keys only. The legacy export
+  bridge must frame the ExternalPub HPKEPublicKey and re-sign GroupInfo, and
+  import existing PKCS#8/raw Ed25519 keys without changing their public key.
+  Production integration, persisted-state/retry safety, browser concurrency,
+  full history/device/call/file acceptance, pinned reproducible CI artifacts
+  and independent review remain required. Members are still not told their
+  messages are safe against a compromised server.
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
   preserving evidence and reporting through the legal path for the site's
