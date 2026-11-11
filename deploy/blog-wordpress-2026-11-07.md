@@ -192,3 +192,73 @@ deployment, actual WordPress source-crawl/cutover parity, scale acceptance,
 private hosted previews, owner/agent acceptance in Replit or Lovable, provider
 settlement, independent review or the final stable candidate. The C2.27–C2.29
 boxes remain open for their remaining criteria.
+
+
+## Public-source discovery, 2026-11-11
+
+C3.22 now has `imports.previewFromUrl`, used by the import studio's **Read the
+public source** form and the same HTTP/MCP/SDK contract. A WordPress source
+address includes its installation subdirectory; discovery requests both pages
+and posts with embedded author, taxonomy and featured-image metadata. Each
+page must agree with WordPress's record/page totals and contain the exact
+number of declared records; changed totals, duplicate IDs and incomplete
+pages refuse discovery. Public REST cannot read private drafts or replace a
+complete authenticated WordPress export.
+
+Sitemap indexes are bounded recursively; sitemap and RSS/Atom entries fetch
+the rendered page instead of committing an empty body or a truncated excerpt.
+HTML discovery follows same-origin links, without repeatedly fetching fragments.
+All fetches use the shared public-DNS/IP-pinned, redirect-free transport, omit
+credentials/cookies, honor the selected robots group and longest matching
+allow/disallow rule, and count actual UTF-8 response bytes. The limits remain
+500 pages, 20 MB, depth four, two requests per second, 30 seconds per request
+and ten minutes per crawl. Robots outages, redirects and compressed replies
+fail visibly. This follows [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309.html)
+matching and keeps stricter fail-closed transport behavior for source errors.
+
+The network work runs outside a business transaction. The apply phase locks
+the original run and compares its full snapshot digest, so a late response
+cannot replace a newer preview, upload, commit or rollback. Existing pasted
+and manually mapped previews now also refuse a committed/reconciled/published/
+rolled-back run. An upload result rechecks the stageable lifecycle after
+storage I/O. Nothing is published by discovery.
+
+Private orchestration phases may explicitly bind to one public same-family
+operation. The already authorized invocation supplies only that operation's
+authority to its original actor; no API-key scopes or audit identity change.
+This allows an exact `imports.previewFromUrl` key to use its private phases.
+Direct private calls, other phases/parents, different actors, ordinary service
+transactions, plugin phase bindings and async work after the invocation ends
+cannot use this authority. Existing cross-module permissions and fresh human
+verification requirements continue to apply.
+
+C3.22 remains open: nested menus, resumable larger-than-cap imports, complete
+generic media/typed-block/redirect integration and a real static-archive
+reader still require implementation. C2.27–C2.29 and C3.46 also retain scale
+and source-specific cutover acceptance. A passing fictional source fixture is
+not a WordPress production migration, live-provider sign-off or stable release.
+
+Local qualification for this source increment used only fictional records and
+separate disposable PostgreSQL/browser databases. Eighty-six broad importer,
+upload, registry and core controls passed before the final transport/lifecycle
+hardening; the subsequent 52-check source run passed. The final 44-check run
+covers complete/changed REST pagination, binary/soft-error/DTD refusal,
+repeated-navigation deduplication, recovery ownership, source races, exact public
+upload/commit scopes, original audit actors and all eight SDK checks. These
+counts overlap and must not be added as unique tests.
+
+The committed-run restaging regression failed when its former missing guard
+was restored. A real Chromium bounds regression also reproduced clipped native
+file-input/form content at 320px despite passing Axe and document-scroll
+checks. The local form grid/file-input width correction passed four real
+Chromium journeys in English, Spanish, French and Arabic RTL, with keyboard
+start/navigation, safe private-source refusal, actual control bounds and both
+cookie-selected light/dark Axe scans. English light and Arabic dark screenshots
+were visually inspected. Source network responses in the native tests are
+recorded fixtures; the browser uses no live provider or owner credentials.
+
+The final production build passed TypeScript and the standalone scrub gate
+(18,777 files, 226,994,672 bytes). Source counters expose robots exclusions,
+request totals and actual bytes read in the owner report. The protected PR and
+merge queue must still pass; these local results are not a production rollout
+or an independent security sign-off.

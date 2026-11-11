@@ -111,25 +111,70 @@ export function enforceImporterLimits(
   }
 }
 
-export function robotsDisallow(robotsTxt: string, path: string): boolean {
-  const lines = robotsTxt.split(/\r?\n/);
-  let applies = false;
-  const disallowed: string[] = [];
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^user-agent:\s*\*/i.test(trimmed)) {
-      applies = true;
-      continue;
-    }
-    if (/^user-agent:/i.test(trimmed)) {
-      applies = false;
-      continue;
-    }
-    const match = applies ? /^disallow:\s*(.*)$/i.exec(trimmed) : null;
-    if (match) {
-      const rule = match[1]?.trim() ?? "";
-      if (rule) disallowed.push(rule);
+/** RFC 9309 matching for the product token sent by the first-party crawler. */
+export function robotsDisallow(robotsTxt: string, path: string, product = "Freeholder-Importer"): boolean {
+  type Rule = { path: string; allow: boolean };
+  const groups: Array<{ agents: string[]; rules: Rule[] }> = [];
+  let group: typeof groups[number] | undefined;
+  let hasRules = false;
+  for (const raw of robotsTxt.split(/\r?\n/)) {
+    const line = raw.split("#", 1)[0]!.trim();
+    const colon = line.indexOf(":");
+    if (colon < 0) continue;
+    const field = line.slice(0, colon).trim().toLowerCase();
+    const value = line.slice(colon + 1).trim();
+    if (field === "user-agent") {
+      if (!group || hasRules) { group = { agents: [], rules: [] }; groups.push(group); hasRules = false; }
+      group.agents.push(value.toLowerCase());
+    } else if (group && (field === "allow" || field === "disallow")) {
+      hasRules = true;
+      if (value.startsWith("/")) group.rules.push({ path: value, allow: field === "allow" });
     }
   }
-  return disallowed.some((rule) => path.startsWith(rule));
+  const exact = groups.filter(item => item.agents.includes(product.toLowerCase()));
+  const chosen = exact.length ? exact : groups.filter(item => item.agents.includes("*"));
+  const normalize = (value: string): string => {
+    let out = "";
+    for (let index = 0; index < value.length; index += 1) {
+      const char = value[index]!;
+      if (char === "%" && /^[0-9a-f]{2}$/i.test(value.slice(index + 1, index + 3))) {
+        const hex = value.slice(index + 1, index + 3).toUpperCase();
+        const decoded = String.fromCharCode(parseInt(hex, 16));
+        out += /^[A-Za-z0-9._~-]$/.test(decoded) ? decoded : `%${hex}`;
+        index += 2;
+      } else if (char.charCodeAt(0) > 127) {
+        const point = value.codePointAt(index)!;
+        out += [...new TextEncoder().encode(String.fromCodePoint(point))].map(byte => `%${byte.toString(16).toUpperCase().padStart(2, "0")}`).join("");
+        if (point > 0xffff) index += 1;
+      } else out += char;
+    }
+    return out;
+  };
+  const target = normalize(path);
+  const matches = (pattern: string): boolean => {
+    const exactEnd = pattern.endsWith("$");
+    const body = exactEnd ? pattern.slice(0, -1) : pattern;
+    // Literal segments, without a generated regexp or polynomial regexp backtracking.
+    let cursor = 0;
+    const segments = body.split("*");
+    if (!target.startsWith(segments[0]!)) return false;
+    cursor = segments[0]!.length;
+    for (let index = 1; index < segments.length; index += 1) {
+      const segment = segments[index]!;
+      if (index === segments.length - 1 && exactEnd) return target.endsWith(segment) && target.length - segment.length >= cursor;
+      const found = target.indexOf(segment, cursor);
+      if (found < 0) return false;
+      cursor = found + segment.length;
+    }
+    return !exactEnd || cursor === target.length;
+  };
+  let best = -1;
+  let allowed = true;
+  for (const rule of chosen.flatMap(item => item.rules)) {
+    const pattern = normalize(rule.path);
+    if (!matches(pattern)) continue;
+    const weight = pattern.replace(/\*/g, "").replace(/\$$/, "").length;
+    if (weight > best || (weight === best && rule.allow)) { best = weight; allowed = rule.allow; }
+  }
+  return !allowed;
 }

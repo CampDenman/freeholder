@@ -8,6 +8,7 @@ import { apiJson } from "../media/upload-client";
 import { Button, Field, Input, Select } from "@/ui/primitives";
 import {
   commitImportAction,
+  crawlImportAction,
   mapImportAction,
   previewImportAction,
   publishImportAction,
@@ -33,7 +34,7 @@ export function StartImportForm({
 }) {
   const [state, action] = useActionState(startImportAction, empty);
   return (
-    <form action={action} className="grid gap-4">
+    <form action={action} className="grid min-w-0 gap-4">
       {state.error ? (
         <p role="alert" className="text-sm font-medium text-danger">
           {state.error}
@@ -59,10 +60,14 @@ export function StartImportForm({
 export function ImportStepForms({
   id,
   status,
+  sourceKind,
+  origin,
   labels,
 }: {
   id: string;
   status: string;
+  sourceKind: string;
+  origin: string;
   labels: {
     preview: string;
     url: string;
@@ -87,15 +92,22 @@ export function ImportStepForms({
     uploading: string;
     readingSource: string;
     uploadFailed: string;
+    sourceUrl: string;
+    crawl: string;
+    crawlHint: string;
+    crawling: string;
   };
 }) {
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4">
       {status === "discover" || status === "mapped" || status === "failed" || status === "previewed" ? (
-        <SourceUploadForm id={id} labels={labels} />
+        <div className="grid min-w-0 gap-6">
+          {["wordpress-rest", "sitemap", "rss", "atom", "html"].includes(sourceKind) ? <CrawlSourceForm id={id} origin={origin} labels={labels} /> : null}
+          <SourceUploadForm id={id} labels={labels} />
+        </div>
       ) : null}
       {status === "discover" ? (
-        <form action={mapImportAction} className="grid gap-3">
+        <form action={mapImportAction} className="grid min-w-0 gap-3">
           <input type="hidden" name="id" value={id} />
           <Field htmlFor="map-url" label={labels.url}>
             <Input id="map-url" name="url" type="url" required />
@@ -116,7 +128,7 @@ export function ImportStepForms({
         </form>
       ) : null}
       {status === "mapped" ? (
-        <form action={previewImportAction} className="grid gap-3">
+        <form action={previewImportAction} className="grid min-w-0 gap-3">
           <input type="hidden" name="id" value={id} />
           <Field htmlFor="url" label={labels.url}>
             <Input id="url" name="url" type="url" required />
@@ -131,7 +143,7 @@ export function ImportStepForms({
         </form>
       ) : null}
       {status === "previewed" ? (
-        <form action={reviewImportConflictsAction} className="grid gap-3">
+        <form action={reviewImportConflictsAction} className="grid min-w-0 gap-3">
           <input type="hidden" name="id" value={id} />
           <Field htmlFor="conflict-slug" label={labels.slug}>
             <Input id="conflict-slug" name="slug" required />
@@ -242,7 +254,7 @@ function SourceUploadForm({
   }
 
   return (
-    <form onSubmit={(event) => void submit(event)} className="grid gap-3">
+    <form onSubmit={(event) => void submit(event)} className="grid min-w-0 gap-3">
       {error ? (
         <p role="alert" className="text-sm font-medium text-danger">
           {error}
@@ -256,7 +268,7 @@ function SourceUploadForm({
           accept=".xml,.json,.html,.htm,.rss,.atom,application/xml,text/xml,application/json,text/html"
           required
           disabled={progress !== null}
-          className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
+          className="w-full min-w-0 max-w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
         />
       </Field>
       {progress ? (
@@ -269,4 +281,18 @@ function SourceUploadForm({
       </Button>
     </form>
   );
+}
+
+
+function CrawlSourceForm({ id, origin, labels }: { id: string; origin: string; labels: { sourceUrl: string; crawl: string; crawlHint: string; crawling: string } }) {
+  const [state, action, pending] = useActionState(crawlImportAction, empty);
+  return <form action={action} className="grid min-w-0 gap-3">
+    <input type="hidden" name="id" value={id} />
+    <Field htmlFor="import-source-url" label={labels.sourceUrl}>
+      <Input id="import-source-url" name="sourceUrl" type="url" defaultValue={origin} required aria-describedby="import-crawl-hint" />
+    </Field>
+    <p id="import-crawl-hint" className="text-sm text-ink-muted">{labels.crawlHint}</p>
+    {state.error ? <p role="alert" className="text-sm font-medium text-danger">{state.error}</p> : null}
+    <Button type="submit" disabled={pending}>{pending ? labels.crawling : labels.crawl}</Button>
+  </form>;
 }
