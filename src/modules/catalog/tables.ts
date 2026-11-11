@@ -47,6 +47,7 @@ export {
   digitalDeliveries,
   returnRequests,
   returnItems,
+  returnRefundAllocations,
   coupons,
   couponRedemptions,
   cartCoupons,

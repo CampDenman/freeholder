@@ -37,6 +37,7 @@ import {
   releaseOrderPaymentMilestone,
   receiveReturn,
   refundReturn,
+  prepareReturnRefund,
   submitReturnProviderRefund,
   requestReturn,
   shipFulfillment,
@@ -801,6 +802,7 @@ export async function productAction(form: FormData): Promise<void> {
           {
             id: field(form, "id"),
             decision: field(form, "decision") as "approved" | "rejected",
+            ...(field(form,"labelUrl")?{labelUrl:field(form,"labelUrl")}:{}) ,
           },
           actor,
         );
@@ -809,17 +811,21 @@ export async function productAction(form: FormData): Promise<void> {
         await receiveReturn.call(
           {
             id: field(form, "id"),
+            restock:field(form,"restock")==="yes",
             ...(field(form, "locationId") ? { locationId: field(form, "locationId") } : {}),
           },
           actor,
         );
         destination = `/admin/returns?id=${field(form, "id")}&saved=receiveReturn`;
+      } else if (intent === "prepareReturnRefund") {
+        await prepareReturnRefund.call({id:field(form,"id"),idempotencyKey:field(form,"idempotencyKey")},actor);
+        destination = `/admin/returns?id=${field(form,"id")}&saved=prepareReturnRefund`;
       } else if (intent === "submitReturnProviderRefund") {
         await submitReturnProviderRefund.call({id:field(form,"id"),idempotencyKey:field(form,"idempotencyKey")},actor);
         destination = `/admin/returns?id=${field(form,"id")}&saved=submitReturnProviderRefund`;
       } else if (intent === "refundReturn") {
         await refundReturn.call(
-          { id: field(form, "id"), idempotencyKey: field(form, "idempotencyKey"), offlineRefundConfirmed: field(form,"offlineRefundConfirmed")==="yes" ? true : undefined },
+          { id: field(form, "id"), idempotencyKey: field(form, "idempotencyKey"), offlineRefundConfirmed: field(form,"offlineRefundConfirmed")==="yes" ? true : undefined, ...(field(form,"offlineRefundAmountMinor") ? {offlineRefundAmountMinor:Number(field(form,"offlineRefundAmountMinor"))} : {}) },
           actor,
         );
         destination = `/admin/returns?id=${field(form, "id")}&saved=refundReturn`;

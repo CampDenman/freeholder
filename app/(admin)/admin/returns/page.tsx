@@ -7,9 +7,10 @@ import { ArrowUUpLeft, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { listLocations } from "@/core/locations/service";
 import { hasModuleAccess } from "@/core/service";
 import { RETURN_STATUSES } from "@/modules/catalog/contract";
-import { getReturn, listReturns } from "@/modules/catalog/service";
-import { Button, Callout, Card, CardBody, CardHeader, Field, Pill, Select } from "@/ui/primitives";
-import { getT } from "../../../i18n";
+import { getReturn, getReturnRefundPlan, listReturns } from "@/modules/catalog/service";
+import {formatMoney} from "@/core/i18n";
+import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
+import { getLocale,getT } from "../../../i18n";
 import { productAction } from "../../catalog-actions";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
@@ -32,6 +33,9 @@ export default async function ReturnsPage({
     getT(),
   ]);
   const selected = query.id ? await domainOrNull(getReturn.call({ id: query.id }, actor)) : null;
+  const plan=selected ? await getReturnRefundPlan.call({id:selected.return.id},actor) : null;
+  const locale=await getLocale();
+  const offlineRemaining=plan ? Math.max(0,plan.offlineMinor-plan.offlineConfirmedMinor) : 0;
   const canManage = hasModuleAccess(actor, "catalog", "manage");
 
   return (
@@ -99,6 +103,7 @@ export default async function ReturnsPage({
                   <input type="hidden" name="id" value={selected.return.id} />
                   <input type="hidden" name="decision" value="approved" />
                   <input type="hidden" name="returnTo" value={`/admin/returns?id=${selected.return.id}`} />
+                  <Field htmlFor="return-label" label={t("catalog.returns.labelUrl")}><Input id="return-label" name="labelUrl" type="url" maxLength={500}/></Field>
                   <Button type="submit">{t("catalog.returns.approve")}</Button>
                 </form>
                 <form action={productAction}>
@@ -121,11 +126,24 @@ export default async function ReturnsPage({
                     {locations.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
                   </Select>
                 </Field>
+                <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="restock" value="yes" defaultChecked={selected.return.restock}/><span>{t("catalog.returns.chooseRestock")}</span></label>
                 <div><Button type="submit">{t("catalog.returns.receive")}</Button></div>
               </form>
             ) : null}
-            {canManage && selected.return.status === "received" ? (
+            {canManage && selected.return.status === "received" && !plan?.prepared ? (
+              <form action={productAction} className="grid gap-3">
+                <input type="hidden" name="intent" value="prepareReturnRefund" />
+                <input type="hidden" name="id" value={selected.return.id} />
+                <input type="hidden" name="idempotencyKey" value={randomUUID()} />
+                <input type="hidden" name="returnTo" value={`/admin/returns?id=${selected.return.id}`} />
+                <p className="text-sm text-ink-muted">{t("catalog.returns.reviewHelp")}</p>
+                <Button type="submit">{t("catalog.returns.reviewRefund")}</Button>
+              </form>
+            ) : null}
+            {canManage && selected.return.status === "received" && plan?.prepared ? (
               <div className="grid gap-6">
+              <dl className="grid gap-2 text-sm"><div><dt className="font-medium">{t("catalog.returns.totalRefund")}</dt><dd>{formatMoney(plan.amountMinor,plan.currency,locale)}</dd></div><div><dt className="font-medium">{t("catalog.returns.offlineRemaining")}</dt><dd>{formatMoney(offlineRemaining,plan.currency,locale)}</dd></div><div><dt className="font-medium">{t("catalog.returns.onlineRemaining")}</dt><dd>{formatMoney(Math.max(0,plan.onlineMinor-plan.onlineConfirmedMinor),plan.currency,locale)}</dd></div></dl>
+              {plan.onlineMinor>0 ? (
               <form action={productAction} className="grid gap-3">
                 <input type="hidden" name="intent" value="submitReturnProviderRefund" />
                 <input type="hidden" name="id" value={selected.return.id} />
@@ -134,15 +152,19 @@ export default async function ReturnsPage({
                 <p className="text-sm text-ink-muted">{t("catalog.returns.providerRefundHelp")}</p>
                 <Button type="submit">{t("catalog.returns.providerRefund")}</Button>
               </form>
+              ) : null}
+              {offlineRemaining>0 ? (
               <form action={productAction} className="grid gap-3">
                 <input type="hidden" name="intent" value="refundReturn" />
                 <input type="hidden" name="id" value={selected.return.id} />
                 <input type="hidden" name="idempotencyKey" value={randomUUID()} />
+                <input type="hidden" name="offlineRefundAmountMinor" value={offlineRemaining} />
                 <input type="hidden" name="returnTo" value={`/admin/returns?id=${selected.return.id}`} />
                 <p className="text-sm text-ink-muted">{t("catalog.returns.refundHelp")}</p>
-                <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="offlineRefundConfirmed" value="yes" required className="mt-1" />{t("catalog.returns.confirmOfflineRefund")}</label>
+                <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="offlineRefundConfirmed" value="yes" required className="mt-1" />{t("catalog.returns.confirmOfflineAmount",{amount:formatMoney(offlineRemaining,plan.currency,locale)})}</label>
                 <Button type="submit">{t("catalog.returns.refund")}</Button>
               </form>
+              ) : plan.offlineMinor>0 ? <p className="text-sm text-ink-muted">{t("catalog.returns.offlineRecorded")}</p> : null}
               </div>
             ) : null}
           </CardBody>

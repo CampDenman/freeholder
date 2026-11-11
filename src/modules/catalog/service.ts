@@ -192,6 +192,8 @@ import fulfillmentServices, {
   packFulfillment,
   receiveReturn,
   refundReturn,
+  prepareReturnRefund,
+  getReturnRefundPlan,
   submitReturnProviderRefund,
   requestReturn,
   shipFulfillment,
@@ -260,6 +262,8 @@ export {
   packFulfillment,
   receiveReturn,
   refundReturn,
+  prepareReturnRefund,
+  getReturnRefundPlan,
   submitReturnProviderRefund,
   requestReturn,
   shipFulfillment,
@@ -1041,10 +1045,13 @@ registerSearchSource({
 });
 
 import publicBookingServices from "./public-booking";
+import customerReturnServices from "./customer-returns";
+export {myOrderReturns,requestMyReturn} from "./customer-returns";
 
 export default [
   ...marketServices,
   ...publicBookingServices,
+  ...customerReturnServices,
   ...demoServices,
   listProducts,
   getProduct,
