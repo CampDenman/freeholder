@@ -233,9 +233,16 @@ plus three final typed-refusal reruns, full fast gates: 373 contracts with one
 deliberate exclusion, and four actual Chromium locale journeys. The UI checks
 exercise both merge directions and duplicate-desk refusal, preserve the open
 candidate and both identities, and cover keyboard, 320px and both-theme Axe.
-The final production artifact contains 19,437 files / 238,464,635 bytes and passes
+The current-main production artifact contains 19,445 files / 238,812,230 bytes and passes
 the standalone source/environment scrub. These engineering checks and bounded
 agent peer review do not supply independent security sign-off.
+
+After archive integration, only the independent review-packet append required
+resolution; both full sections remain. Against the computed automatic merge
+tree, runtime, SQL and locales are unchanged. The composed source passed the
+live SDK's eight checks and all three cutover regressions, four actual locale
+browser journeys, full fast gates and the production scrub above. Fresh
+exact-head protected checks still govern merge-queue admission.
 
 - **Artifact disclosure:** authenticated delivery, exact Contact ownership,
   contacts-manage authority, short retention, no public URL and no-store
