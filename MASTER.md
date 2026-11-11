@@ -6785,6 +6785,17 @@ owner operations, never substitute for them.
   55 commerce tests and seven production-build browser journeys passed,
   including the HTTP capability/read-only boundary and visitor-to-paid flow;
   changeset `cart-capability-authorization.md`, `deploy/catalog-cart-access.md`.
+  Stock refresh follow-up 2026-11-11 (C5.16/C5.20): four new PostgreSQL
+  regressions reproduced a cart counting its own hold as unavailable and
+  refusing a valid quantity increase. Private cart availability now includes
+  only that cart's active holds for the selected variant/location, aggregates
+  matching cart lines and leaves public availability unchanged. Expired and
+  other-cart holds never grant stock. Thirty-nine PostgreSQL cases, eight live
+  SDK checks, production build/artifact scrub and six Chromium journeys passed.
+  The four owner stock-checkout journeys cover all locales, keyboard use,
+  320px and both-theme Axe scans; an unlabeled quantity input found by that
+  scan now has a translated product-specific label. See
+  `deploy/catalog-cart-access.md` and changeset `cart-owned-reservations.md`.
 - [x] **C5.21** Build checkout identity/address, fulfillment, tax, discounts,
   consent, payment, idempotency, failure recovery and accessible confirmation.
   *(Evidence: `catalog.checkoutCart` attaches the guest cart, requires
