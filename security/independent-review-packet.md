@@ -325,7 +325,7 @@ final composed qualification and protected checks remain required. This
 section records review targets, not acceptance or independent sign-off. Local
 native/recorded-provider controls and eight four-locale browser journeys have
 passed; the final contiguous upgrade and protected CI remain outstanding.
-An actual old-image merge interleaved after74's legacy backfill and before
+An actual old-image merge interleaved after migration 74's legacy backfill and before
 trigger installation was blocked by the complete migration transaction and
 failed closed after commit, with original ownership/history unchanged. Keep
 that transactional migration boundary intact. Provider branding must also
