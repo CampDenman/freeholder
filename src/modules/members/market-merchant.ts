@@ -32,7 +32,7 @@ async function policyForSellers(sellerIds: string[], containsSiteItems: boolean,
   const [seller] = await ctx.tx.select({ account: memberPayoutAccounts, profile: memberProfiles })
     .from(memberPayoutAccounts).innerJoin(memberProfiles, eq(memberProfiles.userId, memberPayoutAccounts.userId))
     .where(inArray(memberPayoutAccounts.userId, sellerIds)).for("share");
-  if (!seller || seller.profile.status !== "active" || seller.account.adapter !== "stripe_connect" || seller.account.status !== "ready" || !seller.account.chargesReady || !seller.account.externalAccountId || !seller.account.merchantName) throw new ServiceError("conflict", "This seller must finish direct-payment setup before an agreement or invoice can be issued.");
+  if (!seller || seller.profile.status !== "active" || seller.account.adapter !== "stripe_connect" || seller.account.status !== "ready" || !seller.account.chargesReady || !seller.account.externalAccountId || !seller.account.merchantName || seller.account.merchantName === ERASED_MERCHANT_NAME) throw new ServiceError("conflict", "This seller must finish direct-payment setup before an agreement or invoice can be issued.");
   if (!seller.account.merchantSupport) throw new ServiceError("conflict", "This seller must finish their public business support details before an agreement or invoice can be issued.");
   const [contact]=await ctx.tx.select({id:contacts.id}).from(contacts).where(eq(contacts.userId,seller.profile.userId)).limit(1);
   if(!contact)throw new ServiceError("conflict","This seller's public business details need their unified contact record.");
@@ -115,7 +115,7 @@ registerInvoiceMerchantVerifier(async (invoiceId, ctx) => { await ctx.callAsSyst
 
 async function verifyMerchantPolicy(policy: SubscriptionMarketPolicy, ctx: ServiceContext): Promise<void> {
   if (!policy.sellerUserId) throw new ServiceError("conflict", "The original seller is missing.");
-  if(await merchantIdentityErased(ctx.tx,policy.sellerUserId,policy.merchantContactId))throw new ServiceError("conflict","This seller's erased business details cannot authorize new collection.");
+  if(policy.merchantName===ERASED_MERCHANT_NAME || await merchantIdentityErased(ctx.tx,policy.sellerUserId,policy.merchantContactId))throw new ServiceError("conflict","This seller's erased business details cannot authorize new collection.");
   const [seller] = await ctx.tx.select({ account: memberPayoutAccounts, profile: memberProfiles })
     .from(memberPayoutAccounts).innerJoin(memberProfiles, eq(memberProfiles.userId, memberPayoutAccounts.userId))
     .where(eq(memberPayoutAccounts.userId, policy.sellerUserId)).limit(1);

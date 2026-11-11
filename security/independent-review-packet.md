@@ -325,6 +325,11 @@ final composed qualification and protected checks remain required. This
 section records review targets, not acceptance or independent sign-off. Local
 native/recorded-provider controls and eight four-locale browser journeys have
 passed; the final contiguous upgrade and protected CI remain outstanding.
+An actual old-image merge interleaved after74's legacy backfill and before
+trigger installation was blocked by the complete migration transaction and
+failed closed after commit, with original ownership/history unchanged. Keep
+that transactional migration boundary intact. Provider branding must also
+refuse the private erased-identity marker as a live public merchant name.
 
 The later Stripe card-setup increment resolves an unexpanded SetupIntent only
 after raw signature/account validation, on the same account. Review succeeded

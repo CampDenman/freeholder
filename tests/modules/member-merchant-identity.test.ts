@@ -100,6 +100,11 @@ describe.runIf(hasDatabase)("frozen merchant commercial identity (C12.38)",()=>{
   expect(await failure(agreement())).toMatchObject({code:"conflict"});
   expect(await db().select().from(subscriptionMarketPolicies)).toHaveLength(0);
  });
+ it("refuses a pre-existing provider public name that collides with the erased-identity marker",async()=>{
+  await db().update(memberPayoutAccounts).set({merchantName:"[privacy-erased-merchant]"}).where(eq(memberPayoutAccounts.userId,SELLER.userId));
+  expect(await failure(agreement())).toMatchObject({code:"conflict"});
+  expect(await db().select().from(subscriptionMarketPolicies)).toHaveLength(0);
+ });
  it("exports only this merchant's public account/agreement/invoice copies, then erases them while preserving financial records",async()=>{
   const {invoice}=await issued(),source=contactPrivacySources().find(item=>item.scope==="members.merchantIdentity")!;
   const {artifact}=await fulfillDataRequest.call({id:await request("export")},OWNER);

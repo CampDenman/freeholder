@@ -358,9 +358,10 @@ after login deletion. The SQL completion fence refuses an older writer's
 false erasure acknowledgement. Full rollback requires the pre-upgrade database
 and object snapshot.
 
-Local qualification includes 20 provider boundary controls; 16 distinct owned
+Local qualification includes 21 provider boundary controls; 17 distinct owned
 native identity controls across the initial run and the inherited-hold follow-up;
-eight composed held-login controls; eight live SDK controls; and the three
+eight composed held-login controls; eight live SDK controls; a final29-case
+adjacent customer/merchant run; and the three
 interrupted billing cases rerun successfully in a quiet database slot. The
 earlier broad nine-suite attempt was interrupted and is not a wholly green
 broad integration result. Eight real Chromium journeys passed in English,
@@ -370,6 +371,17 @@ current public details. French and Arabic screenshots were inspected. The
 main71/refreshed675 composition built 20,340 files / 242,278,796 bytes with a clean
 standalone scrub. The browser development database applied the recorded
 migrations plus exact74 SQL; that is not the missing contiguous upgrade proof.
+
+One additional actual provider control reproduced a public name colliding with
+the private erased-identity marker. The normalizer and agreement/collection
+guards now refuse that reserved value as merchant authority. Its actual
+agreement refusal passes. The complete74 transaction was also paused after
+legacy history backfill and before the new history trigger while the actual
+pre74 source attempted another merge. The old writer was observed blocked by
+the migration's transaction, then failed closed after commit; the original
+seller/contact and single prior merge operation remained unchanged. This
+checks the production migrator's transaction boundary alongside the earlier
+genuine legacy-upgrade/undo proof.
 
 Migration74 must follow the reserved physical-mail72 and import-graph73 changes;
 mail71 is merged. The contiguous empty and populated upgrade checks and final

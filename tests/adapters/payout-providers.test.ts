@@ -149,6 +149,10 @@ describe("Stripe Connect payouts (C12.26)", () => {
     for(const privateValue of ["private-owner","Private corporate","Private registered","Private Person","private-person"])expect(JSON.stringify(details)).not.toContain(privateValue);
   });
 
+  it("never treats the internal erased-identity marker as a ready public merchant name",()=>{
+    expect(stripeMerchantDetails({payouts_enabled:true,charges_enabled:true,capabilities:{transfers:"active",card_payments:"active"},business_profile:{name:"[privacy-erased-merchant]",support_email:"support@studio.example"}})).toMatchObject({merchantName:null,chargesReady:false});
+  });
+
   it.each([
     {},{support_url:"javascript:alert(1)"},{support_url:"https://private:password@example.test/help"},{support_url:"file:///private/address"},
     {support_email:"private\r\nBcc: someone@example.test"},{support_phone:"private\u0000phone"},

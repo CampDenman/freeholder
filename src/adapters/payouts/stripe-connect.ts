@@ -7,7 +7,7 @@
 // an account can be paid.
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/core/env";
-import { publicMerchantAddress, publicMerchantSupport } from "@/core/commerce/merchant-identity";
+import { ERASED_MERCHANT_NAME, publicMerchantAddress, publicMerchantSupport } from "@/core/commerce/merchant-identity";
 import { AdapterError } from "../types";
 import { object, paymentFetch } from "../payments/http";
 import { createStripePayments } from "../payments/stripe";
@@ -37,7 +37,8 @@ export function stripeMerchantDetails(account: Record<string, unknown>) {
   const status = stripeAccountStatus(account);
   // Business-profile names are public merchant branding. Never publish a
   // private legal person's identity as a fallback for missing branding.
-  const merchantName = text(object(account.business_profile)?.name)?.trim().slice(0, 200) || null;
+  const suppliedName = text(object(account.business_profile)?.name)?.trim().slice(0, 200) || null;
+  const merchantName = suppliedName === ERASED_MERCHANT_NAME ? null : suppliedName;
   const profile=object(account.business_profile),address=object(profile?.support_address);
   const parsedAddress=publicMerchantAddress.safeParse(address?{line1:address.line1,line2:address.line2??null,city:address.city??null,state:address.state??null,postalCode:address.postal_code??null,country:address.country}:null);
   const email=publicMerchantSupport.shape.email.safeParse(profile?.support_email),phone=publicMerchantSupport.shape.phone.safeParse(profile?.support_phone),url=publicMerchantSupport.shape.url.safeParse(profile?.support_url);
