@@ -2568,12 +2568,12 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F04** — Partial — `app/(admin)/admin/returns/page.tsx` distinguishes a human-attested offline refund from the original provider's refund path. Complete provider-to-return integration remains open in `MASTER.md` C5.19.
 - **F05** — `catalog.createFulfillment`/`shipFulfillment`/`grantDigitalFulfillment`/`requestReturn`/`listFulfillments` at /api/v1/catalog.*, MCP `catalog_*`. — surface equivalence: `tests/core/api.test.ts` (every service has an endpoint, spec schema is the validator), `tests/core/sdk-schema.test.ts` (generated client contract) and `tests/core/mcp.test.ts` (registry-derived MCP tools)..
 - **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG over the surfaces the browser suite visits in `tests/browser/accessibility.spec.ts`.
-- **F07** — `tests/core/catalog-fulfillment.test.ts` covers permission, refusal and recovery.
+- **F07** — Partial — `tests/core/catalog-fulfillment.test.ts` covers fresh human attestation, key/plugin refusal, no fabricated provider refund, reserved balances, installment replay and concurrent quantity bounds. Complete provider-to-return recovery remains open in `MASTER.md` C5.19.
 - **F08** — `tests/core/catalog-fulfillment.test.ts` — the item's unit/service/database coverage.
 - **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared audit/outbox participation it rides on: `tests/core/record-participation.test.ts`.
 - **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; per-item contextual help is not separately evidenced.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping). Changeset `commerce-fulfillment.md` named in §43.
-- **F12** — Partial — `tests/core/catalog-fulfillment.test.ts` and `tests/core/c11-02-catalog-journey.test.ts` cover original offline refunds, full installment allocation, safe replay and refusal of fabricated provider settlement. Actual provider-to-return and localized owner/customer journeys remain open in `MASTER.md` C5.19.
+- **F12** — Partial — `tests/core/catalog-fulfillment.test.ts` and `tests/core/c11-02-catalog-journey.test.ts` cover original offline refunds, full installment allocation, safe replay and refusal of fabricated provider settlement. `tests/browser/return-refund.spec.ts` proves required confirmation, keyboard submission and both installments in the ledger at 320px in all four locales with both-theme Axe scans. Actual provider-to-return and customer journeys remain open in `MASTER.md` C5.19.
 
 ## C5.20 — Build persistent/contact-attached carts, saved carts/wishlists
 

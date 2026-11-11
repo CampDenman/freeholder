@@ -6744,7 +6744,12 @@ owner operations, never substitute for them.
   identities, and covers original installments atomically. Duplicate and
   cumulative return quantities are bounded under the order lock. Four-locale
   copy distinguishes recording money already returned from asking a provider
-  to send it. Provider refunds retain the original payment's refund path;
+  to send it. Eleven PostgreSQL financial cases and eight live SDK checks
+  passed. Four Chromium journeys passed at 320px in English, Spanish, French
+  and Arabic RTL, including required confirmation, keyboard submission,
+  both-theme Axe scans and both original installments in the ledger.
+  These use seeded offline settlements, not live provider money.
+  Provider refunds retain the original payment's refund path;
   complete provider-to-return reconciliation, discounted/taxed return amounts
   and full localized owner/customer journeys remain required before C5.19
   can be checked again. No new deferral or launch acceptance is supplied.

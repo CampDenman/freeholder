@@ -203,6 +203,13 @@ across duplicate lines and previous non-rejected returns. Review these
 boundaries in `src/modules/catalog/fulfillment.ts` and
 `tests/core/catalog-fulfillment.test.ts`.
 
+Three pre-repair regressions reproduced the failures. All 11 repaired
+financial/manual journey cases and eight live SDK checks passed. Four real
+Chromium owner journeys cover explicit confirmation and full installment
+recording, keyboard use, 320px, both-theme Axe scans and all four locales in
+`tests/browser/return-refund.spec.ts`. Settlements are seeded offline evidence,
+not a real provider transaction. The production build/artifact scrub passed.
+
 C5.19 is reopened for complete provider-to-return reconciliation, correct
 discount/tax handling and localized owner/customer acceptance. Refusing to
 invent a hosted refund is a safety repair; it does not complete that journey

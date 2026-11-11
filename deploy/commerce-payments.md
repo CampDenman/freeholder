@@ -235,6 +235,21 @@ remain open in MASTER.md C5.19. The old manual-only C11.02 journey does not
 prove that integration. No existing ledger entries are rewritten, and no
 external provider request is made by these source tests.
 
+The three pre-repair reproductions failed on the old source as expected.
+The repaired `tests/core/catalog-fulfillment.test.ts` and existing manual
+`tests/core/c11-02-catalog-journey.test.ts` passed all 11 cases, including
+created/processing/succeeded refund reservations, concurrent requests for
+the same quantities, human/key/plugin boundaries, full installment allocation
+and replay. Live SDK generation passed all eight checks. The production
+build and standalone artifact scrub passed (18,586 files, 224,726,330 bytes).
+`tests/browser/return-refund.spec.ts` passed four actual Chromium journeys
+at 320px in English/Spanish/French/Arabic RTL, checking required confirmation,
+keyboard submission, both-theme Axe scans and both original installments
+in the ledger. Those payment settlements are seeded and no provider is called.
+Required fast gates also passed typechecking, lint, licensing, release notes,
+plan consistency and 368 contract checks with one deliberate skip. The
+evidence matrix retains 369 rows × 12 criteria; C5.19 remains open.
+
 ## Rollback
 
 C5.08 migration `0047_fantastic_miss_america.sql` is additive except for safely
