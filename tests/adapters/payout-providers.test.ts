@@ -6,7 +6,8 @@
 // sandboxes; that waits for test credentials.
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { createStripeConnect, stripeAccountStatus } from "@/adapters/payouts/stripe-connect";
+import { createStripeConnect, stripeAccountStatus, stripeMerchantDetails } from "@/adapters/payouts/stripe-connect";
+import { marketFeeMinor } from "@/modules/invoicing/market-policy";
 import { createPayPalPayouts } from "@/adapters/payouts/paypal-payouts";
 import { createRazorpayRoute, razorpayKey } from "@/adapters/payouts/razorpay-route";
 
@@ -57,9 +58,35 @@ describe("Stripe Connect payouts (C12.26)", () => {
     const t = Math.floor(Date.now() / 1000);
     const sig = createHmac("sha256", "whsec_x").update(`${t}.${event}`).digest("hex");
     const now = new Date().toISOString();
-    expect(await stripe.webhook({ headers: { "stripe-signature": `t=${t},v1=${sig}` }, body: body(event), receivedAt: now })).toEqual([{ kind: "account", externalAccountId: "acct_1", status: "ready" }]);
+    expect(await stripe.webhook({ headers: { "stripe-signature": `t=${t},v1=${sig}` }, body: body(event), receivedAt: now })).toEqual([{ kind: "account", externalAccountId: "acct_1", status: "ready", chargesReady: false, merchantName: null }]);
     await expect(stripe.webhook({ headers: { "stripe-signature": `t=${t},v1=${"0".repeat(64)}` }, body: body(event), receivedAt: now })).rejects.toThrow(/invalid/);
     await expect(stripe.webhook({ headers: { "stripe-signature": `t=${t - 3600},v1=${sig}` }, body: body(event), receivedAt: now })).rejects.toThrow(/window/);
+  });
+
+  it("requests direct charge capability explicitly and requires charge readiness plus public merchant branding (C12.38)", async () => {
+    const account = { id: "acct_1", payouts_enabled: true, charges_enabled: true, capabilities: { transfers: "active", card_payments: "active" }, business_profile: { name: "Sam Studio" } };
+    const { calls, fetcher } = recorder(call => call.url.endsWith("/account_links") ? { url: "https://connect.stripe.test/setup/1" } : account);
+    const stripe = createStripeConnect({ secretKey: "sk_test_x", webhookSecrets: ["whsec_x"], fetch: fetcher });
+    await stripe.onboard({ ...seller, acceptDirectCharges: true }, {}, urls);
+    expect(new URLSearchParams(calls[0]!.body).get("capabilities[card_payments][requested]")).toBe("true");
+    calls.length = 0;
+    await stripe.onboard({ ...seller, acceptDirectCharges: true }, {}, urls, "acct_1");
+    expect(calls[0]!.url).toBe("https://api.stripe.com/v1/accounts/acct_1");
+    expect(calls[0]!.method).toBe("POST");
+    expect(new URLSearchParams(calls[0]!.body).get("capabilities[card_payments][requested]")).toBe("true");
+    expect(await stripe.accountDetails!("acct_1")).toEqual({ status: "ready", chargesReady: true, merchantName: "Sam Studio" });
+    for (const broken of [
+      { ...account, payouts_enabled: false }, { ...account, charges_enabled: false },
+      { ...account, capabilities: { transfers: "active", card_payments: "pending" } },
+      { ...account, business_profile: {}, individual: { first_name: "Private", last_name: "Name" } },
+    ]) expect(stripeMerchantDetails(broken).chargesReady).toBe(false);
+    expect(stripeMerchantDetails({ ...account, business_profile: {} }).merchantName).toBeNull();
+  });
+
+  it("does not round a large site's fee up by a minor unit (C12.38)", () => {
+    // Floating-point multiplication previously produced 208967022709991.
+    expect(marketFeeMinor(Number.MAX_SAFE_INTEGER, 232)).toBe(208967022709990);
+    expect(marketFeeMinor(1, 232)).toBe(0);
   });
 });
 

@@ -16,7 +16,17 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "subscriptions.paymentScope",
+  "members.verifySubscriptionMerchantAccount",
+  "invoicing.providerPaymentSource",
+  "subscriptions.captureMarketPolicy",
+  "subscriptions.marketPolicy",
+  "members.resolveSubscriptionMarketPolicy",
   "invoicing.reconcilePluginRefund",
+  "invoicing.captureInvoiceMarketPolicy",
+  "invoicing.marketPolicy",
+  "members.resolveInvoiceMarketPolicy",
+  "members.verifyInvoiceMerchantAccount",
   // C11.10: records a carrier's answer for a text staged by messaging.sendSms,
   // from the post-commit delivery job.
   "messaging.applySmsSendResult",
@@ -125,7 +135,6 @@ const INTERNAL = [
   // authorizes the caller; these run as the system around provider I/O.
   "invoicing.claimPaymentCheckout",
   "invoicing.applyPaymentCheckout",
-  "invoicing.providerPaymentSource",
   "invoicing.recordProviderPaymentResult",
   "invoicing.claimProviderRefund",
   "invoicing.recordProviderRefundResult",
@@ -197,7 +206,17 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "subscriptions.paymentScope",
+  "members.verifySubscriptionMerchantAccount",
+  "subscriptions.captureMarketPolicy",
+  "subscriptions.marketPolicy",
+  "members.resolveSubscriptionMarketPolicy",
+  "invoicing.providerPaymentSource",
   "invoicing.reconcilePluginRefund",
+  "invoicing.captureInvoiceMarketPolicy",
+  "invoicing.marketPolicy",
+  "members.resolveInvoiceMarketPolicy",
+  "members.verifyInvoiceMerchantAccount",
   // C1.38/C10.31: browser-only entry and owner host controls. These do not
   // belong in API-key, SDK, OpenAPI or MCP projections.
   "playground.enter",

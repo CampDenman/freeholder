@@ -327,7 +327,7 @@ export const refundInPersonPayment = defineOrchestratedService({
   handler: async (input, caller) => {
     const system = { kind: "system", request: caller.request } as const;
     const by = actorString(caller);
-    const payment = await providerPaymentSource.call({ paymentId: input.paymentId }, system);
+    const { payment } = await providerPaymentSource.call({ paymentId: input.paymentId }, system);
     if (!IN_PERSON_METHODS.includes(payment.method as (typeof IN_PERSON_METHODS)[number])) {
       throw new ServiceError("conflict", "That payment was not collected in person.");
     }

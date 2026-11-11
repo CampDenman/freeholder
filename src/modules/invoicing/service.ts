@@ -3,6 +3,7 @@
 // One registry export for the convergent money module (C5.02-C5.05).
 
 import invoiceServices from "./invoice-service";
+import marketPolicyServices from "./market-policy";
 import advancedMoneyServices from "./advanced-money-service";
 import paymentProviderServices from "./payment-provider-service";
 import posServices from "./pos-service";
@@ -25,6 +26,7 @@ import "./reporting";
 import "./funnel";
 
 export default [
+  ...marketPolicyServices,
   ...demoServices,
   ...recurringServices,
   ...briefingContributors,

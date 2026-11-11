@@ -16,7 +16,12 @@ export interface PaymentAdapterCapabilities {
   payouts: boolean;
   inPerson: boolean;
   strongCustomerAuthentication: boolean;
+  /** Charge, refund and service payments on an identified seller account. */
+  sellerMerchantCharges?: boolean;
 }
+
+/** Supplied by canonical ledger policy, never by a buyer's request. */
+export interface PaymentAccountScope { providerAccountId?: string }
 
 export interface PaymentMethodOffer {
   id: string;
@@ -33,7 +38,8 @@ export interface PaymentMethodOffer {
   recurring: boolean;
 }
 
-export interface InvoiceForCharge {
+export interface InvoiceForCharge extends PaymentAccountScope {
+  applicationFeeMinor?: number;
   invoiceId: string;
   invoiceNumber: string;
   contactId: string;
@@ -51,7 +57,7 @@ export interface InvoiceForCharge {
   providerCustomerRef?: string;
 }
 
-export interface CheckoutSession {
+export interface CheckoutSession extends PaymentAccountScope {
   /** Checkout/session/order reference used until settlement finishes. */
   providerRef: string;
   /** Settlement reference when the provider creates it with the checkout. */
@@ -68,7 +74,7 @@ export interface CheckoutSession {
  * instead. Providers that cannot do it leave the method off the adapter, and
  * the plan stays unavailable rather than starting an unverified trial.
  */
-export interface MethodSetupRequest {
+export interface MethodSetupRequest extends PaymentAccountScope {
   contactId: string;
   subscriptionId: string;
   customer: { email: string; name?: string };
@@ -79,27 +85,30 @@ export interface MethodSetupRequest {
   idempotencyKey: string;
 }
 
-export interface MethodSetupSession {
+export interface MethodSetupSession extends PaymentAccountScope {
   providerRef: string;
   url: string;
   expiresAt?: string;
   providerCustomerRef?: string;
 }
 
-export interface CheckoutCaptureRequest {
+export interface CheckoutCaptureRequest extends PaymentAccountScope {
   checkoutRef: string;
   idempotencyKey: string;
 }
 
-export interface CheckoutCaptureResult {
+export interface CheckoutCaptureResult extends PaymentAccountScope {
   providerRef: string;
   status: "pending" | "succeeded" | "failed";
   amountMinor?: number;
   currency?: string;
   occurredAt?: string;
+  applicationFeeMinor?: number;
 }
 
-export interface RefundRequest {
+export interface RefundRequest extends PaymentAccountScope {
+  /** Return the collected platform fee along with a direct-charge refund. */
+  refundApplicationFee?: boolean;
   paymentId: string;
   providerRef: string;
   currency: string;
@@ -108,17 +117,18 @@ export interface RefundRequest {
   idempotencyKey: string;
 }
 
-export interface RefundResult {
+export interface RefundResult extends PaymentAccountScope {
   providerRef: string;
   status: "pending" | "succeeded" | "failed";
 }
 
-export interface SavedMethodRevocationRequest {
+export interface SavedMethodRevocationRequest extends PaymentAccountScope {
   providerRef: string;
   idempotencyKey: string;
 }
 
-export interface OffSessionChargeRequest {
+export interface OffSessionChargeRequest extends PaymentAccountScope {
+  applicationFeeMinor?: number;
   methodRef: string;
   customerRef?: string;
   invoiceId: string;
@@ -129,7 +139,8 @@ export interface OffSessionChargeRequest {
   idempotencyKey: string;
 }
 
-export interface OffSessionChargeResult {
+export interface OffSessionChargeResult extends PaymentAccountScope {
+  applicationFeeMinor?: number;
   providerRef: string;
   status: "pending" | "succeeded" | "failed";
   amountMinor?: number;
@@ -138,7 +149,8 @@ export interface OffSessionChargeResult {
   failureMessage?: string;
 }
 
-export interface RecurringScheduleRequest {
+export interface RecurringScheduleRequest extends PaymentAccountScope {
+  applicationFeePercent?: number;
   /** First renewal after an already paid period or free trial. */
   firstBillingAt?: string;
   customerRef: string;
@@ -156,12 +168,14 @@ export interface RecurringScheduleRequest {
   };
 }
 
-export interface RecurringScheduleResult {
+export interface RecurringScheduleResult extends PaymentAccountScope {
+  applicationFeePercent?: number;
   providerRef: string;
   customerRef?: string;
 }
 
-export interface RecurringScheduleUpdateRequest {
+export interface RecurringScheduleUpdateRequest extends PaymentAccountScope {
+  applicationFeePercent?: number;
   providerRef: string;
   amountMinor: number;
   currency: string;
@@ -183,7 +197,7 @@ export interface SavedPaymentMethodEvidence {
   expiryYear?: number;
 }
 
-export type PaymentProviderEvent =
+export type PaymentProviderEvent = PaymentAccountScope & (
   | {
       id: string;
       kind: "payment_processing" | "payment_succeeded" | "payment_failed" | "payment_cancelled";
@@ -196,6 +210,7 @@ export type PaymentProviderEvent =
       contactId?: string;
       providerCustomerRef?: string;
       savedMethod?: SavedPaymentMethodEvidence;
+      applicationFeeMinor?: number;
     }
   | {
       id: string;
@@ -246,7 +261,7 @@ export type PaymentProviderEvent =
       periodStart?: string;
       periodEnd?: string;
       invoiceProviderRef?: string;
-    };
+    });
 
 export interface PaymentAdapter {
   readonly id: string;
@@ -270,6 +285,6 @@ export interface PaymentAdapter {
   chargeSavedMethod(request: OffSessionChargeRequest): Promise<OffSessionChargeResult>;
   createRecurringSchedule(request: RecurringScheduleRequest): Promise<RecurringScheduleResult>;
   updateRecurringSchedule(request: RecurringScheduleUpdateRequest): Promise<RecurringScheduleResult>;
-  cancelRecurringSchedule(request: { providerRef: string; idempotencyKey: string }): Promise<void>;
+  cancelRecurringSchedule(request: PaymentAccountScope & { providerRef: string; idempotencyKey: string }): Promise<void>;
   verifyWebhook(request: RawProviderRequest): Promise<readonly PaymentProviderEvent[]>;
 }

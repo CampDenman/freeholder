@@ -31,6 +31,14 @@ export function stripeAccountStatus(account: Record<string, unknown>): PayoutAcc
   return account.payouts_enabled === true && transfers === "active" ? "ready" : "pending";
 }
 
+export function stripeMerchantDetails(account: Record<string, unknown>) {
+  const status = stripeAccountStatus(account);
+  // Business-profile names are public merchant branding. Never publish a
+  // private legal person's identity as a fallback for missing branding.
+  const merchantName = text(object(account.business_profile)?.name)?.trim().slice(0, 200) || null;
+  return { status, merchantName, chargesReady: status === "ready" && account.charges_enabled === true && text(object(account.capabilities)?.card_payments) === "active" && merchantName !== null };
+}
+
 export function createStripeConnect(options: StripeConnectOptions = {}): PayoutProvider {
   const current = env();
   const secretKey = options.secretKey ?? current.STRIPE_SECRET_KEY;
@@ -69,12 +77,18 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
             type: "express",
             email: seller.email,
             "capabilities[transfers][requested]": "true",
+            ...(seller.acceptDirectCharges ? { "capabilities[card_payments][requested]": "true" } : {}),
             "business_profile[name]": seller.displayName.slice(0, 100),
             "metadata[freeholder_user_id]": seller.userId,
           }),
         });
         accountId = text(account.id);
         if (!accountId) throw new AdapterError("payments", "stripe_connect", "provider_failure", "Stripe did not create an account.");
+      } else if (seller.acceptDirectCharges) {
+        await api(`/v1/accounts/${encodeURIComponent(accountId)}`, {
+          method: "POST", idempotencyKey: `freeholder-direct-capability-${seller.userId}-${accountId}`,
+          body: new URLSearchParams({ "capabilities[card_payments][requested]": "true" }),
+        });
       }
       const link = await api("/v1/account_links", {
         method: "POST",
@@ -86,6 +100,9 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
     },
     async accountStatus(accountId) {
       return stripeAccountStatus(await api(`/v1/accounts/${encodeURIComponent(accountId)}`, { method: "GET" }));
+    },
+    async accountDetails(accountId) {
+      return stripeMerchantDetails(await api(`/v1/accounts/${encodeURIComponent(accountId)}`, { method: "GET" }));
     },
     async transfer(request) {
       const value = await api("/v1/transfers", {
@@ -141,7 +158,7 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
       if (!event) throw new AdapterError("payments", "stripe_connect", "invalid_request", "Stripe sent an invalid event.");
       const data = object(object(event.data)?.object);
       if (event.type === "account.updated" && data && text(data.id)) {
-        return [{ kind: "account", externalAccountId: text(data.id)!, status: stripeAccountStatus(data) }];
+        return [{ kind: "account", externalAccountId: text(data.id)!, ...stripeMerchantDetails(data) }];
       }
       return [];
     },

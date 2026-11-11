@@ -72,6 +72,40 @@ describe("manual payment adapter", () => {
 });
 
 describe("Stripe payment adapter", () => {
+  it("keeps seller checkout, capture and refunds scoped and validates the fee before transport (C12.38)", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const adapter = createStripePayments({ secretKey: "sk_test", webhookSecrets: ["whsec_test"], fetch: async (input, init = {}) => {
+      const url = requestUrl(input); calls.push({ url, init });
+      if (url.includes("/refunds")) return Response.json({ id: "re_seller", status: "succeeded" });
+      if (init.method === "GET") return Response.json({ id: "cs_seller", payment_intent: { id: "pi_seller", application_fee_amount: 123 }, payment_status: "paid", amount_total: invoice.amountMinor, currency: "cad" });
+      return Response.json({ id: "cs_seller", payment_intent: "pi_seller", url: "https://checkout.stripe.test/seller" });
+    } });
+    await adapter.createCheckout({ ...invoice, providerAccountId: "acct_seller", applicationFeeMinor: 123 });
+    expect(new URLSearchParams(bodyText(calls[0]!.init.body)).get("payment_intent_data[application_fee_amount]")).toBe("123");
+    expect(await adapter.captureCheckout({ checkoutRef: "cs_seller", idempotencyKey: "capture-seller", providerAccountId: "acct_seller" })).toMatchObject({ status: "succeeded", providerRef: "pi_seller", applicationFeeMinor: 123 });
+    await adapter.refund({ paymentId: invoice.invoiceId, providerRef: "pi_seller", amountMinor: 1000, currency: "CAD", idempotencyKey: "refund-seller", providerAccountId: "acct_seller", refundApplicationFee: true });
+    expect(new URLSearchParams(bodyText(calls[2]!.init.body)).get("refund_application_fee")).toBe("true");
+    expect(calls.every(call => (call.init.headers as Record<string, string>)["stripe-account"] === "acct_seller")).toBe(true);
+    const sent = calls.length;
+    for (const invalid of [
+      { providerAccountId: "acct_seller\nforged", applicationFeeMinor: 123 },
+      { providerAccountId: "acct_seller", applicationFeeMinor: invoice.amountMinor },
+      { providerAccountId: undefined, applicationFeeMinor: 123 },
+    ]) await expect(adapter.createCheckout({ ...invoice, ...invalid })).rejects.toBeInstanceOf(AdapterError);
+    expect(calls).toHaveLength(sent);
+  });
+
+  it("preserves the signed account and fee while Checkout alone cannot settle a seller charge (C12.38)", async () => {
+    const secret = "whsec_seller"; const at = 1_800_000_000;
+    const adapter = createStripePayments({ secretKey: "sk_test", webhookSecrets: [secret] });
+    const verify = (event: unknown) => {
+      const raw = JSON.stringify(event); const signature = createHmac("sha256", secret).update(`${at}.${raw}`).digest("hex");
+      return adapter.verifyWebhook({ headers: { "stripe-signature": `t=${at},v1=${signature}` }, body: bytes(raw), receivedAt: new Date(at * 1000).toISOString() });
+    };
+    expect(await verify({ id: "evt_direct", created: at, account: "acct_seller", type: "payment_intent.succeeded", data: { object: { id: "pi_seller", amount_received: 1000, currency: "cad", application_fee_amount: 100 } } })).toContainEqual(expect.objectContaining({ kind: "payment_succeeded", providerAccountId: "acct_seller", applicationFeeMinor: 100 }));
+    expect(await verify({ id: "evt_checkout_direct", created: at, account: "acct_seller", type: "checkout.session.completed", data: { object: { id: "cs_seller", mode: "payment", payment_status: "paid", payment_intent: "pi_seller", amount_total: 1000, currency: "cad" } } })).toContainEqual(expect.objectContaining({ kind: "payment_processing", providerAccountId: "acct_seller" }));
+    await expect(verify({ id: "evt_invalid_account", created: at, account: null, type: "payment_intent.succeeded", data: { object: { id: "pi_seller" } } })).rejects.toBeInstanceOf(AdapterError);
+  });
   it("creates idempotent Checkout requests and provider refunds without exposing secrets", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -211,6 +245,29 @@ describe("Stripe payment adapter", () => {
       expect(saved[0].method).toMatchObject({ providerRef: "pm_setup", last4: "4242", kind: "card" });
     }
     expect(saved.some((event) => event.kind === "payment_succeeded")).toBe(false);
+  });
+
+  it("creates, updates and cancels a recurring schedule on its original account and verifies its actual application fee", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    let reportedFee = 10.5;
+    const adapter = createStripePayments({ secretKey: "sk_test_private", apiBase: "https://stripe.example.test", fetch: async (input, init) => {
+      const url = requestUrl(input);
+      calls.push({ url, init });
+      if (url.endsWith("/v1/products")) return Response.json({ id: "prod_seller" });
+      if (init?.method === "GET") return Response.json({ id: "sub_seller", items: { data: [{ id: "si_seller", price: { product: "prod_seller" } }] } });
+      return Response.json({ id: "sub_seller", application_fee_percent: reportedFee });
+    } });
+    const scope = { providerAccountId: "acct_seller", applicationFeePercent: 10.5 };
+    const terms = { currency: "CAD", amountMinor: 2500, interval: "month" as const, intervalCount: 1, description: "Seller membership", idempotencyKey: "seller-schedule" };
+    await expect(adapter.createRecurringSchedule({ ...scope, ...terms, customerRef: "cus_seller", methodRef: "pm_seller", metadata: { subscriptionId: invoice.invoiceId, contactId: invoice.contactId, planId: invoice.invoiceId } })).resolves.toMatchObject({ providerRef: "sub_seller", ...scope });
+    await expect(adapter.updateRecurringSchedule({ ...scope, ...terms, providerRef: "sub_seller", proration: "none" })).resolves.toMatchObject({ providerRef: "sub_seller", ...scope });
+    await adapter.cancelRecurringSchedule({ providerAccountId: scope.providerAccountId, providerRef: "sub_seller", idempotencyKey: "seller-cancel" });
+    expect(calls).toHaveLength(5);
+    expect(calls.every(call => new Headers(call.init?.headers).get("stripe-account") === "acct_seller")).toBe(true);
+    const posted = calls.filter(call => call.init?.method === "POST" && !call.url.endsWith("/v1/products"));
+    expect(posted.every(call => new URLSearchParams(bodyText(call.init?.body)).get("application_fee_percent") === "10.5")).toBe(true);
+    reportedFee = 0;
+    await expect(adapter.updateRecurringSchedule({ ...scope, ...terms, providerRef: "sub_seller", proration: "none" })).rejects.toThrow("did not confirm");
   });
 
   it("charges a stored method off-session and creates a recurring schedule", async () => {

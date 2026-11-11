@@ -85,7 +85,7 @@ export const payoutSetupSource = defineService({
   external: false,
   agentCallable: false,
   input: z.object({}),
-  output: z.object({ adapter: z.string(), userId: uuid, email: z.string(), displayName: z.string(), externalAccountId: z.string().nullable() }),
+  output: z.object({ adapter: z.string(), userId: uuid, email: z.string(), displayName: z.string(), externalAccountId: z.string().nullable(), acceptDirectCharges: z.boolean() }),
   handler: async (_input, ctx) => {
     const userId = self(ctx);
     const rules = await marketRules(ctx);
@@ -97,7 +97,7 @@ export const payoutSetupSource = defineService({
       .where(eq(users.id, userId));
     if (!person || person.status !== "active") throw new ServiceError("permission", "Join the site first.");
     const [account] = await ctx.tx.select().from(memberPayoutAccounts).where(eq(memberPayoutAccounts.userId, userId));
-    return { adapter: rules.adapter, userId, email: person.email, displayName: person.displayName, externalAccountId: account?.adapter === rules.adapter ? account.externalAccountId : null };
+    return { adapter: rules.adapter, userId, email: person.email, displayName: person.displayName, externalAccountId: account?.adapter === rules.adapter ? account.externalAccountId : null, acceptDirectCharges: rules.model === "seller_merchant" };
   },
 });
 
@@ -109,14 +109,14 @@ export const applyPayoutAccount = defineService({
   external: false,
   agentCallable: false,
   writeClass: "money",
-  input: z.object({ adapter: z.string(), externalAccountId: z.string().min(1).max(200), status: z.enum(["pending", "ready", "disabled"]) }),
+  input: z.object({ adapter: z.string(), externalAccountId: z.string().min(1).max(200), status: z.enum(["pending", "ready", "disabled"]), chargesReady: z.boolean().default(false), merchantName: z.string().trim().min(1).max(200).nullable().default(null) }),
   output: okResult,
   handler: async (input, ctx) => {
     const userId = self(ctx);
     await ctx.tx
       .insert(memberPayoutAccounts)
-      .values({ userId, adapter: input.adapter, status: input.status, externalAccountId: input.externalAccountId })
-      .onConflictDoUpdate({ target: memberPayoutAccounts.userId, set: { adapter: input.adapter, status: input.status, externalAccountId: input.externalAccountId, updatedAt: new Date() } });
+      .values({ userId, ...input })
+      .onConflictDoUpdate({ target: memberPayoutAccounts.userId, set: { ...input, updatedAt: new Date() } });
     ctx.setSubject("member_payout_account", userId);
     return { ok: true as const };
   },
@@ -140,11 +140,11 @@ export const startPayoutSetup = defineOrchestratedService({
     if (provider.missing().length) throw new ServiceError("validation", "The site owner has not finished setting up payouts yet.");
     const base = env().APP_URL.replace(/\/+$/, "");
     const result = await provider
-      .onboard({ userId: source.userId, email: source.email, displayName: source.displayName }, input.fields, { returnUrl: `${base}/portal/payouts?setup=done`, refreshUrl: `${base}/portal/payouts?setup=again` }, source.externalAccountId)
+      .onboard({ userId: source.userId, email: source.email, displayName: source.displayName, acceptDirectCharges: source.acceptDirectCharges }, input.fields, { returnUrl: `${base}/portal/payouts?setup=done`, refreshUrl: `${base}/portal/payouts?setup=again` }, source.externalAccountId)
       .catch((error: unknown) => {
         throw new ServiceError("validation", error instanceof Error ? error.message : "The payout provider refused that.");
       });
-    await applyPayoutAccount.call({ adapter: provider.id, externalAccountId: result.externalAccountId, status: result.status }, actor);
+    await applyPayoutAccount.call({ adapter: provider.id, externalAccountId: result.externalAccountId, status: result.status, chargesReady: result.chargesReady, merchantName: result.merchantName }, actor);
     return { url: result.url ?? null, status: result.status };
   },
 });
@@ -162,9 +162,10 @@ export const refreshPayoutAccount = defineOrchestratedService({
     const source = await payoutSetupSource.call({}, actor);
     const provider = payoutProvider(source.adapter);
     if (!provider || !source.externalAccountId) throw new ServiceError("validation", "Set up payouts first.");
-    const status = await provider.accountStatus(source.externalAccountId);
-    await applyPayoutAccount.call({ adapter: provider.id, externalAccountId: source.externalAccountId, status }, actor);
-    return { status };
+    const details = provider.accountDetails ? await provider.accountDetails(source.externalAccountId)
+      : { status: await provider.accountStatus(source.externalAccountId), chargesReady: false, merchantName: null };
+    await applyPayoutAccount.call({ adapter: provider.id, externalAccountId: source.externalAccountId, ...details }, actor);
+    return { status: details.status };
   },
 });
 
@@ -429,7 +430,7 @@ export const applyPayoutWebhook = defineService({
   input: z.object({
     provider: z.string(),
     events: z.array(z.union([
-      z.object({ kind: z.literal("account"), externalAccountId: z.string(), status: z.enum(["pending", "ready", "disabled"]) }),
+      z.object({ kind: z.literal("account"), externalAccountId: z.string(), status: z.enum(["pending", "ready", "disabled"]), chargesReady: z.boolean().optional(), merchantName: z.string().nullable().optional() }),
       z.object({ kind: z.literal("transfer"), reference: z.string(), key: z.string().optional(), state: z.enum(["settled", "failed", "unclaimed"]), error: z.string().optional() }),
     ])).max(50),
   }),
@@ -441,7 +442,7 @@ export const applyPayoutWebhook = defineService({
       if (event.kind === "account") {
         const rows = await ctx.tx
           .update(memberPayoutAccounts)
-          .set({ status: event.status, updatedAt: new Date() })
+          .set({ status: event.status, chargesReady: event.chargesReady ?? false, merchantName: event.merchantName ?? null, updatedAt: new Date() })
           .where(and(eq(memberPayoutAccounts.adapter, input.provider), eq(memberPayoutAccounts.externalAccountId, event.externalAccountId)))
           .returning({ userId: memberPayoutAccounts.userId });
         applied += rows.length;

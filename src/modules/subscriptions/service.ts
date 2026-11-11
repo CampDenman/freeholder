@@ -45,6 +45,7 @@ import { paymentAdapter } from "@/adapters/payments";
 import { createDraftInvoice, issueInvoice } from "@/modules/invoicing/invoice-service";
 import { paymentMethods } from "@/modules/invoicing/schema";
 import { invoices } from "@/modules/invoicing/schema";
+import marketPolicyServices, { captureSubscriptionMarketPolicy, getSubscriptionMarketPolicy } from "./market-policy";
 import {
   BILLING_MODES,
   CANCEL_BEHAVIOURS,
@@ -815,6 +816,9 @@ export const subscribe = defineService({
       })
       .returning();
 
+    await ctx.callAsSystem(captureSubscriptionMarketPolicy, { subscriptionId: created!.id });
+    const merchant = await ctx.callAsSystem(getSubscriptionMarketPolicy, { subscriptionId: created!.id });
+    if (paymentMethod && paymentMethod.providerAccountId !== (merchant?.providerAccountId ?? "")) throw new ServiceError("conflict", "The saved method belongs to a different merchant account.");
     await record(ctx, created!.id, "created");
     if (!pending) await record(ctx, created!.id, trialing ? "trialing" : "activated");
 
@@ -1731,6 +1735,7 @@ export {
 import publicMembershipServices, { activatePaidSignup } from "./public-signup";
 
 export default [
+  ...marketPolicyServices,
   ...publicMembershipServices,
   savePlan,
   listPlans,

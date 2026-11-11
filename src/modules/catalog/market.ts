@@ -122,6 +122,7 @@ export const orderSellers = defineService({
     currency: z.string(),
     status: z.string(),
     createdAt: timestamp,
+    containsSiteItems: z.boolean(),
     lines: listed(row({ orderItemId: uuid, sellerUserId: uuid, lineTotalMinor: z.number().int(), name: z.string(), quantity: z.number().int(), requiresShipping: z.boolean() })),
   }),
   handler: async (input, ctx) => {
@@ -139,7 +140,7 @@ export const orderSellers = defineService({
       .from(orderItems)
       .innerJoin(productVariants, eq(productVariants.id, orderItems.variantId))
       .innerJoin(products, eq(products.id, productVariants.productId))
-      .where(and(eq(orderItems.orderId, order.id), isNotNull(products.sellerUserId)));
+      .where(eq(orderItems.orderId, order.id));
     return {
       orderId: order.id,
       invoiceId: order.invoiceId,
@@ -147,7 +148,8 @@ export const orderSellers = defineService({
       currency: order.currency,
       status: order.status,
       createdAt: order.createdAt,
-      lines: lines.map((l) => ({ ...l, sellerUserId: l.sellerUserId! })),
+      containsSiteItems: lines.some(line => line.sellerUserId === null),
+      lines: lines.filter(line => line.sellerUserId !== null).map((l) => ({ ...l, sellerUserId: l.sellerUserId! })),
     };
   },
 });

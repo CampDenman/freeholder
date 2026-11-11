@@ -238,6 +238,24 @@ export const subscriptions = pgTable(
  * paying in March" needs the second answer, and a status column can never give
  * it.
  */
+/** C12.38: private agreement routing, excluded from public subscription rows. */
+export const subscriptionMarketPolicies = pgTable("subscription_market_policies", {
+  subscriptionId: uuid("subscription_id").primaryKey().references(() => subscriptions.id, { onDelete: "cascade" }),
+  model: text("model", { enum: ["hold", "instant", "seller_merchant"] }).notNull(),
+  adapter: text("adapter").notNull(),
+  siteFeeBps: integer("site_fee_bps").notNull(),
+  holdDays: integer("hold_days").notNull(),
+  sellerUserId: uuid("seller_user_id"),
+  merchantName: text("merchant_name"),
+  providerAccountId: text("provider_account_id"),
+  createdAt: createdAtColumn(),
+}, (t) => [
+  check("subscription_market_policies_model_check", sql`${t.model} in ('hold','instant','seller_merchant')`),
+  check("subscription_market_policies_fee_bps_check", sql`${t.siteFeeBps} between 0 and 10000`),
+  check("subscription_market_policies_hold_days_check", sql`${t.holdDays} between 0 and 365`),
+  check("subscription_market_policies_merchant_check", sql`${t.model} <> 'seller_merchant' or (${t.adapter} = 'stripe_connect' and ${t.sellerUserId} is not null and ${t.merchantName} is not null and ${t.providerAccountId} is not null)`),
+]);
+
 export const subscriptionEvents = pgTable(
   "subscription_events",
   {

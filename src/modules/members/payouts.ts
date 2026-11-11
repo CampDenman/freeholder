@@ -15,6 +15,7 @@ import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { orderForInvoice, orderSellers, registerSellerGate } from "@/modules/catalog/market";
 import { PAYOUT_PROVIDER_IDS } from "@/adapters/payouts";
+import { getInvoiceMarketPolicy, marketFeeMinor } from "@/modules/invoicing/market-policy";
 import { notifyMember } from "./notify";
 import { openMessage, sealMessage } from "./message-crypto";
 import {
@@ -164,10 +165,11 @@ export const recordPayouts = defineService({
   handler: async (input, ctx) => {
     const order = await ctx.callAsSystem(orderSellers, { orderId: input.orderId });
     if (order.lines.length === 0) return { recorded: 0 };
-    const rules = await marketRules(ctx);
+    const frozen = order.invoiceId ? await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: order.invoiceId }) : null;
+    const rules = frozen ?? await marketRules(ctx);
     let recorded = 0;
     for (const line of order.lines) {
-      const fee = Math.floor((line.lineTotalMinor * rules.siteFeeBps) / 10_000);
+      const fee = marketFeeMinor(line.lineTotalMinor, rules.siteFeeBps);
       const now = new Date();
       const [created] = await ctx.tx
         .insert(memberPayouts)

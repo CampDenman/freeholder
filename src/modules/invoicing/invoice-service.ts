@@ -3,6 +3,8 @@
 // Transaction-safe invoice, payment, refund, and credit-note state machines.
 
 import { createHash } from "node:crypto";
+import { captureInvoiceMarketPolicy } from "./market-policy";
+import { reserveMerchantCharge } from "./merchant-charge";
 import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -42,6 +44,7 @@ import {
   paymentMethods,
   paymentProviderCustomers,
   payments,
+  paymentMerchantRoutes,
   refunds,
   taxExemptions,
   taxLines,
@@ -782,6 +785,7 @@ export const issueInvoice = defineService({
       if (invoice.number) return invoiceBundle(ctx.tx, invoice.id);
       throw new ServiceError("conflict", "Only a draft invoice can be issued.");
     }
+    await ctx.callAsSystem(captureInvoiceMarketPolicy, { invoiceId: invoice.id });
     const number = await allocateNumber(ctx.tx, invoice.sequenceKey, "INV-");
     const issuedAt = new Date();
     const zero = invoice.totalMinor === 0;
@@ -950,6 +954,7 @@ export const createPayment = defineService({
     if (input.amountMinor > outstanding) {
       throw new ServiceError("validation", "The payment exceeds this invoice's outstanding balance.");
     }
+    const routing = await reserveMerchantCharge(ctx, invoice, input);
     const [created] = await ctx.tx
       .insert(payments)
       .values({
@@ -963,6 +968,7 @@ export const createPayment = defineService({
         metadata: input.metadata,
       })
       .returning();
+    if (routing.providerAccountId) await ctx.tx.insert(paymentMerchantRoutes).values({ paymentId: created!.id, ...routing });
     await stateEvent(ctx, "payment", created!.id, null, "created");
     ctx.queueEvent("payment.created", { paymentId: created!.id, invoiceId: invoice.id, contactId: invoice.contactId });
     ctx.setSubject("payment", created!.id);
