@@ -120,6 +120,8 @@ export interface RefundRequest extends PaymentAccountScope {
 export interface RefundResult extends PaymentAccountScope {
   providerRef: string;
   status: "pending" | "succeeded" | "failed";
+  /** A definite provider cancellation is unsuccessful, not a card decline. */
+  failureCode?: "provider_cancelled";
 }
 
 export interface SavedMethodRevocationRequest extends PaymentAccountScope {
@@ -217,6 +219,7 @@ export type PaymentProviderEvent = PaymentAccountScope & (
       kind: "refund_processing" | "refund_succeeded" | "refund_failed";
       providerRef: string;
       paymentProviderRef: string;
+      failureCode?: "provider_cancelled";
       amountMinor?: number;
       currency?: string;
       occurredAt: string;

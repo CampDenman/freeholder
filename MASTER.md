@@ -13229,6 +13229,17 @@ whatever is best for the people using the site.
   `payment-provider-customer-erasure.md`; `deploy/privacy-rights.md`.
   Actual provider acceptance and independent review remain open; this source
   increment closes no C-item and does not enable direct seller collection.
+  Refund-feedback repair 2026-11-11 (C12.38/C11.10): actual controls reproduced
+  acceptance of a different parent payment on an otherwise matching seller
+  refund and silently ignored signed Stripe cancellation. Original payment,
+  account, amount and currency now agree before transition or terminal replay;
+  expanded parent references retain their exact IDs. Definite provider
+  cancellation remains an unsuccessful refund with its explicit reason and
+  records no returned money. `tests/core/payment-provider-service.test.ts`,
+  `tests/core/payment-adapters.test.ts`; changeset
+  `refund-original-parent-and-cancellation.md`; `deploy/commerce-payments.md`.
+  Dashboard recovery, actual acceptance, independent review and full C12.38
+  integration remain required; no direct model or stable approval is enabled.
 - [ ] **C12.39** Move end-to-end encryption from `ts-mls` (not independently
   audited) to OpenMLS (audited historically by SRLabs), compiled to WebAssembly
   in pinned CI and committed so deploys stay Node-only. The owner's 2026-11-10

@@ -162,7 +162,7 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
   if (type.startsWith("checkout.session.")) {
     const checkoutRef = text(value.id);
     if (!checkoutRef) return [];
-    const providerRef = typeof value.payment_intent === "string" ? value.payment_intent : checkoutRef;
+    const providerRef = text(value.payment_intent) ?? text(object(value.payment_intent)?.id) ?? checkoutRef;
     const common = { id, providerRef, checkoutRef, amountMinor: number(value.amount_total), currency, occurredAt: created, invoiceId, contactId, providerCustomerRef: customer };
     // Setup mode never moves money. verifyWebhook resolves and validates the
     // SetupIntent before this normalizer extracts its saved method.
@@ -191,10 +191,11 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
 
   if (type.startsWith("refund.")) {
     const providerRef = text(value.id);
-    const paymentProviderRef = text(value.payment_intent) ?? text(value.charge);
+    const paymentProviderRef = text(value.payment_intent) ?? text(object(value.payment_intent)?.id) ?? text(value.charge) ?? text(object(value.charge)?.id);
     if (!providerRef || !paymentProviderRef) return [];
     const common = { id, providerRef, paymentProviderRef, amountMinor: number(value.amount), currency, occurredAt: created };
     if (value.status === "succeeded") return [{ ...common, kind: "refund_succeeded" }];
+    if (value.status === "canceled") return [{ ...common, kind: "refund_failed", failureCode: "provider_cancelled" }];
     if (value.status === "failed" || type === "refund.failed") return [{ ...common, kind: "refund_failed" }];
     if (value.status === "pending" || value.status === "requires_action") return [{ ...common, kind: "refund_processing" }];
     return [];
@@ -354,7 +355,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       return {
         providerRef,
         ...(invoice.providerAccountId ? { providerAccountId: invoice.providerAccountId } : {}),
-        paymentRef: typeof value.payment_intent === "string" ? value.payment_intent : undefined,
+        paymentRef: text(value.payment_intent) ?? text(object(value.payment_intent)?.id),
         url,
         expiresAt: number(value.expires_at) === undefined ? undefined : stripeTime(value.expires_at),
       };
@@ -421,7 +422,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       const value = await api("/v1/refunds", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": request.idempotencyKey }, body: form }, request.providerAccountId);
       const providerRef = text(value.id);
       if (!providerRef) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return a refund reference.");
-      return { providerRef, ...(request.providerAccountId ? { providerAccountId: request.providerAccountId } : {}), status: value.status === "succeeded" ? "succeeded" : value.status === "failed" || value.status === "canceled" ? "failed" : "pending" };
+      return { providerRef, ...(request.providerAccountId ? { providerAccountId: request.providerAccountId } : {}), status: value.status === "succeeded" ? "succeeded" : value.status === "failed" || value.status === "canceled" ? "failed" : "pending", ...(value.status === "canceled" ? { failureCode: "provider_cancelled" as const } : {}) };
     },
     async eraseCustomer(request) {
       const reference=request.providerCustomerRef;

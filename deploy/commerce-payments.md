@@ -217,6 +217,21 @@ real, billable, sandbox, or live provider request.
 
 ## Returned-item refunds (C5.19/C11.10, source repair)
 
+Authenticated refund feedback must match the recorded original payment
+reference, account, amount and currency before any state transition, including
+terminal replay. Stripe's signed `canceled` refund outcome is an unsuccessful
+refund with `provider_cancelled` evidence, matching its immediate API response.
+It releases the failed attempt's reservation without adding refunded money;
+unknown calls remain pending. Expanded PaymentIntent/charge references retain
+their exact IDs. Stripe documents those expandable parent references and the
+actual final statuses in its [Refund object](https://docs.stripe.com/api/refunds/object).
+The [Checkout Session](https://docs.stripe.com/api/checkout/sessions/object)
+response and signed event also preserve an expanded PaymentIntent's ID, so a
+later original-parent refund can match its actual payment rather than a
+Checkout-session fallback.
+This source repair does not supply dashboard-refund recovery, enabled-provider
+acceptance, independent review or direct seller-collection activation.
+
 `catalog.prepareReturnRefund` freezes every original-payment allocation and
 reserves its shared refund-ledger attempt before any money moves. Review the
 amounts in `/admin/returns`. The allocation records original payment, currency,

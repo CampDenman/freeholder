@@ -219,6 +219,24 @@ exposing client secrets. First-customer creation must wait for a durable
 request snapshot that freezes profile/customer/account inputs before I/O;
 that and exact fresh-session proof for reused cards remain C12.38 work.
 
+### Refund parent and definite cancellation repair
+
+Actual before-failing controls reproduced a refund accepting another payment
+reference on the correct account and signed Stripe cancellation being ignored.
+The shared processor now checks the original payment/account/amount/currency
+before transitions or terminal replay. Actual cancellation is an unsuccessful
+refund with `provider_cancelled` evidence; it never records returned money.
+Review both the signed callback and immediate response paths against
+`tests/core/payment-provider-service.test.ts` and
+`tests/core/payment-adapters.test.ts`.
+
+Peer review also reproduced expanded Checkout storing its session ID while the
+later refund identified the PaymentIntent. Both Checkout accessors and refund
+normalization now preserve the same expanded/string payment ID. The real
+signed Checkout→payment→refund control proves the linkage without weakening
+wrong-parent refusal. These are source controls, not actual-provider acceptance
+or independent sign-off; complete dashboard recovery remains C12.38 work.
+
 ## Authenticated provider-evidence boundary (C11.10)
 
 The C12.30 PhotoDNA review must also check unsupported formats and malformed
