@@ -1480,18 +1480,19 @@ async function eraseContact(
   const now = new Date();
   const exceptions = (await contactRetentionExceptions(tx, request.contactId))
     .filter((item) => !item.expiresAt || item.expiresAt > now);
-  const byScope = new Map(exceptions.map((item) => [item.scope, item]));
   const outcomes: Array<Record<string, unknown>> = [];
   const ordered = [...privacySourceRegistry].sort((a, b) => (a.eraseOrder ?? 100) - (b.eraseOrder ?? 100));
-  const loginException = ordered.filter(source => source.requiresLogin)
-    .flatMap(source => [source.scope, ...(source.retentionScopes ?? [])])
-    .map(scope => byScope.get(scope)).find(Boolean);
+  const loginScopes = ordered.filter(source => source.requiresLogin)
+    .flatMap(source => [source.scope, ...(source.retentionScopes ?? [])]);
   let retainedLogin = false;
   for (const source of ordered) {
-    const exception = [source.scope, ...(source.retentionScopes ?? [])].map(scope => byScope.get(scope)).find(Boolean)
-      ?? (source.scope === "contact.credentials" ? loginException : undefined);
-    if (exception) {
-      await source.retain?.(tx, request.contactId, { requestId: exception.dataRequestId, exceptionId: exception.id, service: ctx });
+    const scopes = new Set([source.scope, ...(source.retentionScopes ?? []), ...(source.scope === "contact.credentials" ? loginScopes : [])]);
+    const retained = exceptions.filter(exception => scopes.has(exception.scope));
+    if (retained.length) {
+      // Each original hold must reach opaque-source keepers. A later short
+      // hold must never replace an older continuing hold for the same scope.
+      for (const hold of retained) await source.retain?.(tx, request.contactId, { requestId: hold.dataRequestId, exceptionId: hold.id, service: ctx });
+      const exception = retained[0]!;
       if (source.scope === "contact.credentials") retainedLogin = true;
       outcomes.push({
         scope: source.scope,
@@ -1500,7 +1501,8 @@ async function eraseContact(
         retentionRequestId: exception.dataRequestId,
         reason: exception.reason,
         legalBasis: exception.legalBasis,
-        expiresAt: exception.expiresAt,
+        expiresAt: retained.some(hold => !hold.expiresAt) ? null : new Date(Math.max(...retained.map(hold => hold.expiresAt!.getTime()))),
+        retentionExceptions: retained.map(hold => ({ id: hold.id, dataRequestId: hold.dataRequestId, reason: hold.reason, legalBasis: hold.legalBasis, expiresAt: hold.expiresAt })),
       });
       continue;
     }
@@ -1569,6 +1571,9 @@ async function erasureWasApplied(tx: Tx, requestId: string): Promise<boolean> {
 }
 
 async function refusePendingErasure(tx: Tx, requestId: string): Promise<void> {
+  // Holds now belong to the subject across requests. Keep the same identity
+  // -> request lock order as fulfilment before changing any request's holds.
+  await lockContactIdentity(tx);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${requestId}`}))`);
   const [artifact] = await tx.select({ body: dataRequestArtifacts.body }).from(dataRequestArtifacts)
     .where(eq(dataRequestArtifacts.dataRequestId, requestId)).limit(1);

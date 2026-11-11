@@ -23,6 +23,13 @@ import { products } from "@/modules/catalog/schema";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 let erasureBarrier: { entered: () => void; wait: Promise<void> } | undefined;
+let retainedOrigins: Array<{ requestId: string; exceptionId: string }> = [];
+registerContactPrivacySource({
+  scope: "test.memberHoldOrigins", tables: [], retentionScopes: ["members"],
+  exportData: async () => null,
+  retain: async (_tx, _contactId, context) => { retainedOrigins.push({ requestId: context.requestId, exceptionId: context.exceptionId }); },
+  erase: async () => ({ affected: 0 }),
+});
 registerContactPrivacySource({
   scope: "test.heldLoginPause", tables: [], eraseOrder: 101,
   exportData: async () => null,
@@ -38,6 +45,7 @@ describe.runIf(hasDatabase)("held member login (C1.08/C12.15)", () => {
   beforeAll(ready, 60_000);
   beforeEach(async () => {
     erasureBarrier = undefined;
+    retainedOrigins = [];
     await truncateSpine();
     await db().insert(users).values([
       { id: OWNER.userId, email: "owner@example.test", role: "owner" },
@@ -135,6 +143,15 @@ describe.runIf(hasDatabase)("held member login (C1.08/C12.15)", () => {
     expect(await failure(createMyKey.call({ name: "Late former member key", scopes: ["members.payoutAccount"] }, CUSTOMER))).toMatchObject({ code: "permission" });
   });
 
+  it("passes every original hold to retained sources when two requests hold the same scope", async () => {
+    const first = await hold();
+    const next = await request();
+    const second = await addRetentionException.call({ dataRequestId: next, scope: "members", reason: "legal_claim", legalBasis: "A second shorter hold must not replace the original continuing legal hold.", expiresAt: new Date(Date.now() + 3_600_000).toISOString() }, OWNER);
+    await fulfillDataRequest.call({ id: next, confirmation: "ERASE" }, OWNER);
+    expect(retainedOrigins).toHaveLength(2);
+    expect(retainedOrigins).toEqual(expect.arrayContaining([{ requestId: first.id, exceptionId: first.exception.id }, { requestId: next, exceptionId: second.id }]));
+  });
+
   it("refuses a late personal key from an older writer for the retained erased parent", async () => {
     const { id } = await hold();
     await fulfillDataRequest.call({ id, confirmation: "ERASE" }, OWNER);
@@ -145,6 +162,7 @@ describe.runIf(hasDatabase)("held member login (C1.08/C12.15)", () => {
 
   it("serializes actual concurrent session and personal-key issuance behind erasure", async () => {
     const { id } = await hold();
+    const otherRequest = await request();
     let entered!: () => void, release!: () => void;
     const reached = new Promise<void>(resolve => { entered = resolve; });
     const wait = new Promise<void>(resolve => { release = resolve; });
@@ -157,6 +175,7 @@ describe.runIf(hasDatabase)("held member login (C1.08/C12.15)", () => {
     const session = failure(db().transaction(tx => createSession(tx, CUSTOMER.userId)));
     const key = failure(createMyKey.call({ name: "Concurrent held key", scopes: ["members.payoutAccount"] }, CUSTOMER));
     try {
+      expect(await failure(addRetentionException.call({ dataRequestId: otherRequest, scope: "members", reason: "legal_claim", legalBasis: "A competing hold must not appear after another request captured its erasure scopes." }, OWNER))).toMatchObject({ code: "conflict" });
       let blocked = 0;
       const deadline = Date.now() + 5_000;
       do {

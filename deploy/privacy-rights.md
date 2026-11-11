@@ -324,6 +324,9 @@ request does not release or bypass an earlier hold. The request detail lists
 those inherited holds; the receipt identifies the original exception/request,
 and storage retain callbacks keep that originating hold identity. Explicit
 removal or expiry is still required before held data can be erased.
+When several requests hold the same scope, every original hold reaches the
+source keeper. A newer short hold cannot replace an older continuing hold.
+Hold changes take the same identity-then-request lock order as fulfilment.
 
 Session and personal-key issuance lock the parent before consulting its erased
 contact marker. An authenticated request already in flight cannot issue a new

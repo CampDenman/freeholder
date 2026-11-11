@@ -969,6 +969,9 @@ controls. Holds apply through the unified contact across requests; retained
 callbacks receive the original hold request ID and receipts retain its origin.
 Both credential issuers share the locked parent/tombstone guard, and API-key
 verification independently refuses an erased parent from an older writer.
+Two active holds for the same scope must both reach retained-source keepers;
+the receipt lists every origin and the effective continuing retention. Check
+that hold changes cannot race another request's erasure snapshot.
 
 Review the members retain callback's ordered profile/conversation locks,
 suspension, preserved-left seats and real-context call generation retirement.
