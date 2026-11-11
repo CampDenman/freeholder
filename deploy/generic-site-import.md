@@ -49,6 +49,10 @@ metadata and rollback in English, Spanish, French and Arabic.
   The inherited 32-shard capacity gate then passed all five full-partition/
   degraded-budget controls; workflow integrity also passed. The unchanged
   timeout, slow-runner multiplier and complete-file coverage remain enforced.
+- Protected CI then exposed two older root-URL fixtures expecting distinct
+  page paths. The fixtures now request their intended `/team` and
+  `/exact-commit` sources; all six controls in both affected suites pass,
+  retaining empty-home handling and independent CMS permission checks.
 
 Synthetic HTTP/storage fixtures prove application behavior; they do not prove
 acceptance in an actual external provider account. Protected CI and the final
