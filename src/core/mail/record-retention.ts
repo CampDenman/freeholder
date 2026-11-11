@@ -49,9 +49,9 @@ function eligible(kind: MailRecordKind, privacy = false): SQL {
 }
 function tableFor(kind: MailRecordKind) { return kind === "delivery" ? mailDeliveries : kind === "event" ? mailProviderEvents : mailSuppressions; }
 
-async function candidates(tx: Tx, kind: MailRecordKind, held: string[], cutoff?: Date, ids?: string[], privacy = false): Promise<Row[]> {
+async function candidates(tx: Tx, kind: MailRecordKind, held: string[], cutoff?: Date, ids?: string[], privacy = false, afterId?: string): Promise<Row[]> {
   const table = tableFor(kind), clock = kind === "event" ? mailProviderEvents.createdAt : kind === "delivery" ? mailDeliveries.updatedAt : mailSuppressions.updatedAt;
-  const where = and(isNull(table.redactedAt), eligible(kind, privacy), unheld(kind, table.id, held), cutoff ? sql`${clock}<${cutoff.toISOString()}::timestamptz` : undefined, ids ? inArray(table.id, ids) : undefined);
+  const where = and(isNull(table.redactedAt), eligible(kind, privacy), unheld(kind, table.id, held), cutoff ? sql`${clock}<${cutoff.toISOString()}::timestamptz` : undefined, ids ? inArray(table.id, ids) : undefined, afterId ? sql`${table.id}>${afterId}::uuid` : undefined);
   const projection = kind === "delivery"
     ? sql`${mailDeliveries.id} as id,${mailDeliveries.recipient} as address,${mailDeliveries.recipientDigest} as "addressDigest",${mailDeliveries.provider} as provider,${mailDeliveries.idempotencyKey} as "sendKey",${mailDeliveries.idempotencyDigest} as "sendDigest",null::text as "eventKey",null::text as "eventDigest",${mailDeliveries.providerRef} as ref,${mailDeliveries.providerRefDigest} as "refDigest"`
     : kind === "event"
@@ -150,14 +150,19 @@ for (const [kind, record] of [["mail_deliveries", "delivery"], ["mail_provider_e
   kind, tables: [kind], privacyScope: MAIL_RECORDS_SCOPE,
   purge: async args => {
     let total = 0;
+    let afterId: string | undefined;
     for (;;) {
-      const count = await db().transaction(async tx => {
+      const batch = await db().transaction(async tx => {
         await lockContactIdentityForRead(tx);
         const held = [...new Set([...(await lockMailHolds(tx)), ...args.exceptContactIds])], receipts = await lockMailReceiptWrites(tx);
-        return redactRows(tx, record, await candidates(tx, record, held, args.cutoff), receipts);
+        const rows = await candidates(tx, record, held, args.cutoff, undefined, false, afterId);
+        return { redacted: await redactRows(tx, record, rows, receipts), scanned: rows.length, lastId: rows.at(-1)?.id };
       });
-      total += count;
-      if (count < RETENTION_PURGE_BATCH) return total;
+      total += batch.redacted;
+      // Pending derived attempts stay unchanged, but cannot monopolize the
+      // first page. A later invocation can reconsider their original evidence.
+      if (batch.scanned < RETENTION_PURGE_BATCH) return total;
+      afterId = batch.lastId;
     }
   },
 });

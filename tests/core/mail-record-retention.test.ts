@@ -84,6 +84,22 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     expect((await db().select().from(mailDeliveries)).map(row => row.recipient)).toEqual([EMAIL, EMAIL]);
     expect((await db().select().from(mailSuppressions))[0]).toMatchObject({ email: EMAIL, active: true });
   });
+  it("scans past a full page of unsettled derived notices to minimize later safe records", async () => {
+    const ids = Array.from({ length: 501 }, (_, index) => `10000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
+    await db().insert(mailDeliveries).values(ids.map(id => ({ id, purpose: "transactional" as const, provider: "console" as const, recipient: EMAIL, subject: "Original retained evidence", status: "failed" as const, attempts: 0, requestedBy: "system", createdAt: PAST, updatedAt: PAST })));
+    const events = await db().insert(outboxEvents).values(ids.slice(0, 500).map(id => ({ eventName: "mail.deliveryUpdated", payload: { deliveryId: id, recipient: EMAIL } }))).returning({ id: outboxEvents.id });
+    const notices = await db().insert(notifications).values(events.map(event => ({ recipientUserId: OWNER.userId, topic: "mail.delivery", title: "Original mail notice", body: `Still-running copy ${EMAIL}`, sourceEventName: "mail.deliveryUpdated", sourceEventId: event.id, idempotencyKey: `retention-page:${event.id}` }))).returning({ id: notifications.id });
+    await db().insert(notificationDeliveries).values(notices.map(notice => ({ notificationId: notice.id, channel: "sms" as const, status: "processing" as const, attempts: 1 })));
+    await db().insert(retentionPolicies).values({ kind: "mail_deliveries", ttlDays: 1 });
+    await applyRetentionPolicies();
+    const rows = await db().select().from(mailDeliveries);
+    expect(rows.find(row => row.id === ids[500])?.redactedAt).not.toBeNull();
+    expect(rows.filter(row => row.redactedAt === null)).toHaveLength(500);
+    expect((await db().select().from(notificationDeliveries)).every(row => row.status === "processing" && row.attempts === 1)).toBe(true);
+    // A new pass may reconsider pending evidence, but cannot get stuck on it.
+    await applyRetentionPolicies();
+    expect((await db().select().from(mailDeliveries)).filter(row => row.redactedAt === null)).toHaveLength(500);
+  }, 120_000);
   it("preserves the only original event reference for multiple or unresolved physical attempts", async () => {
     for (const [index, attempts] of [2, 1].entries()) {
       const [delivery] = await db().insert(mailDeliveries).values({ purpose: "bulk", provider: "resend", recipient: EMAIL, subject: "Unresolved original evidence", status: "delivered", deliveredAt: PAST, requestedBy: "system", attempts, providerRef: `latest-reference-${index}`, providerStatusAt: PAST, createdAt: PAST, updatedAt: PAST }).returning();

@@ -88,14 +88,18 @@ callback plaintext restoration, uncertain derived mail copies, hidden retained
 block exports, stale snapshot writes and nullable reviewer metadata refusal.
 The final actual-main composition, based on migration 70 main `1ffec6fa`, passed
 96 actual controls across eight mail routing/privacy/populated-upgrade/adjacent
-suites, with no database skips. Those 96 include both system-actor refusal
+suites, with no database skips. Those 97 include both system-actor refusal
 controls; they are not an additional count. SDK generation passed all eight
 catalog checks without drift. TypeScript, lint, licensing, plan checks and the
 373-contract inventory passed, with its one documented exclusion. The production
-artifact scrub passed 20,330 files /242,415,563 bytes. All four fresh-database
+artifact scrub passed 20,330 files /242,416,243 bytes. All four fresh-database
 English/Spanish/French/Arabic owner review browser journeys passed at 320px in
 both themes with keyboard, Axe, actual element bounds and real service/audit
-assertions. Protected PR/merge integration remains required.
+assertions. A real 501-record before failure proved that 500 unsettled notice copies could
+starve a later eligible record. The repaired purge advances by the last scanned
+ID, preserves those 500 unresolved attempts and finishes repeated bounded
+passes; that control is included in the 97. Protected PR/merge integration
+remains required.
 
 C3.31/C11.08 also require the separate enabled transactional/SMTP physical-send
 recovery increment: freeze original route/request identities, journal each

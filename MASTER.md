@@ -5810,12 +5810,12 @@ deployments are portable, testable and incapable of silently forking the truth.
   anonymization and merge/undo. Unresolved sends and uncertain ownership keep
   erasure pending. Fresh human attribution lives at `/admin/retention/mail`.
   `deploy/mail-record-retention.md` names the model, breaking writer fence and
-  exact-backup recovery. Final actual-main composition passed 96 actual mail
+  exact-backup recovery. Final actual-main composition passed 97 actual mail
   routing/privacy/populated-upgrade/adjacent controls, including both
   background-system refusals, with no database skips. Address generations and original pending receipts remain
   separate; current-fact ownership prevents cross-holder erasure or export.
   SDK 8, audit labels 7, full fast 373 plus one documented exclusion and production
-  scrub 20,330 files / 242,415,563 bytes passed. All four fresh-database locale
+  scrub 20,330 files / 242,416,243 bytes passed. All four fresh-database locale
   owner-browser journeys passed at 320px in both themes with keyboard, Axe,
   bounds and service/audit assertions. Protected integration remains required. The required
   enabled transactional/SMTP per-dispatch provenance and unknown-outcome
