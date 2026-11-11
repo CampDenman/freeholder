@@ -5393,6 +5393,15 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   and both-theme Axe. Build/artifact and fast gates passed. Evidence:
   `deploy/import-navigation.md`. C3.22 stays open for archive/generic
   integration, large-source resumption and actual source-specific acceptance.)*
+  *(Private-source storage follow-up: server-bound chunk digests, pending-object
+  reservation before writes and durable cleanup prevent forgotten temporary
+  copies after provider failure. Typed retained-source ownership protects active
+  archive bytes from cleanup until explicit release or expiry; reads verify
+  current ownership and digest, and acceptance rechecks expiry. Evidence:
+  `deploy/import-source-storage.md` and
+  `tests/core/import-source-object-cleanup.test.ts`. This foundation does not
+  complete archive admission, large-source resumption, historical provider
+  inventory or source-specific acceptance; C3.22 remains open.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,

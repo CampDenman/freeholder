@@ -9,6 +9,7 @@
 import { z } from "zod";
 import { and, count, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
+import { pendingObjectIsOwned } from "./object-ledger";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { db, type Database } from "@/core/db";
 import {
@@ -3385,9 +3386,12 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
       and(eq(mediaObjects.state, "pending"), lt(mediaObjects.createdAt, cutoff)),
     )
     .limit(500);
+  let orphanedObjects = 0;
   for (const object of orphans) {
+    if (await pendingObjectIsOwned(object.key, now)) continue;
     await store.delete(object.key);
     await db().delete(mediaObjects).where(eq(mediaObjects.key, object.key));
+    orphanedObjects += 1;
   }
   const terminalCutoff = new Date(now.getTime() - TRASH_RETENTION_MS);
   const pruned = await db()
@@ -3401,7 +3405,7 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
     .returning({ id: mediaUploads.id });
   return {
     expiredUploads: expired.length,
-    orphanedObjects: orphans.length,
+    orphanedObjects,
     prunedSessions: pruned.length,
   };
 }
