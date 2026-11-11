@@ -232,6 +232,16 @@ Checkout-session fallback.
 This source repair does not supply dashboard-refund recovery, enabled-provider
 acceptance, independent review or direct seller-collection activation.
 
+Final qualification on protected archive main passed all 61 adapter, provider
+ledger, live SDK and activity-label checks in one run, plus 373 contract checks
+with one deliberate exclusion and the full static gates. The final production
+artifact contains 19,445 files / 238,811,983 bytes and passes the standalone
+source/environment scrub. The actual wrong-parent and ignored-cancellation
+controls failed before repair; the peer-found signed expanded-Checkout mismatch
+also failed before its two accessor corrections. Bounded peer re-review found
+no remaining source blocker. No UI or permission surface is added; the same
+private verified-feedback and authorized refund services carry these outcomes.
+
 `catalog.prepareReturnRefund` freezes every original-payment allocation and
 reserves its shared refund-ledger attempt before any money moves. Review the
 amounts in `/admin/returns`. The allocation records original payment, currency,
