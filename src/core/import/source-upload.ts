@@ -24,7 +24,7 @@ import {
 import { importRuns } from "@/core/plugins/schema";
 import { storage } from "@/adapters/storage";
 import { deleteUnownedPendingObjects, reservePendingMediaObject } from "@/core/media/object-ledger";
-import { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES, makeRetainedImportSource, readRetainedSourceChunk, retainedImportSourceSchema, type RetainedImportSource } from "./retained-source";
+import { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES, makeRetainedImportSource, readRetainedSourceChunk, retainedImportSourceSchema, importSourceWrites, type RetainedImportSource } from "./retained-source";
 export { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES } from "./retained-source";
 import { DEFAULT_IMPORTER_LIMITS } from "./contract";
 import { stageImportSource, stageWordpressExport } from "./service";
@@ -205,9 +205,9 @@ const claimChunk = defineService({
     index: z.number().int().nonnegative(),
     size: z.number().int().nonnegative(),
     digest: z.string().regex(/^[a-f0-9]{64}$/),
-    prefix: z.string().max(8_192).optional(),
+    prefixSecret: z.string().max(8_192).optional(),
   }),
-  output: z.object({ key: z.string(), received: z.number().int(), chunks: z.number().int(), alreadyReceived: z.boolean() }),
+  output: z.object({ key: z.string(), received: z.number().int(), chunks: z.number().int(), alreadyReceived: z.boolean(), attemptId: z.uuid().nullable() }),
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
@@ -231,9 +231,9 @@ const claimChunk = defineService({
     if (prior && prior !== input.digest) throw new ServiceError("conflict", "This source chunk was already bound to different bytes. Start a new upload for a changed source.");
     if (upload.received.includes(input.index)) {
       if (!prior) throw new ServiceError("conflict", "This older upload has no verified chunk identity. Upload the source again.");
-      return { key: partKey(upload, input.index), received: upload.received.length, chunks: upload.chunks, alreadyReceived: true };
+      return { key: partKey(upload, input.index), received: upload.received.length, chunks: upload.chunks, alreadyReceived: true, attemptId: null };
     }
-    if (input.index === 0 && !sourceLooksRight(run.kind ?? "html", input.prefix ?? "")) {
+    if (input.index === 0 && !sourceLooksRight(run.kind ?? "html", input.prefixSecret ?? "")) {
       throw new ServiceError(
         "validation",
         run.kind === "wordpress-wxr"
@@ -242,12 +242,41 @@ const claimChunk = defineService({
       );
     }
     const key = partKey(upload, input.index);
-    if (!prior) {
-      upload.digests[String(input.index)] = input.digest;
-      await ctx.tx.update(importRuns).set({ checkpoint: { ...checkpointOf(run.checkpoint), sourceUpload: upload } }).where(eq(importRuns.id, run.id));
-    }
+    const writes = importSourceWrites(run.checkpoint);
+    if (writes.length >= 100) throw new ServiceError("conflict", "This import has unresolved source writes. Wait for storage recovery before sending more chunks.");
+    const attemptId = randomUUID();
+    upload.digests[String(input.index)] = input.digest;
+    writes.push({ attemptId, uploadId: input.uploadId, index: input.index, bytes: input.size, startedAt: new Date().toISOString() });
+    await ctx.tx.update(importRuns).set({ checkpoint: { ...checkpointOf(run.checkpoint), sourceUpload: upload, sourceWrites: writes } }).where(eq(importRuns.id, run.id));
     await reservePendingMediaObject(ctx, { key, role: "staged", contentType: "application/octet-stream", bytes: input.size });
-    return { key, received: upload.received.length, chunks: upload.chunks, alreadyReceived: false };
+    return { key, received: upload.received.length, chunks: upload.chunks, alreadyReceived: false, attemptId };
+  },
+});
+
+// Provider acknowledgement can arrive after the original reservation expired
+// and was swept. Commit a fresh cleanup witness after every attempted PUT,
+// including ambiguous errors, before a stale chunk is refused by recordChunk.
+const rememberChunkWrite = defineService({
+  name: "imports.rememberSourceWrite",
+  orchestratedBy: "imports.uploadSourceChunk",
+  summary: "Keep attempted source writes recoverable after provider I/O.",
+  kind: "mutation", permission: "scoped", external: false,
+  input: z.object({ id: z.uuid(), uploadId: z.uuid(), attemptId: z.uuid(), index: z.number().int().nonnegative().max(24), size: z.number().int().nonnegative().max(IMPORT_SOURCE_CHUNK_BYTES) }),
+  output: z.object({ ok: z.literal(true) }),
+  handler: async (input, ctx) => {
+    // The live parent already authorized and claimed these exact coordinates.
+    // Never accept arbitrary object keys or a caller-supplied actor here.
+    const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
+    if (!run) throw new ServiceError("conflict", "The source write lost its durable import witness.");
+    const writes = importSourceWrites(run.checkpoint);
+    const attempt = writes.find(write => write.attemptId === input.attemptId);
+    if (!attempt || attempt.uploadId !== input.uploadId || attempt.index !== input.index || attempt.bytes !== input.size) throw new ServiceError("conflict", "The source write no longer matches its original attempt.");
+    const key = `imports/${input.id}/${input.uploadId}/${String(input.index).padStart(5, "0")}.part`;
+    await reservePendingMediaObject(ctx, { key, role: "staged", contentType: "application/octet-stream", bytes: input.size });
+    await ctx.queueJob("core.deleteCaptureObjects", { keys: [key] });
+    await ctx.tx.update(importRuns).set({ checkpoint: { ...checkpointOf(run.checkpoint), sourceWrites: writes.filter(write => write.attemptId !== input.attemptId) } }).where(eq(importRuns.id, run.id));
+    ctx.setSubject("import_run", input.id);
+    return { ok: true as const };
   },
 });
 
@@ -278,6 +307,7 @@ const recordChunk = defineService({
     if (!upload || upload.uploadId !== input.uploadId) {
       throw new ServiceError("conflict", "That upload was replaced while this chunk was being stored.");
     }
+    if (Date.parse(upload.expiresAt) <= Date.now()) throw new ServiceError("conflict", "That upload expired while this chunk was being stored. Start the upload again.");
     const received = [...new Set([...upload.received, input.index])].sort((a, b) => a - b);
     await ctx.tx
       .update(importRuns)
@@ -318,11 +348,16 @@ export const uploadSourceChunk = defineOrchestratedService({
         ? new TextDecoder("utf-8", { fatal: false }).decode(bytes.subarray(0, 4_096))
         : undefined;
     const claimed = await claimChunk.call(
-      { id: input.id, uploadId: input.uploadId, index: input.index, size: bytes.byteLength, digest: createHash("sha256").update(bytes).digest("hex"), prefix },
+      { id: input.id, uploadId: input.uploadId, index: input.index, size: bytes.byteLength, digest: createHash("sha256").update(bytes).digest("hex"), prefixSecret: prefix },
       actor,
     );
     if (claimed.alreadyReceived) return { received: claimed.received, chunks: claimed.chunks, complete: claimed.received === claimed.chunks };
-    await storage().put(claimed.key, bytes, "application/octet-stream");
+    if (!claimed.attemptId) throw new ServiceError("internal", "The source write has no durable attempt.");
+    try {
+      await storage().put(claimed.key, bytes, "application/octet-stream");
+    } finally {
+      await rememberChunkWrite.call({ id: input.id, uploadId: input.uploadId, index: input.index, size: bytes.byteLength, attemptId: claimed.attemptId }, actor);
+    }
     const recorded = await recordChunk.call({ id: input.id, uploadId: input.uploadId, index: input.index }, actor);
     return { ...recorded, complete: recorded.received === recorded.chunks };
   },
@@ -486,6 +521,7 @@ export default [
   beginSourceUpload,
   claimChunk,
   recordChunk,
+  rememberChunkWrite,
   uploadSourceChunk,
   uploadSource,
   applyUploaded,

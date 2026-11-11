@@ -23,6 +23,13 @@ export const retainedImportSourceSchema = z.object({
 export type RetainedImportSource = z.infer<typeof retainedImportSourceSchema>;
 type Upload = { uploadId: string; filename: string; bytes: number; chunkBytes: number; digests?: Record<string, string>; expiresAt: string };
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+export const importSourceWriteSchema = z.object({
+  attemptId: z.uuid(), uploadId: z.uuid(), index: z.number().int().nonnegative().max(24),
+  bytes: z.number().int().positive().max(IMPORT_SOURCE_CHUNK_BYTES), startedAt: z.iso.datetime(),
+});
+export function importSourceWrites(checkpoint: unknown): z.infer<typeof importSourceWriteSchema>[] {
+  return importSourceWriteSchema.array().max(100).parse(object(checkpoint).sourceWrites ?? []);
+}
 const activeUploadSchema = z.object({ uploadId: z.uuid(), filename: z.string(), bytes: z.number().int().positive(), chunkBytes: z.number().int().positive(), digests: z.record(z.string(), digest), received: z.array(z.number().int().nonnegative()), expiresAt: z.iso.datetime() });
 function revision(bytes: number, chunkBytes: number, chunkDigests: string[]): string {
   return createHash("sha256").update("freeholder.import.source.v1\0").update(JSON.stringify({ bytes, chunkBytes, chunkDigests })).digest("hex");
@@ -69,7 +76,12 @@ registerPendingObjectOwner("imports/", async (key, now) => {
   const match = /^imports\/([a-f0-9-]{36})\/([a-f0-9-]{36})\/\d{5}\.part$/.exec(key);
   if (!match || !z.uuid().safeParse(match[1]).success || !z.uuid().safeParse(match[2]).success) return false;
   const [run] = await db().select({ status: importRuns.status, checkpoint: importRuns.checkpoint }).from(importRuns).where(eq(importRuns.id, match[1]!)).limit(1);
-  if (!run || ["published", "rolled_back"].includes(run.status)) return false;
+  if (!run) return false;
+  // An unresolved provider request can still write after expiry. Preserve its
+  // cleanup witness until that exact attempt reports an outcome; a clock or
+  // object-not-found response cannot prove provider cancellation.
+  if (importSourceWrites(run.checkpoint).some(write => write.uploadId === match[2] && key.endsWith(`/${String(write.index).padStart(5, "0")}.part`))) return true;
+  if (["published", "rolled_back"].includes(run.status)) return false;
   const checkpoint = object(run.checkpoint);
   for (const value of [checkpoint.sourceUpload, checkpoint.retainedSource]) {
     const owner = object(value);

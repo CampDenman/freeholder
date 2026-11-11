@@ -41,3 +41,22 @@ source-specific acceptance. Historical pre-fix uploads whose metadata and keys
 were already forgotten require a private provider inventory; this change cannot
 reconstruct those keys. Cross-target object-byte recovery and independent
 security review remain open.
+
+Peer review reproduced a delayed PUT completing after expiry had already removed
+its pending row; a later sweep then missed the raw bytes. A private, original-
+actor parent-bound post-I/O phase now restores the pending ledger and queues
+cleanup after every attempted PUT, including lost acknowledgements. It commits
+before an expired/replaced upload is refused, so error rollback cannot erase the
+cleanup witness. Actual late success and late error controls cover this repair.
+
+Every in-flight PUT also has a distinct durable attempt in
+`checkpoint.sourceWrites`, including identical parallel writes. Cleanup preserves
+its ledger witness while any attempt is unresolved, even after upload expiry or
+terminal run status. A matching post-I/O phase clears only its own attempt. A
+crash or unknown provider outcome must remain visible and pending: timeouts and
+an absent object cannot prove cancellation. The owner must establish the actual
+provider outcome before clearing an unresolved attempt during recovery; neither
+cleanup nor privacy acknowledgement can infer that proof from elapsed time.
+The source ledger bounds outstanding attempts to 100 per import and refuses new
+writes until recovery makes room. This is a fail-closed recovery state, not a
+claim that a hung provider request has been cancelled.

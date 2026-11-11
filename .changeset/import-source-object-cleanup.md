@@ -16,3 +16,7 @@ corrupted stored chunk is refused. A verified retained-source descriptor keeps
 an active archive's original chunks safe from scheduled deletion and the orphan
 sweep until release or expiry. Source reads verify ownership, size and digest
 outside the service transaction; preview acceptance checks expiry again.
+
+A provider write completing after the original reservation was swept now commits
+a fresh cleanup witness on both success and ambiguous error before expired
+uploads are refused. The follow-up closes a peer-reproduced late-write gap.

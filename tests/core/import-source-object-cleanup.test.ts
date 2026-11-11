@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { auditLog } from "@/core/events/schema";
 import { db } from "@/core/db";
 import { importRuns } from "@/core/plugins/schema";
 import { mediaObjects } from "@/core/media/schema";
@@ -129,4 +130,75 @@ describe.runIf(hasDatabase)("raw import-source byte cleanup", () => {
     const [saved] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
     expect(saved?.status).not.toBe("previewed");
   });
+  it.each([false, true])("recovers a late provider PUT after expiry removed its ledger row (lost acknowledgement: %s)", async lostAcknowledgement => {
+    const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "source.xml", bytes: source.byteLength }, OWNER);
+    const key = `imports/${run.id}/${upload.uploadId}/00000.part`, store = storage(), original = store.put.bind(store);
+    let entered!: () => void, resume!: () => void;
+    const reached = new Promise<void>(resolve => { entered = resolve; });
+    const release = new Promise<void>(resolve => { resume = resolve; });
+    const put = vi.spyOn(store, "put").mockImplementationOnce(async (...args) => { entered(); await release; const result = await original(...args); if (lostAcknowledgement) throw new Error("Synthetic late lost acknowledgement"); return result; });
+    const pending = uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes: source }, OWNER);
+    try {
+      await reached;
+      const [saved] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
+      const checkpoint = saved!.checkpoint as Record<string, unknown>;
+      checkpoint.sourceUpload = { ...checkpoint.sourceUpload as Record<string, unknown>, expiresAt: new Date(Date.now() - 1_000).toISOString() };
+      await db().update(importRuns).set({ checkpoint }).where(eq(importRuns.id, run.id));
+      await db().update(mediaObjects).set({ createdAt: new Date(Date.now() - 26 * 60 * 60 * 1000) }).where(eq(mediaObjects.key, key));
+      await cleanupOrphanedMedia();
+      expect(await db().select().from(mediaObjects).where(eq(mediaObjects.key, key))).toHaveLength(1);
+    } finally { resume(); }
+    const [result] = await Promise.allSettled([pending]); put.mockRestore();
+    expect(result?.status).toBe("rejected");
+    expect(await db().select().from(mediaObjects).where(eq(mediaObjects.key, key))).toHaveLength(1);
+    await cleanupOrphanedMedia(new Date(Date.now() + 25 * 60 * 60 * 1000));
+    expect(await store.get(key)).toBeUndefined();
+  });
+  it("keeps each identical concurrent write unresolved until its own provider outcome", async () => {
+    const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "source.xml", bytes: source.byteLength }, OWNER);
+    const key = `imports/${run.id}/${upload.uploadId}/00000.part`, store = storage(), put = store.put.bind(store);
+    const resume: Array<() => void> = [];
+    let reached!: () => void;
+    const bothEntered = new Promise<void>(resolve => { reached = resolve; });
+    vi.spyOn(store, "put").mockImplementation(async (...args) => {
+      await new Promise<void>(resolve => { resume.push(resolve); if (resume.length === 2) reached(); });
+      return put(...args);
+    });
+    const input = { id: run.id, uploadId: upload.uploadId, index: 0, bytes: source };
+    const first = uploadSourceChunk.call(input, OWNER).then(() => "accepted", () => "refused");
+    const second = uploadSourceChunk.call(input, OWNER).then(() => "accepted", () => "refused");
+    try {
+      await bothEntered;
+      const [saved] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
+      const checkpoint = saved!.checkpoint as Record<string, unknown>;
+      expect(checkpoint.sourceWrites).toHaveLength(2);
+      checkpoint.sourceUpload = { ...checkpoint.sourceUpload as Record<string, unknown>, expiresAt: new Date(Date.now() - 1_000).toISOString() };
+      await db().update(importRuns).set({ checkpoint }).where(eq(importRuns.id, run.id));
+      await db().update(mediaObjects).set({ createdAt: new Date(Date.now() - 26 * 60 * 60 * 1000) }).where(eq(mediaObjects.key, key));
+      resume[0]!();
+      expect(await Promise.race([first, second])).toBe("refused");
+      const [between] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
+      expect((between!.checkpoint as Record<string, unknown>).sourceWrites).toHaveLength(1);
+      await cleanupOrphanedMedia();
+      expect(await db().select().from(mediaObjects).where(eq(mediaObjects.key, key))).toHaveLength(1);
+      resume[1]!();
+      expect(await Promise.all([first, second])).toEqual(["refused", "refused"]);
+      const [finished] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
+      expect((finished!.checkpoint as Record<string, unknown>).sourceWrites).toHaveLength(0);
+      await cleanupOrphanedMedia(new Date(Date.now() + 25 * 60 * 60 * 1000));
+      expect(await store.get(key)).toBeUndefined();
+    } finally { for (const release of resume) release(); await Promise.all([first, second]); }
+  });
+
+  it("does not retain the private source prefix in its original-actor chunk audit", async () => {
+    const { run } = await uploaded();
+    const audit = await db().select().from(auditLog).where(eq(auditLog.subjectId, run.id));
+    const claim = audit.find(row => row.action === "imports.claimSourceChunk");
+    expect(claim?.actor).toBe(`user:${OWNER.userId}`);
+    expect(claim?.diff).toMatchObject({ id: run.id, prefixSecret: "[redacted]" });
+    expect(JSON.stringify(audit)).not.toContain(EMAIL);
+  });
+
 });
