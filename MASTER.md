@@ -12665,6 +12665,16 @@ whatever is best for the people using the site.
   whose device holds a wrong key receives the same frames and decodes none.
   CI runs the checksum-pinned LiveKit release. Changeset
   `member-group-calls.md`.)*
+  Audit follow-up 2026-11-11: the CSP saw original locale-prefixed paths
+  before rewriting, so localized group calls lacked the SFU signalling
+  origins. The route-specific policy now recognizes the proxy's locale
+  shape while excluding ordinary calls, messages and owner routes.
+  `tests/core/csp.test.ts` reproduces both the policy and actual rewrite
+  failures, then verifies identical forwarded/enforced headers and refusal
+  elsewhere. Thirty-one actual locale/CSP controls and an encrypted-video
+  Chromium journey through the pinned local LiveKit server passed, including
+  a French participant, wrong-key refusal and removal/rekey. This header
+  repair does not supply independent security review.
 - [x] **C12.25** Let members offer bookable services on their own calendar:
   availability set by the seller, the site's booking flow and policies, and
   the booking paid to the seller through C12.09.
