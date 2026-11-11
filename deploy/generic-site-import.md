@@ -46,7 +46,9 @@ metadata and rollback in English, Spanish, French and Arabic.
   mobile screenshots were also visually inspected.
 - Complete local fast gates passed: type/lint, license, release notes,
   specification, playground policy and 368 contracts with one deliberate skip.
-  The inherited 32-shard capacity gate is rechecked after dependency integration.
+  The inherited 32-shard capacity gate then passed all five full-partition/
+  degraded-budget controls; workflow integrity also passed. The unchanged
+  timeout, slow-runner multiplier and complete-file coverage remain enforced.
 
 Synthetic HTTP/storage fixtures prove application behavior; they do not prove
 acceptance in an actual external provider account. Protected CI and the final
