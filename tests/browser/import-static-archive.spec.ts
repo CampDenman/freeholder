@@ -26,7 +26,7 @@ test.describe("static archive owner journey (C3.22)", () => {
       await context.addCookies([{ name: CSRF_COOKIE, value: issueCsrfToken(), url: C11_BASE_URL }]);
       const page = await context.newPage(), t = translator(locale);
       await page.goto("/admin/imports");
-      await page.locator("#origin").fill("https://archive.example/legacy/");
+      await page.locator("#origin").fill("https://staticarchivequalificationwithoutwordbreaks.example/legacy/");
       await page.locator("#kind").selectOption("archive");
       await page.locator("#origin").focus(); await page.keyboard.press("Enter");
       await expect(page).toHaveURL(/\/admin\/imports\/[a-f0-9-]+$/);
@@ -45,6 +45,10 @@ test.describe("static archive owner journey (C3.22)", () => {
         expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         expect(await page.locator("#source-file").evaluate(element => { const box = element.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth; })).toBe(true);
+        expect(await page.getByRole("heading", { level: 1 }).evaluate(element => {
+          const range = document.createRange(); range.selectNodeContents(element);
+          return Array.from(range.getClientRects()).every(box => box.left >= 0 && box.right <= innerWidth);
+        })).toBe(true);
         await page.screenshot({ path: test.info().outputPath(`${locale}-${theme}-archive-owner.png`), fullPage: true });
       }
       // The empty CMS slug names the home page; HTML required validation must

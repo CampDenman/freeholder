@@ -5421,17 +5421,27 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `tests/core/import-source-object-cleanup.test.ts`. This foundation does not
   complete archive admission, large-source resumption, historical provider
   inventory or source-specific acceptance; C3.22 remains open.)*
-  *(Static archive work in progress 2026-11-11: a bounded ZIP reader validates
+  *(Static archive integration 2026-11-11: a bounded ZIP reader validates
   paths, CRC/SHA identities, decompression, entry/body/media budgets and UTF-8
   without filesystem extraction. Static pages retain their own metadata and
   encoded URL identities rather than inventing WordPress authors/feed/query
   semantics. Shared typed conversion now has file/audio asset references as
   well as images/video, and owner ZIP selection uses existing import services.
-  Twenty-four focused real-ZIP/content/manifest controls pass; three real
-  upload-to-CMS controls reproduce the missing binary admission before the
-  transport integration. Original private ZIP ownership, media retries,
-  cleanup and full browser/CI qualification are still being completed. This
-  progress does not close C3.22 or its larger-source resumability gate.)*
+  Twenty-eight focused real-ZIP/content/manifest controls, five actual
+  upload-to-CMS recovery controls, 109 adjacent checks and regenerated SDK
+  controls passed before final privacy integration (counts overlap).
+  Original ZIP ownership, matching-source expiry recovery and atomic
+  asset/import receipts now use the owner forms and shared services; WordPress
+  uses the same receipt recovery. Actual non-English browser failures exposed
+  the unprefixed redirect's hard-coded English assumption; three PostgreSQL
+  regressions and an edge assertion failed before repair, then all 16 focused
+  controls passed. The final privacy-integrated run passes 68 controls across
+  seven files, eight owner/public Chromium journeys pass in all four locales,
+  and the complete fast gates pass (368 contracts plus one deliberate skip).
+  A valid long hostname reproduced mobile heading overflow; its narrow wrap
+  repair is under final browser verification. Protected CI remains pending. Limits and
+  evidence: `deploy/static-archive-import.md`. This does not close C3.22,
+  large-source resumption or source-specific cutover.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,

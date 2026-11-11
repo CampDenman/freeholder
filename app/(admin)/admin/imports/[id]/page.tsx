@@ -64,7 +64,7 @@ export default async function ImportRunPage({
         <Link href="/admin/imports" className="text-sm text-ink-muted">
           {t("imports.back")}
         </Link>
-        <h1 className="mt-2 text-xl font-bold tracking-tight">{run.source}</h1>
+        <h1 className="mt-2 break-all text-xl font-bold tracking-tight">{run.source}</h1>
         <Pill tone="neutral">{t(`imports.status.${run.status}`)}</Pill>
       </div>
       <Card>

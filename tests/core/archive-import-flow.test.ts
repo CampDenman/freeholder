@@ -12,6 +12,11 @@ import { redirects } from "@/core/seo/schema";
 import { updateBusiness } from "@/core/settings/service";
 import { ensureDefaults } from "@/modules/cms/service";
 import { uploadAsset } from "@/core/media/service";
+import { resolveContact } from "@/core/contacts/service";
+import { createDataRequest, verifyDataRequest, fulfillDataRequest } from "@/core/privacy/service";
+import { dataRequests } from "@/core/privacy/schema";
+import { getJob } from "@/core/jobs";
+import { eraseImportSourceObjects } from "@/core/import/source-erasure";
 import { deleteCaptureObjects } from "@/core/media/capture";
 import { retainedImportSourceSchema } from "@/core/import/retained-source";
 import { z } from "zod";
@@ -34,6 +39,30 @@ const stage = (origin = "https://archive.example/") => stageBytes(ZIP, { pages: 
 describe.runIf(hasDatabase)("static archive import studio (C3.22)", { timeout: 60_000 }, () => {
   beforeEach(async () => { vi.restoreAllMocks(); await truncateSpine(); resetStorageForTests(); await ensureDefaults.call({}, OWNER); });
   afterAll(closeDb);
+
+  it("keeps erasure pending for reader metadata in an ignored original ZIP entry", async () => {
+    const bytes = new Uint8Array(readFileSync("tests/fixtures/static-archive/ignored-reader.zip"));
+    const email = "ignored-zip-reader@example.test";
+    expect(new TextDecoder().decode(bytes)).toContain(email);
+    const reader = await resolveContact.call({ email }, OWNER);
+    const source = await stageBytes(bytes, { pages: 1, media: 0 });
+    const [run] = await db().select().from(importRuns).where(eq(importRuns.id, source.id));
+    expect(JSON.stringify(run!.preview)).not.toContain(email);
+    const request = await createDataRequest.call({ contactId: reader.contact.id, request: { kind: "erasure" } }, OWNER);
+    await verifyDataRequest.call({ id: request.id, method: "Synthetic ZIP-source verification" }, OWNER);
+    const result = await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER);
+    expect(result.request.status).toBe("in_progress");
+    const receipt = result.artifact.body as { outcomes: Array<{ scope: string; pendingJobs?: string[] }> };
+    const jobId = receipt.outcomes.find(item => item.scope === "imports.readerSources")!.pendingJobs![0]!;
+    const job = await getJob("core.eraseImportSourceObjects", jobId);
+    expect(job).toBeDefined();
+    await expect(eraseImportSourceObjects(job!.data)).rejects.toThrow(/ownership|unresolved/);
+    expect(await storage().get(source.key)).toEqual(bytes);
+    await rollbackImport.call({ id: source.id }, OWNER);
+    await eraseImportSourceObjects(job!.data);
+    expect(await storage().get(source.key)).toBeUndefined();
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, request.id)))[0]?.status).toBe("completed");
+  });
 
   it("imports original private ZIP bytes as typed media/content and locale-correct redirects, then recovers", async () => {
     await updateBusiness.call({ name: "Fictional archive", country: "CA", baseCurrency: "CAD", timezone: "America/Vancouver", defaultLocale: "fr", enabledLocales: ["en", "es", "fr", "ar"] }, OWNER);
