@@ -53,6 +53,12 @@ metadata and rollback in English, Spanish, French and Arabic.
   page paths. The fixtures now request their intended `/team` and
   `/exact-commit` sources; all six controls in both affected suites pass,
   retaining empty-home handling and independent CMS permission checks.
+- After protected main merged raw privacy as `952bc31f`, the generic stack
+  rebased onto archive/main integration. Import, media and owner import UI
+  runtime source remains byte-identical to qualified head `c774aaf7`;
+  additive locale keys retain both parent and importer wording. Twelve actual
+  content/scope/install-rollback controls, eight SDK controls and the complete
+  373-contract fast gates (one deliberate skip) pass on this composition.
 
 Synthetic HTTP/storage fixtures prove application behavior; they do not prove
 acceptance in an actual external provider account. Protected CI and the final
