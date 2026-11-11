@@ -256,6 +256,23 @@ The original C11.02 journey supplies only offline integration evidence.
 Mixed offline/provider returns, complete customer journeys and actual enabled
 provider acceptance remain open in MASTER.md C5.19; no ledger history is rewritten.
 
+The private refund claim is bound to its exact public operation and runs with
+the original person's actor. Its committed audit names that person; nested
+provider applications and authenticated feedback remain system phases.
+
+Source qualification on 2026-11-11 passed 49 financial/private/audit cases,
+including the original provider suite. After the original-actor refinement,
+a separate final 37-case run passed return recovery, private inventory, human
+audit and shared orchestration boundaries. These are overlapping runs, not
+86 distinct cases. All eight live SDK checks passed again. The final production
+build and scrub checked 19,277 files and 227,809,507 bytes with no source or
+environment leakage. Eight actual Chromium journeys passed at 320px across
+English, Spanish, French and Arabic RTL with keyboard submission and both-theme
+Axe scans: four offline attestations and four pending-to-confirmed provider
+returns. Provider feedback is seeded in those browser journeys; they do not
+make real provider requests or supply live financial acceptance. English/light
+and Arabic/dark provider screenshots were also inspected.
+
 The three pre-repair reproductions failed on the old source as expected.
 The repaired `tests/core/catalog-fulfillment.test.ts` and existing manual
 `tests/core/c11-02-catalog-journey.test.ts` passed all 11 cases, including

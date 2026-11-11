@@ -17,7 +17,6 @@ import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
   "invoicing.reserveRefundBatch",
-  "catalog.claimReturnProviderRefund",
   "catalog.reconcileReturnProviderRefunds",
   "invoicing.merchantSettlement",
   "members.resolveSubscriptionPlanMarketPolicy",

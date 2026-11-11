@@ -5,6 +5,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
+import {auditLog} from "@/core/events/schema";
 import * as paymentAdapters from "@/adapters/payments";
 import { createContact } from "@/core/contacts/service";
 import { createLocationService } from "@/core/locations/service";
@@ -132,6 +133,8 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
     });
     const input={id:received.return.id,idempotencyKey:`provider-return-${received.return.id}`};
     expect((await submitReturnProviderRefund.call(input,OWNER)).return.status).toBe("received");
+    const claimAudit=await db().select().from(auditLog).where(eq(auditLog.action,"catalog.claimReturnProviderRefund"));
+    expect(claimAudit[0]!.actor).toBe(`user:${OWNER.userId}`);
     expect(refund).toHaveBeenCalledTimes(2);
     let invoice=await getInvoice.call({id:paid.order.invoiceId!},OWNER);
     expect(invoice.refunds.map(row=>row.amountMinor).sort((a,b)=>a-b)).toEqual([1000,3000]);
@@ -311,6 +314,7 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
       await expect(submitReturnProviderRefund.call(input,actor)).rejects.toMatchObject({code:"permission"});
     }
     await expect(refundReturn.call(input,{...OWNER,security:{twoFactorRequired:true,twoFactorEnrolled:true,twoFactorVerified:true,stepUpValid:false}})).rejects.toMatchObject({code:"step_up_required"});
+    await expect(submitReturnProviderRefund.call(input,{...OWNER,security:{twoFactorRequired:true,twoFactorEnrolled:true,twoFactorVerified:true,stepUpValid:false}})).rejects.toMatchObject({code:"step_up_required"});
     await expect(refundReturn.call({...input,offlineRefundConfirmed:undefined},OWNER)).rejects.toMatchObject({code:"validation"});
   });
 

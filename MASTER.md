@@ -6761,9 +6761,11 @@ owner operations, never substitute for them.
   preserve original invoice discounts/tax and cumulative rounding across
   separate returns, including pending draft credits. New checkout order lines
   retain their exact invoice-line identity. Both owner money actions require
-  fresh human verification and refuse keys/plugins. Mixed offline/provider
+  fresh human verification and refuse keys/plugins; the bound private claim
+  commits its audit under the original authorizing person. Mixed offline/provider
   returns, complete customer journeys and actual enabled-provider acceptance
-  remain required; C5.19 stays open. See `deploy/commerce-payments.md`.
+  remain required; C5.19 stays open. See `deploy/commerce-payments.md` and
+  changeset `return-provider-reconciliation.md`.
 - [x] **C5.20** Build persistent/contact-attached carts, saved carts/wishlists,
   cross-device restore, price/stock refresh and abandonment events.
   *(Evidence: `carts`, `cart_items`, `wishlists`, `wishlist_items` in

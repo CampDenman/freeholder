@@ -989,8 +989,10 @@ function assignedReturnRefunds(invoice:Awaited<ReturnType<typeof getInvoice.call
 export const claimReturnProviderRefund = defineService({
   name: "catalog.claimReturnProviderRefund",
   summary: "Reserve all original provider payments for one received return.",
-  kind: "mutation", permission: "system", external: false,
-  input: providerReturnInput.extend({ initiatedBy: z.string().min(1).max(500) }),
+  kind: "mutation", permission: "scoped", external: false,
+  orchestratedBy: "catalog.submitReturnProviderRefund",
+  stepUp:true,agentCallable:false,writeClass:"money",
+  input: providerReturnInput,
   output: z.object({ invoiceId:id, attempts:z.array(providerReturnAttempt) }),
   handler: async (input,ctx) => {
     const [source] = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.id,input.id));
@@ -1032,7 +1034,7 @@ export const claimReturnProviderRefund = defineService({
     const firstRefundId=reserved[0]!.id;
     const credit = previousCredit ?? await ctx.callAsSystem(createCreditNote,{invoiceId:order.invoiceId,idempotencyKey:`return:${request.id}:credit`,reason:request.reason,lines:calculated!.creditLines});
     await ctx.tx.update(returnRequests).set({creditNoteId:credit.id,refundId:request.refundId ?? firstRefundId,updatedAt:sql`now()`}).where(eq(returnRequests.id,request.id));
-    await ctx.emitTimeline({contactId:request.contactId,eventType:"return.refundRequested",subjectType:"return",subjectId:request.id,payload:{orderId:order.id,amountMinor,initiatedBy:input.initiatedBy}});
+    await ctx.emitTimeline({contactId:request.contactId,eventType:"return.refundRequested",subjectType:"return",subjectId:request.id,payload:{orderId:order.id,amountMinor,initiatedBy:actorString(ctx.actor)}});
     ctx.setSubject("return",request.id);
     return {invoiceId:order.invoiceId,attempts};
   },
@@ -1076,7 +1078,7 @@ export const submitReturnProviderRefund = defineOrchestratedService({
   input:providerReturnInput,output:returnDetail,
   handler:async(input,caller)=>{
     const system={kind:"system",request:caller.request} as const;
-    const {invoiceId,attempts}=await claimReturnProviderRefund.call({...input,initiatedBy:actorString(caller)},system);
+    const {invoiceId,attempts}=await claimReturnProviderRefund.call(input,caller);
     // Each original-payment orchestrator commits its claim, contacts its own
     // provider/account outside a transaction, then applies actual feedback.
     for(const attempt of attempts) await submitProviderRefund.call(attempt,system);
