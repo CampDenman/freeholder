@@ -13270,8 +13270,9 @@ whatever is best for the people using the site.
   their own payout page. Financial identity follows its persistent contact
   owner through export, named holds, erasure and bounded merge undo. Migration74
   conservatively fences legacy merges whose history predates that ownership;
-  historical support is never guessed from today's account. Qualification and
-  the contiguous migration71→74 chain remain pending. This work does not enable
+  historical support is never guessed from today's account. Recorded-provider,
+  native identity/hold and four-locale browser controls passed locally; the
+  contiguous migration71→74 chain and protected checks remain pending. This work does not enable
   direct collection, close C12.38 or supply actual provider acceptance.
   *(In progress 2026-11-10: an immutable internal invoice market-policy
   snapshot freezes collection model and fees at issue; subscription agreements
@@ -13296,7 +13297,8 @@ whatever is best for the people using the site.
   41 provider/private-service checks, eight SDK checks and a production build
   passed. Four Chromium journeys passed at 320px in English, Spanish, French and Arabic RTL
   with keyboard submission and both-theme Axe scans; setup evidence is seeded,
-  not live Stripe acceptance. Seller invoice identity, mixed-seller/site carts,
+  not live Stripe acceptance. Original invoice names now reach the authorized
+  customer read model above; public support integration, mixed-seller/site carts,
   exact recurring tax/fee rounding, full setup/refund/recovery/erasure integration,
   complete localized journeys and actual provider acceptance remain required.
   See the source evidence document for the precise limits; C12.38 stays open.)*
@@ -13314,9 +13316,10 @@ whatever is best for the people using the site.
   Further source work 2026-11-11 resolves the unexpanded SetupIntent only
   after exact-byte signature/account validation. Confirmed off-session usage,
   customer/method identity and membership metadata must agree before saving
-  the method; setup never records money. First-customer creation, immutable
-  orchestration inputs and fresh session-bound proof for reused cards remain required, along
-  with the other full integration and actual provider acceptance above.
+  the method; setup never records money. The later trial-setup increment below
+  supplies durable first-customer creation, immutable orchestration inputs and
+  fresh session-bound proof for reused cards. The other full integration and
+  actual provider acceptance above remain required.
   See `deploy/seller-merchant-source-2026-11-10.md` and changeset
   `stripe-saved-card-evidence.md`; no direct model is enabled.
   Provider customer erasure repair 2026-11-11 (C1.08/C12.38/C11.10):

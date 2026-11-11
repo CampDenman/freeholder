@@ -358,8 +358,21 @@ after login deletion. The SQL completion fence refuses an older writer's
 false erasure acknowledgement. Full rollback requires the pre-upgrade database
 and object snapshot.
 
-This slice is still undergoing native and four-locale browser qualification.
-Migration74 must follow the reserved mail71, physical-mail72 and import-graph73
-changes; the contiguous empty and populated upgrade checks remain required.
-Recorded HTTP, database fixtures, browser presentation and agent review do not
-supply live provider acceptance, independent security review or stable sign-off.
+Local qualification includes 20 provider boundary controls; 16 distinct owned
+native identity controls across the initial run and the inherited-hold follow-up;
+eight composed held-login controls; eight live SDK controls; and the three
+interrupted billing cases rerun successfully in a quiet database slot. The
+earlier broad nine-suite attempt was interrupted and is not a wholly green
+broad integration result. Eight real Chromium journeys passed in English,
+Spanish, French and Arabic at 320px, with keyboard interaction and both-theme
+Axe scans of customer invoices, exact-token pending receipts and the seller's
+current public details. French and Arabic screenshots were inspected. The
+main71/refreshed675 composition built 20,340 files / 242,278,796 bytes with a clean
+standalone scrub. The browser development database applied the recorded
+migrations plus exact74 SQL; that is not the missing contiguous upgrade proof.
+
+Migration74 must follow the reserved physical-mail72 and import-graph73 changes;
+mail71 is merged. The contiguous empty and populated upgrade checks and final
+protected CI remain required. Recorded HTTP, database fixtures, browser
+presentation and agent review do not supply live provider acceptance,
+independent security review or stable sign-off.

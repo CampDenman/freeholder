@@ -321,8 +321,10 @@ witnesses, conservative pre74 undo fence, old-writer completion fence and
 credential-only versus member-wide holds. Opaque financial routing and actor
 identities remain accounting evidence; support values must not acquire extra
 audit/recovery copies. Migration74 is reserved after71–73; contiguous upgrade,
-final native/browser qualification and protected checks remain required. This
-section records review targets, not acceptance or independent sign-off.
+final composed qualification and protected checks remain required. This
+section records review targets, not acceptance or independent sign-off. Local
+native/recorded-provider controls and eight four-locale browser journeys have
+passed; the final contiguous upgrade and protected CI remain outstanding.
 
 The later Stripe card-setup increment resolves an unexpanded SetupIntent only
 after raw signature/account validation, on the same account. Review succeeded
