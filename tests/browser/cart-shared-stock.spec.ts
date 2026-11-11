@@ -44,8 +44,10 @@ test.describe("photograph cart stock (C5.16/C5.20/C8.08)", () => {
       if (locale === "ar") await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
       const quantityForms = page.locator("form").filter({ has: page.locator('input[name="quantity"]') });
       await expect(quantityForms).toHaveCount(2);
-      await quantityForms.nth(1).locator('input[name="quantity"]').fill("1");
-      await quantityForms.nth(1).getByRole("button").focus();
+      const selectedPhoto = quantityForms.filter({ has: page.locator(`input[name="lineId"][value="${lineIds[1]}"]`) });
+      await expect(selectedPhoto.locator('input[name="quantity"]')).toHaveValue("2");
+      await selectedPhoto.locator('input[name="quantity"]').fill("1");
+      await selectedPhoto.getByRole("button").focus();
       await page.keyboard.press("Enter");
       await expect(page).toHaveURL(/saved=quantity/);
       const afterShopper = await db().select().from(cartItems).where(eq(cartItems.cartId, cartId));
@@ -64,8 +66,10 @@ test.describe("photograph cart stock (C5.16/C5.20/C8.08)", () => {
       const ownerPage = await owner.newPage();
       await ownerPage.goto(`/admin/carts/${cartId}`);
       const ownerQuantities = ownerPage.locator("form").filter({ has: ownerPage.locator('input[name="intent"][value="setCartQty"]') });
-      await ownerQuantities.nth(1).locator('input[name="quantity"]').fill("2");
-      await ownerQuantities.nth(1).getByRole("button").focus();
+      const ownerPhoto = ownerQuantities.filter({ has: ownerPage.locator(`input[name="lineId"][value="${lineIds[1]}"]`) });
+      await expect(ownerPhoto.locator('input[name="quantity"]')).toHaveValue("1");
+      await ownerPhoto.locator('input[name="quantity"]').fill("2");
+      await ownerPhoto.getByRole("button").focus();
       await ownerPage.keyboard.press("Enter");
       await expect(ownerPage).toHaveURL(/saved=setCartQty/);
       const afterOwner = await db().select().from(cartItems).where(eq(cartItems.cartId, cartId));
