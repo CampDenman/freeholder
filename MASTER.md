@@ -11658,6 +11658,12 @@ schema they inherit reads as a designed thing rather than an excavation.
   adapter errors, idempotent duplicates, preserved ciphertext and automatic
   update rollback. **F09** the suite is the operational story. **F12** the
   vitest chain. Live provider accounts are not claimed.)*
+  *(CI capacity qualification 2026-11-11: the expanded privacy/import tests
+  crossed the 28-shard prediction by 547 ms. Thirty-two isolated databases now
+  retain the same 25-minute deadline, seven-times degraded-runner allowance,
+  complete unique coverage and stable required `checks`/DCO gates. The exact
+  topology contract is included in local fast gates; evidence and unchanged
+  constraints are recorded in `deploy/ci-release-gate.md`.)*
 - [x] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.

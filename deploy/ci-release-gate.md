@@ -32,12 +32,18 @@ The shard topology has a checked degradation budget, not an arbitrary count.
 Run `33904651417` established the normal duration of a deterministic shard;
 run `33905822088` then placed that exact file list on a contended hosted runner,
 where representative database files slowed uniformly by as much as 6.7x. CI
-therefore partitions the suite across twenty-three databases and keeps a tested 7x
+therefore partitions the suite across thirty-two databases and keeps a tested 7x
 work allowance plus fixed setup overhead below the unchanged 25-minute job
 limit. `tests/core/runtime-balanced-sequencer.test.ts` proves full, unique test
 coverage, bounded predicted skew, the degradation budget, and exact workflow
 topology. Refresh measured outliers and re-run that contract after a material
 test redesign; never increase the timeout merely to absorb an unexplained tail.
+
+The 2026-11-11 privacy/import additions crossed the previous 28-shard prediction
+by 547 ms (1,500,547 ms against 1,500,000 ms). Capacity increased to 32 isolated
+shards; the 25-minute deadline, seven-times allowance, full coverage and stable
+required `checks`/DCO protections remain unchanged. The topology contract also
+runs in the local fast gates so this bound is checked before a full CI shard.
 
 The image gate also boots once against an unreachable database and requires
 process liveness to remain `200` while readiness is `503`, then boots normally
