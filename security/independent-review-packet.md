@@ -64,6 +64,22 @@ automated alert does not establish their security. Live provider acceptance,
 cross-target object-byte recovery and actual platform launches retain their
 own open checklist items.
 
+## Newly published XML parser advisory
+
+The 2026-11-10 C3.42 protected CI run independently caught
+[GHSA-474x-hrwr-fgx4](https://github.com/advisories/GHSA-474x-hrwr-fgx4),
+published in GitHub's advisory database that day. It affects fast-xml-parser
+through 5.11.2; the upstream patched release is 5.12.0. The direct storage
+inventory parser and the inherited `@replit/object-storage` →
+`@google-cloud/storage` path both move to the patched 5.x version. No exception
+was added and the audit policy stays unchanged. The unchanged live audit
+reports no known advisories, 13 storage-inventory acceptance/refusal tests pass,
+and the production build/standalone artifact gate pass with the patched
+parser. Twenty publisher CLI/activity-label checks pass on Node 22.23.2,
+including actual artifact and catalogue signing. Protected exact-head CI is
+required. This remains automated remediation evidence, not the independent
+C11.10 review.
+
 ## 2026-10-03 automated-alert triage (preliminary)
 
 This update is preparation for C11.10, not independent sign-off. GitHub CodeQL

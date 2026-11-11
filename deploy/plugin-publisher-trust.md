@@ -41,7 +41,7 @@ or a caller-defined local override cannot bypass signature verification.
 
 ## Publisher: produce the public proof
 
-These repository tools require Node 24+ and the locked repository dependencies;
+These repository tools require Node 22.18+ or 24+ and the locked repository dependencies;
 they do not change the server's supported runtime. Generate and keep your
 private Ed25519 signing key outside the artifact and outside Freeholder. Run
 signing commands in the publisher's private signing environment. Never upload

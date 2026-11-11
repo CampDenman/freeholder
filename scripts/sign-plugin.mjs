@@ -4,7 +4,8 @@
 import { readFile, stat } from "node:fs/promises";
 
 async function main() {
-  if (Number(process.versions.node.split(".")[0]) < 24) throw new Error("node-version");
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  if (!((major === 22 && minor >= 18) || major >= 24)) throw new Error("node-version");
   const [command, ...args] = process.argv.slice(2);
   const values = new Map();
   for (let i = 0; i < args.length; i += 2) {
@@ -40,7 +41,7 @@ async function main() {
 await main().catch(() => {
   // Malformed input could be a private PEM file passed as --index. Never
   // echo parser errors, file contents or private key material to a terminal.
-  console.error("Signing failed. Use Node 24+, an Ed25519 key and a self-contained artifact or valid registry index. Private key files must have mode 600.");
+  console.error("Signing failed. Use Node 22.18+ or 24+, an Ed25519 key and a self-contained artifact or valid registry index. Private key files must have mode 600.");
   console.error("Usage: node scripts/sign-plugin.mjs fingerprint --public-key FILE | artifact --directory DIR --private-key FILE | registry --index FILE --url HTTPS_URL --private-key FILE");
   process.exitCode = 2;
 });
