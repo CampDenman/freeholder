@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Menu rows live on nav blocks; chrome looks in the nav section first (C2.11).
+import { mergeNavigation, type NavigationLink } from "./navigation-tree";
 import type { BlockNode } from "./blocks/types";
 import { HEADER_KEY, NAV_KEY } from "./defaults";
 
@@ -19,7 +20,7 @@ export function addNavLink(blocks: BlockNode[], label: string, href: string): bo
   return false;
 }
 
-type NavLink = { label: string; href: string };
+type NavLink = NavigationLink;
 
 /**
  * Index pages the platform links from the menu on its own (§5's "no orphan
@@ -70,14 +71,7 @@ export function mergeNavLinks(target: BlockNode[], source: BlockNode[]): boolean
   const incoming = navLinks(source);
   const from = firstNav(source);
   const platformOnly = existing.every((link) => PLATFORM_NAV_HREFS.has(normalizeNavHref(link.href)));
-  const ordered = platformOnly ? [...incoming, ...existing] : [...existing, ...incoming];
-  const seen = new Set<string>();
-  into.props.links = ordered.filter((link) => {
-    const key = normalizeNavHref(link.href);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  into.props.links = mergeNavigation(platformOnly ? incoming : existing, platformOnly ? existing : incoming, link => normalizeNavHref(link.href)).links;
   if (platformOnly && from) {
     if (from.props.ariaLabelKey !== undefined) into.props.ariaLabelKey = from.props.ariaLabelKey;
     if (from.props.collapseOnMobile !== undefined) into.props.collapseOnMobile = from.props.collapseOnMobile;
@@ -125,4 +119,14 @@ export function navHasLinks(blocks: BlockNode[]): boolean {
     if (node.children && navHasLinks(node.children)) return true;
   }
   return false;
+}
+
+
+/** Merge an imported menu beneath the matching owner parents, never the tail. */
+export function mergeNavMenu(blocks: BlockNode[], links: NavigationLink[]): { blockId: string; added: NavigationLink[] } | null {
+  const node = firstNav(blocks);
+  if (!node) return null;
+  const result = mergeNavigation((node.props.links ?? []) as NavigationLink[], links);
+  node.props.links = result.links;
+  return { blockId: node.id, added: result.added };
 }

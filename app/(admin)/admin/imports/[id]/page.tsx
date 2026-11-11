@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import { z } from "zod";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -33,6 +34,7 @@ export default async function ImportRunPage({
     ["mediaFailed", t("imports.count.mediaFailed")],
     ["redirects", t("imports.count.redirects")],
     ["menus", t("imports.count.menus")],
+    ["menuWarnings", t("imports.count.menuWarnings")],
     ["categories", t("imports.count.categories")],
     ["tags", t("imports.count.tags")],
     ["authors", t("imports.count.authors")],
@@ -43,6 +45,10 @@ export default async function ImportRunPage({
   ];
   const shown = countLabels.filter(([key]) => typeof counts[key] === "number");
   const wordpress = run.source.startsWith("wordpress-");
+  const checkpoint = run.checkpoint && typeof run.checkpoint === "object" ? run.checkpoint as Record<string, unknown> : {};
+  const report = checkpoint.report && typeof checkpoint.report === "object" ? checkpoint.report as Record<string, unknown> : {};
+  const parsedIssues = z.array(z.object({ menu: z.string(), label: z.string(), reason: z.enum(["target", "private"]) })).safeParse(report.menuIssues);
+  const menuIssues = parsedIssues.success ? parsedIssues.data.slice(0, 100) : [];
 
   return (
     <div className="grid gap-6">
@@ -112,6 +118,15 @@ export default async function ImportRunPage({
                 ))}
               </dl>
             ) : null}
+            {menuIssues.length ? <div className="mt-4 grid min-w-0 gap-2">
+              <h3 className="text-sm font-semibold">{t("imports.count.menuWarnings")}</h3>
+              <ul className="grid list-none gap-3 p-0">
+                {menuIssues.map((issue, index) => <li key={index} className="min-w-0 break-words text-sm">
+                  <p className="font-medium">{issue.label || issue.menu}</p>
+                  <p className="text-ink-muted">{t(`imports.menuWarning.${issue.reason}`)}</p>
+                </li>)}
+              </ul>
+            </div> : null}
             {wordpress ? (
               <p className="mt-4 max-w-prose text-sm text-ink-muted">{t("imports.note.wordpress")}</p>
             ) : null}

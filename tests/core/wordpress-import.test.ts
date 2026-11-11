@@ -271,3 +271,78 @@ describe("WordPress REST payloads (C3.22)", () => {
     });
   });
 });
+
+describe("WordPress menu hierarchy and target intent (C3.22)", () => {
+  it("reconstructs parent order and genuine grandchildren from unsorted source rows", () => {
+    const exported = parseWordpressExport(FIXTURE);
+    exported.menuItems = [
+      { wpId: "c", menu: "primary-menu", label: "Member", order: 0, type: "post_type", object: "post", objectId: "20", parentItemId: "b" },
+      { wpId: "b", menu: "primary-menu", label: "Team", order: 1, type: "post_type", object: "page", objectId: "31", parentItemId: "a" },
+      { wpId: "a", menu: "primary-menu", label: "About", order: 2, type: "post_type", object: "page", objectId: "30" },
+    ];
+    expect(planWordpressImport(exported, ORIGIN).menus[0]?.items.map(item => [item.label, item.depth])).toEqual([["About", 0], ["Team", 1], ["Member", 2]]);
+  });
+
+  it("keeps category/tag targets, custom query/fragments and WordPress query-ID links", () => {
+    const exported = parseWordpressExport(FIXTURE);
+    const base = { menu: "primary-menu", order: 0, type: "taxonomy", object: "category" };
+    exported.menuItems = [
+      { ...base, wpId: "a", label: "News", objectId: "3" },
+      { ...base, wpId: "b", label: "Firing", object: "post_tag", objectId: "5" },
+      { ...base, wpId: "c", label: "Details", type: "custom", url: `${ORIGIN}/about/?view=profile#team` },
+      { ...base, wpId: "d", label: "Old post link", type: "custom", url: `${ORIGIN}/?p=20#firing` },
+      { ...base, wpId: "e", label: "Unsafe", type: "custom", url: "javascript:alert(1)" },
+      { ...base, wpId: "f", label: "Current-page section", type: "custom", url: "#section" },
+    ];
+    const planned = planWordpressImport(exported, ORIGIN).menus[0]!.items;
+    expect(planned[0]).toMatchObject({ href: "/category/studio-news" });
+    expect(planned[1]).toMatchObject({ href: "/tag/firing" });
+    expect(planned[2]).toMatchObject({ href: "/about?view=profile#team" });
+    expect(planned[3]).toMatchObject({ targetWpId: "20", fragment: "#firing" });
+    expect(planned[4]?.href).toBeUndefined();
+    expect(planned[5]?.href).toBe("#section");
+  });
+
+  it.each(["/about/", "/?p=20"])("refuses raw credentialed custom URLs before rewriting %s", (path) => {
+    const exported = parseWordpressExport(FIXTURE);
+    const address = new URL(path, ORIGIN);
+    address.username = "synthetic-owner";
+    address.password = "synthetic-proof";
+    exported.menuItems = [{ ...exported.menuItems[0]!, wpId: "review", label: "", type: "custom", url: address.href }];
+    const planned = planWordpressImport(exported, ORIGIN).menus[0]!.items[0]!;
+    expect(planned.href).toBeUndefined();
+    expect(planned.targetWpId).toBeUndefined();
+    expect(planned.note).toBe("unsafe or invalid source link");
+    expect(planned.label).toBe("");
+  });
+
+  it.each([
+    { base: "", path: "/?p=20", target: "20" },
+    { base: "", path: "/index.php?page_id=1", target: "1" },
+    { base: "/legacy", path: "/legacy/?p=20", target: "20" },
+    { base: "/legacy", path: "/legacy/index.php?page_id=1", target: "1" },
+  ])("maps valid query-ID targets within the source base $base: $path", ({ base, path, target }) => {
+    const exported = parseWordpressExport(FIXTURE);
+    exported.site.baseUrl = `${ORIGIN}${base}`;
+    exported.menuItems = [{ ...exported.menuItems[0]!, wpId: "review", label: "Valid", type: "custom", url: `${ORIGIN}${path}` }];
+    expect(planWordpressImport(exported, ORIGIN).menus[0]!.items[0]!.targetWpId).toBe(target);
+  });
+
+  it.each(["/elsewhere/?p=20", "/legacy-other/?page_id=1", "/elsewhere/about/"])("preserves same-host links outside the source base: %s", (path) => {
+    const exported = parseWordpressExport(FIXTURE);
+    exported.site.baseUrl = `${ORIGIN}/legacy`;
+    exported.menuItems = [{ ...exported.menuItems[0]!, wpId: "review", label: "Elsewhere", type: "custom", url: `${ORIGIN}${path}` }];
+    const planned = planWordpressImport(exported, ORIGIN).menus[0]!.items[0]!;
+    expect(planned.targetWpId).toBeUndefined();
+    expect(planned.href).toBe(`${ORIGIN}${path}`);
+  });
+
+  it("retains disconnected/cyclic links with an explicit warning instead of losing or hanging them", () => {
+    const exported = parseWordpressExport(FIXTURE);
+    const base = { menu: "primary-menu", order: 0, type: "custom", object: "custom", url: "/about" };
+    exported.menuItems = [{ ...base, wpId: "orphan", label: "Orphan", parentItemId: "absent" }, { ...base, wpId: "a", label: "A", parentItemId: "b" }, { ...base, wpId: "b", label: "B", parentItemId: "a" }];
+    const plan = planWordpressImport(exported, ORIGIN);
+    expect(plan.menus[0]?.items).toHaveLength(3);
+    expect(plan.report.skipped).toMatchObject({ "menu parent missing: promoted item": 1, "menu hierarchy cycle: link retained as a root": 1 });
+  });
+});

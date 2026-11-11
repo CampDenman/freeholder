@@ -2113,16 +2113,17 @@ never changes merely because the crawler finished.
   download, content-sniffed type, size limit, AVIF/WebP renditions, alt text
   and source-URL provenance kept, body captions kept as text), body images
   rewritten to image and gallery blocks, Yoast/Rank Math SEO titles and
-  descriptions, and the top level of one menu (joined to the nav section at
-  publish). Original URLs either survive or receive explicit `Redirect` rows.
+  descriptions, and one menu with nested links (joined to the nav section at
+  publish). Navigation supports four nested levels; deeper source links remain
+  in order at the fourth level with an explicit import warning. Original URLs either survive or receive explicit `Redirect` rows.
   The REST path covers pages and posts with dates, Yoast fields and embedded
   terms; it carries no attachment list, so only same-site body images are
   fetched. Categories, tags and authors become real blog records; ordinary
   WXR reader comments preserve moderation state, dates and available parentage.
   Replacing live content stages changed blog membership and comments until
   publication; rollback restores prior metadata and retained comment history.
-  The report keeps remaining uncertainty explicit: nested menus, reserved
-  member-feed collisions, orphan attachments and metadata absent from WXR
+  The report keeps remaining uncertainty explicit: malformed or deeper menus,
+  reserved member-feed collisions, orphan attachments and metadata absent from WXR
   require source-crawl review (C2.27–C2.29, C3.22 and C3.46 remain open until
   their acceptance evidence is complete). An export file of up to 100 MB is
   reserved, sent in 4 MB chunks to
@@ -5344,6 +5345,30 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   resumability, generic typed media/redirect integration, archive reading and
   actual source-specific acceptance remain open; see
   `deploy/blog-wordpress-2026-11-07.md`.)*
+  *(Nested navigation source increment 2026-11-11: menus reconstruct their
+  source parent/child order, retain grandchildren, taxonomy targets, ordinary
+  query/fragment intent and WordPress query-ID links. Raw custom URLs validate
+  before rewriting or supplying a fallback label; credentials remain unresolved
+  and safe same-host links outside the imported frontend retain their original
+  URL. Two pure repros failed before this peer-review repair; nine permanent
+  controls cover refusal, valid query IDs and subdirectory ownership.
+  CMS navigation stores
+  editable bounded levels and renders semantic nested lists; merge keeps the
+  owner's labels/order and attaches children to their matching parent. Stable
+  import identities let rollback remove only that import's additions while
+  preserving owner-added descendants. Draft/vetoed imported destinations do
+  not advertise their navigation labels. Repeated, cyclic, missing-parent,
+  deeper-than-four and unresolved source relationships remain explicitly
+  reported. Owner reports expose translated warning counts and details.
+  Cutover selects the business default locale and records the actual CMS
+  fallback section locale for reversal; three real localized publish/rollback
+  regressions failed before the repair and pass afterward.
+  Fifty-nine integrated PostgreSQL/native controls and a final 63-check
+  menu/WordPress/chrome/SDK run passed (overlapping counts); eight Chromium
+  journeys passed at 320px in all four locales with keyboard, actual bounds
+  and both-theme Axe. Build/artifact and fast gates passed. Evidence:
+  `deploy/import-navigation.md`. C3.22 stays open for archive/generic
+  integration, large-source resumption and actual source-specific acceptance.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,

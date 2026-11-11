@@ -27,6 +27,8 @@ import {
   imageCropSchema,
   imageFraming,
 } from "@/core/media/framing";
+import { navigationLinksSchema } from "../navigation-schema";
+import { navigationTree, type NavigationNode } from "../navigation-tree";
 import { defineBlock } from "./types";
 import { fromPlainString, richBodySchema } from "./rich";
 import { renderRichDoc } from "./rich-render";
@@ -454,9 +456,7 @@ export const nav = defineBlock({
   labelKey: "cms.block.nav",
   contexts: ["chrome"],
   schema: z.object({
-    links: z
-      .array(z.object({ label: z.string().min(1), href: z.string().min(1) }))
-      .default([]),
+    links: navigationLinksSchema.default([]),
     ariaLabelKey: z.string().default("cms.nav.primary"),
     /**
      * Collapse behind a "Menu" disclosure on small screens.
@@ -472,43 +472,32 @@ export const nav = defineBlock({
   // The screen-reader name for the menu is platform machinery, not copy the
   // owner writes — it is a catalog key, and showing it would invite someone to
   // type a sentence into a field that expects an identifier.
-  fieldHints: { ariaLabelKey: { hidden: true } },
+  fieldHints: { ariaLabelKey: { hidden: true }, links: { items: { id: { hidden: true } } } },
   render: ({ props, ctx }) => {
     if (props.links.length === 0) return null;
-    const linkItems = (suffix: string) =>
-      props.links.map((link) => {
-        const current =
-          link.href === ctx.path ||
-          (link.href !== "/" && ctx.path.startsWith(link.href));
-        return (
-          <li key={`${suffix}-${link.href}`}>
-            <a
-              href={ctx.localizeHref?.(link.href) ?? link.href}
-              aria-current={current ? "page" : undefined}
-              className={cx(
-                "text-sm",
-                current ? "font-semibold text-ink" : "text-ink-muted",
-              )}
-            >
-              {link.label}
-            </a>
-          </li>
-        );
-      });
+    const tree = navigationTree(props.links);
+    const linkItems = (nodes: NavigationNode[], suffix: string): React.ReactNode => nodes.map((node, index) => {
+      const link = node.link;
+      const current = link.href === ctx.path || (link.href !== "/" && ctx.path.startsWith(`${link.href}/`));
+      return <li key={`${suffix}-${link.id ?? link.href}-${index}`} className="min-w-0">
+        <a href={ctx.localizeHref?.(link.href) ?? link.href} aria-current={link.href === ctx.path ? "page" : undefined} className={cx("break-words text-sm", current ? "font-semibold text-ink" : "text-ink-muted")}>{link.label}</a>
+        {node.children.length ? <ul className="ms-3 mt-1 grid min-w-0 list-none gap-1 border-s border-rule ps-3">{linkItems(node.children, `${suffix}-${index}`)}</ul> : null}
+      </li>;
+    });
     return (
-      <nav aria-label={ctx.t(props.ariaLabelKey)}>
+      <nav aria-label={ctx.t(props.ariaLabelKey)} className="min-w-0 max-w-full">
         {props.collapseOnMobile ? (
           <details className="sm:hidden">
             <summary className="cursor-pointer text-sm font-semibold text-ink">
               {ctx.t("cms.nav.menu")}
             </summary>
-            <ul className="mt-2 grid list-none gap-2 p-0">{linkItems("mobile")}</ul>
+            <ul className="mt-2 grid list-none gap-2 p-0">{linkItems(tree, "mobile")}</ul>
           </details>
         ) : (
-          <ul className="grid list-none gap-2 p-0 sm:hidden">{linkItems("mobile")}</ul>
+          <ul className="grid list-none gap-2 p-0 sm:hidden">{linkItems(tree, "mobile")}</ul>
         )}
-        <ul className="hidden list-none flex-wrap items-center gap-x-5 gap-y-1 p-0 sm:flex">
-          {linkItems("desktop")}
+        <ul className="hidden min-w-0 list-none flex-wrap items-start gap-x-5 gap-y-1 p-0 sm:flex">
+          {linkItems(tree, "desktop")}
         </ul>
       </nav>
     );

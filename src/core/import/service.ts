@@ -29,7 +29,9 @@ import {
 import { importRuns } from "@/core/plugins/schema";
 import { getPinnedBytes, PinnedDownloadError } from "@/core/http/pinned-download";
 import { uploadAsset } from "@/core/media/service";
-import { addNavLink, NAV_SECTION_KEYS } from "@/modules/cms/chrome-nav";
+import { mergeNavMenu, NAV_SECTION_KEYS } from "@/modules/cms/chrome-nav";
+import { navigationLinkSchema } from "@/modules/cms/navigation-schema";
+import { removeNavigation, type NavigationLink } from "@/modules/cms/navigation-tree";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS } from "./contract";
 import { crawlPublicSource, type CrawlKind } from "./crawl";
@@ -161,6 +163,7 @@ const wordpressPreviewSchema = z.object({
           targetWpId: z.string().optional(),
           href: z.string().optional(),
           note: z.string().optional(),
+          fragment: z.string().optional(),
         }),
       ),
     }),
@@ -290,14 +293,15 @@ const navAppliedSchema = z.object({
   key: z.string(),
   locale: z.string(),
   menu: z.string(),
-  links: z.array(z.object({ label: z.string(), href: z.string() })),
+  blockId: z.string().optional(),
+  links: z.array(navigationLinkSchema),
 });
 
 const resolvedMenusSchema = z.array(
   z.object({
     slug: z.string(),
     name: z.string(),
-    links: z.array(z.object({ label: z.string(), href: z.string() })),
+    links: z.array(navigationLinkSchema),
     nested: z.number(),
     unresolved: z.number(),
   }),
@@ -790,7 +794,7 @@ const commitApply = defineService({
       const assetId = key ? assetByKey.get(key) : undefined;
       return assetId ? { assetId, alt: key ? altByKey.get(key) : undefined } : null;
     };
-    const linkMap = new Map<string, string>();
+    const linkMap = new Map<string, string>(archiveAliases.map(alias => [alias.fromPath, alias.toPath]));
     for (const { page, slug } of placements) {
       const target = slug;
       if (page.redirectFrom) linkMap.set(page.redirectFrom, target);
@@ -967,26 +971,30 @@ const commitApply = defineService({
       }
     }
 
-    // Menus, resolved to the slugs pages actually landed at.
+    // Resolve and retain the source hierarchy. An unresolved ancestor never
+    // accidentally attaches its child to the preceding owner's/root item.
+    const menuIssues: Array<{ menu: string; label: string; reason: "target" | "private" }> = [];
     const menus: ResolvedMenu[] = (wordpress?.menus ?? []).map((menu) => {
-      const links: Array<{ label: string; href: string }> = [];
-      let nested = 0;
-      let unresolved = 0;
-      for (const item of menu.items) {
-        if (item.depth > 0) {
-          nested += 1;
-          continue;
+      const links: NavigationLink[] = [];
+      const ancestors: Array<NavigationLink | null> = [];
+      let nested = 0, unresolved = 0;
+      for (const [index, item] of menu.items.entries()) {
+        if (item.depth > 0) nested += 1;
+        const depth = Math.max(0, Math.min(4, Math.trunc(item.depth)));
+        ancestors.length = Math.min(ancestors.length, depth);
+        let href = item.targetWpId ? slugByWpId.has(item.targetWpId) ? `/${slugByWpId.get(item.targetWpId)}${item.fragment ?? ""}` : undefined : item.href;
+        if (href && !item.targetWpId && !href.startsWith("#")) {
+          const path = wordpressPath(href, hosts, basePath);
+          if (path !== null) {
+            const url = new URL(href, `https://${hosts[0] ?? "invalid.invalid"}/`);
+            href = `/${linkMap.get(path) ?? path}${url.search}${url.hash}`;
+          }
         }
-        const href = item.targetWpId
-          ? slugByWpId.has(item.targetWpId) ? `/${slugByWpId.get(item.targetWpId)}` : undefined
-          : item.href?.startsWith("/") && linkMap.has(item.href.slice(1))
-            ? `/${linkMap.get(item.href.slice(1))}`
-            : item.href;
-        if (!href || !item.label.trim()) {
-          unresolved += 1;
-          continue;
-        }
-        links.push({ label: item.label.trim().slice(0, 80), href });
+        if (!href || !item.label.trim()) { unresolved += 1; ancestors[depth] = null; menuIssues.push({ menu: menu.name, label: item.label.trim().slice(0, 80), reason: "target" }); continue; }
+        const actualDepth = ancestors.filter(Boolean).length;
+        const id = `import-${before.id}-${createHash("sha256").update(`${menu.slug}:${index}`).digest("hex").slice(0, 16)}`;
+        const link: NavigationLink = { id, label: item.label.trim().slice(0, 80), href, ...(actualDepth ? { depth: actualDepth } : {}) };
+        links.push(link); ancestors[depth] = link;
       }
       return { slug: menu.slug, name: menu.name, links, nested, unresolved };
     });
@@ -1026,6 +1034,7 @@ const commitApply = defineService({
           authors,
           taxonomy: wordpress.taxonomy,
           menus: menus.map(({ slug, name, links, nested, unresolved }) => ({ slug, name, links: links.length, nested, unresolved })),
+          menuIssues: menuIssues.slice(0, REPORT_LIST_MAX),
           // Said out loud so nobody reads a silent zero as "done".
           notRecreated: [
             ...(Number((wordpress.report.comments as { total?: number } | undefined)?.total ?? 0) > commentsImported + commentsStaged ? ["Unsupported comment types, comments on ordinary pages or skipped posts remain in the source export; counts.commentsSkipped reports the difference."] : []),
@@ -1044,6 +1053,7 @@ const commitApply = defineService({
           mediaFailed: mediaFailures.length,
           redirects: redirectIds.length,
           menus: menus.filter((menu) => menu.links.length > 0).length,
+          menuWarnings: menuIssues.length + Object.entries(checkpointOf(wordpress.report.skipped)).filter(([key, value]) => key.startsWith("menu ") && typeof value === "number" && Number.isFinite(value)).reduce((total, [, value]) => total + Number(value), 0),
           categories: wordpress.taxonomy.categories.length,
           tags: wordpress.taxonomy.tags.length,
           authors: authors.length,
@@ -1075,6 +1085,7 @@ const commitApply = defineService({
         ...landed.flatMap(({ page, slug }) => page.wpId ? ["p", "page_id"].flatMap(key => ["", "index.php"].map(root => ({ fromPath: `${root}?${key}=${page.wpId}`, toPath: slug }))) : []),
       ],
       menus,
+      menuPagePaths: [...new Set(placements.map(placement => placement.slug))],
       ...(blogIndexPageId ? { blogIndexPageId } : {}),
       ...(report ? { report } : {}),
     });
@@ -1110,20 +1121,15 @@ export const commitImport = defineOrchestratedService({
 
 /* ---------------------------------------------------------------- rollback */
 
-function withoutNavLinks(nodes: BlockNode[], links: Array<{ label: string; href: string }>): boolean {
+function withoutNavLinks(nodes: BlockNode[], links: NavigationLink[], blockId?: string): boolean {
   let changed = false;
   for (const node of nodes) {
-    if (node.type === "nav") {
-      const current = (node.props.links ?? []) as Array<{ label: string; href: string }>;
-      const kept = current.filter(
-        (link) => !links.some((added) => added.href === link.href && added.label === link.label),
-      );
-      if (kept.length !== current.length) {
-        node.props.links = kept;
-        changed = true;
-      }
+    if (node.type === "nav" && (!blockId || node.id === blockId)) {
+      const current = (node.props.links ?? []) as NavigationLink[];
+      const kept = removeNavigation(current, links);
+      if (JSON.stringify(kept) !== JSON.stringify(current)) { node.props.links = kept; changed = true; }
     }
-    if (node.children && withoutNavLinks(node.children, links)) changed = true;
+    if (node.children && withoutNavLinks(node.children, links, blockId)) changed = true;
   }
   return changed;
 }
@@ -1140,8 +1146,9 @@ export const rollbackImport = defineService({
   input: z.object({ id: z.string().uuid() }),
   output: runRow,
   handler: async (input, ctx) => {
-    const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
+    const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
+    if (before.status === "rolled_back") return before;
     const checkpoint = checkpointOf(before.checkpoint);
 
     // Menu links the import added, and only those, come off the nav.
@@ -1153,7 +1160,7 @@ export const rollbackImport = defineService({
         .parse(await ctx.call(getService("cms.getSection"), { key: nav.data.key, locale: nav.data.locale, fallback: false }));
       if (section) {
         const blocks = structuredClone(section.blocks) as BlockNode[];
-        if (Array.isArray(blocks) && withoutNavLinks(blocks, nav.data.links)) {
+        if (Array.isArray(blocks) && withoutNavLinks(blocks, nav.data.links, nav.data.blockId)) {
           await ctx.call(getService("cms.updateSection"), { key: nav.data.key, locale: nav.data.locale, blocks });
         }
       }
@@ -1395,12 +1402,15 @@ export const publishImport = defineService({
   input: z.object({ id: z.string().uuid() }),
   output: runRow,
   handler: async (input, ctx) => {
-    const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
+    const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
+    if (before.status === "published") return before;
     if (before.status !== "reconciled") {
       throw new ServiceError("conflict", "Reconcile the import before publishing it.");
     }
     const checkpoint = checkpointOf(before.checkpoint);
+    const profile = z.object({ defaultLocale: z.string() }).nullable().parse(await ctx.call(getService("settings.getBusiness"), {}));
+    const sourceLocale = profile?.defaultLocale ?? "en";
     const drafts = new Set(stringIds(checkpoint.draftPageIds));
     const dates =
       checkpoint.publishedAt && typeof checkpoint.publishedAt === "object"
@@ -1440,7 +1450,7 @@ export const publishImport = defineService({
       for (const alias of aliases.data) {
         if (draftPaths.has(alias.toPath)) continue;
         if (alias.toPath !== "feeds/blog.xml") {
-          const page = await ctx.call(getService("cms.resolvePage"), { slug: alias.toPath, locale: "en" });
+          const page = await ctx.call(getService("cms.resolvePage"), { slug: alias.toPath, locale: sourceLocale });
           const archive = page ? null : await ctx.call(getService("cms.resolveBlogArchive"), { path: alias.toPath });
           if (!page && !archive) { skippedAliases.push({ fromPath: alias.fromPath, reason: "destination is not public" }); continue; }
         }
@@ -1454,25 +1464,41 @@ export const publishImport = defineService({
     let navApplied: z.infer<typeof navAppliedSchema> | undefined;
     const menus = resolvedMenusSchema.safeParse(checkpoint.menus);
     const menu = menus.success ? chooseMenu(menus.data) : undefined;
+    const skippedMenuLinks: Array<{ href: string; label?: string; reason: string }> = [];
     if (menu) {
+      const landings = z.array(z.object({ path: z.string() })).safeParse(checkpoint.landedPaths);
+      const sourcePaths = new Set([...stringIds(checkpoint.menuPagePaths), ...(landings.success ? landings.data.map(page => page.path) : [])]);
+      const checked = new Map<string, boolean>();
+      const hidden: NavigationLink[] = [];
+      for (const link of menu.links) {
+        if (!link.href.startsWith("/") || link.href.startsWith("//")) continue;
+        const path = new URL(link.href, "https://freeholder.invalid").pathname.replace(/^\/+|\/+$/g, "");
+        if (!sourcePaths.has(path)) continue;
+        if (!checked.has(path)) checked.set(path, Boolean(await ctx.call(getService("cms.resolvePage"), { slug: path, locale: sourceLocale })));
+        if (!checked.get(path)) { hidden.push(link); skippedMenuLinks.push({ href: link.href, label: link.label, reason: "imported destination is not public" }); }
+      }
+      menu.links = removeNavigation(menu.links, hidden);
+
       for (const key of NAV_SECTION_KEYS) {
         const section = z
-          .object({ blocks: z.unknown() })
+          .object({ blocks: z.unknown(), locale: z.string() })
           .nullable()
-          .parse(await ctx.call(getService("cms.getSection"), { key, locale: "en", fallback: false }));
+          .parse(await ctx.call(getService("cms.getSection"), { key, locale: sourceLocale, fallback: true }));
         if (!section || !Array.isArray(section.blocks)) continue;
         const blocks = structuredClone(section.blocks) as BlockNode[];
-        const added = menu.links.filter((link) => addNavLink(blocks, link.label, link.href));
+        const merged = mergeNavMenu(blocks, menu.links);
+        if (!merged) continue;
+        const { added, blockId } = merged;
         if (added.length > 0) {
-          await ctx.call(getService("cms.updateSection"), { key, locale: "en", blocks });
+          await ctx.call(getService("cms.updateSection"), { key, locale: section.locale, blocks });
         }
-        navApplied = { key, locale: "en", menu: menu.slug, links: added };
+        navApplied = { key, locale: section.locale, menu: menu.slug, blockId, links: added };
         break;
       }
     }
     const [row] = await ctx.tx
       .update(importRuns)
-      .set({ status: "published", counts: { ...checkpointOf(before.counts), commentsImported: Number(checkpointOf(before.counts).commentsImported ?? 0) + stagedCommentsImported, commentsStaged: 0 }, checkpoint: { ...checkpoint, pendingBlogPosts: [], redirectIds, skippedAliases, ...(navApplied ? { navApplied } : {}) } })
+      .set({ status: "published", counts: { ...checkpointOf(before.counts), menuWarnings: Number(checkpointOf(before.counts).menuWarnings ?? 0) + skippedMenuLinks.length, commentsImported: Number(checkpointOf(before.counts).commentsImported ?? 0) + stagedCommentsImported, commentsStaged: 0 }, checkpoint: { ...checkpoint, pendingBlogPosts: [], redirectIds, skippedAliases, skippedMenuLinks, report: { ...checkpointOf(checkpoint.report), menuIssues: [...(Array.isArray(checkpointOf(checkpoint.report).menuIssues) ? checkpointOf(checkpoint.report).menuIssues as unknown[] : []), ...skippedMenuLinks.map(link => ({ menu: menu?.name ?? "", label: link.label ?? link.href, reason: "private" }))].slice(0, REPORT_LIST_MAX) }, ...(navApplied ? { navApplied } : {}) } })
       .where(eq(importRuns.id, input.id))
       .returning();
     ctx.setSubject("import_run", row!.id);
