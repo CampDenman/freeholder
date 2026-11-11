@@ -245,6 +245,7 @@ export const claimTrialCardSetup = defineService({
 
 export const applyTrialCardSetup = defineService({
   name: "subscriptions.applyTrialCardSetup",
+  auditInputFields:["subscriptionId","attemptId","stage","provider"],
   summary: "Remember which provider customer a card-setup session belongs to.",
   kind: "mutation",
   permission: "authenticated",

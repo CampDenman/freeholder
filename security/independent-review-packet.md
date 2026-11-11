@@ -846,3 +846,10 @@ erasure-completion guards are deliberate prior-image refusal boundaries. Full
 rollback requires the actual pre-upgrade database/object snapshot. Synthetic
 provider HTTP and browser state fixtures do not supply account acceptance or
 Tony Aly's independent C11.10 sign-off.
+
+A separate actual before-failing control found the original email retained in
+generic reconciliation audit input even after setup cleanup completed. Review
+the setup consumers of the existing `auditInputFields` seam: generic copies
+retain operation IDs/outcomes, private dispatches retain concrete evidence
+until cleanup/hold resolution, and original actor/action/subject remain intact.
+The regression requires exact minimal audit diff equality after erasure.

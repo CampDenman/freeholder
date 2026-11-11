@@ -279,3 +279,8 @@ human-confirmed and retains that human's audit identity; a checkbox, generic
 assurance, time or absence is insufficient. If proof is unavailable, keep the
 request pending and retain its evidence. Retry the original cleanup job only
 after the actual outstanding outcomes are reconciled.
+
+Recovery's full provider/stopped-caller evidence stays in that private source
+until its hold or completed cleanup permits deletion. Typed audit projection
+keeps only operation identities/outcomes in the generic audit copy, preserving
+actor/action/subject history without recreating erased evidence after cutover.

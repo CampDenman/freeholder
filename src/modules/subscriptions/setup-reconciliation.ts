@@ -34,7 +34,7 @@ async function locked(ctx:{tx:Tx},id:string){
 }
 
 export const claimTrialSetupReconciliation=defineService({
- name:"subscriptions.claimTrialSetupReconciliation",orchestratedBy:"subscriptions.reconcileTrialSetupDispatch",summary:"Read exact original inputs for a fresh human's provider-outcome reconciliation.",
+ name:"subscriptions.claimTrialSetupReconciliation",auditInputFields:["dispatchId","outcome"],orchestratedBy:"subscriptions.reconcileTrialSetupDispatch",summary:"Read exact original inputs for a fresh human's provider-outcome reconciliation.",
  kind:"mutation",permission:"scoped",external:false,agentCallable:false,stepUp:true,writeClass:"money",
  input:confirmation,output:z.object({provider:z.string(),request:setupRequest,kind:z.enum(["customer","session"]),state,createdAt:z.string(),customerAtStart:z.string().nullable()}),
  handler:async(input,ctx)=>{
@@ -47,7 +47,7 @@ export const claimTrialSetupReconciliation=defineService({
 });
 
 export const applyTrialSetupReconciliation=defineService({
- name:"subscriptions.applyTrialSetupReconciliation",orchestratedBy:"subscriptions.reconcileTrialSetupDispatch",summary:"Record exact human-confirmed final provider and stopped-caller evidence.",
+ name:"subscriptions.applyTrialSetupReconciliation",auditInputFields:["dispatchId","outcome"],orchestratedBy:"subscriptions.reconcileTrialSetupDispatch",summary:"Record exact human-confirmed final provider and stopped-caller evidence.",
  kind:"mutation",permission:"scoped",external:false,agentCallable:false,stepUp:true,writeClass:"money",
  input:confirmation.extend({requestHash:z.string().length(64),providerAccountId:z.string().optional(),verifiedCustomerRef:z.string().optional(),verifiedProviderRef:z.string().optional()}),output:result,
  handler:async(input,ctx)=>{
@@ -78,7 +78,7 @@ export const applyTrialSetupReconciliation=defineService({
 });
 
 export const reconcileTrialSetupDispatch=defineOrchestratedService({
- name:"subscriptions.reconcileTrialSetupDispatch",summary:"Record a human's exact final provider guarantee and stopped-caller evidence; unresolved work stays pending.",
+ name:"subscriptions.reconcileTrialSetupDispatch",auditInputFields:["dispatchId","outcome"],summary:"Record a human's exact final provider guarantee and stopped-caller evidence; unresolved work stays pending.",
  kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,writeClass:"money",input:confirmation,output:result,
  handler:async(input,actor)=>{
   requireHuman(actor);

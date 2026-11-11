@@ -38,7 +38,7 @@ export const claimTrialSetupDispatch=defineService({
 
 /** Private operational evidence only; it never restores an erased customer or card. */
 export const recordTrialSetupDispatch=defineService({
- name:"subscriptions.recordTrialSetupDispatch",summary:"Record the actual outcome of one physical provider request.",
+ name:"subscriptions.recordTrialSetupDispatch",auditInputFields:["dispatchId","outcome"],summary:"Record the actual outcome of one physical provider request.",
  kind:"mutation",permission:"system",external:false,
  input:z.object({dispatchId:z.uuid(),outcome:z.enum(["succeeded","unknown"]),providerAccountId:z.string().max(200).optional(),providerRef:z.string().min(1).max(500).optional(),providerCustomerRef:z.string().min(1).max(500).optional(),errorCode:z.string().max(100).optional()}),
  output:z.object({accepted:z.boolean(),erasing:z.boolean(),customerRef:z.string().nullable()}),

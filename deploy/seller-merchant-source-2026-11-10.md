@@ -255,3 +255,18 @@ Sources: `card-setup.ts`, `setup-dispatch.ts`, `setup-erasure.ts`,
 transports are synthetic source evidence. Actual enabled-account acceptance,
 independent review and the remaining full seller-merchant integration above
 remain required; this source increment enables no direct merchant mode.
+
+Final audit-copy control also reproduced a completed erasure retaining the
+subject's email in generic reconciliation audit input. The existing typed
+`auditInputFields` seam now limits those phase copies to dispatch/outcome, and
+setup application/response copies to their minimum operation IDs/stage. Full
+concrete evidence remains in the private dispatch until its named hold or
+cleanup permits erasure. Original actor/action/subject metadata is unchanged.
+
+A populated schema69→70 rehearsal preserved the existing paused agreement,
+customer and unrelated saved card, inserted zero setup/dispatch evidence, and
+refused a prior-image trial activation with
+`subscription_trial_setup_confirmation`. Migration70 SHA-256:
+`baddb276d83d472d58413ed119e4e3ef30a24b6cf376b3caf49474448b344e9b`.
+This is upgrade/source refusal evidence; actual full restore acceptance remains
+required under C11.08.

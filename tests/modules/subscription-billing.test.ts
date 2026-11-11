@@ -1199,6 +1199,7 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     const recovery=entries.filter(item=>item.action.includes("TrialSetupReconciliation"));
     expect(recovery).toHaveLength(2);
     expect(recovery.every(item=>item.actor===`user:${OWNER.userId}` && item.subjectType==="subscription" && item.subjectId===joined.id)).toBe(true);
+    expect(recovery.map(item=>item.diff)).toEqual([{dispatchId:dispatch!.id,outcome:"completed"},{dispatchId:dispatch!.id,outcome:"completed"}]);
     expect(JSON.stringify(recovery.map(item=>item.diff))).not.toContain(contact.email!);
     expect(JSON.stringify(recovery.map(item=>item.diff))).not.toContain(evidence);
   });
