@@ -56,7 +56,7 @@ and two identical fingerprint generations (65 sources) passed. The final npm
 audit reports zero vulnerabilities at every severity. This does not close the
 deferred mobile acceptance items.
 
-The reviewer must also examine the explicitly unfinished plugin permission/consent/runtime
+The reviewer must also examine the new plugin permission/consent/runtime
 controls (C3.40), the newly implemented network wrapper (C3.41) and publisher-
 signature boundary (C3.42), member cryptography
 (C12.39), and current upload/payout/preview-assistant boundaries. A closed
@@ -323,8 +323,27 @@ loader, permission contract, update/rollback.
   wrapper with raw Node APIs remains possible for trusted in-process code;
   this is not the deferred C3.43 sandbox. Inspect provider factories and the
   social-plugin fixture for accidental unbounded/global fetch defaults.
-- C3.40 service grants/owner consent/runtime plugin actors remain unfinished;
-  network wrapper verification does not supply those controls.
+- Review C3.40's exact-scope consent (`permission-policy.ts`, `permissions.ts`),
+  owner-only approval/revocation, `plugin:<name>` service/timeline audit attribution,
+  and plugin execution ALS boundaries in `service.ts` and `context.ts`.
+  Cross-module calls replace supplied system/owner identities; permitted core
+  operations retain core composition authority and plugin audit cause. Inspect
+  the narrow own-scope privacy erasure bridge and imported-order refund bridge
+  (`invoicing.reconcilePluginRefund`: own source prefix, currency, idempotency,
+  remaining credit bounds), denial of generic human-review actions,
+  own-namespace event/timeline/job context operations and core callback isolation.
+- Inspect `runtime.ts`, CMS rendering/JSON-LD and boot isolation: unexpected
+  contribution errors force the current shared transaction to roll back, with
+  generic runtime disable persisted after rollback. Earlier committed phases
+  are not undone. Expected adapter/provider errors retry. Client widget errors
+  have only a local boundary; there is no anonymous disable endpoint.
+- Check migration 0066, consent backup/restore, invalid synthetic demo approvals
+  on real instances, stale compiled scopes, revocation and actual owner recovery.
+  Outbox enrollment records exclude plugins inactive at event commit while
+  preserving retry of previously accepted work. Tests include new native
+  permission/context cases and actual owner-browser review/widget recovery.
+  `deploy/plugin-publisher-trust.md` records the owner procedure and limitations.
+  These coding-agent checks do not provide independent security sign-off.
 - Rollback of a plugin is not rollback of data it wrote. Call that out.
 
 ### Updater

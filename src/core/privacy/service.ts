@@ -1526,9 +1526,13 @@ async function refusePendingErasure(tx: Tx, requestId: string): Promise<void> {
 /** Provider workers acknowledge only their own durable task, never a whole request. */
 export const completeErasureJob = defineService({
   name: "privacy.completeErasureJob", summary: "Acknowledge one completed provider erasure job.",
-  kind: "mutation", permission: "system", external: false,
+  kind: "mutation", permission: "system", external: false, pluginAccess: "manage",
   input: z.object({ requestId: z.uuid(), scope: z.string(), jobId: z.uuid() }), output: okResult,
   handler: async (input, ctx) => {
+    if (ctx.actor.kind === "plugin") {
+      const own = `plugins.${ctx.actor.name}`;
+      if (input.scope !== own && !input.scope.startsWith(`${own}.`)) throw new ServiceError("permission", "A plugin can acknowledge only its own provider erasure scope.");
+    }
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
     const [request] = await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id, input.requestId)).limit(1);
     const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, input.requestId)).limit(1);

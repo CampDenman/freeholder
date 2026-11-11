@@ -12,7 +12,9 @@ import {
 } from "@/core/plugin";
 import { PLATFORM_VERSION } from "@/core/platform";
 import { validatePluginContract, type PluginContractInput } from "@freeholder/plugin-kit";
-import { installedPlugins, pluginPublisherKeys, pluginRegistries, pluginRetentions } from "./schema";
+import { installedPlugins, pluginPermissionConsents, pluginPublisherKeys, pluginRegistries, pluginRetentions } from "./schema";
+import permissionServices from "./permissions";
+import { assertPluginConsent, pluginScopeHash } from "./permission-policy";
 import { assertDirectory, hashDirectory, signatureKeyId } from "./integrity";
 import publisherKeyServices, { assertTrustedArtifact, lockPublisherTrust, publisherKeyId, requirePublisherReviewer, trustedPublisherKey } from "./publisher-keys";
 import {
@@ -203,6 +205,7 @@ export const enablePlugin = defineService({
     if (integrity !== stored.integrity) throw new ServiceError("conflict", "The installed plugin files changed. Verify an update before enabling them.");
     if (!stored.signature) throw new ServiceError("permission", "This plugin needs a trusted Ed25519 signature before it can be enabled.");
     await assertTrustedArtifact(ctx.tx, integrity, stored.signature);
+    await assertPluginConsent(ctx.tx, stored.name, stored.permissions);
     const [row] = await ctx.tx
       .update(installedPlugins)
       .set({ status: "enabled", disabledReason: null })
@@ -223,6 +226,7 @@ export const disablePlugin = defineService({
   input: z.object({ name: z.string().min(1), reason: z.string().max(500).optional() }),
   output: pluginRow,
   handler: async (input, ctx) => {
+    await lockPublisherTrust(ctx.tx);
     const [row] = await ctx.tx
       .update(installedPlugins)
       .set({ status: "disabled", disabledReason: input.reason ?? "Disabled by the owner." })
@@ -271,6 +275,8 @@ export const updatePlugin = defineService({
       ctx.setSubject("plugin", before.id);
       return before;
     }
+    const scopesChanged = pluginScopeHash(before.name, before.permissions) !== pluginScopeHash(before.name, manifest.permissions ?? []);
+    if (scopesChanged) await ctx.tx.update(pluginPermissionConsents).set({ revokedAt: new Date() }).where(eq(pluginPermissionConsents.name, before.name));
     const [row] = await ctx.tx
       .update(installedPlugins)
       .set({
@@ -283,6 +289,7 @@ export const updatePlugin = defineService({
         license: manifest.license,
         freeholder: manifest.freeholder,
         permissions: manifest.permissions ?? [],
+        ...(scopesChanged ? { status: "disabled" as const, disabledReason: "Review and approve this plugin's changed permissions before enabling it." } : {}),
       })
       .where(eq(installedPlugins.id, before.id))
       .returning();
@@ -319,9 +326,11 @@ export const rollbackPlugin = defineService({
     }
     if (!artifact.signature) throw new ServiceError("permission", "A plugin cannot roll back to an unsigned artifact.");
     await assertTrustedArtifact(ctx.tx, integrity, artifact.signature);
+    const scopesChanged = pluginScopeHash(before.name, before.permissions) !== pluginScopeHash(before.name, artifact.permissions);
+    if (scopesChanged) await ctx.tx.update(pluginPermissionConsents).set({ revokedAt: new Date() }).where(eq(pluginPermissionConsents.name, before.name));
     const [row] = await ctx.tx
       .update(installedPlugins)
-      .set({ ...artifact, previousVersion: before.version, previousArtifact: artifactSnapshot.parse(before) })
+      .set({ ...artifact, previousVersion: before.version, previousArtifact: artifactSnapshot.parse(before), ...(scopesChanged ? { status: "disabled" as const, disabledReason: "Review and approve this plugin's changed permissions before enabling it." } : {}) })
       .where(eq(installedPlugins.id, before.id))
       .returning();
     ctx.setSubject("plugin", row!.id);
@@ -342,6 +351,8 @@ export const uninstallPlugin = defineService({
   }),
   output: okResult.extend({ name: z.string(), retention: z.enum(["keep", "purge"]) }),
   handler: async (input, ctx) => {
+    await lockPublisherTrust(ctx.tx);
+    await ctx.tx.update(pluginPermissionConsents).set({ revokedAt: new Date() }).where(eq(pluginPermissionConsents.name, input.name));
     const [row] = await ctx.tx
       .delete(installedPlugins)
       .where(eq(installedPlugins.name, input.name))
@@ -518,4 +529,5 @@ export default [
   cachePluginRegistry,
   listPluginCatalog,
   ...publisherKeyServices,
+  ...permissionServices,
 ];

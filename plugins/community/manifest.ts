@@ -7,7 +7,7 @@ export default definePlugin({
   version: "0.1.0",
   freeholder: "^0.2.0",
   license: "Apache-2.0",
-  permissions: ["contacts:read"],
+  permissions: ["contacts:write"],
   requires: ["core"],
   migrations: ["0000_reviewed-baseline.sql", "0001_community_rooms.sql"],
   capabilities: { widgets: true },

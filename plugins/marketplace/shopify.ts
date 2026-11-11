@@ -10,6 +10,7 @@ import type { MarketplaceProvider } from "./adapter";
 
 export interface ShopifyConfiguration { shop: string; clientId: string; clientSecret: string }
 export class ShopifyError extends Error {
+  readonly pluginOperationalFailure = true;
   constructor(message: string) { super(message); this.name = "ShopifyError"; }
 }
 const shopIdentity = z.object({ id: z.string().regex(/^gid:\/\/shopify\/Shop\/[0-9]+$/), myshopifyDomain: z.string() });

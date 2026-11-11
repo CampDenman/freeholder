@@ -40,6 +40,7 @@ import {
 } from "@/core/jobs";
 import { ready } from "@/core/runtime";
 import {withDeploymentContinuation} from '@/core/runtime/deployment-admission';
+import { currentPluginAudit, currentPluginExecution, currentServiceTransaction, insideServiceTransaction, pluginActor, pluginOwnsTopic, pluginServiceOwner, withCoreExecution, withPluginExecution, withServiceTransaction } from "@/core/plugins/context";
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -80,6 +81,7 @@ type ActorIdentity =
       keyScopes?: readonly string[];
     }
   | { kind: "agent"; keyName: string; scopes: string[] }
+  | { kind: "plugin"; name: string; grants: readonly ModuleGrant[] }
   | { kind: "system" }
   | { kind: "anonymous" };
 
@@ -118,6 +120,9 @@ export { runAsSeed, SEED_AUDIT_ACTOR } from "@/core/audit-origin";
 
 /** The audit_log actor for a call: `actorString`, or the seed marker. */
 export function auditActorString(actor: Actor): string {
+  if (isSeeding() && (actor.kind === "system" || actor.kind === "plugin")) return SEED_AUDIT_ACTOR;
+  const origin = currentPluginAudit();
+  if (origin) return `plugin:${origin.name}`;
   return actor.kind === "system" && isSeeding() ? SEED_AUDIT_ACTOR : actorString(actor);
 }
 
@@ -134,6 +139,8 @@ export function actorString(actor: Actor): string {
       return actor.keyName.startsWith("agent:")
         ? actor.keyName
         : `agent:${actor.keyName}`;
+    case "plugin":
+      return `plugin:${actor.name}`;
     case "system":
       return "system";
     case "anonymous":
@@ -159,6 +166,10 @@ export function permits(
   serviceName: string,
   kind: "query" | "mutation" = "mutation",
 ): boolean {
+  if (actor.kind === "plugin") {
+    if (required === "system" || required === "authenticated") return false;
+    return hasModuleAccess(actor, serviceName.split(".")[0]!, kind === "query" ? "view" : "manage");
+  }
   if (actor.kind === "system") return true;
   if (required === "system") return false;
   if (actor.kind === "user" && actor.keyScopes) {
@@ -190,6 +201,9 @@ export function hasModuleAccess(
   required: GrantAccess = "view",
 ): boolean {
   if (actor.kind === "system") return true;
+  if (actor.kind === "plugin") {
+    return actor.grants.some(grant => grant.module === module && (required === "view" || grant.access === "manage"));
+  }
   if (actor.kind !== "user") return false;
   // A personal key never carries its person's staff access.
   if (actor.keyScopes) return false;
@@ -242,6 +256,8 @@ export interface ServiceCallOptions {
   tx?: Tx;
   /** Append bus events here so the outermost call publishes them. */
   queued?: QueuedEvent[];
+  /** Unexpected plugin failures are persisted only after the outer rollback. */
+  pluginFailures?: Set<string>;
 }
 
 export interface ServiceContext {
@@ -381,6 +397,12 @@ export interface ServiceDef<In extends z.ZodType, Out> {
    */
   agentCallable?: boolean;
   /**
+   * Explicit opt-in for a core internal contract a plugin must use. The
+   * handler must also bind its input to that plugin's own resource/scope.
+   * This never grants human/API-key access to a system-only service.
+   */
+  pluginAccess?: GrantAccess;
+  /**
    * C3.04: hide this service from MCP discovery even when the caller could
    * invoke it over HTTP. Credential and invitation verbs use this so an
    * agent is never invited to guess a password.
@@ -472,7 +494,8 @@ function authorizeInput<In extends z.ZodType, Out>(
     actor.kind === "user" &&
     !permits(actor, def.permission, def.name, def.kind);
 
-  if (!viaSelfService && !permits(actor, def.permission, def.name, def.kind)) {
+  const pluginBridge = actor.kind === "plugin" && def.permission === "system" && def.pluginAccess !== undefined && hasModuleAccess(actor, def.name.split(".")[0]!, def.pluginAccess);
+  if (!viaSelfService && !pluginBridge && !permits(actor, def.permission, def.name, def.kind)) {
     throw new ServiceError(
       "permission",
       actor.kind === "anonymous"
@@ -482,13 +505,13 @@ function authorizeInput<In extends z.ZodType, Out>(
           : `Your role does not have permission to ${def.kind === "query" ? "view" : "manage"} ${def.name.split(".")[0]}.`,
     );
   }
-  if (def.agentCallable === false && actsByKey(actor)) {
+  if (def.agentCallable === false && (actsByKey(actor) || actor.kind === "plugin" || currentPluginExecution())) {
     throw new ServiceError(
       "permission",
       "Sign in as a person to perform this human-review action.",
     );
   }
-  if (def.stepUp && actor.kind !== "system" && actor.kind === "agent") {
+  if (def.stepUp && (actor.kind === "agent" || actor.kind === "plugin" || currentPluginExecution())) {
     throw new ServiceError(
       "permission",
       "Sign in as a person to perform this security-sensitive action.",
@@ -627,11 +650,19 @@ export function defineOrchestratedService<In extends z.ZodType, Out>(
   return {
     def,
     async call(rawInput, actor, options): Promise<Out> {
-      if (options?.tx) return unavailableInsideTransaction();
+      const executing = currentPluginExecution();
+      if (executing && pluginServiceOwner(def)?.name !== executing.name) actor = pluginActor(executing, actor);
+      if (options?.tx || insideServiceTransaction()) return unavailableInsideTransaction();
       const { input } = authorizeInput(def, rawInput, actor);
       await ready();
       await enforceRateLimit(def, input, actor);
-      return assertOutput(def, await orchestration.handler(input, actor));
+      const owner = pluginServiceOwner(def);
+      const execute = async () => assertOutput(def, await orchestration.handler(input, actor));
+      if (owner) {
+        const { runPluginContribution } = await import("@/core/plugins/runtime");
+        return runPluginContribution(owner, execute);
+      }
+      return withCoreExecution(execute);
     },
   };
 }
@@ -646,6 +677,8 @@ export function defineService<In extends z.ZodType, Out>(
       actor: Actor,
       options?: ServiceCallOptions,
     ): Promise<Out> {
+      const executing = currentPluginExecution();
+      if (executing && pluginServiceOwner(def)?.name !== executing.name) actor = pluginActor(executing, actor);
       // Ownership cannot be decided by `permits`: it is pure by design, and
       // whether this contact belongs to this user is a fact about rows. So
       // eligibility is decided here and *verified inside the transaction*,
@@ -660,6 +693,8 @@ export function defineService<In extends z.ZodType, Out>(
       // A composed call inherits its parent's transaction and event queue; a
       // top-level call owns both. Exactly one transaction per outermost call.
       const inheritedTx = options?.tx;
+      if (!inheritedTx && insideServiceTransaction()) throw new ServiceError("internal", "Compose services with ctx.call so this mutation shares its transaction.");
+      if (inheritedTx && currentServiceTransaction() && inheritedTx !== currentServiceTransaction()) throw new ServiceError("internal", "A composed service must use its caller's transaction.");
 
       // The platform must be wired before a mutation can fan out to the
       // modules listening for it. Awaited here rather than at each entry point
@@ -679,9 +714,10 @@ export function defineService<In extends z.ZodType, Out>(
       // changed. See rate-limit.ts for why the counter commits separately.
       if (!inheritedTx) await enforceRateLimit(def, parsedInput, actor);
       const queued: QueuedEvent[] = options?.queued ?? [];
+      const pluginFailures = options?.pluginFailures ?? new Set<string>();
       let subject: { subjectType: string; subjectId: string } | undefined;
 
-      const run = async (tx: Tx): Promise<Out> => {
+      const runHandler = async (tx: Tx): Promise<Out> => {
         // A caller who got here only because the service is self-service has
         // proved nothing yet. Prove it now, against the same transaction the
         // handler is about to read from.
@@ -706,15 +742,22 @@ export function defineService<In extends z.ZodType, Out>(
             );
           }
         }
+        const requireContributionTopic = (topic: string): void => {
+          const plugin = currentPluginExecution();
+          if (plugin && !pluginOwnsTopic(plugin, topic)) throw new ServiceError("permission", "A plugin may emit events, write timeline entries and enqueue jobs only in its own namespace.");
+        };
         const ctx: ServiceContext = {
           tx,
           actor,
-          emitTimeline: (event) =>
-            writeTimelineEvent(tx, actorString(actor), event),
+          emitTimeline: (event) => {
+            requireContributionTopic(event.eventType);
+            return writeTimelineEvent(tx, currentPluginAudit() ? auditActorString(actor) : actorString(actor), event);
+          },
           setSubject: (subjectType, subjectId) => {
             subject = { subjectType, subjectId };
           },
           queueEvent: (eventName, payload) => {
+            requireContributionTopic(eventName);
             // Recorded *inside* this transaction, so the event commits with
             // the change that caused it or not at all (§11's outbox). The
             // write is deferred to the end of the handler rather than awaited
@@ -722,23 +765,26 @@ export function defineService<In extends z.ZodType, Out>(
             // caller in the codebase treats it as fire-and-forget.
             queued.push({ eventName, payload });
           },
-          queueJob: (name, data = {}, jobOptions = {}) =>
-            enqueueJob(tx, name, data, jobOptions),
-          call: (service, input) => service.call(input, actor, { tx, queued }),
+          queueJob: (name, data = {}, jobOptions = {}) => {
+            requireContributionTopic(name);
+            return enqueueJob(tx, name, data, jobOptions);
+          },
+          call: (service, input) => service.call(input, actor, { tx, queued, pluginFailures }),
           callAsSystem: (service, input) =>
             service.call(
               input,
               { kind: "system", request: actor.request },
-              { tx, queued },
+              { tx, queued, pluginFailures },
             ),
           callAsAgent: (keyName, scopes, service, input) =>
             service.call(
               input,
               { kind: "agent", keyName, scopes },
-              { tx, queued },
+              { tx, queued, pluginFailures },
             ),
         };
         const out = assertOutput(def, await def.handler(parsedInput, ctx));
+        if (!inheritedTx && pluginFailures.size) throw new ServiceError("internal", "A plugin failed; this operation was rolled back.");
 
         // The outermost call owns the outbox rows: a composed call shares the
         // queue, and writing them per-nested-call would order them by who
@@ -761,10 +807,31 @@ export function defineService<In extends z.ZodType, Out>(
         return out;
       };
 
+      const run = (tx: Tx): Promise<Out> => {
+        const owner = pluginServiceOwner(def);
+        if (!owner) return withServiceTransaction(tx, pluginFailures, () => withCoreExecution(() => runHandler(tx)));
+        return withServiceTransaction(tx, pluginFailures, () => withPluginExecution(owner, async () => {
+          const { assertPluginCanRun } = await import("@/core/plugins/permission-policy");
+          await assertPluginCanRun(owner, tx);
+          try { return await runHandler(tx); }
+          catch (error) {
+            const { unexpectedPluginError } = await import("@/core/plugins/runtime");
+            if (unexpectedPluginError(error)) pluginFailures.add(owner.name);
+            throw error;
+          }
+        }));
+      };
+
       const complete=async()=>{
-      const result = inheritedTx
-        ? await run(inheritedTx)
-        : await db().transaction(run);
+      let result: Out;
+      try { result = inheritedTx ? await run(inheritedTx) : await db().transaction(run); }
+      catch (error) {
+        if (!inheritedTx && pluginFailures.size) {
+          const { recordPluginFailures } = await import("@/core/plugins/runtime");
+          await recordPluginFailures(pluginFailures);
+        }
+        throw error;
+      }
 
       // Only the outermost call dispatches, and only after its commit — a
       // listener must never observe state that later rolled back (§11). The

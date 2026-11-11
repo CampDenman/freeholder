@@ -11,7 +11,7 @@ import { ready } from "@/core/runtime";
 import { createContact } from "@/core/contacts/service";
 import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
 import { createDataRequest, verifyDataRequest, fulfillDataRequest } from "@/core/privacy/service";
-import { getJob, stopJobs } from "@/core/jobs";
+import { getJob, listJobs, stopJobs } from "@/core/jobs";
 import { resetEnvForTests } from "@/core/env";
 import type { getPinnedBytes } from "@/core/http/pinned-download";
 import { storage } from "@/adapters/storage";
@@ -141,10 +141,10 @@ async function runErasureJobs(requestId: string) {
   for (const outcome of body!.outcomes) {
     for (const jobId of outcome.pendingJobs ?? []) {
       const storageJob = await getJob(eraseImportedCopies.name, jobId);
-      if (storageJob) { await eraseImportedCopies.handler(storageJob.data, jobContext(jobId)); continue; }
+      if (storageJob) { await listJobs().get(eraseImportedCopies.name)!.handler(storageJob.data, jobContext(jobId)); continue; }
       const providerJob = await getJob(eraseProviderRecordings.name, jobId);
       if (!providerJob) throw new Error(`Unknown erasure job ${jobId}`);
-      await eraseProviderRecordings.handler(providerJob.data, jobContext(jobId));
+      await listJobs().get(eraseProviderRecordings.name)!.handler(providerJob.data, jobContext(jobId));
     }
   }
   const [after] = await db().select().from(dataRequests).where(eq(dataRequests.id, requestId));

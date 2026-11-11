@@ -16,10 +16,36 @@ import {
   revokePublisherKeyAction,
   setRegistryPublisherKeyAction,
   cachePluginRegistryAction,
+  approvePluginPermissionsAction,
+  revokePluginPermissionsAction,
   type PluginActionState,
 } from "../../plugin-actions";
 
 const empty: PluginActionState = {};
+
+export function PluginPermissionsForm({ name, scopeHash, approved, canReview, labels }: {
+  name: string; scopeHash: string; approved: boolean; canReview: boolean;
+  labels: { confirmation: string; approve: string; saved: string; revoke: string; revokeConfirmation: string; revoked: string };
+}) {
+  const [approval, approve, approving] = useActionState(approvePluginPermissionsAction, empty);
+  const [revocation, revoke, revoking] = useActionState(revokePluginPermissionsAction, empty);
+  return <div className="grid gap-3">
+    <form action={approve} data-plugin-consent={name} className="grid gap-2">
+      <input type="hidden" name="name" value={name} /><input type="hidden" name="scopeHash" value={scopeHash} />
+      {approval.error ? <p role="alert" className="text-sm text-danger">{approval.error}</p> : null}
+      {approval.saved ? <p role="status" className="text-sm text-success">{labels.saved}</p> : null}
+      <label className="flex items-start gap-2 text-sm"><input name="confirmation" type="checkbox" required disabled={!canReview || approving} className="mt-1 h-4 w-4 accent-accent" /><span>{labels.confirmation}</span></label>
+      <div><Button type="submit" disabled={!canReview || approving}>{labels.approve}</Button></div>
+    </form>
+    {approved ? <form action={revoke} data-plugin-revoke={name} className="grid gap-2">
+      <input type="hidden" name="name" value={name} />
+      {revocation.error ? <p role="alert" className="text-sm text-danger">{revocation.error}</p> : null}
+      {revocation.saved ? <p role="status" className="text-sm text-ink-muted">{labels.revoked}</p> : null}
+      <label className="flex items-start gap-2 text-sm"><input name="confirmation" type="checkbox" required disabled={!canReview || revoking} className="mt-1 h-4 w-4 accent-accent" /><span>{labels.revokeConfirmation}</span></label>
+      <div><Button type="submit" variant="quiet" disabled={!canReview || revoking}>{labels.revoke}</Button></div>
+    </form> : null}
+  </div>;
+}
 
 export function InstallPluginForm({
   labels,

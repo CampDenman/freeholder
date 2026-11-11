@@ -23,6 +23,7 @@ export interface PinnedRequestOptions extends PinnedDownloadOptions {
 }
 
 export class PinnedDownloadError extends Error {
+  readonly pluginOperationalFailure = true;
   constructor(
     public readonly code: "timeout" | "too_large" | "network",
     message: string,

@@ -1253,6 +1253,7 @@ export const SERVICE_NAMES = [
   "platform.verifyReleaseFeed",
   "platform.version",
   "plugins.addRegistry",
+  "plugins.approvePermissions",
   "plugins.cacheRegistry",
   "plugins.disable",
   "plugins.enable",
@@ -1260,8 +1261,10 @@ export const SERVICE_NAMES = [
   "plugins.install",
   "plugins.list",
   "plugins.listCatalog",
+  "plugins.listPermissions",
   "plugins.listPublisherKeys",
   "plugins.listRegistries",
+  "plugins.revokePermissions",
   "plugins.revokePublisherKey",
   "plugins.rollback",
   "plugins.setRegistryPublisherKey",
@@ -6602,6 +6605,10 @@ export interface ServiceCatalog {
     input: { name: string; url: string; publisherKeyId?: string; tier?: "verified" | "community" | "private" | "local" };
     output: { id: string; name: string; url: string; tier: "verified" | "community" | "private" | "local"; [key: string]: unknown };
   };
+  "plugins.approvePermissions": {
+    input: { name: string; scopeHash: string; confirmation: true };
+    output: { ok: true };
+  };
   "plugins.cacheRegistry": {
     input: { url: string; index: { registry: string; updated: string; plugins: { name: string; version: string; tier: "verified" | "community" | "private" | "local"; license: string; permissions: string[]; freeholder: string; integrity: string; changelog: string; description?: string; repo?: string }[] }; signature: string };
     output: { id: string; name: string; url: string; plugins: number; [key: string]: unknown };
@@ -6630,6 +6637,10 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { name: string; version: string; tier: "verified" | "community" | "private" | "local"; license: string; permissions: unknown; freeholder: string; integrity: string; changelog: string; [key: string]: unknown }[];
   };
+  "plugins.listPermissions": {
+    input: Record<string, never>;
+    output: { name: string; version: string; permissions: string[]; scopeHash: string; bundled: boolean; installed: boolean; approved: boolean; disabled: boolean; bootDisabled: boolean }[];
+  };
   "plugins.listPublisherKeys": {
     input: Record<string, never>;
     output: { keyId: string; publisher: string; publicKey: string; trustedBy: string; createdAt: string; revokedAt: string | null; [key: string]: unknown }[];
@@ -6637,6 +6648,10 @@ export interface ServiceCatalog {
   "plugins.listRegistries": {
     input: Record<string, never>;
     output: { id: string; name: string; url: string; tier: "verified" | "community" | "private" | "local"; signature: string | null; publisherKeyId: string | null; cachedIndex: unknown; fetchedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+  };
+  "plugins.revokePermissions": {
+    input: { name: string; confirmation: true };
+    output: { ok: true };
   };
   "plugins.revokePublisherKey": {
     input: { keyId: string; confirmation: true };
@@ -9371,6 +9386,7 @@ export interface FreeholderApi {
   };
   plugins: {
     addRegistry: (input: ServiceCatalog["plugins.addRegistry"]["input"]) => Promise<ServiceCatalog["plugins.addRegistry"]["output"]>;
+    approvePermissions: (input: ServiceCatalog["plugins.approvePermissions"]["input"]) => Promise<ServiceCatalog["plugins.approvePermissions"]["output"]>;
     cacheRegistry: (input: ServiceCatalog["plugins.cacheRegistry"]["input"]) => Promise<ServiceCatalog["plugins.cacheRegistry"]["output"]>;
     disable: (input: ServiceCatalog["plugins.disable"]["input"]) => Promise<ServiceCatalog["plugins.disable"]["output"]>;
     enable: (input: ServiceCatalog["plugins.enable"]["input"]) => Promise<ServiceCatalog["plugins.enable"]["output"]>;
@@ -9378,8 +9394,10 @@ export interface FreeholderApi {
     install: (input: ServiceCatalog["plugins.install"]["input"]) => Promise<ServiceCatalog["plugins.install"]["output"]>;
     list: (input?: ServiceCatalog["plugins.list"]["input"]) => Promise<ServiceCatalog["plugins.list"]["output"]>;
     listCatalog: (input?: ServiceCatalog["plugins.listCatalog"]["input"]) => Promise<ServiceCatalog["plugins.listCatalog"]["output"]>;
+    listPermissions: (input?: ServiceCatalog["plugins.listPermissions"]["input"]) => Promise<ServiceCatalog["plugins.listPermissions"]["output"]>;
     listPublisherKeys: (input?: ServiceCatalog["plugins.listPublisherKeys"]["input"]) => Promise<ServiceCatalog["plugins.listPublisherKeys"]["output"]>;
     listRegistries: (input?: ServiceCatalog["plugins.listRegistries"]["input"]) => Promise<ServiceCatalog["plugins.listRegistries"]["output"]>;
+    revokePermissions: (input: ServiceCatalog["plugins.revokePermissions"]["input"]) => Promise<ServiceCatalog["plugins.revokePermissions"]["output"]>;
     revokePublisherKey: (input: ServiceCatalog["plugins.revokePublisherKey"]["input"]) => Promise<ServiceCatalog["plugins.revokePublisherKey"]["output"]>;
     rollback: (input: ServiceCatalog["plugins.rollback"]["input"]) => Promise<ServiceCatalog["plugins.rollback"]["output"]>;
     setRegistryPublisherKey: (input: ServiceCatalog["plugins.setRegistryPublisherKey"]["input"]) => Promise<ServiceCatalog["plugins.setRegistryPublisherKey"]["output"]>;

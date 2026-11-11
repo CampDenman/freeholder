@@ -12,6 +12,8 @@ import { auditLog } from "@/core/events/schema";
 import { hashDirectory, publisherPublicKey, signIntegrity } from "@/core/plugins/integrity";
 import { lockPublisherTrust, revokePublisherKey, setRegistryPublisherKey, trustPublisherKey } from "@/core/plugins/publisher-keys";
 import { signRegistryIndex, type RegistryIndex } from "@/core/plugins/registry";
+import { approvePluginPermissions } from "@/core/plugins/permissions";
+import { pluginScopeHash } from "@/core/plugins/permission-policy";
 import { installedPlugins, pluginPublisherKeys } from "@/core/plugins/schema";
 import { addPluginRegistry, cachePluginRegistry, enablePlugin, installPlugin, listInstalledPlugins, listPluginCatalog, listPluginRegistries, rollbackPlugin, updatePlugin } from "@/core/plugins/service";
 import { type Actor } from "@/core/service";
@@ -101,6 +103,7 @@ describe.runIf(hasDatabase)("publisher trust transactions (C3.42)", { timeout: 3
     expect(await failure(enablePlugin.call({ name: "sample" }, reviewer))).toMatchObject({ code: "permission" });
     expect(await failure(updatePlugin.call({ path: replacement.path, signature: replacement.signature }, OWNER))).toMatchObject({ code: "step_up_required" });
     expect(await updatePlugin.call({ path: replacement.path, signature: replacement.signature }, reviewer)).toMatchObject({ signature: replacement.signature, status: "disabled" });
+    await approvePluginPermissions.call({ name: "sample", scopeHash: pluginScopeHash("sample", ["contacts:read"]), confirmation: true }, reviewer);
     expect(await enablePlugin.call({ name: "sample" }, OWNER)).toMatchObject({ status: "enabled" });
   });
 
@@ -173,6 +176,7 @@ describe.runIf(hasDatabase)("publisher trust transactions (C3.42)", { timeout: 3
   it("disables signed registrations on revocation and refuses re-enable", async () => {
     await trustPublisherKey.call(keyInput(), reviewer);
     await installPlugin.call(await artifact(), OWNER);
+    await approvePluginPermissions.call({ name: "sample", scopeHash: pluginScopeHash("sample", ["contacts:read"]), confirmation: true }, reviewer);
     await enablePlugin.call({ name: "sample" }, OWNER);
     expect(await failure(revokePublisherKey.call({ keyId: keyInput().fingerprint }, reviewer))).toMatchObject({ code: "validation" });
     expect((await listInstalledPlugins.call({}, OWNER))[0]!.status).toBe("enabled");
@@ -201,6 +205,7 @@ describe.runIf(hasDatabase)("publisher trust transactions (C3.42)", { timeout: 3
     await trustPublisherKey.call(keyInput(), reviewer);
     const signed = await artifact();
     await installPlugin.call(signed, OWNER);
+    await approvePluginPermissions.call({ name: "sample", scopeHash: pluginScopeHash("sample", ["contacts:read"]), confirmation: true }, reviewer);
     await enablePlugin.call({ name: "sample" }, OWNER);
     await addPluginRegistry.call({ name: "Fixture", url, publisherKeyId: keyInput().fingerprint }, reviewer);
     await cachePluginRegistry.call({ url, index, signature: signRegistryIndex(index, url, old.privateKey) }, OWNER);

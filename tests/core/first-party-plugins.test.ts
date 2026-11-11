@@ -489,7 +489,7 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", { ti
       },
       OWNER,
     );
-    expect(recorded.status).toBe("recorded");
+    expect(recorded.status, recorded.lastError ?? "Artifact state").toBe("recorded");
     expect(recorded.conversationId).toBeTruthy();
     expect(recorded.transcript).toMatch(/Sitting recap/);
     const artifacts = await listVoiceVideoArtifacts.call({}, OWNER);
@@ -531,7 +531,7 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", { ti
       },
       OWNER,
     );
-    expect(live.status).toBe("live");
+    expect(live.status, live.lastError ?? "Room state").toBe("live");
     expect(live.conversationId).toBeTruthy();
     const joined = await joinVoiceVideoRoom.call(
       { roomId: live.id, contactId: person.id },

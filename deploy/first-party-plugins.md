@@ -229,7 +229,7 @@ making a request. A missing scope refuses both HTTP and recording downloads
 before a transport runs. Changing the manifest's array after binding does not
 expand the captured capability. The Plugins screen labels declared network
 access for installed artifacts and catalogue entries. Owner consent and the
-runtime service actor remain C3.40.
+runtime service actor are enforced by C3.40; see `deploy/plugin-publisher-trust.md` for review and recovery.
 
 The returned `fetch` supports ordinary provider API methods and fetch
 `Request`/`RequestInit` inputs. It forwards explicit provider credentials to the

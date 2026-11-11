@@ -849,12 +849,15 @@ async function checkManagedAgentConnections(): Promise<Check[]> {
 
 export async function checkPlugins(): Promise<Check[]> {
   try {
-    const { installedPlugins, pluginPublisherKeys, pluginRegistries } = await import("@/core/plugins/schema");
+    const { installedPlugins, pluginPermissionConsents, pluginPublisherKeys, pluginRegistries } = await import("@/core/plugins/schema");
+    const { pluginScopeHash, validConsentOrigin } = await import("@/core/plugins/permission-policy");
+    const { listPluginExecutions } = await import("@/core/plugins/context");
     const { hashDirectory, signatureKeyId, verifySignature } = await import("@/core/plugins/integrity");
     const { registryIndexSchema, verifyRegistryIndex } = await import("@/core/plugins/registry");
     const rows = await db().select().from(installedPlugins);
     const keys = await db().select().from(pluginPublisherKeys);
     const registries = await db().select().from(pluginRegistries);
+    const consents = await db().select().from(pluginPermissionConsents);
     const activeKey = (id: string | null) => keys.find(key => key.keyId === id && !key.revokedAt);
     let invalidArtifacts = 0;
     for (const plugin of rows.filter(row => row.status === "enabled")) {
@@ -875,6 +878,15 @@ export async function checkPlugins(): Promise<Check[]> {
         `${invalidArtifacts} enabled artifact(s) and ${invalidCatalogs} cached catalog(s) failed current publisher verification.`,
         "Disable affected plugins. In Admin → Plugins, verify publisher fingerprints, replace altered artifacts and refresh catalogs with trusted signatures. Revoked keys cannot be restored."),
         message: { key: "doctor.pluginTrust.failed", params: { artifacts: String(invalidArtifacts), catalogs: String(invalidCatalogs) } } }];
+    }
+    const unreviewed = rows.filter(plugin => plugin.status === "enabled" && !consents.some(consent => consent.name === plugin.name && validConsentOrigin(consent.approvedBy) && !consent.revokedAt && !consent.runtimeDisabledAt && consent.scopeHash === pluginScopeHash(plugin.name, plugin.permissions)));
+    const known = new Set([...rows.map(plugin => plugin.name), ...listPluginExecutions().map(plugin => plugin.name)]);
+    const stopped = consents.filter(consent => consent.runtimeDisabledAt && !consent.revokedAt && known.has(consent.name));
+    if (unreviewed.length || stopped.length) {
+      return [{ ...warn("plugins.permissions", "Plugin permission review",
+        `${unreviewed.length} enabled installation(s) need permission review; ${stopped.length} plugin(s) stopped after a runtime failure.`,
+        "Open Admin → Plugins. Repair affected plugins, review their current permission list, approve it as the verified owner and enable installed artifacts again."),
+        message: { key: "doctor.pluginPermissions.review", params: { unreviewed: String(unreviewed.length), stopped: String(stopped.length) } } }];
     }
     const disabled = rows.filter((row) => row.status === "disabled");
     if (disabled.length === 0) {

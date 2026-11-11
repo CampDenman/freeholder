@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "freeholder": "^0.2.0",
   "license": "Apache-2.0",
-  "permissions": ["contacts:read", "invoicing:create"],
+  "permissions": ["contacts:write", "invoicing:create"],
   "requires": ["core", "invoicing"],
   "migrations": ["0000_reviewed-baseline.sql"],
   "capabilities": {}

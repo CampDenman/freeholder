@@ -52,6 +52,15 @@ test("the owner trusts, installs, rotates and revokes a publisher key", async ({
     await expect(plugin.getByText("0.1.0", { exact: true })).toBeVisible();
     await expect(plugin.getByText("Does not declare outbound network access", { exact: true })).toBeVisible();
     await plugin.getByRole("button", { name: "Enable", exact: true }).click();
+    await expect(plugin.getByRole("alert")).toContainText("Review its permissions");
+    const review = page.locator('li[data-plugin-permissions="sample"]');
+    async function approvePermissions() {
+      await review.getByLabel("I approve exactly the permissions listed above.", { exact: true }).check();
+      await review.getByRole("button", { name: "Approve permissions", exact: true }).click();
+      await expect(review.getByText("Permissions approved", { exact: true })).toBeVisible();
+    }
+    await approvePermissions();
+    await plugin.getByRole("button", { name: "Enable", exact: true }).click();
     await expect(plugin.getByText("Enabled", { exact: true })).toBeVisible();
 
     const url = "https://publisher.example/index.json";
@@ -76,6 +85,12 @@ test("the owner trusts, installs, rotates and revokes a publisher key", async ({
     await plugin.getByRole("button", { name: "Update", exact: true }).click();
     await expect(plugin.getByText("0.2.0", { exact: true })).toBeVisible();
     await expect(plugin.getByText("Declares outbound network access", { exact: true })).toBeVisible();
+    await expect(review.getByText("Review required", { exact: true })).toBeVisible();
+    await expect(review.getByLabel("I approve exactly the permissions listed above.", { exact: true })).not.toBeChecked();
+    await expect(plugin.getByText("Disabled", { exact: true })).toBeVisible();
+    await approvePermissions();
+    await plugin.getByRole("button", { name: "Enable", exact: true }).click();
+    await expect(plugin.getByText("Enabled", { exact: true })).toBeVisible();
     await registry.getByLabel("Registry signing key", { exact: true }).selectOption(keyId(next));
     await registry.getByRole("button", { name: "Pin registry key", exact: true }).click();
     await expect(page.locator('li[data-catalog-plugin="sample"]')).toHaveCount(0);

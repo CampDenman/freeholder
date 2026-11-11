@@ -9,6 +9,7 @@ import { demoScenarios } from "@/core/demo/schema";
 import cmsOnboarding from "@/modules/cms/onboarding";
 import formsOnboarding from "@/modules/forms/onboarding";
 import seedOnboarding from "@/modules/seed/onboarding";
+import { seedReviewedBuiltinPlugins } from "../helpers/plugin-consent";
 
 export async function resetBrowserDatabase(): Promise<void> {
   const url = process.env.DATABASE_URL;
@@ -35,6 +36,7 @@ export async function resetBrowserDatabase(): Promise<void> {
   await db().transaction(async (tx) => {
     await seedDefaultRoles(tx);
     await seedCoreGuidanceFlows(tx);
+    await seedReviewedBuiltinPlugins(tx, "user:00000000-0000-4000-8000-000000000001");
     const scenario = seedOnboarding.scenarios[0]!;
     await tx
       .insert(demoScenarios)

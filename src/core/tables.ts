@@ -179,6 +179,7 @@ export {
   installedPlugins,
   pluginRegistries,
   pluginPublisherKeys,
+  pluginPermissionConsents,
   pluginRetentions,
   importRuns,
 } from "@/core/plugins/schema";

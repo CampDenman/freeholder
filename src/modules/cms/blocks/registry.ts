@@ -7,6 +7,7 @@
 // where a plugin's block types join without the editor changing. One source,
 // several projections — the same shape as the service registry in §28.
 import { z } from "zod";
+import { pluginBlockOwner, withPluginExecution, type PluginExecution } from "@/core/plugins/context";
 import { selectAssignedVariants } from "../experiments";
 import { deriveFields, type FieldDescriptor } from "./fields";
 import type { BlockContext, BlockDefinition, BlockNode } from "./types";
@@ -272,14 +273,22 @@ export const blockTreeSchema = (context: BlockContext) =>
  * the document head, which renders before the body — so the SEO layer asks the
  * tree what it contains rather than collecting it as a side effect of drawing.
  */
-export function collectJsonLd(nodes: BlockNode[]): Record<string, unknown>[] {
+export function collectJsonLd(nodes: BlockNode[], allowedPlugins?: ReadonlySet<PluginExecution>, failedPlugins?: Set<string>): Record<string, unknown>[] {
   const found: Record<string, unknown>[] = [];
   const walk = (list: BlockNode[]) => {
     for (const node of list) {
       const definition = byType.get(node.type);
-      const emitted = definition?.jsonLd?.(node.props);
+      const plugin = definition ? pluginBlockOwner(definition) : undefined;
+      if (plugin && !allowedPlugins?.has(plugin)) continue;
+      let emitted: Record<string, unknown> | undefined;
+      if (!plugin) emitted = definition?.jsonLd?.(node.props);
+      else if (allowedPlugins?.has(plugin)) {
+        try { emitted = withPluginExecution(plugin, () => definition?.jsonLd?.(node.props)); }
+        catch { failedPlugins?.add(plugin.name); }
+      }
       if (emitted) found.push(emitted);
       if (!node.children) continue;
+      if (plugin && definition?.includeChildren) continue;
       // Gated children must not leak into the document head (C2.10).
       if (node.type === "paywall") continue;
       if (node.type === "experiment") {
@@ -293,4 +302,22 @@ export function collectJsonLd(nodes: BlockNode[]): Record<string, unknown>[] {
   };
   walk(nodes);
   return found;
+}
+
+/** Public documents include only currently consented plugin structured data. */
+export async function collectPageJsonLd(nodes: BlockNode[]): Promise<Record<string, unknown>[]> {
+  const owners = new Set<PluginExecution>();
+  const find = (items: BlockNode[]) => { for (const node of items) {
+    const definition = byType.get(node.type); const plugin = definition ? pluginBlockOwner(definition) : undefined;
+    if (plugin) owners.add(plugin); if (node.children) find(node.children);
+  } };
+  find(nodes);
+  const { assertPluginCanRun } = await import("@/core/plugins/permission-policy");
+  const { recordPluginFailures } = await import("@/core/plugins/runtime");
+  const allowed = new Set<PluginExecution>();
+  for (const owner of owners) { try { await assertPluginCanRun(owner); allowed.add(owner); } catch { /* Disabled contributions add no public data. */ } }
+  const failures = new Set<string>();
+  const result = collectJsonLd(nodes, allowed, failures);
+  if (failures.size) await recordPluginFailures(failures);
+  return result;
 }

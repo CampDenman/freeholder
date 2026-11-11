@@ -70,10 +70,10 @@ import "./portal";
 
 const id = z.string().uuid();
 
-function requirePerson(actor: Actor): void {
+function requireThreadWriter(actor: Actor): void {
   // System passes: a form submission and a carrier webhook both arrive on
   // anonymous paths and reach here through `ctx.callAsSystem`.
-  if (actor.kind !== "user" && actor.kind !== "system") {
+  if (actor.kind !== "user" && actor.kind !== "system" && !(actor.kind === "plugin" && actor.grants.some(grant => grant.module === "conversations" && grant.access === "manage"))) {
     throw new ServiceError("permission", "Sign in to read conversations.");
   }
 }
@@ -188,7 +188,7 @@ export const recordMessage = defineService({
     ),
   output: row({ conversation: conversationRow, message: messageRow, duplicate: z.boolean() }),
   handler: async (input, ctx) => {
-    requirePerson(ctx.actor);
+    requireThreadWriter(ctx.actor);
     if (input.policyException && ctx.actor.kind !== "system") {
       throw new ServiceError(
         "permission",
@@ -514,7 +514,7 @@ export const recordDelivery = defineService({
   }),
   output: row({ id: uuid, duplicate: z.boolean() }),
   handler: async (input, ctx) => {
-    requirePerson(ctx.actor);
+    requireThreadWriter(ctx.actor);
     const [message] = await ctx.tx
       .select({ id: messages.id, contactId: messages.contactId })
       .from(messages)
@@ -701,7 +701,7 @@ export const markConversationRead = defineService({
   input: z.object({ id, read: z.boolean().default(true) }),
   output: conversationRow,
   handler: async (input, ctx) => {
-    requirePerson(ctx.actor);
+    requireThreadWriter(ctx.actor);
     const [updated] = await ctx.tx
       .update(conversations)
       .set({ unread: !input.read, updatedAt: sql`now()` })

@@ -4,6 +4,7 @@
 import { readBoundedBytes } from "@/core/http/body";
 import { getPinnedBytes, requestPinnedBytes } from "@/core/http/pinned-download";
 import { ServiceError } from "@/core/service";
+import { currentPluginExecution, insideServiceTransaction } from "./context";
 
 type NetworkManifest = { name: string; permissions: readonly string[] };
 const METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
@@ -18,7 +19,9 @@ export function createPluginHttp(
   const name = manifest.name;
   const external = manifest.permissions.includes("network:external");
   function requireExternal(): void {
-    if (!external) throw new ServiceError("permission", `Plugin ${name} does not declare network:external.`);
+    const executing = currentPluginExecution();
+    if (!external || (executing && !executing.permissions.includes("network:external"))) throw new ServiceError("permission", `Plugin ${executing?.name ?? name} does not declare network:external.`);
+    if (insideServiceTransaction()) throw new ServiceError("internal", "Plugin provider requests must run outside a service transaction.");
   }
   const pluginFetch: typeof fetch = async (input, init) => {
     requireExternal();

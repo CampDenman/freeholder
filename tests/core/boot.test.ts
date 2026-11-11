@@ -133,6 +133,7 @@ describe("a plugin that cannot be wired", () => {
   const plugin = (over: Record<string, unknown>): ModuleManifest =>
     ({
       name: "sinking",
+      permissions: [],
       version: "1.0.0",
       kind: "plugin",
       license: "Apache-2.0",
@@ -166,6 +167,19 @@ describe("a plugin that cannot be wired", () => {
     const report = await boot([doesNotFit()]);
     expect(report.disabled).toHaveLength(1);
     expect(report.disabled[0]!.module).toBe("sinking");
+  });
+
+  it("does not wire plugins that depend on a failed plugin, transitively", async () => {
+    let loaded = 0;
+    const dependent = (name: string, requires: string[]) => plugin({ name, requires, freeholder: `^${PLATFORM_VERSION}`, services: async () => { loaded++; return { default: [] }; } });
+    const report = await boot([dependent("third", ["second"]), dependent("second", ["sinking"]), throwsOnLoad(), demoModule()]);
+    expect(loaded).toBe(0);
+    expect(report.disabled.map(entry => entry.module)).toEqual(["sinking", "second", "third"]);
+    expect(report.modules).toContain("demo");
+  });
+
+  it("refuses a core module whose required plugin failed to load", async () => {
+    await expect(boot([throwsOnLoad(), demoModule({ requires: ["sinking"] })])).rejects.toThrow('Required plugin "sinking" failed to load.');
   });
 
   it("still boots, so one bad plugin is not a downed instance", async () => {

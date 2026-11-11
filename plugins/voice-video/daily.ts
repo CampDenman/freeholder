@@ -8,6 +8,7 @@ import { readBoundedBytes } from "@/core/http/body";
 
 export interface DailyConfiguration { apiKey: string; domain: string }
 export class DailyError extends Error {
+  readonly pluginOperationalFailure = true;
   constructor(message: string, readonly status?: number) { super(message); this.name = "DailyError"; }
 }
 // Recordings download whole into memory before storage puts them, so the

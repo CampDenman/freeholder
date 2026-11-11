@@ -3,6 +3,8 @@
 import { createServer, type Server, type RequestListener } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPluginHttp } from "@/core/plugins/fetch";
+import { registerPluginExecution, withPluginExecution, withServiceTransaction } from "@/core/plugins/context";
+import type { Tx } from "@/core/service";
 import { requestPinnedBytes, type getPinnedBytes } from "@/core/http/pinned-download";
 import { readBoundedBytes } from "@/core/http/body";
 import { defineOrchestratedService } from "@/core/service";
@@ -33,6 +35,16 @@ afterEach(async () => {
 });
 
 describe("plugin HTTP capabilities (C3.41)", () => {
+  it("cannot borrow another plugin's network grant or perform provider I/O inside a transaction", async () => {
+    const transport = vi.fn<typeof requestPinnedBytes>().mockResolvedValue(reply());
+    const download = vi.fn<typeof getPinnedBytes>().mockResolvedValue(reply());
+    const http = createPluginHttp(declared, transport, download);
+    const noNetwork = registerPluginExecution({ name: "no-network-egress-fixture", version: "0.1.0", permissions: ["contacts:read"] });
+    await expect(withPluginExecution(noNetwork, () => http.fetch("https://provider.example/api"))).rejects.toMatchObject({ code: "permission" });
+    await expect(withPluginExecution(noNetwork, () => http.download("https://provider.example/file", { maxBytes: 100 }))).rejects.toMatchObject({ code: "permission" });
+    await expect(withServiceTransaction({} as Tx, new Set(), () => http.fetch("https://provider.example/api"))).rejects.toMatchObject({ code: "internal" });
+    expect(transport).not.toHaveBeenCalled(); expect(download).not.toHaveBeenCalled();
+  });
   it("uses the scoped defaults in every production provider instead of global fetch", async () => {
     const unscoped = vi.fn<typeof fetch>().mockRejectedValue(new Error("Unscoped network forbidden"));
     vi.stubGlobal("fetch", unscoped);

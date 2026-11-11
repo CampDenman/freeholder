@@ -2210,7 +2210,7 @@ await inspectPluginFolder("plugins/gift-registry");             // validates the
 The bar: **zero-config from idea to installable in under an hour.** The dev harness (part of Apache-2.0 `plugin-kit`, like every package in this repository — §22's license policy) is the make-or-break piece — nobody should need to set up a whole Freeholder to write a widget. Today the harness checks a plugin folder (`inspectPluginFolder`); the planned `npm run dev` gives them Aurora Coast Photography with their plugin live inside it.
 
 **Installing (owner side):**
-- Admin → Plugins installs a plugin from a directory on the server, checks its integrity hash and optional signature (§26), and enables it; it also browses the cached catalogue of added registries. One-click npm fetch and a permission consent screen are planned (C3.40).
+- Admin → Plugins installs a plugin from a directory on the server, verifies its integrity and mandatory publisher signature (§26), asks the freshly verified owner to approve its exact permissions, and then enables it; it also browses the cached catalogue of added registries. One-click npm fetch remains planned; local source additions require a rebuild.
 - Planned: `npm i freeholder-plugin-gift-registry` in the deploy, auto-discovered by the `freeholder-plugin-*` naming convention. Today the installed modules are the hand-written list in `src/modules/index.ts`, plus private plugins an installer writes into `src/modules/local-plugins.ts`.
 - Or: drop a folder into `/plugins` and add it to that list (the hackable path — a vibe-coded personal plugin never needs publishing). Plugin code is compiled into the build, so new plugin code needs a rebuild and redeploy.
 - Config-as-code stays true: installed plugins + versions are recorded in `freeholder.config.ts`, so a redeploy reproduces the instance exactly
@@ -2219,12 +2219,12 @@ The bar: **zero-config from idea to installable in under an hour.** The dev harn
 
 ## 26. Trust Model (honest v1)
 
-Plugins run **in-process** — same trust level as core once installed. Sandboxing in-process JS is a research project, deferred to v2 (C3.43, §43.18), so we do trust engineering instead and say so plainly. Each point below separates what the code does today from what is still open (C3.40) or deferred (C3.43):
+Plugins run **in-process** — same trust level as core once installed. Sandboxing in-process JS is a research project, deferred to v2 (C3.43, §43.18), so we do trust engineering instead and say so plainly. Each point below separates implemented trust controls (C3.40–C3.42) from deferred process sandboxing (C3.43):
 
-1. **Declared service permissions: not yet enforced.** A plugin's manifest lists scopes (`contacts:read`, `invoicing:create`, `settings:write`, `network:external`, …). `@freeholder/plugin-kit` validates them and can describe each in plain language (`describePermission`: "can manage invoicing", "can make outbound network requests"), and an importer that fetches a source must declare `network:external`. Service calls are not yet held to that list. Plugin code runs in-process with the caller's actor, so the service registry does not reject a call outside the declared scopes; the install screen does not yet show every scope or ask for consent (C3.40). Cross-service permission enforcement remains C3.40. Plugin HTTP clients now use a manifest-bound fetch wrapper that requires `network:external` and reuses core DNS/address pinning, redirect refusal, timeouts and byte limits (C3.41). Raw JavaScript remains trusted in-process code, so this is not a sandbox against deliberately bypassing the wrapper.
+1. **Declared service permissions, enforced at shared entry points.** A plugin's manifest lists scopes such as `contacts:read`, `invoicing:create` and `network:external`. The existing plugin-kit contract maps read/view to module view and other service verbs to module manage; the localized owner screen describes that actual access. The freshly verified owner explicitly approves a hash of the exact permission list before installed or bundled contributions run. Changes invalidate approval. Cross-module calls replace caller-supplied owner/system identities with `plugin:<name>` and the manifest's grants; human-review actions stay unavailable. Permitted core operations retain core composition authority. Shared-service writes and timeline events name `plugin:<name>`. Consent and current disable state are checked at service, job, event and server-widget entry, reusing the current transaction where applicable. Scope checks are pure; live consent/revocation checks deliberately use current primary-key reads (C3.40). Manifest-bound HTTP also requires `network:external` and core DNS/address pinning, redirect refusal, time and byte bounds (C3.41). Raw Node APIs remain trusted in-process code, not a sandbox against deliberate bypass.
 2. **Registry review tiers** (mirrors deploy recipes): **Verified** (maintainer-reviewed source, in the CI matrix, badge) / **Community** (automated checks: no eval, scope-lint, license check, integrity pinned, **CHANGELOG.md present with an entry for the published version — versions without release notes are rejected by the registry**) / **Unlisted** (install by name at your own risk — always possible; it's your instance). Plugin changelog entries are what feed the instance's own release notes when a plugin is installed or updated, so a missing changelog breaks the chain for every downstream site — hence it's a hard registry requirement, not a courtesy.
-3. **Signed releases (§39.3) and owner-trusted plugin publishers.** Platform images and the update feed carry signatures and build provenance, and the updater verifies both before applying anything; the feed is checked against an Ed25519 public key the instance ships. Plugin artifacts and registry indexes now use Ed25519 signatures against public keys the freshly verified owner explicitly trusts (C3.42). Agents and personal API keys cannot approve publisher roots. Every installed artifact needs a signature; local developers can sign their own code through the same process. Registry keys are pinned to their URL, key rotation clears the old cached index, and revocation refuses future verification. The v2 artifact hash binds entry types, names, directory entries and dependency bytes with length framing. Signed updates preserve the publisher identity; rollback verifies the actual previous artifact. These checks authenticate the publisher and artifact; runtime service permission/consent remains C3.40, the network wrapper is C3.41, and process sandboxing remains deferred. Owner and publisher instructions: `deploy/plugin-publisher-trust.md`.
-4. **Kill switches:** per-plugin disable without uninstall (`plugins.disable`); a plugin that fails its version or dependency check, or throws while loading, is named and disabled at boot instead of taking the site down (C3.10). A runtime boundary that degrades a failing plugin to a disabled widget, and audit rows under `actor: plugin:<name>`, are open (C3.40); today a plugin's service calls are audited under the actor who triggered them.
+3. **Signed releases (§39.3) and owner-trusted plugin publishers.** Platform images and the update feed carry signatures and build provenance, and the updater verifies both before applying anything; the feed is checked against an Ed25519 public key the instance ships. Plugin artifacts and registry indexes now use Ed25519 signatures against public keys the freshly verified owner explicitly trusts (C3.42). Agents and personal API keys cannot approve publisher roots. Every installed artifact needs a signature; local developers can sign their own code through the same process. Registry keys are pinned to their URL, key rotation clears the old cached index, and revocation refuses future verification. The v2 artifact hash binds entry types, names, directory entries and dependency bytes with length framing. Signed updates preserve the publisher identity; rollback verifies the actual previous artifact. These checks authenticate the publisher and artifact; runtime service permission/consent is enforced by C3.40, the network wrapper is C3.41, and process sandboxing remains deferred. Owner and publisher instructions: `deploy/plugin-publisher-trust.md`.
+4. **Kill switches and runtime recovery:** per-plugin disable without uninstall (`plugins.disable`) and fresh-owner consent revocation stop future contribution entry. A plugin that fails compatibility, dependency or load checks is named and disabled at boot, together with its plugin dependants (C3.10/C3.40). Unexpected server contribution errors roll back the current shared mutation, even when caught by a parent, then persist a generic disable after rollback. Previously committed orchestration phases retain their recovery rules. Expected validation/provider/adapter failures retry or refuse normally. Server widget failures show a localized unavailable widget while core content remains available; a client render boundary contains client errors without granting an anonymous server-disable endpoint. Accepted one-off jobs and events stay retryable while disabled; new events exclude inactive plugin listeners permanently. Repair and fresh-owner permission review restore a plugin. Migration 0066 disables legacy registrations and invents no approvals. Synthetic playground approvals are invalid on real sites. See `deploy/plugin-publisher-trust.md` (C3.40).
 5. **No sandbox.** Running plugin code out of process, or in a sandbox that limits what it can reach, is deferred to v2 (C3.43, §43.18, owner decision 2026-11-05). It is a research problem for in-process JavaScript, so until it lands, install only plugins whose source you trust.
 
 **Licensing policy (stated up front to avoid ambiguity):**
@@ -3549,7 +3549,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-10: 32 live C-items remain unchecked. C3.41 manifest-bound provider egress passed 13 boundary/default checks, 60 existing controls, 33 PostgreSQL provider flows and owner-browser disclosure/accessibility qualification. C3.42 publisher authentication passed native PostgreSQL/CLI, migration, SDK, production-build and owner-browser qualification; protected CI then caught newly published GHSA-474x-hrwr-fgx4. Both direct and inherited XML parser paths are patched to 5.12.0 with no audit exception. C11.10 independent review remains open. Repairs #638/#639/#640 passed protected checks and merged; GitHub reported zero open CodeQL/Dependabot alerts and both dependency audits were clean. The disposable demo runs verified main `e6577345`; production remains on `c3215f63`. Ten hosted blog checks passed, including one literal 301 to a working archive, moderation, email privacy and both-theme Axe scans; see `deploy/blog-wordpress-2026-11-07.md`. Same-host database upgrade/recovery rehearsals passed with zero source media assets; cross-target object-byte proof remains C11.08. This evidence does not supply stable or platform-launch acceptance. |
+| Latest launch audit | 2026-11-10: 31 live C-items remain unchecked. C3.40 exact-scope owner consent, service/audit actors, rollback and widget recovery passed 36 native boundary checks, 81 PostgreSQL regressions, 24 final callback/outbox checks, 27 final scope/provider checks, 17 imported-refund/permission checks, eight SDK checks, a real 65→66 migration rehearsal, production build and two actual owner-browser journeys. C3.41 manifest-bound provider egress passed 13 boundary/default checks, 60 existing controls, 33 PostgreSQL provider flows and owner-browser disclosure/accessibility qualification. C3.42 publisher authentication passed native PostgreSQL/CLI, migration, SDK, production-build and owner-browser qualification; protected CI then caught newly published GHSA-474x-hrwr-fgx4. Both direct and inherited XML parser paths are patched to 5.12.0 with no audit exception. C11.10 independent review remains open. Repairs #638/#639/#640 passed protected checks and merged; GitHub reported zero open CodeQL/Dependabot alerts and both dependency audits were clean. The disposable demo runs verified main `e6577345`; production remains on `c3215f63`. Ten hosted blog checks passed, including one literal 301 to a working archive, moderation, email privacy and both-theme Axe scans; see `deploy/blog-wordpress-2026-11-07.md`. Same-host database upgrade/recovery rehearsals passed with zero source media assets; cross-target object-byte proof remains C11.08. This evidence does not supply stable or platform-launch acceptance. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -3559,7 +3559,7 @@ what is true now and what remains.
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | _not selected — record the final candidate merge SHA when signing_ |
-| Remaining open | The unchecked rows below govern completion. Source and integration gaps include plugin permission/consent/audit enforcement (C3.40), seller-as-merchant checkout (C12.38), OpenMLS (C12.39), and abuse-provider/reporting acceptance (C12.30). Qualification remains for blog metadata/comments (C2.27–C2.29), complete imports and source-specific cutover (C3.22/C3.46), actual Replit/Lovable launches (C3.28), gallery publication (C3.29), provider/preview/intake/file journeys (C3.31–C3.39), fresh native installation (C3.44), the managed assistant (C3.45), phone link-in-bio acceptance (C9.39), hosted quota/cutover operation (C10.32/C10.33), provider settlement and recovery (C11.05/C11.08), independent review and final reconciliation/suite/signature (C11.10/C11.16/C11.17), and marketplace payout acceptance (C12.26/C12.27). C3.38 now exposes the original private file on its project after #639; its hosted-preview acceptance remains open. Historical closure evidence stays with each checklist item. |
+| Remaining open | The unchecked rows below govern completion. Source and integration gaps include seller-as-merchant checkout (C12.38), OpenMLS (C12.39), and abuse-provider/reporting acceptance (C12.30). Qualification remains for blog metadata/comments (C2.27–C2.29), complete imports and source-specific cutover (C3.22/C3.46), actual Replit/Lovable launches (C3.28), gallery publication (C3.29), provider/preview/intake/file journeys (C3.31–C3.39), fresh native installation (C3.44), the managed assistant (C3.45), phone link-in-bio acceptance (C9.39), hosted quota/cutover operation (C10.32/C10.33), provider settlement and recovery (C11.05/C11.08), independent review and final reconciliation/suite/signature (C11.10/C11.16/C11.17), and marketplace payout acceptance (C12.26/C12.27). C3.38 now exposes the original private file on its project after #639; its hosted-preview acceptance remains open. Historical closure evidence stays with each checklist item. |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -5872,13 +5872,42 @@ deployments are portable, testable and incapable of silently forking the truth.
   "Get started" in the navigation. Example `seed/launch/example-v2.json`;
   evidence `tests/core/launch-template.test.ts`; guide
   `deploy/launch-template.md`.)*
-- [ ] **C3.40** Enforce a plugin's declared permissions at runtime (§26
-  item 1). A plugin's service calls run as a `plugin:<name>` actor whose grants
-  are its declared scopes, so the service registry refuses a call outside
-  them and the audit log names the plugin. A failing plugin degrades to a
-  disabled widget at runtime as well as at boot. The install screen shows
-  each scope in plain language and records the owner's consent before
-  enable. Open; recorded 2026-11-05 when §26 was corrected to match the code.
+- [x] **C3.40** Enforce a plugin's declared permissions at runtime (§26
+  item 1). A plugin's cross-module service calls run as a `plugin:<name>`
+  actor whose grants are its declared scopes, and shared-service audit and
+  timeline rows name the plugin. Exact-scope consent requires the freshly
+  verified signed-in owner; changed scopes invalidate approval. Services,
+  jobs, event callbacks and server widgets check current consent/disable state.
+  Unexpected failures roll back the current shared mutation and disable after
+  rollback; widgets degrade locally and owner review restores a repaired
+  contribution. Earlier committed phases and accepted work keep their recovery
+  rules. New events exclude inactive plugin listeners permanently.
+  *(Qualified 2026-11-10: 36 native context/boot/network checks, 81 PostgreSQL
+  lifecycle/provider/outbox regressions, 24 final callback/outbox checks and 27
+  final scope/provider checks passed, including rejection of forged core
+  jobs/events/timeline types. CI caught Shopify automatic credits crossing
+  the human-review boundary; a separate internal own-imported-invoice credit
+  contract now preserves source ownership, currency, idempotency and remaining
+  invoice bounds. Its 17 PostgreSQL controls and 19 discovery/audit/context
+  controls passed; generic owner credit-note review remains restricted.
+  Eight SDK checks passed. Real 65→66 migration
+  preserved two legacy registrations and accepted outbox work, disabled both
+  registrations and invented zero consents. Production build/artifact gate
+  and two owner-browser journeys passed: signed install/changed-scope consent,
+  and corrupt widget → repair → reviewed recovery, Arabic RTL, keyboard,
+  320px reflow and both-theme Axe. Sources `src/core/plugins/`, `service.ts`,
+  CMS rendering/JSON-LD and outbox. **F04** fresh-owner scope forms and
+  reviewed widget recovery passed actual browser checks. **F05** the shared
+  permission service/API/MCP contracts and live SDK checks passed. **F07**
+  forged authority, out-of-scope operations, unsafe transactions and core
+  job/event impersonation are refused before mutation. **F09** migration,
+  runtime disable, durable retry and owner recovery are qualified. **F12**
+  actual signed install/changed-scope review and widget recovery journeys
+  passed. Owner procedure
+  `deploy/plugin-publisher-trust.md`; F01–F12 matrix and independent review
+  packet updated; changeset `plugin-permission-runtime.md`. Trusted in-process
+  code can bypass seams with raw Node APIs; C3.43 remains deferred. This
+  supplies no independent C11.10 review or C11.17 signature.)*
 - [x] **C3.41** Route outbound requests from plugin code through a fetch
   wrapper that refuses a plugin without `network:external` and applies the
   same outbound boundary as core (private-address refusal, timeouts).
@@ -5902,8 +5931,8 @@ deployments are portable, testable and incapable of silently forking the truth.
   `tests/browser/plugin-publisher-trust.spec.ts`. F01–F12 evidence is in
   `deploy/f-criteria-matrix.md`; changeset `plugin-network-boundary.md`,
   operator/author contract `deploy/first-party-plugins.md`. This is a boundary
-  for trusted in-process code, not C3.43's deferred sandbox. C3.40 and C11.10
-  remain open.)*
+  for trusted in-process code, not C3.43's deferred sandbox. C3.40 supplies runtime consent and actor enforcement;
+  C11.10 independent review remains open.)*
 - [x] **C3.42** Verify plugin and registry-index signatures with publisher
   Ed25519 public keys instead of an HMAC over a caller-supplied shared
   secret. That covers key distribution for registries and publishers, key
@@ -5927,7 +5956,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   use normal core backup tables, and publisher rotation preserves explicit
   overlap. **F12** composed owner journey and actual previous-artifact
   rollback pass. Full F01–F12 evidence is in `deploy/f-criteria-matrix.md`.
-  C3.40 runtime/consent controls and C11.10 independent review remain open;
+  C3.40 supplies runtime/consent controls; C11.10 independent review remains open;
   this supplies no stable sign-off.)*
 - [ ] **C3.44** Make the by-hand install WordPress-easy on any host, with no
   AI and no Docker required (owner decision 2026-11-06: "native first, Docker

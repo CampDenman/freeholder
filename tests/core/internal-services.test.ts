@@ -16,6 +16,7 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "invoicing.reconcilePluginRefund",
   // C11.10: records a carrier's answer for a text staged by messaging.sendSms,
   // from the post-commit delivery job.
   "messaging.applySmsSendResult",
@@ -37,6 +38,8 @@ const INTERNAL = [
   // (2026-10-23 review), never a person or an agent with demo access.
   "demo.installBusy",
   "forms.purgeExpired",
+  "plugins.reportRuntimeFailure",
+  "plugins.seedDemoPermissions",
   "popups.purgeExpired",
   "segments.purgeExpired",
   "views.purgeExpired",
@@ -194,6 +197,7 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "invoicing.reconcilePluginRefund",
   // C1.38/C10.31: browser-only entry and owner host controls. These do not
   // belong in API-key, SDK, OpenAPI or MCP projections.
   "playground.enter",
@@ -208,6 +212,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "cms.resolvePageForRender",
   "collections.purgeExpired",
   "forms.purgeExpired",
+  "plugins.reportRuntimeFailure",
+  "plugins.seedDemoPermissions",
   "popups.purgeExpired",
   "segments.purgeExpired",
   "views.purgeExpired",

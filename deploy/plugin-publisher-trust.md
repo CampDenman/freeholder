@@ -1,10 +1,10 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
 # Publisher keys and signed plugin artifacts
 
-MASTER.md C3.42. This guide covers publisher authentication, owner trust and
+MASTER.md C3.40/C3.42. This guide covers publisher authentication, owner trust and
 artifact verification. A signature identifies a trusted publisher; it is not a
 security review or a process sandbox. Plugins run in the application process.
-Runtime service permission/consent enforcement remains C3.40. Manifest-bound
+Owner-reviewed runtime service permissions are enforced at the shared plugin entry points (C3.40). Manifest-bound
 provider HTTP and download limits are C3.41 (`deploy/first-party-plugins.md`);
 sandboxing remains explicitly deferred under C3.43 and §43.18.
 
@@ -92,7 +92,7 @@ registrations become disabled, catalogues signed by that key disappear, and
 future install/enable/update/rollback verification refuses it. Revocation and
 artifact state changes serialize in one database transaction. This is not a
 claim that revocation terminates arbitrary code already running in-process;
-runtime enforcement remains C3.40.
+future service, widget, job and event entry checks also refuse disabled registrations (C3.40).
 
 Keep old release directories immutable if rollback is required. Rollback
 restores the actual previous path, hash, signature and manifest metadata,
@@ -153,3 +153,63 @@ The offline publisher CLI is exercised with temporary fixture keys. Successful
 mutations share the service audit/outbox transaction; refused mutations roll
 back without changing trust or installed state. This does not claim a separate
 persistent log of refused service calls.
+
+## Owner: review permissions and recover a stopped plugin (C3.40)
+
+Trusting a publisher and approving runtime permissions are separate actions.
+After installing a signed artifact, open **Admin → Plugins → Plugin permissions**.
+The freshly verified, signed-in owner reviews each plain-language permission,
+checks the explicit approval box and chooses **Approve permissions**. API keys,
+agents, staff and plugin code cannot approve. Then enable an installed artifact.
+Bundled plugins use the same consent requirement; their code is authenticated by
+the platform release, so they need no separate local artifact registration.
+A new site starts without real owner approvals. The public playground alone has
+synthetic approvals, which cannot authorize a real site or restored instance.
+
+Approval binds the plugin name and exact sorted, deduplicated permission list.
+Changed scopes on update or rollback invalidate approval and disable the artifact;
+review the current list before enabling it. A same-scope version change retains
+consent, but still requires current publisher/artifact verification. Compiled
+contributions must match the stored reviewed scopes; rebuild after changing them.
+The existing plugin-kit contract maps read/view to module view and every other
+service verb (including create/write) to module manage; the consent screen says
+"manage". It does not promise per-method grants.
+
+At service, job, listener and server-widget entry, current consent, disable state
+and compiled scopes are checked using primary-key reads. Service grant checks
+remain pure and require no database query; live revocation checks deliberately
+read current state rather than caching stale permission decisions. A mutation's
+nested checks reuse its transaction. A plugin cannot open a second transaction
+through a direct nested service call, perform provider I/O inside that transaction,
+borrow another plugin's network grant, impersonate system/owner authority at a
+cross-module call, or perform a human security-review operation.
+
+The internal invoicing refund contract permits a plugin with invoicing manage access to reconcile only its own imported order invoices, in the original currency and within the remaining credit total. It composes the normal idempotent credit-note services with plugin audit attribution; generic owner credit-note review actions remain unavailable to plugins. Plugin service contexts can emit events, write timeline event types and enqueue jobs only in their own namespace; trusted core operations compose their own work. Shared-service writes and timeline entries name `plugin:<name>`. An unexpected
+server contribution failure rolls back the current shared mutation, even if a
+parent catches the exception. The platform records a generic disable only after
+rollback; private exception details are not retained in that record. Earlier
+committed orchestration phases retain their own recovery rules. Validation,
+permission, adapter and identified provider/transport errors use ordinary retry
+or refusal behavior rather than globally disabling a healthy plugin for an outage.
+
+Server widget failures show a localized unavailable message within the widget;
+core page content remains available. A client render error has a local React
+boundary and cannot trigger a privileged server disable. Block data resolution
+belongs in `resolve`; render functions should remain pure. The boundary is not
+protection against deliberately hostile Node code or exhausted process resources.
+
+Repair the underlying issue, review the current list, approve it again and enable
+an installed artifact. Revocation immediately stops future entry checks; it does
+not terminate arbitrary work already running. Accepted one-off jobs and events
+remain retryable while disabled. Empty scheduled poll ticks may pause without
+consuming domain work. New events record inactive plugin listeners as excluded,
+so later approval or replay cannot enroll them retroactively. Legacy outbox work
+keeps its existing intended listeners. Permission consent records travel with core
+backup/restore; migration 0066 disables registrations and invents no approval.
+
+Qualification: `tests/core/plugin-execution.test.ts`, `plugin-permissions-postgres.test.ts`,
+`plugin-egress.test.ts`, `boot.test.ts`, outbox/lifecycle/provider regression tests,
+and the publisher-trust and runtime-recovery owner-browser journeys. A real
+65→66 rehearsal preserved two legacy registrations and accepted outbox data,
+disabled both registrations and created zero consents. This does not supply the
+independent C11.10 review or final C11.17 owner signature.

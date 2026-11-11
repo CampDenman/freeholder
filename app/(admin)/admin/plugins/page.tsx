@@ -12,24 +12,41 @@ import {
 import { platformCompatibility } from "@/core/portability/service";
 import { listPublisherKeys } from "@/core/plugins/publisher-keys";
 import { signatureKeyId } from "@/core/plugins/integrity";
-import { AddRegistryForm, CacheRegistryForm, InstallPluginForm, PluginRowActions, RegistryPublisherForm, RevokePublisherForm, TrustPublisherForm } from "./PluginForms";
+import { listPluginPermissions } from "@/core/plugins/permissions";
+import { parsePermission } from "@freeholder/plugin-kit";
+import { AddRegistryForm, CacheRegistryForm, InstallPluginForm, PluginPermissionsForm, PluginRowActions, RegistryPublisherForm, RevokePublisherForm, TrustPublisherForm } from "./PluginForms";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
-export default async function PluginsPage() {
+export default async function PluginsPage({ searchParams }: { searchParams?: Promise<{ review?: string | string[] }> } = {}) {
   const actor = await requireStaffActor("platform");
-  const [t, plugins, registries, catalog, compatibility, publisherKeys] = await Promise.all([
+  const [t, plugins, registries, catalog, compatibility, publisherKeys, permissionReviews] = await Promise.all([
     getT(),
     listInstalledPlugins.call({}, actor),
     listPluginRegistries.call({}, actor),
     listPluginCatalog.call({}, actor),
     platformCompatibility.call({}, actor),
     listPublisherKeys.call({}, actor),
+    listPluginPermissions.call({}, actor),
   ]);
   const isOwner = actor.kind === "user" && actor.role === "owner";
   const canChangeTrust = isOwner && Boolean(actor.security?.stepUpValid);
   const activeKeys = publisherKeys.filter(key => !key.revokedAt);
+  const requested = searchParams ? (await searchParams).review : undefined;
+  const requestedReview = typeof requested === "string" && permissionReviews.some(plugin => plugin.name === requested) ? requested : undefined;
+  const areas: Record<string, string> = {
+    contacts: t("admin.activity.area.contacts"), invoicing: t("admin.activity.area.invoicing"),
+    catalog: t("admin.activity.area.catalog"), conversations: t("admin.activity.area.conversations"),
+    media: t("admin.activity.area.media"), cms: t("admin.activity.area.cms"),
+    settings: t("admin.activity.area.settings"), privacy: t("plugins.permissions.privacy"),
+    forms: t("admin.activity.area.forms"), members: t("admin.activity.area.members"),
+  };
+  const permissionLabel = (raw: string) => {
+    const permission = parsePermission(raw);
+    return permission.access === "external" ? t("plugins.permissions.external")
+      : t(permission.access === "view" ? "plugins.permissions.view" : "plugins.permissions.manage", { module: areas[permission.module] ?? permission.module });
+  };
 
   return (
     <div className="grid gap-6">
@@ -53,6 +70,24 @@ export default async function PluginsPage() {
               signatureHint: t("plugins.signatureHint"),
             }}
           />
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("plugins.permissions.title")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("plugins.permissions.intro")}</p>
+          {requestedReview ? <p role="status" className="mt-2 text-sm text-ink">{t("plugins.permissions.required", { name: requestedReview })}</p> : null}
+          {!isOwner ? <p className="mt-2 text-sm text-ink-muted">{t("plugins.permissions.ownerOnly")}</p> : null}
+          {isOwner && !canChangeTrust ? <p className="mt-2 text-sm"><a href="/security/verify?returnTo=/admin/plugins" className="text-accent underline">{t("plugins.permissions.verify")}</a></p> : null}
+          {permissionReviews.length === 0 ? <p className="mt-2 text-sm text-ink-muted">{t("plugins.permissions.empty")}</p> : <ul className="mt-4 grid list-none gap-4 p-0">
+            {permissionReviews.map(plugin => <li key={plugin.name} data-plugin-permissions={plugin.name} className="grid gap-3">
+              <div aria-live="polite" className="flex flex-wrap items-center gap-2"><span className="font-medium">{plugin.name}</span><Pill>{plugin.version}</Pill><Pill tone={plugin.approved && !plugin.disabled ? "success" : "neutral"}>{t(plugin.approved ? "plugins.permissions.approved" : "plugins.permissions.needsReview")}</Pill>{plugin.disabled ? <Pill>{t("plugins.status.disabled")}</Pill> : null}{plugin.bundled ? <Pill>{t("plugins.permissions.bundled")}</Pill> : null}</div>
+              {plugin.disabled ? <p className="text-sm text-ink-muted">{t(plugin.bootDisabled ? "plugins.permissions.restart" : "plugins.permissions.recovery")}</p> : null}
+              {plugin.permissions.length === 0 ? <p className="text-sm text-ink-muted">{t("plugins.permissions.none")}</p> : <ul className="list-disc ps-5 text-sm">{plugin.permissions.map(permission => <li key={permission}>{permissionLabel(permission)}</li>)}</ul>}
+              <PluginPermissionsForm key={`${plugin.scopeHash}:${plugin.approved}:${plugin.disabled}`} name={plugin.name} scopeHash={plugin.scopeHash} approved={plugin.approved} canReview={canChangeTrust && !plugin.bootDisabled} labels={{ confirmation: t("plugins.permissions.confirmation"), approve: t("plugins.permissions.approve"), saved: t("plugins.permissions.saved"), revoke: t("plugins.permissions.revoke"), revokeConfirmation: t("plugins.permissions.revokeConfirmation"), revoked: t("plugins.permissions.revoked") }} />
+            </li>)}
+          </ul>}
         </CardBody>
       </Card>
 
