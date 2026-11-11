@@ -89,9 +89,10 @@ export async function socialFetch(
   adapterId: string,
   input: string,
   init: RequestInit,
+  fetcher: typeof fetch = fetch,
 ): Promise<Response> {
   try {
-    return await fetch(input, {
+    return await fetcher(input, {
       ...init,
       redirect: init.redirect ?? "error",
       signal: init.signal ?? AbortSignal.timeout(30_000),

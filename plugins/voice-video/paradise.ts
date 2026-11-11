@@ -3,8 +3,9 @@
 // C3.13: Paradise Comms room, credential, recording and erasure lifecycle.
 // Contract: docs/site-comms-api.md §7.1 in the paradisemodern tree,
 // 2026-09-28.comms-recording-lifecycle. Base https://paradisemodern.com/v1.
+import { pluginHttp } from "./http";
 import { z } from "zod";
-import { getPinnedBytes } from "@/core/http/pinned-download";
+import type { getPinnedBytes } from "@/core/http/pinned-download";
 import { readBoundedBytes } from "@/core/http/body";
 
 export type ParadiseAuthScheme = "site_key" | "portfolio_token";
@@ -113,9 +114,9 @@ interface RequestOptions {
 
 export function createParadiseClient(
   configuration: ParadiseConfiguration,
-  fetcher: typeof fetch = fetch,
+  fetcher: typeof fetch = pluginHttp.fetch,
   now = Date.now,
-  download: typeof getPinnedBytes = getPinnedBytes,
+  download: typeof getPinnedBytes = pluginHttp.download,
 ) {
   const baseUrl = configuration.baseUrl.trim().replace(/\/+$/, "");
   if (!/^https:\/\/[a-z0-9.-]+(?::\d+)?(?:\/[a-z0-9\-._~%]*)*$/i.test(baseUrl)) {

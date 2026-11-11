@@ -4682,6 +4682,8 @@
   "plugins.error": "Cette extension n’a pas pu être installée.",
   "plugins.install": "Installer depuis un dossier",
   "plugins.installed": "Extensions installées",
+  "plugins.network.declared": "Déclare un accès réseau sortant",
+  "plugins.network.absent": "Ne déclare aucun accès réseau sortant",
   "plugins.intro": "Installez, activez, désactivez ou retirez des extensions. Une extension défaillante est nommée et arrêtée — elle ne fait pas tomber le site.",
   "plugins.path": "Dossier de l’extension",
   "plugins.platform": "Cette instance est Freeholder {version}.",

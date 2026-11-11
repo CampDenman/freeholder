@@ -56,9 +56,9 @@ and two identical fingerprint generations (65 sources) passed. The final npm
 audit reports zero vulnerabilities at every severity. This does not close the
 deferred mobile acceptance items.
 
-The reviewer must also examine the explicitly unfinished plugin permission
-and egress controls (C3.40/C3.41), the newly implemented publisher-signature
-boundary (C3.42), member cryptography
+The reviewer must also examine the explicitly unfinished plugin permission/consent/runtime
+controls (C3.40), the newly implemented network wrapper (C3.41) and publisher-
+signature boundary (C3.42), member cryptography
 (C12.39), and current upload/payout/preview-assistant boundaries. A closed
 automated alert does not establish their security. Live provider acceptance,
 cross-target object-byte recovery and actual platform launches retain their
@@ -315,8 +315,16 @@ loader, permission contract, update/rollback.
   owner recovery path in `deploy/plugin-publisher-trust.md`.
 - Successful mutations are audited transactionally. Refused calls leave state
   unchanged; this feature does not add persistent denial logging.
-- Plugin permissions cannot mint `network:external` (or equivalent) without
-  declaring it. Importers already require that; other plugin kinds may not.
+- Review C3.41's manifest-bound provider HTTP and recording-download defaults.
+  Missing network scope is refused before transport; every DNS answer is
+  checked and the connection pinned with core's private-address refusal.
+  Redirects, time/byte bounds, cancellation and header handling have native
+  tests, including actual local receiver controls. Deliberately bypassing the
+  wrapper with raw Node APIs remains possible for trusted in-process code;
+  this is not the deferred C3.43 sandbox. Inspect provider factories and the
+  social-plugin fixture for accidental unbounded/global fetch defaults.
+- C3.40 service grants/owner consent/runtime plugin actors remain unfinished;
+  network wrapper verification does not supply those controls.
 - Rollback of a plugin is not rollback of data it wrote. Call that out.
 
 ### Updater

@@ -3,7 +3,8 @@
 // C3.13: the Paradise Comms adapter behind the plugin's provider seam.
 // Paradise identity is the `rm_`/`rec_` prefixed id kept in externalRef;
 // providerRoomId stays null because those ids are not UUIDs.
-import { getPinnedBytes } from "@/core/http/pinned-download";
+import { pluginHttp } from "./http";
+import type { getPinnedBytes } from "@/core/http/pinned-download";
 import { createParadiseClient, ParadiseError } from "./paradise";
 import type { ParadiseConfig } from "./settings";
 import type {
@@ -15,8 +16,8 @@ import type {
 
 export function createParadiseVoiceVideoProvider(
   configuration: ParadiseConfig,
-  fetcher: typeof fetch = fetch,
-  download: typeof getPinnedBytes = getPinnedBytes,
+  fetcher: typeof fetch = pluginHttp.fetch,
+  download: typeof getPinnedBytes = pluginHttp.download,
 ): VoiceVideoProvider {
   const client = createParadiseClient({
     baseUrl: configuration.baseUrl,

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C3.13: own-store Shopify integration. Contracts: https://shopify.dev/docs/api/admin-graphql/2026-07/queries/orders
 // https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant
+import { pluginHttp } from "./http";
 import { z } from "zod";
 import { readBoundedBytes } from "@/core/http/body";
 import { decimalToMinor } from "@/adapters/payments/currency";
@@ -35,7 +36,7 @@ const REFUNDS_QUERY = `query FreeholderRefunds($first: Int!, $after: String) {
   }
 }`;
 
-export function createShopifyProvider(configuration: ShopifyConfiguration, fetcher: typeof fetch = fetch, now = Date.now): MarketplaceProvider {
+export function createShopifyProvider(configuration: ShopifyConfiguration, fetcher: typeof fetch = pluginHttp.fetch, now = Date.now): MarketplaceProvider {
   const shop = configuration.shop.trim().toLowerCase();
   const clientId = configuration.clientId.trim();
   const clientSecret = configuration.clientSecret.trim();

@@ -3927,6 +3927,8 @@
   "plugins.error": "تعذّر تثبيت تلك الإضافة.",
   "plugins.install": "تثبيت من مجلد",
   "plugins.installed": "الإضافات المثبتة",
+  "plugins.network.declared": "يعلن عن الوصول إلى الشبكة الخارجية",
+  "plugins.network.absent": "لا يعلن عن الوصول إلى الشبكة الخارجية",
   "plugins.intro": "ثبّت الإضافات وفعّلها وعطّلها أو أزلها. الإضافة السيئة تُسمى وتُعطَّل — لا تُسقط الموقع.",
   "plugins.path": "مجلد الإضافة",
   "plugins.previous": "الإصدار السابق: {version}",

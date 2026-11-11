@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Printify-style fulfillment stays behind this plugin (MASTER.md §36, C3.13).
+import { pluginHttp } from "./http";
 import { z } from "zod";
 import { env } from "@/core/env";
 import { createPrintifyClient, PrintifyError, type PrintifyOrderStatus } from "./printify";
@@ -51,7 +52,7 @@ export function podProvider(): PodProvider {
   return createPrintifyPodProvider({ token: configuration.PRINTIFY_API_TOKEN, shopId: configuration.PRINTIFY_SHOP_ID });
 }
 
-export function createPrintifyPodProvider(configuration: { token: string; shopId: string }, fetcher: typeof fetch = fetch): PodProvider {
+export function createPrintifyPodProvider(configuration: { token: string; shopId: string }, fetcher: typeof fetch = pluginHttp.fetch): PodProvider {
   const client = createPrintifyClient(configuration, fetcher);
   function sameAccount(input: { provider: string; accountId: string | null }) {
     if (input.provider !== "printify") throw new PrintifyError("This instance's live print provider is Printify.");

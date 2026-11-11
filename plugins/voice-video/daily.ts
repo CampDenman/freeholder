@@ -1,8 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.13: Daily REST room lifecycle. https://docs.daily.co/reference/rest-api/rooms/create-room
+import { pluginHttp } from "./http";
 import { z } from "zod";
-import { getPinnedBytes } from "@/core/http/pinned-download";
+import type { getPinnedBytes } from "@/core/http/pinned-download";
 import { readBoundedBytes } from "@/core/http/body";
 
 export interface DailyConfiguration { apiKey: string; domain: string }
@@ -20,7 +21,7 @@ const roomSchema = z.object({ id: z.string().uuid(), name: nameSchema, privacy: 
 export interface DailyRoom { providerRoomId: string; externalRef: string; roomUrl: string; expiresAt: number }
 export interface DailyRecording { id: string; roomName: string; meetingSessionId: string; durationSeconds: number }
 
-export function createDailyClient(configuration: DailyConfiguration, fetcher: typeof fetch = fetch, now = Date.now, download: typeof getPinnedBytes = getPinnedBytes) {
+export function createDailyClient(configuration: DailyConfiguration, fetcher: typeof fetch = pluginHttp.fetch, now = Date.now, download: typeof getPinnedBytes = pluginHttp.download) {
   const apiKey = configuration.apiKey.trim();
   const domain = configuration.domain.trim().toLowerCase();
   if (!apiKey || /[\r\n]/.test(apiKey) || !/^[a-z0-9][a-z0-9-]*\.daily\.co$/.test(domain)) {
