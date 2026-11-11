@@ -27,7 +27,10 @@ import { storage } from "@/adapters/storage";
 import { deleteUnownedPendingObjects, reservePendingMediaObject } from "@/core/media/object-ledger";
 import { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES, importSourceObjectKeys, importSourceWrites, makeRetainedImportSource, readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceChunkKey, retainedSourceFromRun, type RetainedImportSource } from "./retained-source";
 export { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES } from "./retained-source";
-import { DEFAULT_IMPORTER_LIMITS } from "./contract";
+import { DEFAULT_IMPORTER_LIMITS, ImporterPhaseLimitError } from "./contract";
+import sourceGraphServices, { claimWxrGraph, applyWxrIndex } from "./source-graph";
+import { indexWxrPhase } from "./wxr-index";
+import { importSourceRanges } from "./source-range";
 import { approvedMediaOrigins, approvedMediaOriginsSchema } from "./media-origins";
 import { stageImportSource, stageWordpressExport } from "./service";
 import { assertSourceStageable } from "./source-lifecycle";
@@ -402,7 +405,7 @@ const uploadSource = defineService({
   permission: "scoped",
   external: false,
   input: z.object({ id: z.string().uuid(), uploadId: z.string().uuid() }),
-  output: z.object({ kind: z.string(), origin: z.string(), keys: z.array(z.string()), bytes: z.number().int(), source: retainedImportSourceSchema, approvedMediaOrigins: approvedMediaOriginsSchema }),
+  output: z.object({ kind: z.string(), origin: z.string(), keys: z.array(z.string()), bytes: z.number().int(), source: retainedImportSourceSchema, approvedMediaOrigins: approvedMediaOriginsSchema, hasSourceGraph: z.boolean() }),
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
@@ -417,7 +420,7 @@ const uploadSource = defineService({
         `Only ${upload.received.length} of ${upload.chunks} chunks have arrived. Send the rest first.`,
       );
     }
-    return { kind: run.kind ?? "html", origin: run.origin ?? "https://example.com", keys: allKeys(upload), bytes: upload.bytes, source: makeRetainedImportSource(run.id, upload), approvedMediaOrigins: approvedMediaOrigins(run.checkpoint) };
+    return { kind: run.kind ?? "html", origin: run.origin ?? "https://example.com", keys: allKeys(upload), bytes: upload.bytes, source: makeRetainedImportSource(run.id, upload), approvedMediaOrigins: approvedMediaOrigins(run.checkpoint), hasSourceGraph: Boolean(checkpointOf(run.checkpoint).sourceGraph) };
   },
 });
 
@@ -566,10 +569,23 @@ export const previewFromUpload = defineOrchestratedService({
   handler: async (input, actor) => {
     const state = await uploadSource.call(input, actor);
     try {
+      if (state.hasSourceGraph) {
+        const claimed = await claimWxrGraph.call(input, actor);
+        if (!claimed.leaseToken) throw new ServiceError("internal", "The source phase has no lease.");
+        const indexed = await indexWxrPhase(importSourceRanges(claimed.source, index => readRetainedSourceChunk(claimed.source, index)), claimed.cursor);
+        return await applyWxrIndex.call({ ...input, graphId: claimed.graphId, generation: claimed.generation, leaseToken: claimed.leaseToken, source: claimed.source, previous: claimed.cursor, ...indexed }, actor);
+      }
       const staged = await stageStoredSource(state);
       await applyUploaded.call({ ...input, preview: staged.preview, counts: staged.counts, archivePreviewDigest: staged.archivePreviewDigest }, actor);
       return { id: input.id, status: "previewed", error: null, counts: staged.counts };
     } catch (error) {
+      if (state.kind === "wordpress-wxr" && error instanceof ImporterPhaseLimitError && ["pages", "bytes"].includes(error.limit)) {
+        await claimWxrGraph.call({ ...input, initialize: true }, actor);
+        return { id: input.id, status: "discover", error: null, counts: { indexed: 0 } };
+      }
+      // An indexed source remains resumable on a failed read or candidate
+      // apply; the ordinary preview failure path must not release its bytes.
+      if (state.hasSourceGraph) throw error;
       if (error instanceof ReaderSourceErasureError) await releaseErasedUpload.call(input, actor);
       if (error instanceof ServiceError) throw error;
       const message = error instanceof Error ? error.message.slice(0, 2_000) : "That file could not be read.";
@@ -583,6 +599,7 @@ export const previewFromUpload = defineOrchestratedService({
 });
 
 export default [
+  ...sourceGraphServices,
   beginApply,
   beginSourceUpload,
   claimChunk,

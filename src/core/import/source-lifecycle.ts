@@ -20,5 +20,6 @@ export function assertSourceStageable(run: { status: string; checkpoint: unknown
 }
 
 export function assertNoPendingSourceUpload(run: { checkpoint: unknown }): void {
+  if (checkpointOf(run.checkpoint).sourceGraph) throw new ServiceError("conflict", "Resume this import through its bounded source graph.");
   if (checkpointOf(run.checkpoint).sourceUpload) throw new ServiceError("conflict", "Finish or replace the current source upload before reading or committing another source.");
 }

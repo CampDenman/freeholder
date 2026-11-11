@@ -17,6 +17,8 @@ import { contactPrivacyIdentity } from "@/core/privacy/contact-identity";
 import { ServiceError, type Tx } from "@/core/service";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { z } from "zod";
+import { assertImportBatchAccess } from "./batch-context";
+import { invalidateImportGraph } from "./graph-state";
 
 type Run = typeof importRuns.$inferSelect;
 type Json = Record<string, unknown>;
@@ -105,6 +107,7 @@ function sourceEntries(run: Run): SourceEntry[] {
 
 /** Import scopes may see their supplied source, not probe existing CRM IDs. */
 export function publicImportRun(run: Run): Run {
+  assertImportBatchAccess(run);
   const project = (value: unknown, collection: string, readers: string): unknown => {
     const source = object(value);
     if (!Array.isArray(source[collection])) return value;
@@ -259,6 +262,7 @@ registerContactPrivacySource({
         inArray(auditLog.action, ["imports.previewFromSource", "imports.preview", "imports.applyCrawl", "imports.applyUploadedPreview", "imports.claimSourceChunk"]),
       ));
       const keys = await ownedSourceKeys(tx, run);
+      if (keys.length && object(run.checkpoint).sourceGraph) await invalidateImportGraph(tx, run);
       for (let offset = 0; offset < keys.length; offset += 25) {
         if (!context.service) throw new ServiceError("internal", "Source-object erasure requires the real privacy service context.");
         const originalJobId = randomUUID();

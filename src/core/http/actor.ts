@@ -86,10 +86,11 @@ export async function resolveApiKey(request: Request): Promise<Actor | undefined
     // the key's scopes (`permits` enforces that).
     const person = await personForKey(key.actsAsUserId);
     if (!person) return undefined;
-    return { kind: "user", ...person, keyScopes: key.scopes, request: requestMetadata(request) };
+    return { kind: "user", ...person, keyId: key.id, keyScopes: key.scopes, request: requestMetadata(request) };
   }
   return {
     kind: "agent",
+    keyId: key.id,
     keyName: key.name,
     scopes: key.scopes,
     request: requestMetadata(request),

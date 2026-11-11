@@ -48,6 +48,8 @@ import { approvedMediaOrigins, approvedMediaOriginsSchema, allowedMediaOrigins }
 import { parseGenericFeed } from "./generic-feed";
 import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
 import importMediaReceiptServices, { bindImportMediaBytes, claimImportMedia } from "./media-receipts";
+import { assertImportBatchAccess, isPrivateImportBatch } from "./batch-context";
+import { invalidateImportGraph } from "./graph-state";
 import {
   discoverFromPublicOrigin,
   parseSitemap,
@@ -527,6 +529,7 @@ const commitSource = defineService({
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
+    assertImportBatchAccess(run);
     const previewDigest = archivePreviewDigest(run.preview);
     if (["committed", "reconciled", "published"].includes(run.status)) return { media: [], delayMs: 0, previewDigest, completed: run };
     assertNoPendingSourceUpload(run);
@@ -1302,6 +1305,7 @@ export const rollbackImport = defineService({
     if (!before) throw new ServiceError("not_found", "No such import run.");
     if (before.status === "rolled_back") return publicImportRun(before);
     const checkpoint = checkpointOf(before.checkpoint);
+    if (checkpoint.sourceGraph) await invalidateImportGraph(ctx.tx, before);
 
     // Menu links the import added, and only those, come off the nav.
     const nav = navAppliedSchema.safeParse(checkpoint.navApplied);
@@ -1401,7 +1405,7 @@ export const listImports = defineService({
   input: z.object({}),
   output: listed(runRow),
   handler: async (input, ctx) =>
-    (await ctx.tx.select().from(importRuns).orderBy(desc(importRuns.createdAt))).map(publicImportRun),
+    (await ctx.tx.select().from(importRuns).orderBy(desc(importRuns.createdAt))).filter(run => !isPrivateImportBatch(run)).map(publicImportRun),
 });
 
 export const mapImport = defineService({
