@@ -3,8 +3,8 @@
 // Orders and checkout from a cart (C5.21, C5.22).
 //
 // Checkout creates the order and the invoice in one transaction. Payment
-// settlement stays on the invoicing module; paying the order consumes stock
-// holds. Fulfillment shipments are C5.19.
+// settlement stays on the invoicing module; paying extends stock holds.
+// Physical stock is consumed when C5.19 fulfillment shipments leave.
 
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";

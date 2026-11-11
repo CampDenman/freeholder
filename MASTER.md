@@ -6832,6 +6832,16 @@ owner operations, never substitute for them.
   320px and both-theme Axe scans; an unlabeled quantity input found by that
   scan now has a translated product-specific label. See
   `deploy/catalog-cart-access.md` and changeset `cart-owned-reservations.md`.
+  Photograph-line follow-up 2026-11-11 (C5.16/C5.20/C8.08): real service
+  regressions reproduced duplicate-holder failures for distinct photos of one
+  tracked print, lost photo identity during guest/contact merges, and failed
+  named snapshots. Cart/order stock now aggregates per variant/location while
+  lines keep their photo identity; quantity/removal controls select a line.
+  Expired carts remain editable without releasing another cart's units.
+  Contact callbacks receive the real parent context for same-transaction stock
+  composition. Ten new controls and 113 PostgreSQL integration cases, eight
+  SDK checks, type/lint and 368 contracts pass; production/browser qualification
+  remains in progress in `deploy/cart-photo-stock-2026-11-11.md`.
 - [x] **C5.21** Build checkout identity/address, fulfillment, tax, discounts,
   consent, payment, idempotency, failure recovery and accessible confirmation.
   *(Evidence: `catalog.checkoutCart` attaches the guest cart, requires
