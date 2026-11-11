@@ -93,15 +93,16 @@ replacement comments keep their existing privacy-controlled cutover checkpoint.
 
 The expanded media/choice implementation needs its final complete native rerun,
 including the real-post ownership rollback control. The four-locale actual
-browser journey is written but has not run. Browser qualification, production
-the final production candidate, populated 72→73
-rehearsal and protected checks. Other source adapters must receive the durable
+browser journey is written but has not run. Browser qualification, the final
+production candidate, populated 72→73 rehearsal and protected checks remain
+required. Other source adapters must receive the durable
 continuation contract; the WXR vertical alone does not complete C3.22.
 
-Core media's physical PUT ownership has three genuine before failures in the
+Core media's physical PUT ownership has five genuine before failures in the
 separate primitive lane. A successful physical write followed by a lost Asset
 reply does not establish recovery from an unresolved, delayed or ambiguous
-physical PUT. Original storage namespace ownership also remains under review.
+physical PUT. The additional actual probes show late writers crossing cleanup
+and cleanup in a replacement namespace forgetting original-store bytes.
 Neither clocks nor GET-not-found may establish settlement in a replacement
 namespace. These are required dependencies, not optional deferrals.
 
