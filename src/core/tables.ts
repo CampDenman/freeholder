@@ -79,6 +79,9 @@ export {
   mailSuppressions,
   mailReceiptKeys,
   mailRecordSubjects,
+  mailDispatchRequests,
+  mailDispatches,
+  mailLegacyResolutions,
 } from "@/core/mail/schema";
 export {
   deviceTokens,

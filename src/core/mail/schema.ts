@@ -278,6 +278,55 @@ export const mailOutbox = pgTable(
   ],
 );
 
+/** C3.31/C11.08: immutable staged intent, separate from its physical attempts. */
+export const mailDispatchRequests = pgTable("mail_dispatch_requests", {
+  deliveryId: uuid("delivery_id").primaryKey().references(() => mailDeliveries.id, { onDelete: "restrict" }),
+  routeDigest: text("route_digest").notNull(),
+  payloadDigest: text("payload_digest").notNull(),
+  encryptedRoute: text("encrypted_route"),
+  admittedAttempt: integer("admitted_attempt").notNull().default(1),
+  createdAt: createdAtColumn(),
+}, t => [
+  check("mail_dispatch_requests_route_digest", sql`${t.routeDigest} ~ '^[a-f0-9]{64}$'`),
+  check("mail_dispatch_requests_payload_digest", sql`${t.payloadDigest} ~ '^[a-f0-9]{64}$'`),
+]);
+
+/** A reserved call remains unknown until its own positive outcome is proved. */
+export const mailDispatches = pgTable("mail_dispatches", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  deliveryId: uuid("delivery_id").notNull().references(() => mailDeliveries.id, { onDelete: "restrict" }),
+  routeDigest: text("route_digest").notNull(),
+  payloadDigest: text("payload_digest").notNull(),
+  attempt: integer("attempt").notNull(),
+  state: text("state", { enum: ["running", "unknown", "submitted", "not_submitted"] }).notNull(),
+  providerRef: text("provider_ref"),
+  /** Private keyed evidence receipt; operator prose is never persisted. */
+  resolutionDigest: text("resolution_digest"),
+  resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
+  resolutionSource: text("resolution_source", { enum: ["adapter", "human_provider_confirmation"] }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  redactedAt: timestamp("redacted_at", { withTimezone: true }),
+  createdAt: createdAtColumn(),
+}, t => [
+  uniqueIndex("mail_dispatches_physical_attempt_idx").on(t.deliveryId, t.attempt),
+  index("mail_dispatches_state_idx").on(t.state, t.createdAt),
+  check("mail_dispatches_route_digest", sql`${t.routeDigest} ~ '^[a-f0-9]{64}$'`),
+  check("mail_dispatches_payload_digest", sql`${t.payloadDigest} ~ '^[a-f0-9]{64}$'`),
+  check("mail_dispatches_state_allowed", sql`${t.state} in ('running','unknown','submitted','not_submitted')`),
+  check("mail_dispatches_resolution_source_allowed", sql`${t.resolutionSource} is null or ${t.resolutionSource} in ('adapter','human_provider_confirmation')`),
+  check("mail_dispatches_finished_consistent", sql`(${t.state} in ('running','unknown') and ${t.finishedAt} is null and ${t.resolutionSource} is null) or (${t.state} in ('submitted','not_submitted') and ${t.finishedAt} is not null and ${t.resolutionSource} is not null)`),
+]);
+
+/** Human evidence about incomplete old sends is not invented physical provenance. */
+export const mailLegacyResolutions = pgTable("mail_legacy_resolutions", {
+  deliveryId: uuid("delivery_id").primaryKey().references(() => mailDeliveries.id, { onDelete: "restrict" }),
+  originalDigest: text("original_digest").notNull(),
+  outcome: text("outcome", { enum: ["submitted", "not_submitted"] }).notNull(),
+  evidenceDigest: text("evidence_digest").notNull(),
+  resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: createdAtColumn(),
+}, t => [check("mail_legacy_resolutions_outcome", sql`${t.outcome} in ('submitted','not_submitted')`)]);
+
 /** Idempotency receipt plus the normalized provider fact, never the raw body. */
 export const mailProviderEvents = pgTable(
   "mail_provider_events",

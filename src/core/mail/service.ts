@@ -34,6 +34,8 @@ import { oauthAccessTokenOutsideTransaction } from "@/core/mail/oauth";
 import { decryptMailOutbox, encryptMailOutbox } from "@/core/mail/outbox-crypto";
 import { mailReceipts } from "@/core/mail/receipts";
 import { bindMailRecord } from "@/core/mail/ownership";
+import { freezeMailDispatchRequest } from "@/core/mail/dispatch-route";
+import { acceptPhysicalMailSubmission, claimPhysicalMailDispatch, markPhysicalMailUnknown, removeSettledMailBody } from "@/core/mail/dispatch-state";
 import { lockMailHolds, mailRecordIsUnheld } from "@/core/mail/record-retention";
 import mailRecordServices from "@/core/mail/record-services";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
@@ -612,6 +614,7 @@ export async function sendMail(
     deliveryId: inserted.id,
     encryptedMessage: encryptMailOutbox(serialized, inserted.id),
   });
+  await freezeMailDispatchRequest(tx, inserted.id, { purpose, provider: route.provider, sender, from: finalMessage.from }, serialized);
   if (holdReason) {
     // Held, never sent: the body stays encrypted in the outbox for the owner
     // to read in the admin, and no delivery job exists to send it.
@@ -650,21 +653,24 @@ async function finishQueuedMail(
   values: Partial<typeof mailDeliveries.$inferInsert>,
   /** Saved in the same transaction as the outcome (C3.31: a recorded grant). */
   alsoRecord?: (tx: Tx) => Promise<void>,
-  options: { onlyUnsent?: boolean } = {},
+  options: { onlyUnsent?: boolean; dispatchId?: string } = {},
 ): Promise<void> {
   const events: Array<{ id: string; eventName: string; payload: unknown }> = [];
   await db().transaction(async (tx) => {
+    await lockContactIdentityForRead(tx);
+    const held = await lockMailHolds(tx);
     const receipts = await mailReceipts(tx);
     const [current] = await tx.select().from(mailDeliveries).where(eq(mailDeliveries.id, deliveryId)).limit(1).for("update");
     if (!current) return;
     if (options.onlyUnsent && current.attempts > 0) return;
+    if (options.dispatchId && !await acceptPhysicalMailSubmission(tx, options.dispatchId, values.providerRef ?? "")) return;
     const [delivery] = await tx
       .update(mailDeliveries)
       .set({ ...values, ...(values.providerRef ? { providerRefDigest: receipts.digest(`provider:${current.provider}`, values.providerRef) } : {}), updatedAt: new Date() })
       .where(eq(mailDeliveries.id, deliveryId))
       .returning({ recipient: mailDeliveries.recipient });
     if (alsoRecord) await alsoRecord(tx);
-    if (current.attempts <= 1) await tx.delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
+    if (current.attempts <= 1) await removeSettledMailBody(tx, deliveryId, held);
     if (delivery && (values.status === "suppressed" || values.status === "failed")) {
       const eventName = "mail.deliveryUpdated";
       const payload = { deliveryId, type: values.status };
@@ -710,10 +716,10 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
   }
 
   let message: StagedMessage;
+  let originalPayload: string;
   try {
-    message = stagedMessage.parse(
-      JSON.parse(decryptMailOutbox(queued.encryptedMessage, deliveryId)) as unknown,
-    );
+    originalPayload = decryptMailOutbox(queued.encryptedMessage, deliveryId);
+    message = stagedMessage.parse(JSON.parse(originalPayload) as unknown);
   } catch {
     await finishQueuedMail(deliveryId, {
       status: "failed",
@@ -745,7 +751,7 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
     }
   }
 
-  let dispatchClaimed = false;
+  let dispatchId: string | null = null;
   try {
     const sender = queued.delivery.senderId
       ? await getSender(db() as unknown as Tx, queued.delivery.senderId)
@@ -775,16 +781,8 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
             reason: transactionalReason ?? "service_notification",
             eventRef: eventRef ?? `mail-delivery:${deliveryId}`,
           };
-    const claimed = await db().transaction(async tx => {
-      await mailReceipts(tx);
-      const [row] = await tx.update(mailDeliveries).set({ attempts: sql`${mailDeliveries.attempts} + 1`, updatedAt: new Date() }).where(and(
-        eq(mailDeliveries.id, deliveryId), inArray(mailDeliveries.status, ["queued", "failed"]), isNull(mailDeliveries.redactedAt),
-        sql`exists(select 1 from ${mailOutbox} where ${mailOutbox.deliveryId}=${mailDeliveries.id} and ${mailOutbox.createdAt} >= clock_timestamp()-interval '30 days')`,
-      )).returning({ id: mailDeliveries.id });
-      return row;
-    });
-    if (!claimed) return { status: "missing" };
-    dispatchClaimed = true;
+    dispatchId = await db().transaction(tx => claimPhysicalMailDispatch(tx, deliveryId, { purpose: queued.delivery.purpose, provider: adapter.id, sender, from: message.from }, originalPayload));
+    if (!dispatchId) return { status: "missing" };
     const result = await adapter.send({ ...outbound, deliveryId, ...(permission ? { permission } : {}) });
     // A grant the carrier recorded is remembered with the send's outcome, in
     // one transaction, so a later withdrawal reaches exactly this address and
@@ -800,6 +798,7 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
         lastError: adapter.delivers ? null : "The configured adapter does not deliver.",
       },
       grant ? (tx) => rememberProviderGrant(tx, adapter.id, grant) : undefined,
+      { dispatchId },
     );
     return { status: adapter.delivers ? "submitted" : "failed" };
   } catch (error) {
@@ -807,7 +806,11 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
       error instanceof MailAdapterError
         ? error.retryable
         : !(error instanceof ServiceError);
-    if (!dispatchClaimed && !retryable) {
+    if (dispatchId) {
+      await db().transaction(tx => markPhysicalMailUnknown(tx, dispatchId!));
+      return { status: "failed" };
+    }
+    if (!retryable) {
       await finishQueuedMail(deliveryId, { status: "failed", lastError: safeDeliveryError(error) }, undefined, { onlyUnsent: true });
       return { status: "failed" };
     }
