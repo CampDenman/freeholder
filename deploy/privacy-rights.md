@@ -73,6 +73,36 @@ Within one transaction it:
 - appends marketing-withdrawal suppression evidence for email, SMS and push;
 - creates a minimal erasure receipt and emits timeline/outbox evidence.
 
+## Merge history and subject identity
+
+Active transitive merges form one privacy subject. Undo separates those subjects
+again. Exports include only a snapshot or historical payload that belongs wholly
+to the current subject; shared payloads are redacted, and owner-only merge recovery
+checkpoints are excluded. Erasure also removes the subject's personal data from
+shared historical snapshots, timeline payloads and audit differences, including
+nested merges later undone. A separate other person's before-image remains intact.
+Affected recovery checkpoints are cleared and their merges become non-undoable.
+
+Stored action identifiers, record dates and contact references remain as
+operational history; the existing login-actor anonymization still applies. A subject export masks historical contact identifiers that
+belong to a separate party; erasure clears applicable personal payloads rather
+than rewriting transaction history. Existing scope-specific retention exceptions
+still apply independently. A hold on `contact.merge_history` does not retain an
+unheld `contact.audit` or `contact.timeline` payload.
+
+Merge, undo and privacy fulfilment take the same nonwaiting transaction guard
+before reading identity. A competing operation receives a retryable conflict
+without partially changing either identity. New audit, timeline and merge points
+use the actual operation time so nested operations in one transaction remain
+ordered. Legacy transaction-start timestamps can be ambiguous; shared historical
+payloads are conservatively redacted rather than attributed to a separate person.
+
+The real PostgreSQL controls are in
+`tests/core/contact-privacy-lineage.test.ts`. They cover transitive and undone
+merges, borrowed addresses, other-party recovery data, named holds, exact audit
+scrubbing, timeline payloads, composed transactions and competing identity work.
+These source repairs do not supply the independent C11.10 review.
+
 ## Legal-retention exceptions
 
 An exception belongs to one open erasure request and one registered scope. It

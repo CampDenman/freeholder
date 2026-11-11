@@ -7,6 +7,7 @@ import {
   asc,
   desc,
   eq,
+  getTableColumns,
   inArray,
   lt,
   or,
@@ -28,6 +29,8 @@ import {
   updateContact,
 } from "@/core/contacts/service";
 import { db } from "@/core/db";
+import {lockContactIdentity} from "@/core/contacts/identity-lock";
+import {contactPrivacyIdentity,contactPrivacyHistory,contactHistoryOwnership} from "./contact-identity";
 import { auditLog } from "@/core/events/schema";
 import {
   consentRecords,
@@ -1056,6 +1059,7 @@ async function portableExport(
   request: typeof dataRequests.$inferSelect,
   contact: typeof contacts.$inferSelect,
 ) {
+  await lockContactIdentity(tx);
   const consent = await consentBundle(tx, contact.id);
   const sources: Record<string, unknown> = {};
   for (const source of privacySourceRegistry) {
@@ -1088,17 +1092,27 @@ function scrubContactSnapshot(value: unknown): Record<string, unknown> {
 registerContactPrivacySource({
   scope: "contact.timeline",
   tables: ["timeline_events"],
-  exportData: (tx, contactId) =>
-    tx
-      .select()
-      .from(timelineEvents)
-      .where(eq(timelineEvents.contactId, contactId))
-      .orderBy(asc(timelineEvents.occurredAt)),
+  exportData: async (tx, contactId) => {
+    const { contactIds } = await contactPrivacyIdentity(tx, contactId);
+    const history = await contactPrivacyHistory(tx, contactIds);
+    return tx.select({
+      ...getTableColumns(timelineEvents),
+      contactId: sql<string | null>`case when ${timelineEvents.contactId} in (${sql.join(contactIds.map(id => sql`${id}::uuid`), sql`, `)}) then ${timelineEvents.contactId} else null end`,
+      subjectId: sql<string | null>`case when ${timelineEvents.subjectType}='contact' and not (${timelineEvents.subjectId} in (${sql.join(contactIds.map(id => sql`${id}`), sql`, `)})) then null else ${timelineEvents.subjectId} end`,
+      // Merge payloads name the other party even on an otherwise owned record.
+      payload: sql`case when ${timelineEvents.eventType} in ('contact.merged','contact.mergeUndone') or not ${contactHistoryOwnership(timelineEvents.contactId,timelineEvents.occurredAt,contactIds,"all")} then '{}'::jsonb else ${timelineEvents.payload} end`,
+    }).from(timelineEvents).where(and(
+      inArray(timelineEvents.contactId, history.contactIds),
+      contactHistoryOwnership(timelineEvents.contactId,timelineEvents.occurredAt,contactIds,"any"),
+    )).orderBy(asc(timelineEvents.occurredAt));
+  },
   erase: async (tx, contactId) => {
-    const rows = await tx
-      .update(timelineEvents)
+    const { contactIds } = await contactPrivacyIdentity(tx, contactId);
+    const history = await contactPrivacyHistory(tx, contactIds);
+    const rows = await tx.update(timelineEvents)
       .set({ subjectId: null, payload: { erased: true } })
-      .where(eq(timelineEvents.contactId, contactId))
+      .where(and(inArray(timelineEvents.contactId, history.contactIds),
+        contactHistoryOwnership(timelineEvents.contactId,timelineEvents.occurredAt,contactIds,"any")))
       .returning({ id: timelineEvents.id });
     return { affected: rows.length };
   },
@@ -1198,85 +1212,74 @@ registerContactPrivacySource({
   },
 });
 
+async function mergePrivacyView(tx:Tx,contactId:string){
+  const identity=await contactPrivacyIdentity(tx,contactId);
+  const history=await contactPrivacyHistory(tx,identity.contactIds);
+  const rows=history.operations.length?await tx.select({
+    id:contactMergeOperations.id,candidateId:contactMergeOperations.candidateId,
+    survivingContactId:contactMergeOperations.survivingContactId,duplicateContactId:contactMergeOperations.duplicateContactId,
+    survivorBefore:contactMergeOperations.survivorBefore,duplicateBefore:contactMergeOperations.duplicateBefore,survivorAfter:contactMergeOperations.survivorAfter,
+    undoable:contactMergeOperations.undoable,mergedAt:contactMergeOperations.mergedAt,undoneAt:contactMergeOperations.undoneAt,
+  }).from(contactMergeOperations).where(inArray(contactMergeOperations.id,history.operations.map(operation=>operation.id))).orderBy(asc(contactMergeOperations.mergedAt),asc(contactMergeOperations.id)):[];
+  const operations=rows.map(operation=>{
+    const point=history.operation(operation.id)!;
+    const survivorBefore=history.at(operation.survivingContactId,point.mergedMicros,operation.id);
+    const duplicateBefore=history.at(operation.duplicateContactId,point.mergedMicros,operation.id);
+    const survivorAfter=history.at(operation.survivingContactId,point.mergedMicros);
+    return {operation,survivorBefore,duplicateBefore,survivorAfter};
+  }).filter(value=>value.survivorBefore.containsSubject||value.duplicateBefore.containsSubject||value.survivorAfter.containsSubject);
+  const candidateIds=operations.flatMap(({operation})=>operation.candidateId?[operation.candidateId]:[]);
+  const candidates=await tx.select({...getTableColumns(mergeCandidates),detectedMicros:sql<string>`(extract(epoch from ${mergeCandidates.detectedAt})*1000000)::bigint::text`}).from(mergeCandidates).where(or(
+    inArray(mergeCandidates.contactAId,history.contactIds),inArray(mergeCandidates.contactBId,history.contactIds),
+    candidateIds.length?inArray(mergeCandidates.id,candidateIds):undefined,
+  ));
+  const addresses=new Set(identity.emails);
+  const candidateViews=candidates.map(candidate=>{
+    const a=candidate.contactAId?history.at(candidate.contactAId,candidate.detectedMicros):null;
+    const b=candidate.contactBId?history.at(candidate.contactBId,candidate.detectedMicros):null;
+    const linked=candidateIds.includes(candidate.id);
+    const aContains=a?.containsSubject??(linked||!!candidate.contactAEmail&&addresses.has(candidate.contactAEmail.toLowerCase()));
+    const bContains=b?.containsSubject??(linked||!!candidate.contactBEmail&&addresses.has(candidate.contactBEmail.toLowerCase()));
+    return {candidate,a,b,aContains,bContains};
+  }).filter(value=>value.aContains||value.bContains);
+  return {identity,operations,candidates:candidateViews};
+}
+
 registerContactPrivacySource({
-  scope: "contact.merge_history",
-  tables: ["merge_candidates"],
-  exportData: async (tx, contactId) => ({
-    candidates: await tx
-      .select()
-      .from(mergeCandidates)
-      .where(
-        or(
-          eq(mergeCandidates.contactAId, contactId),
-          eq(mergeCandidates.contactBId, contactId),
-        ),
-      ),
-    operations: await tx
-      .select()
-      .from(contactMergeOperations)
-      .where(
-        or(
-          eq(contactMergeOperations.survivingContactId, contactId),
-          eq(contactMergeOperations.duplicateContactId, contactId),
-        ),
-      ),
-  }),
-  erase: async (tx, contactId) => {
-    const candidates = await tx
-      .select()
-      .from(mergeCandidates)
-      .where(
-        or(
-          eq(mergeCandidates.contactAId, contactId),
-          eq(mergeCandidates.contactBId, contactId),
-        ),
-      );
-    for (const candidate of candidates) {
-      await tx
-        .update(mergeCandidates)
-        .set({
-          contactAName:
-            candidate.contactAId === contactId
-              ? "Erased contact"
-              : candidate.contactAName,
-          contactAEmail:
-            candidate.contactAId === contactId ? null : candidate.contactAEmail,
-          contactBName:
-            candidate.contactBId === contactId
-              ? "Erased contact"
-              : candidate.contactBName,
-          contactBEmail:
-            candidate.contactBId === contactId ? null : candidate.contactBEmail,
-          reasons: [],
-        })
-        .where(eq(mergeCandidates.id, candidate.id));
-    }
-    const operations = await tx
-      .select()
-      .from(contactMergeOperations)
-      .where(
-        or(
-          eq(contactMergeOperations.survivingContactId, contactId),
-          eq(contactMergeOperations.duplicateContactId, contactId),
-        ),
-      );
-    for (const operation of operations) {
-      await tx
-        .update(contactMergeOperations)
-        .set({
-          survivorBefore: scrubContactSnapshot(operation.survivorBefore),
-          duplicateBefore: scrubContactSnapshot(operation.duplicateBefore),
-          survivorAfter: scrubContactSnapshot(operation.survivorAfter),
-          referenceState: [],
-          undoable: false,
-          undoBlockers: [
-            ...operation.undoBlockers,
-            "Personal data was erased after this merge, so it cannot be undone.",
-          ],
-        })
-        .where(eq(contactMergeOperations.id, operation.id));
-    }
-    return { affected: candidates.length + operations.length };
+  scope:"contact.merge_history",tables:["merge_candidates","contact_merge_operations"],
+  exportData:async(tx,contactId)=>{
+    const view=await mergePrivacyView(tx,contactId),owned=new Set(view.identity.contactIds);
+    return {
+      candidates:view.candidates.map(({candidate,a,b})=>({
+        id:candidate.id,score:candidate.score,status:candidate.status,detectedAt:candidate.detectedAt,dismissedAt:candidate.dismissedAt,mergedAt:candidate.mergedAt,updatedAt:candidate.updatedAt,
+        contactAId:a?.onlySubject?candidate.contactAId:null,contactAName:a?.onlySubject?candidate.contactAName:null,contactAEmail:a?.onlySubject?candidate.contactAEmail:null,
+        contactBId:b?.onlySubject?candidate.contactBId:null,contactBName:b?.onlySubject?candidate.contactBName:null,contactBEmail:b?.onlySubject?candidate.contactBEmail:null,
+        reasons:[],recoveryDataRedacted:true,
+      })),
+      operations:view.operations.map(({operation,survivorBefore,duplicateBefore,survivorAfter})=>({
+        id:operation.id,candidateId:operation.candidateId,
+        survivingContactId:owned.has(operation.survivingContactId)?operation.survivingContactId:null,
+        duplicateContactId:owned.has(operation.duplicateContactId)?operation.duplicateContactId:null,
+        survivorBefore:survivorBefore.onlySubject?operation.survivorBefore:{redacted:true},
+        duplicateBefore:duplicateBefore.onlySubject?operation.duplicateBefore:{redacted:true},
+        survivorAfter:survivorAfter.onlySubject?operation.survivorAfter:{redacted:true},
+        referenceState:[],undoable:operation.undoable,undoBlockers:[],mergedAt:operation.mergedAt,undoneAt:operation.undoneAt,recoveryDataRedacted:true,
+      })),
+    };
+  },
+  erase:async(tx,contactId)=>{
+    const view=await mergePrivacyView(tx,contactId);
+    for(const {candidate,aContains,bContains} of view.candidates)await tx.update(mergeCandidates).set({
+      contactAName:aContains?"Erased contact":candidate.contactAName,contactAEmail:aContains?null:candidate.contactAEmail,
+      contactBName:bContains?"Erased contact":candidate.contactBName,contactBEmail:bContains?null:candidate.contactBEmail,reasons:[],
+    }).where(eq(mergeCandidates.id,candidate.id));
+    for(const {operation,survivorBefore,duplicateBefore,survivorAfter} of view.operations)await tx.update(contactMergeOperations).set({
+      survivorBefore:survivorBefore.containsSubject?scrubContactSnapshot(operation.survivorBefore):operation.survivorBefore,
+      duplicateBefore:duplicateBefore.containsSubject?scrubContactSnapshot(operation.duplicateBefore):operation.duplicateBefore,
+      survivorAfter:survivorAfter.containsSubject?scrubContactSnapshot(operation.survivorAfter):operation.survivorAfter,
+      referenceState:[],undoable:false,undoBlockers:["Personal data was erased after this merge, so it cannot be undone."],
+    }).where(eq(contactMergeOperations.id,operation.id));
+    return {affected:view.candidates.length+view.operations.length};
   },
 });
 
@@ -1284,16 +1287,21 @@ registerContactPrivacySource({
   scope: "contact.audit",
   tables: ["audit_log"],
   exportData: async (tx, contactId) => {
+    const {contactIds}=await contactPrivacyIdentity(tx,contactId);
+    const history=await contactPrivacyHistory(tx,contactIds);
     const requestIds = await tx
       .select({ id: dataRequests.id })
       .from(dataRequests)
       .where(eq(dataRequests.contactId, contactId));
     return tx
-      .select()
+      .select({...getTableColumns(auditLog),
+        subjectId:sql<string|null>`case when ${auditLog.subjectType}='contact' and ${auditLog.subjectId} not in (${sql.join(contactIds.map(id=>sql`${id}`),sql`, `)}) then null else ${auditLog.subjectId} end`,
+        diff:sql`case when ${auditLog.subjectType}='contact' and not ${contactHistoryOwnership(auditLog.subjectId,auditLog.at,contactIds,"all")} then '{}'::jsonb else ${auditLog.diff} end`,
+      })
       .from(auditLog)
       .where(
         or(
-          and(eq(auditLog.subjectType, "contact"), eq(auditLog.subjectId, contactId)),
+          and(eq(auditLog.subjectType,"contact"),inArray(auditLog.subjectId,history.contactIds),contactHistoryOwnership(auditLog.subjectId,auditLog.at,contactIds,"any")),
           requestIds.length
             ? and(
                 eq(auditLog.subjectType, "dataRequest"),
@@ -1309,6 +1317,8 @@ registerContactPrivacySource({
   },
   erase: async (tx, contactId) => {
     const contact = await requireContact(tx, contactId);
+    const {contactIds}=await contactPrivacyIdentity(tx,contactId);
+    const history=await contactPrivacyHistory(tx,contactIds);
     const requestIds = await tx
       .select({ id: dataRequests.id })
       .from(dataRequests)
@@ -1318,7 +1328,7 @@ registerContactPrivacySource({
       .set({ diff: {} })
       .where(
         or(
-          and(eq(auditLog.subjectType, "contact"), eq(auditLog.subjectId, contactId)),
+          and(eq(auditLog.subjectType,"contact"),inArray(auditLog.subjectId,history.contactIds),contactHistoryOwnership(auditLog.subjectId,auditLog.at,contactIds,"any")),
           requestIds.length
             ? and(
                 eq(auditLog.subjectType, "dataRequest"),
@@ -1441,6 +1451,7 @@ async function eraseContact(
   request: typeof dataRequests.$inferSelect,
 ) {
   const tx = ctx.tx;
+  await lockContactIdentity(tx);
   const now = new Date();
   const exceptions = (
     await tx
@@ -1579,6 +1590,8 @@ export const fulfillDataRequest = defineService({
     artifact: artifactRow,
   }),
   handler: async (input, ctx) => {
+    // Serialize identity changes before reading a profile or its request.
+    await lockContactIdentity(ctx.tx);
     await ctx.tx.execute(
       sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.id}`}))`,
     );

@@ -810,6 +810,8 @@ export function defineService<In extends z.ZodType, Out>(
 
         if (def.kind === "mutation" && (def.auditWhen?.(out) ?? true)) {
           await tx.insert(auditLog).values({
+            // A composed transaction can change identity between mutations.
+            at: sql`clock_timestamp()`,
             actor: auditActorString(actor),
             action: def.name,
             subjectType: subject?.subjectType,
