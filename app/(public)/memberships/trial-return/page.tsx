@@ -33,7 +33,7 @@ export default async function TrialReturn({
   const membership = await myMembership.call({ id }, actor).catch(() => null);
   if (!membership) notFound();
   if (!membership.cardSetup) redirect(href(`/portal/subscriptions/${id}`));
-  const methods = await myMembershipPaymentMethods.call({}, actor).catch(() => []);
+  const methods = await myMembershipPaymentMethods.call({ subscriptionId: id }, actor).catch(() => []);
   return (
     <div className="mx-auto grid max-w-xl gap-6 px-6 py-12">
       <h1 className="text-3xl font-semibold">{membership.name}</h1>

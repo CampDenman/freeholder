@@ -4,7 +4,7 @@
 // it sends (shapes taken from the providers' public API references), how it
 // reads replies, and how it verifies webhooks. Not yet run against live
 // sandboxes; that waits for test credentials.
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createStripeConnect, stripeAccountStatus, stripeMerchantDetails } from "@/adapters/payouts/stripe-connect";
 import { marketFeeMinor } from "@/modules/invoicing/market-policy";
@@ -61,6 +61,62 @@ describe("Stripe Connect payouts (C12.26)", () => {
     expect(await stripe.webhook({ headers: { "stripe-signature": `t=${t},v1=${sig}` }, body: body(event), receivedAt: now })).toEqual([{ kind: "account", externalAccountId: "acct_1", status: "ready", chargesReady: false, merchantName: null }]);
     await expect(stripe.webhook({ headers: { "stripe-signature": `t=${t},v1=${"0".repeat(64)}` }, body: body(event), receivedAt: now })).rejects.toThrow(/invalid/);
     await expect(stripe.webhook({ headers: { "stripe-signature": `t=${t - 3600},v1=${sig}` }, body: body(event), receivedAt: now })).rejects.toThrow(/window/);
+  });
+
+  it("authenticates connected financial bytes with the Connect secret before forwarding account and fee evidence (C12.38)", async () => {
+    const { calls, fetcher } = recorder(() => ({}));
+    const stripe = createStripeConnect({ secretKey: "sk_test_x", webhookSecrets: ["whsec_connect"], fetch: fetcher });
+    const timestamp = Math.floor(Date.now() / 1000);
+    const receivedAt = new Date().toISOString();
+    const event = { id: "evt_connected_paid", created: timestamp, account: "acct_seller", type: "payment_intent.succeeded", data: { object: { id: "pi_direct", amount_received: 2000, currency: "cad", application_fee_amount: 200 } } };
+    async function deliver(value: unknown, secret = "whsec_connect") {
+      const raw = JSON.stringify(value);
+      const signature = createHmac("sha256", secret).update(`${timestamp}.${raw}`).digest("hex");
+      return stripe.webhook({ headers: { "stripe-signature": `t=${timestamp},v1=${signature}` }, body: body(raw), receivedAt });
+    }
+    const forwarded = await deliver(event);
+    expect(forwarded).toMatchObject([{ kind: "payment", receivedAt, bodySha256: createHash("sha256").update(JSON.stringify(event)).digest("hex"), event: { id: event.id, kind: "payment_succeeded", providerAccountId: "acct_seller", providerRef: "pi_direct", applicationFeeMinor: 200, amountMinor: 2000, currency: "CAD" } }]);
+    await expect(deliver(event, "whsec_platform")).rejects.toThrow("signature is invalid");
+    await expect(deliver({ ...event, account: null })).rejects.toThrow("account scope");
+    expect(await deliver({ ...event, account: undefined })).toEqual([]);
+    const raw = JSON.stringify(event);
+    const signature = createHmac("sha256", "whsec_connect").update(`${timestamp}.${raw}`).digest("hex");
+    await expect(stripe.webhook({ headers: { "stripe-signature": `t=${timestamp},v1=${signature}` }, body: body(raw + " "), receivedAt })).rejects.toThrow("signature is invalid");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("proves connected recurring payments with account-scoped invoice-payment and PaymentIntent reads (C12.38)", async () => {
+    let proof = "valid";
+    const { calls, fetcher } = recorder(call => {
+      if (call.url.includes("/v1/invoice_payments?")) {
+        const record = { id: "inpay_direct", invoice: "in_direct", status: "paid", amount_paid: proof === "amount" ? 1999 : 2000, amount_requested: 2000, currency: "cad", payment: { type: "payment_intent", payment_intent: "pi_direct" } };
+        return { has_more: proof === "pagination", data: proof === "split" ? [record,record] : [record] };
+      }
+      if (call.url.endsWith("/v1/payment_intents/pi_direct")) return { id: "pi_direct", status: "succeeded", amount_received: 2000, currency: "cad", customer: proof === "customer" ? "cus_other" : "cus_direct", application_fee_amount: proof === "fee" ? undefined : 200 };
+      throw new Error("Unexpected provider request.");
+    });
+    const stripe = createStripeConnect({ secretKey: "sk_test_x", webhookSecrets: ["whsec_connect"], apiBase: "https://stripe.example.test", fetch: fetcher });
+    const timestamp = Math.floor(Date.now()/1000);
+    const event = { id: "evt_recurring_direct", created: timestamp, account: "acct_seller", type: "invoice.paid", data: { object: { id: "in_direct", parent: { subscription_details: { subscription: "sub_direct" } }, amount_paid: 2000, total: 2000, currency: "cad", customer: "cus_direct", application_fee_amount: 1, lines: { data: [{ period: { start: timestamp, end: timestamp + 86400 } }] } } } };
+    async function deliver(value: unknown = event) {
+      const raw = JSON.stringify(value);
+      const signature = createHmac("sha256", "whsec_connect").update(`${timestamp}.${raw}`).digest("hex");
+      return stripe.webhook({ headers: { "stripe-signature": `t=${timestamp},v1=${signature}` }, body: body(raw), receivedAt: new Date().toISOString() });
+    }
+    expect(await deliver()).toMatchObject([{ kind: "payment", event: { kind: "subscription_period_paid", providerRef: "sub_direct", providerAccountId: "acct_seller", paymentProviderRef: "pi_direct", applicationFeeMinor: 200, amountMinor: 2000, currency: "CAD" } }]);
+    expect(calls).toHaveLength(2);
+    const query = new URL(calls[0]!.url).searchParams;
+    expect([query.get("invoice"),query.get("status"),query.get("limit")]).toEqual(["in_direct","paid","2"]);
+    for (const invalid of ["split","pagination","amount","fee","customer"]) {
+      proof = invalid;
+      await expect(deliver()).rejects.toThrow("did not prove");
+    }
+    expect(calls.every(call => call.headers["stripe-account"] === "acct_seller" && call.headers["stripe-version"] === "2026-02-25.clover")).toBe(true);
+    const before = calls.length;
+    expect(await deliver({ ...event, data: { object: { ...event.data.object, amount_paid: 0, total: 0 } } })).toEqual([]);
+    expect(calls).toHaveLength(before);
+    await expect(deliver({ ...event, data: { object: { ...event.data.object, paid_out_of_band: true } } })).rejects.toThrow("did not prove");
+    expect(calls).toHaveLength(before);
   });
 
   it("requests direct charge capability explicitly and requires charge readiness plus public merchant branding (C12.38)", async () => {

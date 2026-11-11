@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C9.38: verified signup, a canonical first invoice, and payment-bound access.
 import { createHash } from "node:crypto";
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter } from "@/adapters/payments";
 import { contactForActor } from "@/core/portal/service";
@@ -15,6 +15,8 @@ import { sellerCanSell } from "@/modules/catalog/market";
 import { registerCheckoutRequirement, registerCheckoutEligibility } from "@/modules/invoicing/checkout-requirements";
 import { invoices, paymentMethods, paymentProviderCustomers, payments } from "@/modules/invoicing/schema";
 import { plans, subscriptionEvents, subscriptions } from "./schema";
+import { resolveSubscriptionPlanMarketPolicy, subscriptionPaymentScope } from "./market-policy";
+import { assertProviderAccount, paymentRouting } from "@/modules/invoicing/merchant-charge";
 
 registerCheckoutRequirement("subscription", async (ctx, id) => {
   const [row] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, id.split(":")[0]!)).limit(1);
@@ -31,10 +33,11 @@ function needsCardTrial(plan: { trialDays: number; trialRequiresCard: boolean })
 }
 
 /** A card trial is offered only when this instance can actually save the card. */
-function membershipAvailable(plan: { billingMode: "manual" | "platform" | "provider"; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number }, sellerReady: boolean) {
+function membershipAvailable(plan: { billingMode: "manual" | "platform" | "provider"; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number }, sellerReady: boolean, direct = false) {
   if (!sellerReady) return false;
+  const adapter = direct ? paymentAdapter("stripe") : paymentAdapter();
+  if (direct && (!adapter.status.available || !adapter.capabilities().sellerMerchantCharges)) return false;
   if (plan.billingMode === "manual") return !needsCardTrial(plan);
-  const adapter = paymentAdapter();
   const caps = adapter.capabilities();
   const billable = adapter.status.available && caps.savedMethods && (plan.billingMode === "provider" ? caps.subscriptions : caps.offSessionCharges);
   if (!billable) return false;
@@ -58,7 +61,13 @@ export const publicMembershipPlans = defineService({
       const price=await ctx.callAsSystem(resolvePrice,{variantId:variant,currency,contactId:contact?.id,quantity:1});
       if(!price.available||price.amountMinor===undefined)continue;
       const promise={id:plan.id,name:plan.name,description:product.subtitle,currency,amountMinor:price.amountMinor,setupFeeMinor:plan.setupFeeMinor,interval:plan.interval,intervalCount:plan.intervalCount,trialDays:plan.trialDays,trialRequiresCard:plan.trialRequiresCard,billingMode:plan.billingMode,cancelBehaviour:plan.cancelBehaviour};
-      result.push({...promise,termsHash:createHash("sha256").update(JSON.stringify({...promise,variant,updatedAt:plan.updatedAt})).digest("hex"),available:membershipAvailable(plan, sellerReady)});
+      let policyUnavailable = false;
+      const policy = await resolveSubscriptionPlanMarketPolicy(ctx, plan.id).catch((error: unknown) => {
+        if (error instanceof ServiceError && error.code === "conflict") { policyUnavailable = true; return null; }
+        throw error;
+      });
+      const collectionProvider = plan.billingMode === "manual" ? null : policy?.model === "seller_merchant" ? "stripe" : paymentAdapter().id;
+      result.push({...promise,termsHash:createHash("sha256").update(JSON.stringify({...promise,variant,updatedAt:plan.updatedAt,policy,collectionProvider})).digest("hex"),available:!policyUnavailable && membershipAvailable(plan, sellerReady, policy?.model === "seller_merchant")});
     }
     return result;
   },
@@ -73,8 +82,25 @@ export const myMembership = defineService({
   },
 });
 export const myMembershipPaymentMethods = defineService({
-  name:"subscriptions.myPaymentMethods",summary:"Your consented, active methods that can bill a membership.",kind:"query",permission:"authenticated",input:z.object({}),output:z.array(z.object({id:z.uuid(),label:z.string()})),
-  handler:async(_input,ctx)=>{const contact=await contactForActor(ctx);return ctx.tx.select({id:paymentMethods.id,label:paymentMethods.label}).from(paymentMethods).where(and(eq(paymentMethods.contactId,contact.id),eq(paymentMethods.status,"active"),eq(paymentMethods.provider,paymentAdapter().id),eq(paymentMethods.consentSource,"provider_checkout")));},
+  name:"subscriptions.myPaymentMethods",summary:"Your consented, active methods for the chosen membership's merchant.",kind:"query",permission:"authenticated",input:z.object({ subscriptionId: z.uuid().optional(), planId: z.uuid().optional() }).refine(value => !value.subscriptionId || !value.planId, "Choose a plan or an existing agreement."),output:z.array(z.object({id:z.uuid(),label:z.string()})),
+  handler:async(input,ctx)=>{
+    const contact=await contactForActor(ctx);
+    let providerAccountId: string | undefined;
+    let agreementProvider: string | null = null;
+    let setup: typeof subscriptionEvents.$inferSelect | undefined;
+    if (input.subscriptionId) {
+      const [own] = await ctx.tx.select().from(subscriptions).where(and(eq(subscriptions.id,input.subscriptionId),eq(subscriptions.contactId,contact.id))).limit(1);
+      if (!own) throw new ServiceError("not_found", "That membership is unavailable.");
+      providerAccountId = (await subscriptionPaymentScope(ctx, own.id)).providerAccountId;
+      agreementProvider = own.provider;
+      if (own.signupPending && own.status === "paused" && !own.signupInvoiceId && !own.paymentMethodId && !own.cancelledAt) {
+        [setup] = await ctx.tx.select().from(subscriptionEvents).where(and(eq(subscriptionEvents.subscriptionId,own.id),eq(subscriptionEvents.kind,"card_setup"))).orderBy(desc(subscriptionEvents.at)).limit(1);
+        if (!setup?.detail) return [];
+      }
+    } else if (input.planId) providerAccountId = (await resolveSubscriptionPlanMarketPolicy(ctx,input.planId))?.providerAccountId ?? undefined;
+    const provider = providerAccountId ? "stripe" : agreementProvider ?? paymentAdapter().id;
+    return ctx.tx.select({id:paymentMethods.id,label:paymentMethods.label}).from(paymentMethods).where(and(eq(paymentMethods.contactId,contact.id),eq(paymentMethods.status,"active"),eq(paymentMethods.provider,provider),eq(paymentMethods.providerAccountId,providerAccountId ?? ""),eq(paymentMethods.consentSource,"provider_checkout"),setup ? gte(paymentMethods.createdAt,setup.at) : undefined,setup?.detail ? eq(paymentMethods.providerCustomerRef,setup.detail) : undefined));
+  },
 });
 export const joinMembership = defineService({
   name:"subscriptions.join",summary:"Join a public plan as yourself; paid access waits for the first invoice to settle.",kind:"mutation",permission:"authenticated",writeClass:"money",
@@ -99,7 +125,9 @@ export const joinMembership = defineService({
     // skip the fee invoice (C11.10).
     if(input.paymentMethodId){
       const [method]=await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id,input.paymentMethodId)).limit(1);
-      if(!method||method.contactId!==contact.id||method.status!=="active"||method.provider!==paymentAdapter().id||method.consentSource!=="provider_checkout")throw new ServiceError("conflict","That saved card cannot be used for this membership.");
+      const policy=await resolveSubscriptionPlanMarketPolicy(ctx,plan.id);
+      const provider=policy?.model==="seller_merchant"?"stripe":paymentAdapter().id;
+      if(!method||method.contactId!==contact.id||method.status!=="active"||method.provider!==provider||method.providerAccountId!==(policy?.providerAccountId??"")||method.consentSource!=="provider_checkout")throw new ServiceError("conflict","That saved card cannot be used for this membership.");
     }
     const paymentMethodId=needsCardTrial(plan)&&plan.setupFeeMinor>0?undefined:input.paymentMethodId;
     const created=await ctx.callAsSystem(subscribe,{contactId:contact.id,planId:plan.id,currency:plan.currency,paymentMethodId,deferFirstPayment:true});
@@ -145,6 +173,9 @@ export const activatePaidSignup = defineService({
 });
 
 async function openCardTrial(ctx: ServiceContext, sub: typeof subscriptions.$inferSelect, plan: { name: string; trialDays: number }, method: { id: string; provider: string }) {
+  const routing = await subscriptionPaymentScope(ctx, sub.id, true);
+  const [stored] = await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, method.id)).limit(1);
+  if (!stored || stored.contactId !== sub.contactId || stored.provider !== method.provider || stored.providerAccountId !== (routing.providerAccountId ?? "") || (routing.providerAccountId && stored.provider !== "stripe")) throw new ServiceError("conflict", "The saved card belongs to a different membership merchant.");
   const { periodEnd, keepAccess, record } = await import("./service");
   const start = new Date();
   const end = periodEnd(start, "day", plan.trialDays);
@@ -185,7 +216,7 @@ const claimTrialCardSetup = defineService({
   external: false,
   writeClass: "money",
   input: z.object({ subscriptionId: z.uuid(), saveMethodConsent: z.literal(true) }),
-  output: z.object({ subscriptionId: z.uuid(), contactId: z.uuid(), email: z.string(), name: z.string(), provider: z.string(), providerCustomerRef: z.string().nullable(), idempotencyKey: z.string() }),
+  output: z.object({ subscriptionId: z.uuid(), contactId: z.uuid(), email: z.string(), name: z.string(), provider: z.string(), providerCustomerRef: z.string().nullable(), providerAccountId: paymentRouting.shape.providerAccountId, idempotencyKey: z.string() }),
   handler: async (input, ctx) => {
     const contact = await contactForActor(ctx);
     if (!contact.email) throw new ServiceError("conflict", "Verify your email before saving a card.");
@@ -194,12 +225,13 @@ const claimTrialCardSetup = defineService({
     if (!sub || sub.cancelledAt || sub.status !== "paused" || !sub.signupPending || sub.paymentMethodId || sub.signupInvoiceId) throw new ServiceError("conflict", "This trial is not waiting for a card.");
     const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, sub.planId)).limit(1);
     if (!plan || !needsCardTrial(plan) || plan.setupFeeMinor > 0 || plan.billingMode === "manual") throw new ServiceError("conflict", "This trial is not waiting for a card.");
-    const adapter = paymentAdapter();
+    const routing = await subscriptionPaymentScope(ctx, sub.id, true);
+    const adapter = paymentAdapter(routing.providerAccountId ? "stripe" : sub.provider ?? undefined);
     const caps = adapter.capabilities();
-    const billable = adapter.status.available && caps.savedMethods && typeof adapter.createMethodSetup === "function" && (plan.billingMode === "provider" ? caps.subscriptions : caps.offSessionCharges);
+    const billable = adapter.status.available && caps.savedMethods && (!routing.providerAccountId || caps.sellerMerchantCharges) && typeof adapter.createMethodSetup === "function" && (plan.billingMode === "provider" ? caps.subscriptions : caps.offSessionCharges);
     if (!billable) throw new ServiceError("conflict", "Saving a card is not available for this membership.");
-    const [known] = await ctx.tx.select({ providerCustomerRef: paymentProviderCustomers.providerCustomerRef }).from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, contact.id), eq(paymentProviderCustomers.provider, adapter.id))).orderBy(desc(paymentProviderCustomers.createdAt)).limit(1);
-    return { subscriptionId: sub.id, contactId: contact.id, email: contact.email, name: contact.name, provider: adapter.id, providerCustomerRef: known?.providerCustomerRef ?? null, idempotencyKey: `trial-card:${sub.id}` };
+    const [known] = await ctx.tx.select({ providerCustomerRef: paymentProviderCustomers.providerCustomerRef }).from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, contact.id), eq(paymentProviderCustomers.provider, adapter.id),eq(paymentProviderCustomers.providerAccountId,routing.providerAccountId??""))).orderBy(desc(paymentProviderCustomers.createdAt)).limit(1);
+    return { providerAccountId: routing.providerAccountId, subscriptionId: sub.id, contactId: contact.id, email: contact.email, name: contact.name, provider: adapter.id, providerCustomerRef: known?.providerCustomerRef ?? null, idempotencyKey: `trial-card:${sub.id}` };
   },
 });
 
@@ -210,22 +242,27 @@ const applyTrialCardSetup = defineService({
   permission: "authenticated",
   external: false,
   writeClass: "money",
-  input: z.object({ subscriptionId: z.uuid(), provider: z.string().trim().min(1).max(100), providerCustomerRef: z.string().trim().min(1).max(500), url: z.string().url() }),
+  input: z.object({ subscriptionId: z.uuid(), provider: z.string().trim().min(1).max(100), providerAccountId: paymentRouting.shape.providerAccountId, providerCustomerRef: z.string().trim().min(1).max(500), url: z.string().url() }),
   output: z.object({ url: z.string().url() }),
   handler: async (input, ctx) => {
     const contact = await contactForActor(ctx);
     const [sub] = await ctx.tx.select().from(subscriptions).where(and(eq(subscriptions.id, input.subscriptionId), eq(subscriptions.contactId, contact.id))).limit(1).for("update");
     if (!sub || sub.cancelledAt || sub.status !== "paused" || !sub.signupPending) throw new ServiceError("conflict", "This trial is not waiting for a card.");
+    const routing = await subscriptionPaymentScope(ctx, sub.id);
+    assertProviderAccount(routing, input);
+    if(sub.provider && sub.provider!==input.provider) throw new ServiceError("conflict","This card setup belongs to a different membership provider.");
+    if (routing.providerAccountId && input.provider !== "stripe") throw new ServiceError("conflict", "This trial needs its original Stripe merchant account.");
     const url = providerCheckoutUrl(input.url);
-    const [created] = await ctx.tx.insert(paymentProviderCustomers).values({ contactId: contact.id, provider: input.provider, providerCustomerRef: input.providerCustomerRef }).onConflictDoNothing().returning({ id: paymentProviderCustomers.id });
+    const [created] = await ctx.tx.insert(paymentProviderCustomers).values({ contactId: contact.id, provider: input.provider, providerAccountId: routing.providerAccountId??"", providerCustomerRef: input.providerCustomerRef }).onConflictDoNothing().returning({ id: paymentProviderCustomers.id });
     if (!created) {
-      const [existing] = await ctx.tx.select().from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.provider, input.provider), eq(paymentProviderCustomers.providerCustomerRef, input.providerCustomerRef))).limit(1);
+      const [existing] = await ctx.tx.select().from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.provider, input.provider),eq(paymentProviderCustomers.providerAccountId,routing.providerAccountId??""), eq(paymentProviderCustomers.providerCustomerRef, input.providerCustomerRef))).limit(1);
       if (!existing || existing.contactId !== contact.id) throw new ServiceError("conflict", "The payment provider customer is already linked to a different contact.");
     }
     const { record } = await import("./service");
     const [previous] = await ctx.tx.select().from(subscriptionEvents).where(and(eq(subscriptionEvents.subscriptionId, sub.id), eq(subscriptionEvents.kind, "card_setup"))).orderBy(desc(subscriptionEvents.at)).limit(1);
     if (previous?.detail && previous.detail !== input.providerCustomerRef) throw new ServiceError("conflict", "This trial is already saving a card with a different provider customer.");
     if (!previous) await record(ctx, sub.id, "card_setup", { detail: input.providerCustomerRef });
+    if (!sub.provider) await ctx.tx.update(subscriptions).set({provider:input.provider}).where(eq(subscriptions.id,sub.id));
     ctx.setSubject("subscription", sub.id);
     return { url };
   },
@@ -247,6 +284,7 @@ export const beginTrialCardSetup = defineOrchestratedService({
     let created;
     try {
       created = await adapter.createMethodSetup({
+        providerAccountId: claimed.providerAccountId,
         contactId: claimed.contactId,
         subscriptionId: claimed.subscriptionId,
         customer: { email: claimed.email, name: claimed.name },
@@ -260,7 +298,7 @@ export const beginTrialCardSetup = defineOrchestratedService({
       throw new ServiceError("conflict", "The card setup could not be opened. Please try again.");
     }
     if (!created.providerCustomerRef) throw new ServiceError("conflict", "The payment provider did not return a customer reference for this card.");
-    return applyTrialCardSetup.call({ subscriptionId: claimed.subscriptionId, provider: claimed.provider, providerCustomerRef: created.providerCustomerRef, url: created.url }, actor);
+    return applyTrialCardSetup.call({ providerAccountId: created.providerAccountId, subscriptionId: claimed.subscriptionId, provider: claimed.provider, providerCustomerRef: created.providerCustomerRef, url: created.url }, actor);
   },
 });
 
@@ -283,7 +321,9 @@ export const startCardTrial = defineService({
     const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, sub.planId)).limit(1);
     if (!plan || !needsCardTrial(plan)) throw new ServiceError("conflict", "This membership is not a card trial.");
     const [method] = await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, input.paymentMethodId)).limit(1);
-    if (!method || method.contactId !== contact.id || method.status !== "active" || method.provider !== paymentAdapter().id || method.consentSource !== "provider_checkout") {
+    const routing = await subscriptionPaymentScope(ctx, sub.id, true);
+    const provider = routing.providerAccountId ? "stripe" : sub.provider ?? paymentAdapter().id;
+    if (!method || method.contactId !== contact.id || method.status !== "active" || method.provider !== provider || method.providerAccountId !== (routing.providerAccountId??"") || method.consentSource !== "provider_checkout") {
       throw new ServiceError("conflict", "That saved card cannot start this trial.");
     }
     if (plan.setupFeeMinor > 0) {

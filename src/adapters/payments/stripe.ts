@@ -234,10 +234,11 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
   }
 
   if (type === "invoice.paid" || type === "invoice.payment_failed") {
+    const subscriptionSource = value.subscription ?? object(object(value.parent)?.subscription_details)?.subscription;
     const subscriptionRef =
-      typeof value.subscription === "string"
-        ? value.subscription
-        : text(object(value.subscription)?.id);
+      typeof subscriptionSource === "string"
+        ? subscriptionSource
+        : text(object(subscriptionSource)?.id);
     if (!subscriptionRef) return [];
     const lineData = object(value.lines)?.data;
     const firstLine = Array.isArray(lineData) ? object(lineData[0]) : undefined;
@@ -249,8 +250,8 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
       occurredAt: created,
       amountMinor: number(value.amount_paid) ?? amount,
       currency,
-      periodStart: stripeOptionalTime(linePeriod?.start ?? object(value.period)?.start),
-      periodEnd: stripeOptionalTime(linePeriod?.end ?? object(value.period)?.end),
+      periodStart: stripeOptionalTime(linePeriod?.start ?? value.period_start ?? object(value.period)?.start),
+      periodEnd: stripeOptionalTime(linePeriod?.end ?? value.period_end ?? object(value.period)?.end),
       invoiceProviderRef: text(value.id),
     }];
   }
@@ -574,7 +575,37 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       try { payload = JSON.parse(raw.toString("utf8")); } catch { throw new AdapterError("payments", "stripe", "invalid_request", "Stripe sent invalid JSON."); }
       const parsed = object(payload);
       if (!parsed) throw new AdapterError("payments", "stripe", "invalid_request", "Stripe sent an invalid event.");
-      return stripePaymentEvents(parsed);
+      const events = stripePaymentEvents(parsed);
+      // A signed invoice says that its balance is paid. It does not prove
+      // which connected PaymentIntent paid it or the fee actually taken.
+      // Read that evidence on the original account, outside every DB TX.
+      const value = object(object(parsed.data)?.object);
+      const paid = events.find(event => event.kind === "subscription_period_paid" && event.providerAccountId);
+      if (!paid || paid.kind !== "subscription_period_paid" || !paid.providerAccountId) return events;
+      const invoiceRef = text(value?.id);
+      const amount = number(value?.amount_paid);
+      const currency = text(value?.currency)?.toUpperCase();
+      // Stripe can emit a zero invoice while starting a trial. It does not
+      // buy another paid period and must never advance subscription access.
+      if (amount === 0 && number(value?.total) === 0) return events.filter(event => event !== paid);
+      const unproven = () => new AdapterError("payments", "stripe", "provider_failure", "Stripe did not prove this recurring seller payment and its application fee.");
+      if (!invoiceRef || amount === undefined || amount <= 0 || !currency || value?.paid_out_of_band === true) throw unproven();
+      const query = new URLSearchParams({ invoice: invoiceRef, status: "paid", limit: "2" });
+      const list = await api(`/v1/invoice_payments?${query}`, { method: "GET" }, paid.providerAccountId);
+      const records = list.data;
+      if (list.has_more !== false || !Array.isArray(records) || records.length !== 1) throw unproven();
+      const record = object(records[0]);
+      const invoicePayment = object(record?.payment);
+      const intentRef = text(invoicePayment?.payment_intent) ?? text(object(invoicePayment?.payment_intent)?.id);
+      const linkedInvoice = text(record?.invoice) ?? text(object(record?.invoice)?.id);
+      if (!record || record.status !== "paid" || linkedInvoice !== invoiceRef || record.amount_paid !== amount || record.amount_requested !== amount || text(record.currency)?.toUpperCase() !== currency || invoicePayment?.type !== "payment_intent" || !intentRef) throw unproven();
+      const intent = await api(`/v1/payment_intents/${encodeURIComponent(intentRef)}`, { method: "GET" }, paid.providerAccountId);
+      const fee = intent.application_fee_amount === null ? 0 : number(intent.application_fee_amount);
+      if (intent.id !== intentRef || intent.status !== "succeeded" || number(intent.amount_received) !== amount || text(intent.currency)?.toUpperCase() !== currency || fee === undefined || fee < 0 || fee >= amount) throw unproven();
+      const invoiceCustomer = text(value?.customer) ?? text(object(value?.customer)?.id);
+      const intentCustomer = text(intent.customer) ?? text(object(intent.customer)?.id);
+      if (!invoiceCustomer || intentCustomer !== invoiceCustomer) throw unproven();
+      return events.map(event => event === paid ? { ...paid, paymentProviderRef: intentRef, applicationFeeMinor: fee, amountMinor: amount, currency } : event);
     },
   };
 }

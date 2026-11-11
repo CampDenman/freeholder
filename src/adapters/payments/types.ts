@@ -261,6 +261,8 @@ export type PaymentProviderEvent = PaymentAccountScope & (
       periodStart?: string;
       periodEnd?: string;
       invoiceProviderRef?: string;
+      paymentProviderRef?: string;
+      applicationFeeMinor?: number;
     });
 
 export interface PaymentAdapter {

@@ -128,6 +128,8 @@ const subscriptionBillingEvent = z.object({
   periodStart: z.string().datetime().optional(),
   periodEnd: z.string().datetime().optional(),
   invoiceProviderRef: z.string().trim().min(1).max(500).optional(),
+  paymentProviderRef: z.string().trim().min(1).max(500).optional(),
+  applicationFeeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
 });
 const payoutEvent = z.object({
   providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
@@ -141,7 +143,7 @@ const payoutEvent = z.object({
   statementRef: z.string().trim().min(1).max(500).optional(),
   failureReason: z.string().trim().min(1).max(1_000).optional(),
 });
-const providerEvent = z.union([paymentEvent, refundEvent, disputeEvent, savedMethodEvent, payoutEvent, subscriptionBillingEvent]);
+export const providerEvent = z.union([paymentEvent, refundEvent, disputeEvent, savedMethodEvent, payoutEvent, subscriptionBillingEvent]);
 
 function adapterFailure(error: unknown): never {
   if (error instanceof ServiceError) throw error;
@@ -459,6 +461,8 @@ async function applyEvent(providerId: string, event: PaymentProviderEvent, ctx: 
       currency: billing.currency,
       periodStart: billing.periodStart,
       periodEnd: billing.periodEnd,
+      paymentProviderRef: billing.paymentProviderRef,
+      applicationFeeMinor: billing.applicationFeeMinor,
     });
     return result.applied ? billing.kind : "subscription_event_ignored";
   }

@@ -82,14 +82,56 @@ SHA-256: `678a794801bbb9ea7e0b41dc1d3d17a05dfdf1530722f4001308f815e158c250`.
 
 ## Remaining full integration
 
-The source foundation does not yet enable account-scoped trial-card setup
-and card selection across all buyer surfaces, authenticated Connect financial
-webhook forwarding, complete direct recurring-payment reconciliation with
-actual PaymentIntent fee proof, direct-charge payout-ledger reconciliation,
-seller branding/support on invoices and receipts, or the complete localized
-owner/buyer browser journeys. Checkout retry inputs also need explicit recovery
-qualification when customer mappings change between attempts. Each remains
-part of C12.38; none is newly deferred.
+The next source increment wires account-scoped trial setup and card selection
+on member offers and trial return, including an agreement's original provider
+after defaults change. Private account/customer references do not enter the
+card labels or public response. Pending trials require a card verified after
+their recorded setup; an unrelated merchant's or platform card cannot start
+them. Public offer terms bind the current collection policy in their opaque
+terms hash.
+
+The Connect webhook verifies its original bytes before forwarding normalized
+financial events through system-only services in the existing transaction.
+Recurring paid invoices need a unique paid InvoicePayment and its succeeded
+PaymentIntent on the original account, with the actual customer, amount,
+currency and application fee. Zero-value trial invoices do not buy a period.
+The ledger checks canonical period dates and the pending plan's interval,
+keeps the real charge reference for refunds, and refuses a second charge for
+an already paid period. Verified money already collected is still recorded
+after the seller is disabled; that does not authorize a new collection.
+
+Direct-charge earnings reconcile as already paid, under the frozen seller
+and fee policy. Refunds/disputes put those earnings into review or cancel
+them after a full refund. They never become transfer candidates or accept
+manual commands to send another payout. Order-line earnings and the separate
+subscription/booking recorder cannot both pay the same order.
+
+Source qualification for this increment: 81 PostgreSQL financial cases passed
+across merchant agreements, existing held/instant payouts, subscription billing
+and payment-provider services. Forty-one native provider/private-service/audit
+checks and all eight live SDK checks passed. A production build and standalone
+artifact scrub passed. Four actual Chromium journeys passed at 320px in English,
+Spanish, French and Arabic RTL, with keyboard submission, both-theme Axe scans, original-account
+card selection and other-person refusal. Provider setup in those journeys is
+seeded; these are not real Stripe acceptance. A subsequent focused renewal
+run also qualifies changing from a monthly to an annual plan at renewal,
+including rollback of a paid event with the old interval. All 35 financial
+renewal/billing cases passed; a duplicate private-service inventory entry from
+the rebase was repaired and all 41 provider/private-service checks then passed.
+Required fast gates passed 368 contract checks with one deliberate skip,
+typechecking, lint, licensing, release notes and plan consistency. The evidence
+matrix covers 369 rows × 12 criteria. The final standalone artifact scrub
+checked 18,777 files and 226,573,806 bytes. This increment leaves migration 67
+unchanged. GitHub reported zero open CodeQL and Dependabot alerts on 2026-11-10;
+that is not independent review.
+
+Still required: seller branding/support and commercial identity on invoices
+and receipts; complete mixed-seller/site carts; exact recurring tax, fee and
+rounding behavior; fresh setup evidence for reused cards; changed-customer
+retry inputs; external/dashboard refund recovery; account-scoped erasure;
+complete dispute recovery and all four-locale owner/buyer/provider journeys.
+Each remains part of C12.38; none is newly deferred. The owner-facing registry
+continues to refuse activation.
 
 Actual enabled provider settlement remains C11.05/C12.26, independent review
 remains C11.10, recovery acceptance remains C11.08, and the final exact-candidate

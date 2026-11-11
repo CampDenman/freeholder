@@ -16,15 +16,15 @@ import { updateBusiness } from "@/core/settings/service";
 import { joinSite, updateMembershipRules } from "@/modules/members/service";
 import { createListing } from "@/modules/members/listings";
 import { myPayoutAccount, onOrderPaid, PROVIDER_CHECK, reversePayouts, settlePayouts, sitePayouts } from "@/modules/members/payouts";
-import { applyPayoutWebhook, applyProviderTransfer, payoutSetup, sendProviderPayouts, startPayoutSetup } from "@/modules/members/provider-payouts";
+import { applyPayoutWebhook, applyProviderTransfer, claimProviderTransfers, payoutSetup, sendProviderPayouts, startPayoutSetup } from "@/modules/members/provider-payouts";
 import { memberPayouts, memberPayoutTransfers } from "@/modules/members/schema";
 import { setPayoutProviderForTests } from "@/adapters/payouts";
 import { createStripeConnect } from "@/adapters/payouts/stripe-connect";
 import { addCartItem, getOrCreateCart } from "@/modules/catalog/cart";
 import { checkoutCart } from "@/modules/catalog/orders";
 import { getProductVariants } from "@/modules/catalog/variants";
-import { createPayment, settlePayment } from "@/modules/invoicing/invoice-service";
-import { invoices } from "@/modules/invoicing/schema";
+import { createDraftInvoice, issueInvoice, createPayment, settlePayment, startPayment } from "@/modules/invoicing/invoice-service";
+import { invoices, invoiceMarketPolicies, paymentMerchantRoutes, paymentProviderEvents, payments } from "@/modules/invoicing/schema";
 import { POST as webhook } from "../../app/api/payouts/[provider]/webhook/route";
 import { ANONYMOUS, closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
@@ -100,6 +100,47 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
   const retryNow = () => db().update(memberPayoutTransfers).set({ nextAttemptAt: new Date(Date.now() - 1000) });
   const transferCalls = () => calls.filter((c) => c.path === "/v1/transfers");
   afterAll(closeDb);
+
+  it("settles an original-account payment through the real Connect webhook route exactly once (C12.38)", async () => {
+    const { contact } = await resolveContact.call({ email: "direct-buyer@example.test", name: "Direct buyer" }, OWNER);
+    const draft = await createDraftInvoice.call({ contactId: contact.id, currency: "CAD", idempotencyKey: "connect-financial-invoice", lines: [{ description: "Seller sale", quantityMicros: 1_000_000, unitAmountMinor: 2000, taxCategoryCode: "standard", requiresShipping: false, snapshot: {} }], tax: { mode: "not_applicable", reason: "Synthetic test transaction." } }, OWNER);
+    const { invoice } = await issueInvoice.call({ id: draft.invoice.id }, OWNER);
+    const payment = await createPayment.call({ invoiceId: invoice.id, provider: "stripe", method: "hosted_checkout", amountMinor: 2000, idempotencyKey: "connect-financial-payment" }, OWNER);
+    // Seed the internal boundary while owner activation remains unavailable.
+    await db().insert(invoiceMarketPolicies).values({ invoiceId: invoice.id, model: "seller_merchant", adapter: "stripe_connect", siteFeeBps: 1000, holdDays: 0, feeMinor: 200, sellerUserId: RAE.userId, merchantName: "Rae Studio", providerAccountId: "acct_rae" });
+    await db().insert(paymentMerchantRoutes).values({ paymentId: payment.id, providerAccountId: "acct_rae", applicationFeeMinor: 200 });
+    await startPayment.call({ id: payment.id, providerRef: "pi_connected", providerCheckoutRef: "cs_connected" }, OWNER);
+    const event = { id: "evt_connected", created: Math.floor(Date.now() / 1000), account: "acct_rae", type: "payment_intent.succeeded", data: { object: { id: "pi_connected", amount_received: 2000, currency: "cad", application_fee_amount: 200, metadata: { freeholder_invoice_id: invoice.id, freeholder_contact_id: contact.id } } } };
+    await expect(signed({ ...event, account: "acct_other" })).rejects.toMatchObject({ code: "conflict" });
+    expect(await db().select().from(paymentProviderEvents)).toHaveLength(0);
+    expect((await signed(event)).status).toBe(200);
+    expect((await signed(event)).status).toBe(200);
+    const [paid] = await db().select().from(invoices).where(eq(invoices.id, invoice.id));
+    expect(paid!.paidMinor).toBe(2000);
+    expect((await db().select().from(payments))[0]!.status).toBe("succeeded");
+    expect(await db().select().from(paymentProviderEvents)).toHaveLength(1);
+    await expect(applyPayoutWebhook.call({ provider: "paypal_payouts", events: [{ kind: "payment", event: { id: "evt_wrong_provider", kind: "payment_succeeded", providerRef: "pi_connected", providerAccountId: "acct_rae", occurredAt: new Date().toISOString(), amountMinor: 2000, currency: "CAD" }, bodySha256: "a".repeat(64), receivedAt: new Date().toISOString() }] }, { kind: "system" })).rejects.toMatchObject({ code: "permission" });
+  });
+
+  it("never sends a second payout for a direct charge, even if a due state or an old claimed transfer is present", async () => {
+    await readySeller();
+    await sell("20");
+    const [payout] = await db().select().from(memberPayouts);
+    await db().update(memberPayouts).set({ model:"seller_merchant" }).where(eq(memberPayouts.id,payout!.id));
+    await sendProviderPayouts();
+    expect(transferCalls()).toHaveLength(0);
+    await expect(settlePayouts.call({ids:[payout!.id],action:"paid",reference:"not-a-second-transfer"},OWNER)).rejects.toMatchObject({code:"conflict"});
+    // Simulate a previously accepted transfer claim. Quarantine it without
+    // pretending its unknown provider outcome was a confirmed failure.
+    await db().update(memberPayouts).set({model:"instant"}).where(eq(memberPayouts.id,payout!.id));
+    expect((await claimProviderTransfers.call({}, {kind:"system"})).transfers).toHaveLength(1);
+    await db().update(memberPayouts).set({model:"seller_merchant"}).where(eq(memberPayouts.id,payout!.id));
+    await retryNow();
+    await sendProviderPayouts();
+    expect(transferCalls()).toHaveLength(0);
+    expect((await db().select().from(memberPayoutTransfers))[0]!.state).toBe("unknown");
+    expect((await db().select().from(memberPayouts))[0]!.state).toBe("review");
+  });
 
   it("sets a seller up with Stripe, pays each due payout once, and reverses it on refund", { timeout: 60_000 }, async () => {
     expect(await payoutSetup.call({}, RAE)).toEqual({ provider: "stripe_connect", kind: "hosted", fields: [], configured: true });

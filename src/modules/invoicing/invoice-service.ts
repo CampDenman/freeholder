@@ -3,7 +3,7 @@
 // Transaction-safe invoice, payment, refund, and credit-note state machines.
 
 import { createHash } from "node:crypto";
-import { captureInvoiceMarketPolicy } from "./market-policy";
+import { captureInvoiceMarketPolicy, getInvoiceMarketPolicy } from "./market-policy";
 import { reserveMerchantCharge } from "./merchant-charge";
 import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -1077,6 +1077,7 @@ export const settlePayment = defineService({
     await lock(ctx.tx, "payment", input.id);
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.id)).limit(1);
     if (!payment) throw new ServiceError("not_found", "That payment is not here.");
+    if (ctx.actor.kind!=="system" && (await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:payment.invoiceId}))?.model === "seller_merchant") throw new ServiceError("permission","A direct seller payment must be confirmed through its provider.");
     if (payment.status === "succeeded") {
       if (payment.providerRef !== input.providerRef) throw new ServiceError("conflict", "That payment already settled under a different provider reference.");
       return payment;
@@ -1308,6 +1309,7 @@ export const settleRefund = defineService({
     await lock(ctx.tx, "refund", input.id);
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.id)).limit(1);
     if (!refund) throw new ServiceError("not_found", "That refund is not here.");
+    if (ctx.actor.kind!=="system" && (await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:refund.invoiceId}))?.model === "seller_merchant") throw new ServiceError("permission","A direct seller refund must be confirmed through its original provider account.");
     if (refund.status === "succeeded") {
       if (refund.providerRef !== input.providerRef) throw new ServiceError("conflict", "That refund already settled under a different provider reference.");
       return refund;

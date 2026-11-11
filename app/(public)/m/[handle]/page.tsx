@@ -75,7 +75,7 @@ export default async function MemberProfile({
     memberServices.call({ handle: profile.handle }, actor),
   ]);
   const viewer = actor.kind === "user" ? await myMembership.call({}, actor) : null;
-  const methods = actor.kind === "user" ? await myMembershipPaymentMethods.call({}, actor).catch(() => []) : [];
+  const methods = actor.kind === "user" && offers.plans[0] ? await myMembershipPaymentMethods.call({ planId: offers.plans[0].id }, actor).catch(() => []) : [];
   const canAct = viewer?.status === "active" && !r.self;
   return (
     <div className="mx-auto grid max-w-2xl gap-6 px-6 py-12">

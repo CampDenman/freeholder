@@ -16,6 +16,7 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { orderForInvoice, orderSellers, registerSellerGate } from "@/modules/catalog/market";
 import { PAYOUT_PROVIDER_IDS } from "@/adapters/payouts";
 import { getInvoiceMarketPolicy, marketFeeMinor } from "@/modules/invoicing/market-policy";
+import { merchantSettlement } from "@/modules/invoicing/merchant-settlement";
 import { notifyMember } from "./notify";
 import { openMessage, sealMessage } from "./message-crypto";
 import {
@@ -167,6 +168,8 @@ export const recordPayouts = defineService({
     if (order.lines.length === 0) return { recorded: 0 };
     const frozen = order.invoiceId ? await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: order.invoiceId }) : null;
     const rules = frozen ?? await marketRules(ctx);
+    const settled = rules.model === "seller_merchant" && order.invoiceId && frozen?.sellerUserId ? await ctx.callAsSystem(merchantSettlement,{invoiceId:order.invoiceId,sellerUserId:frozen.sellerUserId}) : null;
+    if(rules.model === "seller_merchant" && (!settled || order.lines.some(line=>line.sellerUserId!==frozen?.sellerUserId))) throw new ServiceError("conflict","The original seller payment needs reconciliation.");
     let recorded = 0;
     for (const line of order.lines) {
       const fee = marketFeeMinor(line.lineTotalMinor, rules.siteFeeBps);
@@ -182,9 +185,11 @@ export const recordPayouts = defineService({
           feeMinor: fee,
           netMinor: line.lineTotalMinor - fee,
           model: rules.model,
-          state: rules.model === "hold" ? "held" : "due",
+          state: settled?.state ?? (rules.model === "hold" ? "held" : "due"),
+          reference: settled?.reference,
+          paidAt: settled?.paidAt,
           releaseAt: rules.model === "hold" ? new Date(now.getTime() + rules.holdDays * 86_400_000) : null,
-          releasedAt: rules.model === "hold" ? null : now,
+          releasedAt: settled?.paidAt ?? (rules.model === "hold" ? null : now),
         })
         .onConflictDoNothing()
         .returning();
@@ -218,6 +223,12 @@ export const reversePayouts = defineService({
     const [direct] = orderId ? [] : await ctx.tx.select({ grossMinor: memberPayouts.grossMinor }).from(memberPayouts).where(eq(memberPayouts.invoiceId, input.invoiceId));
     if (!orderId && !direct) return { changed: 0 };
     const source = orderId ? eq(memberPayouts.orderId, orderId) : eq(memberPayouts.invoiceId, input.invoiceId);
+    const policy = await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:input.invoiceId});
+    if(policy?.model === "seller_merchant" && policy.sellerUserId) {
+      const settled = await ctx.callAsSystem(merchantSettlement,{invoiceId:input.invoiceId,sellerUserId:policy.sellerUserId});
+      const changed = await ctx.tx.update(memberPayouts).set({state:settled.state,note:settled.state === "cancelled" ? "Original seller payment refunded in full." : "Review the original seller payment's refund or dispute."}).where(and(source,eq(memberPayouts.model,"seller_merchant"))).returning({id:memberPayouts.id});
+      return {changed:changed.length};
+    }
     const full = orderId ? totalMinor !== null && input.amountMinor >= totalMinor : input.amountMinor >= direct!.grossMinor;
     const open = await ctx.tx
       .update(memberPayouts)
@@ -405,6 +416,8 @@ export const settlePayouts = defineService({
   }),
   output: z.object({ changed: z.number().int() }),
   handler: async (input, ctx) => {
+    const direct = await ctx.tx.select({id:memberPayouts.id}).from(memberPayouts).where(and(inArray(memberPayouts.id,input.ids),eq(memberPayouts.model,"seller_merchant"))).limit(1);
+    if (direct.length) throw new ServiceError("conflict", "Direct seller charges reconcile through their original payments, refunds and disputes; do not send another payout.");
     if (input.action === "providerPaid" || input.action === "sendAgain") {
       // Sending money again is answered for one payout at a time, never in bulk.
       if (input.action === "sendAgain" && input.ids.length !== 1) throw new ServiceError("validation", "Check and send one payout at a time.");

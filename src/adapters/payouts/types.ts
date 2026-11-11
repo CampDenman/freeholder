@@ -10,6 +10,8 @@
 // ledger in src/modules/members/payouts.ts decides what is owed and when;
 // providers only carry it out.
 
+import type { PaymentProviderEvent } from "../payments/types";
+
 export type PayoutAccountStatus = "pending" | "ready" | "disabled";
 
 /** What a provider's setup form asks the seller for, beyond what the site knows. */
@@ -55,6 +57,8 @@ export interface TransferResult {
 export type ReverseResult = { reference: string } | { unsupported: string };
 
 export type PayoutWebhookEvent =
+  /** C12.38: exact-byte authenticated connected-account financial feedback. */
+  | { kind: "payment"; event: PaymentProviderEvent; bodySha256: string; receivedAt: string }
   | { kind: "account"; externalAccountId: string; status: PayoutAccountStatus; chargesReady?: boolean; merchantName?: string | null }
   /**
    * key is the attempt key the transfer carried, when the provider echoes it

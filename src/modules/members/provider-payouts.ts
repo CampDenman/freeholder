@@ -21,8 +21,9 @@
 // resent automatically: the owner checks the provider and records "paid" or
 // "did not pay — send again". Money that reaches a seller after a refund or
 // a review queues a reversal or goes to review — never silently.
-import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lte, ne, sql } from "drizzle-orm";
 import { z } from "zod";
+import { processPaymentProviderEvents, providerEvent } from "@/modules/invoicing/payment-provider-service";
 import { okResult, row, uuid, listed } from "@/core/contract";
 import { env } from "@/core/env";
 import { defineOrchestratedService, defineService, ServiceError, type ServiceContext } from "@/core/service";
@@ -205,7 +206,7 @@ export const claimProviderTransfers = defineService({
     const rules = await marketRules(ctx);
     const now = new Date();
     if (payoutProvider(rules.adapter)) {
-      const payable = and(eq(memberPayoutAccounts.userId, memberPayouts.sellerId), eq(memberPayoutAccounts.adapter, rules.adapter), eq(memberPayoutAccounts.status, "ready"), isNotNull(memberPayoutAccounts.externalAccountId));
+      const payable = and(ne(memberPayouts.model,"seller_merchant"),eq(memberPayoutAccounts.userId, memberPayouts.sellerId), eq(memberPayoutAccounts.adapter, rules.adapter), eq(memberPayoutAccounts.status, "ready"), isNotNull(memberPayoutAccounts.externalAccountId));
       // A payout due again after a review ("still owed") whose last attempt
       // is dead at the provider gets a new attempt under a new key. One whose
       // last attempt may have paid is never resent automatically.
@@ -244,7 +245,7 @@ export const claimProviderTransfers = defineService({
       }
     }
     const found = await ctx.tx
-      .select({ t: memberPayoutTransfers, payoutState: memberPayouts.state, externalAccountId: memberPayoutAccounts.externalAccountId })
+      .select({ t: memberPayoutTransfers, payoutState: memberPayouts.state, payoutModel: memberPayouts.model, externalAccountId: memberPayoutAccounts.externalAccountId })
       .from(memberPayoutTransfers)
       .innerJoin(memberPayouts, eq(memberPayouts.id, memberPayoutTransfers.payoutId))
       .leftJoin(memberPayoutAccounts, eq(memberPayoutAccounts.userId, memberPayouts.sellerId))
@@ -254,6 +255,12 @@ export const claimProviderTransfers = defineService({
     const ready: typeof found = [];
     for (const r of found) {
       const maybePaid = uncertain(r.t.lastError);
+      if (r.payoutModel === "seller_merchant") {
+        const note = "This sale was charged directly to the seller. Reconcile its original payment; do not send another payout or transfer reversal.";
+        await ctx.tx.update(memberPayoutTransfers).set({ state: maybePaid ? "unknown" : "failed",lastError:note,updatedAt:now }).where(eq(memberPayoutTransfers.id,r.t.id));
+        await ctx.tx.update(memberPayouts).set({state:"review",note}).where(eq(memberPayouts.id,r.t.payoutId));
+        continue;
+      }
       // Same-key retries stay inside the providers' key retention (Stripe
       // keeps keys 24 hours); past that, the owner checks instead.
       const stale = maybePaid && r.t.attemptStartedAt !== null && now.getTime() - r.t.attemptStartedAt.getTime() > STALE_KEY_MS;
@@ -430,6 +437,7 @@ export const applyPayoutWebhook = defineService({
   input: z.object({
     provider: z.string(),
     events: z.array(z.union([
+      z.object({ kind: z.literal("payment"), event: providerEvent, bodySha256: z.string().regex(/^[0-9a-f]{64}$/), receivedAt: z.string().datetime() }),
       z.object({ kind: z.literal("account"), externalAccountId: z.string(), status: z.enum(["pending", "ready", "disabled"]), chargesReady: z.boolean().optional(), merchantName: z.string().nullable().optional() }),
       z.object({ kind: z.literal("transfer"), reference: z.string(), key: z.string().optional(), state: z.enum(["settled", "failed", "unclaimed"]), error: z.string().optional() }),
     ])).max(50),
@@ -439,6 +447,12 @@ export const applyPayoutWebhook = defineService({
     let applied = 0;
     let unmatched = 0;
     for (const event of input.events as PayoutWebhookEvent[]) {
+      if (event.kind === "payment") {
+        if (input.provider !== "stripe_connect" || !event.event.providerAccountId) throw new ServiceError("permission", "Connected financial feedback needs its authenticated Stripe account scope.");
+        const result = await ctx.callAsSystem(processPaymentProviderEvents, { provider: "stripe", bodySha256: event.bodySha256, receivedAt: event.receivedAt, events: [event.event] });
+        applied += result.processed;
+        continue;
+      }
       if (event.kind === "account") {
         const rows = await ctx.tx
           .update(memberPayoutAccounts)

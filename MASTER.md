@@ -13000,9 +13000,19 @@ whatever is best for the people using the site.
   rehearsal preserved accepted payments/platform methods and trial agreements
   without inventing direct-charge authority. See
   `deploy/seller-merchant-source-2026-11-10.md`. No direct model is enabled by
-  this foundation: account-scoped checkout, stored methods/recurring billing,
-  authenticated refunds/disputes, seller invoice identity and full provider
-  acceptance remain required before C12.38 can be checked.)*
+  this foundation. A further source increment forwards signed Connect financial
+  feedback through the private ledger, scopes trial setup/card selection to
+  the agreement's original account/provider, and reconciles direct recurring
+  charges only with actual PaymentIntent/fee/period proof. Direct earnings
+  are already paid and cannot trigger a second payout; order and invoice
+  recorders cannot both pay an order. Eighty-one PostgreSQL financial controls,
+  41 provider/private-service checks, eight SDK checks and a production build
+  passed. Four Chromium journeys passed at 320px in English, Spanish, French and Arabic RTL
+  with keyboard submission and both-theme Axe scans; setup evidence is seeded,
+  not live Stripe acceptance. Seller invoice identity, mixed-seller/site carts,
+  exact recurring tax/fee rounding, full setup/refund/recovery/erasure integration,
+  complete localized journeys and actual provider acceptance remain required.
+  See the source evidence document for the precise limits; C12.38 stays open.)*
 - [ ] **C12.39** Move end-to-end encryption from `ts-mls` (not independently
   audited) to OpenMLS (audited by SRLabs), compiled to WebAssembly in CI and
   committed so deploys stay Node-only. Deferred by Tony on 2026-10-15; until

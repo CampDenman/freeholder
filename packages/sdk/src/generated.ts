@@ -7721,7 +7721,7 @@ export interface ServiceCatalog {
     output: { name: string; pending: boolean; invoiceId: string | null; cancelAtPeriodEnd: boolean; cardSetup: boolean };
   };
   "subscriptions.myPaymentMethods": {
-    input: Record<string, never>;
+    input: { subscriptionId?: string; planId?: string };
     output: { id: string; label: string }[];
   };
   "subscriptions.pause": {
