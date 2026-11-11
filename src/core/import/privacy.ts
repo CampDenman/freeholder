@@ -110,6 +110,25 @@ function sourceEntries(run: Run): SourceEntry[] {
   return entries;
 }
 
+/** Import scopes may see their supplied source, not probe existing CRM IDs. */
+export function publicImportRun(run: Run): Run {
+  const project = (value: unknown, collection: string, readers: string): unknown => {
+    const source = object(value);
+    if (!Array.isArray(source[collection])) return value;
+    return { ...source, [collection]: source[collection].map((row: unknown) => {
+      const entry = object(row);
+      if (!Array.isArray(entry[readers])) return row;
+      return { ...entry, [readers]: entry[readers].map((comment: unknown) => {
+        if (!Object.hasOwn(object(comment), "contactId")) return comment;
+        const copy = { ...object(comment) }; delete copy.contactId; return copy;
+      }) };
+    }) };
+  };
+  // Copy only changed reader objects; do not clone every multi-megabyte body
+  // again while projecting a list of otherwise unchanged import runs.
+  return { ...run, preview: project(run.preview, "pages", "readerComments"), checkpoint: project(run.checkpoint, "pendingBlogPosts", "comments") };
+}
+
 // One bounded row at a time: an owner may retain many 20 MB source previews.
 async function* runs(tx: Tx, lock: boolean, noWait = false) {
   let after: string | undefined;

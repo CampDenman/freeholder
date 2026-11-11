@@ -8,10 +8,10 @@ import { db } from "@/core/db";
 import { violates } from "@/core/db/errors";
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import { contacts } from "@/core/contacts/schema";
-import { mergeContacts, resolveContact, undoContactMerge, updateContact } from "@/core/contacts/service";
+import { getContact, mergeContacts, resolveContact, undoContactMerge, updateContact } from "@/core/contacts/service";
 import { importRuns } from "@/core/plugins/schema";
 import { addRetentionException, contactPrivacySources, createDataRequest, fulfillDataRequest, registerContactPrivacySource, verifyDataRequest } from "@/core/privacy/service";
-import { commitImport, previewFromSource, publishImport, reconcileImport, reviewImportConflicts, rollbackImport, startImport } from "@/core/import/service";
+import { commitImport, listImports, previewFromSource, publishImport, reconcileImport, reviewImportConflicts, rollbackImport, startImport } from "@/core/import/service";
 import { beginSourceUpload, previewFromUpload, uploadSourceChunk } from "@/core/import/source-upload";
 import { createPage, ensureDefaults, publishPage } from "@/modules/cms/service";
 import { setPostMeta } from "@/modules/cms/blog-service";
@@ -76,6 +76,18 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     const [saved] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
     expect(JSON.stringify(saved)).not.toContain(EMAIL);
     expect(JSON.stringify(saved)).not.toContain(COMMENT);
+  });
+
+  it("keeps existing CRM identity bindings private from exact source-preview and list keys", async () => {
+    const reader = await resolveContact.call({ email: EMAIL }, OWNER);
+    const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
+    const actor = { kind: "agent" as const, keyName: "source-only", scopes: ["imports.previewFromSource"] };
+    await expect(getContact.call({ id: reader.contact.id }, actor)).rejects.toMatchObject({ code: "permission" });
+    const preview = await previewFromSource.call({ id: run.id, payload: SOURCE }, actor);
+    expect(JSON.stringify(preview)).not.toContain(reader.contact.id);
+    const listed = await listImports.call({}, { ...actor, scopes: ["imports.list"] });
+    expect(JSON.stringify(listed)).not.toContain(reader.contact.id);
+    expect(JSON.stringify(await savedRun(run.id))).toContain(reader.contact.id);
   });
 
   it("cannot recreate erased contact/comment data from an already-staged replacement", async () => {

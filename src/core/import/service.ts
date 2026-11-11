@@ -36,7 +36,7 @@ import type { BlockNode } from "@/modules/cms/blocks/types";
 import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS } from "./contract";
 import { crawlPublicSource, type CrawlKind } from "./crawl";
 import { assertSourceStageable, assertNoPendingSourceUpload } from "./source-lifecycle";
-import { assertLegacyReaderSafety, bindReaderSources, stripReaderCopies } from "./privacy";
+import { assertLegacyReaderSafety, bindReaderSources, publicImportRun, stripReaderCopies } from "./privacy";
 import {
   discoverFromPublicOrigin,
   parseRssOrAtom,
@@ -429,7 +429,7 @@ export const startImport = defineService({
       .returning();
     ctx.setSubject("import_run", row!.id);
     ctx.queueEvent("import.started", { id: row!.id, source: row!.source });
-    return row!;
+    return publicImportRun(row!);
   },
 });
 
@@ -466,7 +466,7 @@ export const previewImport = defineService({
       .returning();
     if (!row) throw new ServiceError("not_found", "No such import run.");
     ctx.setSubject("import_run", row.id);
-    return row;
+    return publicImportRun(row);
   },
 });
 
@@ -1099,7 +1099,7 @@ const commitApply = defineService({
       .returning();
     ctx.setSubject("import_run", row!.id);
     ctx.queueEvent("import.committed", { id: row!.id });
-    return row!;
+    return publicImportRun(row!);
   },
 });
 
@@ -1151,7 +1151,7 @@ export const rollbackImport = defineService({
   handler: async (input, ctx) => {
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
-    if (before.status === "rolled_back") return before;
+    if (before.status === "rolled_back") return publicImportRun(before);
     const checkpoint = checkpointOf(before.checkpoint);
 
     // Menu links the import added, and only those, come off the nav.
@@ -1238,7 +1238,7 @@ export const rollbackImport = defineService({
       .returning();
     ctx.setSubject("import_run", row!.id);
     ctx.queueEvent("import.rolledBack", { id: row!.id });
-    return row!;
+    return publicImportRun(row!);
   },
 });
 
@@ -1249,8 +1249,8 @@ export const listImports = defineService({
   permission: "scoped",
   input: z.object({}),
   output: listed(runRow),
-  handler: (input, ctx) =>
-    ctx.tx.select().from(importRuns).orderBy(desc(importRuns.createdAt)),
+  handler: async (input, ctx) =>
+    (await ctx.tx.select().from(importRuns).orderBy(desc(importRuns.createdAt))).map(publicImportRun),
 });
 
 export const mapImport = defineService({
@@ -1281,7 +1281,7 @@ export const mapImport = defineService({
       .returning();
     if (!row) throw new ServiceError("not_found", "No such import run.");
     ctx.setSubject("import_run", row.id);
-    return row;
+    return publicImportRun(row);
   },
 });
 
@@ -1309,7 +1309,7 @@ export const reviewImportConflicts = defineService({
       .returning();
     if (!row) throw new ServiceError("not_found", "No such import run.");
     ctx.setSubject("import_run", row.id);
-    return row;
+    return publicImportRun(row);
   },
 });
 
@@ -1393,7 +1393,7 @@ export const reconcileImport = defineService({
       .where(eq(importRuns.id, input.id))
       .returning();
     ctx.setSubject("import_run", row!.id);
-    return row!;
+    return publicImportRun(row!);
   },
 });
 
@@ -1408,7 +1408,7 @@ export const publishImport = defineService({
   handler: async (input, ctx) => {
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
-    if (before.status === "published") return before;
+    if (before.status === "published") return publicImportRun(before);
     if (before.status !== "reconciled") {
       throw new ServiceError("conflict", "Reconcile the import before publishing it.");
     }
@@ -1508,7 +1508,7 @@ export const publishImport = defineService({
       .returning();
     ctx.setSubject("import_run", row!.id);
     ctx.queueEvent("import.published", { id: row!.id });
-    return row!;
+    return publicImportRun(row!);
   },
 });
 
@@ -1624,7 +1624,7 @@ export const previewFromSource = defineService({
         })
         .where(eq(importRuns.id, input.id))
         .returning();
-      return failed!;
+      return publicImportRun(failed!);
     }
     const [row] = await ctx.tx
       .update(importRuns)
@@ -1637,7 +1637,7 @@ export const previewFromSource = defineService({
       .where(eq(importRuns.id, input.id))
       .returning();
     ctx.setSubject("import_run", row!.id);
-    return row!;
+    return publicImportRun(row!);
   },
 });
 
@@ -1687,7 +1687,7 @@ const applyCrawl = defineService({
       : { status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview!), counts: input.counts!, error: null, checkpoint: { ...checkpointOf(run.checkpoint), crawl: input.report } }
     ).where(eq(importRuns.id, input.id)).returning();
     ctx.setSubject("import_run", run.id);
-    return result!;
+    return publicImportRun(result!);
   },
 });
 
