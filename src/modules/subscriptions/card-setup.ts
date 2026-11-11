@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: immutable first requests and agreement-specific saved-method proof.
 import {createHash,randomUUID} from "node:crypto";
-import {and,desc,eq,sql} from "drizzle-orm";
+import {and,asc,desc,eq,sql} from "drizzle-orm";
 import {z} from "zod";
 import {registerContactPrivacySource} from "@/core/privacy/service";
 import {ServiceError,type ServiceContext,type Tx} from "@/core/service";
 import {paymentMethods} from "@/modules/invoicing/schema";
-import {subscriptionCardSetups,subscriptions} from "./schema";
+import {subscriptionCardSetups,subscriptionSetupDispatches,subscriptions} from "./schema";
 
 export const setupRequest=z.object({
  setupAttemptId:z.uuid(),subscriptionId:z.uuid(),contactId:z.uuid(),currency:z.string().regex(/^[A-Z]{3}$/),
@@ -38,17 +38,20 @@ export async function claimSetup(ctx:ServiceContext,input:{subscriptionId:string
  if(existing){
   if(existing.provider!==input.provider || existing.providerAccountId!==(input.providerAccountId??""))throw new ServiceError("conflict","This card setup belongs to its original payment provider and account.");
   const request=originalSetupRequest(existing);
+  if(existing.erasureRequestId)throw new ServiceError("conflict","This original setup is awaiting privacy cleanup.");
   if(existing.confirmedMethodId)return {attempt:existing,request,url:request.successUrl,recover:false};
   if(existing.checkoutUrl){
    if(existing.expiresAt && existing.expiresAt.getTime()<=Date.now())return {attempt:existing,request,url:null,recover:true};
    return {attempt:existing,request,url:existing.checkoutUrl,recover:false};
   }
-  if(Date.now()-existing.createdAt.getTime()>23*60*60*1000)return {attempt:existing,request,url:null,recover:true};
+  const kind=existing.providerCustomerRef?"session":"customer";
+  const [first]=await ctx.tx.select({expired:sql<boolean>`${subscriptionSetupDispatches.startedAt} <= clock_timestamp() - interval '23 hours'`}).from(subscriptionSetupDispatches).where(and(eq(subscriptionSetupDispatches.setupId,existing.id),eq(subscriptionSetupDispatches.kind,kind))).orderBy(asc(subscriptionSetupDispatches.startedAt)).limit(1);
+  if(first?.expired)return {attempt:existing,request,url:null,recover:true};
   return {attempt:existing,request,url:null,recover:false};
  }
  if(!input.customer.email)throw new ServiceError("conflict","Verify your email before saving a card.");
  const attemptId=randomUUID();
- const request=setupRequest.parse({setupAttemptId:attemptId,subscriptionId:input.subscriptionId,contactId:input.contactId,currency:input.currency,providerAccountId:input.providerAccountId,customer:{email:input.customer.email,name:input.customer.name.slice(0,200)},providerCustomerRef:input.providerCustomerRef,successUrl:input.successUrl,cancelUrl:input.cancelUrl,idempotencyKey:`trial-card:${input.subscriptionId}:${attemptId}`});
+ const request=setupRequest.parse({setupAttemptId:attemptId,subscriptionId:input.subscriptionId,contactId:input.contactId,currency:input.currency,providerAccountId:input.providerAccountId,customer:{email:input.customer.email,name:input.customer.name.slice(0,200)},providerCustomerRef:input.providerCustomerRef??(attempts[0]?.closedReason==="provider_cancelled" && attempts[0]?.provider===input.provider && attempts[0]?.providerAccountId===(input.providerAccountId??"") ? attempts[0].providerCustomerRef??undefined:undefined),successUrl:input.successUrl,cancelUrl:input.cancelUrl,idempotencyKey:`trial-card:${input.subscriptionId}:${attemptId}`});
  const [attempt]=await ctx.tx.insert(subscriptionCardSetups).values({id:attemptId,subscriptionId:input.subscriptionId,provider:input.provider,providerAccountId:input.providerAccountId??"",request,requestHash:createHash("sha256").update(JSON.stringify(request)).digest("hex"),providerCustomerRef:request.providerCustomerRef??null}).returning();
  return {attempt:attempt!,request,url:null,recover:false};
 }
@@ -58,6 +61,7 @@ export async function bindSetupEvidence(ctx:ServiceContext,input:{provider:strin
  const [attempt]=await ctx.tx.select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.id,input.setup.attemptId)).for("update");
  // Erasure removes completed local setup copies. A late callback cannot recreate them.
  if(!attempt)return null;
+ if(attempt.erasureRequestId)return null;
  if(attempt.closedAt)throw new ServiceError("conflict","This saved-card setup was already reconciled as closed.");
  const request=originalSetupRequest(attempt);
  const [sub]=await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id,attempt.subscriptionId));
@@ -74,15 +78,13 @@ export async function applySetupEvidence(tx:Tx,input:{attemptId:string;methodId:
 }
 
 registerContactPrivacySource({
- scope:"subscriptions.cardSetups",tables:["subscription_card_setups"],retentionScopes:["commerce.money"],eraseOrder:5,
+ scope:"subscriptions.cardSetups",tables:["subscription_card_setups","subscription_setup_dispatches"],retentionScopes:["commerce.money"],eraseOrder:5,
  exportData:async(tx,contactId)=>{
   const rows=await tx.select({attempt:subscriptionCardSetups}).from(subscriptionCardSetups).innerJoin(subscriptions,eq(subscriptions.id,subscriptionCardSetups.subscriptionId)).where(eq(subscriptions.contactId,contactId));
   return rows.map(({attempt})=>({id:attempt.id,subscriptionId:attempt.subscriptionId,provider:attempt.provider,createdAt:attempt.createdAt,confirmedAt:attempt.confirmedAt,customer:originalSetupRequest(attempt).customer}));
  },
- erase:async(tx,contactId)=>{
-  const rows=await tx.select({attempt:subscriptionCardSetups}).from(subscriptionCardSetups).innerJoin(subscriptions,eq(subscriptions.id,subscriptionCardSetups.subscriptionId)).where(eq(subscriptions.contactId,contactId)).for("update",{of:subscriptionCardSetups});
-  if(rows.some(({attempt})=>!attempt.providerCustomerRef))throw new ServiceError("conflict","Reconcile the pending card-setup provider customer before erasing this contact.");
-  for(const {attempt} of rows)await tx.delete(subscriptionCardSetups).where(eq(subscriptionCardSetups.id,attempt.id));
-  return {affected:rows.length};
- },
+ erase:async(tx,contactId,context)=>{
+  const {queueTrialSetupErasure}=await import("./setup-erasure");
+  return queueTrialSetupErasure(tx,contactId,context.requestId);
+ }
 });

@@ -297,7 +297,7 @@ export interface PaymentAdapter {
   /** Create the customer separately so its actual reference commits before Checkout I/O. */
   createSetupCustomer?(request: MethodSetupRequest): Promise<{ providerCustomerRef: string; providerAccountId?: string }>;
   createMethodSetup?(request: MethodSetupRequest): Promise<MethodSetupSession>;
-  recoverMethodSetup?(request: MethodSetupRequest & { createdAt: string; providerRef?: string }): Promise<MethodSetupRecovery>;
+  recoverMethodSetup?(request: MethodSetupRequest & { createdAt: string; providerRef?: string; verifyCustomerCreation?: boolean }): Promise<MethodSetupRecovery>;
   captureCheckout(request: CheckoutCaptureRequest): Promise<CheckoutCaptureResult>;
   refund(request: RefundRequest): Promise<RefundResult>;
   /** Erase the merchant-owned customer and its saved methods on the original account. */

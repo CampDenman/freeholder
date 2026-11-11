@@ -250,3 +250,32 @@ Primary references checked for this implementation (2026-08-11):
 - [CRTC guidance on complying with CASL](https://crtc.gc.ca/eng/com500/guide.htm)
 - [CRTC CASL frequently asked questions](https://crtc.gc.ca/eng/com500/faq500.htm)
 - [California Privacy Protection Agency FAQ](https://cppa.ca.gov/faq)
+
+## Card-setup requests still in flight
+
+`subscriptions.cardSetups` retains the immutable original setup input and each
+physical provider dispatch until its actual outcome is settled. It inherits an
+active `commerce.money` retention exception. Otherwise erasure marks the attempt,
+prevents new caller dispatches and queues `subscriptions.eraseTrialSetupCustomers`
+with the original privacy task identity. The receipt stays pending while a
+physical call is running/unknown, including a rejected provider promise whose
+actual remote result remains unknown.
+
+A late successful response records its real original-account customer privately
+before human business application is refused. Cleanup then deletes every actual
+customer reference and removes the private setup copies before acknowledging
+its own task. Unsupported providers, wrong identities, outages and unresolved
+calls stay pending. A positive resource lookup, elapsed request-key window or an
+empty search does not prove that all callers have stopped.
+
+For operational recovery, open the subscription from `/admin/subscriptions` and
+verify your identity. Obtain the provider's actual final operation/support
+record for that exact request and original account, plus evidence that every
+original caller and retry stopped. Record those concrete references and evidence
+in the recovery form. Completed resources undergo positive original-account
+metadata checks. Cancellation needs an actual provider guarantee that the exact
+operation created no resource and cannot complete later. The result is labeled
+human-confirmed and retains that human's audit identity; a checkbox, generic
+assurance, time or absence is insufficient. If proof is unavailable, keep the
+request pending and retain its evidence. Retry the original cleanup job only
+after the actual outstanding outcomes are reconciled.

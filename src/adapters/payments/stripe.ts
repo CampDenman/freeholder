@@ -460,6 +460,11 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         customer=text(found.id);
         if(!customer || !/^cus_[A-Za-z0-9]+$/.test(customer) || found.deleted===true)throw failed();
       }
+      if(request.verifyCustomerCreation){
+        if(!customer || !/^cus_[A-Za-z0-9]+$/.test(customer))throw failed();
+        const original=await api(`/v1/customers/${encodeURIComponent(customer)}`,{method:"GET"},request.providerAccountId);
+        if(original.id!==customer || original.deleted===true || !sameMetadata(original))throw failed();
+      }
       const base={providerCustomerRef:customer,...(request.providerAccountId?{providerAccountId:request.providerAccountId}:{})};
       const session=request.providerRef
         ? await api(`/v1/checkout/sessions/${encodeURIComponent(request.providerRef)}`,{method:"GET"},request.providerAccountId)

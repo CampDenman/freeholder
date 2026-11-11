@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { createStripePayments } from "@/adapters/payments/stripe";
 import type { MethodSetupRequest } from "@/adapters/payments/types";
 
+const fetchUrl=(value:Parameters<typeof fetch>[0])=>new URL(typeof value==="string"?value:value instanceof URL?value.href:value.url);
+function formBody(body:RequestInit["body"]):URLSearchParams{if(body instanceof URLSearchParams)return body;if(typeof body==="string")return new URLSearchParams(body);throw new Error("Expected the adapter’s actual form body");}
 const at=Math.floor(Date.now()/1000);
 const request:MethodSetupRequest={setupAttemptId:"50000000-0000-4000-8000-000000000005",subscriptionId:"30000000-0000-4000-8000-000000000003",contactId:"20000000-0000-4000-8000-000000000002",currency:"CAD",providerAccountId:"acct_original",customer:{email:"original-setup@example.test",name:"Original setup name"},successUrl:"https://shop.example.test/memberships/trial-return",cancelUrl:"https://shop.example.test/memberships",idempotencyKey:"trial-card:original-attempt"};
 const metadata={freeholder_setup_attempt_id:request.setupAttemptId,freeholder_subscription_id:request.subscriptionId,freeholder_contact_id:request.contactId};
@@ -20,7 +22,7 @@ function provider(respond:(url:URL,init?:RequestInit)=>unknown){
  });
  const adapter=createStripePayments({secretKey:"sk_setup_fixture",webhookSecrets:["whsec_setup_fixture"],apiBase:"https://stripe.example.test",fetch:fetcher});
  if(!adapter.createSetupCustomer||!adapter.createMethodSetup||!adapter.recoverMethodSetup)throw new Error("Stripe setup operations must exist.");
- return {adapter,fetcher,createCustomer:adapter.createSetupCustomer,createSession:adapter.createMethodSetup,recover:adapter.recoverMethodSetup};
+ return {adapter,fetcher,createCustomer:adapter.createSetupCustomer.bind(adapter),createSession:adapter.createMethodSetup.bind(adapter),recover:adapter.recoverMethodSetup.bind(adapter)};
 }
 
 describe("Stripe durable setup edges (C12.38/C11.10)",()=>{
@@ -30,7 +32,7 @@ describe("Stripe durable setup edges (C12.38/C11.10)",()=>{
   expect(p.fetcher).toHaveBeenCalledOnce();
   const customerCall=p.fetcher.mock.calls[0]![1]!;
   expect(customerCall).toMatchObject({method:"POST",headers:{"stripe-account":"acct_original","idempotency-key":`${request.idempotencyKey}:customer`}});
-  const customerForm=new URLSearchParams(String(customerCall.body));
+  const customerForm=formBody(customerCall.body);
   expect(customerForm.get("email")).toBe(request.customer.email);
   expect(customerForm.get("name")).toBe(request.customer.name);
   expect(customerForm.get("metadata[freeholder_setup_attempt_id]")).toBe(request.setupAttemptId);
@@ -39,7 +41,7 @@ describe("Stripe durable setup edges (C12.38/C11.10)",()=>{
   await p.createSession({...request,providerCustomerRef:"cus_original"});
   const call=p.fetcher.mock.calls[1]![1]!;
   expect(call).toMatchObject({method:"POST",headers:{"stripe-account":"acct_original","idempotency-key":request.idempotencyKey}});
-  const form=new URLSearchParams(String(call.body));
+  const form=formBody(call.body);
   expect(form.get("currency")).toBe("cad");expect(form.get("mode")).toBe("setup");expect(form.get("customer")).toBe("cus_original");
   expect(form.get("metadata[freeholder_setup_attempt_id]")).toBe(request.setupAttemptId);
   expect(form.get("setup_intent_data[metadata][freeholder_setup_attempt_id]")).toBe(request.setupAttemptId);
@@ -75,13 +77,13 @@ describe("Stripe durable setup edges (C12.38/C11.10)",()=>{
   const p=provider(url=>url.searchParams.has("starting_after")?{has_more:false,data:[]}:{has_more:true,data:[{id:"cus_unrelated",metadata:{}}]});
   expect(await p.recover({...request,createdAt:recovery.createdAt})).toEqual({state:"unresolved",providerAccountId:"acct_original"});
   expect(p.fetcher).toHaveBeenCalledTimes(2);
-  expect(new URL(String(p.fetcher.mock.calls[1]![0])).searchParams.get("starting_after")).toBe("cus_unrelated");
+  expect(fetchUrl(p.fetcher.mock.calls[1]![0]).searchParams.get("starting_after")).toBe("cus_unrelated");
  });
  it("recovers a committed customer with no Checkout without creating a second customer",async()=>{
   const p=provider(()=>({has_more:false,data:[]}));
   expect(await p.recover({...recovery,providerRef:undefined})).toEqual({state:"customer_only",providerCustomerRef:"cus_original",providerAccountId:"acct_original"});
   expect(p.fetcher).toHaveBeenCalledOnce();
-  expect(String(p.fetcher.mock.calls[0]![0])).toContain("customer=cus_original");
+  expect(fetchUrl(p.fetcher.mock.calls[0]![0]).href).toContain("customer=cus_original");
  });
  it("closes only an actually expired original setup without manufacturing card evidence",async()=>{
   const p=provider(()=>({...session,status:"expired",url:null}));
@@ -118,4 +120,21 @@ describe("Stripe durable setup edges (C12.38/C11.10)",()=>{
   const unavailable=provider(()=>new Response(JSON.stringify({error:{message:"Synthetic provider outage"}}),{status:503}));
   await expect(unavailable.recover({...request,createdAt:recovery.createdAt})).rejects.toMatchObject({code:"provider_failure"});
  });
+ it("positively verifies an operator-supplied created Customer on its original account before accepting its binding",async()=>{
+  const p=provider(url=>url.pathname==="/v1/customers/cus_original"?{id:"cus_original",metadata}:{has_more:false,data:[]});
+  expect(await p.recover({...recovery,providerRef:undefined,verifyCustomerCreation:true})).toMatchObject({state:"customer_only",providerCustomerRef:"cus_original",providerAccountId:"acct_original"});
+  expect(p.fetcher.mock.calls[0]![1]).toMatchObject({method:"GET",headers:{"stripe-account":"acct_original"}});
+  expect(fetchUrl(p.fetcher.mock.calls[0]![0]).href).toContain("/v1/customers/cus_original");
+ });
+ it.each([
+  {id:"cus_other",metadata},{id:"cus_original",metadata:{}},
+  {id:"cus_original",metadata:{...metadata,freeholder_contact_id:"another-contact"}},
+  {id:"cus_original",metadata:{...metadata,freeholder_setup_attempt_id:"another-attempt"}},
+  {id:"cus_original",deleted:true},
+ ])("refuses unbound operator-supplied Customer evidence %#",async value=>{
+  const p=provider(()=>value);
+  await expect(p.recover({...recovery,providerRef:undefined,verifyCustomerCreation:true})).rejects.toMatchObject({code:"provider_failure"});
+  expect(p.fetcher).toHaveBeenCalledOnce();
+ });
+
 });

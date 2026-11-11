@@ -399,9 +399,9 @@ export default async function SubscriptionsPage({
                   key={subscription.id}
                   className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm"
                 >
-                  <span className="font-semibold text-ink">
+                  <a href={`/admin/subscriptions/${subscription.id}`} className="font-semibold text-accent underline">
                     {planName.get(subscription.planId) ?? subscription.planId}
-                  </span>
+                  </a>
                   <Pill tone={TONE[subscription.status]}>
                     {t(`subscriptions.status.${subscription.status}`)}
                   </Pill>

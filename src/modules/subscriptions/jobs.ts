@@ -7,6 +7,7 @@
 // have its renewals cluster at midnight — nor should a customer who cancels at
 // noon keep access until the small hours of the following day.
 import { defineJob } from "@/core/jobs";
+import {eraseTrialSetupCustomers} from "./setup-erasure";
 
 export const renewSubscriptions = defineJob({
   name: "subscriptions.renewDue",
@@ -49,4 +50,4 @@ export const finishCustomerSignups = defineJob({
     return result;
   },
 });
-export default [renewSubscriptions, advanceDunning, finishCustomerSignups];
+export default [renewSubscriptions, advanceDunning, finishCustomerSignups,eraseTrialSetupCustomers];

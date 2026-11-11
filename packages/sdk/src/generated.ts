@@ -1537,10 +1537,12 @@ export const SERVICE_NAMES = [
   "subscriptions.list",
   "subscriptions.listOffered",
   "subscriptions.listPlans",
+  "subscriptions.listTrialSetupDispatches",
   "subscriptions.mine",
   "subscriptions.myPaymentMethods",
   "subscriptions.pause",
   "subscriptions.publicPlans",
+  "subscriptions.reconcileTrialSetupDispatch",
   "subscriptions.resume",
   "subscriptions.savePlan",
   "subscriptions.startCardTrial",
@@ -7746,6 +7748,10 @@ export interface ServiceCatalog {
     input: { status?: "draft" | "active" | "archived" };
     output: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; dunning: { retries: number[]; graceDays: number; notifyChannels: ("email" | "sms" | "in_app")[]; finalAction: "pause" | "cancel" | "downgrade"; downgradeToPlanId: string | null; [key: string]: unknown } | null; [key: string]: unknown }[];
   };
+  "subscriptions.listTrialSetupDispatches": {
+    input: { subscriptionId: string; afterId?: string; limit?: number };
+    output: { rows: { id: string; attemptId: string; kind: "customer" | "session"; state: "running" | "unknown" | "succeeded" | "provider_completed" | "provider_cancelled"; provider: string; providerAccountId: string; idempotencyKey: string; requestHash: string; providerCustomerRef: string | null; providerRef: string | null; startedAt: string; privacyPending: boolean; resolution: unknown }[]; nextCursor: string | null };
+  };
   "subscriptions.mine": {
     input: { id: string };
     output: { name: string; pending: boolean; invoiceId: string | null; cancelAtPeriodEnd: boolean; cardSetup: boolean };
@@ -7761,6 +7767,10 @@ export interface ServiceCatalog {
   "subscriptions.publicPlans": {
     input: { sellerUserId?: string };
     output: { id: string; name: string; description: string | null; currency: string; amountMinor: number; setupFeeMinor: number; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; billingMode: "manual" | "platform" | "provider"; cancelBehaviour: "immediate" | "period_end"; termsHash: string; available: boolean }[];
+  };
+  "subscriptions.reconcileTrialSetupDispatch": {
+    input: { dispatchId: string; outcome: "completed" | "cancelled"; providerOperationRef: string; providerEvidence: string; callerStopEvidence: string; confirmation: "PROVIDER OUTCOME CONFIRMED"; providerCustomerRef?: string; providerRef?: string };
+    output: { dispatchId: string; state: "running" | "unknown" | "succeeded" | "provider_completed" | "provider_cancelled"; source: "provider_response" | "human_provider_confirmation" };
   };
   "subscriptions.resume": {
     input: { id: string };
@@ -9745,10 +9755,12 @@ export interface FreeholderApi {
     list: (input?: ServiceCatalog["subscriptions.list"]["input"]) => Promise<ServiceCatalog["subscriptions.list"]["output"]>;
     listOffered: (input?: ServiceCatalog["subscriptions.listOffered"]["input"]) => Promise<ServiceCatalog["subscriptions.listOffered"]["output"]>;
     listPlans: (input?: ServiceCatalog["subscriptions.listPlans"]["input"]) => Promise<ServiceCatalog["subscriptions.listPlans"]["output"]>;
+    listTrialSetupDispatches: (input: ServiceCatalog["subscriptions.listTrialSetupDispatches"]["input"]) => Promise<ServiceCatalog["subscriptions.listTrialSetupDispatches"]["output"]>;
     mine: (input: ServiceCatalog["subscriptions.mine"]["input"]) => Promise<ServiceCatalog["subscriptions.mine"]["output"]>;
     myPaymentMethods: (input?: ServiceCatalog["subscriptions.myPaymentMethods"]["input"]) => Promise<ServiceCatalog["subscriptions.myPaymentMethods"]["output"]>;
     pause: (input: ServiceCatalog["subscriptions.pause"]["input"]) => Promise<ServiceCatalog["subscriptions.pause"]["output"]>;
     publicPlans: (input?: ServiceCatalog["subscriptions.publicPlans"]["input"]) => Promise<ServiceCatalog["subscriptions.publicPlans"]["output"]>;
+    reconcileTrialSetupDispatch: (input: ServiceCatalog["subscriptions.reconcileTrialSetupDispatch"]["input"]) => Promise<ServiceCatalog["subscriptions.reconcileTrialSetupDispatch"]["output"]>;
     resume: (input: ServiceCatalog["subscriptions.resume"]["input"]) => Promise<ServiceCatalog["subscriptions.resume"]["output"]>;
     savePlan: (input: ServiceCatalog["subscriptions.savePlan"]["input"]) => Promise<ServiceCatalog["subscriptions.savePlan"]["output"]>;
     startCardTrial: (input: ServiceCatalog["subscriptions.startCardTrial"]["input"]) => Promise<ServiceCatalog["subscriptions.startCardTrial"]["output"]>;

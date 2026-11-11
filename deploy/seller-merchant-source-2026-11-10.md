@@ -198,3 +198,60 @@ be replaced by a fabricated completion. See `deploy/privacy-rights.md`.
 `tests/core/stripe-customer-erasure.test.ts` are the source controls. Actual
 provider erasure/account acceptance and the independent review remain required;
 this increment does not close C12.38 or enable seller-merchant activation.
+
+## Immutable trial setup and physical provider dispatches
+
+Migration70 adds a private original request per card-setup attempt and a ledger
+row for every physical Customer or Checkout POST. The original contact metadata,
+name/email, currency, original account, return addresses and request keys are
+frozen before I/O; Customer identity commits before Checkout starts. Each actual
+response commits through a system-only phase even if privacy has meanwhile
+removed the public identity. Competing responses retain every actual customer
+reference. No provider call runs inside a service transaction.
+
+New zero-fee card trials require the exact latest attempt's confirmed method,
+original customer and original account. A newly saved unrelated card cannot
+start the trial; re-verifying an older card for this exact attempt can. Contact
+merge changes ownership through the subscription while preserving original
+provider metadata. Signed feedback and actual readonly recovery must agree on
+the account, Customer, Checkout, SetupIntent and attempt/subscription/contact.
+
+Request-key retry age comes from PostgreSQL's first physical dispatch, not the
+application clock or the parent row's creation time. Actual account-scoped reads
+can recover an open, completed or expired session. Age and lookup absence never
+settle a physical request; finding one customer does not establish that another
+outstanding caller cannot still create a resource. All running/unknown calls
+remain durable and keep privacy pending until their own final outcome is known.
+
+The owner can inspect original request keys and accounts from the subscription
+detail, reached from `/admin/subscriptions`. Recovery requires fresh interactive
+verification and concrete original-provider operation/support evidence plus
+evidence all original callers/retries stopped. Completed resources also require
+positive original-account metadata checks; cancellation requires the provider's
+actual no-resource/no-future-completion guarantee. These records are explicitly
+`human_provider_confirmation`, with the original human actor and evidence, and
+are never represented as machine-verified provider responses. Agents, personal
+keys, system actors and stale verification cannot supply them. Without the
+actual evidence, leave work pending. A fully settled cancellation can close its
+attempt and let the customer explicitly start a new immutable request.
+
+The `subscriptions.cardSetups` privacy source inherits the existing money hold.
+Otherwise it queues durable cleanup before removing any pending setup evidence.
+Cleanup waits for every physical call, deletes all actual customer references
+on the original account and acknowledges the original logical job only after
+success. Parent deletion and old-image erasure completion are fenced in SQL.
+The historical confirmed-method UUID does not prevent credential erasure when
+only setup evidence is held. Full rollback of migration70 requires the actual
+pre-upgrade database/object snapshot; an older image is deliberately refused at
+these safety boundaries.
+
+Sources: `card-setup.ts`, `setup-dispatch.ts`, `setup-erasure.ts`,
+`setup-reconciliation.ts` in `src/modules/subscriptions`; native controls in
+`tests/modules/subscription-billing.test.ts`,
+`tests/modules/member-merchant-policy.test.ts`,
+`tests/core/stripe-setup-recovery.test.ts` and
+`tests/core/stripe-setup-evidence.test.ts`; actual owner/customer UI journeys in
+`tests/browser/trial-setup-recovery.spec.ts`. Browser provider states and HTTP
+transports are synthetic source evidence. Actual enabled-account acceptance,
+independent review and the remaining full seller-merchant integration above
+remain required; this source increment enables no direct merchant mode.
