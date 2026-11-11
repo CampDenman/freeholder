@@ -3,6 +3,8 @@
 // C5.06 database proof for offline money and authenticated provider convergence.
 
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {createHmac} from "node:crypto";
+import {createStripePayments} from "@/adapters/payments/stripe";
 import { and, eq, sql } from "drizzle-orm";
 import * as adapters from "@/adapters/payments";
 import { providerJson } from "@/adapters/payments/http";
@@ -83,6 +85,51 @@ async function openTransactions(): Promise<number> {
 describe.runIf(hasDatabase)("payment provider services", () => {
   beforeEach(async () => { vi.restoreAllMocks(); await truncateSpine(); });
 
+  it("settles signed expanded Checkout then binds the refund to its actual PaymentIntent",async()=>{
+    const {invoice}=await issuedInvoice("expanded-checkout-refund");
+    const payment=await createPayment.call({invoiceId:invoice.id,provider:"stripe",method:"hosted_checkout",amountMinor:10000,idempotencyKey:"expanded-checkout-payment"},OWNER);
+    await startPayment.call({id:payment.id,providerRef:"cs_OriginalExpanded",providerCheckoutRef:"cs_OriginalExpanded"},OWNER);
+    const at=Math.floor(Date.parse(receivedAt)/1000),adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_expanded"]});
+    const deliver=async(id:string,type:string,value:Record<string,unknown>)=>{
+      const raw=JSON.stringify({id,type,created:at,data:{object:value}}),signature=createHmac("sha256","whsec_expanded").update(`${at}.${raw}`).digest("hex");
+      const events=await adapter.verifyWebhook({headers:{"stripe-signature":`t=${at},v1=${signature}`},body:Uint8Array.from(Buffer.from(raw)),receivedAt});
+      return processPaymentProviderEvents.call({provider:"stripe",bodySha256:digest,receivedAt,events:[...events]},{kind:"system"});
+    };
+    await deliver("evt_ExpandedPaid","checkout.session.completed",{id:"cs_OriginalExpanded",mode:"payment",payment_status:"paid",payment_intent:{id:"pi_OriginalExpanded"},amount_total:10000,currency:"cad",metadata:{freeholder_invoice_id:invoice.id}});
+    expect((await db().select().from(payments).where(eq(payments.id,payment.id)))[0]).toMatchObject({status:"succeeded",providerRef:"pi_OriginalExpanded"});
+    const refund=await createRefund.call({paymentId:payment.id,amountMinor:500,reason:"Exact original expanded payment",idempotencyKey:"expanded-original-refund"},OWNER);
+    await startRefund.call({id:refund.id,providerRef:"re_OriginalExpanded"},OWNER);
+    await deliver("evt_ExpandedRefund","refund.updated",{id:"re_OriginalExpanded",payment_intent:{id:"pi_OriginalExpanded"},amount:500,currency:"cad",status:"succeeded"});
+    expect((await db().select().from(refunds).where(eq(refunds.id,refund.id)))[0]).toMatchObject({status:"succeeded",amountMinor:500});
+    expect((await getInvoice.call({id:invoice.id},OWNER)).invoice.refundedMinor).toBe(500);
+  });
+
+  it.each(["","acct_Original"])("records actual signed cancellation on original account %j without refunding money",async account=>{
+    const {invoice}=await issuedInvoice(account?"cancel-merchant":"cancel-platform");
+    const payment=await createPayment.call({invoiceId:invoice.id,provider:"stripe",method:"hosted_checkout",amountMinor:10000,idempotencyKey:"cancel-original-payment"},OWNER);
+    if(account){
+      await db().insert(invoiceMarketPolicies).values({invoiceId:invoice.id,model:"seller_merchant",adapter:"stripe_connect",siteFeeBps:1000,holdDays:14,feeMinor:1000,sellerUserId:OWNER.userId,merchantName:"Original merchant",providerAccountId:account});
+      await db().insert(paymentMerchantRoutes).values({paymentId:payment.id,providerAccountId:account,applicationFeeMinor:1000});
+    }
+    await startPayment.call({id:payment.id,providerRef:"pi_OriginalCancelledRefund"},OWNER);
+    const deliver=(events:readonly PaymentProviderEvent[])=>processPaymentProviderEvents.call({provider:"stripe",bodySha256:digest,receivedAt,events:[...events]},{kind:"system"});
+    await deliver([{id:"evt_OriginalPaid",kind:"payment_succeeded",providerRef:"pi_OriginalCancelledRefund",invoiceId:invoice.id,amountMinor:10000,currency:"CAD",occurredAt:receivedAt,...(account?{providerAccountId:account,applicationFeeMinor:1000}:{})}]);
+    const refund=await createRefund.call({paymentId:payment.id,amountMinor:500,reason:"Original provider refund",idempotencyKey:"cancel-original-refund"},OWNER);
+    await startRefund.call({id:refund.id,providerRef:"re_CancelledOriginal"},OWNER);
+    const at=Math.floor(Date.parse(receivedAt)/1000);
+    const raw=JSON.stringify({id:"evt_OriginalCancelled",type:"refund.updated",created:at,...(account?{account}:{}),data:{object:{id:"re_CancelledOriginal",payment_intent:{id:"pi_OriginalCancelledRefund"},amount:500,currency:"cad",status:"canceled"}}});
+    const signature=createHmac("sha256","whsec_original_cancel").update(`${at}.${raw}`).digest("hex");
+    const adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_original_cancel"]});
+    const events=await adapter.verifyWebhook({headers:{"stripe-signature":`t=${at},v1=${signature}`},body:Uint8Array.from(Buffer.from(raw)),receivedAt});
+    await deliver(events);
+    expect((await db().select().from(refunds).where(eq(refunds.id,refund.id)))[0]).toMatchObject({status:"failed",failureCode:"provider_cancelled",providerRef:"re_CancelledOriginal"});
+    expect((await getInvoice.call({id:invoice.id},OWNER)).invoice.refundedMinor).toBe(0);
+    expect(await deliver(events)).toEqual({processed:0,duplicates:1});
+    await expect(deliver(events.map(event=>({...event,id:"evt_WrongCancelledParent",paymentProviderRef:"pi_AnotherPayment"})))).rejects.toMatchObject({code:"conflict"});
+    // Only the actual final cancellation releases the original reservation.
+    await expect(createRefund.call({paymentId:payment.id,amountMinor:10000,reason:"Later separately authorized refund",idempotencyKey:"after-provider-cancel"},OWNER)).resolves.toMatchObject({status:"created",amountMinor:10000});
+  });
+
   it("isolates seller feedback by account and verifies the reserved application fee (C12.38)", async () => {
     const { contact, invoice } = await issuedInvoice("seller-feedback");
     const payment = await createPayment.call({ invoiceId: invoice.id, provider: "stripe", method: "hosted_checkout", amountMinor: 10_000, idempotencyKey: "seller-feedback" }, OWNER);
@@ -114,6 +161,7 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     await startRefund.call({ id: refund.id, providerRef: "re_seller" }, OWNER);
     const refunded = { id: "evt_seller_refund", kind: "refund_succeeded" as const, providerRef: "re_seller", paymentProviderRef: "pi_seller", amountMinor: 500, currency: "CAD", occurredAt: receivedAt, providerAccountId: "acct_seller" };
     expect(await failure(deliver({ ...refunded, providerAccountId: "acct_other" }))).toMatchObject({ code: "conflict" });
+    expect(await failure(deliver({ ...refunded, paymentProviderRef: "pi_AnotherOriginalPayment" }))).toMatchObject({ code: "conflict" });
     await deliver(refunded);
     expect((await getInvoice.call({ id: invoice.id }, OWNER)).invoice.refundedMinor).toBe(500);
     const method = { id: "evt_seller_method", kind: "saved_method_added" as const, contactId: contact.id, providerCustomerRef: "cus_seller", providerAccountId: "acct_seller", occurredAt: receivedAt,
@@ -322,6 +370,14 @@ describe.runIf(hasDatabase)("payment provider services", () => {
       await startPayment.call({ id: payment.id, providerRef: `pi_${key}`, providerCheckoutRef: `cs_${key}` }, OWNER);
       return settlePayment.call({ id: payment.id, providerRef: `pi_${key}` }, OWNER);
     }
+
+    it("preserves definite provider cancellation from the committed original refund response",async()=>{
+      const {refund}=hostedStripe();
+      const payment=await settledStripePayment("immediate-cancellation");
+      refund.mockResolvedValueOnce({providerRef:"re_ImmediateCancelled",status:"failed",failureCode:"provider_cancelled"});
+      await expect(submitProviderRefund.call({paymentId:payment.id,amountMinor:500,reason:"Original refund request",idempotencyKey:"immediate-cancellation"},OWNER)).resolves.toMatchObject({status:"failed",failureCode:"provider_cancelled",failureMessage:"stripe confirmed that the refund was cancelled."});
+      expect((await getInvoice.call({id:payment.invoiceId},OWNER)).invoice.refundedMinor).toBe(0);
+    });
 
     it("commits the hosted checkout attempt before the provider is called and applies the answer afterwards", async () => {
       const { createCheckout, captureCheckout } = hostedStripe();

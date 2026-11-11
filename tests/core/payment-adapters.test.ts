@@ -71,6 +71,34 @@ describe("manual payment adapter", () => {
   });
 });
 
+describe("Stripe refund finality",()=>{
+  it("binds signed expanded Checkout and subsequent refund to the same PaymentIntent",async()=>{
+    const at=1_800_000_000,adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_expanded"]});
+    const events=async(id:string,type:string,value:Record<string,unknown>)=>{
+      const raw=JSON.stringify({id,type,created:at,data:{object:value}}),signature=createHmac("sha256","whsec_expanded").update(`${at}.${raw}`).digest("hex");
+      return adapter.verifyWebhook({headers:{"stripe-signature":`t=${at},v1=${signature}`},body:bytes(raw),receivedAt:new Date(at*1000).toISOString()});
+    };
+    const checkout=await events("evt_ExpandedCheckout","checkout.session.completed",{id:"cs_ExpandedCheckout",mode:"payment",payment_status:"paid",payment_intent:{id:"pi_OriginalExpanded"},amount_total:1000,currency:"cad",metadata:{freeholder_invoice_id:invoice.invoiceId}});
+    const refund=await events("evt_ExpandedRefund","refund.updated",{id:"re_ExpandedRefund",payment_intent:{id:"pi_OriginalExpanded"},amount:500,currency:"cad",status:"succeeded"});
+    expect(checkout).toEqual([expect.objectContaining({kind:"payment_succeeded",providerRef:"pi_OriginalExpanded",checkoutRef:"cs_ExpandedCheckout"})]);
+    expect(refund).toEqual([expect.objectContaining({kind:"refund_succeeded",paymentProviderRef:"pi_OriginalExpanded"})]);
+  });
+
+  it("preserves actual immediate cancellation on the original provider account",async()=>{
+    const calls:RequestInit[]=[];
+    const adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_cancel"],fetch:async(_input,init)=>{calls.push(init!);return Response.json({id:"re_CancelledRefund",status:"canceled"});}});
+    await expect(adapter.refund({paymentId:invoice.invoiceId,providerRef:"pi_OriginalRefund",currency:"CAD",amountMinor:500,idempotencyKey:"original-cancelled-refund",providerAccountId:"acct_Original"})).resolves.toEqual({providerRef:"re_CancelledRefund",providerAccountId:"acct_Original",status:"failed",failureCode:"provider_cancelled"});
+    expect(new Headers(calls[0]!.headers).get("stripe-account")).toBe("acct_Original");
+  });
+  it.each(["pi_OriginalRefund",{id:"pi_OriginalRefund"}])("preserves signed cancellation and exact original parent %j",async paymentIntent=>{
+    const at=1_800_000_000;
+    const adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_cancel"]});
+    const raw=JSON.stringify({id:"evt_CancelledRefund",type:"refund.updated",account:"acct_Original",created:at,data:{object:{id:"re_CancelledRefund",object:"refund",payment_intent:paymentIntent,charge:"ch_OriginalRefund",amount:500,currency:"cad",status:"canceled"}}});
+    const signature=createHmac("sha256","whsec_cancel").update(`${at}.${raw}`).digest("hex");
+    await expect(adapter.verifyWebhook({headers:{"stripe-signature":`t=${at},v1=${signature}`},body:bytes(raw),receivedAt:new Date(at*1000).toISOString()})).resolves.toEqual([{id:"evt_CancelledRefund",kind:"refund_failed",failureCode:"provider_cancelled",providerRef:"re_CancelledRefund",paymentProviderRef:"pi_OriginalRefund",amountMinor:500,currency:"CAD",occurredAt:new Date(at*1000).toISOString(),providerAccountId:"acct_Original"}]);
+  });
+});
+
 describe("Stripe payment adapter", () => {
   it("keeps seller checkout, capture and refunds scoped and validates the fee before transport (C12.38)", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];

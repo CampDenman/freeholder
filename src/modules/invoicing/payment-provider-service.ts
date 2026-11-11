@@ -93,6 +93,7 @@ const refundEvent = z.object({
   kind: z.enum(["refund_processing", "refund_succeeded", "refund_failed"]),
   providerRef: z.string().trim().min(1).max(500),
   paymentProviderRef: z.string().trim().min(1).max(500),
+  failureCode: z.literal("provider_cancelled").optional(),
   amountMinor: positiveMinor.optional(),
   currency: currency.optional(),
   occurredAt: z.string().datetime(),
@@ -330,13 +331,15 @@ async function processPaymentEvent(providerId: string, event: z.infer<typeof pay
 
 async function processRefundEvent(providerId: string, event: z.infer<typeof refundEvent>, ctx: ServiceContext): Promise<string> {
   const rows = await ctx.tx
-    .select(getTableColumns(refunds))
+    .select({...getTableColumns(refunds), parentProviderRef: payments.providerRef})
     .from(refunds)
+    .innerJoin(payments, eq(payments.id, refunds.paymentId))
     .leftJoin(paymentMerchantRoutes, eq(paymentMerchantRoutes.paymentId, refunds.paymentId))
     .where(and(eq(refunds.provider, providerId), eq(sql<string>`coalesce(${paymentMerchantRoutes.providerAccountId}, '')`, event.providerAccountId ?? ""), eq(refunds.providerRef, event.providerRef)))
     .limit(2);
   if (rows.length !== 1) throw new ServiceError("conflict", "The authenticated refund event arrived before its refund was ready; retry it.");
   const refund = rows[0]!;
+  if (refund.parentProviderRef !== event.paymentProviderRef) throw new ServiceError("conflict", "The authenticated refund does not identify its original payment.");
   if (event.amountMinor !== undefined && event.amountMinor !== refund.amountMinor) throw new ServiceError("conflict", "The authenticated provider refund amount does not match the ledger.");
   if (event.currency !== undefined && event.currency !== refund.currency) throw new ServiceError("conflict", "The authenticated provider refund currency does not match the ledger.");
   if (event.kind === "refund_processing") {
@@ -348,7 +351,7 @@ async function processRefundEvent(providerId: string, event: z.infer<typeof refu
     await ctx.callAsSystem(settleRefund, { id: refund.id, providerRef: event.providerRef, processedAt: new Date(event.occurredAt) });
     return "refund_succeeded";
   }
-  await ctx.callAsSystem(failRefund, { id: refund.id, code: "provider_failed", message: `${providerId} reported that the refund failed.` });
+  await ctx.callAsSystem(failRefund, { id: refund.id, code: event.failureCode ?? "provider_failed", message: event.failureCode === "provider_cancelled" ? `${providerId} confirmed that the refund was cancelled.` : `${providerId} reported that the refund failed.` });
   return "refund_failed";
 }
 
@@ -915,7 +918,7 @@ export const submitProviderRefund = defineOrchestratedService({
     }
     assertProviderAccount(routing, result);
     if (result.status === "succeeded") return recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "settle", providerRef: result.providerRef } }, system);
-    if (result.status === "failed") return recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "fail", code: "provider_failed", message: `${payment.provider} reported that the refund failed.` } }, system);
+    if (result.status === "failed") return recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "fail", code: result.failureCode ?? "provider_failed", message: result.failureCode === "provider_cancelled" ? `${payment.provider} confirmed that the refund was cancelled.` : `${payment.provider} reported that the refund failed.` } }, system);
     return recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "start", providerRef: result.providerRef } }, system);
   },
 });
