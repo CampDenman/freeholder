@@ -1873,18 +1873,18 @@ this addendum also includes C10.33 instead of weakening either gate.
 
 ## C3.41 — Route plugin egress through a `network:external` fetch wrapper
 
-- **F01** — N/A — no schema change: the scope already lives in each plugin's declared `permissions`.
-- **F02** — `packages/plugin-kit/src/importer.ts`: Pending — today only importers must declare `network:external`; every plugin's outbound request goes through one wrapper.
-- **F03** — N/A — egress control touches no contact, money or audit surface beyond C3.40's plugin actor.
-- **F04** — `app/(admin)/admin/plugins/page.tsx`: Pending — the install screen says which plugins can make outbound requests.
-- **F05** — N/A — the wrapper is an in-process boundary for plugin code, not an HTTP or MCP action.
-- **F06** — `locales/en.json`: Pending — the refusal and scope copy.
-- **F07** — `tests/core/outbound-boundaries.test.ts`: Pending — a plugin without `network:external` is refused, and a declared one still gets core's private-address refusal and timeouts.
-- **F08** — `tests/core/outbound-boundaries.test.ts`: Pending — unit coverage of the wrapper against a fake transport.
-- **F09** — N/A — the wrapper keeps no data to export, back up or erase.
-- **F10** — `src/core/plugins/isolate.ts`: Pending — the wrapper adds no per-request lookup beyond the plugin's boot-time grants.
-- **F11** — `deploy/doc-claim-mapping.md`: strike S11 records the gap in MASTER §26 item 1; changeset when it ships.
-- **F12** — `tests/core/outbound-boundaries.test.ts`: Pending — a plugin service making a refused and an allowed outbound request.
+- **F01** — N/A — no schema change; the declared scope is existing artifact/catalogue metadata.
+- **F02** — `src/core/plugins/fetch.ts`: captured manifest permission gates provider HTTP and downloads before transport. `src/core/http/pinned-download.ts` shares checked/pinned connections with API methods, headers/body bytes, cancellation and finite bounds. Provider defaults use that wrapper.
+- **F03** — N/A — no new contact, payment, timeline or event; owning shared services retain their existing transactions/audit. C3.40 plugin actor enforcement remains open.
+- **F04** — `app/(admin)/admin/plugins/page.tsx` shows declared outbound access on installed artifacts and catalogue entries; `tests/browser/plugin-publisher-trust.spec.ts` exercises absent/present scope before and after signed update.
+- **F05** — N/A — an internal transport, not a new HTTP/MCP action. `tests/core/plugin-egress.test.ts` exercises allowed/refused requests through shared service orchestration; no transport-specific business logic is introduced.
+- **F06** — `locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`: network scope copy; existing semantic Pill tokens. Owner browser passes keyboard, 320px reflow and both-theme Axe.
+- **F07** — `tests/core/plugin-egress.test.ts`: missing/caller-mutated grants refuse before I/O; private/mixed DNS, redirect/credential forwarding, request/response limits, deadlines and cancellation. Actual local receiver controls run only on an explicitly permitted test transport; plugin options cannot allow private destinations. Raw Node capability sandboxing remains C3.43's explicit deferral.
+- **F08** — `tests/core/plugin-egress.test.ts` proves 13 boundary/default controls. Existing Daily/Paradise/Printify/Shopify adapter tests, plus PostgreSQL flow/recovery tests, pass; scope disclosure is covered by the owner-browser journey.
+- **F09** — N/A — no data, credentials, jobs or retained response is added. Provider credentials/recovery remain in their existing shared services; actual provider acceptance stays open separately.
+- **F10** — `src/core/plugins/fetch.ts` captures the capability once, adds no permission database lookup and uses the existing DNS resolution cost. API bodies/responses cap at 1/2 MiB and twenty seconds; recording downloads cap at 512 MiB/sixty seconds. Caller cancellation is honored.
+- **F11** — `deploy/first-party-plugins.md`, MASTER §26 and `.changeset/plugin-network-boundary.md` describe methods, identity encoding, bounds, provider-default inventory and trusted-code limits. S11 remains narrowed for C3.40 and C11.10 independent review remains open.
+- **F12** — `tests/core/plugin-egress.test.ts`: shared service → allowed/refused wrapper → transport and actual pinned socket controls. `tests/core/paradise-flow.test.ts` and existing Daily/Shopify/Printify PostgreSQL flows retain provider recovery; owner browser covers network disclosure and signed-update changes.
 
 ## C3.42 — Publisher Ed25519 signatures for plugins and registry indexes
 
@@ -1898,7 +1898,7 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F08** — `tests/core/plugin-publisher-trust.test.ts`, `tests/core/plugin-publisher-trust-postgres.test.ts`, `tests/core/plugins-lifecycle.test.ts`: real keys, offline CLI and PostgreSQL refusals, rotation, retry/rollback and concurrency. Owner-browser journey and live SDK schema verification supplement production build/artifact checks.
 - **F09** — `src/core/doctor/index.ts` checks enabled artifact bytes and cached registry trust. Public keys, pins and revocations are normal core backup/restore tables. Keep retiring keys during supported-release overlap; revoke compromised keys immediately. No publisher private key, customer erasure data or job is added.
 - **F10** — `app/(admin)/admin/plugins/PluginForms.tsx`: existing Plugins screen supplies key, registry and artifact setup, contextual help and fresh-verification recovery; migration leaves legacy installations disabled for explicit review. Hashing is streamed and bounded; verification makes no provider request or seed change.
-- **F11** — `deploy/plugin-publisher-trust.md`, MASTER §26, `.changeset/plugin-publisher-keys.md`, SDK and independent-review packet describe the implemented boundary. S11 remains narrowed for unfinished C3.40/C3.41, and C11.10 independent review remains open.
+- **F11** — `deploy/plugin-publisher-trust.md`, MASTER §26, `.changeset/plugin-publisher-keys.md`, SDK and independent-review packet describe the implemented boundary. S11 remains narrowed for unfinished C3.40, and C11.10 independent review remains open.
 - **F12** — `tests/browser/plugin-publisher-trust.spec.ts`: owner-browser proof: trust → verify catalogue → signed install/update → rotate registry key → refresh → revoke → refused rollback/enable. The actual previous artifact and preserved history are also exercised on PostgreSQL.
 
 ## C3.44 — WordPress-easy manual install on any host, native first, Docker optional

@@ -3,12 +3,17 @@
 // Fixture social network used to prove C9.31: a plugin registers here, and
 // the composer, profile table and admin hub do not learn its id.
 import { createSocialNetwork, socialAdapters } from "@/adapters/social";
+import { createPluginHttp } from "@/core/plugins/fetch";
+import manifest from "./manifest";
+
+export const pluginHttp = createPluginHttp(manifest);
 
 export const FIXTURE_SOCIAL_NETWORK_ID = "fixture_net";
 
 export function createFixtureSocialNetwork() {
   return createSocialNetwork({
     id: FIXTURE_SOCIAL_NETWORK_ID,
+    fetcher: pluginHttp.fetch,
     label: "Fixture network",
     authorizeUrl: "https://fixture.example/oauth/authorize",
     tokenUrl: "https://fixture.example/oauth/token",

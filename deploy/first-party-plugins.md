@@ -219,3 +219,38 @@ on every page. Restore the original configuration if it changes. Connection
 and sync leases reject competing or expired workers. No live store acceptance
 has been performed; HTTP fixtures and database integration tests establish
 local behavior only.
+
+## Plugin network boundary (C3.41)
+
+Plugins that request a provider API or recording URL use
+`createPluginHttp(manifest)` from `src/core/plugins/fetch.ts`, bound once to
+their own validated manifest. Add `network:external` to that manifest before
+making a request. A missing scope refuses both HTTP and recording downloads
+before a transport runs. Changing the manifest's array after binding does not
+expand the captured capability. The Plugins screen labels declared network
+access for installed artifacts and catalogue entries. Owner consent and the
+runtime service actor remain C3.40.
+
+The returned `fetch` supports ordinary provider API methods and fetch
+`Request`/`RequestInit` inputs. It forwards explicit provider credentials to the
+checked destination, removes connection/proxy/Host overrides, requests identity
+encoding, and refuses redirects and compressed responses. It neither loads
+browser cookies nor follows a provider's Location header. Request bodies stop
+at 1 MiB, API responses at 2 MiB, DNS at five seconds, and the complete request
+at twenty seconds. Caller cancellation also cancels a pending body read or
+active connection. Check status and parse the returned Response as usual.
+
+The returned `download` preserves `getPinnedBytes`'s bounded byte interface for
+recordings. It caps a download at 512 MiB and sixty seconds. Both paths check
+all DNS answers, refuse private/special-use addresses in either IP family,
+pin the selected connection with the original Host/TLS identity, and never
+follow redirects. `allowLocal` cannot be enabled by plugin request options.
+Daily, Paradise Comms, Printify, Shopify and the social-plugin fixture use the
+bound defaults. Provider test transports remain explicit constructor inputs;
+production clients use the pinned defaults.
+
+This is a contract for trusted, in-process plugin code. It is not a JavaScript
+sandbox: a deliberately hostile plugin can still import Node networking or
+other process capabilities. Review plugin source and its declared permissions;
+C3.43's process sandbox remains explicitly deferred. No global fetch function
+is patched, and core/provider-independent traffic keeps its own boundaries.

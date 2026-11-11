@@ -4682,6 +4682,8 @@
   "plugins.error": "That plugin could not be installed.",
   "plugins.install": "Install from a folder",
   "plugins.installed": "Installed plugins",
+  "plugins.network.declared": "Declares outbound network access",
+  "plugins.network.absent": "Does not declare outbound network access",
   "plugins.intro": "Install, enable, disable or remove plugins. A bad plugin is named and turned off — it does not take the site down.",
   "plugins.path": "Plugin folder",
   "plugins.platform": "This instance is Freeholder {version}.",

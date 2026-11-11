@@ -71,6 +71,7 @@ export default async function PluginsPage() {
                     <Pill tone={plugin.status === "enabled" ? "success" : "neutral"}>
                       {t(`plugins.status.${plugin.status}`)}
                     </Pill>
+                    <Pill tone="neutral">{t(Array.isArray(plugin.permissions) && plugin.permissions.includes("network:external") ? "plugins.network.declared" : "plugins.network.absent")}</Pill>
                   </div>
                   <p className="text-xs text-ink-muted">{plugin.signature
                     ? t("plugins.trust.signedBy", { publisher: publisherKeys.find(key => key.keyId === signatureKeyId(plugin.signature!))?.publisher ?? t("plugins.trust.unverified") })
@@ -177,6 +178,7 @@ export default async function PluginsPage() {
                   <span className="font-medium">{plugin.name}</span>
                   <Pill tone="neutral">{plugin.version}</Pill>
                   <Pill tone="neutral">{t(`plugins.tier.${plugin.tier}`)}</Pill>
+                  <Pill tone="neutral">{t(Array.isArray(plugin.permissions) && plugin.permissions.includes("network:external") ? "plugins.network.declared" : "plugins.network.absent")}</Pill>
                 </li>
               ))}
             </ul>

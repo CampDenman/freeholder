@@ -16,6 +16,12 @@ export interface PinnedDownloadOptions extends WebhookTransportOptions {
   headers?: Record<string, string>;
 }
 
+export interface PinnedRequestOptions extends PinnedDownloadOptions {
+  method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS";
+  body?: Uint8Array<ArrayBuffer>;
+  signal?: AbortSignal;
+}
+
 export class PinnedDownloadError extends Error {
   constructor(
     public readonly code: "timeout" | "too_large" | "network",
@@ -34,6 +40,15 @@ export async function getPinnedBytes(
   contentType: string | undefined;
   bytes: Uint8Array<ArrayBuffer>;
 }> {
+  const { status, contentType, bytes } = await requestPinnedBytes(raw, { ...options, method: "GET", body: undefined });
+  return { status, contentType, bytes };
+}
+
+/** The same pinned connection for bounded plugin API requests (C3.41). */
+export async function requestPinnedBytes(
+  raw: string,
+  options: PinnedRequestOptions,
+): Promise<{ status: number; contentType: string | undefined; bytes: Uint8Array<ArrayBuffer>; headers: Headers }> {
   const timeoutMs = options.timeoutMs ?? 30_000;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("timeoutMs must be a positive number of milliseconds.");
@@ -43,11 +58,13 @@ export async function getPinnedBytes(
   }
 
   const startedAt = Date.now();
+  options.signal?.throwIfAborted();
   const target = await resolveWebhookTarget(raw, {
     ...options,
     allowLocal: options.allowLocal ?? false,
   });
   const remainingMs = timeoutMs - (Date.now() - startedAt);
+  options.signal?.throwIfAborted();
   if (remainingMs <= 0) {
     throw new PinnedDownloadError("timeout", "The download timed out.");
   }
@@ -59,16 +76,17 @@ export async function getPinnedBytes(
       if (settled) return;
       settled = true;
       clearTimeout(deadline);
+      options.signal?.removeEventListener("abort", abort);
       operation();
     };
     const outgoing = request(
       {
         ...pinnedRequestOptions(target, options.headers ?? {}),
-        method: "GET",
+        method: options.method ?? "GET",
       },
       (incoming) => {
         const declared = Number(incoming.headers["content-length"]);
-        if (Number.isFinite(declared) && declared > options.maxBytes) {
+        if (options.method !== "HEAD" && Number.isFinite(declared) && declared > options.maxBytes) {
           finish(() => reject(new PinnedDownloadError(
             "too_large",
             "The download is larger than the configured byte limit.",
@@ -96,10 +114,16 @@ export async function getPinnedBytes(
         incoming.on("end", () => finish(() => {
           const body = Buffer.concat(chunks);
           const contentType = incoming.headers["content-type"];
+          const headers = new Headers();
+          for (const [name, value] of Object.entries(incoming.headers)) {
+            if (Array.isArray(value)) for (const entry of value) headers.append(name, entry);
+            else if (value !== undefined) headers.set(name, value);
+          }
           resolve({
             status: incoming.statusCode ?? 0,
             contentType: typeof contentType === "string" ? contentType : undefined,
             bytes: new Uint8Array(body.buffer, body.byteOffset, body.byteLength),
+            headers,
           });
         }));
         incoming.on("error", (error) => finish(() => reject(error)));
@@ -108,11 +132,14 @@ export async function getPinnedBytes(
     const deadline = setTimeout(() => {
       outgoing.destroy(new PinnedDownloadError("timeout", "The download timed out."));
     }, remainingMs);
+    const abort = () => outgoing.destroy(new PinnedDownloadError("network", "The request was cancelled."));
+    options.signal?.addEventListener("abort", abort, { once: true });
+    if (options.signal?.aborted) abort();
     outgoing.on("error", (error) => finish(() => reject(
       error instanceof PinnedDownloadError
         ? error
         : new PinnedDownloadError("network", "The download failed."),
     )));
-    outgoing.end();
+    outgoing.end(options.body);
   });
 }

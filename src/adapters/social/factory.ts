@@ -35,6 +35,8 @@ export interface SocialNetworkSpec {
   interactionUrl?: (postId: string) => string;
   reviewsUrl?: string;
   hoursUrl?: string;
+  /** Plugins supply their manifest-bound, address-pinned transport (C3.41). */
+  fetcher?: typeof fetch;
 }
 
 function asRecord(body: unknown): Record<string, unknown> {
@@ -168,6 +170,7 @@ function parseInteractions(
 }
 
 export function createSocialNetwork(spec: SocialNetworkSpec): SocialAdapter {
+  const requestProvider = (input: string, init: RequestInit) => socialFetch(spec.id, input, init, spec.fetcher);
   const clientId = () => spec.clientId()?.trim() || undefined;
   const clientSecret = () => spec.clientSecret()?.trim() || undefined;
   const configured = () => Boolean(clientId() && clientSecret());
@@ -229,7 +232,7 @@ export function createSocialNetwork(spec: SocialNetworkSpec): SocialAdapter {
         grant_type: "authorization_code",
       });
       if (input.codeVerifier) body.set("code_verifier", input.codeVerifier);
-      const response = await socialFetch(spec.id, spec.tokenUrl, {
+      const response = await requestProvider(spec.tokenUrl, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body,
@@ -263,7 +266,7 @@ export function createSocialNetwork(spec: SocialNetworkSpec): SocialAdapter {
     },
     async identity(accessToken) {
       requireReady();
-      const response = await socialFetch(spec.id, spec.identityUrl, {
+      const response = await requestProvider(spec.identityUrl, {
         method: "GET",
         headers: { authorization: `Bearer ${accessToken}` },
       });
@@ -282,7 +285,7 @@ export function createSocialNetwork(spec: SocialNetworkSpec): SocialAdapter {
     async listOwnedPosts(accessToken) {
       requireReady();
       const url = spec.ownedPostsUrl ?? `${spec.identityUrl.replace(/\/+$/, "")}/media`;
-      const response = await socialFetch(spec.id, url, {
+      const response = await requestProvider(url, {
         method: "GET",
         headers: { authorization: `Bearer ${accessToken}` },
       });
@@ -293,7 +296,7 @@ export function createSocialNetwork(spec: SocialNetworkSpec): SocialAdapter {
       const url =
         spec.interactionUrl?.(postProviderRef) ??
         `${spec.identityUrl.replace(/\/me\/?$/, "")}/${postProviderRef}/comments`;
-      const response = await socialFetch(spec.id, url, {
+      const response = await requestProvider(url, {
         method: "GET",
         headers: { authorization: `Bearer ${accessToken}` },
       });
@@ -302,7 +305,7 @@ export function createSocialNetwork(spec: SocialNetworkSpec): SocialAdapter {
     async listReviews(accessToken) {
       requireReady();
       if (!spec.reviewsUrl) return [];
-      const response = await socialFetch(spec.id, spec.reviewsUrl, {
+      const response = await requestProvider(spec.reviewsUrl, {
         method: "GET",
         headers: { authorization: `Bearer ${accessToken}` },
       });
@@ -311,7 +314,7 @@ export function createSocialNetwork(spec: SocialNetworkSpec): SocialAdapter {
     async pushHours(accessToken, periods) {
       requireReady();
       if (!spec.hoursUrl) return;
-      const response = await socialFetch(spec.id, spec.hoursUrl, {
+      const response = await requestProvider(spec.hoursUrl, {
         method: "PUT",
         headers: {
           authorization: `Bearer ${accessToken}`,
@@ -333,7 +336,7 @@ export function createSocialNetwork(spec: SocialNetworkSpec): SocialAdapter {
     },
     async publish(request) {
       requireReady();
-      const response = await socialFetch(spec.id, spec.identityUrl, {
+      const response = await requestProvider(spec.identityUrl, {
         method: "POST",
         headers: {
           authorization: `Bearer ${request.accountRef}`,
@@ -357,7 +360,7 @@ export function createSocialNetwork(spec: SocialNetworkSpec): SocialAdapter {
     },
     async remove(request) {
       requireReady();
-      await socialFetch(spec.id, spec.identityUrl, {
+      await requestProvider(spec.identityUrl, {
         method: "DELETE",
         headers: { "idempotency-key": request.idempotencyKey },
       });

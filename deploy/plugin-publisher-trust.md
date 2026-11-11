@@ -4,8 +4,9 @@
 MASTER.md C3.42. This guide covers publisher authentication, owner trust and
 artifact verification. A signature identifies a trusted publisher; it is not a
 security review or a process sandbox. Plugins run in the application process.
-Declared-permission/consent enforcement and the plugin egress boundary remain
-C3.40/C3.41; sandboxing remains explicitly deferred under C3.43 and §43.18.
+Runtime service permission/consent enforcement remains C3.40. Manifest-bound
+provider HTTP and download limits are C3.41 (`deploy/first-party-plugins.md`);
+sandboxing remains explicitly deferred under C3.43 and §43.18.
 
 ## Owner: establish trust
 

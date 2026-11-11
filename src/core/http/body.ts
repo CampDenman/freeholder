@@ -41,8 +41,10 @@ function positiveLimit(maxBytes: number): void {
 export async function readBoundedBytes(
   source: BodySource,
   maxBytes: number,
+  signal?: AbortSignal,
 ): Promise<Uint8Array<ArrayBuffer>> {
   positiveLimit(maxBytes);
+  signal?.throwIfAborted();
   const length = declaredLength(source);
   if (length !== undefined && length > maxBytes) {
     throw new RequestBodyError(413, "The request body is too large.");
@@ -50,11 +52,15 @@ export async function readBoundedBytes(
   if (!source.body) return new Uint8Array();
 
   const reader = source.body.getReader();
+  const abort = () => { void reader.cancel().catch(() => {}); };
+  signal?.addEventListener("abort", abort, { once: true });
+  if (signal?.aborted) abort();
   const chunks: Uint8Array<ArrayBuffer>[] = [];
   let received = 0;
   try {
     while (true) {
       const part = await reader.read();
+      signal?.throwIfAborted();
       if (part.done) break;
       received += part.value.byteLength;
       if (received > maxBytes) {
@@ -64,6 +70,7 @@ export async function readBoundedBytes(
       chunks.push(part.value);
     }
   } finally {
+    signal?.removeEventListener("abort", abort);
     reader.releaseLock();
   }
 

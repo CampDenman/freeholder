@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C3.13: Printify's documented external-id conflict response makes retries
 // recover the original order. Contract: https://developers.printify.com/openapi.json
+import { pluginHttp } from "./http";
 import { z } from "zod";
 import { readBoundedBytes } from "@/core/http/body";
 
@@ -61,7 +62,7 @@ function safeTrackingUrl(value: string | null | undefined): string | null {
   } catch { return null; }
 }
 
-export function createPrintifyClient(config: { token: string; shopId: string }, fetcher: typeof fetch = fetch) {
+export function createPrintifyClient(config: { token: string; shopId: string }, fetcher: typeof fetch = pluginHttp.fetch) {
   const token = config.token.trim();
   if (!token || /[\r\n]/.test(token) || !/^[1-9][0-9]*$/.test(config.shopId)) {
     throw new PrintifyError("Configure a Printify API token and shop ID before submitting print orders.");

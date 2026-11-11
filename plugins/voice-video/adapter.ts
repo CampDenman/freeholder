@@ -3,8 +3,9 @@
 // Vendor SDKs stay behind this plugin (MASTER.md §4.14). Core owns the
 // conversation and the timeline; this file is the only place a WebRTC vendor
 // would ever be imported.
+import { pluginHttp } from "./http";
 import { env } from "@/core/env";
-import { getPinnedBytes } from "@/core/http/pinned-download";
+import type { getPinnedBytes } from "@/core/http/pinned-download";
 import { z } from "zod";
 import { createDailyClient, DailyError, type DailyConfiguration } from "./daily";
 import { createParadiseVoiceVideoProvider } from "./paradise-provider";
@@ -141,7 +142,7 @@ export async function voiceVideoProvider(): Promise<VoiceVideoProvider> {
 export { createParadiseVoiceVideoProvider } from "./paradise-provider";
 export type { ParadiseConfiguration } from "./paradise";
 
-export function createDailyVoiceVideoProvider(configuration: DailyConfiguration, fetcher: typeof fetch = fetch, download: typeof getPinnedBytes = getPinnedBytes): VoiceVideoProvider {
+export function createDailyVoiceVideoProvider(configuration: DailyConfiguration, fetcher: typeof fetch = pluginHttp.fetch, download: typeof getPinnedBytes = pluginHttp.download): VoiceVideoProvider {
   const client = createDailyClient(configuration, fetcher, Date.now, download);
   async function verify(input: { provider: string; accountDomain: string | null }) {
     if (input.provider !== "daily") throw new DailyError("This instance's live voice/video provider is Daily.");

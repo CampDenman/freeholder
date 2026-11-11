@@ -131,18 +131,18 @@ appears in MASTER.md or any New string is missing.
 ### S11 — §26 · Plugin trust model vs code
 - Kind: Narrowed
 - Old: 1. **Declared permissions, enforced at the service registry.**
-- New: 1. **Declared permissions: disclosed, not yet enforced.**
+- New: 1. **Declared service permissions: not yet enforced.**
 - Old: The service registry rejects calls outside the granted set; the install screen shows scopes in human language
-- New: so the service registry does not reject a call outside the declared scopes; the install screen does not yet show the scopes or ask for consent (C3.40)
+- New: so the service registry does not reject a call outside the declared scopes; the install screen does not yet show every scope or ask for consent (C3.40)
 - Old: Network egress from plugin code goes through a fetch wrapper that enforces the `network:external` scope.
-- New: no fetch wrapper limits outbound requests to plugins that declare `network:external` (C3.41)
+- New: Plugin HTTP clients now use a manifest-bound fetch wrapper that requires `network:external` and reuses core DNS/address pinning, redirect refusal, timeouts and byte limits
 - Old: plugin errors are boundary-caught and degrade to a disabled widget, never a downed site
 - New: is named and disabled at boot instead of taking the site down (C3.10)
 - Old: `AuditLog` records every plugin's service calls under `actor: plugin:<name>`.
 - New: today a plugin's service calls are audited under the actor who triggered them.
 - Old: 3. **Signed releases (§39.3).** Platform images
 - New: Plugin artifacts and registry indexes now use Ed25519 signatures against public keys the freshly verified owner explicitly trusts
-- Why: the row was marked Evidence, but no code enforces a plugin's declared scopes. Plugin code runs with the caller's actor; `network:external` is checked only for importers (`packages/plugin-kit/src/importer.ts`); `/admin/plugins` shows no scopes or consent; no actor kind is `plugin:<name>` (`src/core/service.ts` `actorString`); isolation is boot-time only (`src/core/plugins/isolate.ts`, C3.10). C3.42 now replaces caller-supplied HMAC secrets with Ed25519 publisher signatures (`src/core/plugins/integrity.ts`, `src/core/plugins/registry.ts`, `src/core/plugins/publisher-keys.ts`); native PostgreSQL, CLI, migration and owner-browser proofs are described in `deploy/plugin-publisher-trust.md`. The remaining v1 gaps are open items C3.40/C3.41; sandboxing, C3.43, is deferred to v2 under §43.18 (owner decision 2026-11-05).
+- Why: the row was marked Evidence, but no code enforces a plugin's declared scopes. Plugin code runs with the caller's actor; `network:external` is checked only for importers (`packages/plugin-kit/src/importer.ts`); `/admin/plugins` shows network access but not the full permission-consent flow; no actor kind is `plugin:<name>` (`src/core/service.ts` `actorString`); isolation is boot-time only (`src/core/plugins/isolate.ts`, C3.10). C3.42 now replaces caller-supplied HMAC secrets with Ed25519 publisher signatures (`src/core/plugins/integrity.ts`, `src/core/plugins/registry.ts`, `src/core/plugins/publisher-keys.ts`); native PostgreSQL, CLI, migration and owner-browser proofs are described in `deploy/plugin-publisher-trust.md`. C3.41 now binds provider HTTP and downloads to declared network access (`src/core/plugins/fetch.ts`) and uses core pinned connections, private-address/redirect refusal, limits and cancellation; `tests/core/plugin-egress.test.ts` and owner-browser scope disclosure supply its source proof. The remaining v1 gap is open item C3.40; sandboxing, C3.43, is deferred to v2 under §43.18 (owner decision 2026-11-05).
 
 ### S12 — §25 · Plugin scaffolding and install paths
 - Kind: Narrowed

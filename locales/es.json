@@ -4682,6 +4682,8 @@
   "plugins.error": "Ese complemento no se pudo instalar.",
   "plugins.install": "Instalar desde una carpeta",
   "plugins.installed": "Complementos instalados",
+  "plugins.network.declared": "Declara acceso de red saliente",
+  "plugins.network.absent": "No declara acceso de red saliente",
   "plugins.intro": "Instala, activa, desactiva o quita complementos. Uno defectuoso se nombra y se apaga — no tumba el sitio.",
   "plugins.path": "Carpeta del complemento",
   "plugins.platform": "Esta instancia es Freeholder {version}.",

@@ -17,6 +17,7 @@ import type { getPinnedBytes } from "@/core/http/pinned-download";
 import { storage } from "@/adapters/storage";
 import { moduleSettings } from "@/core/settings/schema";
 import * as adapter from "../../plugins/voice-video/adapter";
+import { pluginHttp } from "../../plugins/voice-video/http";
 import { createParadiseVoiceVideoProvider } from "../../plugins/voice-video/paradise-provider";
 import { eraseImportedCopies, eraseProviderRecordings } from "../../plugins/voice-video/erasure";
 import {
@@ -251,11 +252,11 @@ describe.runIf(hasDatabase)("Paradise Comms room integration", { timeout: 60_000
     // The probe builds its own client from the saved settings; both answers
     // are mocked HTTP, never the production host.
     await configureVoiceVideo.call({ provider: "paradise", paradise: { apiKey: "pm-key" } }, OWNER);
-    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(Response.json({ rooms: [] })));
+    const probeHttp = vi.spyOn(pluginHttp, "fetch").mockResolvedValue(Response.json({ rooms: [] }));
     const probe = await verifyVoiceVideoConnection.call({}, OWNER);
     expect(probe).toMatchObject({ ok: true, status: 200 });
-    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(Response.json({ error: { code: "insufficient_balance",
-      message: "Balance is empty", balance_usd: 0, top_up_url: "https://paradisemodern.com/billing/top-up" }, message: "Balance is empty" }, { status: 402 })));
+    probeHttp.mockResolvedValue(Response.json({ error: { code: "insufficient_balance",
+      message: "Balance is empty", balance_usd: 0, top_up_url: "https://paradisemodern.com/billing/top-up" }, message: "Balance is empty" }, { status: 402 }));
     const refused = await verifyVoiceVideoConnection.call({}, OWNER);
     expect(refused).toMatchObject({ ok: false, status: 402, balanceUsd: 0, topUpUrl: "https://paradisemodern.com/billing/top-up" });
   });

@@ -26,7 +26,7 @@ test("the owner trusts, installs, rotates and revokes a publisher key", async ({
   const keyId = (key: typeof old) => publisherPublicKey(publicKey(key)).keyId;
   async function artifact(version: string, key: typeof old) {
     const path = await mkdtemp(join(tmpdir(), "freeholder-browser-publisher-")); directories.push(path);
-    await writeFile(join(path, "plugin.json"), JSON.stringify({ name: "sample", version, license: "Apache-2.0", freeholder: ">=0.0.0", permissions: ["contacts:read"] }));
+    await writeFile(join(path, "plugin.json"), JSON.stringify({ name: "sample", version, license: "Apache-2.0", freeholder: ">=0.0.0", permissions: version === "0.1.0" ? ["contacts:read"] : ["contacts:read", "network:external"] }));
     await writeFile(join(path, "index.js"), `// browser fixture ${version}`);
     const integrity = await hashDirectory(path);
     return { path, integrity, signature: signIntegrity(integrity, key.privateKey) };
@@ -50,6 +50,7 @@ test("the owner trusts, installs, rotates and revokes a publisher key", async ({
     await page.getByRole("button", { name: "Install from a folder", exact: true }).click();
     const plugin = page.locator('li[data-plugin-name="sample"]');
     await expect(plugin.getByText("0.1.0", { exact: true })).toBeVisible();
+    await expect(plugin.getByText("Does not declare outbound network access", { exact: true })).toBeVisible();
     await plugin.getByRole("button", { name: "Enable", exact: true }).click();
     await expect(plugin.getByText("Enabled", { exact: true })).toBeVisible();
 
@@ -74,11 +75,13 @@ test("the owner trusts, installs, rotates and revokes a publisher key", async ({
     await plugin.getByLabel("Publisher signature", { exact: true }).fill(second.signature);
     await plugin.getByRole("button", { name: "Update", exact: true }).click();
     await expect(plugin.getByText("0.2.0", { exact: true })).toBeVisible();
+    await expect(plugin.getByText("Declares outbound network access", { exact: true })).toBeVisible();
     await registry.getByLabel("Registry signing key", { exact: true }).selectOption(keyId(next));
     await registry.getByRole("button", { name: "Pin registry key", exact: true }).click();
     await expect(page.locator('li[data-catalog-plugin="sample"]')).toHaveCount(0);
     index.plugins[0]!.version = "0.2.0";
     index.plugins[0]!.integrity = second.integrity;
+    index.plugins[0]!.permissions = ["contacts:read", "network:external"];
     await cache(next);
 
     const oldKey = page.locator(`li[data-publisher-key-id="${keyId(old)}"]`);
@@ -88,6 +91,7 @@ test("the owner trusts, installs, rotates and revokes a publisher key", async ({
     await plugin.getByRole("button", { name: "Roll back", exact: true }).click();
     await expect(plugin.getByRole("alert")).toContainText("whether the publisher key was revoked");
     await expect(plugin.getByText("0.2.0", { exact: true })).toBeVisible();
+    await expect(plugin.getByText("Declares outbound network access", { exact: true })).toBeVisible();
     const newKey = page.locator(`li[data-publisher-key-id="${keyId(next)}"]`);
     await newKey.getByRole("checkbox").check();
     await newKey.getByRole("button", { name: "Revoke key", exact: true }).click();
