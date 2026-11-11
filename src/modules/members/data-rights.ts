@@ -32,6 +32,7 @@ import { registerContactPrivacySource } from "@/core/privacy/service";
 import { ServiceError, type Tx, type ServiceContext } from "@/core/service";
 import { dropFromCalls } from "./call-seats";
 import { lockMemberProfiles, lockMemberConversations } from "./authority-locks";
+import { applyMemberStatus } from "./status";
 import { products } from "@/modules/catalog/schema";
 import { assets } from "@/core/media/schema";
 import { openMessage, sealMessage } from "./message-crypto";
@@ -53,6 +54,7 @@ import {
   memberMessages,
   memberMlsLog,
   memberPayouts,
+  memberPayoutAccounts,
   memberPosts,
   memberProfiles,
   memberProfileSections,
@@ -207,12 +209,16 @@ async function eraseMember(tx: Tx, userId: string, service?: ServiceContext): Pr
   count(await tx.update(assets).set({ status: "trashed", deletedAt: now, purgeAfter: now, updatedAt: now }).where(and(eq(assets.uploadedBy, `user:${userId}`), ne(assets.status, "trashed"))).returning({ id: assets.id }));
   count(await tx.delete(memberProfileSections).where(eq(memberProfileSections.userId, userId)).returning({ id: memberProfileSections.id }));
   count(await tx.delete(memberListings).where(eq(memberListings.sellerId, userId)).returning({ productId: memberListings.productId }));
+  // An unrelated hold may keep the login parent alive; do not rely on its
+  // eventual FK cascade to erase this unheld mutable account copy.
+  count(await tx.delete(memberPayoutAccounts).where(eq(memberPayoutAccounts.userId, userId)).returning({ userId: memberPayoutAccounts.userId }));
   if (profile) count(await tx.delete(memberProfiles).where(eq(memberProfiles.userId, userId)).returning({ userId: memberProfiles.userId }));
   return affected;
 }
 
 registerContactPrivacySource({
   scope: "members",
+  requiresLogin: true,
   tables: [
     "member_profiles",
     "member_profile_sections",
@@ -251,6 +257,21 @@ registerContactPrivacySource({
     "member_remote_follows",
   ],
   eraseOrder: 10,
+  retain: async (tx, contactId, context) => {
+    const userId = await loginOf(tx, contactId);
+    if (!userId) return;
+    if (!context.service || context.service.tx !== tx) throw new ServiceError("internal", "Held member suspension requires its transactional service context.");
+    await lockMemberProfiles(tx, [userId], "update");
+    await lockMemberConversations(tx, userId);
+    const losingSeats = await tx.select({ id: memberConversationParticipants.conversationId }).from(memberConversationParticipants)
+      .where(and(eq(memberConversationParticipants.userId, userId), ne(memberConversationParticipants.state, "left")));
+    const [profile] = await tx.select({ id: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.userId, userId));
+    if (profile) await applyMemberStatus(context.service, userId, "suspended", "Account erased; original records retained under a named privacy hold.");
+    await dropFromCalls(context.service, losingSeats.map(seat => seat.id), userId);
+    // Retain historical seats as evidence while removing outgoing MLS/call
+    // entitlement. Suspension alone does not change the delivery witness.
+    await tx.update(memberConversationParticipants).set({ state: "left" }).where(eq(memberConversationParticipants.userId, userId));
+  },
   exportData: async (tx, contactId) => {
     const userId = await loginOf(tx, contactId);
     return userId ? exportMember(tx, userId) : null;
