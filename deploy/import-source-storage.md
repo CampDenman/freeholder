@@ -78,3 +78,55 @@ elapsed time cannot settle a different unknown request. Those witnesses remain
 visible for recovery and block byte-deletion/erasure acknowledgement until actual
 provider completion or cancellation evidence exists. Unknown provider requests
 are deliberately not garbage-collected as if their client error proved failure.
+
+## Raw reader erasure receipts
+
+All opaque reserved or retained original chunks join `imports.readerSources`, including reserved
+keys whose provider write has not arrived yet. The reader-comment hold covers
+these raw copies too. Local contact anonymization and parsed-cache cleanup do
+not complete the receipt: a durable `core.eraseImportSourceObjects` task must
+confirm deletion and absence on the original private storage. Provider errors,
+a still-active source window and each unresolved writer keep the receipt in
+progress. Recovery can redrive the same original task ID. No raw reader address,
+body or arbitrary object key comes from the erasure request payload.
+
+Upload reservation and chunk claims acquire the shared side of the existing
+identity guard before reading the run. Multiple ordinary writers may proceed;
+merge/erasure uses the exclusive side. Direct imported/public reader-comment
+mutations use the same guard and reject an explicitly erased contact binding.
+This prevents new raw sources or comments appearing after erasure has already
+passed their scope. Actual before-failing controls cover both snapshot races.
+
+`ServiceDef.auditInputFields` limits only the input evidence stored beside an
+authorized operation; it cannot change caller, action, subject, permission or
+transaction ownership. The global secret redactor still applies. Raw import
+payloads/previews and reader-comment bodies are excluded prospectively. Erasure
+also removes named historical content fields from the relevant import/comment
+audit differences while preserving operation metadata. Actual source and CMS
+comment audit regressions failed before the repair. A NUL-containing private
+input control verifies the handler receives its real input while audit stores
+only permitted metadata. Stored article/page/media recovery ownership remains.
+
+The receipt/guard proof is local with synthetic private storage. Independent
+security review, historical provider inventory and final cross-target object
+recovery still require actual evidence; C2.29/C3.22/C11.10 are not closed here.
+
+Explicit reader holds also protect the current original file from normal expiry,
+replacement cleanup and rollback. The privacy hold branch invokes an optional
+registered source `retain` callback in the same real transaction. Imports binds
+only existing upload IDs to that actual request/exception. The keeper consults
+the current exception before deletion, ahead of ordinary terminal/expiry checks;
+removal or expiry releases that protection. Later uploads are not held by an old
+nonce. Three actual future-sweep failures reproduced lost held bytes; preservation,
+replacement isolation and removal are covered by
+`tests/core/import-source-hold-retention.test.ts`. Internal request/exception
+bindings remain in the database and are excluded from every public import
+run/list DTO; an exact source-only key regression exercises that boundary.
+
+After the payment-customer privacy repair merged, main integration retained its
+universal pending/missing-receipt guard and this source's hold callback. The only
+merge conflict was the four-language pending help text, now covering payment
+customers, recordings, transcripts and stored files together. A fresh isolated
+database run passed 43 source/hold/audit/provider checks across six files; all
+fast gates passed (368 contracts with one deliberate skip). These are combined
+source checks, not independent sign-off or live-provider acceptance.

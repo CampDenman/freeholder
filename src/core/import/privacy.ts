@@ -1,7 +1,13 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C2.29/C3.22: staged reader comments are personal data, not a second CRM.
-import { and, asc, eq, gt, gte, inArray } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, asc, eq, gt, gte, inArray, like, or, sql } from "drizzle-orm";
+import { auditLog } from "@/core/events/schema";
+import { mediaObjects } from "@/core/media/schema";
+import { retainedSourceFromRun, retainedSourceChunkKey } from "./retained-source";
+import { IMPORT_SOURCE_ERASURE_JOB } from "./source-erasure";
+import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { importRuns } from "@/core/plugins/schema";
@@ -28,6 +34,7 @@ export function stripReaderCopies(preview: unknown): Json {
 
 /** Bind existing readers without creating CRM contacts just to preview a file. */
 export async function bindReaderSources(tx: Tx, preview: unknown): Promise<Json> {
+  await lockContactIdentityForRead(tx);
   const copy = structuredClone(object(preview));
   const readers = items(copy.pages).flatMap(page => items(page.readerComments));
   const addresses = [...new Set(readers.map(comment => email(comment.email)).filter(Boolean))];
@@ -43,15 +50,15 @@ export async function bindReaderSources(tx: Tx, preview: unknown): Promise<Json>
 }
 
 export class ReaderSourceErasureError extends ServiceError {
-  constructor() { super("conflict", "A reader erasure completed while this source upload was pending. Review the source for erased readers and upload a fresh file before importing comments."); }
+  constructor() { super("conflict", "A reader erasure started while this source upload was pending. Review the source for erased readers and upload a fresh file before importing comments."); }
 }
 
 /** Opaque chunks cannot be matched to a contact until parsing has completed. */
 export async function assertReaderUploadWindow(tx: Tx, preview: unknown, startedAt: Date): Promise<void> {
   if (!items(object(preview).pages).some(page => items(page.readerComments).length > 0)) return;
   const [erasure] = await tx.select({ id: dataRequests.id }).from(dataRequests).where(and(
-    eq(dataRequests.kind, "erasure"), inArray(dataRequests.status, ["completed", "partially_completed"]),
-    gte(dataRequests.fulfilledAt, startedAt),
+    eq(dataRequests.kind, "erasure"), inArray(dataRequests.status, ["completed", "partially_completed", "in_progress"]),
+    or(gte(dataRequests.fulfilledAt, startedAt), and(eq(dataRequests.status, "in_progress"), gte(dataRequests.updatedAt, startedAt))),
   )).limit(1);
   if (erasure) throw new ReaderSourceErasureError();
 }
@@ -112,7 +119,14 @@ export function publicImportRun(run: Run): Run {
   };
   // Copy only changed reader objects; do not clone every multi-megabyte body
   // again while projecting a list of otherwise unchanged import runs.
-  return { ...run, preview: project(run.preview, "pages", "readerComments"), checkpoint: project(run.checkpoint, "pendingBlogPosts", "comments") };
+  let checkpoint = project(run.checkpoint, "pendingBlogPosts", "comments");
+  const privateFields = ["sourcePrivacyHolds", "sourceWrites", "mediaClaims"] as const;
+  if (privateFields.some(field => Object.hasOwn(object(checkpoint), field))) {
+    const visible = { ...object(checkpoint) };
+    for (const field of privateFields) delete visible[field];
+    checkpoint = visible;
+  }
+  return { ...run, preview: project(run.preview, "pages", "readerComments"), checkpoint };
 }
 
 // One bounded row at a time: an owner may retain many 20 MB source previews.
@@ -177,16 +191,39 @@ registerContactReference({
   },
 });
 
+async function ownedSourceKeys(tx: Tx, run: Run): Promise<string[]> {
+  const checkpoint = object(run.checkpoint);
+  const objects = await tx.select({ key: mediaObjects.key }).from(mediaObjects).where(like(mediaObjects.key, `imports/${run.id}/%`));
+  const reserved = z.object({ uploadId: z.uuid(), chunks: z.number().int().positive().max(25) }).safeParse(checkpoint.sourceUpload);
+  const retained = retainedSourceFromRun(run);
+  return [...new Set([...objects.map(item => item.key), ...(reserved.success ? Array.from({ length: reserved.data.chunks }, (_, index) => `imports/${run.id}/${reserved.data.uploadId}/${String(index).padStart(5, "0")}.part`) : []), ...(retained ? retained.chunkDigests.map((_, index) => retainedSourceChunkKey(retained, index)) : [])])];
+}
+const sourceHold = z.object({ exceptionId: z.uuid(), requestId: z.uuid(), uploadId: z.uuid() });
+
 registerContactPrivacySource({
   scope: "imports.readerSources", tables: ["import_runs"], retentionScopes: ["cms.readerComments"], eraseOrder: 10,
+  retain: async (tx, _contactId, context) => {
+    // Opaque files cannot yet attribute ignored reader metadata. Preserve
+    // only the originals present at this held request, never later uploads.
+    for await (const run of runs(tx, true)) {
+      const keys = await ownedSourceKeys(tx, run);
+      const uploadIds = [...new Set(keys.map(key => key.split("/")[2]))].map(id => z.uuid().parse(id));
+      if (!uploadIds.length) continue;
+      const checkpoint = object(run.checkpoint);
+      const holds = sourceHold.array().parse(checkpoint.sourcePrivacyHolds ?? []);
+      for (const uploadId of uploadIds) if (!holds.some(hold => hold.exceptionId === context.exceptionId && hold.uploadId === uploadId)) holds.push({ requestId: context.requestId, exceptionId: context.exceptionId, uploadId });
+      await tx.update(importRuns).set({ checkpoint: { ...checkpoint, sourcePrivacyHolds: holds.map(({ exceptionId, requestId, uploadId }) => ({ exceptionId, requestId, uploadId })) } }).where(eq(importRuns.id, run.id));
+    }
+  },
   exportData: async (tx, contactId) => {
     const matches = await subject(tx, contactId), result: SourceEntry[] = [];
     for await (const run of runs(tx, false)) result.push(...sourceEntries(run).filter(entry => matches(run.id, entry.key, entry.comment)));
     return result;
   },
-  erase: async (tx, contactId) => {
+  erase: async (tx, contactId, context) => {
     const matches = await subject(tx, contactId);
     let affected = 0;
+    const pendingJobs: string[] = [];
     // Publish/commit lock the same run before reading pending comments. Either
     // erasure removes their input, or it deletes their committed comment later
     // in this same privacy transaction; an old snapshot cannot recreate it.
@@ -211,7 +248,24 @@ registerContactPrivacySource({
         await tx.update(importRuns).set({ preview, checkpoint }).where(eq(importRuns.id, run.id));
         affected += removed;
       }
+      // An opaque original cannot yet prove which reader metadata it contains. Its ordinary
+      // private upload window may finish, but no erasure receipt may claim
+      // completion before the original chunks are confirmed gone. Article,
+      // page and media ownership remain untouched.
+      // Historical generic audit inputs held another raw source copy.
+      // Preserve the immutable caller/action/subject and non-content fields.
+      await tx.update(auditLog).set({ diff: sql`${auditLog.diff} - 'payload' - 'preview' - 'pages' - 'prefix' - 'robotsTxt' - 'report'` }).where(and(
+        eq(auditLog.subjectType, "import_run"), eq(auditLog.subjectId, run.id),
+        inArray(auditLog.action, ["imports.previewFromSource", "imports.preview", "imports.applyCrawl", "imports.applyUploadedPreview", "imports.claimSourceChunk"]),
+      ));
+      const keys = await ownedSourceKeys(tx, run);
+      for (let offset = 0; offset < keys.length; offset += 25) {
+        if (!context.service) throw new ServiceError("internal", "Source-object erasure requires the real privacy service context.");
+        const originalJobId = randomUUID();
+        const queued = await context.service.queueJob(IMPORT_SOURCE_ERASURE_JOB, { requestId: context.requestId, originalJobId, keys: keys.slice(offset, offset + 25) }, { id: originalJobId });
+        pendingJobs.push(queued.id);
+      }
     }
-    return { affected };
+    return { affected, pendingJobs };
   },
 });

@@ -435,6 +435,7 @@ export const startImport = defineService({
 
 export const previewImport = defineService({
   name: "imports.preview",
+  auditInputFields: ["id"],
   summary: "Record a staged preview for an import run.",
   kind: "mutation",
   permission: "scoped",
@@ -1597,6 +1598,7 @@ export function stageImportSource(kind: string, payload: string, origin: string,
 
 export const previewFromSource = defineService({
   name: "imports.previewFromSource",
+  auditInputFields: ["id"],
   summary: "Parse a WordPress or generic-site payload into a staged preview.",
   kind: "mutation",
   permission: "scoped",
@@ -1671,6 +1673,7 @@ const crawlSource = defineService({
 
 const applyCrawl = defineService({
   name: "imports.applyCrawl",
+  auditInputFields: ["id", "revision", "counts"],
   orchestratedBy: "imports.previewFromUrl",
   summary: "Stage discovery only while the source run still matches its read snapshot.",
   kind: "mutation",

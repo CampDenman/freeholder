@@ -782,3 +782,25 @@ and the production scrub passed 19,423 files / 237,159,757 bytes. A separate
 actual follow-up reproduced a completed erasure receipt with reader details
 still in an opaque original WXR object. The parsed-cache repair does not cover
 that provider acknowledgement; raw-object work remains required before sign-off.
+
+## Raw source and reader audit follow-up (C2.29/C3.22/C11.10)
+
+Actual local before-failing controls reproduced completed erasure with reader
+bytes still in an opaque WXR, reader details retained in import/comment audit
+inputs, a new source upload after the erasure snapshot, and a direct imported
+comment after its scope. Review `src/core/import/source-erasure.ts`, the
+`imports.readerSources` hook and core job, shared/read identity guards, explicit
+`ServiceDef.auditInputFields`, CMS comment audit cleanup and the matching
+regressions. Provider deletion/absence, active windows, unresolved per-attempt
+writers, legal holds and redrive must remain truthful in the receipt. Typed
+input projection cannot affect original actor/action/subject authorization or
+remove global secret redaction. This is agent source evidence, not Tony's
+independent sign-off or actual-provider acceptance.
+
+Retained-original qualification also reproduced three ordinary-sweep failures
+that deleted explicitly held bytes and a source-only key learning the internal
+hold/request IDs. The source retain callback now records only current upload IDs;
+the keeper checks the actual still-active exception before expiry/terminal
+cleanup. Public import projections remove those private bindings. Review the
+hold, replacement, rollback, removal and exact-key DTO controls alongside provider
+acknowledgement; neither a clock nor lookup absence settles an unresolved PUT.

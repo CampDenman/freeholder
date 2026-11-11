@@ -228,8 +228,8 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     let publishing: ReturnType<typeof publishImport.call> | undefined;
     try {
       if (point === "before") {
-        await publishImport.call({ id: run.id }, OWNER);
-        expect(await db().select().from(blogReaderComments).where(eq(blogReaderComments.body, COMMENT))).toHaveLength(1);
+        await expect(publishImport.call({ id: run.id }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+        expect(await db().select().from(blogReaderComments).where(eq(blogReaderComments.body, COMMENT))).toHaveLength(0);
       } else {
         publishing = publishImport.call({ id: run.id }, OWNER);
         const deadline = Date.now() + 5000;
@@ -244,6 +244,7 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     } finally { release(); }
     await erasing;
     if (publishing) await publishing;
+    else await publishImport.call({ id: run.id }, OWNER);
     expect((await savedRun(run.id)).status).toBe("published");
     expect(JSON.stringify(await savedRun(run.id))).not.toContain(COMMENT);
     expect(await db().select().from(blogReaderComments).where(eq(blogReaderComments.body, COMMENT))).toHaveLength(0);
@@ -256,8 +257,13 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     const bytes = new TextEncoder().encode(SOURCE);
     const upload = await beginSourceUpload.call({ id: run.id, filename: "reader-source.xml", bytes: bytes.byteLength }, OWNER);
     await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER);
-    await erase(reader.contact.id);
+    const request = await createDataRequest.call({ contactId: reader.contact.id, request: { kind: "erasure" } }, OWNER);
+    await verifyDataRequest.call({ id: request.id, method: "Synthetic source identity verification" }, OWNER);
+    const erased = await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER);
+    expect(erased.request.status).toBe("in_progress");
     await expect(previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER)).rejects.toThrow(/erasure.*source|source.*erasure/i);
+    // The typed refusal releases this invalid source; only the durable
+    // worker's confirmed removal may complete its still-pending receipt.
     expect(await storage().get(`imports/${run.id}/${upload.uploadId}/00000.part`)).toBeUndefined();
     expect(JSON.stringify(await savedRun(run.id))).not.toContain(COMMENT);
   });
@@ -351,27 +357,16 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     } });
     const merging = mergeContacts.call({ survivingId: survivor.contact.id, duplicateId: duplicate.contact.id }, OWNER);
     void merging.catch(() => undefined);
-    let staging: ReturnType<typeof previewFromSource.call> | undefined;
-    let runId: string | undefined;
+    let runId = "";
     try {
       await captured;
       const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
       runId = run.id;
-      staging = previewFromSource.call({ id: run.id, payload: SOURCE }, OWNER);
-      void staging.catch(() => undefined);
-      const deadline = Date.now() + 5000;
-      let waitingForContact = false;
-      while (Date.now() < deadline) {
-        const rows = await db().execute(sql`select pid from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and query like '%contacts%'`);
-        if (rows.length) { waitingForContact = true; break; }
-        await new Promise(resolve => setTimeout(resolve, 10));
-      }
-      expect(waitingForContact).toBe(true);
-    } finally { release(); registerContactReference(original); }
-    const [merged, staged] = await Promise.allSettled([merging, staging]);
-    expect(merged).toMatchObject({ status: "rejected", reason: { code: "conflict" } });
-    expect(staged).toMatchObject({ status: "fulfilled", value: { status: "previewed" } });
-    await mergeContacts.call({ survivingId: survivor.contact.id, duplicateId: duplicate.contact.id }, OWNER);
+      await expect(previewFromSource.call({ id: run.id, payload: SOURCE }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    } finally { release(); registerContactReference(original); await merging; }
+    // The new empty run survives; its owner can stage after the identity
+    // transition. Erasure still recognizes the merged reader's source address.
+    await previewFromSource.call({ id: runId, payload: SOURCE }, OWNER);
     await erase(survivor.contact.id);
     expect(JSON.stringify(await savedRun(runId))).not.toContain(COMMENT);
   });

@@ -372,6 +372,9 @@ export interface ServiceDef<In extends z.ZodType, Out> {
   kind: "query" | "mutation";
   permission: Permission;
   input: In;
+  /** Keep raw files/private text out of audit inputs; identity/action/subject
+   * still come from the same authorized mutation and cannot be projected. */
+  auditInputFields?: readonly (keyof z.output<In> & string)[];
   /**
    * C4.03: how `agents.proposeWrite` treats this mutation. Undeclared
    * mutations fail closed — they queue for owner approval whatever the
@@ -816,7 +819,9 @@ export function defineService<In extends z.ZodType, Out>(
             action: def.name,
             subjectType: subject?.subjectType,
             subjectId: subject?.subjectId,
-            diff: redact(parsedInput) ?? {},
+            diff: redact(def.auditInputFields
+              ? Object.fromEntries(def.auditInputFields.filter(key => Object.hasOwn(parsedInput as object, key)).map(key => [key, (parsedInput as Record<string, unknown>)[key]]))
+              : parsedInput) ?? {},
           });
         }
         return out;

@@ -61,6 +61,7 @@ const steps = [
       "tests/core/outbound-boundaries.test.ts",
       "tests/core/http-body-boundary.test.ts",
       "tests/core/runtime-shutdown.test.ts",
+      "tests/core/runtime-balanced-sequencer.test.ts",
       "tests/core/long-running-service-boundary.test.ts",
       "tests/core/colour-literals.test.ts",
       "tests/core/lint-gates.test.ts",

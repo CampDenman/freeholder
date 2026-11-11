@@ -4970,6 +4970,17 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   their scope. Evidence and limits: `deploy/import-reader-privacy.md`,
   `tests/core/import-source-privacy.test.ts`. Independent review and actual
   source-specific acceptance remain open.)*
+  *(Raw-source/audit follow-up: actual service regressions reproduced a
+  completed erasure receipt with private WXR bytes, retained source/comment
+  audit input, a new upload after the erasure snapshot and a direct comment
+  after its scope. Durable source cleanup now keeps the receipt pending until
+  actual private deletion is confirmed; unresolved writes are never inferred
+  cancelled. Shared identity guards fence snapshot races, and explicit audit
+  input projection plus historical content scrubbing preserve operation
+  metadata without retaining raw readers. Evidence:
+  `deploy/import-source-storage.md`, `tests/core/import-raw-source-erasure.test.ts`
+  and `tests/core/service-audit-input-fields.test.ts`. Qualification and actual
+  provider/independent review remain open.)*
   *(Implementation and qualification in progress 2026-11-07; owner: CMS/importer.
   Reproductions: a live replacement exposed imported post metadata before
   cutover; direct public metadata/comment queries could bypass a registered
@@ -11647,6 +11658,12 @@ schema they inherit reads as a designed thing rather than an excavation.
   adapter errors, idempotent duplicates, preserved ciphertext and automatic
   update rollback. **F09** the suite is the operational story. **F12** the
   vitest chain. Live provider accounts are not claimed.)*
+  *(CI capacity qualification 2026-11-11: the expanded privacy/import tests
+  crossed the 28-shard prediction by 547 ms. Thirty-two isolated databases now
+  retain the same 25-minute deadline, seven-times degraded-runner allowance,
+  complete unique coverage and stable required `checks`/DCO gates. The exact
+  topology contract is included in local fast gates; evidence and unchanged
+  constraints are recorded in `deploy/ci-release-gate.md`.)*
 - [x] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.

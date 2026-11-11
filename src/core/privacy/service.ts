@@ -143,6 +143,8 @@ export interface ContactPrivacySource {
    */
   eraseOrder?: number;
   exportData: (tx: Tx, contactId: string) => Promise<unknown>;
+  /** Protect existing external/temporary copies when an explicit hold skips erase. */
+  retain?: (tx: Tx, contactId: string, context: { requestId: string; exceptionId: string; service?: ServiceContext }) => Promise<void>;
   erase: (
     tx: Tx,
     contactId: string,
@@ -1466,6 +1468,7 @@ async function eraseContact(
   for (const source of ordered) {
     const exception = [source.scope, ...(source.retentionScopes ?? [])].map(scope => byScope.get(scope)).find(Boolean);
     if (exception) {
+      await source.retain?.(tx, request.contactId, { requestId: request.id, exceptionId: exception.id, service: ctx });
       outcomes.push({
         scope: source.scope,
         outcome: "retained",

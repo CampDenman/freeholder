@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // C3.22: immutable source identity and bounded private reads, never public keys.
 import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
+import { privacyRetentionExceptions } from "@/core/privacy/schema";
 import { importRuns } from "@/core/plugins/schema";
 import { insideServiceTransaction } from "@/core/plugins/context";
 import { ServiceError } from "@/core/service";
@@ -82,6 +83,15 @@ registerPendingObjectOwner("imports/", async (key, now) => {
   // cleanup witness until that exact attempt reports an outcome; a clock or
   // object-not-found response cannot prove provider cancellation.
   if (importSourceWrites(run.checkpoint).some(write => write.uploadId === match[2] && key.endsWith(`/${String(write.index).padStart(5, "0")}.part`))) return true;
+  const holds = z.object({ exceptionId: z.uuid(), requestId: z.uuid(), uploadId: z.uuid() }).array().parse(object(run.checkpoint).sourcePrivacyHolds ?? []).filter(hold => hold.uploadId === match[2]);
+  if (holds.length) {
+    const [active] = await db().select({ id: privacyRetentionExceptions.id }).from(privacyRetentionExceptions).where(and(
+      or(...holds.map(hold => and(eq(privacyRetentionExceptions.id, hold.exceptionId), eq(privacyRetentionExceptions.dataRequestId, hold.requestId)))),
+      inArray(privacyRetentionExceptions.scope, ["imports.readerSources", "cms.readerComments"]),
+      or(isNull(privacyRetentionExceptions.expiresAt), gt(privacyRetentionExceptions.expiresAt, now)),
+    )).limit(1);
+    if (active) return true;
+  }
   if (["published", "rolled_back"].includes(run.status)) return false;
   const checkpoint = object(run.checkpoint);
   for (const value of [checkpoint.sourceUpload, checkpoint.retainedSource]) {
