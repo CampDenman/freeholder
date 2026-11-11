@@ -32,7 +32,7 @@ describe.runIf(hasDatabase)("exact import operation scopes (C3.22)", () => {
   });
 
   it("commits through an exact verb while retaining independent CMS permissions", async () => {
-    const run = await startImport.call({ origin: "https://source.example", kind: "html" }, OWNER);
+    const run = await startImport.call({ origin: "https://source.example/exact-commit", kind: "html" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: "<title>Exact commit</title><h1>Exact commit</h1><p>Fixture body</p>" }, OWNER);
     expect((await failure(commitImport.call({ id: run.id }, key("imports.commit")))).code).toBe("permission");
     // CMS grants are a separate declared business permission, never inferred
@@ -43,7 +43,7 @@ describe.runIf(hasDatabase)("exact import operation scopes (C3.22)", () => {
     const [entry] = await db().select().from(auditLog).where(eq(auditLog.action, "imports.commitApply"));
     expect(entry).toMatchObject({ actor: "agent:exact-import", subjectId: run.id });
     const owned = result.checkpoint as { createdPageIds: string[] };
-    expect(await db().select().from(pages).where(eq(pages.id, owned.createdPageIds[0]!))).toHaveLength(1);
+    expect(await db().select().from(pages).where(eq(pages.id, owned.createdPageIds[0]!))).toMatchObject([{ slug: "exact-commit", title: "Exact commit", status: "draft" }]);
     expect(actor).toMatchObject({ scopes: ["imports.commit", "cms.*", "seo.*"] });
   });
 });

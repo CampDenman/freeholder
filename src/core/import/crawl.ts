@@ -4,7 +4,9 @@
 import { parse, type DefaultTreeAdapterTypes } from "parse5";
 import { requestPinnedBytes } from "@/core/http/pinned-download";
 import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS, enforceImporterLimits, robotsDisallow, type ImporterLimits } from "./contract";
-import { parseRssOrAtom, parseSemanticHtml, parseSitemap, type ParsedPage } from "./parsers";
+import { parseSitemap, type ParsedPage } from "./parsers";
+import { parseGenericHtml, type GenericPage } from "./generic-plan";
+import { parseGenericFeed } from "./generic-feed";
 
 export type CrawlKind = "wordpress-rest" | "sitemap" | "rss" | "atom" | "html";
 export type CrawlResult = {
@@ -12,6 +14,7 @@ export type CrawlResult = {
   sourceUrl: string;
   wordpress?: unknown[];
   pages: ParsedPage[];
+  robotsTxt: string;
   report: { requests: number; bytes: number; blocked: string[] };
 };
 
@@ -51,7 +54,7 @@ export async function crawlPublicSource(kind: CrawlKind, raw: string, dependenci
   const download = dependencies.download ?? requestPinnedBytes;
   const pause = dependencies.pause ?? (milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)));
   const report: CrawlResult["report"] = { requests: 0, bytes: 0, blocked: [] };
-  const result: CrawlResult = { kind, sourceUrl: start.href, pages: [], report };
+  const result: CrawlResult = { kind, sourceUrl: start.href, pages: [], robotsTxt: "", report };
   let robots = "";
   const deadline = Date.now() + 10 * 60_000;
   const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -82,6 +85,7 @@ export async function crawlPublicSource(kind: CrawlKind, raw: string, dependenci
   };
   const robotsResult = await read(new URL("/robots.txt", start), { robots: true, allowNotFound: true });
   robots = robotsResult?.text ?? "";
+  result.robotsTxt = robots;
   if (kind === "wordpress-rest") {
     const rows: unknown[] = [];
     let totalRecords = 0;
@@ -126,6 +130,7 @@ export async function crawlPublicSource(kind: CrawlKind, raw: string, dependenci
     return result;
   }
   const seen = new Set<string>();
+  const feedEntries = new Map<string, GenericPage>();
   const queue: Array<{ url: string; depth: number; kind: "sitemap" | "html" | "rss" | "atom" }> = [{ url: start.href, depth: 0, kind }];
   const scheduled = new Set([start.href]);
   const schedule = (url: URL, depth: number, targetKind: "sitemap" | "html" | "rss" | "atom") => {
@@ -146,9 +151,14 @@ export async function crawlPublicSource(kind: CrawlKind, raw: string, dependenci
       const index = /<sitemapindex[\s>]/i.test(response.text);
       for (const entry of parseSitemap(response.text)) schedule(sameOrigin(entry.url, start.origin), index ? item.depth + 1 : item.depth, index ? "sitemap" : "html");
     } else if (item.kind === "rss" || item.kind === "atom") {
-      for (const entry of parseRssOrAtom(response.text)) schedule(sameOrigin(entry.url, start.origin), item.depth, "html");
+      for (const entry of parseGenericFeed(response.text, target.href)) {
+        const url = sameOrigin(entry.url, start.origin);
+        feedEntries.set(url.href, entry);
+        schedule(url, item.depth, "html");
+      }
     } else {
-      result.pages.push(parseSemanticHtml(response.text, target.href));
+      const page = parseGenericHtml(response.text, target.href), entry = feedEntries.get(target.href);
+      result.pages.push(entry ? { ...page, kind: "post", publishedAt: page.publishedAt ?? entry.publishedAt, status: page.status ?? entry.status } as GenericPage : page);
       enforceImporterLimits({ pages: result.pages.length, bytes: report.bytes, depth: item.depth }, limits);
       if (kind === "html" && item.depth < limits.maxDepth) for (const href of links(response.text, target.href)) {
         let link: URL;

@@ -72,7 +72,7 @@ describe.runIf(hasDatabase)("public-source import studio (C3.22)", () => {
   });
 
   it("cannot restage or remap committed, reconciled, published or rolled-back runs", async () => {
-    const run = await startImport.call({ origin: "https://source.example", kind: "html" }, OWNER);
+    const run = await startImport.call({ origin: "https://source.example/existing.html", kind: "html" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: "<h1>Existing</h1><p>Owned body</p>" }, OWNER);
     await commitImport.call({ id: run.id }, OWNER);
     for (const status of ["committed", "reconciled", "published", "rolled_back"] as const) {
@@ -92,7 +92,7 @@ describe.runIf(hasDatabase)("public-source import studio (C3.22)", () => {
 
 
   it("preserves owned page rollback evidence when a recovery state is marked failed", async () => {
-    const run = await startImport.call({ origin: "https://source.example", kind: "html" }, OWNER);
+    const run = await startImport.call({ origin: "https://source.example/owned-page.html", kind: "html" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: "<title>Owned page</title><main><h1>Owned page</h1><p>Keep this recovery ledger.</p></main>" }, OWNER);
     const committed = await commitImport.call({ id: run.id }, OWNER);
     const checkpoint = committed.checkpoint as { createdPageIds: string[] };

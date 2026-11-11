@@ -29,11 +29,12 @@ import {
 import { importRuns } from "@/core/plugins/schema";
 import { getPinnedBytes, PinnedDownloadError } from "@/core/http/pinned-download";
 import { uploadAsset } from "@/core/media/service";
+import { importedMediaFilename } from "@/core/media/validation";
 import { mergeNavMenu, NAV_SECTION_KEYS } from "@/modules/cms/chrome-nav";
 import { navigationLinkSchema } from "@/modules/cms/navigation-schema";
 import { removeNavigation, type NavigationLink } from "@/modules/cms/navigation-tree";
 import type { BlockNode } from "@/modules/cms/blocks/types";
-import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS } from "./contract";
+import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS, robotsDisallow } from "./contract";
 import { crawlPublicSource, type CrawlKind } from "./crawl";
 import { assertSourceStageable, assertNoPendingSourceUpload } from "./source-lifecycle";
 import { assertLegacyReaderSafety, bindReaderSources, publicImportRun, stripReaderCopies } from "./privacy";
@@ -42,12 +43,12 @@ import { archiveBodyToBlocks, type ArchiveMediaMatch } from "./archive-content";
 import { archiveRangeSource } from "./archive-source";
 import { restoreStaticArchive } from "./archive-commit";
 import { safeImportHref } from "./content-links";
+import { genericPreview, genericPlanSchema, parseGenericHtml, stageGenericPages } from "./generic-plan";
+import { parseGenericFeed } from "./generic-feed";
 import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
 import importMediaReceiptServices, { bindImportMediaBytes, claimImportMedia } from "./media-receipts";
 import {
   discoverFromPublicOrigin,
-  parseRssOrAtom,
-  parseSemanticHtml,
   parseSitemap,
   type ParsedPage,
 } from "./parsers";
@@ -75,7 +76,7 @@ type PreviewPage = {
   title: string;
   body: string;
   kind: "page" | "post";
-  /** WordPress only: a draft, private or scheduled item stays a draft at publish. */
+  /** Unpublished or scheduled source content stays a draft at publish. */
   status?: "publish" | "draft";
   publishedAt?: string;
   modifiedAt?: string;
@@ -424,7 +425,7 @@ export const startImport = defineService({
       );
     }
     if (input.kind === "archive" && (url.search || url.hash)) throw new ServiceError("validation", "An archive source URL cannot contain a query or fragment.");
-    const origin = input.kind === "archive" ? url.href : url.origin;
+    const origin = input.kind === "archive" || ["html", "rss", "atom", "sitemap"].includes(input.kind) && (url.pathname !== "/" || url.search) ? url.href : url.origin;
     const [row] = await ctx.tx
       .insert(importRuns)
       .values({
@@ -509,7 +510,7 @@ const commitSource = defineService({
   permission: "scoped",
   external: false,
   input: z.object({ id: z.string().uuid() }),
-  output: z.object({ media: z.array(mediaToFetch), delayMs: z.number().int().nonnegative(), previewDigest: z.string(), archive: archiveCommitSourceSchema.optional(), completed: runRow.optional() }),
+  output: z.object({ media: z.array(mediaToFetch), delayMs: z.number().int().nonnegative(), previewDigest: z.string(), archive: archiveCommitSourceSchema.optional(), generic: genericPlanSchema.optional(), completed: runRow.optional() }),
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
@@ -520,6 +521,8 @@ const commitSource = defineService({
       throw new ServiceError("conflict", "Preview the import before committing it.");
     }
     const wordpress = wordpressPreview(run.preview);
+    const generic = genericPreview(run.preview);
+    if (generic?.report.sourceWarnings.some(warning => warning.code === "discovery-only")) throw new ServiceError("validation", "This sitemap contains addresses without their page content. Read its public source URL before committing these pages.");
     const archive = archiveCommitSource(run);
     if (run.kind === "archive" && !archive) throw new ServiceError("conflict", "Upload and preview a ZIP before committing this archive import.");
     const done = new Set(
@@ -530,9 +533,10 @@ const commitSource = defineService({
     return {
       previewDigest,
       archive,
-      media: (wordpress?.media ?? [])
+      generic: generic ?? undefined,
+      media: (generic?.media ?? wordpress?.media ?? [])
         .filter((media) => !done.has(media.key))
-        .map(({ key, sourceUrl, filename, altText, wpId }) => ({ key, sourceUrl, filename, altText, wpId })),
+        .map(media => ({ key: media.key, sourceUrl: media.sourceUrl, filename: media.filename, altText: media.altText, ...("wpId" in media && typeof media.wpId === "string" ? { wpId: media.wpId } : {}) })),
       delayMs: Math.ceil(1000 / DEFAULT_IMPORTER_LIMITS.requestsPerSecond),
     };
   },
@@ -567,7 +571,7 @@ const recordImportMedia = defineService({
       throw new ServiceError("conflict", "This import is no longer waiting to be committed.");
     }
     if (archivePreviewDigest(run.preview) !== input.previewDigest) throw new ServiceError("conflict", "The source preview changed while this file was being fetched.");
-    const planned = (staticArchivePlan(run.preview)?.media ?? wordpressPreview(run.preview)?.media)?.find((media) => media.key === input.key);
+    const planned = (staticArchivePlan(run.preview)?.media ?? genericPreview(run.preview)?.media ?? wordpressPreview(run.preview)?.media)?.find((media) => media.key === input.key);
     if (!planned) throw new ServiceError("validation", "That file is not part of this import.");
     const allRecords = mediaRecordsFrom(run.checkpoint);
     if (allRecords.some(record => record.key === input.key && record.assetId)) return { ok: true as const };
@@ -612,10 +616,12 @@ async function fetchImportMedia(
   item: z.infer<typeof mediaToFetch>,
   actor: Actor,
   claim: { id: string; previewDigest: string; token: string },
+  generic?: { origin: string; robotsTxt: string },
 ): Promise<{ assetId: string } | { error: string }> {
   let uploadStarted = false;
   try {
-    assertPublicHttpUrl(item.sourceUrl);
+    const target = assertPublicHttpUrl(item.sourceUrl);
+    if (generic && (target.origin !== generic.origin || robotsDisallow(generic.robotsTxt, `${target.pathname}${target.search}`))) return { error: "The source origin or its current robots policy blocks this file." };
     const downloaded = await getPinnedBytes(item.sourceUrl, {
       maxBytes: WORDPRESS_MEDIA_LIMITS.maxBytesPerFile,
       timeoutMs: WORDPRESS_MEDIA_LIMITS.timeoutMs,
@@ -630,7 +636,7 @@ async function fetchImportMedia(
     uploadStarted = true;
     const asset = await uploadAsset.call(
       {
-        filename: item.filename,
+        filename: generic ? importedMediaFilename(item.filename, downloaded.bytes) : item.filename,
         // The bytes decide the type; a server's Content-Type is not trusted.
         contentType: "application/octet-stream",
         bytes: downloaded.bytes,
@@ -639,7 +645,7 @@ async function fetchImportMedia(
         source: "import",
         provenance: {
           ...(item.sourceUrl.length <= 2_048 ? { sourceUrl: item.sourceUrl } : {}),
-          note: item.wpId ? `WordPress attachment ${item.wpId}` : "WordPress import",
+          note: item.wpId ? `WordPress attachment ${item.wpId}` : generic ? "Generic site import" : "WordPress import",
         },
         metadata: {},
       },
@@ -718,8 +724,10 @@ const commitApply = defineService({
     const staged = previewPages(before.preview);
     const wordpress = wordpressPreview(before.preview);
     const archive = staticArchivePlan(before.preview);
+    const generic = genericPreview(before.preview);
+    const nonWordpress = archive ?? generic;
     if (archive) archiveCommitSource(before);
-    const typedContent = Boolean(wordpress || archive);
+    const typedContent = Boolean(wordpress || nonWordpress);
     const decisions = conflictDecisions(before.conflicts);
     const existing = listedCmsPages(await ctx.call(getService("cms.listPages"), {}));
     const bySlug = new Map(existing.map((page) => [page.slug, page]));
@@ -738,7 +746,7 @@ const commitApply = defineService({
         slug = cmsSlug(decision.renamedSlug?.trim() || `${page.slug}-imported`);
       }
       if (bySlug.has(slug) && decision?.resolution === "replace") {
-        if (wordpress && page.status === "draft" && bySlug.get(slug)!.status === "published") throw new ServiceError("conflict", "A WordPress draft cannot replace a live page. Rename the imported draft or keep the live page.");
+        if ((wordpress || generic) && page.status === "draft" && bySlug.get(slug)!.status === "published") throw new ServiceError("conflict", wordpress ? "A WordPress draft cannot replace a live page. Rename the imported draft or keep the live page." : "An unpublished source item cannot replace a live page. Rename the imported draft or keep the live page.");
         placements.push({ page, slug, action: "replace", current: bySlug.get(slug)! });
         continue;
       }
@@ -811,16 +819,16 @@ const commitApply = defineService({
       records.filter((record) => record.assetId).map((record) => [record.key, record.assetId!]),
     );
     const archiveAssets = new Map<string, ArchiveMediaMatch>();
-    if (archive) {
-      for (const media of archive.media) {
+    if (nonWordpress) {
+      for (const media of nonWordpress.media) {
         const assetId = assetByKey.get(media.key);
-        if (!assetId) throw new ServiceError("conflict", "An archive file has not been imported. Retry the commit before publishing pages.");
+        if (!assetId) throw new ServiceError("conflict", "A source file has not been imported. Retry the commit before publishing pages.");
         const asset = z.object({ id: uuid, kind: z.enum(["image", "video", "audio", "doc"]), filename: z.string(), status: z.string() }).parse(await ctx.call(getService("media.get"), { id: assetId }));
-        if (asset.status !== "ready") throw new ServiceError("conflict", "An archive file is not ready. Resolve its media warning before committing the pages.");
+        if (asset.status !== "ready") throw new ServiceError("conflict", "A source file is not ready. Resolve its media warning before committing the pages.");
         archiveAssets.set(asset.id, { assetId: asset.id, kind: asset.kind, filename: asset.filename });
       }
     }
-    const plannedMedia = archive?.media ?? wordpress?.media ?? [];
+    const plannedMedia = nonWordpress?.media ?? wordpress?.media ?? [];
     const keyByAlias = new Map<string, string>();
     const keyByWpId = new Map<string, string>();
     for (const media of plannedMedia) {
@@ -828,14 +836,15 @@ const commitApply = defineService({
       if ("wpId" in media && typeof media.wpId === "string") keyByWpId.set(media.wpId, media.key);
     }
     const altByKey = new Map(plannedMedia.map((media) => [media.key, media.altText]));
-    const hosts = archive?.site.hosts ?? wordpress?.site.hosts ?? [];
-    const basePath = archive?.site.basePath ?? wordpress?.site.basePath ?? "";
+    const hosts = nonWordpress?.site.hosts ?? wordpress?.site.hosts ?? [];
+    const basePath = nonWordpress?.site.basePath ?? wordpress?.site.basePath ?? "";
     const resolveMediaKey = (src: string, wpId?: string): string | undefined => {
       if (wpId && keyByWpId.has(wpId)) return keyByWpId.get(wpId);
       let key: string | undefined;
       try {
         const parsed = new URL(src, `https://${hosts[0] ?? "invalid.invalid"}/`);
-        if (archive && (parsed.username || parsed.password || parsed.origin !== new URL(archive.site.url).origin)) return undefined;
+        if (nonWordpress && (parsed.username || parsed.password || parsed.origin !== new URL(nonWordpress.site.url).origin)) return undefined;
+        if (generic) { parsed.hash = ""; return keyByAlias.get(parsed.href); }
         const base = `${parsed.host.toLowerCase()}${parsed.pathname}`;
         if (archive) return keyByAlias.get(base);
         const sized = base.replace(/-\d+x\d+(\.[a-z0-9]+)$/i, "$1");
@@ -850,37 +859,37 @@ const commitApply = defineService({
     const resolveImage = (src: string, wpId?: string): ImageMatch | null => {
       const key = resolveMediaKey(src, wpId);
       const assetId = key ? assetByKey.get(key) : undefined;
-      if (archive && assetId && archiveAssets.get(assetId)?.kind !== "image") return null;
+      if (nonWordpress && assetId && archiveAssets.get(assetId)?.kind !== "image") return null;
       return assetId ? { assetId, alt: key ? altByKey.get(key) : undefined } : null;
     };
     const linkMap = new Map<string, string>(archiveAliases.map(alias => [alias.fromPath, alias.toPath]));
     for (const { page, slug } of placements) {
       const target = slug;
       if (page.redirectFrom) linkMap.set(page.redirectFrom, target);
-      const path = archive ? archiveSourcePath(page.url, archive.site) : wordpressPath(page.url, hosts, basePath);
+      const path = nonWordpress ? archiveSourcePath(page.url, nonWordpress.site) : wordpressPath(page.url, hosts, basePath);
       if (path !== null) linkMap.set(path, target);
     }
     const rewriteHref = (href: string): string => {
       if (!typedContent) return href;
-      if (!safeImportHref(href, archive?.site.url ?? wordpress?.site.url ?? "https://invalid.invalid/")) return "";
-      if (archive) {
+      if (!safeImportHref(href, nonWordpress?.site.url ?? wordpress?.site.url ?? "https://invalid.invalid/")) return "";
+      if (nonWordpress) {
         const mediaKey = resolveMediaKey(href);
         const assetId = mediaKey ? assetByKey.get(mediaKey) : undefined;
         if (assetId) return `/media/download/${assetId}`;
       }
-      const path = archive ? archiveSourcePath(href, archive.site) : wordpressPath(href, hosts, basePath);
+      const path = nonWordpress ? archiveSourcePath(href, nonWordpress.site) : wordpressPath(href, hosts, basePath);
       if (path === null) return href;
       let hash = "";
       let search = "";
       try {
-        const url = new URL(href, archive?.site.url ?? `https://${hosts[0] ?? "invalid.invalid"}/`);
+        const url = new URL(href, nonWordpress?.site.url ?? `https://${hosts[0] ?? "invalid.invalid"}/`);
         hash = url.hash;
-        if (archive) search = url.search;
+        if (nonWordpress) search = url.search;
       } catch {
         /* keep no fragment */
       }
       const mapped = linkMap.get(path);
-      if (archive && mapped === undefined) return href;
+      if (nonWordpress && mapped === undefined) return href;
       return `/${mapped ?? path}${search}${hash}`;
     };
     const hasPosts = written.some((placement) => placement.page.kind === "post");
@@ -916,7 +925,7 @@ const commitApply = defineService({
           resolveImage,
           rewriteHref,
         };
-        const converted = archive ? archiveBodyToBlocks(page.body, {
+        const converted = nonWordpress ? archiveBodyToBlocks(page.body, {
           ...context,
           resolveMedia(src) {
             const key = resolveMediaKey(src), assetId = key ? assetByKey.get(key) : undefined;
@@ -924,7 +933,7 @@ const commitApply = defineService({
           },
         }) : wordpressBodyToBlocks(page.body, context);
         if (converted.overBudget) {
-          if (archive) throw new ServiceError("validation", converted.overBudget);
+          if (nonWordpress) throw new ServiceError("validation", converted.overBudget);
           skippedPages.push({ url: page.url, slug, reason: converted.overBudget });
           continue;
         }
@@ -966,7 +975,7 @@ const commitApply = defineService({
         id = created.id;
       }
       if (page.status === "draft") draftPageIds.push(id);
-      if (wordpress && placement.action === "replace") {
+      if ((wordpress || generic) && placement.action === "replace") {
         postSnapshots.push(await ctx.call(getService("cms.getPostMeta"), { pageId: id }));
         if (page.kind !== "post") {
           const meta = { pageId: id, isPost: false };
@@ -974,7 +983,7 @@ const commitApply = defineService({
           else await ctx.call(getService("cms.setPostMeta"), meta);
         }
       }
-      if (wordpress && page.kind === "post") {
+      if ((wordpress || generic) && page.kind === "post") {
         const meta = {
           pageId: id, isPost: true, authorId: page.author ? authorIds.get(page.author) ?? null : null,
           categoryIds: (page.categorySlugs ?? []).flatMap(slug => categoryIds.has(slug) ? [categoryIds.get(slug)!] : []),
@@ -996,7 +1005,7 @@ const commitApply = defineService({
 
     // The listing the posts belong to. Without it they exist but nothing lists them.
     let blogIndexPageId: string | undefined;
-    if (wordpress && posts > 0 && !used.has("blog") && !bySlug.has("blog")) {
+    if ((wordpress || generic) && posts > 0 && !used.has("blog") && !bySlug.has("blog")) {
       const created = createdCmsPage(
         await ctx.call(getService("cms.createPage"), {
           slug: "blog",
@@ -1129,6 +1138,10 @@ const commitApply = defineService({
           unresolvedImages: [...new Set([...archive.report.unresolvedImages, ...unresolvedImages])].slice(0, REPORT_LIST_MAX),
           mediaFailures: mediaFailures.slice(0, REPORT_LIST_MAX).map(({ sourceUrl, error }) => ({ sourceUrl, error })),
           droppedEmbeds, flattenedHtml,
+        } : generic ? {
+          ...generic.report, sourceFormat: "generic-site", skippedPages, skippedRedirects,
+          unresolvedImages: [...new Set([...generic.report.unresolvedMedia, ...unresolvedImages])].slice(0, REPORT_LIST_MAX),
+          mediaFailures: mediaFailures.slice(0, REPORT_LIST_MAX).map(({ sourceUrl, error }) => ({ sourceUrl, error })), droppedEmbeds, flattenedHtml,
         } : undefined;
     const counts = wordpress
       ? {
@@ -1148,6 +1161,7 @@ const commitApply = defineService({
         }
       : archive
         ? { pages: createdPageIds.length + replacedPages.length, media: mediaImported, mediaFailed: mediaFailures.length, redirects: redirectIds.length, skippedPages: skippedPages.length, filesNotImported: archive.report.ignored.length, mediaWarnings: new Set([...archive.report.unresolvedImages, ...unresolvedImages]).size, elementsNotImported: droppedEmbeds }
+        : generic ? { pages: createdPageIds.length + replacedPages.length, posts, media: mediaImported, mediaFailed: mediaFailures.length, redirects: redirectIds.length, skippedPages: skippedPages.length, mediaWarnings: new Set([...generic.report.unresolvedMedia, ...unresolvedImages]).size, sourceWarnings: generic.report.sourceWarnings.length, elementsNotImported: droppedEmbeds }
         : { pages: createdPageIds.length + replacedPages.length, media: 0, redirects: 0 };
 
     const checkpoint = withImportPages(before.checkpoint, createdPageIds, replacedPages);
@@ -1192,7 +1206,7 @@ const commitApply = defineService({
 export const commitImport = defineOrchestratedService({
   name: "imports.commit",
   summary:
-    "Write previewed import pages into the CMS as drafts, fetching WordPress media first. Publish stays a later step.",
+    "Write previewed import pages into the CMS as drafts, fetching source media first. Publish stays a later step.",
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
@@ -1200,6 +1214,13 @@ export const commitImport = defineOrchestratedService({
   handler: async (input, actor) => {
     const source = await commitSource.call({ id: input.id }, actor);
     if (source.completed) return publicImportRun(source.completed);
+    let genericPolicy: { origin: string; robotsTxt: string } | undefined;
+    if (source.generic && source.media.length) {
+      const origin = assertPublicHttpUrl(source.generic.site.url).origin;
+      const robots = await getPinnedBytes(new URL("/robots.txt", origin).href, { maxBytes: 512 * 1024, timeoutMs: 30_000, allowLocal: false, headers: { "User-Agent": "Freeholder-Importer/1.0", "Accept-Encoding": "identity", accept: "text/plain" } });
+      if (robots.status !== 404 && (robots.status !== 200 || (robots.contentType ?? "").split(";", 1)[0]!.trim().toLowerCase() !== "text/plain")) throw new ServiceError("conflict", "The source robots policy could not be verified before fetching media.");
+      genericPolicy = { origin, robotsTxt: robots.status === 404 ? "" : new TextDecoder("utf-8", { fatal: true }).decode(robots.bytes) };
+    }
     if (source.archive) {
       const archive = source.archive, completed = new Set(archive.completedKeys);
       if (archive.plan.media.some(item => !completed.has(item.key))) await restoreStaticArchive(
@@ -1221,10 +1242,10 @@ export const commitImport = defineOrchestratedService({
       );
     }
     for (const [index, item] of source.media.entries()) {
-      if (index > 0) await pause(source.delayMs);
+      if (index > 0 || genericPolicy) await pause(source.delayMs);
       const claim = await claimImportMedia.call({ id: input.id, key: item.key, previewDigest: source.previewDigest }, actor);
       if (claim.assetId) continue;
-      const outcome = await fetchImportMedia(item, actor, { id: input.id, previewDigest: source.previewDigest, token: claim.token });
+      const outcome = await fetchImportMedia(item, actor, { id: input.id, previewDigest: source.previewDigest, token: claim.token }, genericPolicy);
       if ("error" in outcome) await recordImportMedia.call({ id: input.id, key: item.key, previewDigest: source.previewDigest, claimToken: claim.token, ...outcome }, actor);
     }
     return commitApply.call({ id: input.id }, actor);
@@ -1687,23 +1708,13 @@ export function stageImportSource(kind: string, payload: string, origin: string,
       provenance: { url: page.url, source: "sitemap" },
     }));
   } else if (kind === "rss" || kind === "atom") {
-    parsed = parseRssOrAtom(payload);
+    parsed = parseGenericFeed(payload, origin);
   } else {
-    parsed = [parseSemanticHtml(payload, origin)];
+    parsed = [parseGenericHtml(payload, origin)];
   }
   const discovered = discoverFromPublicOrigin(origin, parsed, robotsTxt);
-  const pages: PreviewPage[] = discovered.pages.map((page) => {
-    const full = parsed.find((candidate) => candidate.url === page.url);
-    const extra = page as { slug?: string };
-    return {
-      url: page.url,
-      slug: extra.slug ?? full?.slug ?? page.title ?? "page",
-      title: page.title ?? full?.title ?? page.url,
-      body: full?.body ?? "",
-      kind: full?.kind ?? (page.kind === "post" ? "post" : "page"),
-    };
-  });
-  return { preview: { pages }, counts: { pages: pages.length } };
+  const allowed = new Set(discovered.pages.map(page => page.url));
+  return stageGenericPages(parsed.filter(page => allowed.has(page.url)), origin, robotsTxt);
 }
 
 export const previewFromSource = defineService({
@@ -1774,9 +1785,10 @@ const crawlSource = defineService({
     if (!run) throw new ServiceError("not_found", "No such import run.");
     assertSourceStageable(run);
     if (!["wordpress-rest", "sitemap", "rss", "atom", "html"].includes(run.kind ?? "")) throw new ServiceError("validation", "Upload this source as an export file instead.");
+    if (!run.origin) throw new ServiceError("conflict", "This import has no approved source origin.");
     let url: URL;
     try { url = assertPublicHttpUrl(input.url); } catch { throw new ServiceError("validation", "Use a public HTTP or HTTPS source URL without credentials."); }
-    if (url.origin !== run.origin) throw new ServiceError("validation", "The source URL must belong to this import's origin.");
+    if (url.origin !== new URL(run.origin).origin) throw new ServiceError("validation", "The source URL must belong to this import's origin.");
     return { id: run.id, revision: sourceRevision(run), kind: run.kind!, origin: run.origin, url: url.href };
   },
 });
@@ -1821,7 +1833,7 @@ export const previewFromUrl = defineOrchestratedService({
       const discovered = await crawlPublicSource(source.kind as CrawlKind, source.url);
       staged = discovered.wordpress
         ? stageWordpressExport(wordpressExportFromRest(discovered.wordpress, source.origin), source.origin)
-        : { preview: { pages: discovered.pages }, counts: { pages: discovered.pages.length } };
+        : stageGenericPages(discovered.pages, source.origin, discovered.robotsTxt);
       staged.counts = { ...staged.counts, crawlBlocked: discovered.report.blocked.length, crawlRequests: discovered.report.requests, crawlBytes: discovered.report.bytes };
       report = { sourceUrl: discovered.sourceUrl, ...discovered.report };
     } catch (error) {

@@ -37,7 +37,7 @@ function snapshot(run: Run, witness: string): void {
   }
 }
 function planned(run: Run, key: string) {
-  const preview = object(run.preview), source = object(preview.sourceFormat === "static-archive" ? preview.archive : preview.wordpress);
+  const preview = object(run.preview), source = object(preview.sourceFormat === "static-archive" ? preview.archive : preview.sourceFormat === "generic-site" ? preview.generic : preview.wordpress);
   const item = z.array(plannedSchema).max(500).parse(source.media ?? []).find(item => item.key === key);
   if (!item) throw new ServiceError("validation", "That file is not in this import preview.");
   return item;

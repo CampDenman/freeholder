@@ -81,7 +81,7 @@ describe.runIf(hasDatabase)("C11.08 demo import update rollback", { timeout: 90_
 
   it("commits a generic HTML import as a CMS draft", async () => {
     const run = await startImport.call(
-      { origin: "https://example.com", kind: "html" },
+      { origin: "https://example.com/team", kind: "html" },
       OWNER,
     );
     const previewed = await previewFromSource.call(

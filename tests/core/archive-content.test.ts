@@ -49,4 +49,17 @@ describe("static archive typed media", () => {
     expect(result.blocks.filter(block => block.type === "file")).toHaveLength(1);
     expect(result.unresolvedImages).toEqual(["https://static-archive.invalid/archive-media-0"]);
   });
+  it("retains fragment targets as valid native blocks alongside media", () => {
+    const result = convert('<h2 id="people">People</h2><p id="details">Details</p><a name="old-target"></a><img id="photo" src="https://archive.example/image" alt="Photo">');
+    const blocks = parseBlockTree(result.blocks, "page");
+    expect(blocks.filter(block => block.type === "anchor").map(block => block.props.target)).toEqual(["people", "details", "old-target", "photo"]);
+    expect(blocks.filter(block => block.type === "image").map(block => block.props.assetId)).toEqual([ids.image]);
+    expect(result.overBudget).toBeNull();
+  });
+  it("keeps first duplicate fragment identity, reserves the main target and reports invalid names", () => {
+    const result = convert('<h2 id="people">People</h2><p id="people">Duplicate</p><p id="main-content">Main</p><p id="invalid name">Invalid</p>');
+    expect(result.blocks.filter(block => block.type === "anchor").map(block => block.props.target)).toEqual(["people"]);
+    expect(result.droppedEmbeds).toBe(1);
+    expect(JSON.stringify(result.blocks)).toContain("Invalid");
+  });
 });

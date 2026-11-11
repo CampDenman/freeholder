@@ -100,9 +100,9 @@ describe("bounded public source crawl (C3.22)", () => {
     expect(download).toHaveBeenCalledTimes(3);
   });
   it("fetches feed entries as rendered pages and does not trust the feed excerpt as the complete body", async () => {
-    const download = vi.fn(async (raw: string) => raw.endsWith("/robots.txt") ? response("", 404) : raw.endsWith("/feed.xml") ? response("<rss><item><title>Excerpt</title><link>https://source.example/post</link><description>Truncated</description></item></rss>") : response("<title>Complete post</title><article><p>Full source body</p></article>"));
+    const download = vi.fn(async (raw: string) => raw.endsWith("/robots.txt") ? response("", 404) : raw.endsWith("/feed.xml") ? response("<rss><channel><item><title>Excerpt</title><link>https://source.example/post</link><pubDate>Tue, 02 Apr 2024 09:00:00 GMT</pubDate><description>Truncated</description></item></channel></rss>") : response("<title>Complete post</title><article><p>Full source body</p></article>"));
     const result = await crawlPublicSource("rss", "https://source.example/feed.xml", { download, pause: noWait });
-    expect(result.pages[0]).toMatchObject({ title: "Complete post", body: "<p>Full source body</p>" });
+    expect(result.pages[0]).toMatchObject({ title: "Complete post", body: "<p>Full source body</p>", kind: "post", publishedAt: "2024-04-02T09:00:00.000Z" });
   });
 
   it.each([301, 401, 429, 503])("refuses source HTTP %i without following a redirect or ignoring a robots outage", async status => {

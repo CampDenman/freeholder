@@ -8401,7 +8401,7 @@
   "cms.field.style": "Button style",
   "cms.field.socials": "Social profiles",
   "cms.field.kind": "Links to",
-  "cms.field.target": "Address or page",
+  "cms.field.target": "Target name",
   "cms.field.hidden": "Hidden",
   "cms.field.startsAt": "Show from",
   "cms.field.endsAt": "Show until",
@@ -8631,5 +8631,13 @@
   "privacy.system.identityBeforeErasure": "Identity verified before erasure",
   "privacy.system.providerPending": "Waiting for required provider cleanup.",
   "privacy.system.completed": "Request completed.",
-  "privacy.system.retained": "Completed with documented retention exceptions."
+  "privacy.system.retained": "Completed with documented retention exceptions.",
+  "imports.count.sourceWarnings": "Source warnings",
+  "imports.note.generic": "Review the source media, links and metadata before publishing. Media outside this source or blocked by its access policy needs your attention.",
+  "imports.sourceWarning.query-address": "Review this query-based address before cutover; its query-specific redirect is not created automatically.",
+  "imports.sourceWarning.discovery-only": "Only the page address was supplied. Read the public source URL to fetch its content before committing.",
+  "cms.block.anchor": "Link target",
+  "imports.count.pagesStaged": "Pages staged",
+  "imports.count.mediaFound": "Files found",
+  "imports.count.redirectsProposed": "Redirects proposed"
 }

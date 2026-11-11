@@ -8401,7 +8401,7 @@
   "cms.field.style": "Style des boutons",
   "cms.field.socials": "Profils sociaux",
   "cms.field.kind": "Mène vers",
-  "cms.field.target": "Adresse ou page",
+  "cms.field.target": "Nom de la cible",
   "cms.field.hidden": "Masqué",
   "cms.field.startsAt": "Afficher à partir du",
   "cms.field.endsAt": "Afficher jusqu’au",
@@ -8631,5 +8631,13 @@
   "privacy.system.identityBeforeErasure": "Identité vérifiée avant l’effacement",
   "privacy.system.providerPending": "En attente des suppressions requises chez le prestataire.",
   "privacy.system.completed": "Demande terminée.",
-  "privacy.system.retained": "Terminée avec les exceptions de conservation documentées."
+  "privacy.system.retained": "Terminée avec les exceptions de conservation documentées.",
+  "imports.count.sourceWarnings": "Avertissements de la source",
+  "imports.note.generic": "Vérifiez les médias, liens et métadonnées avant publication. Les médias extérieurs à cette source ou bloqués par ses règles d’accès nécessitent une vérification.",
+  "imports.sourceWarning.query-address": "Vérifiez cette adresse avec paramètres avant la bascule ; sa redirection spécifique aux paramètres n’est pas créée automatiquement.",
+  "imports.sourceWarning.discovery-only": "Seule l’adresse de la page a été fournie. Lisez l’URL publique de la source pour récupérer son contenu avant de valider.",
+  "cms.block.anchor": "Cible de lien",
+  "imports.count.pagesStaged": "Pages préparées",
+  "imports.count.mediaFound": "Fichiers trouvés",
+  "imports.count.redirectsProposed": "Redirections proposées"
 }
