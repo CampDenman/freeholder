@@ -491,6 +491,13 @@
       "when": 1793310000049,
       "tag": "0069_import_reader_privacy",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1793310000050,
+      "tag": "0070_subscription_card_setup_requests",
+      "breakpoints": true
     }
   ]
 }

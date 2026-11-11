@@ -13,16 +13,16 @@ import { processPaymentProviderEvents } from "@/modules/invoicing/payment-provid
 import { publicMembershipPlans, joinMembership, activatePaidSignup, beginTrialCardSetup, startCardTrial } from "@/modules/subscriptions/public-signup";
 import { createPayment, settlePayment } from "@/modules/invoicing/invoice-service";
 import { users } from "@/core/auth/schema";
-import { resolveContact } from "@/core/contacts/service";
+import { mergeContacts,updateContact,resolveContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
-import { invoiceLines, invoices, paymentMethods, payments } from "@/modules/invoicing/schema";
+import { invoiceLines, invoices, paymentMethods,paymentProviderCustomers,payments } from "@/modules/invoicing/schema";
 import {
   priceListEntries,
   priceLists,
   productVariants,
   products,
 } from "@/modules/catalog/schema";
-import { subscriptions } from "@/modules/subscriptions/schema";
+import { subscriptionCardSetups,subscriptions } from "@/modules/subscriptions/schema";
 import { hasAccess } from "@/core/entitlements/service";
 import {
   attachProviderSchedule,
@@ -46,7 +46,9 @@ import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from ".
 
 const mocks = vi.hoisted(() => ({
   createCheckout: vi.fn<PaymentAdapter["createCheckout"]>(),
-  createMethodSetup: vi.fn(),
+  createMethodSetup: vi.fn<NonNullable<PaymentAdapter["createMethodSetup"]>>(),
+  createSetupCustomer:vi.fn<NonNullable<PaymentAdapter["createSetupCustomer"]>>(),
+  recoverMethodSetup:vi.fn<NonNullable<PaymentAdapter["recoverMethodSetup"]>>(),
   offerMethodSetup: { current: true },
   chargeSavedMethod: vi.fn(),
   createRecurringSchedule: vi.fn<PaymentAdapter["createRecurringSchedule"]>(),
@@ -73,7 +75,7 @@ vi.mock("@/adapters/payments", async (importOriginal) => {
         strongCustomerAuthentication: true,
       }),
       createCheckout: mocks.createCheckout,
-      ...(mocks.offerMethodSetup.current ? { createMethodSetup: mocks.createMethodSetup } : {}),
+      ...(mocks.offerMethodSetup.current ? { createMethodSetup: mocks.createMethodSetup,createSetupCustomer:mocks.createSetupCustomer,recoverMethodSetup:mocks.recoverMethodSetup } : {}),
       chargeSavedMethod: mocks.chargeSavedMethod,
       createRecurringSchedule: mocks.createRecurringSchedule,
       updateRecurringSchedule: mocks.updateRecurringSchedule,
@@ -199,6 +201,9 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     mocks.offerMethodSetup.current = true;
     mocks.createCheckout.mockReset();
     mocks.createCheckout.mockResolvedValue({providerRef:"cs_signup",paymentRef:"pi_signup",url:"https://checkout.example.test/signup"});
+    mocks.recoverMethodSetup.mockReset();
+    mocks.createSetupCustomer.mockReset();
+    mocks.createSetupCustomer.mockResolvedValue({providerCustomerRef:"cus_setup"});
     mocks.createMethodSetup.mockReset();
     mocks.createMethodSetup.mockResolvedValue({ providerRef: "cs_setup", url: "https://checkout.example.test/setup", providerCustomerRef: "cus_setup" });
     mocks.chargeSavedMethod.mockReset();
@@ -277,7 +282,8 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     const setup = await beginTrialCardSetup.call({ subscriptionId: joined.id, saveMethodConsent: true }, CUSTOMER);
     expect(setup.url).toBe("https://checkout.example.test/setup");
     const setupRequest = mocks.createMethodSetup.mock.calls[0]![0] as { contactId: string; subscriptionId: string; idempotencyKey: string; successUrl: string };
-    expect(setupRequest).toMatchObject({ contactId: contact.id, subscriptionId: joined.id, idempotencyKey: `trial-card:${joined.id}` });
+    expect(setupRequest).toMatchObject({ contactId: contact.id, subscriptionId: joined.id, currency:"CAD" });
+    expect(setupRequest.idempotencyKey).toMatch(new RegExp(`^trial-card:${joined.id}:[0-9a-f-]{36}$`));
     expect(setupRequest.successUrl).toContain(`/memberships/trial-return?subscription=${joined.id}`);
     expect(new URL(setupRequest.successUrl).origin).toBe(new URL(env().APP_URL).origin);
     expect(await db().select().from(payments)).toHaveLength(0);
@@ -289,7 +295,8 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     await db().update(paymentMethods).set({ providerCustomerRef: "cus_setup", consentSource: "staff" }).where(eq(paymentMethods.id, staffCard.id));
     expect((await failure(startCardTrial.call({ subscriptionId: joined.id, paymentMethodId: staffCard.id }, CUSTOMER))).code).toBe("conflict");
 
-    const metadata={freeholder_contact_id:contact.id,freeholder_subscription_id:joined.id};
+    const [attempt]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,joined.id));
+    const metadata={freeholder_contact_id:contact.id,freeholder_subscription_id:joined.id,freeholder_setup_attempt_id:attempt!.id};
     const at=Math.floor(Date.now()/1000);
     const raw=JSON.stringify({id:"evt_trial_card",type:"checkout.session.completed",created:at,data:{object:{id:"cs_setup",mode:"setup",payment_status:"no_payment_required",customer:"cus_setup",metadata,setup_intent:"seti_trial"}}});
     const signature=createHmac("sha256","whsec_trial_fixture").update(`${at}.${raw}`).digest("hex");
@@ -811,4 +818,160 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     );
     expect(error.code).toBe("not_found");
   });
+  async function pausedCardTrial(key:string){
+    const contact=await person(key);
+    await db().insert(users).values({id:CUSTOMER.userId,email:contact.email!,role:"customer"});
+    await db().update(contacts).set({userId:CUSTOMER.userId}).where(eq(contacts.id,contact.id));
+    const monthly=await plan({billingMode:"provider",trialDays:14,trialRequiresCard:true});
+    const offered=(await publicMembershipPlans.call({},{kind:"anonymous"})).find(entry=>entry.id===monthly.id)!;
+    const joined=await joinMembership.call({planId:monthly.id,termsHash:offered.termsHash,requestKey:randomUUID(),acceptedTerms:true},CUSTOMER);
+    return {contact,joined};
+  }
+  it("freezes the first customer request before I/O and retries it after contact and customer changes",async()=>{
+    const {contact,joined}=await pausedCardTrial("frozen-first-customer");
+    mocks.createSetupCustomer.mockImplementationOnce(async request=>{
+      const [stored]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,joined.id));
+      expect(stored!.request).toEqual(JSON.parse(JSON.stringify(request)));
+      expect(stored!.providerCustomerRef).toBeNull();
+      throw new Error("Synthetic lost customer response");
+    });
+    await expect(beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER)).rejects.toMatchObject({code:"conflict"});
+    const original=mocks.createSetupCustomer.mock.calls[0]![0];
+    await updateContact.call({id:contact.id,name:"Changed later",email:"changed-first-customer@billing.test"},OWNER);
+    await db().insert(paymentProviderCustomers).values({contactId:contact.id,provider:"stripe",providerCustomerRef:"cus_changed_later"});
+    await beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER);
+    expect(mocks.createSetupCustomer.mock.calls[1]![0]).toEqual(original);
+    expect(mocks.createMethodSetup.mock.calls[0]![0]).toEqual({...original,providerCustomerRef:"cus_setup"});
+  });
+  it("commits the actual customer before Checkout and never recreates it after a lost session response",async()=>{
+    const {contact,joined}=await pausedCardTrial("frozen-checkout");
+    mocks.createMethodSetup.mockImplementationOnce(async request=>{
+      const [stored]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,joined.id));
+      expect(stored!.providerCustomerRef).toBe("cus_setup");
+      expect((await db().select().from(paymentProviderCustomers))[0]!.providerCustomerRef).toBe("cus_setup");
+      expect(request.providerCustomerRef).toBe("cus_setup");
+      throw new Error("Synthetic lost Checkout response");
+    });
+    await expect(beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER)).rejects.toMatchObject({code:"conflict"});
+    const original=mocks.createMethodSetup.mock.calls[0]![0];
+    await updateContact.call({id:contact.id,name:"Changed checkout contact",email:"changed-checkout@billing.test"},OWNER);
+    await beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER);
+    expect(mocks.createSetupCustomer).toHaveBeenCalledOnce();
+    expect(mocks.createMethodSetup.mock.calls[1]![0]).toEqual(original);
+  });
+  it("accepts an old saved card only after its exact current attempt is verified",async()=>{
+    const {contact,joined}=await pausedCardTrial("old-card-exact-proof");
+    const old=await card(contact.id),unrelated=await card(contact.id);
+    await db().update(paymentMethods).set({providerCustomerRef:"cus_setup",createdAt:new Date("2020-01-01T00:00:00Z")}).where(eq(paymentMethods.id,old.id));
+    await db().update(paymentMethods).set({providerCustomerRef:"cus_setup"}).where(eq(paymentMethods.id,unrelated.id));
+    await beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER);
+    const [attempt]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,joined.id));
+    await expect(startCardTrial.call({subscriptionId:joined.id,paymentMethodId:unrelated.id},CUSTOMER)).rejects.toMatchObject({code:"conflict"});
+    const receivedAt=new Date().toISOString();
+    await processPaymentProviderEvents.call({provider:"stripe",bodySha256:"a".repeat(64),receivedAt,events:[{id:"evt_exact_reused_card",kind:"saved_method_added",contactId:contact.id,providerCustomerRef:"cus_setup",setup:{attemptId:attempt!.id,subscriptionId:joined.id,checkoutRef:"cs_setup",setupIntentRef:"seti_reused"},occurredAt:receivedAt,method:{providerRef:old.providerMethodRef,providerCustomerRef:"cus_setup",kind:"card",label:"Reverified old card"}}]},{kind:"system"});
+    expect((await db().select().from(paymentMethods).where(eq(paymentMethods.id,old.id)))[0]!.createdAt).toEqual(new Date("2020-01-01T00:00:00Z"));
+    expect(await startCardTrial.call({subscriptionId:joined.id,paymentMethodId:old.id},CUSTOMER)).toEqual({id:joined.id,started:true});
+  });
+  it("keeps original provider metadata after contact merge while binding evidence to the current parent owner",async()=>{
+    const {contact,joined}=await pausedCardTrial("merged-setup-owner");
+    await beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER);
+    const [attempt]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,joined.id));
+    const survivor=await person("setup-survivor");
+    await mergeContacts.call({survivingId:survivor.id,duplicateId:contact.id},OWNER);
+    const receivedAt=new Date().toISOString();
+    await processPaymentProviderEvents.call({provider:"stripe",bodySha256:"c".repeat(64),receivedAt,events:[{id:"evt_merged_setup",kind:"saved_method_added",contactId:contact.id,providerCustomerRef:"cus_setup",setup:{attemptId:attempt!.id,subscriptionId:joined.id,checkoutRef:"cs_setup",setupIntentRef:"seti_merged"},occurredAt:receivedAt,method:{providerRef:"pm_merged_setup",providerCustomerRef:"cus_setup",kind:"card",label:"Merged setup card"}}]},{kind:"system"});
+    const [saved]=await db().select().from(paymentMethods).where(eq(paymentMethods.providerMethodRef,"pm_merged_setup"));
+    expect(saved!.contactId).toBe(survivor.id);
+    expect((await db().select().from(subscriptionCardSetups))[0]!.request).toEqual(attempt!.request);
+    expect(await startCardTrial.call({subscriptionId:joined.id,paymentMethodId:saved!.id},CUSTOMER)).toEqual({id:joined.id,started:true});
+  });
+  it("preserves immutable setup requests and blocks a prior image from activating an unrelated fresh card",async()=>{
+    const {contact,joined}=await pausedCardTrial("setup-old-image");
+    await beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER);
+    const [attempt]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,joined.id));
+    await expect(db().update(subscriptionCardSetups).set({request:{...attempt!.request,customer:{email:"changed@billing.test"}}}).where(eq(subscriptionCardSetups.id,attempt!.id))).rejects.toMatchObject({cause:{code:"23514"}});
+    await expect(db().update(subscriptionCardSetups).set({providerAccountId:"acct_other"}).where(eq(subscriptionCardSetups.id,attempt!.id))).rejects.toMatchObject({cause:{code:"23514"}});
+    const other=await card(contact.id),end=new Date(Date.now()+14*86400000);
+    await expect(db().update(subscriptions).set({status:"trialing",signupPending:false,paymentMethodId:other.id,currentPeriodStart:new Date(),currentPeriodEnd:end,trialEndsAt:end}).where(eq(subscriptions.id,joined.id))).rejects.toMatchObject({cause:{code:"23514",constraint_name:"subscription_trial_setup_confirmation"}});
+    expect((await db().select().from(subscriptions).where(eq(subscriptions.id,joined.id)))[0]!.signupPending).toBe(true);
+  });
+
+  it("refuses an unrelated newly saved card on the same customer without exact trial setup proof",async()=>{
+    const contact=await person("unrelated-fresh-setup-card");
+    await db().insert(users).values({id:CUSTOMER.userId,email:contact.email!,role:"customer"});
+    await db().update(contacts).set({userId:CUSTOMER.userId}).where(eq(contacts.id,contact.id));
+    const monthly=await plan({billingMode:"provider",trialDays:14,trialRequiresCard:true});
+    const offered=(await publicMembershipPlans.call({},{kind:"anonymous"})).find(entry=>entry.id===monthly.id)!;
+    const joined=await joinMembership.call({planId:monthly.id,termsHash:offered.termsHash,requestKey:randomUUID(),acceptedTerms:true},CUSTOMER);
+    await beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER);
+    const receivedAt=new Date().toISOString();
+    await processPaymentProviderEvents.call({provider:"stripe",bodySha256:"e".repeat(64),receivedAt,events:[{id:"evt_unrelated_fresh_card",kind:"saved_method_added",contactId:contact.id,providerCustomerRef:"cus_setup",occurredAt:receivedAt,method:{providerRef:"pm_unrelated_setup",providerCustomerRef:"cus_setup",kind:"card",label:"Saved by another checkout"}}]},{kind:"system"});
+    const [saved]=await db().select().from(paymentMethods).where(eq(paymentMethods.providerMethodRef,"pm_unrelated_setup"));
+    await expect(startCardTrial.call({subscriptionId:joined.id,paymentMethodId:saved!.id},CUSTOMER)).rejects.toMatchObject({code:"conflict"});
+  });
+
+  it("reopens only an actually expired provider session with a new immutable attempt",async()=>{
+    const {joined}=await pausedCardTrial("expired-provider-session");
+    const originalNow=Date.now();
+    mocks.createMethodSetup.mockResolvedValueOnce({providerRef:"cs_expired",providerCustomerRef:"cus_setup",url:"https://checkout.example.test/expired",expiresAt:new Date(originalNow+1800000).toISOString()});
+    await beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER);
+    const [original]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,joined.id));
+    const metadata={freeholder_contact_id:(original!.request as {contactId:string}).contactId,freeholder_subscription_id:joined.id,freeholder_setup_attempt_id:original!.id};
+    const fetcher=vi.fn<typeof fetch>().mockResolvedValue(Response.json({id:"cs_expired",mode:"setup",status:"expired",customer:"cus_setup",currency:"cad",metadata}));
+    const provider=createStripePayments({secretKey:"sk_recovery_fixture",webhookSecrets:["whsec_recovery_fixture"],apiBase:"https://stripe.example.test",fetch:fetcher});
+    if(!provider.recoverMethodSetup)throw new Error("Stripe recovery must exist");
+    mocks.recoverMethodSetup.mockImplementation(provider.recoverMethodSetup);
+    const clock=vi.spyOn(Date,"now").mockReturnValue(originalNow+31*60000);
+    try{expect(await beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER)).toEqual({url:"https://checkout.example.test/setup"});}finally{clock.mockRestore();}
+    const attempts=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,joined.id));
+    expect(attempts).toHaveLength(2);
+    expect(attempts.find(attempt=>attempt.id===original!.id)).toMatchObject({closedReason:"expired",request:original!.request,requestHash:original!.requestHash});
+    expect(attempts.find(attempt=>attempt.id!==original!.id)!.requestHash).not.toBe(original!.requestHash);
+    expect(mocks.createSetupCustomer).toHaveBeenCalledOnce();expect(fetcher).toHaveBeenCalledOnce();
+  });
+  it("recovers a lost first-customer response beyond the idempotency window through actual provider lookup",async()=>{
+    const {joined}=await pausedCardTrial("recover-lost-customer");
+    mocks.createSetupCustomer.mockRejectedValueOnce(new Error("Synthetic unknown customer outcome"));
+    await expect(beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER)).rejects.toMatchObject({code:"conflict"});
+    const [attempt]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,joined.id));
+    const metadata={freeholder_contact_id:(attempt!.request as {contactId:string}).contactId,freeholder_subscription_id:joined.id,freeholder_setup_attempt_id:attempt!.id};
+    const fetcher=vi.fn<typeof fetch>().mockImplementation(async input=>Response.json(String(input).includes("/v1/customers?")?{has_more:false,data:[{id:"cus_setup",metadata}]}:{has_more:false,data:[]}));
+    const provider=createStripePayments({secretKey:"sk_recovery_fixture",webhookSecrets:["whsec_recovery_fixture"],apiBase:"https://stripe.example.test",fetch:fetcher});
+    if(!provider.recoverMethodSetup)throw new Error("Stripe recovery must exist");
+    mocks.recoverMethodSetup.mockImplementation(provider.recoverMethodSetup);
+    const clock=vi.spyOn(Date,"now").mockReturnValue(Date.now()+24*3600000);
+    try{await beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER);}finally{clock.mockRestore();}
+    expect(mocks.createSetupCustomer).toHaveBeenCalledOnce();
+    expect(mocks.createMethodSetup.mock.calls[0]![0].providerCustomerRef).toBe("cus_setup");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect((await db().select().from(subscriptionCardSetups))[0]!.request).toEqual(attempt!.request);
+  });
+  it("recovers a completed lost session from actual provider reads and confirms only that exact trial",async()=>{
+    const {contact,joined}=await pausedCardTrial("recover-completed-session");
+    mocks.createMethodSetup.mockRejectedValueOnce(new Error("Synthetic unknown Checkout outcome"));
+    await expect(beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER)).rejects.toMatchObject({code:"conflict"});
+    const [attempt]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,joined.id));
+    const metadata={freeholder_contact_id:contact.id,freeholder_subscription_id:joined.id,freeholder_setup_attempt_id:attempt!.id};
+    const created=Math.floor(Date.now()/1000);
+    const fetcher=vi.fn<typeof fetch>().mockImplementation(async input=>Response.json(String(input).includes("/v1/setup_intents/")?{id:"seti_recovered",created,status:"succeeded",usage:"off_session",customer:"cus_setup",metadata,payment_method:{id:"pm_recovered",customer:"cus_setup",type:"card",card:{brand:"visa",last4:"4242"}}}:{has_more:false,data:[{id:"cs_recovered",mode:"setup",status:"complete",payment_status:"no_payment_required",customer:"cus_setup",currency:"cad",metadata,created,setup_intent:"seti_recovered"}]}));
+    const provider=createStripePayments({secretKey:"sk_recovery_fixture",webhookSecrets:["whsec_recovery_fixture"],apiBase:"https://stripe.example.test",fetch:fetcher});
+    if(!provider.recoverMethodSetup)throw new Error("Stripe recovery must exist");
+    mocks.recoverMethodSetup.mockImplementation(provider.recoverMethodSetup);
+    const clock=vi.spyOn(Date,"now").mockReturnValue(Date.now()+24*3600000);
+    try{expect((await beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER)).url).toContain(`/memberships/trial-return?subscription=${joined.id}`);}finally{clock.mockRestore();}
+    const [saved]=await db().select().from(paymentMethods).where(eq(paymentMethods.providerMethodRef,"pm_recovered"));
+    expect(await startCardTrial.call({subscriptionId:joined.id,paymentMethodId:saved!.id},CUSTOMER)).toEqual({id:joined.id,started:true});
+    expect(mocks.createMethodSetup).toHaveBeenCalledOnce();expect(mocks.createSetupCustomer).toHaveBeenCalledOnce();expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it.each(["contact","account","customer","checkout","subscription"] as const)("refuses exact-attempt evidence with the wrong %s",async field=>{
+    const {contact,joined}=await pausedCardTrial(`wrong-setup-${field}`);
+    await beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER);
+    const [attempt]=await db().select().from(subscriptionCardSetups).where(eq(subscriptionCardSetups.subscriptionId,joined.id));
+    const receivedAt=new Date().toISOString(),customer=field==="customer"?"cus_other":"cus_setup";
+    const event={id:`evt_wrong_setup_${field}`,kind:"saved_method_added" as const,contactId:field==="contact"?randomUUID():contact.id,...(field==="account"?{providerAccountId:"acct_other"}:{}),providerCustomerRef:customer,setup:{attemptId:attempt!.id,subscriptionId:field==="subscription"?randomUUID():joined.id,checkoutRef:field==="checkout"?"cs_other":"cs_setup",setupIntentRef:"seti_wrong"},occurredAt:receivedAt,method:{providerRef:"pm_wrong_setup",providerCustomerRef:customer,kind:"card",label:"Unproven card"}};
+    await expect(processPaymentProviderEvents.call({provider:"stripe",bodySha256:"f".repeat(64),receivedAt,events:[event]},{kind:"system"})).rejects.toMatchObject({code:"conflict"});
+    expect(await db().select().from(paymentMethods)).toHaveLength(0);
+    expect((await db().select().from(subscriptionCardSetups))[0]!.confirmedAt).toBeNull();
+  });
+
 });

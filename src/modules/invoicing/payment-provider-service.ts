@@ -113,6 +113,7 @@ const savedMethodEvent = z.object({
   providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["saved_method_added", "saved_method_removed"]),
+  setup:z.object({attemptId:z.uuid(),subscriptionId:z.uuid(),checkoutRef:z.string().min(1).max(500),setupIntentRef:z.string().min(1).max(500)}).optional(),
   providerCustomerRef: z.string().trim().min(1).max(500).optional(),
   contactId: z.string().uuid().optional(),
   method: methodEvidence,
@@ -426,11 +427,18 @@ async function processMethodEvent(providerId: string, event: z.infer<typeof save
     if(contact?.source==="privacy-erasure")return "saved_method_after_erasure_ignored";
   }
   const customerRef = event.providerCustomerRef ?? event.method.providerCustomerRef;
-  const contactId = await resolveMethodContact(ctx.tx, providerId, event.contactId, customerRef, event.providerAccountId ?? "");
+  const setupHelpers=event.setup?await import("@/modules/subscriptions/card-setup"):null;
+  const bound=event.setup && setupHelpers?await setupHelpers.bindSetupEvidence(ctx,{provider:providerId,providerAccountId:event.providerAccountId??"",contactId:event.contactId,customerRef,methodRef:event.method.providerRef,setup:event.setup}):undefined;
+  if(event.setup && !bound)return "saved_method_without_setup_ignored";
+  const contactId = bound?.contactId??await resolveMethodContact(ctx.tx, providerId, event.contactId, customerRef, event.providerAccountId ?? "");
   if (!contactId && event.providerAccountId) throw new ServiceError("conflict", "The seller method arrived before its authorized customer binding; retry it.");
   if (!contactId) return "saved_method_without_contact_ignored";
   if(!await upsertProviderCustomer(ctx.tx, contactId, providerId, customerRef, event.providerAccountId ?? ""))return "saved_method_after_erasure_ignored";
-  await persistMethod(ctx.tx, providerId, contactId, event.method, event.kind, new Date(event.occurredAt), event.providerAccountId ?? "");
+  const methodId=await persistMethod(ctx.tx, providerId, contactId, event.method, event.kind, new Date(event.occurredAt), event.providerAccountId ?? "");
+  if(bound && event.setup && setupHelpers && customerRef){
+    if(event.kind!=="saved_method_added")throw new ServiceError("conflict","A method removal cannot confirm a card setup.");
+    await setupHelpers.applySetupEvidence(ctx.tx,{attemptId:bound.attempt.id,methodId,customerRef,checkoutRef:event.setup.checkoutRef,setupIntentRef:event.setup.setupIntentRef,occurredAt:new Date(event.occurredAt)});
+  }
   return event.kind;
 }
 

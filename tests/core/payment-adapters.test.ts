@@ -174,6 +174,8 @@ describe("Stripe payment adapter", () => {
     const setup = await createMethodSetup({
       contactId: invoice.contactId,
       subscriptionId,
+      currency:"CAD",
+      providerCustomerRef:"cus_setup",
       customer: { email: invoice.customer.email, name: invoice.customer.name },
       successUrl: `https://shop.example.test/memberships/trial-return?subscription=${subscriptionId}`,
       cancelUrl: "https://shop.example.test/memberships?setup=cancelled",
@@ -193,8 +195,10 @@ describe("Stripe payment adapter", () => {
     expect(form.get("metadata[freeholder_subscription_id]")).toBe(subscriptionId);
     expect(form.get("setup_intent_data[metadata][freeholder_contact_id]")).toBe(invoice.contactId);
     expect(form.get("setup_intent_data[metadata][freeholder_subscription_id]")).toBe(subscriptionId);
-    expect(form.get("customer_creation")).toBe("always");
-    expect(form.get("customer_email")).toBe(invoice.customer.email);
+    expect(form.get("currency")).toBe("cad");
+    expect(form.get("customer")).toBe("cus_setup");
+    expect(form.has("customer_creation")).toBe(false);
+    expect(form.has("customer_email")).toBe(false);
     expect(calls[0]?.init?.headers).toMatchObject({ "idempotency-key": `trial-card:${subscriptionId}` });
     expect(bodyText(calls[0]?.init?.body)).not.toContain("sk_test_private");
 
@@ -202,6 +206,8 @@ describe("Stripe payment adapter", () => {
     await expect(createMethodSetup({
       contactId: invoice.contactId,
       subscriptionId,
+      currency:"CAD",
+      providerCustomerRef:"cus_setup",
       customer: { email: invoice.customer.email },
       successUrl: "https://shop.example.test/memberships/trial-return",
       cancelUrl: "https://shop.example.test/memberships?setup=cancelled",
