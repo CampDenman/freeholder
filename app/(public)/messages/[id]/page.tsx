@@ -53,7 +53,7 @@ export default async function ConversationPage({ params, searchParams }: { param
   const secureLabels = { loading: t("members.e2ee.decrypting"), unreadable: t("members.e2ee.unreadable"), before: t("members.e2ee.before") };
   return (
     <SecureConversation conversationId={c.id} userId={actor.userId}>
-    <div className="mx-auto grid max-w-2xl gap-6 px-6 py-12">
+    <div className="mx-auto grid min-w-0 w-full max-w-2xl gap-6 px-6 py-12">
       <a className="underline" href="/messages">{t("members.messages.back")}</a>
       <h1 className="text-2xl font-semibold">{name}</h1>
       <p className="text-sm text-ink-muted">

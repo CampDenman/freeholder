@@ -64,6 +64,34 @@ automated alert does not establish their security. Live provider acceptance,
 cross-target object-byte recovery and actual platform launches retain their
 own open checklist items.
 
+## OpenMLS migration boundary (C12.39, source qualification)
+
+Review `native/openmls/src/lib.rs`, the pinned upstream/compiler/runtime and
+license manifest, and `src/modules/members/e2ee/crypto.ts`, `server-init.ts`,
+`legacy.ts` and `engine.ts`. The isolated bridge imports existing raw/PKCS#8
+identities, frames and re-signs legacy GroupInfo, and recovers public commits
+older clients skipped. New messages, call controls, KeyPackages, signatures and
+history HPKE use the same Rust runtime on browser and server boundaries.
+
+Check exact pending receipt recovery, creator response loss, sender-ratchet
+persistence before delivery, member/external CAS conflicts, cross-tab/history
+locking, late Welcomes after erasure and the distinction between private
+historical pins and fresh outgoing authority. Public keys erased from the site
+must not be restored server-side. New ciphertext/export requires the actual
+MLS leaves, current directory and current entitlement/epoch to agree. Legacy
+fallback must not resume new-message encryption after migration or bypass an
+older server's missing refresh capability.
+
+`deploy/openmls-migration-2026-11-11.md` records fourteen native, seventeen
+core, fifteen PostgreSQL, eight SDK and twenty-five actual browser journeys,
+plus the final eight locale/theme and transient-WASM-retry browser variants.
+Final protected checks and independent acceptance remain open. RustSec reports zero vulnerabilities with a visible informational
+maintenance warning for an uncompiled verification dependency; no advisory is
+ignored. OpenMLS's historical audit does not audit this upstream revision,
+binding or Freeholder's directory/history protocol. The compromised-server
+warning remains. Coding-agent tests and this packet do not supply independent
+review, a completed C11.10 sign-off or C11.17 release approval.
+
 ## Seller collection-policy and original-account boundary (C12.38, partial)
 
 Review the private invoice/subscription policy snapshots and payment routing

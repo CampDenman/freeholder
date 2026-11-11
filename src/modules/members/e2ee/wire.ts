@@ -14,8 +14,8 @@
 // reports a message reveals the body and key, and the server checks them
 // against the tag it stored when the message was sent, so moderation sees
 // exactly what was reported and cannot be shown anything else.
-import { decodeMlsMessage, getCiphersuiteFromName, getCiphersuiteImpl, type CiphersuiteImpl, type KeyPackage } from "ts-mls";
-import { verifyKeyPackage } from "ts-mls/keyPackage.js";
+import { getCiphersuiteFromName, getCiphersuiteImpl, type CiphersuiteImpl } from "ts-mls";
+import { openMls } from "./crypto";
 
 export const SUITE = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519" as const;
 
@@ -51,21 +51,19 @@ export function parseIdentity(identity: Uint8Array): { userId: string; deviceId:
 }
 
 /** A key package as sent over the wire, with what the server must check about it. */
-export async function readKeyPackage(encoded: string): Promise<{ keyPackage: KeyPackage; identity: { userId: string; deviceId: string } | null; signatureKey: Uint8Array } | null> {
-  let bytes: Uint8Array;
+export async function readKeyPackage(encoded: string): Promise<{ identity: { userId: string; deviceId: string } | null; signatureKey: Uint8Array } | null> {
   try {
-    bytes = unb64(encoded);
-  } catch {
-    return null;
-  }
-  const decoded = decodeMlsMessage(bytes, 0)?.[0];
-  if (!decoded || decoded.wireformat !== "mls_key_package") return null;
-  const keyPackage = decoded.keyPackage;
-  if (keyPackage.cipherSuite !== SUITE) return null;
-  const credential = keyPackage.leafNode.credential;
-  const identity = credential.credentialType === "basic" ? parseIdentity(credential.identity) : null;
-  if (!(await verifyKeyPackage(keyPackage, (await suite()).signature))) return null;
-  return { keyPackage, identity, signatureKey: keyPackage.leafNode.signaturePublicKey };
+    const read = await openMls<{ identity: string; signatureKey: string }>({ op: "readKeyPackage", encoded });
+    return { identity: parseIdentity(utf8(read.identity)), signatureKey: unb64(read.signatureKey) };
+  } catch { return null; }
+}
+
+export async function sign(privateKey: Uint8Array, message: Uint8Array): Promise<Uint8Array> {
+  return unb64((await openMls<{ signature: string }>({ op: "sign", privateKey: b64(privateKey), message: b64(message) })).signature);
+}
+export async function verify(publicKey: Uint8Array, message: Uint8Array, signature: Uint8Array): Promise<boolean> {
+  try { return (await openMls<{ valid: boolean }>({ op: "verify", publicKey: b64(publicKey), message: b64(message), signature: b64(signature) })).valid; }
+  catch { return false; }
 }
 
 async function hmac(key: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
@@ -118,7 +116,7 @@ const signedPart = (conversationId: string, p: Pick<Payload, "body" | "fk" | "de
 export async function sealPayload(conversationId: string, body: string, device: { deviceId: string; signKey: Uint8Array }, files: SealedFile[] = []): Promise<{ bytes: Uint8Array; fk: string }> {
   const fk = b64(crypto.getRandomValues(new Uint8Array(32)));
   const content = { body, fk, device: device.deviceId, ...(files.length ? { files } : {}) };
-  const sig = await (await suite()).signature.sign(device.signKey, signedPart(conversationId, content));
+  const sig = await sign(device.signKey, signedPart(conversationId, content));
   const payload: Payload = { v: 1, ...content, sig: b64(sig) };
   return { bytes: utf8(JSON.stringify(payload)), fk };
 }
@@ -155,7 +153,7 @@ export async function openPayload(conversationId: string, bytes: Uint8Array, sen
   }
   if (parsed?.v !== 1 || typeof parsed.body !== "string" || typeof parsed.fk !== "string" || typeof parsed.sig !== "string" || parsed.device !== sender.deviceId) return null;
   if (parsed.files !== undefined && !(Array.isArray(parsed.files) && parsed.files.length <= 4 && parsed.files.every(isSealedFile))) return null;
-  const ok = await (await suite()).signature.verify(sender.signatureKey, signedPart(conversationId, parsed), unb64(parsed.sig));
+  const ok = await verify(sender.signatureKey, signedPart(conversationId, parsed), unb64(parsed.sig));
   return ok ? parsed : null;
 }
 
@@ -173,7 +171,7 @@ export interface CallKeyPayload {
 const callKeyPart = (conversationId: string, p: Pick<CallKeyPayload, "call" | "gen" | "key" | "device">) => utf8(`freeholder:callkey:v1\n${conversationId}\n${p.device}\n${p.call}\n${p.gen}\n${p.key}`);
 
 export async function sealCallKey(conversationId: string, callId: string, generation: number, key: string, device: { deviceId: string; signKey: Uint8Array }): Promise<Uint8Array> {
-  const sig = await (await suite()).signature.sign(device.signKey, callKeyPart(conversationId, { call: callId, gen: generation, key, device: device.deviceId }));
+  const sig = await sign(device.signKey, callKeyPart(conversationId, { call: callId, gen: generation, key, device: device.deviceId }));
   const payload: CallKeyPayload = { v: 1, call: callId, gen: generation, key, device: device.deviceId, sig: b64(sig) };
   return utf8(JSON.stringify(payload));
 }
@@ -186,7 +184,7 @@ export async function openCallKey(conversationId: string, callId: string, genera
     return null;
   }
   if (parsed?.v !== 1 || parsed.call !== callId || parsed.gen !== generation || parsed.device !== sender.deviceId || typeof parsed.key !== "string" || typeof parsed.sig !== "string") return null;
-  const ok = await (await suite()).signature.verify(sender.signatureKey, callKeyPart(conversationId, parsed), unb64(parsed.sig));
+  const ok = await verify(sender.signatureKey, callKeyPart(conversationId, parsed), unb64(parsed.sig));
   return ok && unb64(parsed.key).length === 32 ? parsed.key : null;
 }
 

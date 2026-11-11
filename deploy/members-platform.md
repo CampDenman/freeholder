@@ -328,12 +328,16 @@ from mocked payment, mail or media runs alone.
 
 ## C12.23 — end-to-end encrypted messages (2026-10-15)
 
-- MLS (RFC 9420) through `ts-mls` 1.6.4, ciphersuite 1 (X25519,
-  AES-128-GCM, SHA-256, Ed25519). `ts-mls` has **not had an independent
-  security audit** (its README says so). Commission a review of the library
-  and of `src/modules/members/e2ee/` before telling members their messages
-  are safe against a compromised server. `@noble/hashes` is a direct
-  dependency only because `ts-mls` imports it without declaring it.
+- MLS (RFC 9420) uses the pinned OpenMLS WebAssembly binding for new groups,
+  messages, call keys, payload signatures and history HPKE. Node deployments
+  use the committed assets; Rust is needed only to regenerate them. Existing
+  `ts-mls` 1.6.4 states and Welcomes are read by an isolated compatibility
+  bridge and migrated through a signed external resync using the same device
+  keys. `@noble/hashes` remains a direct legacy dependency because `ts-mls`
+  imports it without declaring it. See `deploy/openmls-migration-2026-11-11.md`
+  and `native/openmls/README.md` for provenance, recovery, tests and remaining
+  qualification. OpenMLS's historical audit does not independently review
+  Freeholder's binding or the pinned current revision; C11.10 remains open.
 - The server is the delivery service and the device directory. It cannot
   read messages, but whoever runs it could register a device in a member's
   name. Device verification (C12.35) makes that visible: devices compute the
@@ -344,8 +348,9 @@ from mocked payment, mail or media runs alone.
   messages, sent sealed after the member approves (C12.34).
 - The delivery log keeps ciphertext so offline devices can catch up;
   unsending and erasure delete it. There is no pruning yet.
-- Tests: `tests/modules/member-e2ee.test.ts` (3 cases) and the C12.23 journey
-  in `tests/browser/members.spec.ts`.
+- Tests: `tests/modules/member-e2ee.test.ts`, `tests/modules/member-group-calls.test.ts`,
+  `tests/core/openmls-legacy.test.ts`, `tests/core/openmls-wire.test.ts`,
+  `tests/browser/member-openmls.spec.ts` and the existing member journeys.
 
 ## C12.24 — group calls through the SFU (2026-10-15)
 

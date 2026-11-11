@@ -13,8 +13,9 @@ import { followMember } from "@/modules/members/graph";
 import { leaveConversation, sendMessage, startConversation, unsendMessage, viewConversation } from "@/modules/members/messages";
 import { reportContent } from "@/modules/members/reports";
 import { claimKeyPackages, e2eeSync, registerDevice, revokeDevice, sendEncrypted } from "@/modules/members/e2ee/service";
-import type { E2eeDevice } from "@/modules/members/e2ee/engine";
-import { deviceFor } from "../helpers/e2ee";
+import { E2eeDevice, type E2eeStore } from "@/modules/members/e2ee/engine";
+import { deviceFor, memoryStore, directTransport } from "../helpers/e2ee";
+import { LegacyE2eeDevice } from "../helpers/legacy-e2ee";
 import { memberKeyPackages, memberReports, memberSealedBlobs } from "@/modules/members/schema";
 import { purgeSealedBlobs, sealedBlobAccess, uploadSealedBlob } from "@/modules/members/sealed-blobs";
 import { openFile, sealFile } from "@/modules/members/e2ee/wire";
@@ -227,6 +228,109 @@ describe.runIf(hasDatabase)("end-to-end encrypted messages (C12.23)", () => {
     }
     const claimed = await db().select().from(memberKeyPackages).where(eq(memberKeyPackages.claimedBy, rae.deviceId));
     expect(claimed).toHaveLength(1);
+  });
+
+  it("migrates existing identities and recovers the public commit skipped by an older client (C12.39)", { timeout: 90_000 }, async () => {
+    const raeStore = memoryStore(), samStore = memoryStore();
+    const old = (actor: Member, store: E2eeStore) => new LegacyE2eeDevice(actor.userId, store as unknown as ConstructorParameters<typeof LegacyE2eeDevice>[1], directTransport(actor), "Legacy device");
+    const legacyRae = old(RAE, raeStore), legacySam = old(SAM, samStore);
+    await Promise.all([legacyRae.device(), legacySam.device()]);
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await legacyRae.send(id, "Before the migration");
+    await legacySam.sync(id);
+    const before = (await legacyRae.verification(id))!;
+    const rae = new E2eeDevice(RAE.userId, raeStore, directTransport(RAE), "Existing Rae");
+    await rae.send(id, "After OpenMLS migration");
+    // This is the actual old behavior: public commits were silently skipped.
+    await legacySam.sync(id);
+    const sam = new E2eeDevice(SAM.userId, samStore, directTransport(SAM), "Existing Sam");
+    expect((await sam.sync(id)).ready).toBe(true);
+    expect(await bodies(sam, id)).toEqual(["Before the migration", "After OpenMLS migration"]);
+    expect((await sam.verification(id))!.number).toBe(before.number);
+    expect((await rae.verification(id))!.devices.map((d) => [d.deviceId, d.signatureKey])).toEqual(before.devices.map((d) => [d.deviceId, d.signatureKey]));
+    await sam.send(id, "Existing devices still reply");
+    expect(await bodies(rae, id)).toContain("Existing devices still reply");
+  });
+
+  it("recovers an accepted creator commit after a lost response and serializes two clients on one store (C12.39)", { timeout: 60_000 }, async () => {
+    const store = memoryStore();
+    const transport = directTransport(RAE);
+    let loseResponse = true;
+    const rae = new E2eeDevice(RAE.userId, store, { ...transport, async commit(input) {
+      const receipt = await transport.commit(input);
+      if (loseResponse) { loseResponse = false; throw new Error("Synthetic lost commit response"); }
+      return receipt;
+    } }, "Rae");
+    const sam = deviceFor(SAM, "Sam");
+    await Promise.all([rae.device(), sam.device()]);
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await expect(rae.send(id, "not delivered")).rejects.toThrow("Synthetic lost commit response");
+    const recovered = new E2eeDevice(RAE.userId, store, transport, "Same device");
+    expect((await recovered.sync(id)).ready).toBe(true);
+    const otherTab = new E2eeDevice(RAE.userId, store, transport, "Same device second tab");
+    await Promise.all([recovered.send(id, "First concurrent send"), otherTab.send(id, "Second concurrent send")]);
+    expect(await bodies(sam, id)).toEqual(expect.arrayContaining(["First concurrent send", "Second concurrent send"]));
+    expect((await db().execute(sql`select count(*)::int as n from member_mls_groups`))[0]).toEqual({ n: 1 });
+  });
+
+  it("recovers competing external migrations from their persisted legacy backups (C12.39)", { timeout: 90_000 }, async () => {
+    const raeStore = memoryStore(), samStore = memoryStore();
+    const raeTransport = directTransport(RAE), samTransport = directTransport(SAM);
+    const oldRae = new LegacyE2eeDevice(RAE.userId, raeStore as unknown as ConstructorParameters<typeof LegacyE2eeDevice>[1], raeTransport, "Legacy Rae");
+    const oldSam = new LegacyE2eeDevice(SAM.userId, samStore as unknown as ConstructorParameters<typeof LegacyE2eeDevice>[1], samTransport, "Legacy Sam");
+    await Promise.all([oldRae.device(), oldSam.device()]);
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await oldRae.send(id, "Before competing migrations");
+    await oldSam.sync(id);
+    let prepared = 0;
+    let release!: () => void;
+    const bothPrepared = new Promise<void>((resolve) => { release = resolve; });
+    const racing = (transport: ReturnType<typeof directTransport>) => ({ ...transport, async commit(input: Parameters<typeof transport.commit>[0]) {
+      if (input.refresh && input.fromEpoch === 1) { if (++prepared === 2) release(); await bothPrepared; }
+      return transport.commit(input);
+    } });
+    const rae = new E2eeDevice(RAE.userId, raeStore, racing(raeTransport), "Existing Rae");
+    const sam = new E2eeDevice(SAM.userId, samStore, racing(samTransport), "Existing Sam");
+    await Promise.all([rae.sync(id), sam.sync(id)]);
+    expect(prepared).toBe(2);
+    await rae.send(id, "After competing migrations");
+    expect(await bodies(sam, id)).toEqual(["Before competing migrations", "After competing migrations"]);
+    expect((await sam.verification(id))!.number).toBe((await rae.verification(id))!.number);
+  });
+
+  it("abandons a losing member commit without rewinding the sender ratchet (C12.39)", { timeout: 90_000 }, async () => {
+    const raeStore = memoryStore(), samStore = memoryStore();
+    const raeTransport = directTransport(RAE), samTransport = directTransport(SAM);
+    let prepared = 0;
+    let release!: () => void;
+    const bothPrepared = new Promise<void>((resolve) => { release = resolve; });
+    const racing = (transport: ReturnType<typeof directTransport>) => ({ ...transport, async commit(input: Parameters<typeof transport.commit>[0]) {
+      if (!input.create && input.added.length && input.fromEpoch === 1) { if (++prepared === 2) release(); await bothPrepared; }
+      return transport.commit(input);
+    } });
+    const rae = new E2eeDevice(RAE.userId, raeStore, racing(raeTransport), "Rae");
+    const sam = new E2eeDevice(SAM.userId, samStore, racing(samTransport), "Sam");
+    await Promise.all([rae.device(), sam.device()]);
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await rae.send(id, "Before the new device");
+    await sam.sync(id);
+    const tablet = deviceFor(SAM, "Sam tablet");
+    await tablet.device();
+    await Promise.all([rae.send(id, "Rae after rekey"), sam.send(id, "Sam after rekey")]);
+    expect(prepared).toBe(2);
+    expect(await bodies(tablet, id)).toEqual(expect.arrayContaining(["Rae after rekey", "Sam after rekey"]));
+    expect((await tablet.sync(id)).messages.size).toBe(2);
+  });
+
+  it("stays read-only when a rolling older server cannot accept OpenMLS refresh (C12.39)", { timeout: 60_000 }, async () => {
+    const transport = directTransport(RAE);
+    const rae = new E2eeDevice(RAE.userId, memoryStore(), { ...transport, async sync(input) { const result = await transport.sync(input); return { ...result, supportsOpenMlsRefresh: undefined }; } }, "Rae");
+    const sam = deviceFor(SAM, "Sam");
+    await Promise.all([rae.device(), sam.device()]);
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    expect((await rae.sync(id)).ready).toBe(false);
+    await expect(rae.send(id, "must wait for server")).rejects.toMatchObject({ code: "not_ready" });
+    expect((await db().execute(sql`select count(*)::int as n from member_mls_groups`))[0]).toEqual({ n: 0 });
   });
 
   it("stays plaintext, and says so, until everyone has a device", async () => {

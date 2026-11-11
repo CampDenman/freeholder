@@ -85,6 +85,7 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
     : [];
   const call = options.path.startsWith("/call/group/") ? [...new Set(options.callOrigins ?? [])].sort() : [];
   const assistant = isPreviewAssistantContactPath(options.path) ? [...new Set(options.assistantOrigins ?? [])].sort() : [];
+  const memberWasm = /^\/(?:[a-z]{2,3}(?:-[a-z0-9]{2,8})*\/)?(?:messages(?:\/|$)|report(?:\/|$)|call\/group\/)/i.test(options.path);
   const assistantWasm = isPreviewAssistantContactPath(options.path) || options.path.startsWith("/managed-assistant/");
   const measurement = options.path.startsWith("/admin")
     ? []
@@ -96,7 +97,7 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
     : " 'unsafe-eval'";
   const policy = [
     "default-src 'self'",
-    `script-src 'nonce-${options.nonce}' 'strict-dynamic' 'self'${assistantWasm ? " 'wasm-unsafe-eval'" : ""}${development}${sources([...creative, ...measurement])}`,
+    `script-src 'nonce-${options.nonce}' 'strict-dynamic' 'self'${assistantWasm || memberWasm ? " 'wasm-unsafe-eval'" : ""}${development}${sources([...creative, ...measurement])}`,
     "script-src-attr 'none'",
     `style-src 'self' 'nonce-${options.nonce}'${sources(creative)}`,
     "style-src-attr 'unsafe-inline'",

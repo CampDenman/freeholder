@@ -210,7 +210,7 @@ export function SecureComposer({ conversationId, fallback, labels, children }: {
   }
   const blocked = !secure || secure.phase === "loading" || secure.phase === "joining" || secure.phase === "failed";
   return (
-    <form ref={form} action={fallback} onSubmit={(event) => { void submit(event); }} className="grid gap-2">
+    <form ref={form} action={fallback} onSubmit={(event) => { void submit(event); }} className="grid min-w-0 gap-2">
       <input type="hidden" name="conversationId" value={conversationId} />
       <input type="hidden" name="verb" value="send" />
       {failed ? <Callout tone="danger">{labels.failed}</Callout> : null}
@@ -218,9 +218,9 @@ export function SecureComposer({ conversationId, fallback, labels, children }: {
         <textarea id="reply-body" name="body" required maxLength={10000} rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
       </Field>
       {secure?.phase === "ready" ? (
-        <div className="grid gap-2">
+        <div className="grid min-w-0 gap-2">
           <Field label={labels.files} htmlFor="sealed-files">
-            <input id="sealed-files" name="sealed" type="file" multiple accept={SEALED_TYPES.join(",")} className="text-sm" />
+            <input id="sealed-files" name="sealed" type="file" multiple accept={SEALED_TYPES.join(",")} className="min-w-0 w-full max-w-full text-sm" />
           </Field>
           <Field label={labels.describe} htmlFor="sealed-alt">
             <input id="sealed-alt" name="sealedAlt" maxLength={500} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />

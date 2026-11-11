@@ -13031,19 +13031,29 @@ whatever is best for the people using the site.
   complete localized journeys and actual provider acceptance remain required.
   See the source evidence document for the precise limits; C12.38 stays open.)*
 - [ ] **C12.39** Move end-to-end encryption from `ts-mls` (not independently
-  audited) to OpenMLS (audited by SRLabs), compiled to WebAssembly in CI and
-  committed so deploys stay Node-only. The owner's 2026-11-10 full-scope
-  stable decision includes this item. In progress 2026-11-11: isolated native,
-  Node WebAssembly and Chromium WebAssembly probes moved a legacy two-device
-  group from epoch 1 to 2 while preserving both device identities; the legacy
-  recipient accepted the external resync commit and decrypted the OpenMLS
-  application message. These use synthetic probe keys only. The legacy export
-  bridge must frame the ExternalPub HPKEPublicKey and re-sign GroupInfo, and
-  import existing PKCS#8/raw Ed25519 keys without changing their public key.
-  Production integration, persisted-state/retry safety, browser concurrency,
-  full history/device/call/file acceptance, pinned reproducible CI artifacts
-  and independent review remain required. Members are still not told their
-  messages are safe against a compromised server.
+  audited) to OpenMLS (audited historically by SRLabs), compiled to WebAssembly
+  in pinned CI and committed so deploys stay Node-only. The owner's 2026-11-10
+  full-scope stable decision includes this item. Source progress 2026-11-11:
+  the shared Rust binding now handles new groups/messages/call keys, package
+  validation, signatures and approved-history HPKE. Existing raw/PKCS#8 device
+  identities migrate through a signed external resync without resetting keys;
+  the isolated legacy bridge reads old state and recovers public commits that
+  older clients skipped. Exact pending receipts, persisted sender ratchets,
+  actual-leaf/current-epoch entitlement checks, private historical pins after
+  erasure, and browser cross-tab locking prevent unsafe retries or new sharing
+  with removed devices. Fourteen native tests, seventeen core integration/CSP
+  checks and fifteen PostgreSQL message/group-call controls pass; independently
+  located builds reproduce the committed runtime and license bundle. RustSec
+  reports zero vulnerabilities with its documented uncompiled maintenance
+  warning visible. See `deploy/openmls-migration-2026-11-11.md` and
+  `native/openmls/README.md`. Twenty-five actual browser journeys passed,
+  including encrypted SFU media, wrong-key refusal, removal/rekey and the full
+  existing member suite. The final migration rerun also passed recovery from an
+  aborted WASM download, two real tabs, approved history and eight 320px locale/
+  theme variants with Axe and native-input bounds checks. Final protected
+  checks and independent review remain required. A historical OpenMLS
+  audit does not audit this revision or integration; members are still not told
+  their messages are safe against a compromised server.
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
   preserving evidence and reporting through the legal path for the site's

@@ -19,6 +19,7 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { attachmentInput } from "../attachment-store";
 import { activeSelf, directBlocked, participant, send } from "../messages";
 import { memberConversationParticipants, memberConversations, memberDevices, memberGroupCalls, memberKeyPackages, memberMessages, memberMlsGroups, memberMlsLog, memberMlsRoster } from "../schema";
+import "./server-init";
 import { b64, readKeyPackage, unb64 } from "./wire";
 import { assertGeneration, dropFromCalls } from "../call-seats";
 import { attachSealedBlobs } from "../sealed-blobs";
@@ -193,6 +194,7 @@ export const e2eeSync = defineService({
   output: z.object({
     /** Everyone still in the conversation has a device, so it can be encrypted. */
     available: z.boolean(),
+    supportsOpenMlsRefresh: z.literal(true),
     missing: listed(uuid),
     epoch: z.number().int().nullable(),
     inGroup: z.boolean(),
@@ -250,6 +252,7 @@ export const e2eeSync = defineService({
       .where(and(eq(memberKeyPackages.deviceId, input.deviceId), isNull(memberKeyPackages.claimedAt), eq(memberKeyPackages.lastResort, false)));
     return {
       available: missing.length === 0,
+      supportsOpenMlsRefresh: true as const,
       missing,
       epoch: group?.epoch ?? null,
       inGroup: Boolean(mine),
@@ -341,6 +344,7 @@ export const claimKeyPackages = defineService({
 
 export const e2eeCommit = defineService({
   name: "members.e2eeCommit",
+  rateLimit: { limit: 120, windowSeconds: 3600, message: "Too many encryption setup attempts. Please wait a little.", subject: (_i, actor) => actor.kind === "user" ? actor.userId : undefined },
   summary: "Create a conversation's encrypted group, or change who is in it, from one of your devices.",
   kind: "mutation",
   permission: "authenticated",
@@ -351,6 +355,8 @@ export const e2eeCommit = defineService({
     deviceId: uuid,
     /** True when this device just created the group; `fromEpoch` is then 0. */
     create: z.boolean().default(false),
+    /** C12.39: an existing device refreshes its own leaf without changing membership. */
+    refresh: z.boolean().default(false),
     fromEpoch: z.number().int().min(0),
     commit: base64,
     welcome: base64.optional(),
@@ -376,7 +382,9 @@ export const e2eeCommit = defineService({
       if (!group || group.epoch !== input.fromEpoch) throw membershipChanged();
       if (!roster.has(input.deviceId)) throw new ServiceError("permission", "This device is not in the conversation's group yet.");
     }
-    if (input.added.length + input.removed.length === 0) throw new ServiceError("validation", "A commit must add or remove a device.");
+    if (!entitled.has(input.deviceId)) throw membershipChanged();
+    if (input.refresh && (input.create || input.added.length || input.removed.length || input.welcome)) throw new ServiceError("validation", "A refresh preserves the group membership.");
+    if (!input.refresh && input.added.length + input.removed.length === 0) throw new ServiceError("validation", "A commit must add or remove a device.");
     if (input.added.length && !input.welcome) throw new ServiceError("validation", "Adding a device needs a welcome.");
     for (const a of input.added) {
       if (!entitled.has(a.deviceId) || roster.has(a.deviceId) || a.deviceId === input.deviceId) throw membershipChanged();
@@ -388,14 +396,15 @@ export const e2eeCommit = defineService({
     }
     // Only devices that should no longer read may be removed: revoked ones and
     // those of people who left. Nobody can push someone else's device out.
-    for (const id of input.removed) if (!roster.has(id) || entitled.has(id)) throw membershipChanged();
+    for (const id of input.removed) if (entitled.has(id)) throw membershipChanged();
 
     const epoch = input.fromEpoch + 1;
+    // Persist even the creator’s receipt: a lost response must be recoverable.
+    await ctx.tx.insert(memberMlsLog).values({ conversationId: input.conversationId, epoch: input.fromEpoch, kind: "commit", senderDeviceId: input.deviceId, payload: input.commit });
     if (input.create) {
       await ctx.tx.insert(memberMlsGroups).values({ conversationId: input.conversationId, epoch });
       await ctx.tx.insert(memberMlsRoster).values({ conversationId: input.conversationId, deviceId: input.deviceId, joinedSeq: 0 });
     } else {
-      await ctx.tx.insert(memberMlsLog).values({ conversationId: input.conversationId, epoch: input.fromEpoch, kind: "commit", senderDeviceId: input.deviceId, payload: input.commit });
       await ctx.tx.update(memberMlsGroups).set({ epoch, updatedAt: new Date() }).where(eq(memberMlsGroups.conversationId, input.conversationId));
     }
     for (const a of input.added) {
