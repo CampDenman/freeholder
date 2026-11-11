@@ -292,3 +292,16 @@ Migration70 seeds empty witnesses for pre-existing
 active operations and fences prior-image inserts that omit the new family;
 the populated upgrade rehearsal verifies both protections without inventing
 any provider records.
+
+Final source qualification includes 58 adapter/recovery wire controls, eight
+SDK controls, 20 setup/identity/privacy-lineage controls, and six bounded
+witness controls. The earlier seven-suite integration exercised 146 unique
+cases: 144 passed initially; two invalid fixture assumptions were corrected
+and their affected suites passed. It was not one wholly green 146-case run.
+The final production artifact contains 20,320 files / 242,439,763 bytes and
+passes the standalone source/environment scrub. Eight actual Chromium journeys
+passed on a fresh schema70 database in English, Spanish, French and Arabic,
+including keyboard submission, 320px reflow and both-theme Axe scans. Final
+type, lint, licensing, plan and 373 contract checks passed across the main run
+and the generated-changelog correction retry. Bounded peer review found no
+remaining source blocker; it does not supply independent security sign-off.
