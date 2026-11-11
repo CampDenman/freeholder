@@ -187,6 +187,52 @@ through the authorized spine while direct stock reservation remains refused.
 113 PostgreSQL controls and ten actual browser journeys pass; evidence and
 remaining protected qualification are in `deploy/cart-photo-stock-2026-11-11.md`.
 
+## Original trial-setup requests and outstanding provider work (2026-11-11)
+Review migration70 and subscriptions' card-setup, setup-dispatch, setup-erasure
+and setup-reconciliation sources. Every physical POST commits its own pending
+row before I/O; post-I/O recording is system-only and does not borrow the erased
+human's identity. All actual customer responses remain available for cleanup.
+Unknown outcomes cannot be discarded or completed from time/search absence.
+Check late completion during erasure, competing responses, exact reused-card
+proof, original routing and the named money/setup retention dependencies.
+
+Human reconciliation must remain explicit: fresh interactive verification,
+actual original-account operation/support evidence and evidence every original
+caller stopped. A found completed resource also requires positive original
+metadata checks. This is human provider confirmation, not automatic final-call
+verification. Without the actual final completion/cancellation guarantee, the
+unknown call remains pending. Review the owner form and its four locales,
+agent/system/personal-key/stale refusal controls, and original actor audit.
+
+The SQL trial, immutable dispatch, missing JSON-proof, parent deletion and
+erasure-completion guards are deliberate prior-image refusal boundaries. Full
+rollback requires the actual pre-upgrade database/object snapshot. Synthetic
+provider HTTP and browser state fixtures do not supply account acceptance or
+Tony Aly's independent C11.10 sign-off.
+
+A separate actual before-failing control found the original email retained in
+generic reconciliation audit input even after setup cleanup completed. Review
+the setup consumers of the existing `auditInputFields` seam: generic copies
+retain operation IDs/outcomes, private dispatches retain concrete evidence
+until cleanup/hold resolution, and original actor/action/subject remain intact.
+The regression requires exact minimal audit diff equality after erasure.
+
+An actual least-privilege control also reproduced a freshly verified view-only
+subscription role reading the private recovery record through the API. The
+shared service now requires subscription management for both inspection and
+confirmation, matching the owner UI. The response projects concrete evidence
+fields, and authorized managers can review the recorded evidence in the page.
+Agents, personal keys and view-only roles remain refused.
+
+The setup-aware merge witness repairs an actual before-failing undo that moved
+a new merged-identity customer snapshot back to a separated subscription. Read
+the parent-owned `columns: []` reference: it locks setup rows in ID order and
+stores only SHA-256 fingerprints of exact SQL setup/dispatch JSON. It refuses
+new or changed evidence without copying PII into merge history. Unchanged
+pre-merge undo still passes. Review migration70's legacy witness backfill and
+prior-image INSERT fence, plus the populated69→70 rehearsal and adjacent
+lineage controls.
+
 ## Seller collection-policy and original-account boundary (C12.38, partial)
 
 Review the private invoice/subscription policy snapshots and payment routing
@@ -822,50 +868,3 @@ private projections against `tests/core/import-media-receipts.test.ts` and
 `tests/core/archive-import-flow.test.ts`. Claims and reader bindings must stay
 private on first acceptance and replay. These agent-authored controls provide
 engineering evidence, not Tony's independent sign-off or C3.22 completion.
-
-## Original trial-setup requests and outstanding provider work (2026-11-11)
-
-Review migration70 and subscriptions' card-setup, setup-dispatch, setup-erasure
-and setup-reconciliation sources. Every physical POST commits its own pending
-row before I/O; post-I/O recording is system-only and does not borrow the erased
-human's identity. All actual customer responses remain available for cleanup.
-Unknown outcomes cannot be discarded or completed from time/search absence.
-Check late completion during erasure, competing responses, exact reused-card
-proof, original routing and the named money/setup retention dependencies.
-
-Human reconciliation must remain explicit: fresh interactive verification,
-actual original-account operation/support evidence and evidence every original
-caller stopped. A found completed resource also requires positive original
-metadata checks. This is human provider confirmation, not automatic final-call
-verification. Without the actual final completion/cancellation guarantee, the
-unknown call remains pending. Review the owner form and its four locales,
-agent/system/personal-key/stale refusal controls, and original actor audit.
-
-The SQL trial, immutable dispatch, missing JSON-proof, parent deletion and
-erasure-completion guards are deliberate prior-image refusal boundaries. Full
-rollback requires the actual pre-upgrade database/object snapshot. Synthetic
-provider HTTP and browser state fixtures do not supply account acceptance or
-Tony Aly's independent C11.10 sign-off.
-
-A separate actual before-failing control found the original email retained in
-generic reconciliation audit input even after setup cleanup completed. Review
-the setup consumers of the existing `auditInputFields` seam: generic copies
-retain operation IDs/outcomes, private dispatches retain concrete evidence
-until cleanup/hold resolution, and original actor/action/subject remain intact.
-The regression requires exact minimal audit diff equality after erasure.
-
-An actual least-privilege control also reproduced a freshly verified view-only
-subscription role reading the private recovery record through the API. The
-shared service now requires subscription management for both inspection and
-confirmation, matching the owner UI. The response projects concrete evidence
-fields, and authorized managers can review the recorded evidence in the page.
-Agents, personal keys and view-only roles remain refused.
-
-The setup-aware merge witness repairs an actual before-failing undo that moved
-a new merged-identity customer snapshot back to a separated subscription. Read
-the parent-owned `columns: []` reference: it locks setup rows in ID order and
-stores only SHA-256 fingerprints of exact SQL setup/dispatch JSON. It refuses
-new or changed evidence without copying PII into merge history. Unchanged
-pre-merge undo still passes. Review migration70's legacy witness backfill and
-prior-image INSERT fence, plus the populated69→70 rehearsal and adjacent
-lineage controls.
