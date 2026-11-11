@@ -13071,6 +13071,19 @@ whatever is best for the people using the site.
   upload. Regression: `tests/adapters/abuse-scan.test.ts`,
   `tests/modules/member-abuse.test.ts`; changeset
   `abuse-scan-unchecked-images.md`.
+  Audit follow-up 2026-11-11 (C12.30/C11.10): six regression failures
+  reproduced unsupported image formats and malformed HTTP-200 responses
+  passing through PhotoDNA as clean, or returning untyped match metadata.
+  Unsupported formats now remain unchecked; the adapter requires a boolean
+  verdict and successful numeric provider status, validates match metadata,
+  and bounds streamed UTF-8 replies to 256 KiB. Unchecked uploads retain the
+  rescannable/deletable error tag and cannot become abuse evidence or suspend
+  an uploader. Thirteen adapter controls and four actual PostgreSQL
+  upload/quarantine/recovery cases passed. Evidence belongs to
+  `tests/adapters/abuse-scan.test.ts` and
+  `tests/modules/member-abuse.test.ts`. C12.30 remains open for the provider
+  agreement/reference, actual live acceptance and legal-reporting integration;
+  no real provider request or legal report was sent by these tests.
 
 ---
 

@@ -5266,18 +5266,18 @@ this addendum also includes C10.33 instead of weakening either gate.
 
 ## C12.30 — Hash-match known abuse imagery on upload
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-14; no implementation is claimed.
+- **F01** — Partial: `src/core/media/abuse-schema.ts` records a provider match, SHA-256 and upload linkage; the repair needs no schema change. Provider reporting integration remains open.
+- **F02** — Partial: `tests/modules/member-abuse.test.ts` proves only the owner sees/records reports; unchecked files cannot suspend a member. Provider agreement and complete legal-reporting permissions remain open.
+- **F03** — Partial: `src/core/media/abuse-evidence.ts` records shared assets and uploader identities; the members sweep links those records without another customer store. Live reporting remains open.
+- **F04** — Partial: `app/(admin)/admin/members/page.tsx` records manual references; shared media quarantine/error recovery is exercised in PostgreSQL. Full configured-provider browser journeys remain open.
+- **F05** — Partial: `src/core/media/service.ts` and `src/modules/members/abuse.ts` use shared services; no route-only mutation is added. End-to-end provider/reporting parity remains open.
+- **F06** — Partial: `src/adapters/abuse-scan/photodna.ts` changes no UI or locale strings; full four-locale provider/reporting acceptance remains open.
+- **F07** — `tests/adapters/abuse-scan.test.ts`, `tests/modules/member-abuse.test.ts`: malformed and unsupported checks stay quarantined without match evidence or suspension; genuine matches retain legal hold and owner-only reporting. Independent review remains C11.10.
+- **F08** — `tests/adapters/abuse-scan.test.ts` and `tests/modules/member-abuse.test.ts`: thirteen recorded-HTTP adapter controls and four actual PostgreSQL upload/quarantine/recovery cases pass, including streamed response limits, UTF-8 and strict verdict typing. Actual provider acceptance remains open.
+- **F09** — Partial: `src/core/media/abuse-evidence.ts` and `tests/modules/member-abuse.test.ts`: unchecked assets remain deletable/rescannable; confirmed matches remain under existing legal hold. Full retention/export/recovery and jurisdictional reporting proof remain open.
+- **F10** — Pending: `tests/adapters/abuse-scan.test.ts` uses benign synthetic fixtures; approved provider integration still needs acceptance. No real abuse imagery or legal report is used in these tests.
+- **F11** — Partial: changeset `photodna-unchecked-verdicts.md`, `MASTER.md` C12.30 and `security/independent-review-packet.md` record source evidence and limits. Provider agreement/reference and operational acceptance remain open.
+- **F12** — Partial: `tests/modules/member-abuse.test.ts` covers actual shared upload → unchecked quarantine → no report/suspension → delete or successful rescan with synthetic images and mocked provider HTTP; live provider and legal-report submission remain open.
 ## C10.17 — v2-deferred (§43.18) — C10.17
 
 - **F01** — N/A — no schema change in this item.

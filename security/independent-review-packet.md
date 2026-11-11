@@ -89,6 +89,17 @@ in the source document; they are not live-provider or independent acceptance.
 
 ## Authenticated provider-evidence boundary (C11.10)
 
+The C12.30 PhotoDNA review must also check unsupported formats and malformed
+provider answers. Six pre-repair regressions reproduced fail-open behavior:
+unsupported images and absent/string verdicts could be accepted as clean;
+untyped positive-match metadata could enter evidence processing. The repair
+requires a typed boolean verdict, numeric success status and bounded match
+metadata, caps streamed replies at 256 KiB and rejects invalid UTF-8. Actual
+PostgreSQL upload tests must prove unchecked images stay quarantined without
+evidence or account suspension, remain deletable, and can be rescanned after
+a valid negative response. Provider access, live acceptance and legal reporting
+remain open; synthetic fixtures do not supply independent sign-off.
+
 The audit found that `invoicing.processPaymentProviderEvents` was declared as
 financially scoped and appeared in generated external discovery despite its
 intended webhook-only contract. The repair makes it system-only and explicitly
