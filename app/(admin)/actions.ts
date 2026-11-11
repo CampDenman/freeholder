@@ -30,6 +30,7 @@ import {
   saveUpdatePolicy,
 } from "@/core/update/service";
 import {
+  ErasedContactMergeError,
   createContact,
   mergeContacts,
   undoContactMerge,
@@ -126,6 +127,13 @@ function present(error: unknown): ActionState {
   if (error instanceof ServiceError) return { error: error.message };
   console.error("admin action failed", error);
   return { error: "Something went wrong. Try again." };
+}
+
+async function presentMerge(error: unknown): Promise<ActionState> {
+  if (error instanceof ErasedContactMergeError) {
+    return { error: (await getT())("contacts.merge.erased") };
+  }
+  return present(error);
 }
 
 function field(form: FormData, key: string, fallback = ""): string {
@@ -404,7 +412,7 @@ export async function mergeContactAction(
       await currentActor(),
     );
   } catch (error) {
-    return present(error);
+    return presentMerge(error);
   }
   redirect(`/admin/contacts/${survivingId}`);
 }
@@ -452,7 +460,7 @@ export async function duplicateReviewAction(
         throw new ServiceError("validation", "Choose a duplicate-review action.");
     }
   } catch (error) {
-    return present(error);
+    return presentMerge(error);
   }
   revalidatePath("/admin/contacts");
   revalidatePath("/admin/contacts/duplicates");

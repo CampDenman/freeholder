@@ -7,7 +7,7 @@ import * as adapters from "@/adapters/payments";
 import {createStripePayments} from "@/adapters/payments/stripe";
 import {eq,sql} from "drizzle-orm";
 import {db} from "@/core/db";
-import {createContact,updateContact} from "@/core/contacts/service";
+import {createContact,updateContact,mergeContacts} from "@/core/contacts/service";
 import {contacts,organizations} from "@/core/contacts/schema";
 import {createDataRequest,verifyDataRequest,fulfillDataRequest,downloadDataRequestArtifact,denyDataRequest,addRetentionException,registerContactPrivacySource} from "@/core/privacy/service";
 import {createDraftInvoice,issueInvoice,createPayment,startPayment} from "@/modules/invoicing/invoice-service";
@@ -64,6 +64,24 @@ describe.runIf(hasDatabase)("payment-provider erasure (C1.08/C12.38/C11.10)",()=
   await erase(contact.id);
   const receivedAt=new Date().toISOString();
   await processPaymentProviderEvents.call({provider:"stripe",bodySha256:"b".repeat(64),receivedAt,events:[{id:"evt_late_money",kind:"payment_succeeded",providerRef:"pi_late_money",invoiceId:issued.id,contactId:contact.id,providerCustomerRef:"cus_late_money",amountMinor:1000,currency:"CAD",occurredAt:receivedAt}]},{kind:"system"});
+  expect((await db().select().from(payments).where(eq(payments.id,payment.id)))[0]!.status).toBe("succeeded");
+  expect(await db().select().from(paymentProviderCustomers)).toHaveLength(0);
+ });
+ it.each(["survivor","duplicate"] as const)("refuses merging an erased %s into a new relationship",async side=>{
+  const erased=await subject(`erased-merge-${side}`),fresh=await createContact.call({name:`Synthetic fresh-merge-${side}`,email:`fresh-merge-${side}@example.test`,source:"manual"},OWNER);
+  await erase(erased.id);
+  await expect(mergeContacts.call({survivingId:side==="survivor"?erased.id:fresh.id,duplicateId:side==="duplicate"?erased.id:fresh.id},OWNER)).rejects.toMatchObject({code:"conflict"});
+  expect((await db().select().from(contacts).where(eq(contacts.id,erased.id)))[0]!.source).toBe("privacy-erasure");
+  expect((await db().select().from(contacts).where(eq(contacts.id,fresh.id)))[0]!.email).toBe(`fresh-merge-${side}@example.test`);
+ });
+ it("keeps late financial feedback from recreating erased provider identity after a merge attempt",async()=>{
+  const erased=await subject("erased-money-merge"),issued=await invoice(erased.id),fresh=await createContact.call({name:"Synthetic new relationship",email:"new-money-relationship@example.test",source:"manual"},OWNER);
+  const payment=await createPayment.call({invoiceId:issued.id,provider:"stripe",method:"hosted_checkout",amountMinor:1000,idempotencyKey:"erased-merge-payment"},OWNER);
+  await startPayment.call({id:payment.id,providerRef:"pi_ErasedMerge"},OWNER);
+  await erase(erased.id);
+  try{await mergeContacts.call({survivingId:fresh.id,duplicateId:erased.id},OWNER);}catch(error){expect(error).toMatchObject({code:"conflict"});}
+  const receivedAt=new Date().toISOString();
+  await processPaymentProviderEvents.call({provider:"stripe",bodySha256:"e".repeat(64),receivedAt,events:[{id:"evt_ErasedMerge",kind:"payment_succeeded",providerRef:"pi_ErasedMerge",invoiceId:issued.id,contactId:erased.id,providerCustomerRef:"cus_ErasedMerge",amountMinor:1000,currency:"CAD",occurredAt:receivedAt}]},{kind:"system"});
   expect((await db().select().from(payments).where(eq(payments.id,payment.id)))[0]!.status).toBe("succeeded");
   expect(await db().select().from(paymentProviderCustomers)).toHaveLength(0);
  });

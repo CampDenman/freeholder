@@ -2304,6 +2304,7 @@
   "contacts.merge.searchLabel": "ابحث عن النسخة المكررة",
   "contacts.merge.searchPlaceholder": "الاسم أو البريد",
   "contacts.merge.submit": "الدمج في جهة الاتصال هذه",
+  "contacts.merge.erased": "لا يمكن دمج جهة اتصال مُحيت بياناتها. أبقِ العلاقة الجديدة منفصلة عن السجل الممحو.",
   "contacts.merge.title": "دمج نسخة مكررة",
   "contacts.new": "جهة اتصال جديدة",
   "contacts.new.intro": "كل جزء من المنصة سيشارك هذا السجل الواحد.",

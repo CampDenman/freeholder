@@ -822,3 +822,15 @@ private projections against `tests/core/import-media-receipts.test.ts` and
 `tests/core/archive-import-flow.test.ts`. Claims and reader bindings must stay
 private on first acceptance and replay. These agent-authored controls provide
 engineering evidence, not Tony's independent sign-off or C3.22 completion.
+
+## Erased-contact merge cutover (C1.07/C1.08/C11.10)
+
+Three actual before-failing service controls reproduced a fresh relationship
+merged with an erased participant in either direction, and an original late
+signed payment recreating erased provider-customer data after its retained
+invoice moved to a fresh survivor with its own acquisition source. Review the
+early `contacts.merge` refusal under the existing identity/ordered row locks
+alongside `tests/core/payment-provider-erasure.test.ts`. No candidate, pointer
+or snapshot may change on refusal. Ordinary merge/undo remains supported;
+genuine late money still settles without restoring personal copies. This is
+agent source evidence and does not supply independent sign-off.

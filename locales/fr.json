@@ -2601,6 +2601,7 @@
   "contacts.merge.searchLabel": "Rechercher le doublon",
   "contacts.merge.searchPlaceholder": "nom ou e-mail",
   "contacts.merge.submit": "Fusionner dans ce contact",
+  "contacts.merge.erased": "Un contact effacé ne peut pas être fusionné. Gardez la nouvelle relation séparée de la fiche effacée.",
   "contacts.merge.title": "Fusionner un doublon",
   "contacts.new": "Nouveau contact",
   "contacts.new.intro": "Toutes les parties de la plateforme partageront cette même fiche.",
