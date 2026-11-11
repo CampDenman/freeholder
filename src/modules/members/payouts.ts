@@ -13,7 +13,7 @@ import { z } from "zod";
 import { and, desc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
-import { orderForInvoice, orderSellers, registerSellerGate } from "@/modules/catalog/market";
+import { orderForInvoice, orderInvoiceRevenue, orderSellers, registerSellerGate } from "@/modules/catalog/market";
 import { PAYOUT_PROVIDER_IDS } from "@/adapters/payouts";
 import { getInvoiceMarketPolicy, marketFeeMinor } from "@/modules/invoicing/market-policy";
 import { merchantSettlement } from "@/modules/invoicing/merchant-settlement";
@@ -37,6 +37,25 @@ export type PayoutModel = (typeof PAYOUT_MODELS)[number];
  * refund, a dispute) goes through "still owed" with its note.
  */
 export const PROVIDER_CHECK = "Check with ";
+
+/** Existing financial rows stay intact; an unverified amount cannot leave the site. */
+export const ORIGINAL_REVENUE_CHECK = "Reconcile this payout with its original discounted invoice revenue before paying the seller.";
+
+export async function matchesOriginalOrderRevenue(ctx: ServiceContext, payout: typeof memberPayouts.$inferSelect): Promise<boolean> {
+  // Subscription earnings have their own immutable invoice settlement path.
+  if (!payout.orderId) return true;
+  if (!payout.orderItemId) return false;
+  try {
+    const order = await ctx.callAsSystem(orderSellers, { orderId: payout.orderId });
+    if (!order.invoiceId || order.currency !== payout.currency || !order.lines.some(line => line.orderItemId === payout.orderItemId && line.sellerUserId === payout.sellerId)) return false;
+    const revenue = await ctx.callAsSystem(orderInvoiceRevenue, { orderId: order.orderId, invoiceId: order.invoiceId });
+    const original = revenue.find(line => line.orderItemId === payout.orderItemId);
+    return Boolean(original && payout.grossMinor === original.revenueMinor && payout.feeMinor >= 0 && payout.feeMinor <= original.revenueMinor && payout.netMinor === original.revenueMinor - payout.feeMinor);
+  } catch (error) {
+    if (error instanceof ServiceError && (error.code === "conflict" || error.code === "not_found")) return false;
+    throw error;
+  }
+}
 
 /** A provider that moves money to sellers. Each declares the models it can run. */
 export interface MarketplacePayoutAdapter {
@@ -166,13 +185,33 @@ export const recordPayouts = defineService({
   handler: async (input, ctx) => {
     const order = await ctx.callAsSystem(orderSellers, { orderId: input.orderId });
     if (order.lines.length === 0) return { recorded: 0 };
+    const prior=await ctx.tx.select({orderItemId:memberPayouts.orderItemId}).from(memberPayouts).where(eq(memberPayouts.orderId,order.orderId));
+    const recordedItems=new Set(prior.map(item=>item.orderItemId));
+    if(order.lines.every(line=>recordedItems.has(line.orderItemId)))return{recorded:0};
+    if(!order.invoiceId)throw new ServiceError("conflict","This order needs its original invoice before seller earnings are recorded.");
+    const revenue=await ctx.callAsSystem(orderInvoiceRevenue,{orderId:order.orderId,invoiceId:order.invoiceId});
+    const originalLines=order.lines.map(line=>{
+      const original=revenue.find(item=>item.orderItemId===line.orderItemId);
+      if(!original)throw new ServiceError("conflict","This seller line has no original invoice revenue.");
+      return{...line,...original};
+    });
     const frozen = order.invoiceId ? await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: order.invoiceId }) : null;
     const rules = frozen ?? await marketRules(ctx);
     const settled = rules.model === "seller_merchant" && order.invoiceId && frozen?.sellerUserId ? await ctx.callAsSystem(merchantSettlement,{invoiceId:order.invoiceId,sellerUserId:frozen.sellerUserId}) : null;
     if(rules.model === "seller_merchant" && (!settled || order.lines.some(line=>line.sellerUserId!==frozen?.sellerUserId))) throw new ServiceError("conflict","The original seller payment needs reconciliation.");
+    let fees=originalLines.map(line=>marketFeeMinor(line.revenueMinor,rules.siteFeeBps));
+    if(frozen && fees.reduce((sum,fee)=>sum+fee,0)!==frozen.feeMinor){
+      // Older invoices froze commission against pre-discount catalog totals.
+      // Preserve that exact known fee; never reprice an issued provider charge.
+      const legacy=originalLines.map(line=>marketFeeMinor(line.originalMinor,rules.siteFeeBps));
+      if(legacy.reduce((sum,fee)=>sum+fee,0)!==frozen.feeMinor)throw new ServiceError("conflict","Reconcile the original seller fee allocation before recording earnings.");
+      fees=legacy;
+    }
     let recorded = 0;
-    for (const line of order.lines) {
-      const fee = marketFeeMinor(line.lineTotalMinor, rules.siteFeeBps);
+    for (const [position,line] of originalLines.entries()) {
+      if(recordedItems.has(line.orderItemId))continue;
+      const fee=fees[position]!;
+      if(fee>line.revenueMinor)throw new ServiceError("conflict","The original seller fee exceeds this line's invoice revenue. Reconcile its existing terms first.");
       const now = new Date();
       const [created] = await ctx.tx
         .insert(memberPayouts)
@@ -181,13 +220,13 @@ export const recordPayouts = defineService({
           orderItemId: line.orderItemId,
           sellerId: line.sellerUserId,
           currency: order.currency,
-          grossMinor: line.lineTotalMinor,
+          grossMinor: line.revenueMinor,
           feeMinor: fee,
-          netMinor: line.lineTotalMinor - fee,
+          netMinor: line.revenueMinor - fee,
           model: rules.model,
-          state: settled?.state ?? (rules.model === "hold" ? "held" : "due"),
+          state: settled?.state ?? (line.revenueMinor === fee ? "paid" : rules.model === "hold" ? "held" : "due"),
           reference: settled?.reference,
-          paidAt: settled?.paidAt,
+          paidAt: settled?.paidAt ?? (line.revenueMinor === fee ? now : undefined),
           releaseAt: rules.model === "hold" ? new Date(now.getTime() + rules.holdDays * 86_400_000) : null,
           releasedAt: settled?.paidAt ?? (rules.model === "hold" ? null : now),
         })
@@ -429,6 +468,12 @@ export const settlePayouts = defineService({
     const from = { release: ["held"], paid: ["due"], cancel: ["held", "due", "review"], owe: ["review"] }[input.action] as (typeof PAYOUT_STATES)[number][];
     if (input.action === "paid" && !input.reference) throw new ServiceError("validation", "Record how each payout was paid.");
     if ((input.action === "cancel" || input.action === "owe") && !input.note) throw new ServiceError("validation", "Say why.");
+    if (input.action === "release" || input.action === "owe") {
+      const candidates = await ctx.tx.select().from(memberPayouts).where(and(inArray(memberPayouts.id, input.ids), inArray(memberPayouts.state, from))).for("update");
+      for (const payout of candidates) {
+        if (!await matchesOriginalOrderRevenue(ctx, payout)) throw new ServiceError("conflict", ORIGINAL_REVENUE_CHECK);
+      }
+    }
     const now = new Date();
     const set =
       input.action === "release" ? { state: "due" as const, releasedAt: now }

@@ -31,7 +31,7 @@ import { users } from "@/core/auth/schema";
 import { payoutProvider } from "@/adapters/payouts";
 import { AdapterError } from "@/adapters/types";
 import type { OnboardingField, PayoutWebhookEvent } from "@/adapters/payouts/types";
-import { marketRules, PROVIDER_CHECK } from "./payouts";
+import { marketRules, matchesOriginalOrderRevenue, ORIGINAL_REVENUE_CHECK, PROVIDER_CHECK } from "./payouts";
 import { memberPayoutAccounts, memberPayouts, memberPayoutTransfers, memberProfiles, type PayoutTransferAttempt } from "./schema";
 
 const MAX_ATTEMPTS = 5;
@@ -223,6 +223,10 @@ export const claimProviderTransfers = defineService({
           await ctx.tx.update(memberPayouts).set({ state: "paid", paidAt: now, reference: t.reference }).where(eq(memberPayouts.id, payout.id));
         } else if (t.state === "unknown") {
           await ctx.tx.update(memberPayouts).set({ state: "review", note: NEEDS_CHECK(t.provider, "an earlier attempt's outcome is unknown.") }).where(eq(memberPayouts.id, payout.id));
+        } else if (!await matchesOriginalOrderRevenue(ctx, payout)) {
+          await ctx.tx.update(memberPayouts).set({ state: "review", note: ORIGINAL_REVENUE_CHECK }).where(eq(memberPayouts.id, payout.id));
+        } else if (payout.netMinor === 0) {
+          await ctx.tx.update(memberPayouts).set({ state: "paid", paidAt: now }).where(eq(memberPayouts.id, payout.id));
         } else {
           await ctx.tx
             .update(memberPayoutTransfers)
@@ -236,16 +240,23 @@ export const claimProviderTransfers = defineService({
         .from(memberPayouts)
         .innerJoin(memberPayoutAccounts, payable)
         .where(and(eq(memberPayouts.state, "due"), sql`not exists (select 1 from ${memberPayoutTransfers} t where t.payout_id = ${memberPayouts.id} and t.kind = 'transfer')`))
-        .limit(input.limit);
-      if (due.length) {
+        .limit(input.limit)
+        .for("update", { of: memberPayouts, skipLocked: true });
+      const verified: typeof due = [];
+      for (const row of due) {
+        if (!await matchesOriginalOrderRevenue(ctx, row.payout)) await ctx.tx.update(memberPayouts).set({ state: "review", note: ORIGINAL_REVENUE_CHECK }).where(eq(memberPayouts.id, row.payout.id));
+        else if (row.payout.netMinor === 0) await ctx.tx.update(memberPayouts).set({ state: "paid", paidAt: now }).where(eq(memberPayouts.id, row.payout.id));
+        else verified.push(row);
+      }
+      if (verified.length) {
         await ctx.tx
           .insert(memberPayoutTransfers)
-          .values(due.map(({ payout }) => ({ payoutId: payout.id, kind: "transfer" as const, provider: rules.adapter, amountMinor: payout.netMinor, currency: payout.currency })))
+          .values(verified.map(({ payout }) => ({ payoutId: payout.id, kind: "transfer" as const, provider: rules.adapter, amountMinor: payout.netMinor, currency: payout.currency })))
           .onConflictDoNothing();
       }
     }
     const found = await ctx.tx
-      .select({ t: memberPayoutTransfers, payoutState: memberPayouts.state, payoutModel: memberPayouts.model, externalAccountId: memberPayoutAccounts.externalAccountId })
+      .select({ t: memberPayoutTransfers, payout: memberPayouts, payoutState: memberPayouts.state, payoutModel: memberPayouts.model, externalAccountId: memberPayoutAccounts.externalAccountId })
       .from(memberPayoutTransfers)
       .innerJoin(memberPayouts, eq(memberPayouts.id, memberPayoutTransfers.payoutId))
       .leftJoin(memberPayoutAccounts, eq(memberPayoutAccounts.userId, memberPayouts.sellerId))
@@ -259,6 +270,18 @@ export const claimProviderTransfers = defineService({
         const note = "This sale was charged directly to the seller. Reconcile its original payment; do not send another payout or transfer reversal.";
         await ctx.tx.update(memberPayoutTransfers).set({ state: maybePaid ? "unknown" : "failed",lastError:note,updatedAt:now }).where(eq(memberPayoutTransfers.id,r.t.id));
         await ctx.tx.update(memberPayouts).set({state:"review",note}).where(eq(memberPayouts.id,r.t.payoutId));
+        continue;
+      }
+      if (r.t.kind === "transfer" && (!await matchesOriginalOrderRevenue(ctx, r.payout) || r.t.amountMinor !== r.payout.netMinor || r.t.currency !== r.payout.currency)) {
+        const note = maybePaid ? NEEDS_CHECK(r.t.provider, "the original invoice revenue does not establish this transfer amount.") : ORIGINAL_REVENUE_CHECK;
+        await ctx.tx.update(memberPayoutTransfers).set({ state: maybePaid ? "unknown" : "failed", lastError: maybePaid ? r.t.lastError : note, updatedAt: now }).where(eq(memberPayoutTransfers.id, r.t.id));
+        await ctx.tx.update(memberPayouts).set({ state: "review", note }).where(eq(memberPayouts.id, r.t.payoutId));
+        continue;
+      }
+      if (r.t.kind === "transfer" && r.t.amountMinor === 0) {
+        const note = maybePaid ? NEEDS_CHECK(r.t.provider, "an earlier zero-amount attempt has an unknown outcome.") : "No transfer is needed: the original seller earning is zero.";
+        await ctx.tx.update(memberPayoutTransfers).set({ state: maybePaid ? "unknown" : "failed", lastError: maybePaid ? r.t.lastError : note, updatedAt: now }).where(eq(memberPayoutTransfers.id, r.t.id));
+        await ctx.tx.update(memberPayouts).set(maybePaid ? { state: "review", note } : { state: "paid", paidAt: now }).where(eq(memberPayouts.id, r.t.payoutId));
         continue;
       }
       // Same-key retries stay inside the providers' key retention (Stripe

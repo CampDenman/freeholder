@@ -101,6 +101,7 @@ const INTERNAL = [
   // and refund.succeeded and released by a job, on nobody's behalf.
   "catalog.memberOrdersForContact",
   "catalog.orderForInvoice",
+  "catalog.orderInvoiceRevenue",
   "catalog.orderSellers",
   "members.recordPayouts",
   // C12.05 / C12.25: a paid invoice for a member's subscription or booked
@@ -216,6 +217,7 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "catalog.orderInvoiceRevenue",
   "subscriptions.claimTrialCardSetup",
   "subscriptions.applyTrialCardSetup",
   "subscriptions.claimTrialSetupDispatch",
