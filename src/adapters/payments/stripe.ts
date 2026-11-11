@@ -27,7 +27,29 @@ const capabilities: PaymentAdapterCapabilities = {
   payouts: false,
   inPerson: false,
   strongCustomerAuthentication: true,
+  sellerMerchantCharges: true,
 };
+
+function accountHeaders(id?: string): Record<string, string> {
+  if (!id) return {};
+  if (id.length > 200 || !/^acct_[A-Za-z0-9]+$/.test(id)) throw new AdapterError("payments", "stripe", "invalid_request", "That seller payment account is invalid.");
+  return { "stripe-account": id };
+}
+
+function applicationFee(form: URLSearchParams, key: string, value: number | undefined, accountId: string | undefined, amountMinor?: number): void {
+  if (value === undefined || value === 0) return;
+  if (!accountId || !Number.isFinite(value) || value < 0 || (amountMinor !== undefined ? !Number.isSafeInteger(value) || value >= amountMinor : !validFeePercent(value))) throw new AdapterError("payments", "stripe", "invalid_request", "That seller application fee is outside its valid range.");
+  form.set(key, String(value));
+}
+
+function validFeePercent(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100 && /^\d+(?:\.\d{1,2})?$/.test(String(value));
+}
+
+function feePercent(value: unknown): number | undefined {
+  if (value === null) return 0;
+  return validFeePercent(value) ? value : undefined;
+}
 
 export interface StripePaymentOptions {
   secretKey?: string;
@@ -245,6 +267,23 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
   return [];
 }
 
+/** Normalize only after the caller verifies Stripe's exact-byte signature. */
+export function stripePaymentEvents(payload: Record<string, unknown>): PaymentProviderEvent[] {
+  const account = payload.account;
+  if (account !== undefined && (typeof account !== "string" || !/^acct_[A-Za-z0-9]+$/.test(account) || account.length > 200)) throw new AdapterError("payments", "stripe", "invalid_request", "Stripe sent an invalid account scope.");
+  const value = object(object(payload.data)?.object);
+  return stripeEvents(payload).map(event => {
+    if (!account) return event;
+    if (event.kind === "payment_succeeded" && String(payload.type).startsWith("checkout.session.")) {
+      // A Checkout Session does not prove the application's collected fee.
+      // The PaymentIntent event (or a scoped API read) completes settlement.
+      return { ...event, providerAccountId: account, kind: "payment_processing" };
+    }
+    const fee = value?.application_fee_amount === null ? 0 : number(value?.application_fee_amount);
+    return { ...event, providerAccountId: account, ...(event.kind.startsWith("payment_") && fee !== undefined ? { applicationFeeMinor: fee } : {}) };
+  });
+}
+
 export function createStripePayments(options: StripePaymentOptions = {}): PaymentAdapter {
   const current = env();
   const secretKey = options.secretKey ?? current.STRIPE_SECRET_KEY;
@@ -254,11 +293,11 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
   const tolerance = options.toleranceSeconds ?? 300;
   const missing = [!secretKey ? "STRIPE_SECRET_KEY" : undefined, webhookSecrets.length === 0 ? "STRIPE_WEBHOOK_SECRET" : undefined].filter(Boolean);
 
-  async function api(path: string, init: RequestInit): Promise<Record<string, unknown>> {
+  async function api(path: string, init: RequestInit, providerAccountId?: string): Promise<Record<string, unknown>> {
     if (!secretKey) throw new AdapterError("payments", "stripe", "unavailable", "Stripe is not configured.");
     const response = await paymentFetch(fetcher, `${apiBase}${path}`, {
       ...init,
-      headers: { authorization: `Bearer ${secretKey}`, "stripe-version": "2026-02-25.clover", ...init.headers },
+      headers: { authorization: `Bearer ${secretKey}`, "stripe-version": "2026-02-25.clover", ...init.headers, ...accountHeaders(providerAccountId) },
     });
     return providerJson("stripe", response);
   }
@@ -302,16 +341,18 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         if (!invoice.providerCustomerRef) form.set("customer_creation", "always");
       }
       for (const method of invoice.methodIds ?? []) form.append("payment_method_types[]", method);
+      applicationFee(form, "payment_intent_data[application_fee_amount]", invoice.applicationFeeMinor, invoice.providerAccountId, invoice.amountMinor);
       const value = await api("/v1/checkout/sessions", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": invoice.idempotencyKey },
         body: form,
-      });
+      }, invoice.providerAccountId);
       const providerRef = text(value.id);
       const url = text(value.url);
       if (!providerRef || !url) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return a checkout address.");
       return {
         providerRef,
+        ...(invoice.providerAccountId ? { providerAccountId: invoice.providerAccountId } : {}),
         paymentRef: typeof value.payment_intent === "string" ? value.payment_intent : undefined,
         url,
         expiresAt: number(value.expires_at) === undefined ? undefined : stripeTime(value.expires_at),
@@ -338,7 +379,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": request.idempotencyKey },
         body: form,
-      });
+      }, request.providerAccountId);
       const providerRef = text(value.id);
       const url = text(value.url);
       const providerCustomerRef = typeof value.customer === "string" ? value.customer : text(object(value.customer)?.id);
@@ -347,31 +388,42 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       }
       return {
         providerRef,
+        ...(request.providerAccountId ? { providerAccountId: request.providerAccountId } : {}),
         url,
         expiresAt: number(value.expires_at) === undefined ? undefined : stripeTime(value.expires_at),
         providerCustomerRef,
       };
     },
     async captureCheckout(request): Promise<CheckoutCaptureResult> {
-      const value = await api(`/v1/checkout/sessions/${encodeURIComponent(request.checkoutRef)}`, { method: "GET" });
-      const providerRef = typeof value.payment_intent === "string" ? value.payment_intent : request.checkoutRef;
+      const expansion = request.providerAccountId ? "?expand%5B%5D=payment_intent" : "";
+      const value = await api(`/v1/checkout/sessions/${encodeURIComponent(request.checkoutRef)}${expansion}`, { method: "GET" }, request.providerAccountId);
+      const intent = object(value.payment_intent);
+      const providerRef = typeof value.payment_intent === "string" ? value.payment_intent : text(intent?.id) ?? request.checkoutRef;
+      const fee = intent?.application_fee_amount === null ? 0 : number(intent?.application_fee_amount);
+      if (request.providerAccountId && value.payment_status === "paid" && fee === undefined) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not confirm the seller charge's application fee.");
       return {
         providerRef,
+        ...(request.providerAccountId ? { providerAccountId: request.providerAccountId } : {}),
         status: value.payment_status === "paid" ? "succeeded" : value.status === "expired" ? "failed" : "pending",
         amountMinor: number(value.amount_total),
         currency: text(value.currency)?.toUpperCase(),
+        ...(request.providerAccountId && fee !== undefined ? { applicationFeeMinor: fee } : {}),
       };
     },
     async refund(request) {
       const form = new URLSearchParams({ payment_intent: request.providerRef, amount: String(request.amountMinor) });
       if (request.reason) form.set("metadata[freeholder_reason]", request.reason.slice(0, 500));
-      const value = await api("/v1/refunds", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": request.idempotencyKey }, body: form });
+      if (request.refundApplicationFee) {
+        if (!request.providerAccountId) throw new AdapterError("payments", "stripe", "invalid_request", "A platform-fee refund needs its original seller account.");
+        form.set("refund_application_fee", "true");
+      }
+      const value = await api("/v1/refunds", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": request.idempotencyKey }, body: form }, request.providerAccountId);
       const providerRef = text(value.id);
       if (!providerRef) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return a refund reference.");
-      return { providerRef, status: value.status === "succeeded" ? "succeeded" : value.status === "failed" || value.status === "canceled" ? "failed" : "pending" };
+      return { providerRef, ...(request.providerAccountId ? { providerAccountId: request.providerAccountId } : {}), status: value.status === "succeeded" ? "succeeded" : value.status === "failed" || value.status === "canceled" ? "failed" : "pending" };
     },
     async revokeSavedMethod(request) {
-      await api(`/v1/payment_methods/${encodeURIComponent(request.providerRef)}/detach`, { method: "POST", headers: { "idempotency-key": request.idempotencyKey } });
+      await api(`/v1/payment_methods/${encodeURIComponent(request.providerRef)}/detach`, { method: "POST", headers: { "idempotency-key": request.idempotencyKey } }, request.providerAccountId);
     },
     async chargeSavedMethod(request): Promise<OffSessionChargeResult> {
       const form = new URLSearchParams({
@@ -385,6 +437,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         description: request.description.slice(0, 1000),
       });
       if (request.customerRef) form.set("customer", request.customerRef);
+      applicationFee(form, "application_fee_amount", request.applicationFeeMinor, request.providerAccountId, request.amountMinor);
       const value = await api("/v1/payment_intents", {
         method: "POST",
         headers: {
@@ -392,7 +445,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
           "idempotency-key": request.idempotencyKey,
         },
         body: form,
-      });
+      }, request.providerAccountId);
       const providerRef = text(value.id);
       if (!providerRef) {
         throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return a payment reference.");
@@ -403,8 +456,11 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
           : value.status === "processing"
             ? "pending"
             : "failed";
+      const fee = value.application_fee_amount === null ? 0 : number(value.application_fee_amount);
+      if (request.providerAccountId && value.status === "succeeded" && fee === undefined) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not confirm the seller charge application fee.");
       return {
         providerRef,
+        ...(request.providerAccountId ? { providerAccountId: request.providerAccountId, applicationFeeMinor: fee } : {}),
         status,
         amountMinor: number(value.amount),
         currency: text(value.currency)?.toUpperCase(),
@@ -413,7 +469,9 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       };
     },
     async createRecurringSchedule(request): Promise<RecurringScheduleResult> {
-      const product = await api("/v1/products", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": `${request.idempotencyKey}:product` }, body: new URLSearchParams({ name: request.description.slice(0, 250) }) });
+      const feeFields = new URLSearchParams();
+      applicationFee(feeFields, "application_fee_percent", request.applicationFeePercent, request.providerAccountId);
+      const product = await api("/v1/products", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": `${request.idempotencyKey}:product` }, body: new URLSearchParams({ name: request.description.slice(0, 250) }) }, request.providerAccountId);
       const productId = text(product.id);
       if (!productId) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return a product reference.");
       const form = new URLSearchParams({
@@ -433,6 +491,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         form.set("billing_cycle_anchor", String(Math.floor(new Date(request.firstBillingAt).getTime() / 1000)));
         form.set("proration_behavior", "none");
       }
+      for (const [key, value] of feeFields) form.set(key, value);
       const value = await api("/v1/subscriptions", {
         method: "POST",
         headers: {
@@ -440,17 +499,21 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
           "idempotency-key": request.idempotencyKey,
         },
         body: form,
-      });
+      }, request.providerAccountId);
       const providerRef = text(value.id);
       if (!providerRef) {
         throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return a subscription reference.");
       }
-      return { providerRef, customerRef: request.customerRef };
+      const actualFee = feePercent(value.application_fee_percent);
+      if (request.providerAccountId && actualFee !== (request.applicationFeePercent ?? 0)) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not confirm the seller subscription application fee.");
+      return { providerRef, customerRef: request.customerRef, ...(request.providerAccountId ? { providerAccountId: request.providerAccountId, applicationFeePercent: actualFee } : {}) };
     },
     async updateRecurringSchedule(request): Promise<RecurringScheduleResult> {
+      const feeFields = new URLSearchParams();
+      applicationFee(feeFields, "application_fee_percent", request.applicationFeePercent, request.providerAccountId);
       const current = await api(`/v1/subscriptions/${encodeURIComponent(request.providerRef)}`, {
         method: "GET",
-      });
+      }, request.providerAccountId);
       const items = object(current.items);
       const first = Array.isArray(items?.data) ? object(items.data[0]) : undefined;
       const itemId = text(first?.id);
@@ -466,6 +529,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         "items[0][price_data][product]": productId,
       });
       if (itemId) form.set("items[0][id]", itemId);
+      for (const [key, value] of feeFields) form.set(key, value);
       const value = await api(`/v1/subscriptions/${encodeURIComponent(request.providerRef)}`, {
         method: "POST",
         headers: {
@@ -473,14 +537,16 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
           "idempotency-key": request.idempotencyKey,
         },
         body: form,
-      });
-      return { providerRef: text(value.id) ?? request.providerRef };
+      }, request.providerAccountId);
+      const actualFee = feePercent(value.application_fee_percent);
+      if (request.providerAccountId && actualFee !== (request.applicationFeePercent ?? 0)) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not confirm the seller subscription application fee.");
+      return { providerRef: text(value.id) ?? request.providerRef, ...(request.providerAccountId ? { providerAccountId: request.providerAccountId, applicationFeePercent: actualFee } : {}) };
     },
     async cancelRecurringSchedule(request) {
       await api(`/v1/subscriptions/${encodeURIComponent(request.providerRef)}`, {
         method: "DELETE",
         headers: { "idempotency-key": request.idempotencyKey },
-      });
+      }, request.providerAccountId);
     },
     async verifyWebhook(request) {
       if (webhookSecrets.length === 0) throw new AdapterError("payments", "stripe", "unavailable", "Stripe webhook verification is not configured.");
@@ -508,7 +574,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       try { payload = JSON.parse(raw.toString("utf8")); } catch { throw new AdapterError("payments", "stripe", "invalid_request", "Stripe sent invalid JSON."); }
       const parsed = object(payload);
       if (!parsed) throw new AdapterError("payments", "stripe", "invalid_request", "Stripe sent an invalid event.");
-      return stripeEvents(parsed);
+      return stripePaymentEvents(parsed);
     },
   };
 }

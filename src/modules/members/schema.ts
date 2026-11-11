@@ -425,6 +425,9 @@ export const memberPayoutAccounts = pgTable(
     status: text("status", { enum: ["pending", "ready", "disabled"] }).notNull().default("pending"),
     instructionsSealed: text("instructions_sealed"),
     externalAccountId: text("external_account_id"),
+    /** C12.38: transfer readiness alone cannot authorize direct charges. */
+    chargesReady: boolean("charges_ready").notNull().default(false),
+    merchantName: text("merchant_name"),
     updatedAt: updatedAtColumn(),
   },
   (t) => [check("member_payout_accounts_status_valid", sql`${t.status} in ('pending','ready','disabled')`)],

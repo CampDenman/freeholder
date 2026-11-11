@@ -56,6 +56,26 @@ describe.runIf(hasDatabase)("member payouts (C12.09)", () => {
   });
   afterAll(closeDb);
 
+  it("keeps an issued order's fee and hold model when the site changes its defaults before payment", async () => {
+    const listing = await createListing.call({ acceptPolicy: true, title: "Frozen invoice terms", kind: "digital", price: "40" }, RAE);
+    await savePayoutInstructions.call({ instructions: "Recorded payout instructions" }, RAE);
+    await setPayoutAccountStatus.call({ userId: RAE.userId, status: "ready" }, OWNER);
+    const { contact } = await resolveContact.call({ email: "frozen-fee@example.test", name: "Buyer" }, OWNER);
+    const cart = await getOrCreateCart.call({ currency: "CAD", contactId: contact.id }, OWNER);
+    await addCartItem.call({ cartId: cart.cart.id, cartToken: cart.cart.token ?? undefined, variantId: await variantOf(listing.productId) }, ANONYMOUS);
+    const order = await checkoutCart.call({ cartId: cart.cart.id, contactId: contact.id, idempotencyKey: `frozen-${crypto.randomUUID()}`, acceptedTerms: true as const }, OWNER);
+    await updateMembershipRules.call({ payoutModel: "instant", siteFeeBps: 5000, holdDays: 30 }, OWNER);
+    const payment = await createPayment.call({ invoiceId: order.order.invoiceId!, provider: "manual", method: "bank_transfer", amountMinor: 4000, idempotencyKey: `frozen-pay-${crypto.randomUUID()}` }, OWNER);
+    await settlePayment.call({ id: payment.id, providerRef: "frozen-fee-payment" }, OWNER);
+    await onOrderPaid({ orderId: order.order.id });
+    const { payouts } = await sitePayouts.call({}, OWNER);
+    expect(payouts).toHaveLength(1);
+    expect(payouts[0]).toMatchObject({ model: "hold", grossMinor: 4000, feeMinor: 400, netMinor: 3600, state: "held" });
+    const daysUntilRelease = (new Date(payouts[0]!.releaseAt!).getTime() - Date.now()) / 86_400_000;
+    expect(daysUntilRelease).toBeGreaterThan(6.9);
+    expect(daysUntilRelease).toBeLessThanOrEqual(7.01);
+  });
+
   it("refuses unpayable sellers, records shares less the fee, releases and pays", async () => {
     const print = await createListing.call({ acceptPolicy: true, title: "Harbour print (download)", kind: "digital", price: "40" }, RAE);
     const lesson = await createListing.call({ acceptPolicy: true, title: "Lesson", kind: "service", price: "100" }, SAM);

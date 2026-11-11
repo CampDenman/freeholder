@@ -64,6 +64,20 @@ automated alert does not establish their security. Live provider acceptance,
 cross-target object-byte recovery and actual platform launches retain their
 own open checklist items.
 
+## Seller collection-policy and original-account boundary (C12.38, partial)
+
+Review the private invoice/subscription policy snapshots and payment routing
+in `src/modules/invoicing/market-policy.ts`,
+`src/modules/invoicing/merchant-charge.ts`,
+`src/modules/subscriptions/market-policy.ts` and
+`src/modules/members/market-merchant.ts`. Check account/actual-fee evidence,
+saved customer/method account isolation, original-account refunds and recurring
+operations, response privacy, trial policy capture, and preservation of unknown
+charge outcomes. Migration 67 must not turn a historical transfer account into
+an authorized merchant. `deploy/seller-merchant-source-2026-11-10.md` records
+the limited source evidence and remaining integration. The direct model stays
+unavailable; this packet supplies neither activation nor independent sign-off.
+
 ## Newly published XML parser advisory
 
 The 2026-11-10 C3.42 protected CI run independently caught

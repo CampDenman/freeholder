@@ -13,9 +13,11 @@ import { sendMail } from "@/core/mail/service";
 import { contactForActor } from "@/core/portal/service";
 import { actorString, defineOrchestratedService, defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { customerCheckoutAllowed, requiresSavedMethod } from "./checkout-requirements";
-import { checkoutSession, invoiceRow, paymentRow } from "./contract";
+import { invoiceRow, paymentRow } from "./contract";
+import { assertChargeEvidence, assertProviderAccount, paymentRouting, routingForPayment, verifiedCheckoutSession } from "./merchant-charge";
+import { getInvoiceMarketPolicy } from "./market-policy";
 import { createPayment, failPayment, markInvoiceViewed, settlePayment, startPayment } from "./invoice-service";
-import { invoiceLines, invoices, payments, paymentPlans, paymentPlanInstallments } from "./schema";
+import { invoiceLines, invoices, payments, paymentPlans, paymentPlanInstallments, paymentProviderCustomers } from "./schema";
 import { orderPaymentMilestones, orders } from "@/modules/catalog/schema";
 import { checkoutPaymentSchema } from "@/modules/catalog/checkout-policy";
 import { customerInvoicePath, invoiceAccessToken, paymentReturnToken, validInvoiceToken, validPaymentReturnToken } from "./customer-tokens";
@@ -171,7 +173,7 @@ export const sendInvoice = defineService({
 });
 
 const checkoutAccess = access.extend({ saveMethodConsent: z.boolean().default(false) });
-const checkoutSource = z.object({ invoice: invoiceRow, payment: paymentRow.nullable(), email: z.string(), name: z.string() });
+const checkoutSource = z.object({ invoice: invoiceRow, payment: paymentRow.nullable(), email: z.string(), name: z.string(), routing: paymentRouting, providerCustomerRef: z.string().nullable() });
 export const claimCustomerCheckout = defineService({
   name: "invoicing.claimCustomerCheckout", summary: "Authorize and durably reserve a customer payment before contacting its provider.",
   kind: "mutation", permission: "public", external: false, input: checkoutAccess, output: checkoutSource,
@@ -181,7 +183,8 @@ export const claimCustomerCheckout = defineService({
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`customer-checkout:${input.id}`}))`);
     const invoice = await authorizedInvoice(input, ctx);
     if (!payable(invoice)) throw new ServiceError("conflict", "This invoice is not open for payment.");
-    const adapter = paymentAdapter();
+    const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: invoice.id });
+    const adapter = paymentAdapter(policy?.model === "seller_merchant" ? "stripe" : undefined);
     const saveMethod = await requiresSavedMethod(ctx, invoice);
     if (saveMethod && (!input.saveMethodConsent || !adapter.capabilities().savedMethods || adapter.id === "manual")) {
       throw new ServiceError("conflict", "This membership requires consent and a provider that supports saved payment methods.");
@@ -217,12 +220,14 @@ export const claimCustomerCheckout = defineService({
       metadata: { customerCheckout: true, customerEmail: contact.email, customerName: contact.name, saveMethodRequested: saveMethod },
     });
     const savedCustomer = z.object({ customerEmail: z.string(), customerName: z.string() }).safeParse(payment?.metadata);
-    return { invoice, payment, email: savedCustomer.success ? savedCustomer.data.customerEmail : contact.email,
+    const routing = payment ? await routingForPayment(ctx, payment.id) : {};
+    const [customer] = await ctx.tx.select().from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, invoice.contactId), eq(paymentProviderCustomers.provider, adapter.id), eq(paymentProviderCustomers.providerAccountId, routing.providerAccountId ?? ""))).limit(1);
+    return { routing, providerCustomerRef: customer?.providerCustomerRef ?? null, invoice, payment, email: savedCustomer.success ? savedCustomer.data.customerEmail : contact.email,
       name: savedCustomer.success ? savedCustomer.data.customerName : contact.name };
   },
 });
 
-const applyCheckoutInput = access.extend({ paymentId: z.string().uuid(), response: checkoutSession });
+const applyCheckoutInput = access.extend({ paymentId: z.string().uuid(), response: verifiedCheckoutSession });
 export const applyCustomerCheckout = defineService({
   name: "invoicing.applyCustomerCheckout", summary: "Attach a provider checkout to its authorized customer payment.",
   kind: "mutation", permission: "public", external: false, input: applyCheckoutInput, output: z.object({ url: z.string().url() }),
@@ -231,6 +236,7 @@ export const applyCustomerCheckout = defineService({
     const invoice = await authorizedInvoice({ id: input.id, token: input.token }, ctx);
     const [payment] = await ctx.tx.select().from(payments).where(and(eq(payments.id, input.paymentId), eq(payments.invoiceId, invoice.id))).limit(1);
     if (!payment || !payable(invoice) || await customerCheckoutAmount(invoice, ctx) !== payment.amountMinor) throw new ServiceError("conflict", "The invoice balance changed. Open the invoice again.");
+    assertProviderAccount(await routingForPayment(ctx, payment.id), input.response);
     await ctx.callAsSystem(startPayment, { id: payment.id, providerRef: input.response.paymentRef ?? input.response.providerRef, providerCheckoutRef: input.response.providerRef });
     const url = new URL(input.response.url);
     if (url.protocol !== "https:" || url.username || url.password) throw new ServiceError("conflict", "The payment provider returned an unsafe checkout address.");
@@ -278,6 +284,8 @@ export const beginCustomerCheckout = defineOrchestratedService({
         customer: { email: source.email, name: source.name }, successUrl, cancelUrl: cancel.href,
         idempotencyKey: payment.idempotencyKey,
         saveMethod: (payment.metadata as { saveMethodRequested?: boolean }).saveMethodRequested === true,
+        providerCustomerRef: source.providerCustomerRef ?? undefined,
+        ...source.routing,
       });
       return await applyCustomerCheckout.call({ id: input.id, token: input.token, paymentId: payment.id, response: checkout }, actor);
     } catch (error) {
@@ -305,10 +313,10 @@ export const customerPaymentReceipt = defineService({
 });
 export const customerPaymentSource = defineService({
   name: "invoicing.customerPaymentSource", summary: "Authorize a customer provider-status check.",
-  kind: "query", permission: "public", external: false, input: receiptAccess, output: paymentRow,
-  handler: async (input, ctx) => authorizedPayment(input.token, ctx),
+  kind: "query", permission: "public", external: false, input: receiptAccess, output: z.object({ payment: paymentRow, routing: paymentRouting }),
+  handler: async (input, ctx) => { const payment = await authorizedPayment(input.token, ctx); return { payment, routing: await routingForPayment(ctx, payment.id) }; },
 });
-const capture = z.object({ providerRef: z.string().min(1), status: z.enum(["pending", "succeeded", "failed"]), amountMinor: z.number().int().optional(), currency: z.string().optional(), occurredAt: z.string().datetime().optional() });
+const capture = z.object({ providerAccountId: paymentRouting.shape.providerAccountId, applicationFeeMinor: paymentRouting.shape.applicationFeeMinor, providerRef: z.string().min(1), status: z.enum(["pending", "succeeded", "failed"]), amountMinor: z.number().int().optional(), currency: z.string().optional(), occurredAt: z.string().datetime().optional() });
 export const applyCustomerPayment = defineService({
   name: "invoicing.applyCustomerPayment", summary: "Converge verified provider results through the shared payment ledger.",
   kind: "mutation", permission: "public", external: false, input: receiptAccess.extend({ response: capture }), output: receipt,
@@ -316,6 +324,7 @@ export const applyCustomerPayment = defineService({
     const payment = await authorizedPayment(input.token, ctx);
     if (payment.status === "succeeded") return payment;
     const result = input.response;
+    assertChargeEvidence(await routingForPayment(ctx, payment.id), result);
     if ((result.amountMinor !== undefined && result.amountMinor !== payment.amountMinor) ||
         (result.currency !== undefined && result.currency !== payment.currency)) throw new ServiceError("conflict", "The payment provider amount does not match the invoice.");
     if (result.status === "succeeded") return ctx.callAsSystem(settlePayment, { id: payment.id, providerRef: result.providerRef, processedAt: result.occurredAt ? new Date(result.occurredAt) : new Date() });
@@ -328,11 +337,11 @@ export const confirmCustomerPayment = defineOrchestratedService({
   kind: "mutation", permission: "public", writeClass: "money", input: receiptAccess, output: receipt,
   rateLimit: { limit: 20, windowSeconds: 60, subject: (input: z.infer<typeof receiptAccess>) => `invoice-receipt:${input.token.split(".")[0]}`, message: "Please wait before checking payment again." },
   handler: async (input, actor) => {
-    const payment = await customerPaymentSource.call(input, actor);
+    const { payment, routing } = await customerPaymentSource.call(input, actor);
     if (payment.status === "succeeded" || payment.status === "failed" || payment.status === "cancelled") return receiptView(payment);
     if (!payment.providerCheckoutRef) throw new ServiceError("conflict", "This payment is not ready to confirm.");
     try {
-      const response = await paymentAdapter(payment.provider).captureCheckout({ checkoutRef: payment.providerCheckoutRef, idempotencyKey: `customer-confirm:${payment.id}` });
+      const response = await paymentAdapter(payment.provider).captureCheckout({ checkoutRef: payment.providerCheckoutRef, idempotencyKey: `customer-confirm:${payment.id}`, providerAccountId: routing.providerAccountId });
       return await applyCustomerPayment.call({ ...input, response }, actor);
     } catch (error) {
       if (error instanceof ServiceError) throw error;

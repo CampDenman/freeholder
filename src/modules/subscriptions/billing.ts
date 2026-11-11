@@ -12,8 +12,10 @@ import {
   type Actor,
   type ServiceContext,
 } from "@/core/service";
-import { createPayment, failPayment, settlePayment } from "@/modules/invoicing/invoice-service";
-import { invoices, paymentMethods } from "@/modules/invoicing/schema";
+import { createPayment, failPayment, settlePayment, startPayment } from "@/modules/invoicing/invoice-service";
+import { assertChargeEvidence, assertProviderAccount, paymentRouting, routingForPayment } from "@/modules/invoicing/merchant-charge";
+import { getSubscriptionPaymentScope, subscriptionPaymentScope } from "./market-policy";
+import { invoices, paymentMethods, payments } from "@/modules/invoicing/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
 import { plans, subscriptionEvents, subscriptions } from "./schema";
 import {
@@ -76,6 +78,7 @@ const claimCharge = defineService({
     description: z.string(),
     idempotencyKey: z.string(),
     contactId: uuidSchema,
+    routing: paymentRouting.optional(),
   }),
   handler: async (input, ctx) => {
     const [subscription] = await ctx.tx
@@ -172,8 +175,11 @@ const claimCharge = defineService({
       amountMinor,
       idempotencyKey: `subscription-charge:${current.id}:${invoice.id}`,
     });
+    const routing = await routingForPayment(ctx, payment.id);
+    if (method.providerAccountId !== (routing.providerAccountId ?? "")) throw new ServiceError("conflict", "The stored method belongs to a different merchant account.");
     return {
       skip: false,
+      routing,
       subscriptionId: current.id,
       invoiceId: invoice.id,
       paymentId: payment.id,
@@ -200,7 +206,11 @@ const applyCharge = defineService({
     invoiceId: uuidSchema,
     paymentId: uuidSchema,
     providerRef: z.string().min(1).max(500),
-    succeeded: z.boolean(),
+    status: z.enum(["pending", "succeeded", "failed"]),
+    providerAccountId: paymentRouting.shape.providerAccountId,
+    applicationFeeMinor: paymentRouting.shape.applicationFeeMinor,
+    amountMinor: z.number().int().min(0).optional(),
+    currency: z.string().length(3).optional(),
     failureMessage: z.string().max(500).optional(),
   }),
   output: row({ advanced: z.boolean() }),
@@ -212,8 +222,17 @@ const applyCharge = defineService({
       .limit(1)
       .for("update");
     if (!subscription) throw new ServiceError("not_found", "There is no such subscription.");
+    const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
+    if (!payment || payment.invoiceId !== input.invoiceId || payment.method !== "saved_method") throw new ServiceError("conflict", "This result does not match the original membership payment.");
+    const routing = await routingForPayment(ctx, payment.id);
+    assertChargeEvidence(routing, input);
+    if ((input.amountMinor !== undefined && input.amountMinor !== payment.amountMinor) || (input.currency && input.currency.toUpperCase() !== payment.currency) || (routing.providerAccountId && input.status === "succeeded" && (input.amountMinor === undefined || !input.currency))) throw new ServiceError("conflict", "The provider did not confirm the membership payment amount and currency.");
+    if (input.status === "pending") {
+      await ctx.call(startPayment, { id: payment.id, providerRef: input.providerRef });
+      return { advanced: false };
+    }
     const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
-    if (input.succeeded) {
+    if (input.status === "succeeded") {
       await ctx.call(settlePayment, {
         id: input.paymentId,
         providerRef: input.providerRef,
@@ -285,8 +304,10 @@ export const chargePlatformInvoice = defineOrchestratedService({
     const adapter = paymentAdapter(claimed.provider);
     const invoiceId = claimed.invoiceId;
     const paymentId = claimed.paymentId;
+    let result;
     try {
-      const result = await adapter.chargeSavedMethod({
+      result = await adapter.chargeSavedMethod({
+        ...claimed.routing,
         methodRef: claimed.methodRef,
         customerRef: claimed.customerRef ?? undefined,
         invoiceId,
@@ -296,33 +317,19 @@ export const chargePlatformInvoice = defineOrchestratedService({
         description: claimed.description,
         idempotencyKey: claimed.idempotencyKey,
       });
-      const applied = await applyCharge.call(
-        {
-          subscriptionId: claimed.subscriptionId,
-          invoiceId,
-          paymentId,
-          providerRef: result.providerRef,
-          succeeded: result.status === "succeeded",
-          failureMessage: result.failureMessage,
-        },
-        { kind: "system" },
-      );
-      return { advanced: applied.advanced, skipped: false };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "The provider could not charge that method.";
-      await applyCharge.call(
-        {
-          subscriptionId: claimed.subscriptionId,
-          invoiceId,
-          paymentId,
-          providerRef: `failed:${paymentId}`,
-          succeeded: false,
-          failureMessage: message.slice(0, 500),
-        },
-        { kind: "system" },
-      );
-      return { advanced: false, skipped: false };
+    } catch {
+      // Transport errors can arrive after a successful charge. Preserve the
+      // original attempt for same-key recovery or authenticated feedback;
+      // an exception is not provider evidence of a decline.
+      throw new ServiceError("conflict", "The provider charge needs reconciliation. Retry this same membership payment before creating another attempt.");
     }
+    const applied = await applyCharge.call({
+      subscriptionId: claimed.subscriptionId,
+      invoiceId,
+      paymentId,
+      ...result,
+    }, { kind: "system" });
+    return { advanced: applied.advanced, skipped: false };
   },
 });
 
@@ -393,6 +400,7 @@ const claimProviderSchedule = defineService({
     description: z.string(),
     firstBillingAt: z.string().optional(),
     idempotencyKey: z.string(),
+    routing: getSubscriptionPaymentScope.def.output,
   }),
   handler: async (input, ctx) => {
     const [subscription] = await ctx.tx
@@ -415,6 +423,8 @@ const claimProviderSchedule = defineService({
     if (!method?.providerMethodRef || !method.providerCustomerRef || method.status !== "active" || method.contactId !== subscription.contactId) {
       throw new ServiceError("conflict", "Provider billing needs a stored method with a provider customer.");
     }
+    const routing = await subscriptionPaymentScope(ctx, subscription.id, true);
+    if (method.providerAccountId !== (routing.providerAccountId ?? "") || (routing.providerAccountId && method.provider !== "stripe")) throw new ServiceError("conflict", "Provider billing needs a saved method for the original merchant account.");
     const priced = (await ctx.callAsSystem(resolvePrice, {
       variantId: subscription.productVariantId,
       currency: subscription.currency,
@@ -439,6 +449,7 @@ const claimProviderSchedule = defineService({
       description: plan.name,
       firstBillingAt: subscription.publicRequestKey || subscription.trialEndsAt ? subscription.currentPeriodEnd.toISOString() : undefined,
       idempotencyKey: `subscription-schedule:${subscription.id}`,
+      routing,
     };
   },
 });
@@ -454,11 +465,16 @@ const applyProviderSchedule = defineService({
     subscriptionId: uuidSchema,
     provider: z.string().min(1).max(80),
     providerRef: z.string().min(1).max(500),
+    providerAccountId: paymentRouting.shape.providerAccountId,
+    applicationFeePercent: z.number().min(0).max(100).optional(),
   }),
   output: row({ id: uuidSchema, accepted: z.boolean() }),
   handler: async (input, ctx) => {
     const [current] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, input.subscriptionId)).limit(1).for("update");
     if (!current || current.signupPending || current.cancelledAt || current.cancelAtPeriodEnd || !["active", "trialing"].includes(current.status)) return { id: input.subscriptionId, accepted: false };
+    const routing = await subscriptionPaymentScope(ctx, current.id);
+    assertProviderAccount(routing, input);
+    if (routing.providerAccountId && (input.provider !== "stripe" || routing.applicationFeePercent !== input.applicationFeePercent)) throw new ServiceError("conflict", "The provider did not confirm the original seller schedule fee.");
     await ctx.tx
       .update(subscriptions)
       .set({ provider: input.provider, providerRef: input.providerRef })
@@ -480,6 +496,7 @@ export const attachProviderSchedule = defineOrchestratedService({
     const claimed = await claimProviderSchedule.call(input, actor);
     if (claimed.existingRef) return { id: claimed.subscriptionId, providerRef: claimed.existingRef };
     const created = await paymentAdapter(claimed.provider).createRecurringSchedule({
+      ...claimed.routing,
       customerRef: claimed.customerRef,
       methodRef: claimed.methodRef,
       currency: claimed.currency,
@@ -500,11 +517,13 @@ export const attachProviderSchedule = defineOrchestratedService({
         subscriptionId: claimed.subscriptionId,
         provider: claimed.provider,
         providerRef: created.providerRef,
+        providerAccountId: created.providerAccountId,
+        applicationFeePercent: created.applicationFeePercent,
       },
       actor,
     );
     if (!applied.accepted) {
-      await paymentAdapter(claimed.provider).cancelRecurringSchedule({ providerRef: created.providerRef, idempotencyKey: `subscription-cancel:${created.providerRef}` });
+      await paymentAdapter(claimed.provider).cancelRecurringSchedule({ providerAccountId: claimed.routing.providerAccountId, providerRef: created.providerRef, idempotencyKey: `subscription-cancel:${created.providerRef}` });
       throw new ServiceError("conflict", "The membership was cancelled while its schedule was being created.");
     }
     return { id: claimed.subscriptionId, providerRef: created.providerRef };
@@ -609,6 +628,7 @@ const applyPlanChange = defineService({
     const [fromPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
     const [toPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, input.planId));
     if (!fromPlan || !toPlan) throw new ServiceError("not_found", "There is no such plan.");
+    if (await planSeller(ctx, fromPlan.id) !== await planSeller(ctx, toPlan.id)) throw new ServiceError("conflict", "A subscription cannot change to a different seller's plan.");
     if (toPlan.status !== "active") throw new ServiceError("conflict", "That plan is not on sale.");
     // One change at a time: a change waiting on its proration invoice must be
     // paid or that invoice voided before another is asked for, so a stale
@@ -643,6 +663,8 @@ const applyPlanChange = defineService({
       description: toPlan.name,
       proration: fromPlan.proration,
     };
+    const routing = await subscriptionPaymentScope(ctx, subscription.id);
+    if (method && method.providerAccountId !== (routing.providerAccountId ?? "")) throw new ServiceError("conflict", "This plan's stored method belongs to a different merchant account.");
     if (toPlan.id === fromPlan.id) {
       return {
         subscriptionId: subscription.id,
@@ -835,8 +857,10 @@ async function syncProviderAfterPlanChange(
   actor: Actor,
 ): Promise<void> {
   const stillProvider = applied.billingMode === "provider" || applied.deferred;
+  const routing = await getSubscriptionPaymentScope.call({ subscriptionId: applied.subscriptionId, verify: stillProvider }, { kind: "system", request: actor.request });
   if (stillProvider && applied.provider && applied.providerRef && applied.methodRef && applied.customerRef) {
-    await paymentAdapter(applied.provider).updateRecurringSchedule({
+    const updated = await paymentAdapter(applied.provider).updateRecurringSchedule({
+      ...routing,
       providerRef: applied.providerRef,
       amountMinor: applied.amountMinor,
       currency: applied.currency,
@@ -846,6 +870,8 @@ async function syncProviderAfterPlanChange(
       proration: applied.proration,
       idempotencyKey: `subscription-plan-change:${applied.subscriptionId}:${applied.providerRef}`,
     });
+    assertProviderAccount(routing, updated);
+    if (routing.providerAccountId && updated.applicationFeePercent !== routing.applicationFeePercent) throw new ServiceError("conflict", "The provider did not confirm the original seller subscription fee.");
     return;
   }
   if (applied.billingMode === "provider" && !applied.providerRef) {
@@ -854,6 +880,7 @@ async function syncProviderAfterPlanChange(
   }
   if (!stillProvider && applied.previousProvider && applied.previousProviderRef) {
     await paymentAdapter(applied.previousProvider).cancelRecurringSchedule({
+      providerAccountId: routing.providerAccountId,
       providerRef: applied.previousProviderRef,
       idempotencyKey: `subscription-plan-cancel-schedule:${applied.subscriptionId}`,
     });
@@ -1013,6 +1040,7 @@ export const reconcileProviderPeriod = defineService({
   input: z.object({
     provider: z.string().min(1).max(80),
     providerRef: z.string().min(1).max(500),
+    providerAccountId: z.string().max(200).default(""),
     kind: z.enum(["subscription_period_paid", "subscription_period_failed", "subscription_cancelled"]),
     amountMinor: z.number().int().min(0).optional(),
     currency: z.string().length(3).optional(),
@@ -1027,6 +1055,7 @@ export const reconcileProviderPeriod = defineService({
       .where(and(eq(subscriptions.provider, input.provider), eq(subscriptions.providerRef, input.providerRef)))
       .limit(1);
     if (!found) return { applied: false };
+    if (input.providerAccountId) throw new ServiceError("conflict", "Seller recurring reconciliation is not enabled yet.");
     let subscription = found;
     const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
     if (input.kind === "subscription_cancelled") {
@@ -1106,9 +1135,11 @@ export const reconcileProviderPeriod = defineService({
 async function stopProviderSchedule(subscription: {
   provider: string | null;
   providerRef: string | null;
-}): Promise<void> {
+}, subscriptionId: string): Promise<void> {
   if (!subscription.provider || !subscription.providerRef) return;
+  const routing = await getSubscriptionPaymentScope.call({ subscriptionId }, { kind: "system" });
   await paymentAdapter(subscription.provider).cancelRecurringSchedule({
+    providerAccountId: routing.providerAccountId,
     providerRef: subscription.providerRef,
     idempotencyKey: `subscription-cancel:${subscription.providerRef}`,
   });
@@ -1132,7 +1163,7 @@ export const cancelAgreement = defineOrchestratedService({
   }),
   handler: async (input, actor) => {
     const cancelled = await cancelSubscription.call(input, actor);
-    await stopProviderSchedule(cancelled);
+    await stopProviderSchedule(cancelled, input.id);
     return {
       id: cancelled.id,
       status: cancelled.status,
@@ -1154,7 +1185,7 @@ export const cancelMyAgreement = defineOrchestratedService({
   }),
   handler: async (input, actor) => {
     const ended = await cancelMySubscription.call(input, actor);
-    await stopProviderSchedule(ended);
+    await stopProviderSchedule(ended, input.id);
     return { cancelled: ended.cancelled, endsAt: ended.endsAt };
   },
 });

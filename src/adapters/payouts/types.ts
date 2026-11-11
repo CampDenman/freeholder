@@ -19,6 +19,8 @@ export interface SellerIdentity {
   userId: string;
   email: string;
   displayName: string;
+  /** Request charge acceptance only when the site's chosen model needs it. */
+  acceptDirectCharges?: boolean;
 }
 
 export interface OnboardingResult {
@@ -27,6 +29,8 @@ export interface OnboardingResult {
   /** Where to send the seller to finish setting up, for hosted onboarding. */
   url?: string;
   status: PayoutAccountStatus;
+  chargesReady?: boolean;
+  merchantName?: string | null;
 }
 
 export interface TransferRequest {
@@ -51,7 +55,7 @@ export interface TransferResult {
 export type ReverseResult = { reference: string } | { unsupported: string };
 
 export type PayoutWebhookEvent =
-  | { kind: "account"; externalAccountId: string; status: PayoutAccountStatus }
+  | { kind: "account"; externalAccountId: string; status: PayoutAccountStatus; chargesReady?: boolean; merchantName?: string | null }
   /**
    * key is the attempt key the transfer carried, when the provider echoes it
    * back. "unclaimed": PayPal holds the money for the receiver to claim.
@@ -71,6 +75,7 @@ export interface PayoutProvider {
   onboarding: { kind: "hosted" } | { kind: "form"; fields: readonly OnboardingField[] };
   onboard(seller: SellerIdentity, input: Partial<Record<OnboardingField, string>>, urls: { returnUrl: string; refreshUrl: string }, existing?: string | null): Promise<OnboardingResult>;
   accountStatus(externalAccountId: string): Promise<PayoutAccountStatus>;
+  accountDetails?(externalAccountId: string): Promise<{ status: PayoutAccountStatus; chargesReady: boolean; merchantName: string | null }>;
   transfer(request: TransferRequest): Promise<TransferResult>;
   reverse(request: { reference: string; amountMinor: number; currency: string; idempotencyKey: string }): Promise<ReverseResult>;
   webhook(request: PayoutWebhookRequest): Promise<PayoutWebhookEvent[]>;

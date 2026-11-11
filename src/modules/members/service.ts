@@ -32,6 +32,7 @@ import messageServices from "./messages";
 import callServices from "./calls";
 import listingServices from "./listings";
 import payoutServices, { payoutAdapters } from "./payouts";
+import merchantServices from "./market-merchant";
 import protectionServices from "./protection";
 import reputationServices from "./reputation";
 import reportServices from "./reports";
@@ -458,6 +459,7 @@ export async function activeMember(ctx: ServiceContext, userId: string) {
 }
 
 export default [
+  ...merchantServices,
   ...graphServices,
   ...postServices,
   ...messageServices,

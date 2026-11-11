@@ -18,6 +18,7 @@ import { applyVariantMatrix, getProductVariants, setVariantShipping } from "@/mo
 import { setPriceListEntry } from "@/modules/catalog/pricing";
 import { products, serviceOfferings } from "@/modules/catalog/schema";
 import { invoices } from "@/modules/invoicing/schema";
+import { getInvoiceMarketPolicy, marketFeeMinor } from "@/modules/invoicing/market-policy";
 import { bookings } from "@/core/scheduling/schema";
 import { savePlan } from "@/modules/subscriptions/service";
 import { publicMembershipPlans } from "@/modules/subscriptions/public-signup";
@@ -174,8 +175,9 @@ export const memberPlans = defineService({
 });
 
 /** The member a paid invoice is owed to: a subscription to their plan (C12.05) or a booking of their service (C12.25). */
-async function sellerForInvoice(ctx: ServiceContext, invoice: typeof invoices.$inferSelect): Promise<string | null> {
+export async function sellerForInvoice(ctx: ServiceContext, invoice: typeof invoices.$inferSelect): Promise<string | null> {
   if (!invoice.sourceId) return null;
+  if (!z.uuid().safeParse(invoice.sourceId.split(":")[0]).success) return null;
   if (invoice.sourceType === "subscription") {
     const [row] = await ctx.tx
       .select({ sellerUserId: products.sellerUserId })
@@ -212,10 +214,10 @@ export const recordInvoicePayout = defineService({
     if (!sellerUserId) return { recorded: false };
     const seller = { sellerUserId };
     const subscription = invoice.sourceType === "subscription";
-    const rules = await marketRules(ctx);
+    const rules = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: invoice.id }) ?? await marketRules(ctx);
     // Tax collected belongs to the site, which files it; the seller's share is the pre-tax amount.
     const gross = invoice.totalMinor - invoice.taxMinor;
-    const fee = Math.floor((gross * rules.siteFeeBps) / 10_000);
+    const fee = marketFeeMinor(gross, rules.siteFeeBps);
     const now = new Date();
     const [created] = await ctx.tx
       .insert(memberPayouts)

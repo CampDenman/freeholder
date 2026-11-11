@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C5.06: provider orchestration and authenticated event convergence.
 
-import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, getTableColumns, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter, paymentAdapters } from "@/adapters/payments";
 import {
@@ -40,11 +40,13 @@ import {
   startRefund,
 } from "./invoice-service";
 import { observeProviderPayout } from "./advanced-money-service";
+import { assertChargeEvidence, assertProviderAccount, paymentRouting, routingForPayment, verifiedCheckoutSession } from "./merchant-charge";
 import {
   invoices,
   moneyStateEvents,
   paymentDisputes,
   paymentMethods,
+  paymentMerchantRoutes,
   paymentProviderCustomers,
   paymentProviderEvents,
   payments,
@@ -70,6 +72,7 @@ const methodEvidence = z.object({
   expiryYear: z.number().int().min(2000).max(9999).optional(),
 });
 const paymentEvent = z.object({
+  providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["payment_processing", "payment_succeeded", "payment_failed", "payment_cancelled"]),
   providerRef: z.string().trim().min(1).max(500),
@@ -81,8 +84,10 @@ const paymentEvent = z.object({
   contactId: z.string().uuid().optional(),
   providerCustomerRef: z.string().trim().min(1).max(500).optional(),
   savedMethod: methodEvidence.optional(),
+  applicationFeeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
 });
 const refundEvent = z.object({
+  providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["refund_processing", "refund_succeeded", "refund_failed"]),
   providerRef: z.string().trim().min(1).max(500),
@@ -92,6 +97,7 @@ const refundEvent = z.object({
   occurredAt: z.string().datetime(),
 });
 const disputeEvent = z.object({
+  providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["dispute_opened", "dispute_won", "dispute_lost"]),
   providerRef: z.string().trim().min(1).max(500),
@@ -103,6 +109,7 @@ const disputeEvent = z.object({
   evidenceDueAt: z.string().datetime().optional(),
 });
 const savedMethodEvent = z.object({
+  providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["saved_method_added", "saved_method_removed"]),
   providerCustomerRef: z.string().trim().min(1).max(500).optional(),
@@ -111,6 +118,7 @@ const savedMethodEvent = z.object({
   occurredAt: z.string().datetime(),
 });
 const subscriptionBillingEvent = z.object({
+  providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["subscription_period_paid", "subscription_period_failed", "subscription_cancelled"]),
   providerRef: z.string().trim().min(1).max(500),
@@ -122,6 +130,7 @@ const subscriptionBillingEvent = z.object({
   invoiceProviderRef: z.string().trim().min(1).max(500).optional(),
 });
 const payoutEvent = z.object({
+  providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["payout_pending", "payout_in_transit", "payout_paid", "payout_failed", "payout_cancelled"]),
   providerRef: z.string().trim().min(1).max(500),
@@ -165,13 +174,14 @@ async function paymentByEvent(tx: Tx, providerId: string, event: z.infer<typeof 
   const refs = [event.providerRef, event.checkoutRef].filter((value): value is string => Boolean(value));
   const filters = refs.flatMap((ref) => [eq(payments.providerRef, ref), eq(payments.providerCheckoutRef, ref)]);
   let rows = filters.length
-    ? await tx.select().from(payments).where(and(eq(payments.provider, providerId), or(...filters))).limit(2)
+    ? await tx.select(getTableColumns(payments)).from(payments).leftJoin(paymentMerchantRoutes, eq(paymentMerchantRoutes.paymentId, payments.id)).where(and(eq(payments.provider, providerId), eq(sql<string>`coalesce(${paymentMerchantRoutes.providerAccountId}, '')`, event.providerAccountId ?? ""), or(...filters))).limit(2)
     : [];
   if (rows.length === 0 && event.invoiceId) {
     rows = await tx
-      .select()
+      .select(getTableColumns(payments))
       .from(payments)
-      .where(and(eq(payments.provider, providerId), eq(payments.invoiceId, event.invoiceId), inArray(payments.status, ["created", "processing"])))
+      .leftJoin(paymentMerchantRoutes, eq(paymentMerchantRoutes.paymentId, payments.id))
+      .where(and(eq(payments.provider, providerId), eq(sql<string>`coalesce(${paymentMerchantRoutes.providerAccountId}, '')`, event.providerAccountId ?? ""), eq(payments.invoiceId, event.invoiceId), inArray(payments.status, ["created", "processing"])))
       .orderBy(desc(payments.createdAt))
       .limit(2);
   }
@@ -190,14 +200,14 @@ function assertMovement(payment: typeof payments.$inferSelect, event: { amountMi
   }
 }
 
-async function upsertProviderCustomer(tx: Tx, contactId: string, providerId: string, providerCustomerRef?: string): Promise<void> {
+async function upsertProviderCustomer(tx: Tx, contactId: string, providerId: string, providerCustomerRef?: string, providerAccountId = ""): Promise<void> {
   if (!providerCustomerRef) return;
-  const [created] = await tx.insert(paymentProviderCustomers).values({ contactId, provider: providerId, providerCustomerRef }).onConflictDoNothing().returning({ id: paymentProviderCustomers.id });
+  const [created] = await tx.insert(paymentProviderCustomers).values({ contactId, provider: providerId, providerAccountId, providerCustomerRef }).onConflictDoNothing().returning({ id: paymentProviderCustomers.id });
   if (created) return;
   const [existing] = await tx
     .select()
     .from(paymentProviderCustomers)
-    .where(and(eq(paymentProviderCustomers.provider, providerId), eq(paymentProviderCustomers.providerCustomerRef, providerCustomerRef)))
+    .where(and(eq(paymentProviderCustomers.provider, providerId), eq(paymentProviderCustomers.providerAccountId, providerAccountId), eq(paymentProviderCustomers.providerCustomerRef, providerCustomerRef)))
     .limit(1);
   if (existing && existing.contactId !== contactId) {
     throw new ServiceError("conflict", "The payment provider customer is already linked to a different contact.");
@@ -210,8 +220,9 @@ async function resolveMethodContact(
   providerId: string,
   explicitContactId?: string,
   providerCustomerRef?: string,
+  providerAccountId = "",
 ): Promise<string | undefined> {
-  if (explicitContactId) {
+  if (explicitContactId && !providerAccountId) {
     const [contact] = await tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.id, explicitContactId)).limit(1);
     if (contact) return contact.id;
   }
@@ -219,9 +230,9 @@ async function resolveMethodContact(
   const rows = await tx
     .select({ contactId: paymentProviderCustomers.contactId })
     .from(paymentProviderCustomers)
-    .where(and(eq(paymentProviderCustomers.provider, providerId), eq(paymentProviderCustomers.providerCustomerRef, providerCustomerRef)))
+    .where(and(eq(paymentProviderCustomers.provider, providerId), eq(paymentProviderCustomers.providerAccountId, providerAccountId), eq(paymentProviderCustomers.providerCustomerRef, providerCustomerRef)))
     .limit(2);
-  return rows.length === 1 ? rows[0]!.contactId : undefined;
+  return rows.length === 1 && (!explicitContactId || rows[0]!.contactId === explicitContactId) ? rows[0]!.contactId : undefined;
 }
 
 async function persistMethod(
@@ -231,12 +242,13 @@ async function persistMethod(
   evidence: SavedPaymentMethodEvidence,
   kind: "saved_method_added" | "saved_method_removed",
   occurredAt: Date,
+  providerAccountId = "",
 ): Promise<string> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment-method:${providerId}:${evidence.providerRef}`}))`);
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment-method:${providerId}:${providerAccountId}:${evidence.providerRef}`}))`);
   const [existing] = await tx
     .select()
     .from(paymentMethods)
-    .where(and(eq(paymentMethods.provider, providerId), eq(paymentMethods.providerMethodRef, evidence.providerRef)))
+    .where(and(eq(paymentMethods.provider, providerId), eq(paymentMethods.providerAccountId, providerAccountId), eq(paymentMethods.providerMethodRef, evidence.providerRef)))
     .limit(1);
   if (existing && existing.contactId !== contactId) {
     throw new ServiceError("conflict", "The saved payment method is already linked to a different contact.");
@@ -246,6 +258,7 @@ async function persistMethod(
   const values = {
     contactId,
     provider: providerId,
+    providerAccountId,
     providerMethodRef: evidence.providerRef,
     providerCustomerRef: evidence.providerCustomerRef,
     kind: evidence.kind,
@@ -284,14 +297,16 @@ async function processPaymentEvent(providerId: string, event: z.infer<typeof pay
   }
   if (event.kind === "payment_succeeded") {
     if (payment.status === "failed" || payment.status === "cancelled") return `payment_terminal_${payment.status}`;
+    const routing = await routingForPayment(ctx, payment.id);
+    if (routing.providerAccountId && event.applicationFeeMinor !== routing.applicationFeeMinor) throw new ServiceError("conflict", "The seller charge application fee does not match its reserved payment.");
     await ctx.callAsSystem(settlePayment, { id: payment.id, providerRef: event.providerRef, processedAt: new Date(event.occurredAt) });
     const [invoice] = await ctx.tx.select({ contactId: invoices.contactId }).from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
     const contactId = invoice?.contactId ?? event.contactId;
     if (contactId) {
-      await upsertProviderCustomer(ctx.tx, contactId, providerId, event.providerCustomerRef ?? event.savedMethod?.providerCustomerRef);
+      await upsertProviderCustomer(ctx.tx, contactId, providerId, event.providerCustomerRef ?? event.savedMethod?.providerCustomerRef, event.providerAccountId ?? "");
       const metadata = payment.metadata && typeof payment.metadata === "object" && !Array.isArray(payment.metadata) ? payment.metadata as Record<string, unknown> : {};
       if (event.savedMethod && metadata.saveMethodRequested === true) {
-        const savedPaymentMethodId = await persistMethod(ctx.tx, providerId, contactId, event.savedMethod, "saved_method_added", new Date(event.occurredAt));
+        const savedPaymentMethodId = await persistMethod(ctx.tx, providerId, contactId, event.savedMethod, "saved_method_added", new Date(event.occurredAt), event.providerAccountId ?? "");
         await ctx.tx.update(payments).set({ metadata: { ...metadata, savedPaymentMethodId } }).where(eq(payments.id, payment.id));
       }
     }
@@ -308,9 +323,10 @@ async function processPaymentEvent(providerId: string, event: z.infer<typeof pay
 
 async function processRefundEvent(providerId: string, event: z.infer<typeof refundEvent>, ctx: ServiceContext): Promise<string> {
   const rows = await ctx.tx
-    .select()
+    .select(getTableColumns(refunds))
     .from(refunds)
-    .where(and(eq(refunds.provider, providerId), eq(refunds.providerRef, event.providerRef)))
+    .leftJoin(paymentMerchantRoutes, eq(paymentMerchantRoutes.paymentId, refunds.paymentId))
+    .where(and(eq(refunds.provider, providerId), eq(sql<string>`coalesce(${paymentMerchantRoutes.providerAccountId}, '')`, event.providerAccountId ?? ""), eq(refunds.providerRef, event.providerRef)))
     .limit(2);
   if (rows.length !== 1) throw new ServiceError("conflict", "The authenticated refund event arrived before its refund was ready; retry it.");
   const refund = rows[0]!;
@@ -331,9 +347,10 @@ async function processRefundEvent(providerId: string, event: z.infer<typeof refu
 
 async function processDisputeEvent(providerId: string, event: z.infer<typeof disputeEvent>, ctx: ServiceContext): Promise<string> {
   const [payment] = await ctx.tx
-    .select()
+    .select(getTableColumns(payments))
     .from(payments)
-    .where(and(eq(payments.provider, providerId), eq(payments.providerRef, event.paymentProviderRef)))
+    .leftJoin(paymentMerchantRoutes, eq(paymentMerchantRoutes.paymentId, payments.id))
+    .where(and(eq(payments.provider, providerId), eq(sql<string>`coalesce(${paymentMerchantRoutes.providerAccountId}, '')`, event.providerAccountId ?? ""), eq(payments.providerRef, event.paymentProviderRef)))
     .limit(1);
   if (!payment) throw new ServiceError("conflict", "The authenticated dispute arrived before its payment was ready; retry it.");
   if (event.amountMinor !== undefined && event.amountMinor > payment.amountMinor) {
@@ -345,11 +362,11 @@ async function processDisputeEvent(providerId: string, event: z.infer<typeof dis
   const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
   if (!invoice) throw new ServiceError("not_found", "The disputed payment's invoice is not here.");
   const occurredAt = new Date(event.occurredAt);
-  await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment-dispute:${providerId}:${event.providerRef}`}))`);
+  await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment-dispute:${providerId}:${event.providerAccountId ?? ""}:${event.providerRef}`}))`);
   const [existing] = await ctx.tx
     .select()
     .from(paymentDisputes)
-    .where(and(eq(paymentDisputes.provider, providerId), eq(paymentDisputes.providerRef, event.providerRef)))
+    .where(and(eq(paymentDisputes.provider, providerId), eq(paymentDisputes.paymentId, payment.id), eq(paymentDisputes.providerRef, event.providerRef)))
     .limit(1);
   if (existing && existing.providerStatusAt > occurredAt) return "dispute_older_event_ignored";
   const status = event.kind === "dispute_opened" ? "open" as const : event.kind === "dispute_won" ? "won" as const : "lost" as const;
@@ -397,14 +414,16 @@ async function processDisputeEvent(providerId: string, event: z.infer<typeof dis
 
 async function processMethodEvent(providerId: string, event: z.infer<typeof savedMethodEvent>, ctx: ServiceContext): Promise<string> {
   const customerRef = event.providerCustomerRef ?? event.method.providerCustomerRef;
-  const contactId = await resolveMethodContact(ctx.tx, providerId, event.contactId, customerRef);
+  const contactId = await resolveMethodContact(ctx.tx, providerId, event.contactId, customerRef, event.providerAccountId ?? "");
+  if (!contactId && event.providerAccountId) throw new ServiceError("conflict", "The seller method arrived before its authorized customer binding; retry it.");
   if (!contactId) return "saved_method_without_contact_ignored";
-  await upsertProviderCustomer(ctx.tx, contactId, providerId, customerRef);
-  await persistMethod(ctx.tx, providerId, contactId, event.method, event.kind, new Date(event.occurredAt));
+  await upsertProviderCustomer(ctx.tx, contactId, providerId, customerRef, event.providerAccountId ?? "");
+  await persistMethod(ctx.tx, providerId, contactId, event.method, event.kind, new Date(event.occurredAt), event.providerAccountId ?? "");
   return event.kind;
 }
 
 async function processPayoutEvent(providerId: string, event: z.infer<typeof payoutEvent>, ctx: ServiceContext): Promise<string> {
+  if (event.providerAccountId) return "seller_account_payout_ignored";
   const status = event.kind.slice("payout_".length) as "pending" | "in_transit" | "paid" | "failed" | "cancelled";
   const result = await observeProviderPayout(ctx, providerId, {
     providerRef: event.providerRef,
@@ -423,6 +442,7 @@ async function processPayoutEvent(providerId: string, event: z.infer<typeof payo
 }
 
 async function applyEvent(providerId: string, event: PaymentProviderEvent, ctx: ServiceContext): Promise<string> {
+  if (event.providerAccountId && providerId !== "stripe") throw new ServiceError("validation", "This provider does not implement seller-account feedback.");
   if (event.kind.startsWith("payment_")) return processPaymentEvent(providerId, event as z.infer<typeof paymentEvent>, ctx);
   if (event.kind.startsWith("refund_")) return processRefundEvent(providerId, event as z.infer<typeof refundEvent>, ctx);
   if (event.kind.startsWith("dispute_")) return processDisputeEvent(providerId, event as z.infer<typeof disputeEvent>, ctx);
@@ -433,6 +453,7 @@ async function applyEvent(providerId: string, event: PaymentProviderEvent, ctx: 
     const result = await ctx.callAsSystem(reconcileProviderPeriod, {
       provider: providerId,
       providerRef: billing.providerRef,
+      providerAccountId: billing.providerAccountId,
       kind: billing.kind,
       amountMinor: billing.amountMinor,
       currency: billing.currency,
@@ -629,7 +650,7 @@ export const claimPaymentCheckout = defineService({
   kind: "mutation",
   permission: "system",
   input: beginCheckoutInput.extend({ initiatedBy }),
-  output: z.object({ payment: paymentRow, invoice: invoiceRow, email: z.string(), name: z.string(), providerCustomerRef: z.string().nullable() }),
+  output: z.object({ payment: paymentRow, invoice: invoiceRow, email: z.string(), name: z.string(), providerCustomerRef: z.string().nullable(), routing: paymentRouting }),
   handler: async (input, ctx) => {
     if (input.saveMethod && input.saveMethodConsent !== true) throw new ServiceError("validation", "Saving a payment method requires the customer's explicit consent.");
     const adapter = paymentAdapter(input.provider);
@@ -642,7 +663,6 @@ export const claimPaymentCheckout = defineService({
     const [contact] = await ctx.tx.select({ id: contacts.id, name: contacts.name, email: contacts.email }).from(contacts).where(eq(contacts.id, invoice.contactId)).limit(1);
     if (!contact?.email) throw new ServiceError("validation", "Hosted checkout needs an email address on the invoice contact.");
     const amountMinor = input.amountMinor ?? invoice.totalMinor - invoice.paidMinor;
-    const [customer] = await ctx.tx.select().from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, invoice.contactId), eq(paymentProviderCustomers.provider, input.provider))).orderBy(desc(paymentProviderCustomers.updatedAt)).limit(1);
     // Idempotent on (provider, key): a retry after a crash or timeout returns
     // this same committed attempt instead of minting a second one.
     const payment = await ctx.call(createPayment, {
@@ -656,7 +676,9 @@ export const claimPaymentCheckout = defineService({
     // A failed, cancelled or settled attempt is never sent to the provider
     // again, and an old one could outlive the provider's idempotency window.
     assertRetryableAttempt(payment, "payment");
-    return { payment, invoice, email: contact.email, name: contact.name, providerCustomerRef: customer?.providerCustomerRef ?? null };
+    const routing = await routingForPayment(ctx, payment.id);
+    const [customer] = await ctx.tx.select().from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, invoice.contactId), eq(paymentProviderCustomers.provider, input.provider), eq(paymentProviderCustomers.providerAccountId, routing.providerAccountId ?? ""))).orderBy(desc(paymentProviderCustomers.updatedAt)).limit(1);
+    return { routing, payment, invoice, email: contact.email, name: contact.name, providerCustomerRef: customer?.providerCustomerRef ?? null };
   },
 });
 
@@ -665,11 +687,12 @@ export const applyPaymentCheckout = defineService({
   summary: "Attach a provider checkout to its owner payment attempt while the invoice is still open.",
   kind: "mutation",
   permission: "system",
-  input: z.object({ paymentId: z.string().uuid(), checkout: checkoutSession, initiatedBy }),
+  input: z.object({ paymentId: z.string().uuid(), checkout: verifiedCheckoutSession, initiatedBy }),
   output: paymentRow,
   handler: async (input, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
     if (!payment) throw new ServiceError("not_found", "That payment is not here.");
+    assertProviderAccount(await routingForPayment(ctx, payment.id), input.checkout);
     // Recheck after provider I/O: the invoice can be paid or closed meanwhile.
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
     if (!invoice || !OPEN_INVOICE_STATUSES.includes(invoice.status) || invoice.totalMinor - invoice.paidMinor < payment.amountMinor) {
@@ -687,13 +710,13 @@ export const providerPaymentSource = defineService({
   name: "invoicing.providerPaymentSource",
   summary: "Read one payment before an orchestrator contacts its provider.",
   kind: "query",
-  permission: "system",
+  permission: "system", external: false,
   input: z.object({ paymentId: z.string().uuid() }),
-  output: paymentRow,
+  output: z.object({ payment: paymentRow, routing: paymentRouting }),
   handler: async (input, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
     if (!payment) throw new ServiceError("not_found", "That payment is not here.");
-    return payment;
+    return { payment, routing: await routingForPayment(ctx, payment.id) };
   },
 });
 
@@ -797,6 +820,7 @@ export const beginPaymentCheckout = defineOrchestratedService({
         methodIds: input.methodIds,
         saveMethod: input.saveMethod,
         providerCustomerRef: source.providerCustomerRef ?? undefined,
+        ...source.routing,
       });
     } catch (error) {
       if (definitiveRefusal(error) && payment.status === "created") {
@@ -819,14 +843,15 @@ export const completePaymentCheckout = defineOrchestratedService({
   handler: async (input, caller) => {
     const system = { kind: "system", request: caller.request } as const;
     const by = actorString(caller);
-    const payment = await providerPaymentSource.call({ paymentId: input.paymentId }, system);
+    const { payment, routing } = await providerPaymentSource.call({ paymentId: input.paymentId }, system);
     if (payment.status === "succeeded") return payment;
     if (!payment.providerCheckoutRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment has no hosted checkout to complete.");
     let result: Awaited<ReturnType<PaymentAdapter["captureCheckout"]>>;
     try {
-      result = await paymentAdapter(payment.provider).captureCheckout({ checkoutRef: payment.providerCheckoutRef, idempotencyKey: input.idempotencyKey });
+      result = await paymentAdapter(payment.provider).captureCheckout({ checkoutRef: payment.providerCheckoutRef, idempotencyKey: input.idempotencyKey, providerAccountId: routing.providerAccountId });
     } catch (error) { return adapterFailure(error); }
     assertMovement(payment, result);
+    assertChargeEvidence(routing, result);
     if (result.status === "succeeded") return recordProviderPaymentResult.call({ paymentId: payment.id, initiatedBy: by, outcome: { kind: "settle", providerRef: result.providerRef, processedAt: result.occurredAt ? new Date(result.occurredAt) : undefined } }, system);
     if (result.status === "failed") return recordProviderPaymentResult.call({ paymentId: payment.id, initiatedBy: by, outcome: { kind: "fail", code: "provider_failed", message: `${payment.provider} reported that checkout failed.` } }, system);
     return payment;
@@ -844,7 +869,7 @@ export const submitProviderRefund = defineOrchestratedService({
   handler: async (input, caller) => {
     const system = { kind: "system", request: caller.request } as const;
     const by = actorString(caller);
-    const payment = await providerPaymentSource.call({ paymentId: input.paymentId }, system);
+    const { payment, routing } = await providerPaymentSource.call({ paymentId: input.paymentId }, system);
     if (!payment.providerRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment does not have a refundable hosted-provider settlement.");
     if (!paymentAdapter(payment.provider).capabilities().refunds) throw new ServiceError("conflict", `${payment.provider} refunds are not implemented by this adapter.`);
     // The reservation commits before the provider is asked. A crash after the
@@ -862,6 +887,8 @@ export const submitProviderRefund = defineOrchestratedService({
         amountMinor: input.amountMinor,
         reason: input.reason,
         idempotencyKey: input.idempotencyKey,
+        providerAccountId: routing.providerAccountId,
+        refundApplicationFee: Boolean(routing.providerAccountId && routing.applicationFeeMinor && routing.applicationFeeMinor > 0),
       });
     } catch (error) {
       const refused = refundRefusalCode(error);
@@ -870,6 +897,7 @@ export const submitProviderRefund = defineOrchestratedService({
       }
       return adapterFailure(error);
     }
+    assertProviderAccount(routing, result);
     if (result.status === "succeeded") return recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "settle", providerRef: result.providerRef } }, system);
     if (result.status === "failed") return recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "fail", code: "provider_failed", message: `${payment.provider} reported that the refund failed.` } }, system);
     return recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "start", providerRef: result.providerRef } }, system);
@@ -1017,7 +1045,7 @@ export const savedPaymentMethodSource = defineService({
   kind: "query",
   permission: "system",
   input: z.object({ id: z.string().uuid() }),
-  output: paymentMethodRow,
+  output: paymentMethodRow.extend({ providerAccountId: z.string().max(200) }),
   handler: async (input, ctx) => {
     const [method] = await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, input.id)).limit(1);
     if (!method) throw new ServiceError("not_found", "That saved payment method is not here.");
@@ -1031,7 +1059,7 @@ export const applySavedPaymentMethodRevocation = defineService({
   kind: "mutation",
   permission: "system",
   input: z.object({ id: z.string().uuid(), initiatedBy }),
-  output: paymentMethodRow,
+  output: paymentMethodRow.strip(),
   handler: async (input, ctx) => {
     const [method] = await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, input.id)).limit(1).for("update");
     if (!method) throw new ServiceError("not_found", "That saved payment method is not here.");
@@ -1054,13 +1082,13 @@ export const revokeSavedPaymentMethod = defineOrchestratedService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.string().uuid(), idempotencyKey }),
-  output: paymentMethodRow,
+  output: paymentMethodRow.strip(),
   handler: async (input, caller) => {
     const system = { kind: "system", request: caller.request } as const;
     const method = await savedPaymentMethodSource.call({ id: input.id }, system);
     if (method.status === "revoked") return method;
     try {
-      await paymentAdapter(method.provider).revokeSavedMethod({ providerRef: method.providerMethodRef, idempotencyKey: input.idempotencyKey });
+      await paymentAdapter(method.provider).revokeSavedMethod({ providerAccountId: method.providerAccountId || undefined, providerRef: method.providerMethodRef, idempotencyKey: input.idempotencyKey });
     } catch (error) { return adapterFailure(error); }
     return applySavedPaymentMethodRevocation.call({ id: method.id, initiatedBy: actorString(caller) }, system);
   },

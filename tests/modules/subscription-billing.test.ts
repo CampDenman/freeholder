@@ -429,6 +429,45 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     expect(mocks.cancelRecurringSchedule).toHaveBeenCalledWith(expect.objectContaining({providerRef:"sub_cancel_race"}));
     expect((await db().select().from(subscriptions).where(eq(subscriptions.id,started.subscription.id)))[0]?.providerRef).toBeNull();
   });
+  it("keeps pending charges unsettled until authenticated provider evidence arrives", async () => {
+    const member = await person("pending-charge");
+    const method = await card(member.id);
+    const monthly = await plan({ billingMode: "platform" });
+    const started = await subscribe.call({ contactId: member.id, planId: monthly.id, paymentMethodId: method.id }, OWNER);
+    mocks.chargeSavedMethod.mockResolvedValueOnce({ providerRef: "pi_pending", status: "pending" });
+    expect(await chargePlatformInvoice.call({ subscriptionId: started.subscription.id, invoiceId: started.invoiceId! }, OWNER)).toEqual({ advanced: false, skipped: false });
+    const [attempt] = await db().select().from(payments);
+    expect(attempt).toMatchObject({ status: "processing", providerRef: "pi_pending", failureCode: null });
+    const [invoice] = await db().select().from(invoices).where(eq(invoices.id, started.invoiceId!));
+    expect(invoice!.paidMinor).toBe(0);
+  });
+
+  it("retains an unknown charge outcome and retries the original attempt with the same provider request", async () => {
+    const member = await person("unknown-charge");
+    const method = await card(member.id);
+    const monthly = await plan({ billingMode: "platform" });
+    const started = await subscribe.call({ contactId: member.id, planId: monthly.id, paymentMethodId: method.id }, OWNER);
+    mocks.chargeSavedMethod.mockRejectedValueOnce(new Error("Response lost after provider accepted the charge"));
+    await expect(chargePlatformInvoice.call({ subscriptionId: started.subscription.id, invoiceId: started.invoiceId! }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    expect(await db().select().from(payments)).toMatchObject([{ status: "created", failureCode: null }]);
+    await chargePlatformInvoice.call({ subscriptionId: started.subscription.id, invoiceId: started.invoiceId! }, OWNER);
+    expect(mocks.chargeSavedMethod.mock.calls[0]![0]).toEqual(mocks.chargeSavedMethod.mock.calls[1]![0]);
+    expect(await db().select().from(payments)).toHaveLength(1);
+    expect((await db().select().from(payments))[0]!.status).toBe("succeeded");
+  });
+
+  it("refuses a successful charge response from another merchant without inventing a decline", async () => {
+    const member = await person("wrong-merchant-charge");
+    const method = await card(member.id);
+    const monthly = await plan({ billingMode: "platform" });
+    const started = await subscribe.call({ contactId: member.id, planId: monthly.id, paymentMethodId: method.id }, OWNER);
+    mocks.chargeSavedMethod.mockResolvedValueOnce({ providerRef: "pi_wrong", status: "succeeded", providerAccountId: "acct_someoneelse" });
+    await expect(chargePlatformInvoice.call({ subscriptionId: started.subscription.id, invoiceId: started.invoiceId! }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    expect(await db().select().from(payments)).toMatchObject([{ status: "created", failureCode: null }]);
+    const [invoice] = await db().select().from(invoices).where(eq(invoices.id, started.invoiceId!));
+    expect(invoice!.paidMinor).toBe(0);
+  });
+
   it("charges a stored method for a platform plan without skipping the paid period", async () => {
     const member = await person("platform");
     const method = await card(member.id);

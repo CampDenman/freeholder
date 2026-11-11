@@ -7,6 +7,7 @@ import { and, eq, sql } from "drizzle-orm";
 import * as adapters from "@/adapters/payments";
 import { providerJson } from "@/adapters/payments/http";
 import { AdapterError } from "@/adapters/types";
+import type { PaymentProviderEvent } from "@/adapters/payments/types";
 import { db } from "@/core/db";
 import { env } from "@/core/env";
 import { auditLog } from "@/core/events/schema";
@@ -14,10 +15,12 @@ import { createContact } from "@/core/contacts/service";
 import {
   createDraftInvoice,
   createPayment,
+  createRefund,
   getInvoice,
   issueInvoice,
   settlePayment,
   startPayment,
+  startRefund,
 } from "@/modules/invoicing/invoice-service";
 import * as providerService from "@/modules/invoicing/payment-provider-service";
 import {
@@ -35,6 +38,8 @@ import {
 import {
   paymentDisputes,
   paymentMethods,
+  paymentMerchantRoutes,
+  invoiceMarketPolicies,
   paymentProviderEvents,
   payments,
   providerPayouts,
@@ -76,6 +81,46 @@ async function openTransactions(): Promise<number> {
 
 describe.runIf(hasDatabase)("payment provider services", () => {
   beforeEach(async () => { vi.restoreAllMocks(); await truncateSpine(); });
+
+  it("isolates seller feedback by account and verifies the reserved application fee (C12.38)", async () => {
+    const { contact, invoice } = await issuedInvoice("seller-feedback");
+    const payment = await createPayment.call({ invoiceId: invoice.id, provider: "stripe", method: "hosted_checkout", amountMinor: 10_000, idempotencyKey: "seller-feedback" }, OWNER);
+    // Reserve the routing fixture directly while the public seller model is
+    // still unavailable; no buyer/API parameter can write these columns.
+    await db().insert(invoiceMarketPolicies).values({ invoiceId: invoice.id, model: "seller_merchant", adapter: "stripe_connect", siteFeeBps: 1000, holdDays: 14, feeMinor: 1000, sellerUserId: OWNER.userId, merchantName: "Seller Studio", providerAccountId: "acct_seller" });
+    await db().insert(paymentMerchantRoutes).values({ paymentId: payment.id, providerAccountId: "acct_seller", applicationFeeMinor: 1000 });
+    await startPayment.call({ id: payment.id, providerRef: "pi_seller", providerCheckoutRef: "cs_seller" }, OWNER);
+    const paid = { id: "evt_seller_paid", kind: "payment_succeeded" as const, providerRef: "pi_seller", invoiceId: invoice.id, amountMinor: 10_000, currency: "CAD", occurredAt: receivedAt, providerAccountId: "acct_seller", applicationFeeMinor: 1000, providerCustomerRef: "cus_seller" };
+    const deliver = (event: PaymentProviderEvent) => processPaymentProviderEvents.call({ provider: "stripe", bodySha256: digest, receivedAt, events: [event] }, { kind: "system" });
+    for (const wrong of [
+      { ...paid, providerAccountId: "acct_other" }, { ...paid, providerAccountId: undefined },
+      { ...paid, applicationFeeMinor: 999 }, { ...paid, applicationFeeMinor: undefined },
+    ]) expect(await failure(deliver(wrong))).toMatchObject({ code: "conflict" });
+    expect((await getInvoice.call({ id: invoice.id }, OWNER)).invoice.paidMinor).toBe(0);
+    expect(await db().select().from(paymentProviderEvents)).toHaveLength(0);
+    await deliver(paid);
+    const bundle = await getInvoice.call({ id: invoice.id }, OWNER);
+    expect(bundle.invoice.paidMinor).toBe(10_000);
+    expect(bundle.payments[0]).not.toHaveProperty("providerAccountId");
+    expect(bundle.payments[0]).not.toHaveProperty("applicationFeeMinor");
+    const dispute = { id: "evt_seller_dispute", kind: "dispute_opened" as const, providerRef: "dp_seller", paymentProviderRef: "pi_seller", amountMinor: 10_000, currency: "CAD", occurredAt: receivedAt, providerAccountId: "acct_seller" };
+    expect(await failure(deliver({ ...dispute, providerAccountId: "acct_other" }))).toMatchObject({ code: "conflict" });
+    await deliver(dispute);
+    expect((await db().select().from(paymentDisputes))[0]!.paymentId).toBe(payment.id);
+    const refund = await createRefund.call({ paymentId: payment.id, amountMinor: 500, reason: "Recorded seller refund", idempotencyKey: "seller-feedback-refund" }, OWNER);
+    await startRefund.call({ id: refund.id, providerRef: "re_seller" }, OWNER);
+    const refunded = { id: "evt_seller_refund", kind: "refund_succeeded" as const, providerRef: "re_seller", paymentProviderRef: "pi_seller", amountMinor: 500, currency: "CAD", occurredAt: receivedAt, providerAccountId: "acct_seller" };
+    expect(await failure(deliver({ ...refunded, providerAccountId: "acct_other" }))).toMatchObject({ code: "conflict" });
+    await deliver(refunded);
+    expect((await getInvoice.call({ id: invoice.id }, OWNER)).invoice.refundedMinor).toBe(500);
+    const method = { id: "evt_seller_method", kind: "saved_method_added" as const, contactId: contact.id, providerCustomerRef: "cus_seller", providerAccountId: "acct_seller", occurredAt: receivedAt,
+      method: { providerRef: "pm_seller", providerCustomerRef: "cus_seller", kind: "card" as const, label: "Visa ending 4242", last4: "4242" } };
+    expect(await failure(deliver({ ...method, providerAccountId: "acct_other" }))).toMatchObject({ code: "conflict" });
+    await deliver(method);
+    expect((await db().select().from(paymentMethods))[0]!.providerAccountId).toBe("acct_seller");
+    await deliver({ id: "evt_seller_bank_payout", kind: "payout_paid", providerRef: "po_seller", providerAccountId: "acct_seller", amountMinor: 9000, currency: "CAD", occurredAt: receivedAt });
+    expect(await db().select().from(providerPayouts)).toHaveLength(0);
+  });
 
   it("records partial and complete offline money plus refunds through the one ledger", async () => {
     const { invoice } = await issuedInvoice("offline");

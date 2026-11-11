@@ -12980,6 +12980,23 @@ whatever is best for the people using the site.
   destination charges at checkout through the payout provider (Stripe
   Connect first), with the site fee taken as an application fee, refunds
   and disputes on the seller's account. Split from C12.26 on 2026-10-15.
+  *(In progress 2026-11-10: an immutable internal invoice market-policy
+  snapshot freezes collection model and fees at issue; subscription agreements
+  capture seller terms before trials and preserve them on renewal. Existing held/instant
+  provider paths passed 21 PostgreSQL controls, and five invoice/default-change
+  cases passed. Private original-account payment routing and signed seller
+  feedback passed 22 PostgreSQL controls and 26 provider-edge controls, including
+  account/fee mismatch refusal, refunds/disputes and non-disclosure in ordinary
+  payment responses. Stripe transfer readiness is now distinct from charge
+  readiness and public merchant branding. A further 54 PostgreSQL controls passed
+  original-account trials, existing billing, provider feedback, pending charges,
+  same-key timeout recovery and changed-account refusal. A real 66→67 upgrade
+  rehearsal preserved accepted payments/platform methods and trial agreements
+  without inventing direct-charge authority. See
+  `deploy/seller-merchant-source-2026-11-10.md`. No direct model is enabled by
+  this foundation: account-scoped checkout, stored methods/recurring billing,
+  authenticated refunds/disputes, seller invoice identity and full provider
+  acceptance remain required before C12.38 can be checked.)*
 - [ ] **C12.39** Move end-to-end encryption from `ts-mls` (not independently
   audited) to OpenMLS (audited by SRLabs), compiled to WebAssembly in CI and
   committed so deploys stay Node-only. Deferred by Tony on 2026-10-15; until
