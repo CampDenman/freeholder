@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const smtpMocks = vi.hoisted(() => ({
-  send: vi.fn(async () => ({ messageId: "smtp-message" })),
+  send: vi.fn(async () => ({ messageId: "smtp-message", accepted: ["customer@example.test"], rejected: [], response: "250 2.0.0 queued" })),
   create: vi.fn(),
 }));
 smtpMocks.create.mockImplementation(() => ({ sendMail: smtpMocks.send }));
@@ -72,7 +72,7 @@ afterEach(() => {
   resetMailForTests();
   vi.restoreAllMocks();
   smtpMocks.send.mockReset();
-  smtpMocks.send.mockResolvedValue({ messageId: "smtp-message" });
+  smtpMocks.send.mockResolvedValue({ messageId: "smtp-message", accepted: [MESSAGE.to], rejected: [], response: "250 2.0.0 queued" });
   smtpMocks.create.mockClear();
 });
 
@@ -340,7 +340,8 @@ describe("SMTP and non-delivery modes", () => {
       from: "hello@example.test",
     });
     expect(smtpMocks.create).not.toHaveBeenCalled();
-    await expect(adapter.send(MESSAGE)).resolves.toEqual({ providerRef: "smtp-message" });
+    await expect(adapter.send(MESSAGE)).resolves.toEqual({ providerRef: "smtp-message", acceptance: { protocol: "smtp", recipient: MESSAGE.to, response: "250 2.0.0 queued" } });
+    expect(smtpMocks.create).toHaveBeenCalledWith(expect.objectContaining({ secure: false, requireTLS: true, tls: { rejectUnauthorized: true } }));
     expect(smtpMocks.create).toHaveBeenCalledTimes(1);
     expect(smtpMocks.send).toHaveBeenCalledWith(
       expect.objectContaining({

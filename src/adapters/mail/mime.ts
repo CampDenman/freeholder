@@ -26,6 +26,7 @@ export function mimeMessage(message: OutboundEmail, from: string): string {
     ...(message.deliveryId
       ? [`X-Freeholder-Delivery: ${header(message.deliveryId)}`]
       : []),
+    ...(message.dispatchId ? [`X-Freeholder-Dispatch: ${header(message.dispatchId)}`] : []),
   ];
   if (!message.html) {
     return [

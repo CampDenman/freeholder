@@ -1709,6 +1709,14 @@ export interface MailAdapter {
 
 **Routing rule:** transactional mail (receipts, OTPs, booking confirmations, quote notifications) goes through the owner's connected Gmail/Outlook. Bulk (campaigns) requires a bulk adapter (Resend/SES/Postmark) — the email-marketing module refuses to broadcast through a personal mailbox, protecting the owner's domain reputation from themselves.
 
+Mail staging binds the original body and route to private keyed receipts.
+Physical worker attempts are recorded before adapter I/O; unknown original
+outcomes block automatic retries. Fresh-human recovery requires original
+provider/account, final-outcome and stopped-caller evidence, preserves named
+holds and does not invent missing historical account or attempt facts. SMTP
+requires verified TLS and a final positive response for the exact recipient.
+Source and live acceptance remain governed by §43 C3.31/C11.08.
+
 Same pattern for storage, calendar (2-way sync w/ webhook or polling fallback), sms, ai, **tax** (§4.12 — `quote(order) → TaxLine[]`, whose default implementation is the built-in engine; no Stripe Tax / Avalara / TaxJar adapter), **carrier** (`none` until a live-rate plugin exists), **accounting** (export shapes for QuickBooks, Xero and plain CSV — not an adapter family), and **agent** (§37). There is no FX adapter family. The `none/` implementations let every optional family be absent without null-checks scattered through modules.
 
 **Every outside service is a neutral category with swappable adapters**
@@ -5817,11 +5825,30 @@ deployments are portable, testable and incapable of silently forking the truth.
   SDK 8, audit labels 7, full fast 373 plus one documented exclusion and production
   scrub 20,330 files / 242,435,915 bytes passed. All four fresh-database locale
   owner-browser journeys passed at 320px in both themes with keyboard, Axe,
-  bounds and service/audit assertions. Protected integration remains required. The required
+  bounds and service/audit assertions. Protected PR #672 merged at
+  `4039dfe66f4b2d66c0f0be3e2321c802388b3c70` after merge-group
+  run `43103837092` passed. The required
   enabled transactional/SMTP per-dispatch provenance and unknown-outcome
   recovery (C11.08) continue as a separate source increment; no old account or
   physical-attempt facts are invented. This supplies neither independent
   review nor live provider acceptance.)*
+  *(Physical worker recovery increment, 2026-11-11, in qualification:
+  `0072_mail_physical_dispatches.sql` binds immutable request/route receipts to
+  durable caller witnesses. Unknown outcomes refuse automatic retries; fresh
+  human provider and stopped-caller evidence is distinct from adapter proof.
+  SMTP requires verified TLS and exact-recipient final acceptance. Holds,
+  erasure, late conflicting replies and prior-image fences are covered by
+  focused native/wire controls. An observed positive reply survives a refused
+  local apply without resending or inventing local completion. The final
+  actual-main 19 targeted cases passed across one fixture-only retry; the
+  separate observed-reply recovery case and live SDK 8 passed. Full fast
+  380 plus one documented exclusion and production scrub 20,353 files /
+  242,882,917 bytes passed. Four fresh-database owner-browser journeys passed
+  in en/es/fr/ar at 320px in both themes, with keyboard, Axe, bounds, private
+  receipt omission and both unknown/retry and retained-positive workflows.
+  Protected qualification remains required. See
+  `deploy/mail-dispatch-recovery.md`. This does
+  not close carrier-specific source acceptance, live sends or independent review.)*
   Unchecked: no live send against the provider.)*
 - [ ] **C3.32** Add a measurement-provider category (`MEASUREMENT_PROVIDER`,
   default `none`) with Paradise Modern as its first adapter (§12, C1.18):

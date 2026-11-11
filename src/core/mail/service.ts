@@ -34,8 +34,12 @@ import { oauthAccessTokenOutsideTransaction } from "@/core/mail/oauth";
 import { decryptMailOutbox, encryptMailOutbox } from "@/core/mail/outbox-crypto";
 import { mailReceipts } from "@/core/mail/receipts";
 import { bindMailRecord } from "@/core/mail/ownership";
+import { freezeMailDispatchRequest } from "@/core/mail/dispatch-route";
+import { acceptPhysicalMailSubmission, claimPhysicalMailDispatch, MailDispatchRefusal, markPhysicalMailUnknown, removeSettledMailBody, type ObservedMailReply } from "@/core/mail/dispatch-state";
+import { physicallySettledMail } from "@/core/mail/dispatch-settlement";
 import { lockMailHolds, mailRecordIsUnheld } from "@/core/mail/record-retention";
 import mailRecordServices from "@/core/mail/record-services";
+import mailDispatchServices from "@/core/mail/dispatch-services";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import {
   PREVIEW_BULK_REFUSAL,
@@ -111,6 +115,7 @@ const mailDeliveryRow = row({
   status: z.enum([
     "queued",
     "submitted",
+    "unknown",
     "delivered",
     "bounced",
     "complained",
@@ -612,6 +617,7 @@ export async function sendMail(
     deliveryId: inserted.id,
     encryptedMessage: encryptMailOutbox(serialized, inserted.id),
   });
+  await freezeMailDispatchRequest(tx, inserted.id, { purpose, provider: route.provider, sender, from: finalMessage.from }, serialized);
   if (holdReason) {
     // Held, never sent: the body stays encrypted in the outbox for the owner
     // to read in the admin, and no delivery job exists to send it.
@@ -650,33 +656,38 @@ async function finishQueuedMail(
   values: Partial<typeof mailDeliveries.$inferInsert>,
   /** Saved in the same transaction as the outcome (C3.31: a recorded grant). */
   alsoRecord?: (tx: Tx) => Promise<void>,
-  options: { onlyUnsent?: boolean } = {},
-): Promise<void> {
+  options: { onlyUnsent?: boolean; dispatchId?: string; acceptance?: unknown; keepBody?: boolean } = {},
+): Promise<boolean> {
   const events: Array<{ id: string; eventName: string; payload: unknown }> = [];
-  await db().transaction(async (tx) => {
+  const recorded = await db().transaction(async (tx) => {
+    await lockContactIdentityForRead(tx);
+    const held = await lockMailHolds(tx);
     const receipts = await mailReceipts(tx);
     const [current] = await tx.select().from(mailDeliveries).where(eq(mailDeliveries.id, deliveryId)).limit(1).for("update");
-    if (!current) return;
-    if (options.onlyUnsent && current.attempts > 0) return;
+    if (!current) return false;
+    if (options.onlyUnsent && current.attempts > 0) return false;
+    if (options.dispatchId && !await acceptPhysicalMailSubmission(tx, options.dispatchId, values.providerRef ?? "", options.acceptance, values.status === "submitted")) { if (alsoRecord) await alsoRecord(tx); return false; }
     const [delivery] = await tx
       .update(mailDeliveries)
       .set({ ...values, ...(values.providerRef ? { providerRefDigest: receipts.digest(`provider:${current.provider}`, values.providerRef) } : {}), updatedAt: new Date() })
       .where(eq(mailDeliveries.id, deliveryId))
       .returning({ recipient: mailDeliveries.recipient });
     if (alsoRecord) await alsoRecord(tx);
-    if (current.attempts <= 1) await tx.delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
+    if (!options.keepBody && (options.dispatchId || current.attempts <= 1)) await removeSettledMailBody(tx, deliveryId, held);
     if (delivery && (values.status === "suppressed" || values.status === "failed")) {
       const eventName = "mail.deliveryUpdated";
       const payload = { deliveryId, type: values.status };
       events.push({ id: await enqueue(tx, eventName, payload), eventName, payload });
     }
+    return true;
   });
   await dispatchNow(events);
+  return recorded;
 }
 
 /** Snapshot, provider call, apply: no database transaction spans the call. */
 export async function deliverQueuedMail(deliveryId: string): Promise<{
-  status: "missing" | "submitted" | "failed" | "suppressed" | "held";
+  status: "missing" | "submitted" | "failed" | "suppressed" | "held" | "unknown";
 }> {
   const [queued] = await db()
     .select({
@@ -710,15 +721,15 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
   }
 
   let message: StagedMessage;
+  let originalPayload: string;
   try {
-    message = stagedMessage.parse(
-      JSON.parse(decryptMailOutbox(queued.encryptedMessage, deliveryId)) as unknown,
-    );
+    originalPayload = decryptMailOutbox(queued.encryptedMessage, deliveryId);
+    message = stagedMessage.parse(JSON.parse(originalPayload) as unknown);
   } catch {
     await finishQueuedMail(deliveryId, {
       status: "failed",
       lastError: "The encrypted mail payload could not be read safely.",
-    }, undefined, { onlyUnsent: true });
+    }, undefined, { onlyUnsent: true, keepBody: true });
     return { status: "failed" };
   }
 
@@ -745,7 +756,8 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
     }
   }
 
-  let dispatchClaimed = false;
+  let dispatchId: string | null = null;
+  let observedReply: ObservedMailReply | undefined;
   try {
     const sender = queued.delivery.senderId
       ? await getSender(db() as unknown as Tx, queued.delivery.senderId)
@@ -775,23 +787,16 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
             reason: transactionalReason ?? "service_notification",
             eventRef: eventRef ?? `mail-delivery:${deliveryId}`,
           };
-    const claimed = await db().transaction(async tx => {
-      await mailReceipts(tx);
-      const [row] = await tx.update(mailDeliveries).set({ attempts: sql`${mailDeliveries.attempts} + 1`, updatedAt: new Date() }).where(and(
-        eq(mailDeliveries.id, deliveryId), inArray(mailDeliveries.status, ["queued", "failed"]), isNull(mailDeliveries.redactedAt),
-        sql`exists(select 1 from ${mailOutbox} where ${mailOutbox.deliveryId}=${mailDeliveries.id} and ${mailOutbox.createdAt} >= clock_timestamp()-interval '30 days')`,
-      )).returning({ id: mailDeliveries.id });
-      return row;
-    });
-    if (!claimed) return { status: "missing" };
-    dispatchClaimed = true;
-    const result = await adapter.send({ ...outbound, deliveryId, ...(permission ? { permission } : {}) });
+    dispatchId = await db().transaction(tx => claimPhysicalMailDispatch(tx, deliveryId, { purpose: queued.delivery.purpose, provider: adapter.id, sender, from: message.from }, originalPayload));
+    if (!dispatchId) return { status: "missing" };
+    const result = await adapter.send({ ...outbound, deliveryId, dispatchId, ...(permission ? { permission } : {}) });
+    observedReply = { providerRef: result.providerRef, acceptance: result.acceptance, submitted: adapter.delivers };
     // A grant the carrier recorded is remembered with the send's outcome, in
     // one transaction, so a later withdrawal reaches exactly this address and
     // a contact never granted there is never withdrawn there.
     const grant = result.grantRecorded;
     const { rememberProviderGrant } = await import("@/core/mail/permission");
-    await finishQueuedMail(
+    const recorded = await finishQueuedMail(
       deliveryId,
       {
         providerRef: result.providerRef,
@@ -800,15 +805,20 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
         lastError: adapter.delivers ? null : "The configured adapter does not deliver.",
       },
       grant ? (tx) => rememberProviderGrant(tx, adapter.id, grant) : undefined,
+      { dispatchId, acceptance: result.acceptance },
     );
-    return { status: adapter.delivers ? "submitted" : "failed" };
+    return { status: recorded ? adapter.delivers ? "submitted" : "failed" : "unknown" };
   } catch (error) {
     const retryable =
       error instanceof MailAdapterError
         ? error.retryable
         : !(error instanceof ServiceError);
-    if (!dispatchClaimed && !retryable) {
-      await finishQueuedMail(deliveryId, { status: "failed", lastError: safeDeliveryError(error) }, undefined, { onlyUnsent: true });
+    if (dispatchId) {
+      await db().transaction(tx => markPhysicalMailUnknown(tx, dispatchId!, observedReply));
+      return { status: "unknown" };
+    }
+    if (!retryable) {
+      await finishQueuedMail(deliveryId, { status: "failed", lastError: safeDeliveryError(error) }, undefined, { onlyUnsent: true, keepBody: error instanceof MailDispatchRefusal });
       return { status: "failed" };
     }
     await db().transaction(async tx => {
@@ -835,7 +845,7 @@ export async function pruneExpiredMailOutbox(): Promise<number> {
     const rows = await tx
       .delete(mailOutbox)
       .where(sql`${mailOutbox.createdAt} < now() - interval '30 days' and exists(
-        select 1 from ${mailDeliveries} where ${mailDeliveries.id}=${mailOutbox.deliveryId} and ${mailDeliveries.attempts}=0 and ${mailRecordIsUnheld("delivery", mailDeliveries.id, held) ?? sql`true`}
+        select 1 from ${mailDeliveries} where ${mailDeliveries.id}=${mailOutbox.deliveryId} and (${mailDeliveries.attempts}=0 or ${physicallySettledMail}) and ${mailRecordIsUnheld("delivery", mailDeliveries.id, held) ?? sql`true`}
       )`)
       .returning({ deliveryId: mailOutbox.deliveryId });
     if (rows.length > 0) {
@@ -847,7 +857,7 @@ export async function pruneExpiredMailOutbox(): Promise<number> {
           lastError: "Queued mail expired before it could be delivered.",
           updatedAt: new Date(),
         })
-        .where(and(inArray(mailDeliveries.id, ids), sql`${mailDeliveries.status} <> 'held'`));
+        .where(and(inArray(mailDeliveries.id, ids), sql`${mailDeliveries.status} <> 'held'`, eq(mailDeliveries.attempts, 0)));
       // C3.36: a held preview message stays held, so the owner still sees
       // that it existed; only its body is gone.
       await tx
@@ -1630,6 +1640,7 @@ export const recordMailProviderEvent = defineService({
 
 export default [
   ...mailRecordServices,
+  ...mailDispatchServices,
   mailStatus,
   mailReadiness,
   registerMailSender,

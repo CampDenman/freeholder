@@ -35,8 +35,8 @@ export function createPostmarkMail(options: {
             ReplyTo: message.replyTo,
             MessageStream: options.messageStream ?? "broadcasts",
             Headers: Object.entries(message.headers ?? {}).map(([Name, Value]) => ({ Name, Value })),
-            Metadata: message.deliveryId
-              ? { freeholder_delivery: message.deliveryId }
+            Metadata: message.deliveryId || message.dispatchId
+              ? { ...(message.deliveryId ? { freeholder_delivery: message.deliveryId } : {}), ...(message.dispatchId ? { freeholder_dispatch: message.dispatchId } : {}) }
               : undefined,
           }),
         },

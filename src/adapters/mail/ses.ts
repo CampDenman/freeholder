@@ -53,13 +53,14 @@ export function createSesMail(options: {
               Headers: [
                 ...Object.entries(message.headers ?? {}).map(([Name, Value]) => ({ Name, Value })),
                 ...(message.deliveryId ? [{ Name: "X-Freeholder-Delivery", Value: message.deliveryId }] : []),
+                ...(message.dispatchId ? [{ Name: "X-Freeholder-Dispatch", Value: message.dispatchId }] : []),
               ],
             },
           },
           ReplyToAddresses: message.replyTo ? [message.replyTo] : undefined,
           ConfigurationSetName: options.configurationSet,
-          EmailTags: message.deliveryId
-            ? [{ Name: "freeholder_delivery", Value: message.deliveryId }]
+          EmailTags: message.deliveryId || message.dispatchId
+            ? [...(message.deliveryId ? [{ Name: "freeholder_delivery", Value: message.deliveryId }] : []), ...(message.dispatchId ? [{ Name: "freeholder_dispatch", Value: message.dispatchId }] : [])]
             : undefined,
           }),
           signal: AbortSignal.timeout(30_000),

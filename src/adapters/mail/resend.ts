@@ -26,7 +26,7 @@ export function createResendMail(options: {
         method: "POST",
         headers: {
           ...headers,
-          ...(message.deliveryId ? { "idempotency-key": message.deliveryId } : {}),
+          ...(message.dispatchId || message.deliveryId ? { "idempotency-key": message.dispatchId ?? message.deliveryId! } : {}),
         },
         body: JSON.stringify({
           from: message.from ?? options.from,
@@ -35,7 +35,7 @@ export function createResendMail(options: {
           text: message.text,
           html: message.html,
           reply_to: message.replyTo,
-          headers: { ...message.headers, ...(message.deliveryId ? { "x-freeholder-delivery": message.deliveryId } : {}) },
+          headers: { ...message.headers, ...(message.deliveryId ? { "x-freeholder-delivery": message.deliveryId } : {}), ...(message.dispatchId ? { "x-freeholder-dispatch": message.dispatchId } : {}) },
         }),
       });
       const body = await providerJson<{ id?: string }>(response, "Resend");

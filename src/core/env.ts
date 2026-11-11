@@ -182,6 +182,8 @@ const envSchema = z.object({
   SMTP_PORT: z.string().optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
+  SMTP_SECURE: z.enum(["true", "false"]).optional(),
+  SMTP_TLS_CA: z.string().max(65_536).optional(),
   /** The address mail comes from: "Aurora Coast <hello@auroracoast.ca>". */
   MAIL_FROM: z.string().optional(),
 

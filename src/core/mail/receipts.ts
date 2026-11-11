@@ -11,7 +11,7 @@ import { decryptMailOutbox, encryptMailOutbox } from "./outbox-crypto";
 const KEY_CONTEXT = "00000000-0000-4000-8000-000000000071";
 const CAPABILITY = "freeholder.mail_receipts_v1";
 const SEAL_LOCK = "freeholder-mail-receipt-seal-v1";
-export type MailReceiptKind = "address" | "send" | "ownership-evidence" | `event:${string}` | `provider:${string}`;
+export type MailReceiptKind = "address" | "send" | "ownership-evidence" | "dispatch-route" | "dispatch-authorization" | "dispatch-payload" | "dispatch-resolution" | `event:${string}` | `provider:${string}`;
 export type MailReceipts = { digest(kind: MailReceiptKind, value: string): string };
 
 function wrappingFingerprint(): string {
@@ -23,6 +23,7 @@ function wrappingFingerprint(): string {
 /** Short transactions only. Provider work must not use this context. */
 export async function mailReceipts(tx: Tx): Promise<MailReceipts> {
   await tx.execute(sql`select set_config(${CAPABILITY}, '1', true)`);
+  await tx.execute(sql`select set_config('freeholder.mail_dispatch_v1', '1', true)`);
   const fingerprint = wrappingFingerprint();
   let [stored] = await tx.select().from(mailReceiptKeys).where(eq(mailReceiptKeys.id, 1)).limit(1);
   if (!stored) {

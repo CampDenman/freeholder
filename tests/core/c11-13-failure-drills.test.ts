@@ -34,8 +34,9 @@ import { resetEnvForTests } from "@/core/env";
 import { defineJob, enqueueJob, prepareServiceJobRuntime, registerJob, stopJobs } from "@/core/jobs";
 import { deliverMail } from "@/core/jobs/core-jobs";
 import { beginMailOAuth, completeMailOAuth } from "@/core/mail/oauth";
-import { mailOauthStates, mailSenders, mailDeliveries, mailOutbox } from "@/core/mail/schema";
+import { mailOauthStates, mailSenders, mailDeliveries, mailDispatches, mailOutbox } from "@/core/mail/schema";
 import { deliverQueuedMail, sendMail } from "@/core/mail/service";
+import { reconcileMailDispatch, retryReconciledMail } from "@/core/mail/dispatch-services";
 import { ready } from "@/core/runtime";
 import { createGracefulShutdown } from "@/core/runtime/shutdown";
 import { applyUpdate as runApply } from "@/core/update/apply";
@@ -272,7 +273,7 @@ describe.runIf(hasDatabase)("C11.13 recovery drills", { timeout: 90_000 }, () =>
     await expect(db().execute(sql`select 1`)).resolves.toBeTruthy();
   });
 
-  it("retains an earlier unknown mail attempt when a later provider request succeeds", async () => {
+  it("recovers unknown mail only after fresh human final-provider and stopped-caller proof", async () => {
     process.env.MAIL_BULK_ADAPTER = "resend";
     process.env.MAIL_BULK_FROM = "news@example.test";
     process.env.RESEND_API_KEY = "test-key";
@@ -291,7 +292,7 @@ describe.runIf(hasDatabase)("C11.13 recovery drills", { timeout: 90_000 }, () =>
         createdBy: OWNER.userId,
       })
       .returning();
-    vi.spyOn(globalThis, "fetch")
+    const provider = vi.spyOn(globalThis, "fetch")
       .mockRejectedValueOnce(new Error("temporary network failure"))
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ id: "provider-message-1" }), {
@@ -306,13 +307,21 @@ describe.runIf(hasDatabase)("C11.13 recovery drills", { timeout: 90_000 }, () =>
       }),
     );
     const [original] = await db().select().from(mailOutbox).where(eq(mailOutbox.deliveryId, queued.id));
-    await expect(deliverQueuedMail(queued.id)).rejects.toThrow(/could not be reached/);
+    await expect(deliverQueuedMail(queued.id)).resolves.toEqual({ status: "unknown" });
     expect(
       (await db().select().from(mailDeliveries).where(eq(mailDeliveries.id, queued.id)))[0],
-    ).toMatchObject({ status: "queued" });
-    expect(await db().select().from(mailOutbox)).toHaveLength(1);
-    await expect(deliverQueuedMail(queued.id)).resolves.toEqual({ status: "submitted" });
+    ).toMatchObject({ status: "unknown", attempts: 1 });
     expect(await db().select().from(mailOutbox)).toEqual([original]);
+    await deliverQueuedMail(queued.id);
+    expect(provider).toHaveBeenCalledTimes(1);
+    const [dispatch] = await db().select().from(mailDispatches).where(eq(mailDispatches.deliveryId, queued.id));
+    const person = { ...OWNER, security: { twoFactorRequired: false, twoFactorEnrolled: true, twoFactorVerified: true, stepUpValid: true } };
+    await reconcileMailDispatch.call({ deliveryId: queued.id, dispatchId: dispatch!.id, expectedAttempts: 1, expectedRecipient: "person@example.test", expectedProviderRef: null, outcome: "not_submitted", providerOperationRef: "fictional-final-server-audit", originalRouteEvidence: "Fictional original carrier and account match this exact request.", finalProviderEvidence: "Fictional independent carrier audit guarantees the original request did not submit a message.", stoppedCallerEvidence: "Fictional original caller is positively stopped and its remote operation is final.", confirmation: "ORIGINAL PROVIDER OUTCOME VERIFIED" }, person);
+    await retryReconciledMail.call({ deliveryId: queued.id, confirmation: "RETRY THE ORIGINAL MESSAGE" }, person);
+    await expect(deliverQueuedMail(queued.id)).resolves.toEqual({ status: "submitted" });
+    expect(await db().select().from(mailOutbox)).toEqual([]);
+    expect(provider).toHaveBeenCalledTimes(2);
+    expect((await db().select().from(mailDispatches).orderBy(mailDispatches.attempt)).map(item => item.state)).toEqual(["not_submitted", "submitted"]);
     const [submitted] = await db().select().from(mailDeliveries).where(eq(mailDeliveries.id, queued.id));
     expect(submitted?.attempts).toBe(2);
     expect(submitted?.status).toBe("submitted");

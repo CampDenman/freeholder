@@ -43,6 +43,7 @@ import {
   STAFF,
   truncateSpine,
 } from "../helpers/spine";
+import { currentMailFixture } from "../helpers/mail-fixture";
 
 const PREVIEW_KEY = "preview-key-for-tests-0123456789-abcdefghij";
 const OWNER_ADDRESS = "owner@example.test";
@@ -205,10 +206,10 @@ describe.runIf(hasDatabase)("preview mail", () => {
     expect(await hasJob(third.id)).toBe(false);
 
     // Held messages do not count; a message older than 24 hours no longer does.
-    await db()
+    await currentMailFixture(async tx => tx
       .update(mailDeliveries)
       .set({ createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000) })
-      .where(eq(mailDeliveries.id, first.id));
+      .where(eq(mailDeliveries.id, first.id)));
     const fourth = await send(OWNER_ADDRESS);
     expect(fourth.delivers).toBe(true);
     const status = await listHeldMail.call({}, OWNER);
@@ -280,10 +281,10 @@ describe.runIf(hasDatabase)("preview mail", () => {
   it("keeps an expired held message listed after its body is pruned", async () => {
     preview(CONSOLE);
     const held = await send(OWNER_ADDRESS);
-    await db()
+    await currentMailFixture(async tx => tx
       .update(mailOutbox)
       .set({ createdAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000) })
-      .where(eq(mailOutbox.deliveryId, held.id));
+      .where(eq(mailOutbox.deliveryId, held.id)));
     await expect(pruneExpiredMailOutbox()).resolves.toBe(1);
     expect(await delivery(held.id)).toMatchObject({ status: "held", holdReason: "no_adapter" });
     await expect(listHeldMail.call({}, OWNER)).resolves.toMatchObject({ held: [{ id: held.id, readable: false }] });

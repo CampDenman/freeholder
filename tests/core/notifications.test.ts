@@ -44,6 +44,7 @@ import {
   truncateSpine,
 } from "../helpers/spine";
 import { flushQueuedMail } from "../helpers/mail";
+import { historicalMailFixture } from "../helpers/mail-fixture";
 
 const SYSTEM = { kind: "system" } as const;
 
@@ -307,11 +308,11 @@ describe.runIf(hasDatabase)("notifications", () => {
     const created = await createNotification.call(message({
       idempotencyKey: "digest:terminal-failure",
     }), SYSTEM);
-    await db().insert(mailSuppressions).values({
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({
       email: "owner@example.test",
       reason: "manual",
       provider: "manual",
-    });
+    }));
     await db().update(notificationDeliveries).set({
       attempts: 7,
       availableAt: new Date(0),

@@ -21,6 +21,8 @@ export interface SmtpConfig {
   password?: string;
   /** Implicit TLS (port 465). STARTTLS on 587 is negotiated either way. */
   secure?: boolean;
+  /** Optional private-server CA. Certificate verification is always enabled. */
+  ca?: string;
   from: string;
 }
 
@@ -29,7 +31,7 @@ export function createSmtpMail(config: SmtpConfig): MailAdapter {
   // service-layer lint rules refuse to let an `any` spread quietly through the
   // codebase. The two calls that matter are narrowed here instead.
   interface Sender {
-    sendMail(options: Record<string, unknown>): Promise<{ messageId: string }>;
+    sendMail(options: Record<string, unknown>): Promise<{ messageId?: unknown; accepted?: unknown; rejected?: unknown; response?: unknown }>;
   }
   let transport: Sender | undefined;
 
@@ -46,10 +48,16 @@ export function createSmtpMail(config: SmtpConfig): MailAdapter {
     async send(message: OutboundEmail) {
       // Connected on first use rather than at import, like the database pool:
       // importing a module must never open a socket.
+      const secure = config.secure ?? config.port === 465;
       const sender: Sender = (transport ??= createTransport({
         host: config.host,
         port: config.port,
-        secure: config.secure ?? config.port === 465,
+        secure,
+        requireTLS: !secure,
+        tls: { rejectUnauthorized: true, ...(config.ca ? { ca: config.ca } : {}) },
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 30_000,
         auth: config.user ? { user: config.user, pass: config.password } : undefined,
       }) as Sender);
 
@@ -61,16 +69,17 @@ export function createSmtpMail(config: SmtpConfig): MailAdapter {
           text: message.text,
           html: message.html,
           replyTo: message.replyTo,
-          headers: message.deliveryId
-            ? { "X-Freeholder-Delivery": message.deliveryId }
+          headers: message.deliveryId || message.dispatchId
+            ? { ...(message.deliveryId ? { "X-Freeholder-Delivery": message.deliveryId } : {}), ...(message.dispatchId ? { "X-Freeholder-Dispatch": message.dispatchId } : {}) }
             : undefined,
         });
-        if (!info.messageId) {
+        const recipient = message.to.trim().toLowerCase();
+        if (typeof info.messageId !== "string" || !info.messageId || info.messageId.length > 2_000 || !Array.isArray(info.accepted) || info.accepted.length !== 1 || typeof info.accepted[0] !== "string" || info.accepted[0].trim().toLowerCase() !== recipient || !Array.isArray(info.rejected) || info.rejected.length !== 0 || typeof info.response !== "string" || !/^250(?:[ -]|$)/.test(info.response) || info.response.length > 2_000) {
           throw new MailAdapterError(
-            "SMTP accepted the request without a message id.",
+            "SMTP did not prove final submission for the exact recipient.",
           );
         }
-        return { providerRef: info.messageId };
+        return { providerRef: info.messageId, acceptance: { protocol: "smtp" as const, recipient, response: info.response } };
       } catch (error) {
         if (error instanceof MailAdapterError) throw error;
         // Nodemailer errors can include server banners, hostnames and command

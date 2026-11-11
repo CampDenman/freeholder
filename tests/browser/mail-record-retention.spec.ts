@@ -15,6 +15,7 @@ import es from "../../locales/es.json";
 import fr from "../../locales/fr.json";
 import ar from "../../locales/ar.json";
 import { C11_BASE_URL, seedC11Owner, useOwnerSession } from "./owner-session";
+import { historicalMailFixture } from "../helpers/mail-fixture";
 
 const messages = { en, es, fr, ar };
 test.describe("mail historical ownership review (C3.31)", () => {
@@ -24,7 +25,7 @@ test.describe("mail historical ownership review (C3.31)", () => {
     await db().update(businessProfile).set({ defaultLocale: locale, enabledLocales: ["en", "es", "fr", "ar"] }).where(eq(businessProfile.id, 1));
     const email = `${"historical".repeat(7)}@example.test`;
     const [contact] = await db().insert(contacts).values({ name: "Original fictional person", email }).returning();
-    const [delivery] = await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: email, subject: "Original fictional mail fact", status: "failed", requestedBy: "system", createdAt: new Date("2020-01-01T00:00:00Z") }).returning();
+    const [delivery] = await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: email, subject: "Original fictional mail fact", status: "failed", requestedBy: "system", createdAt: new Date("2020-01-01T00:00:00Z") }).returning());
     const context = await browser.newContext({ baseURL: C11_BASE_URL, viewport: { width: 320, height: 900 } });
     await useOwnerSession(context, owner); const page = await context.newPage();
     try {

@@ -10,7 +10,8 @@ import { registerRetentionSource, RETENTION_PURGE_BATCH } from "@/core/retention
 import type { Tx } from "@/core/service";
 import { notifications, notificationDeliveries } from "@/core/notifications/schema";
 import { translator } from "@/core/i18n";
-import { mailDeliveries, mailOutbox, mailProviderEvents, mailRecordSubjects, mailSuppressions } from "./schema";
+import { mailDeliveries, mailDispatches, mailDispatchRequests, mailLegacyResolutions, mailOutbox, mailProviderEvents, mailRecordSubjects, mailSuppressions } from "./schema";
+import { physicallySettledMail } from "./dispatch-settlement";
 import { lockMailReceiptWrites, sealMailReceipts, type MailReceipts } from "./receipts";
 import type { MailRecordKind } from "./ownership";
 
@@ -33,9 +34,11 @@ export function mailRecordIsUnheld(kind: MailRecordKind, id: SQLWrapper, held: s
    and not exists(select 1 from ${mailRecordSubjects} where kind=${kind} and record_id=${id} and (contact_id is null or ${inArray(mailRecordSubjects.contactId, held)}))`;
 }
 const unheld = mailRecordIsUnheld;
-const terminalDelivery = sql`${inArray(mailDeliveries.status, ["delivered", "bounced", "complained", "suppressed", "failed"])}
+const terminalDelivery = sql`(${inArray(mailDeliveries.status, ["delivered", "bounced", "complained", "suppressed", "failed"])} or (${mailDeliveries.status}='submitted' and ${physicallySettledMail}))
  and not exists(select 1 from ${mailOutbox} where ${mailOutbox.deliveryId}=${mailDeliveries.id})
- and (${mailDeliveries.attempts}=0 or (${mailDeliveries.attempts}=1 and exists(
+ and (${mailDeliveries.attempts}=0 or ${physicallySettledMail} or (not exists(select 1 from ${mailDispatchRequests} where ${mailDispatchRequests.deliveryId}=${mailDeliveries.id})
+ and not exists(select 1 from ${mailDispatches} where ${mailDispatches.deliveryId}=${mailDeliveries.id})
+ and ${mailDeliveries.attempts}=1 and exists(
    select 1 from ${mailProviderEvents} where ${mailProviderEvents.deliveryId}=${mailDeliveries.id}
     and ${inArray(mailProviderEvents.eventType, ["delivered", "hard_bounce", "complaint", "suppressed", "failed"])})))`;
 function eligible(kind: MailRecordKind, privacy = false): SQL {
@@ -106,7 +109,12 @@ async function redactRows(tx: Tx, kind: MailRecordKind, rows: Row[], receipts: M
   for (const row of rows) {
     if (await minimizeDerivedNotices(tx, kind, row.id, row.address, receipts)) continue;
     const addressDigest = row.addressDigest ?? receipts.digest("address", row.address), redactedAt = new Date();
-    if (kind === "delivery") await tx.update(mailDeliveries).set({ recipientDigest: addressDigest, idempotencyDigest: row.sendDigest ?? (row.sendKey ? receipts.digest("send", row.sendKey) : null), providerRefDigest: row.refDigest ?? (row.ref ? receipts.digest(`provider:${row.provider}`, row.ref) : null), redactedAt, recipient: `redacted-${row.id}@retained.invalid`, subject: "", lastError: null, idempotencyKey: null, providerRef: null }).where(eq(mailDeliveries.id, row.id));
+    if (kind === "delivery") {
+      await tx.update(mailDispatchRequests).set({ encryptedRoute: null }).where(eq(mailDispatchRequests.deliveryId, row.id));
+      await tx.update(mailDispatches).set({ providerRef: null, replyProviderRef: null, redactedAt }).where(eq(mailDispatches.deliveryId, row.id));
+      await tx.update(mailLegacyResolutions).set({ providerRef: null, redactedAt }).where(eq(mailLegacyResolutions.deliveryId, row.id));
+      await tx.update(mailDeliveries).set({ recipientDigest: addressDigest, idempotencyDigest: row.sendDigest ?? (row.sendKey ? receipts.digest("send", row.sendKey) : null), providerRefDigest: row.refDigest ?? (row.ref ? receipts.digest(`provider:${row.provider}`, row.ref) : null), redactedAt, recipient: `redacted-${row.id}@retained.invalid`, subject: "", lastError: null, idempotencyKey: null, providerRef: null }).where(eq(mailDeliveries.id, row.id));
+    }
     else if (kind === "event") await tx.update(mailProviderEvents).set({ recipientDigest: addressDigest, externalEventDigest: row.eventDigest ?? receipts.digest(`event:${row.provider}`, row.eventKey!), providerRefDigest: row.refDigest ?? (row.ref ? receipts.digest(`provider:${row.provider}`, row.ref) : null), redactedAt, recipient: `redacted-${row.id}@retained.invalid`, detail: null, externalEventId: `retained:${row.id}`, providerRef: null }).where(eq(mailProviderEvents.id, row.id));
     else {
       await tx.update(mailSuppressions).set({ emailDigest: addressDigest, redactedAt, email: `redacted-${row.id}@retained.invalid`, detail: null }).where(eq(mailSuppressions.id, row.id));
@@ -123,7 +131,7 @@ export async function minimizeMailRecordsInTransaction(tx: Tx, refs: MailRecordR
     const held = await lockMailHolds(tx), receipts = await lockMailReceiptWrites(tx);
     const deliveryIds = refs.filter(ref => ref.kind === "delivery").map(ref => ref.id);
     if (options.cancelUnsent && deliveryIds.length) {
-      const cancel = await tx.select({ id: mailDeliveries.id }).from(mailDeliveries).where(and(inArray(mailDeliveries.id, deliveryIds), eq(mailDeliveries.attempts, 0), inArray(mailDeliveries.status, ["queued", "failed", "held"]), isNull(mailDeliveries.redactedAt), unheld("delivery", mailDeliveries.id, held))).orderBy(mailDeliveries.id).for("update");
+      const cancel = await tx.select({ id: mailDeliveries.id }).from(mailDeliveries).where(and(inArray(mailDeliveries.id, deliveryIds), sql`(${mailDeliveries.attempts}=0 or ${physicallySettledMail})`, inArray(mailDeliveries.status, ["queued", "failed", "held", "submitted"]), isNull(mailDeliveries.redactedAt), unheld("delivery", mailDeliveries.id, held))).orderBy(mailDeliveries.id).for("update");
       if (cancel.length) {
         const ids = cancel.map(row => row.id);
         await tx.update(mailDeliveries).set({ status: "suppressed", holdReason: null, lastError: null }).where(inArray(mailDeliveries.id, ids));
@@ -147,7 +155,7 @@ export async function minimizeMailRecords(refs: MailRecordRef[], options: { canc
 }
 
 for (const [kind, record] of [["mail_deliveries", "delivery"], ["mail_provider_events", "event"], ["mail_suppressions", "suppression"]] as const) registerRetentionSource({
-  kind, tables: [kind], privacyScope: MAIL_RECORDS_SCOPE,
+  kind, tables: record === "delivery" ? [kind, "mail_dispatch_requests", "mail_dispatches", "mail_legacy_resolutions"] : [kind], privacyScope: MAIL_RECORDS_SCOPE,
   purge: async args => {
     let total = 0;
     let afterId: string | undefined;

@@ -201,6 +201,8 @@ function build(): MailAdapter {
         port: e.SMTP_PORT ? Number(e.SMTP_PORT) : 587,
         user: e.SMTP_USER,
         password: e.SMTP_PASSWORD,
+        secure: e.SMTP_SECURE === undefined ? undefined : e.SMTP_SECURE === "true",
+        ca: e.SMTP_TLS_CA,
         from: e.MAIL_FROM!,
       });
     }

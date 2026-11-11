@@ -49,6 +49,7 @@ import {
 } from "@/modules/reporting/service";
 import { ready } from "@/core/runtime";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { currentMailFixture, historicalMailFixture } from "../helpers/mail-fixture";
 
 const SYSTEM = { kind: "system" } as const;
 
@@ -617,11 +618,11 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
     });
     // A hard bounce on file. `sendMail` refuses a suppressed address, which is
     // the most realistic way a monthly delivery stops arriving.
-    await db().insert(mailSuppressions).values({
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({
       email: "bookkeeper@example.test",
       reason: "hard_bounce",
       provider: "ses",
-    });
+    }));
 
     const definition = await defineExport({
       name: "Monthly books",
@@ -685,11 +686,11 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
       SMTP_HOST: "smtp.example.test",
       MAIL_FROM: "books@example.test",
     });
-    await db().insert(mailSuppressions).values({
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({
       email: "bad@example.test",
       reason: "hard_bounce",
       provider: "ses",
-    });
+    }));
     const buyer = await person("partial");
     await invoice({
       contactId: buyer.id,
@@ -725,10 +726,10 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
       "failed",
     );
     const good = copies.find((each) => each.recipient === "good@example.test")!;
-    await db()
+    await currentMailFixture(async tx => tx
       .update(mailDeliveries)
       .set({ status: "submitted", submittedAt: new Date() })
-      .where(eq(mailDeliveries.id, good.mailDeliveryId!));
+      .where(eq(mailDeliveries.id, good.mailDeliveryId!)));
 
     const settled = await settleExportRun.call({ runId: built.id, attempt: 1 }, SYSTEM);
     expect(settled).toMatchObject({
@@ -830,10 +831,10 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
       "not_found",
     );
 
-    await db()
+    await currentMailFixture(async tx => tx
       .update(mailDeliveries)
       .set({ status: "submitted", submittedAt: new Date() })
-      .where(eq(mailDeliveries.id, mail!.id));
+      .where(eq(mailDeliveries.id, mail!.id)));
     const sent = await settleExportRun.call({ runId: built.id, attempt: 1 }, SYSTEM);
     expect(sent).toMatchObject({
       state: "delivered",
@@ -861,10 +862,10 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
       .update(exportRunDeliveries)
       .set({ expiresAt: sql`now() + interval '1 day'` })
       .where(eq(exportRunDeliveries.id, copy!.id));
-    await db()
+    await currentMailFixture(async tx => tx
       .update(mailDeliveries)
       .set({ status: "bounced", lastError: "Mailbox rejected it" })
-      .where(eq(mailDeliveries.id, mail!.id));
+      .where(eq(mailDeliveries.id, mail!.id)));
     const bounced = await settleExportRun.call({ runId: built.id, attempt: 1 }, SYSTEM);
     expect(bounced).toMatchObject({
       state: "failed",

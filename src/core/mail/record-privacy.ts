@@ -11,7 +11,7 @@ import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { completeErasureJob, registerContactPrivacySource } from "@/core/privacy/service";
 import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
 import type { Tx } from "@/core/service";
-import { mailDeliveries, mailProviderEvents, mailRecordSubjects, mailSuppressions } from "./schema";
+import { mailDeliveries, mailDispatches, mailLegacyResolutions, mailProviderEvents, mailRecordSubjects, mailSuppressions } from "./schema";
 import { MAIL_RECORDS_SCOPE, minimizeMailRecordsInTransaction, type MailRecordRef } from "./record-retention";
 import { publicMailDelivery, publicMailSuppression } from "./service";
 import { sealMailReceipts } from "./receipts";
@@ -85,7 +85,7 @@ async function resolvedRefs(tx: Tx, refs: CapturedRef[], contactId: string): Pro
 
 registerContactPrivacySource({
   scope: MAIL_RECORDS_SCOPE,
-  tables: ["mail_deliveries", "mail_provider_events", "mail_suppressions", "mail_record_subjects"],
+  tables: ["mail_deliveries", "mail_provider_events", "mail_suppressions", "mail_record_subjects", "mail_dispatch_requests", "mail_dispatches", "mail_legacy_resolutions"],
   eraseOrder: 20,
   retain: tx => fenceLegacyWriters(tx),
   exportData: async (tx, contactId) => {
@@ -94,6 +94,8 @@ registerContactPrivacySource({
     const ownEvents = new Set(ids("event"));
     return {
       deliveries: await readChunks(ids("delivery"), async chunk => (await tx.select().from(mailDeliveries).where(inArray(mailDeliveries.id, chunk))).map(row => row.redactedAt ? { id: row.id, status: row.status, provider: row.provider, purpose: row.purpose, redactedAt: row.redactedAt } : publicMailDelivery(row))),
+      physicalDispatches: await readChunks(ids("delivery"), async chunk => (await tx.select({ id: mailDispatches.id, deliveryId: mailDispatches.deliveryId, attempt: mailDispatches.attempt, state: mailDispatches.state, providerRef: mailDispatches.providerRef, replyProviderRef: mailDispatches.replyProviderRef, resolutionSource: mailDispatches.resolutionSource, createdAt: mailDispatches.createdAt, finishedAt: mailDispatches.finishedAt, redactedAt: mailDispatches.redactedAt }).from(mailDispatches).where(inArray(mailDispatches.deliveryId, chunk))).map(row => row.redactedAt ? { id: row.id, deliveryId: row.deliveryId, attempt: row.attempt, state: row.state, resolutionSource: row.resolutionSource, createdAt: row.createdAt, finishedAt: row.finishedAt, redactedAt: row.redactedAt } : row)),
+      legacyResolutions: await readChunks(ids("delivery"), async chunk => (await tx.select({ deliveryId: mailLegacyResolutions.deliveryId, outcome: mailLegacyResolutions.outcome, providerRef: mailLegacyResolutions.providerRef, createdAt: mailLegacyResolutions.createdAt, redactedAt: mailLegacyResolutions.redactedAt }).from(mailLegacyResolutions).where(inArray(mailLegacyResolutions.deliveryId, chunk))).map(row => row.redactedAt ? { deliveryId: row.deliveryId, outcome: row.outcome, createdAt: row.createdAt, redactedAt: row.redactedAt } : row)),
       events: await readChunks(ids("event"), async chunk => (await tx.select({ id: mailProviderEvents.id, provider: mailProviderEvents.provider, recipient: mailProviderEvents.recipient, eventType: mailProviderEvents.eventType, detail: mailProviderEvents.detail, occurredAt: mailProviderEvents.occurredAt, redactedAt: mailProviderEvents.redactedAt }).from(mailProviderEvents).where(inArray(mailProviderEvents.id, chunk))).map(row => row.redactedAt ? { id: row.id, provider: row.provider, eventType: row.eventType, occurredAt: row.occurredAt, redactedAt: row.redactedAt } : row)),
       suppressions: await readChunks(ids("suppression"), async chunk => (await tx.select().from(mailSuppressions).where(inArray(mailSuppressions.id, chunk))).map(row => row.sourceEventId && !ownEvents.has(row.sourceEventId)
         ? { id: row.id, status: "retained", redactedAt: row.redactedAt }

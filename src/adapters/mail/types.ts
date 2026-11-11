@@ -24,6 +24,8 @@ export interface OutboundEmail {
   from?: string;
   /** Stable internal correlation/idempotency value, never shown as content. */
   deliveryId?: string;
+  /** Assigned by the worker's durable physical-call claim, never by a caller. */
+  dispatchId?: string;
   /** Narrow allowlist, validated before the encrypted outbox is written. */
   headers?: {
     "List-Unsubscribe"?: string;
@@ -94,6 +96,8 @@ export interface MailAdapter {
   readonly delivers: boolean;
   send(message: OutboundEmail): Promise<{
     providerRef: string;
+    /** Positive final SMTP reply for this exact recipient; private receipt input. */
+    acceptance?: { protocol: "smtp"; recipient: string; response: string };
     /**
      * A permission-checking carrier reports the grant it recorded while
      * sending (C3.31), so the worker can remember it and a later withdrawal

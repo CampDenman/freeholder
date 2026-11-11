@@ -25,6 +25,7 @@ import { applyRetentionPolicies, listRetentionPolicies } from "@/core/retention/
 import { retentionPolicies } from "@/core/retention/schema";
 import { dataRequests } from "@/core/privacy/schema";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { currentMailFixture, historicalMailFixture } from "../helpers/mail-fixture";
 
 const EMAIL = "retention-subject@example.test";
 const PAST = new Date("2020-01-01T00:00:00Z");
@@ -61,11 +62,11 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("removes old terminal personal fields while preserving send and webhook idempotency", async () => {
     const sendKey = `fixture-mail:${randomUUID()}`;
-    const [oneOff] = await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Private source subject", status: "failed", requestedBy: "system", idempotencyKey: sendKey, attempts: 0, createdAt: PAST, updatedAt: PAST }).returning();
-    const [delivery] = await db().insert(mailDeliveries).values({ purpose: "bulk", provider: "resend", recipient: EMAIL, subject: "Private source subject", status: "bounced", requestedBy: "system", providerRef: "fixture-provider-reference", attempts: 1, providerStatusAt: PAST, createdAt: PAST, updatedAt: PAST }).returning();
+    const [oneOff] = await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Private source subject", status: "failed", requestedBy: "system", idempotencyKey: sendKey, attempts: 0, createdAt: PAST, updatedAt: PAST }).returning());
+    const [delivery] = await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({ purpose: "bulk", provider: "resend", recipient: EMAIL, subject: "Private source subject", status: "bounced", requestedBy: "system", providerRef: "fixture-provider-reference", attempts: 1, providerStatusAt: PAST, createdAt: PAST, updatedAt: PAST }).returning());
     const eventInput = { provider: "resend" as const, externalEventId: `fixture-event:${randomUUID()}`, providerRef: "fixture-provider-reference", recipient: EMAIL, eventType: "hard_bounce" as const, detail: "Private source detail", rawDigest: "a".repeat(64), occurredAt: PAST.toISOString() };
-    const [event] = await db().insert(mailProviderEvents).values({ ...eventInput, deliveryId: delivery!.id, occurredAt: PAST, createdAt: PAST }).returning();
-    await db().insert(mailSuppressions).values({ email: EMAIL, reason: "hard_bounce", provider: "resend", sourceEventId: event!.id, detail: "Private source detail", active: false, releasedAt: PAST, createdAt: PAST, updatedAt: PAST });
+    const [event] = await historicalMailFixture(async tx => tx.insert(mailProviderEvents).values({ ...eventInput, deliveryId: delivery!.id, occurredAt: PAST, createdAt: PAST }).returning());
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({ email: EMAIL, reason: "hard_bounce", provider: "resend", sourceEventId: event!.id, detail: "Private source detail", active: false, releasedAt: PAST, createdAt: PAST, updatedAt: PAST }));
     await db().insert(retentionPolicies).values(["mail_deliveries", "mail_provider_events", "mail_suppressions"].map(kind => ({ kind, ttlDays: 1 })));
     await applyRetentionPolicies();
     const current = { deliveries: await db().select().from(mailDeliveries), events: await db().select().from(mailProviderEvents), suppressions: await db().select().from(mailSuppressions) };
@@ -77,8 +78,8 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     expect((await db().select().from(mailSuppressions)).some(row => row.active)).toBe(false);
   });
   it("keeps active suppressions and unresolved queued/submitted records off the retention clock", async () => {
-    await db().insert(mailDeliveries).values(["queued", "submitted"].map(status => ({ purpose: "transactional" as const, provider: "smtp" as const, recipient: EMAIL, subject: "Still owed", status: status as "queued" | "submitted", requestedBy: "system", attempts: 1, createdAt: PAST, updatedAt: PAST })));
-    await db().insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", active: true, createdAt: PAST, updatedAt: PAST });
+    await historicalMailFixture(async tx => tx.insert(mailDeliveries).values(["queued", "submitted"].map(status => ({ purpose: "transactional" as const, provider: "smtp" as const, recipient: EMAIL, subject: "Still owed", status: status as "queued" | "submitted", requestedBy: "system", attempts: 1, createdAt: PAST, updatedAt: PAST }))));
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", active: true, createdAt: PAST, updatedAt: PAST }));
     await db().insert(retentionPolicies).values(["mail_deliveries", "mail_suppressions"].map(kind => ({ kind, ttlDays: 1 })));
     await applyRetentionPolicies();
     expect((await db().select().from(mailDeliveries)).map(row => row.recipient)).toEqual([EMAIL, EMAIL]);
@@ -86,7 +87,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("scans past a full page of unsettled derived notices to minimize later safe records", async () => {
     const ids = Array.from({ length: 501 }, (_, index) => `10000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
-    await db().insert(mailDeliveries).values(ids.map(id => ({ id, purpose: "transactional" as const, provider: "console" as const, recipient: EMAIL, subject: "Original retained evidence", status: "failed" as const, attempts: 0, requestedBy: "system", createdAt: PAST, updatedAt: PAST })));
+    await historicalMailFixture(async tx => tx.insert(mailDeliveries).values(ids.map(id => ({ id, purpose: "transactional" as const, provider: "console" as const, recipient: EMAIL, subject: "Original retained evidence", status: "failed" as const, attempts: 0, requestedBy: "system", createdAt: PAST, updatedAt: PAST }))));
     const events = await db().insert(outboxEvents).values(ids.slice(0, 500).map(id => ({ eventName: "mail.deliveryUpdated", payload: { deliveryId: id, recipient: EMAIL } }))).returning({ id: outboxEvents.id });
     const notices = await db().insert(notifications).values(events.map(event => ({ recipientUserId: OWNER.userId, topic: "mail.delivery", title: "Original mail notice", body: `Still-running copy ${EMAIL}`, sourceEventName: "mail.deliveryUpdated", sourceEventId: event.id, idempotencyKey: `retention-page:${event.id}` }))).returning({ id: notifications.id });
     await db().insert(notificationDeliveries).values(notices.map(notice => ({ notificationId: notice.id, channel: "sms" as const, status: "processing" as const, attempts: 1 })));
@@ -102,9 +103,9 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   }, 120_000);
   it("preserves the only original event reference for multiple or unresolved physical attempts", async () => {
     for (const [index, attempts] of [2, 1].entries()) {
-      const [delivery] = await db().insert(mailDeliveries).values({ purpose: "bulk", provider: "resend", recipient: EMAIL, subject: "Unresolved original evidence", status: "delivered", deliveredAt: PAST, requestedBy: "system", attempts, providerRef: `latest-reference-${index}`, providerStatusAt: PAST, createdAt: PAST, updatedAt: PAST }).returning();
-      if (attempts === 1) await db().insert(mailOutbox).values({ deliveryId: delivery!.id, encryptedMessage: "synthetic-unresolved-encrypted-envelope", createdAt: PAST, updatedAt: PAST });
-      await db().insert(mailProviderEvents).values({ provider: "resend", externalEventId: `terminal-looking-${index}`, providerRef: `only-original-reference-${index}`, recipient: EMAIL, eventType: "delivered", rawDigest: "b".repeat(64), deliveryId: delivery!.id, occurredAt: PAST, createdAt: PAST });
+      const [delivery] = await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({ purpose: "bulk", provider: "resend", recipient: EMAIL, subject: "Unresolved original evidence", status: "delivered", deliveredAt: PAST, requestedBy: "system", attempts, providerRef: `latest-reference-${index}`, providerStatusAt: PAST, createdAt: PAST, updatedAt: PAST }).returning());
+      if (attempts === 1) await historicalMailFixture(async tx => tx.insert(mailOutbox).values({ deliveryId: delivery!.id, encryptedMessage: "synthetic-unresolved-encrypted-envelope", createdAt: PAST, updatedAt: PAST }));
+      await historicalMailFixture(async tx => tx.insert(mailProviderEvents).values({ provider: "resend", externalEventId: `terminal-looking-${index}`, providerRef: `only-original-reference-${index}`, recipient: EMAIL, eventType: "delivered", rawDigest: "b".repeat(64), deliveryId: delivery!.id, occurredAt: PAST, createdAt: PAST }));
     }
     await db().insert(retentionPolicies).values(["mail_deliveries", "mail_provider_events"].map(kind => ({ kind, ttlDays: 1 })));
     await applyRetentionPolicies();
@@ -112,7 +113,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     expect((await db().select().from(mailDeliveries)).every(row => row.recipient === EMAIL)).toBe(true);
   });
   it("reactivates a retained suppression from a new fact without restoring its old plaintext address", async () => {
-    await db().insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", active: false, releasedAt: PAST, createdAt: PAST, updatedAt: PAST });
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", active: false, releasedAt: PAST, createdAt: PAST, updatedAt: PAST }));
     await db().insert(retentionPolicies).values({ kind: "mail_suppressions", ttlDays: 1 });
     await applyRetentionPolicies();
     expect((await db().select().from(mailSuppressions))[0]?.email).not.toBe(EMAIL);
@@ -164,8 +165,8 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   it("keeps a named hold attached after the contact's address is anonymized", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
     const queued = await db().transaction(tx => sendMail(tx, { to: EMAIL, subject: "Held fact", text: "Fixture" }));
-    await db().update(mailDeliveries).set({ status: "failed", updatedAt: PAST }).where(eq(mailDeliveries.id, queued.id));
-    await db().delete(mailOutbox);
+    await currentMailFixture(async tx => tx.update(mailDeliveries).set({ status: "failed", updatedAt: PAST }).where(eq(mailDeliveries.id, queued.id)));
+    await currentMailFixture(async tx => tx.delete(mailOutbox));
     await erasure(contact.id, true);
     expect((await db().select().from(contacts).where(eq(contacts.id, contact.id)))[0]?.email).toBeNull();
     await db().insert(retentionPolicies).values({ kind: "mail_deliveries", ttlDays: 1 });
@@ -178,7 +179,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     const unsent = await db().transaction(tx => sendMail(tx, { to: EMAIL, subject: "Unsent fact", text: "Fixture" }));
     const unknown = await db().transaction(tx => sendMail(tx, { to: EMAIL, subject: "Unknown fact", text: "Fixture" }));
     expect((await db().select().from(mailRecordSubjects)).map(row => row.contactId)).toEqual([contact.id, contact.id]);
-    await db().update(mailDeliveries).set({ status: "submitted", attempts: 1 }).where(eq(mailDeliveries.id, unknown.id));
+    await currentMailFixture(async tx => tx.update(mailDeliveries).set({ status: "submitted", attempts: 1 }).where(eq(mailDeliveries.id, unknown.id)));
     const erased = await erasure(contact.id);
     expect(erased.request.status).toBe("in_progress");
     const receipt = erased.artifact.body as { outcomes: Array<{ scope: string; pendingJobs?: string[] }> };
@@ -194,7 +195,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("requires explicit historical ownership review before minimizing an unbound legacy record", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
-    const [legacy] = await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Unknown history", status: "failed", requestedBy: "system", createdAt: PAST, updatedAt: PAST }).returning();
+    const [legacy] = await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Unknown history", status: "failed", requestedBy: "system", createdAt: PAST, updatedAt: PAST }).returning());
     const erased = await erasure(contact.id);
     expect(erased.request.status).toBe("in_progress");
     const receipt = erased.artifact.body as { outcomes: Array<{ scope: string; pendingJobs?: string[] }> };
@@ -206,14 +207,14 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("fences old SQL mail writers before pending legacy review can acknowledge its captured snapshot", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
-    await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Original unreviewed history", status: "failed", requestedBy: "system" });
+    await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Original unreviewed history", status: "failed", requestedBy: "system" }));
     expect((await erasure(contact.id)).request.status).toBe("in_progress");
     await expect(db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Stale old writer after snapshot", requestedBy: "system" })).rejects.toThrow();
     expect(await db().select().from(mailDeliveries)).toHaveLength(1);
   });
   it("keeps receipt joins, address digests and review evidence out of exact-key DTOs and audit inputs", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
-    const [legacy] = await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Legacy fact", status: "failed", requestedBy: "system" }).returning();
+    const [legacy] = await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Legacy fact", status: "failed", requestedBy: "system" }).returning());
     const evidence = "Synthetic private correspondence proving original ownership.";
     const input = { kind: "delivery" as const, id: legacy!.id, expectedRecipient: EMAIL, contactId: contact.id, evidence, confirmation: "VERIFIED" as const };
     await expect(reviewLegacyMailOwnership.call(input, { kind: "agent", keyName: "mail-only", scopes: ["mail.reviewLegacyOwnership", "contacts.get"] })).rejects.toMatchObject({ code: "permission" });
@@ -228,12 +229,12 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("does not let a background system actor supply the human legacy ownership review", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
-    const [legacy] = await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Unreviewed history", status: "failed", requestedBy: "system" }).returning();
+    const [legacy] = await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Unreviewed history", status: "failed", requestedBy: "system" }).returning());
     await expect(reviewLegacyMailOwnership.call({ kind: "delivery", id: legacy!.id, expectedRecipient: EMAIL, contactId: contact.id, evidence: "Automated text cannot supply independent human ownership review.", confirmation: "VERIFIED" }, { kind: "system" })).rejects.toMatchObject({ code: "permission" });
     expect(await db().select().from(mailRecordSubjects)).toHaveLength(0);
   });
   it("does not let a background system actor independently verify and release an address block", async () => {
-    await db().insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual" });
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual" }));
     await expect(releaseMailSuppression.call({ email: EMAIL, confirmation: EMAIL }, { kind: "system" })).rejects.toMatchObject({ code: "permission" });
     expect((await db().select().from(mailSuppressions))[0]?.active).toBe(true);
   });
@@ -273,7 +274,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("does not let an old erasure worker or its completed replay minimize a later holder's current block", async () => {
     const old = await resolveContact.call({ email: EMAIL }, OWNER);
-    const [block] = await db().insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", detail: "Original old holder's fact", createdAt: PAST, updatedAt: PAST }).returning();
+    const [block] = await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", detail: "Original old holder's fact", createdAt: PAST, updatedAt: PAST }).returning());
     const erased = await erasure(old.contact.id), job = await originalJob(erased);
     await reviewLegacyMailOwnership.call({ kind: "suppression", id: block!.id, expectedRecipient: EMAIL, contactId: old.contact.id, evidence: "Original dated correspondence verifies the old holder's block.", confirmation: "VERIFIED" }, OWNER);
     await releaseMailSuppression.call({ email: EMAIL, confirmation: EMAIL }, OWNER);
@@ -289,7 +290,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("does not apply an initial old-holder erasure to a global block whose current fact belongs to the new holder", async () => {
     const old = await resolveContact.call({ email: EMAIL }, OWNER);
-    const [block] = await db().insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", createdAt: PAST, updatedAt: PAST }).returning();
+    const [block] = await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", createdAt: PAST, updatedAt: PAST }).returning());
     await reviewLegacyMailOwnership.call({ kind: "suppression", id: block!.id, expectedRecipient: EMAIL, contactId: old.contact.id, evidence: "Original dated correspondence verifies the old holder's block.", confirmation: "VERIFIED" }, OWNER);
     await updateContact.call({ id: old.contact.id, email: "old-holder-new-address@example.test" }, OWNER);
     await releaseMailSuppression.call({ email: EMAIL, confirmation: EMAIL }, OWNER);
@@ -309,7 +310,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("acknowledges an unreviewed candidate only after the authorized retention worker already minimized it", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
-    await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Old unreviewed but terminal fact", status: "failed", requestedBy: "system", createdAt: PAST, updatedAt: PAST });
+    await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Old unreviewed but terminal fact", status: "failed", requestedBy: "system", createdAt: PAST, updatedAt: PAST }));
     const erased = await erasure(contact.id), job = await originalJob(erased);
     await db().insert(retentionPolicies).values({ kind: "mail_deliveries", ttlDays: 1 });
     await applyRetentionPolicies();
@@ -329,9 +330,9 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("allows removal of a reviewer's login reference without dropping original contact ownership", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
-    const [legacy] = await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Reviewed fact", status: "failed", requestedBy: "system" }).returning();
+    const [legacy] = await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Reviewed fact", status: "failed", requestedBy: "system" }).returning());
     await reviewLegacyMailOwnership.call({ kind: "delivery", id: legacy!.id, expectedRecipient: EMAIL, contactId: contact.id, evidence: "Synthetic independent original correspondence establishes ownership.", confirmation: "VERIFIED" }, OWNER);
-    await db().insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", active: false, releasedAt: new Date(), releasedBy: OWNER.userId });
+    await historicalMailFixture(async tx => tx.insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", active: false, releasedAt: new Date(), releasedBy: OWNER.userId }));
     await db().transaction(tx => sealMailReceipts(tx));
     await db().delete(users).where(eq(users.id, OWNER.userId));
     expect((await db().select().from(mailRecordSubjects))[0]).toMatchObject({ contactId: contact.id, verifiedBy: null, basis: "owner_review" });
@@ -358,7 +359,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   it("keeps an expired unsent private body under its named hold after anonymization", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
     const queued = await db().transaction(tx => sendMail(tx, { to: EMAIL, subject: "Held original", text: "Synthetic private fixture" }));
-    await db().update(mailOutbox).set({ createdAt: PAST }).where(eq(mailOutbox.deliveryId, queued.id));
+    await currentMailFixture(async tx => tx.update(mailOutbox).set({ createdAt: PAST }).where(eq(mailOutbox.deliveryId, queued.id)));
     const erased = await erasure(contact.id, true);
     expect(erased.request.status).toBe("partially_completed");
     expect(await pruneExpiredMailOutbox()).toBe(0);
@@ -387,7 +388,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     const [source] = await db().select().from(outboxEvents).where(eq(outboxEvents.eventName, "mail.deliveryUpdated"));
     const [notice] = await db().insert(notifications).values({ recipientUserId: OWNER.userId, topic: "mail.delivery", priority: "warning", title: "Old mail notice", body: `Old reader ${EMAIL}`, dedupeKey: `old-mail:${EMAIL}`, sourceEventName: "mail.deliveryUpdated", sourceEventId: source!.id, idempotencyKey: `derived-${ambiguous}` }).returning();
     const [attempt] = await db().insert(notificationDeliveries).values({ notificationId: notice!.id, channel: "email", status: "delivered", attempts: 1, deliveredAt: new Date(), lastError: `Old provider detail ${EMAIL}` }).returning();
-    const [copy] = await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "smtp", recipient: "owner@example.test", subject: `Old rendered subject ${EMAIL}`, status: ambiguous === "submitted" ? "submitted" : "delivered", deliveredAt: ambiguous === "multiple" ? new Date() : null, attempts: ambiguous === "multiple" ? 2 : 1, requestedBy: "system:notifications", idempotencyKey: `notification-delivery:${attempt!.id}`, providerRef: "only-original-derived-reference", lastError: `Old rendered error ${EMAIL}` }).returning();
+    const [copy] = await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({ purpose: "transactional", provider: "smtp", recipient: "owner@example.test", subject: `Old rendered subject ${EMAIL}`, status: ambiguous === "submitted" ? "submitted" : "delivered", deliveredAt: ambiguous === "multiple" ? new Date() : null, attempts: ambiguous === "multiple" ? 2 : 1, requestedBy: "system:notifications", idempotencyKey: `notification-delivery:${attempt!.id}`, providerRef: "only-original-derived-reference", lastError: `Old rendered error ${EMAIL}` }).returning());
     const erased = await erasure(contact.id);
     expect(erased.request.status).toBe("in_progress");
     expect((await db().select().from(mailDeliveries).where(eq(mailDeliveries.id, copy!.id)))[0]?.providerRef).toBe("only-original-derived-reference");
@@ -398,7 +399,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     const [source] = await db().select().from(outboxEvents).where(eq(outboxEvents.eventName, "mail.deliveryUpdated"));
     const [notice] = await db().insert(notifications).values({ recipientUserId: OWNER.userId, topic: "mail.delivery", priority: "warning", title: "Old mail notice", body: `Old reader ${EMAIL}`, sourceEventName: "mail.deliveryUpdated", sourceEventId: source!.id, idempotencyKey: "derived-settled" }).returning();
     const [attempt] = await db().insert(notificationDeliveries).values({ notificationId: notice!.id, channel: "email", status: "delivered", attempts: 1, deliveredAt: new Date(), lastError: `Old provider detail ${EMAIL}` }).returning();
-    await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: "owner@example.test", subject: `Old rendered subject ${EMAIL}`, status: "failed", attempts: 0, requestedBy: "system:notifications", idempotencyKey: `notification-delivery:${attempt!.id}`, lastError: `Old rendered error ${EMAIL}` });
+    await historicalMailFixture(async tx => tx.insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: "owner@example.test", subject: `Old rendered subject ${EMAIL}`, status: "failed", attempts: 0, requestedBy: "system:notifications", idempotencyKey: `notification-delivery:${attempt!.id}`, lastError: `Old rendered error ${EMAIL}` }));
     expect((await erasure(contact.id)).request.status).toBe("completed");
     expect(JSON.stringify(await db().select().from(mailDeliveries))).not.toContain(EMAIL);
     expect(JSON.stringify(await db().select().from(notificationDeliveries))).not.toContain(EMAIL);

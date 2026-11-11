@@ -15,12 +15,33 @@ original pending job identities are separate; completed replays are no-ops and
 missing originals require exact backup. SDK 8/audit 7, full fast 373 plus its one
 documented exclusion and production scrub 20,330 files / 242,435,915 bytes passed.
 Four fresh-database locale 320px owner-browser journeys passed in both themes
-with keyboard, Axe, bounds and service/audit assertions. Protected integration
-remains required. Required enabled
+with keyboard, Axe, bounds and service/audit assertions. Protected
+[PR #672](https://github.com/CampDenman/freeholder/pull/672) merged at `4039dfe6`
+after [merge-group qualification](https://github.com/CampDenman/freeholder/actions/runs/43103837092).
+Required enabled
 SMTP/transactional physical-dispatch recovery continues separately without
 inventing old route/attempt facts or clearing unknowns on elapsed time. All live
 mail provider acceptance and Tony's independent review remain open. No launch
 approval is inferred from agent checks.
+
+C3.31 physical-worker increment (2026-11-11, agent evidence only): review
+`dispatch-route.ts`, `dispatch-state.ts`, `dispatch-services.ts`,
+`dispatch-settlement.ts`, `service.ts` and
+`db/migrations/0072_mail_physical_dispatches.sql`. Frozen request/route receipts,
+durable pre-I/O callers, positive reply retention before mutable apply checks,
+strict old-image admission and fresh-person-only recovery form one boundary.
+Human evidence is labeled human; old per-call/account facts are not invented.
+Unknowns and named holds survive clock expiry and later outcomes. Actual-main
+targeted native 19 completed across one fixture-only retry; the additional
+observed-positive/apply-fence case, live SDK 8, full fast 380 plus one documented
+exclusion and production scrub 20,353 files / 242,882,917 bytes passed. Four
+fresh-database owner journeys passed in en/es/fr/ar at 320px in both themes
+with keyboard, Axe, bounds, private receipt omission and both unknown/retry
+and retained-positive flows; English light and Arabic dark screenshots were
+inspected. Protected qualification remains required. The reviewer must
+distinguish a worker invocation from multiple carrier consent/retry HTTP
+operations. No live inbox placement, external account acceptance or independent
+sign-off is supplied here. See `deploy/mail-dispatch-recovery.md`.
 
 This is a briefing packet for an independent reviewer. It is **not** the
 review. C11.10 stays open until a reviewer who did not author the surfaces
