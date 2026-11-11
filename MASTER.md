@@ -5810,12 +5810,14 @@ deployments are portable, testable and incapable of silently forking the truth.
   anonymization and merge/undo. Unresolved sends and uncertain ownership keep
   erasure pending. Fresh human attribution lives at `/admin/retention/mail`.
   `deploy/mail-record-retention.md` names the model, breaking writer fence and
-  exact-backup recovery. Actual empty-database70/71 qualification passed15
-  mail +8 participation controls, SDK8, type/lint, production scrub and four
-  locale owner-browser journeys. Peer review reproduced an additional
-  derived-copy receipt gap; repair and protected integration qualification
-  remain in progress. This supplies neither independent review nor live
-  provider acceptance.)*
+  exact-backup recovery. Actual latest mail/populated-upgrade qualification
+  passed23 controls; preceding combined routing/privacy44, SDK8, audit labels7,
+  first artifact scrub and four locale owner-browser journeys passed. Final
+  composed build/browser/protected integration remains in progress. Required
+  enabled transactional/SMTP per-dispatch provenance and unknown-outcome
+  recovery (C11.08) continue as a separate source increment; no old account or
+  physical-attempt facts are invented. This supplies neither independent
+  review nor live provider acceptance.)*
   Unchecked: no live send against the provider.)*
 - [ ] **C3.32** Add a measurement-provider category (`MEASUREMENT_PROVIDER`,
   default `none`) with Paradise Modern as its first adapter (§12, C1.18):

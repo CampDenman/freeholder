@@ -7,16 +7,24 @@ import { z } from "zod";
 import { db } from "@/core/db";
 import { enqueueJob } from "@/core/jobs";
 import { contactPrivacyIdentity } from "@/core/privacy/contact-identity";
+import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { completeErasureJob, registerContactPrivacySource } from "@/core/privacy/service";
 import type { Tx } from "@/core/service";
 import { mailDeliveries, mailProviderEvents, mailRecordSubjects, mailSuppressions } from "./schema";
 import { MAIL_RECORDS_SCOPE, minimizeMailRecordsInTransaction, type MailRecordRef } from "./record-retention";
 import { publicMailDelivery, publicMailSuppression } from "./service";
+import { sealMailReceipts } from "./receipts";
 
 export const MAIL_RECORD_ERASURE_JOB = "core.eraseMailRecords";
 const refSchema = z.object({ kind: z.enum(["delivery", "event", "suppression"]), id: z.uuid(), requiresReview: z.boolean() });
 const erasurePayload = z.object({ requestId: z.uuid(), originalJobId: z.uuid(), refs: z.array(refSchema).min(1).max(500) });
 type CapturedRef = z.infer<typeof refSchema>;
+async function fenceLegacyWriters(tx: Tx): Promise<void> {
+  await lockContactIdentity(tx);
+  // Even zero/minimization-pending captures must exclude an old writer
+  // appending personal data after the immutable erasure snapshot.
+  await sealMailReceipts(tx);
+}
 async function readChunks<T>(ids: string[], read: (chunk: string[]) => Promise<T[]>): Promise<T[]> {
   const result: T[] = [];
   for (let offset = 0; offset < ids.length; offset += 500) result.push(...await read(ids.slice(offset, offset + 500)));
@@ -59,6 +67,7 @@ registerContactPrivacySource({
   scope: MAIL_RECORDS_SCOPE,
   tables: ["mail_deliveries", "mail_provider_events", "mail_suppressions", "mail_record_subjects"],
   eraseOrder: 20,
+  retain: tx => fenceLegacyWriters(tx),
   exportData: async (tx, contactId) => {
     const refs = await capture(tx, contactId, true), owned = refs.filter(ref => !ref.requiresReview);
     const ids = (kind: MailRecordRef["kind"]) => owned.filter(ref => ref.kind === kind).map(ref => ref.id);
@@ -70,6 +79,7 @@ registerContactPrivacySource({
     };
   },
   erase: async (tx, contactId, context) => {
+    await fenceLegacyWriters(tx);
     const refs = await capture(tx, contactId);
     if (!refs.length) return { affected: 0 };
     const known = refs.filter(ref => !ref.requiresReview);

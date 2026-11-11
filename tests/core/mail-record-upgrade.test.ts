@@ -18,8 +18,12 @@ describe.runIf(hasDatabase)("populated mail record upgrade (C3.31)", () => {
         ["mail_deliveries_receipt_writer", "mail_deliveries"], ["mail_provider_events_receipt_writer", "mail_provider_events"],
         ["mail_suppressions_receipt_writer", "mail_suppressions"], ["mail_outbox_receipt_writer", "mail_outbox"],
         ["mail_record_subjects_receipt_writer", "mail_record_subjects"], ["mail_retention_hold_writer", "privacy_retention_exceptions"],
+        ["mail_deliveries_receipt_admission", "mail_deliveries"], ["mail_provider_events_receipt_admission", "mail_provider_events"],
+        ["mail_suppressions_receipt_admission", "mail_suppressions"], ["mail_outbox_receipt_admission", "mail_outbox"],
+        ["mail_deliveries_receipt_update_admission", "mail_deliveries"], ["mail_provider_events_receipt_update_admission", "mail_provider_events"],
+        ["mail_suppressions_receipt_update_admission", "mail_suppressions"], ["mail_outbox_receipt_update_admission", "mail_outbox"],
       ]) await tx.execute(sql.raw(`drop trigger ${trigger} on ${table}`));
-      await tx.execute(sql.raw("drop function freeholder_mail_receipt_writer(); drop function freeholder_mail_hold_writer(); drop table mail_record_subjects; drop table mail_receipt_keys;"));
+      await tx.execute(sql.raw("drop function freeholder_mail_receipt_writer(); drop function freeholder_mail_receipt_admission(); drop function freeholder_mail_hold_writer(); drop table mail_record_subjects; drop table mail_receipt_keys;"));
       await tx.execute(sql.raw("alter table mail_deliveries drop column recipient_digest,drop column idempotency_digest,drop column provider_ref_digest,drop column redacted_at; alter table mail_provider_events drop column recipient_digest,drop column external_event_digest,drop column provider_ref_digest,drop column redacted_at; alter table mail_suppressions drop column id,drop column email_digest,drop column redacted_at;"));
       const delivery = randomUUID(), event = randomUUID(), address = "legacy-upgrade@example.test";
       await tx.execute(sql`insert into mail_deliveries(id,purpose,provider,recipient,subject,status,requested_by,attempts,provider_ref) values(${delivery},'bulk','resend',${address},'Original private subject','bounced','system',2,'original-physical-reference')`);

@@ -1,6 +1,6 @@
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
--- freeholder:schema-breaking Mail ownership and minimized replay receipts require guarded writers. Earlier images must refuse ownership changes and, after first minimization, mail writes. Full rollback requires the matching pre-upgrade database and private wrapping keys; acknowledged erasures must be respected before replay.
+-- freeholder:schema-breaking Use only guarded images on this upgraded schema. Stale ownership writers are refused; privacy admission or first minimization fences legacy content writers. Full rollback requires the matching pre-upgrade database and private wrapping keys; acknowledged erasures must be respected before replay.
 -- C3.31: minimize personal fields while retaining private replay and withdrawal receipts.
 CREATE TABLE mail_receipt_keys (
  id integer PRIMARY KEY DEFAULT 1, encrypted_key text NOT NULL,
@@ -39,9 +39,38 @@ CREATE INDEX mail_record_subjects_owned_idx ON mail_record_subjects(kind,record_
 CREATE INDEX mail_record_subjects_contact_idx ON mail_record_subjects(contact_id,kind,record_id);
 --> statement-breakpoint
 
--- Legacy SQL may keep reading receipts. After irreversible redaction it must
--- refuse writes before sending or reconstructing an address-keyed receipt.
+-- Legacy content writers must refuse once privacy begins or personal fields
+-- are minimized, before sending or reconstructing an address-keyed receipt.
 -- The shared/exclusive seal lock also covers a key row not yet initialized.
+-- Statement admission precedes row locks, so a legacy writer cannot hold a
+-- target row while waiting behind the erasure/retention seal lock.
+CREATE FUNCTION freeholder_mail_receipt_admission() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF current_setting('freeholder.mail_receipts_v1',true) IS DISTINCT FROM '1' THEN
+  PERFORM pg_advisory_xact_lock_shared(hashtext('freeholder-mail-receipt-seal-v1'));
+  IF EXISTS(SELECT 1 FROM mail_receipt_keys WHERE id=1 AND sealed_at IS NOT NULL) THEN
+   RAISE EXCEPTION 'Mail privacy requires the current guarded mail writer' USING ERRCODE='23514';
+  END IF;
+ END IF;
+ RETURN NULL;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER mail_deliveries_receipt_admission BEFORE INSERT OR DELETE ON mail_deliveries FOR EACH STATEMENT EXECUTE FUNCTION freeholder_mail_receipt_admission();
+--> statement-breakpoint
+CREATE TRIGGER mail_deliveries_receipt_update_admission BEFORE UPDATE OF id,purpose,provider,recipient,subject,status,hold_reason,provider_ref,idempotency_key,requested_by,attempts,last_error,submitted_at,delivered_at,provider_status_at,created_at,updated_at,recipient_digest,idempotency_digest,provider_ref_digest,redacted_at ON mail_deliveries FOR EACH STATEMENT EXECUTE FUNCTION freeholder_mail_receipt_admission();
+--> statement-breakpoint
+CREATE TRIGGER mail_provider_events_receipt_admission BEFORE INSERT OR DELETE ON mail_provider_events FOR EACH STATEMENT EXECUTE FUNCTION freeholder_mail_receipt_admission();
+--> statement-breakpoint
+CREATE TRIGGER mail_provider_events_receipt_update_admission BEFORE UPDATE OF id,provider,external_event_id,provider_ref,recipient,event_type,detail,raw_digest,delivery_id,occurred_at,created_at,recipient_digest,external_event_digest,provider_ref_digest,redacted_at ON mail_provider_events FOR EACH STATEMENT EXECUTE FUNCTION freeholder_mail_receipt_admission();
+--> statement-breakpoint
+CREATE TRIGGER mail_suppressions_receipt_admission BEFORE INSERT OR DELETE ON mail_suppressions FOR EACH STATEMENT EXECUTE FUNCTION freeholder_mail_receipt_admission();
+--> statement-breakpoint
+CREATE TRIGGER mail_suppressions_receipt_update_admission BEFORE UPDATE OF id,email,reason,provider,source_event_id,detail,active,released_at,created_at,updated_at,email_digest,redacted_at ON mail_suppressions FOR EACH STATEMENT EXECUTE FUNCTION freeholder_mail_receipt_admission();
+--> statement-breakpoint
+CREATE TRIGGER mail_outbox_receipt_admission BEFORE INSERT OR DELETE ON mail_outbox FOR EACH STATEMENT EXECUTE FUNCTION freeholder_mail_receipt_admission();
+--> statement-breakpoint
+CREATE TRIGGER mail_outbox_receipt_update_admission BEFORE UPDATE OF delivery_id,encrypted_message,created_at,updated_at ON mail_outbox FOR EACH STATEMENT EXECUTE FUNCTION freeholder_mail_receipt_admission();
+--> statement-breakpoint
 CREATE FUNCTION freeholder_mail_receipt_writer() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF TG_TABLE_NAME='mail_record_subjects' AND current_setting('freeholder.mail_receipts_v1',true) IS DISTINCT FROM '1' THEN
@@ -52,6 +81,16 @@ BEGIN
     IS NOT DISTINCT FROM ROW(OLD.id,OLD.kind,OLD.record_id,OLD.contact_id,OLD.basis,OLD.evidence_digest,OLD.created_at) THEN RETURN NEW; END IF;
   END IF;
   RAISE EXCEPTION 'Mail ownership changes require the current guarded writer' USING ERRCODE='23514';
+ END IF;
+ -- Declared nullable FK metadata may be anonymized without altering the
+ -- receipt, its ownership or provider outcome. Statement guards exclude only
+ -- these columns; a content/outcome UPDATE is still refused before row locks.
+ IF TG_OP='UPDATE' AND current_setting('freeholder.mail_receipts_v1',true) IS DISTINCT FROM '1' THEN
+  IF TG_TABLE_NAME='mail_suppressions' THEN
+   IF NEW.released_by IS NULL AND (to_jsonb(NEW)-'released_by') IS NOT DISTINCT FROM (to_jsonb(OLD)-'released_by') THEN RETURN NEW; END IF;
+  ELSIF TG_TABLE_NAME='mail_deliveries' THEN
+   IF NEW.sender_id IS NULL AND (to_jsonb(NEW)-'sender_id') IS NOT DISTINCT FROM (to_jsonb(OLD)-'sender_id') THEN RETURN NEW; END IF;
+  END IF;
  END IF;
  IF current_setting('freeholder.mail_receipts_v1',true) IS DISTINCT FROM '1' THEN
   PERFORM pg_advisory_xact_lock_shared(hashtext('freeholder-mail-receipt-seal-v1'));

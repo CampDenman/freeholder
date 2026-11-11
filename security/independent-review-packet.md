@@ -4,14 +4,17 @@ C3.31 mail-record increment (2026-11-11, agent evidence only): review
 `deploy/mail-record-retention.md`, `src/core/mail/record-retention.ts`,
 `record-privacy.ts`, `record-services.ts`, `ownership.ts`, `receipts.ts` and
 `db/migrations/0071_mail_record_retention.sql`. The random encrypted site key,
-domain-separated private HMAC receipts, stale-writer fences, contact ownership,
-named holds and original pending receipt form one boundary. Actual initial and
-peer regressions cover unresolved/multiple attempts and callback resurrection;
-an additional derived-copy outcome gap is reproduced and being repaired. First
-qualification passed23 native participation controls, SDK8, type/lint, production
-scrub and four locale keyboard/mobile/axe owner-browser journeys. Final repair,
-protected integration, live mail provider acceptance and Tony's independent
-review remain open. No launch approval is inferred from these agent checks.
+private HMAC receipts, statement-before-row stale-writer fences, immutable
+contact ownership, nullable metadata cleanup, holds and original pending receipt
+form one boundary. Actual peer failures cover callback resurrection, uncertain
+derived physical attempts, hidden retained block exports and stale snapshot
+writes. Latest mail/populated-upgrade23 and preceding combined routing/privacy44,
+SDK8, audit labels7 and first four locale owner-browser journeys passed. Final
+composed artifact/browser/protected qualification is pending. Required enabled
+SMTP/transactional physical-dispatch recovery continues separately without
+inventing old route/attempt facts or clearing unknowns on elapsed time. All live
+mail provider acceptance and Tony's independent review remain open. No launch
+approval is inferred from agent checks.
 
 This is a briefing packet for an independent reviewer. It is **not** the
 review. C11.10 stays open until a reviewer who did not author the surfaces

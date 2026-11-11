@@ -56,10 +56,12 @@ New mail notices use the existing localized address-free text.
 
 Migration `0071_mail_record_retention.sql` follows migration70. It adds stable
 suppression IDs and private metadata without guessing legacy contact ownership.
-Database guards refuse stale ownership writers and, after first irreversible
+Database guards refuse stale ownership writers and, when privacy begins or after first irreversible
 minimization, old mail/outbox writers. They prevent late callbacks and stale
 upserts from restoring minimized addresses or payloads. This is a declared
-schema-breaking rollout: all writing instances must understand the guards.
+schema-breaking rollout: all running instances must use the guarded image.
+The SQL write fences do not make an earlier application image supported on the
+new schema.
 
 Back up the database and original private wrapping configuration together.
 Credential rotation tries the prior wrapping key and rewraps the same random
@@ -69,13 +71,24 @@ a new key or clearing digests. Full rollback requires the pre-upgrade database
 and configuration, respecting acknowledged erasures before old data can be sent
 or published again.
 
-Local evidence (2026-11-11): actual initial failures reproduced missing policy
-kinds and retained personal fields; peer controls additionally reproduced loss
-of multiple-attempt evidence and late suppression plaintext restoration.
-Corrected empty-database qualification through70/71 passed15 mail controls and
-eight participation controls; SDK8, typecheck, focused lint and production scrub
-passed (20,500 files, 242,750,885 bytes). Four real-owner browser journeys passed
-in English, Spanish, French and Arabic, at320px in both themes with keyboard,
-accessibility and actual service/audit assertions. Additional peer controls
-reproduced a derived-copy receipt gap; its repair and final protected integration
-are still under qualification. Coding-agent evidence is not C11.10 sign-off.
+Local evidence (2026-11-11): actual initial and peer failures reproduced missing
+policy kinds, retained personal fields, loss of multiple-attempt evidence,
+callback plaintext restoration, uncertain derived mail copies, hidden retained
+block exports, stale snapshot writes and nullable reviewer metadata refusal.
+The latest mail/upgrade run passed23 actual controls, including a populated N-1
+upgrade; the preceding combined routing/privacy run passed44. Exact SDK8,
+audit-labels7, TypeScript and the373-contract fast inventory passed; final lint
+recheck uses equivalent explicit receipt assertions. First production scrub
+passed20,500 files /242,750,885 bytes; four real-owner browser journeys passed in
+English, Spanish, French and Arabic at320px in both themes, with keyboard,
+accessibility and actual service/audit assertions. Final composed build/browser
+and protected integration are still in progress.
+
+C3.31/C11.08 also require the separate enabled transactional/SMTP physical-send
+recovery increment: freeze original route/request identities, journal each
+physical dispatch and retain unknown legacy outcomes until concrete original
+provider and stopped-caller evidence exists. This retention increment does not
+invent those missing historical facts, treat submitted mail as final proof or
+supply a generic unknown-outcome clearing override. These source obligations and
+live-provider acceptance remain open before stable. Coding-agent evidence is
+not C11.10 independent sign-off.

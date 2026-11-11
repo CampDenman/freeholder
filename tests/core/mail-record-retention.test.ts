@@ -109,7 +109,9 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     const [block] = await db().select().from(mailSuppressions);
     const source = contactPrivacySources().find(item => item.scope === "mail.records")!;
     const exported = await db().transaction(tx => source.exportData(tx, contact.id)) as { suppressions: Array<{ id: string; active: boolean; redactedAt: Date }> };
-    expect(exported.suppressions).toEqual(expect.arrayContaining([expect.objectContaining({ id: block!.id, active: true, redactedAt: expect.any(Date) })]));
+    const receipt = exported.suppressions.find(row => row.id === block!.id);
+    expect(receipt?.active).toBe(true);
+    expect(receipt?.redactedAt).toBeInstanceOf(Date);
     expect(JSON.stringify(exported)).not.toContain(EMAIL);
     expect(JSON.stringify(exported)).not.toMatch(/Digest|encryptedKey|contactId|verifiedBy|evidence/);
   });
@@ -168,6 +170,13 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     await eraseMailRecords(job!.data);
     expect((await db().select().from(mailDeliveries))[0]?.recipient).not.toBe(EMAIL);
   });
+  it("fences old SQL mail writers before pending legacy review can acknowledge its captured snapshot", async () => {
+    const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
+    await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Original unreviewed history", status: "failed", requestedBy: "system" });
+    expect((await erasure(contact.id)).request.status).toBe("in_progress");
+    await expect(db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Stale old writer after snapshot", requestedBy: "system" })).rejects.toThrow();
+    expect(await db().select().from(mailDeliveries)).toHaveLength(1);
+  });
   it("keeps receipt joins, address digests and review evidence out of exact-key DTOs and audit inputs", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
     const [legacy] = await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Legacy fact", status: "failed", requestedBy: "system" }).returning();
@@ -197,8 +206,11 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
     const [legacy] = await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Reviewed fact", status: "failed", requestedBy: "system" }).returning();
     await reviewLegacyMailOwnership.call({ kind: "delivery", id: legacy!.id, expectedRecipient: EMAIL, contactId: contact.id, evidence: "Synthetic independent original correspondence establishes ownership.", confirmation: "VERIFIED" }, OWNER);
+    await db().insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", active: false, releasedAt: new Date(), releasedBy: OWNER.userId });
+    await db().transaction(tx => sealMailReceipts(tx));
     await db().delete(users).where(eq(users.id, OWNER.userId));
     expect((await db().select().from(mailRecordSubjects))[0]).toMatchObject({ contactId: contact.id, verifiedBy: null, basis: "owner_review" });
+    expect((await db().select().from(mailSuppressions))[0]?.releasedBy).toBeNull();
   });
   it("preserves random site receipt identity across credential rotation and fails closed after key loss", async () => {
     const digest = await db().transaction(async tx => (await mailReceipts(tx)).digest("address", EMAIL));
