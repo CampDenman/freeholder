@@ -17,6 +17,7 @@ import {
 } from "@/core/service";
 import { siteOrigin } from "@/core/seo/origin";
 import { storage } from "@/adapters/storage";
+import { deleteUnownedPendingObjects, reservePendingMediaObject as reserveObject } from "./object-ledger";
 import {
   CAPTURE_SOURCES,
   CAPTURE_STATUSES,
@@ -164,8 +165,7 @@ async function deleteAfterCommit(ctx: ServiceContext, keys: string[]): Promise<v
 
 /** The job body: delete each storage object, with no transaction open. */
 export async function deleteCaptureObjects(keys: readonly string[]): Promise<{ deleted: number }> {
-  for (const key of keys) await storage().delete(key);
-  return { deleted: keys.length };
+  return deleteUnownedPendingObjects(keys);
 }
 
 async function clearChunks(ctx: ServiceContext, sessionId: string): Promise<string[]> {
@@ -254,27 +254,7 @@ function assertSameSession(
   }
 }
 
-/**
- * Record a key in the pending object ledger before its bytes are written. If
- * the write or the apply phase fails, the orphan sweep removes the object; if
- * it succeeds, the apply phase takes ownership of the key.
- */
-async function reserveObject(
-  ctx: ServiceContext,
-  input: { key: string; role: "original" | "staged"; contentType: string; bytes: number },
-): Promise<void> {
-  await ctx.tx
-    .insert(mediaObjects)
-    .values({
-      key: input.key,
-      role: input.role,
-      state: "pending",
-      bytes: input.bytes,
-      contentType: input.contentType,
-    })
-    .onConflictDoNothing();
-}
-
+/** Provider writes follow the shared pending-object reservation. */
 async function storeBytes(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
   const body = new Uint8Array(bytes.byteLength);
   body.set(bytes);

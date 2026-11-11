@@ -10,7 +10,7 @@
 // time by `imports.previewFromUpload`. A WXR file is parsed as it streams, so
 // memory holds one chunk and one `<item>` rather than the whole export. The
 // chunks are deleted once the preview is staged, whether it succeeded or not.
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { uuid } from "@/core/contract";
@@ -23,6 +23,9 @@ import {
 } from "@/core/service";
 import { importRuns } from "@/core/plugins/schema";
 import { storage } from "@/adapters/storage";
+import { deleteUnownedPendingObjects, reservePendingMediaObject } from "@/core/media/object-ledger";
+import { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES, makeRetainedImportSource, readRetainedSourceChunk, retainedImportSourceSchema, type RetainedImportSource } from "./retained-source";
+export { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES } from "./retained-source";
 import { DEFAULT_IMPORTER_LIMITS } from "./contract";
 import { stageImportSource, stageWordpressExport } from "./service";
 import { assertSourceStageable } from "./source-lifecycle";
@@ -35,9 +38,7 @@ import { wordpressExportBuilder } from "./wordpress";
  * headroom without inviting a multi-gigabyte upload. What the import then
  * keeps is still bounded by the importer limits (500 items, 20 MB of bodies).
  */
-export const IMPORT_SOURCE_MAX_BYTES = 100 * 1024 * 1024;
 /** Under the request proxy's 10 MB buffer, with room to spare. */
-export const IMPORT_SOURCE_CHUNK_BYTES = 4 * 1024 * 1024;
 const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 
 
@@ -48,6 +49,7 @@ const uploadRecord = z.object({
   chunkBytes: z.number().int().positive(),
   chunks: z.number().int().positive(),
   received: z.array(z.number().int().nonnegative()),
+  digests: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/)).default({}),
   keyPrefix: z.string(),
   createdBy: z.string(),
   expiresAt: z.string(),
@@ -135,10 +137,15 @@ const beginApply = defineService({
       chunkBytes: IMPORT_SOURCE_CHUNK_BYTES,
       chunks: Math.ceil(input.bytes / IMPORT_SOURCE_CHUNK_BYTES),
       received: [],
+      digests: {},
       keyPrefix: `imports/${run.id}/${uploadId}`,
       createdBy: actorString(ctx.actor),
       expiresAt: new Date(Date.now() + UPLOAD_TTL_MS).toISOString(),
     };
+    // Reserve cleanup before the first provider write. Abandoned uploads and
+    // lost acknowledgements still have an exact durable deletion task.
+    await ctx.queueJob("core.deleteCaptureObjects", { keys: allKeys(upload) }, { startAfter: new Date(upload.expiresAt) });
+    if (previous) await ctx.queueJob("core.deleteCaptureObjects", { keys: allKeys(previous) });
     await ctx.tx
       .update(importRuns)
       .set({ checkpoint: { ...checkpoint, sourceUpload: upload } })
@@ -172,9 +179,10 @@ export const beginSourceUpload = defineOrchestratedService({
     maxBytes: z.number().int(),
   }),
   handler: async (input, actor) => {
+    if (storage().isPublic) throw new ServiceError("conflict", "Import source files require private object storage. Configure private storage and retry.");
     const { upload, previousKeys } = await beginApply.call(input, actor);
     // A replaced, unfinished upload leaves nothing behind.
-    for (const key of previousKeys) await storage().delete(key).catch(() => undefined);
+    for (const key of previousKeys) await deleteUnownedPendingObjects([key]).catch(() => undefined);
     return {
       uploadId: upload.uploadId,
       chunkBytes: upload.chunkBytes,
@@ -188,7 +196,7 @@ const claimChunk = defineService({
   name: "imports.claimSourceChunk",
   orchestratedBy: "imports.uploadSourceChunk",
   summary: "Check one chunk of an import source upload before it is stored.",
-  kind: "query",
+  kind: "mutation",
   permission: "scoped",
   external: false,
   input: z.object({
@@ -196,11 +204,12 @@ const claimChunk = defineService({
     uploadId: z.string().uuid(),
     index: z.number().int().nonnegative(),
     size: z.number().int().nonnegative(),
+    digest: z.string().regex(/^[a-f0-9]{64}$/),
     prefix: z.string().max(8_192).optional(),
   }),
-  output: z.object({ key: z.string() }),
+  output: z.object({ key: z.string(), received: z.number().int(), chunks: z.number().int(), alreadyReceived: z.boolean() }),
   handler: async (input, ctx) => {
-    const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
+    const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
     const upload = uploadOf(run.checkpoint);
     if (!upload || upload.uploadId !== input.uploadId || !sameUploader(upload, ctx.actor)) {
@@ -217,6 +226,13 @@ const claimChunk = defineService({
         `Chunk ${input.index} should be ${expectedChunkSize(upload, input.index)} bytes.`,
       );
     }
+    ctx.setSubject("import_run", run.id);
+    const prior = upload.digests[String(input.index)];
+    if (prior && prior !== input.digest) throw new ServiceError("conflict", "This source chunk was already bound to different bytes. Start a new upload for a changed source.");
+    if (upload.received.includes(input.index)) {
+      if (!prior) throw new ServiceError("conflict", "This older upload has no verified chunk identity. Upload the source again.");
+      return { key: partKey(upload, input.index), received: upload.received.length, chunks: upload.chunks, alreadyReceived: true };
+    }
     if (input.index === 0 && !sourceLooksRight(run.kind ?? "html", input.prefix ?? "")) {
       throw new ServiceError(
         "validation",
@@ -225,7 +241,13 @@ const claimChunk = defineService({
           : "That file does not look like the source this import was started for.",
       );
     }
-    return { key: partKey(upload, input.index) };
+    const key = partKey(upload, input.index);
+    if (!prior) {
+      upload.digests[String(input.index)] = input.digest;
+      await ctx.tx.update(importRuns).set({ checkpoint: { ...checkpointOf(run.checkpoint), sourceUpload: upload } }).where(eq(importRuns.id, run.id));
+    }
+    await reservePendingMediaObject(ctx, { key, role: "staged", contentType: "application/octet-stream", bytes: input.size });
+    return { key, received: upload.received.length, chunks: upload.chunks, alreadyReceived: false };
   },
 });
 
@@ -289,15 +311,18 @@ export const uploadSourceChunk = defineOrchestratedService({
   }),
   output: z.object({ received: z.number().int(), chunks: z.number().int(), complete: z.boolean() }),
   handler: async (input, actor) => {
+    if (storage().isPublic) throw new ServiceError("conflict", "Import source files require private object storage. Configure private storage and retry.");
+    const bytes = new Uint8Array(input.bytes);
     const prefix =
       input.index === 0
-        ? new TextDecoder("utf-8", { fatal: false }).decode(input.bytes.subarray(0, 4_096))
+        ? new TextDecoder("utf-8", { fatal: false }).decode(bytes.subarray(0, 4_096))
         : undefined;
-    const { key } = await claimChunk.call(
-      { id: input.id, uploadId: input.uploadId, index: input.index, size: input.bytes.byteLength, prefix },
+    const claimed = await claimChunk.call(
+      { id: input.id, uploadId: input.uploadId, index: input.index, size: bytes.byteLength, digest: createHash("sha256").update(bytes).digest("hex"), prefix },
       actor,
     );
-    await storage().put(key, new Uint8Array(input.bytes), "application/octet-stream");
+    if (claimed.alreadyReceived) return { received: claimed.received, chunks: claimed.chunks, complete: claimed.received === claimed.chunks };
+    await storage().put(claimed.key, bytes, "application/octet-stream");
     const recorded = await recordChunk.call({ id: input.id, uploadId: input.uploadId, index: input.index }, actor);
     return { ...recorded, complete: recorded.received === recorded.chunks };
   },
@@ -311,7 +336,7 @@ const uploadSource = defineService({
   permission: "scoped",
   external: false,
   input: z.object({ id: z.string().uuid(), uploadId: z.string().uuid() }),
-  output: z.object({ kind: z.string(), origin: z.string(), keys: z.array(z.string()), bytes: z.number().int() }),
+  output: z.object({ kind: z.string(), origin: z.string(), keys: z.array(z.string()), bytes: z.number().int(), source: retainedImportSourceSchema }),
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
@@ -326,7 +351,7 @@ const uploadSource = defineService({
         `Only ${upload.received.length} of ${upload.chunks} chunks have arrived. Send the rest first.`,
       );
     }
-    return { kind: run.kind ?? "html", origin: run.origin ?? "https://example.com", keys: allKeys(upload), bytes: upload.bytes };
+    return { kind: run.kind ?? "html", origin: run.origin ?? "https://example.com", keys: allKeys(upload), bytes: upload.bytes, source: makeRetainedImportSource(run.id, upload) };
   },
 });
 
@@ -342,6 +367,7 @@ const applyUploaded = defineService({
     uploadId: z.string().uuid(),
     preview: z.record(z.string(), z.unknown()).optional(),
     counts: z.record(z.string(), z.number()).optional(),
+    archivePreviewDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     error: z.string().max(2_000).optional(),
   }),
   output: z.object({ ok: z.literal(true) }),
@@ -360,6 +386,16 @@ const applyUploaded = defineService({
       throw new ServiceError("conflict", "That upload was replaced while it was being read.");
     }
     if (input.preview) await assertReaderUploadWindow(ctx.tx, input.preview, new Date(Date.parse(upload.expiresAt) - UPLOAD_TTL_MS));
+    if (Date.parse(upload.expiresAt) <= Date.now()) throw new ServiceError("conflict", "That upload expired while it was being read. Start the upload again.");
+    // Metadata and the retry task commit together. The fast deletion below
+    // remains an optimization; an outage never forgets the source bytes.
+    await ctx.queueJob("core.deleteCaptureObjects", { keys: allKeys(upload) });
+    if (input.preview?.sourceFormat === "static-archive") {
+      if (!input.archivePreviewDigest) throw new ServiceError("conflict", "The archive preview has no verified identity.");
+      const source = makeRetainedImportSource(run.id, upload);
+      checkpoint.retainedSource = source;
+      checkpoint.archiveSource = { source, previewDigest: input.archivePreviewDigest };
+    }
     delete checkpoint.sourceUpload;
     checkpoint.source = { filename: upload.filename, bytes: upload.bytes, stagedAt: new Date().toISOString() };
     await ctx.tx
@@ -381,15 +417,14 @@ const applyUploaded = defineService({
  * the importer's byte limit.
  */
 async function stageStoredSource(
-  state: { kind: string; origin: string; keys: string[] },
-): Promise<{ preview: Record<string, unknown>; counts: Record<string, number> }> {
+  state: { kind: string; origin: string; keys: string[]; source: RetainedImportSource },
+): Promise<{ preview: Record<string, unknown>; counts: Record<string, number>; archivePreviewDigest?: string }> {
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const wxr = state.kind === "wordpress-wxr" ? wordpressExportBuilder() : undefined;
   const reader = wxr?.reader();
   let text = "";
-  for (const key of state.keys) {
-    const bytes = await storage().get(key);
-    if (!bytes) throw new Error("Part of the uploaded file is missing. Upload it again.");
+  for (let index = 0; index < state.source.chunkDigests.length; index += 1) {
+    const bytes = await readRetainedSourceChunk(state.source, index);
     let decoded: string;
     try {
       decoded = decoder.decode(bytes, { stream: true });
@@ -432,7 +467,7 @@ export const previewFromUpload = defineOrchestratedService({
     const state = await uploadSource.call(input, actor);
     try {
       const staged = await stageStoredSource(state);
-      await applyUploaded.call({ ...input, preview: staged.preview, counts: staged.counts }, actor);
+      await applyUploaded.call({ ...input, preview: staged.preview, counts: staged.counts, archivePreviewDigest: staged.archivePreviewDigest }, actor);
       return { id: input.id, status: "previewed", error: null, counts: staged.counts };
     } catch (error) {
       if (error instanceof ServiceError) throw error;
@@ -441,7 +476,7 @@ export const previewFromUpload = defineOrchestratedService({
       return { id: input.id, status: "failed", error: message, counts: {} };
     } finally {
       // The file was the owner's to hand over, not the platform's to keep.
-      for (const key of state.keys) await storage().delete(key).catch(() => undefined);
+      for (const key of state.keys) await deleteUnownedPendingObjects([key]).catch(() => undefined);
     }
   },
 });
