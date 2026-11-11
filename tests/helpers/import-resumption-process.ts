@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
+import { importGraphVersionSchema } from "@/core/import/graph-version";
 
 const execute = promisify(execFile);
 export async function runImportResumptionProcess(id: string, uploadId: string) {
@@ -23,6 +24,6 @@ export async function runImportResumptionProcess(id: string, uploadId: string) {
         FREEHOLDER_JOBS: "off", FREEHOLDER_IMPORT_PROBE_RUN_ID: id, FREEHOLDER_IMPORT_PROBE_UPLOAD_ID: uploadId, FREEHOLDER_IMPORT_PROBE_OUTPUT: output,
       },
     });
-    return z.object({ pid: z.number().int().positive(), result: z.object({ id: z.uuid(), status: z.string(), error: z.string().nullable(), counts: z.record(z.string(), z.number()) }) }).parse(JSON.parse(await readFile(output, "utf8")));
+    return z.object({ pid: z.number().int().positive(), result: z.object({ id: z.uuid(), status: z.string(), error: z.string().nullable(), counts: z.record(z.string(), z.number()), graph: importGraphVersionSchema.optional() }) }).parse(JSON.parse(await readFile(output, "utf8")));
   } finally { await rm(directory, { recursive: true, force: true }); }
 }

@@ -15,6 +15,8 @@ import { commitImport, listImports, publishImport, reconcileImport, rollbackImpo
 import { beginSourceUpload, previewFromUpload, uploadSourceChunk } from "@/core/import/source-upload";
 import { hasDatabase, OWNER, truncateSpine, failure } from "../helpers/spine";
 import { runImportResumptionProcess } from "../helpers/import-resumption-process";
+import { sourceGraphReview } from "@/core/import/graph-query";
+import { markImportGraphWriter } from "@/core/import/graph-writer";
 
 const ORIGIN = "https://resumption-source.example";
 function source(count: number): Uint8Array<ArrayBuffer> {
@@ -24,6 +26,122 @@ function source(count: number): Uint8Array<ArrayBuffer> {
 describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 180_000 }, () => {
   beforeEach(async () => { await truncateSpine(); resetStorageForTests(); await ensureDefaults.call({}, OWNER); });
   afterAll(closeDb);
+  it("fences overlapping restore workers and a verified source result arriving after cancellation", async () => {
+    const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501);
+    const initial = await beginSourceUpload.call({ id: run.id, filename: "fictional-restore-race.xml", bytes: bytes.byteLength }, OWNER);
+    await uploadSourceChunk.call({ id: run.id, uploadId: initial.uploadId, index: 0, bytes }, OWNER);
+    let staged = await previewFromUpload.call({ id: run.id, uploadId: initial.uploadId }, OWNER);
+    for (let phase = 0; phase < 4 && staged.status === "discover"; phase++) staged = await previewFromUpload.call({ id: run.id, uploadId: initial.uploadId }, OWNER);
+    const restored = await beginSourceUpload.call({ id: run.id, filename: "fictional-restore-race-again.xml", bytes: bytes.byteLength, graph: staged.graph }, OWNER);
+    await uploadSourceChunk.call({ id: run.id, uploadId: restored.uploadId, index: 0, bytes }, OWNER);
+    const store = storage(), original = store.get.bind(store);
+    let arrived!: () => void, release!: () => void;
+    const entered = new Promise<void>(resolve => { arrived = resolve; }), pending = new Promise<void>(resolve => { release = resolve; });
+    const spy = vi.spyOn(store, "get").mockImplementationOnce(async key => { const value = await original(key); arrived(); await pending; return value; });
+    const active = failure(previewFromUpload.call({ id: run.id, uploadId: restored.uploadId }, OWNER));
+    try {
+      await entered;
+      expect(await failure(previewFromUpload.call({ id: run.id, uploadId: restored.uploadId }, OWNER))).toMatchObject({ code: "conflict" });
+      expect(await failure(commitImport.call({ id: run.id, graph: staged.graph }, OWNER))).toMatchObject({ code: "conflict" });
+      expect(await rollbackImport.call({ id: run.id, graph: staged.graph }, OWNER)).toMatchObject({ status: "rolled_back" });
+    } finally { release(); spy.mockRestore(); }
+    expect(await active).toMatchObject({ code: "conflict" });
+    expect((await db().select().from(importSourceGraphs))[0]).toMatchObject({ state: "invalidated", leaseToken: null });
+    const [after] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
+    expect(after!.checkpoint).not.toHaveProperty("retainedSource");
+    expect(after!.checkpoint).not.toHaveProperty("sourceGraphRebind");
+    expect(after!.checkpoint).not.toHaveProperty("sourceUpload");
+    expect(await db().select().from(pages).where(sql`${pages.slug} like 'resumed/page-%'`)).toEqual([]);
+  });
+  it("restores only identical expired source bytes one verified chunk at a time after a committed batch", async () => {
+    const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER);
+    const bytes = new TextEncoder().encode(new TextDecoder().decode(source(501)).replace("</channel>", `<!--${"x".repeat(4 * 1024 * 1024)}--></channel>`));
+    const send = async (upload: Awaited<ReturnType<typeof beginSourceUpload.call>>, value: Uint8Array<ArrayBuffer>) => {
+      for (let index = 0; index < upload.chunkCount; index++) await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index, bytes: value.slice(index * upload.chunkBytes, (index + 1) * upload.chunkBytes) }, OWNER);
+    };
+    const initial = await beginSourceUpload.call({ id: run.id, filename: "fictional-original.xml", bytes: bytes.byteLength }, OWNER);
+    expect(initial.chunkCount).toBe(2);
+    await send(initial, bytes);
+    let staged = await previewFromUpload.call({ id: run.id, uploadId: initial.uploadId }, OWNER);
+    for (let phase = 0; phase < 4 && staged.status === "discover"; phase++) staged = await previewFromUpload.call({ id: run.id, uploadId: initial.uploadId }, OWNER);
+    expect(await commitImport.call({ id: run.id, graph: staged.graph }, OWNER)).toMatchObject({ status: "previewed", counts: { pages: 500 } });
+    const [graph] = await db().select().from(importSourceGraphs);
+    await db().transaction(async tx => {
+      await markImportGraphWriter(tx);
+      await tx.execute(sql`update ${importRuns} set checkpoint=jsonb_set(checkpoint,'{retainedSource,expiresAt}',to_jsonb('1970-01-01T00:00:00.000Z'::text)) where id=${run.id}`);
+    });
+    expect(await failure(commitImport.call({ id: run.id, graph: staged.graph }, OWNER))).toMatchObject({ code: "conflict" });
+    expect(await failure(beginSourceUpload.call({ id: run.id, filename: "fictional-original.xml", bytes: bytes.byteLength }, OWNER))).toMatchObject({ code: "conflict" });
+    const wrong = bytes.slice(); wrong[200] = wrong[200] === 65 ? 66 : 65;
+    const changed = await beginSourceUpload.call({ id: run.id, filename: "fictional-changed.xml", bytes: bytes.byteLength, graph: staged.graph }, OWNER);
+    await send(changed, wrong);
+    expect(await failure(previewFromUpload.call({ id: run.id, uploadId: changed.uploadId }, OWNER))).toMatchObject({ code: "conflict" });
+    const restored = await beginSourceUpload.call({ id: run.id, filename: "fictional-original-again.xml", bytes: bytes.byteLength, graph: staged.graph }, OWNER);
+    await send(restored, bytes);
+    expect(await previewFromUpload.call({ id: run.id, uploadId: restored.uploadId }, OWNER)).toMatchObject({ sourceRestored: false, graph: staged.graph, counts: { pages: 500 } });
+    expect((await db().select().from(importRuns).where(eq(importRuns.id, run.id)))[0]!.checkpoint).toMatchObject({ retainedSource: { uploadId: initial.uploadId } });
+    expect(JSON.stringify(await listImports.call({}, OWNER))).not.toContain("sourceGraphRebind");
+    expect(await previewFromUpload.call({ id: run.id, uploadId: restored.uploadId }, OWNER)).toMatchObject({ sourceRestored: true, graph: staged.graph });
+    const [after] = await db().select().from(importSourceGraphs);
+    expect(after).toMatchObject({ generation: graph!.generation, sourceStartedAt: graph!.sourceStartedAt, sourceRevision: graph!.sourceRevision, planDigest: graph!.planDigest, planRevision: graph!.planRevision, commitOrdinal: graph!.commitOrdinal });
+    expect(await commitImport.call({ id: run.id, graph: staged.graph }, OWNER)).toMatchObject({ status: "committed", counts: { pages: 501 } });
+    expect((await db().select().from(pages).where(sql`${pages.slug} like 'resumed/page-%'`))).toHaveLength(501);
+  });
+  it("requires the caller's reviewed graph version and exposes only bounded source metadata", async () => {
+    const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-reviewed-source.xml", bytes: bytes.byteLength }, OWNER);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER);
+    let staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    for (let phase = 0; phase < 4 && staged.status === "discover"; phase++) staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    expect(staged.graph).toBeDefined();
+    const credential = mintApiKey();
+    const [key] = await db().insert(apiKeys).values({ name: "Fictional graph reviewer", prefix: credential.prefix, tokenHash: credential.tokenHash, scopes: ["imports.sourceGraph"] }).returning();
+    const reviewer = await actorFromRequest(new Request("https://instance.example/api/mcp", { headers: { authorization: `Bearer ${credential.token}` } }));
+    const first = await sourceGraphReview.call({ id: run.id }, reviewer);
+    expect(first).toMatchObject({ version: staged.graph, indexed: 501, indexComplete: true, planFrozen: false, nextOrdinal: 49 });
+    expect(first.entries).toHaveLength(50);
+    expect(first.entries[0]).toMatchObject({ ordinal: 0, title: "Fictional page 0", sourceUrl: `${ORIGIN}/resumed/page-0`, destinationPath: "resumed/page-0", applied: false });
+    expect(JSON.stringify(first)).not.toContain("Original source page");
+    expect(JSON.stringify(first)).not.toContain(key!.id);
+    const last = await sourceGraphReview.call({ id: run.id, afterOrdinal: 499 }, reviewer);
+    expect(last.entries.map(entry => entry.ordinal)).toEqual([500]);
+    expect(last.nextOrdinal).toBeNull();
+    expect(await failure(commitImport.call({ id: run.id, graph: first.version }, reviewer))).toMatchObject({ code: "permission" });
+    expect(await failure(commitImport.call({ id: run.id }, OWNER))).toMatchObject({ code: "conflict" });
+    expect(await failure(commitImport.call({ id: run.id, graph: { ...first.version, planRevision: first.version.planRevision + 1 } }, OWNER))).toMatchObject({ code: "conflict" });
+    expect(await failure(rollbackImport.call({ id: run.id }, OWNER))).toMatchObject({ code: "conflict" });
+    expect(await db().select().from(pages).where(sql`${pages.slug} like 'resumed/page-%'`)).toEqual([]);
+    expect((await db().select().from(importSourceGraphs))[0]).toMatchObject({ planDigest: null, commitOrdinal: 0, leaseToken: null });
+    expect(await rollbackImport.call({ id: run.id, graph: first.version }, OWNER)).toMatchObject({ status: "rolled_back" });
+  });
+  it("freezes the accepted plan, entry identity and original source date across later batches", async () => {
+    const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-frozen-plan.xml", bytes: bytes.byteLength }, OWNER);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER);
+    let staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    for (let phase = 0; phase < 4 && staged.status === "discover"; phase++) staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    expect(await commitImport.call({ id: run.id, graph: staged.graph }, OWNER)).toMatchObject({ status: "previewed", counts: { pages: 500 } });
+    const [graph] = await db().select().from(importSourceGraphs), [entry] = await db().select().from(importSourceEntries);
+    expect(graph!.planDigest).toMatch(/^[a-f0-9]{64}$/);
+    await expect(db().update(importSourceGraphs).set({ planDigest: "f".repeat(64) }).where(eq(importSourceGraphs.id, graph!.id))).rejects.toMatchObject({ cause: { code: "23514" } });
+    await expect(db().update(importSourceGraphs).set({ sourceStartedAt: new Date() }).where(eq(importSourceGraphs.id, graph!.id))).rejects.toMatchObject({ cause: { code: "23514" } });
+    await expect(db().update(importSourceEntries).set({ targetSlug: "changed-after-acceptance" }).where(eq(importSourceEntries.id, entry!.id))).rejects.toMatchObject({ cause: { code: "23514" } });
+    const [child] = await db().select().from(importRuns).where(sql`${importRuns.checkpoint} ? 'sourceGraphBatch'`);
+    expect(await failure(sourceGraphReview.call({ id: child!.id }, OWNER))).toMatchObject({ code: "not_found" });
+    await expect(db().update(importRuns).set({ checkpoint: {} }).where(eq(importRuns.id, child!.id))).rejects.toMatchObject({ cause: { code: "55000" } });
+    expect(await commitImport.call({ id: run.id, graph: staged.graph }, OWNER)).toMatchObject({ status: "committed", counts: { pages: 501 } });
+    const [after] = await db().select().from(importSourceGraphs);
+    expect(after).toMatchObject({ planDigest: graph!.planDigest, sourceStartedAt: graph!.sourceStartedAt });
+  });
+  it("refuses an older writer dropping graph ownership or committing an empty root", async () => {
+    const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-old-writer.xml", bytes: bytes.byteLength }, OWNER);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER);
+    await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    await expect(db().execute(sql`update ${importRuns} set status='committed', preview='{}'::jsonb, checkpoint=checkpoint-'sourceGraph' where id=${run.id}`)).rejects.toMatchObject({ cause: { code: "55000" } });
+    expect((await db().select().from(importRuns))[0]).toMatchObject({ status: "discover", counts: { indexed: 0 } });
+    expect(await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER)).toMatchObject({ status: "discover", counts: { indexed: 500 } });
+  });
   it.each(["renamed", "replaced"])("binds the source upload to the immutable key when its friendly name is %s", async change => {
     const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501), credential = mintApiKey();
     const scopes = ["imports.beginSourceUpload", "imports.uploadSourceChunk", "imports.previewFromUpload"];
@@ -77,7 +195,7 @@ describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 18
     const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501);
     const upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-concurrent-export.xml", bytes: bytes.byteLength }, OWNER);
     await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER);
-    await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    const staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
     const store = storage(), original = store.get.bind(store);
     let arrived!: () => void, release!: () => void;
     const entered = new Promise<void>(resolve => { arrived = resolve; }), pending = new Promise<void>(resolve => { release = resolve; });
@@ -86,7 +204,7 @@ describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 18
     try {
       await entered;
       expect(await failure(previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER))).toMatchObject({ code: "conflict" });
-      expect(await rollbackImport.call({ id: run.id }, OWNER)).toMatchObject({ status: "rolled_back" });
+      expect(await rollbackImport.call({ id: run.id, graph: staged.graph }, OWNER)).toMatchObject({ status: "rolled_back" });
     } finally { release(); spy.mockRestore(); }
     expect(await active).toMatchObject({ code: "conflict" });
     expect(await db().select().from(importSourceEntries)).toEqual([]);
@@ -121,33 +239,37 @@ describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 18
     const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501);
     const upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-resumable-export.xml", bytes: bytes.byteLength }, OWNER);
     for (let index = 0; index < upload.chunkCount; index++) await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index, bytes: bytes.slice(index * upload.chunkBytes, (index + 1) * upload.chunkBytes) }, OWNER);
-    let staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    const staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
     // The synchronous phase budget remains 500. A larger parser limit would
     // skip this durable interruption boundary and does not satisfy the case.
     expect(staged.status).toBe("discover");
     await closeDb(); resetStorageForTests();
-    for (let phase = 0; phase < 8 && staged.status === "discover"; phase++) staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
-    expect(staged).toMatchObject({ status: "previewed", error: null, counts: { pages: 501 } });
+    const firstProcess = await runImportResumptionProcess(run.id, upload.uploadId);
+    expect(firstProcess.result).toMatchObject({ status: "discover", counts: { indexed: 500 } });
+    const secondProcess = await runImportResumptionProcess(run.id, upload.uploadId);
+    expect(firstProcess.pid).not.toBe(secondProcess.pid);
+    expect(secondProcess.result).toMatchObject({ status: "previewed", counts: { indexed: 501 } });
+    expect(secondProcess.result).toMatchObject({ status: "previewed", error: null, counts: { pages: 501 }, graph: staged.graph });
     mark("upload and index");
-    let committed = await commitImport.call({ id: run.id }, OWNER);
-    for (let phase = 0; phase < 8 && committed.status === "previewed"; phase++) committed = await commitImport.call({ id: run.id }, OWNER);
+    let committed = await commitImport.call({ id: run.id, graph: staged.graph }, OWNER);
+    for (let phase = 0; phase < 8 && committed.status === "previewed"; phase++) committed = await commitImport.call({ id: run.id, graph: staged.graph }, OWNER);
     expect(committed).toMatchObject({ status: "committed", counts: { pages: 501 } });
     const imported = await db().select().from(pages).where(sql`${pages.slug} like 'resumed/page-%'`);
     expect(imported).toHaveLength(501);
     expect(new Set(imported.map(page => page.id)).size).toBe(501);
     expect(imported.every(page => page.status === "draft")).toBe(true);
     mark("commit");
-    let reconciled = await reconcileImport.call({ id: run.id }, OWNER);
-    for (let phase = 0; phase < 8 && reconciled.status === "committed"; phase++) reconciled = await reconcileImport.call({ id: run.id }, OWNER);
+    let reconciled = await reconcileImport.call({ id: run.id, graph: staged.graph }, OWNER);
+    for (let phase = 0; phase < 8 && reconciled.status === "committed"; phase++) reconciled = await reconcileImport.call({ id: run.id, graph: staged.graph }, OWNER);
     expect(reconciled).toMatchObject({ status: "reconciled", counts: { pages: 501 }, checkpoint: { reconciliation: { found: { pages: 501 }, matches: true } } });
     mark("reconcile");
-    let published = await publishImport.call({ id: run.id }, OWNER);
-    for (let phase = 0; phase < 8 && published.status === "reconciled"; phase++) published = await publishImport.call({ id: run.id }, OWNER);
+    let published = await publishImport.call({ id: run.id, graph: staged.graph }, OWNER);
+    for (let phase = 0; phase < 8 && published.status === "reconciled"; phase++) published = await publishImport.call({ id: run.id, graph: staged.graph }, OWNER);
     expect(published.status).toBe("published");
     expect((await db().select().from(pages).where(sql`${pages.slug} like 'resumed/page-%'`)).filter(page => page.status === "published")).toHaveLength(501);
     mark("publish");
-    let rolledBack = await rollbackImport.call({ id: run.id }, OWNER);
-    for (let phase = 0; phase < 8 && rolledBack.status !== "rolled_back"; phase++) rolledBack = await rollbackImport.call({ id: run.id }, OWNER);
+    let rolledBack = await rollbackImport.call({ id: run.id, graph: staged.graph }, OWNER);
+    for (let phase = 0; phase < 8 && rolledBack.status !== "rolled_back"; phase++) rolledBack = await rollbackImport.call({ id: run.id, graph: staged.graph }, OWNER);
     expect(rolledBack.status).toBe("rolled_back");
     expect(await db().select().from(pages).where(sql`${pages.slug} like 'resumed/page-%'`)).toHaveLength(0);
     mark("rollback");

@@ -49,7 +49,7 @@ export function importMediaNote(runId: string, witness: string, key: string): st
 }
 async function lockedRun(ctx: ServiceContext, runId: string): Promise<Run> {
   await lockImportBatchParent(ctx, runId);
-  if (currentImportBatch()) await assertCurrentImportAuthority(ctx, "media.upload");
+  if (currentImportBatch()) await assertCurrentImportAuthority(ctx, "media.upload", "mutation", "public");
   const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, runId)).limit(1).for("update");
   if (!run) throw new ServiceError("not_found", "No such import run.");
   return run;

@@ -51,6 +51,8 @@ import importMediaReceiptServices, { bindImportMediaBytes, claimImportMedia } fr
 import { assertImportBatchAccess, isPrivateImportBatch, callImportService, currentImportBatch, importBatchTargets, lockImportBatchParent, recordImportBatchTarget } from "./batch-context";
 import graphBatchServices, { advanceGraphCommit } from "./graph-batches";
 import { advanceGraphLifecycle } from "./graph-lifecycle";
+import { importGraphVersionSchema } from "./graph-version";
+import graphQueryServices from "./graph-query";
 import {
   discoverFromPublicOrigin,
   parseSitemap,
@@ -1235,12 +1237,16 @@ export const commitImport = defineOrchestratedService({
     "Write previewed import pages into the CMS as drafts, fetching source media first. Publish stays a later step.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({ id: z.string().uuid() }),
+  input: z.object({ id: z.string().uuid(), graph: importGraphVersionSchema.optional() }),
   output: runRow,
   handler: async (input, actor) => {
     const source = await commitSource.call({ id: input.id }, actor);
     if (source.completed) return publicImportRun(source.completed);
-    if (source.sourceGraph) return advanceGraphCommit(input.id, actor);
+    if (source.sourceGraph) {
+      if (!input.graph) throw new ServiceError("conflict", "This import uses resumable source phases. Review it in a current client before committing.");
+      return advanceGraphCommit(input.id, input.graph, actor);
+    }
+    if (input.graph) throw new ServiceError("conflict", "This import no longer matches the requested source graph.");
     let genericPolicy: Map<string, string> | undefined;
     if (source.generic && source.media.length) {
       genericPolicy = new Map();
@@ -1308,7 +1314,7 @@ export const rollbackImport = defineService({
   summary: "Reverse a committed import batch.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({ id: z.string().uuid() }),
+  input: z.object({ id: z.string().uuid(), graph: importGraphVersionSchema.optional() }),
   output: runRow,
   handler: async (input, ctx) => {
     await lockImportBatchParent(ctx, input.id);
@@ -1316,7 +1322,7 @@ export const rollbackImport = defineService({
     if (!before) throw new ServiceError("not_found", "No such import run.");
     if (before.status === "rolled_back") return publicImportRun(before);
     const checkpoint = checkpointOf(before.checkpoint);
-    if (checkpoint.sourceGraph) return advanceGraphLifecycle(ctx, before, "imports.rollback");
+    if (checkpoint.sourceGraph) return advanceGraphLifecycle(ctx, before, "imports.rollback", input.graph);
 
     // Menu links the import added, and only those, come off the nav.
     const nav = navAppliedSchema.safeParse(checkpoint.navApplied);
@@ -1494,13 +1500,14 @@ export const reconcileImport = defineService({
   input: z.object({
     id: z.string().uuid(),
     counts: reconcileCounts.optional(),
+    graph: importGraphVersionSchema.optional(),
   }),
   output: runRow,
   handler: async (input, ctx) => {
     await lockImportBatchParent(ctx, input.id);
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
-    if (checkpointOf(before.checkpoint).sourceGraph) return advanceGraphLifecycle(ctx, before, "imports.reconcile");
+    if (checkpointOf(before.checkpoint).sourceGraph) return advanceGraphLifecycle(ctx, before, "imports.reconcile", input.graph);
     if (before.status !== "committed") {
       throw new ServiceError("conflict", "Commit the import before reconciling it.");
     }
@@ -1571,13 +1578,13 @@ export const publishImport = defineService({
     "Approve cutover after reconciliation: publish imported pages (WordPress drafts stay drafts, original dates kept) and add the imported menu to the site navigation.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({ id: z.string().uuid() }),
+  input: z.object({ id: z.string().uuid(), graph: importGraphVersionSchema.optional() }),
   output: runRow,
   handler: async (input, ctx) => {
     await lockImportBatchParent(ctx, input.id);
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
-    if (checkpointOf(before.checkpoint).sourceGraph) return advanceGraphLifecycle(ctx, before, "imports.publish");
+    if (checkpointOf(before.checkpoint).sourceGraph) return advanceGraphLifecycle(ctx, before, "imports.publish", input.graph);
     if (before.status === "published") return publicImportRun(before);
     if (before.status !== "reconciled") {
       throw new ServiceError("conflict", "Reconcile the import before publishing it.");
@@ -1895,6 +1902,7 @@ export const wordpressVerificationPlan = defineService({
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
+    assertImportBatchAccess(run);
     if (!run.kind?.startsWith("wordpress-")) throw new ServiceError("validation", "URL acceptance manifests apply to WordPress imports.");
     const checkpoint = checkpointOf(run.checkpoint);
     const landed = z.array(z.object({ sourceUrl: z.string(), path: z.string(), status: z.string(), seo: z.record(z.string(), z.unknown()) })).safeParse(checkpoint.landedPaths);
@@ -1923,6 +1931,7 @@ export const wordpressVerificationPlan = defineService({
 });
 
 export default [
+  ...graphQueryServices,
   ...graphBatchServices,
   ...importMediaReceiptServices,
   wordpressVerificationPlan,

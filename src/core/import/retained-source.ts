@@ -68,6 +68,7 @@ export async function releaseImportSources(ctx: ServiceContext, run: { id: strin
   const keys = importSourceObjectKeys(run);
   delete checkpoint.retainedSource;
   delete checkpoint.sourceUpload;
+  delete checkpoint.sourceGraphRebind;
   if (keys.length) await ctx.queueJob("core.deleteCaptureObjects", { keys });
 }
 /** The descriptor comes from an authorized service; no arbitrary key is read. */

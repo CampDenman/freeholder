@@ -31,6 +31,10 @@ import { DEFAULT_IMPORTER_LIMITS, ImporterPhaseLimitError } from "./contract";
 import sourceGraphServices, { claimWxrGraph, applyWxrIndex } from "./source-graph";
 import { indexWxrPhase } from "./wxr-index";
 import { importSourceRanges } from "./source-range";
+import { markGraphRunWriter } from "./graph-writer";
+import { importGraphVersionSchema } from "./graph-version";
+import { assertCurrentImportAuthority } from "./authority";
+import graphRebindServices, { beginGraphSourceRebind, claimSourceRebind, acceptSourceRebindChunk } from "./graph-rebind";
 import { approvedMediaOrigins, approvedMediaOriginsSchema } from "./media-origins";
 import { stageImportSource, stageWordpressExport } from "./service";
 import { assertSourceStageable } from "./source-lifecycle";
@@ -119,7 +123,11 @@ function archiveRebinding(run: SourceRun): boolean {
   const binding = z.object({ source: retainedImportSourceSchema, previewDigest: z.string() }).safeParse(checkpoint.archiveSource);
   return Boolean(source && binding.success && source.runId === run.id && archivePreviewDigest(source) === archivePreviewDigest(binding.data.source) && binding.data.previewDigest === archivePreviewDigest(run.preview));
 }
-function assertSourceUploadStageable(run: SourceRun): void {
+function assertSourceUploadStageable(run: SourceRun, currentGraphUpload = false): void {
+  if (checkpointOf(run.checkpoint).sourceGraph) {
+    if (!currentGraphUpload || !["discover", "previewed"].includes(run.status)) throw new ServiceError("conflict", "This import owns a source graph. Resume or roll it back before choosing another source.");
+    return;
+  }
   if (!archiveRebinding(run)) assertSourceStageable(run, true);
 }
 
@@ -134,6 +142,7 @@ const beginApply = defineService({
     id: z.string().uuid(),
     filename: z.string().trim().min(1).max(255),
     bytes: z.number().int().positive(),
+    graph: importGraphVersionSchema.optional(),
   }),
   output: z.object({ upload: uploadRecord, previousKeys: z.array(z.string()) }),
   handler: async (input, ctx) => {
@@ -151,14 +160,17 @@ const beginApply = defineService({
       .limit(1)
       .for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
-    const rebind = archiveRebinding(run);
-    assertSourceUploadStageable(run);
+    await markGraphRunWriter(ctx.tx, run);
     const checkpoint = checkpointOf(run.checkpoint);
+    const graphRebind = checkpoint.sourceGraph ? await beginGraphSourceRebind(ctx, run, input.graph, input.bytes) : null;
+    const rebind = archiveRebinding(run) || Boolean(graphRebind);
+    assertSourceUploadStageable(run, Boolean(graphRebind));
     if (!rebind && Array.isArray(checkpoint.media) && checkpoint.media.length > 0) {
       throw new ServiceError("conflict", "Files from this import were already fetched. Roll it back before staging another export.");
     }
     const previous = uploadOf(checkpoint);
-    const previousKeys = rebind ? previous ? allKeys(previous) : [] : [...new Set([...importSourceObjectKeys(run), ...(previous ? allKeys(previous) : [])])];
+    const retained = retainedSourceFromRun(run);
+    const previousKeys = rebind ? previous && previous.uploadId !== retained?.uploadId ? allKeys(previous) : [] : [...new Set([...importSourceObjectKeys(run), ...(previous ? allKeys(previous) : [])])];
     if (!rebind) {
       await releaseImportSources(ctx, run, checkpoint);
       delete checkpoint.archiveSource;
@@ -183,7 +195,7 @@ const beginApply = defineService({
     if (previousKeys.length) await ctx.queueJob("core.deleteCaptureObjects", { keys: previousKeys });
     await ctx.tx
       .update(importRuns)
-      .set({ checkpoint: { ...checkpoint, sourceUpload: upload } })
+      .set({ checkpoint: { ...checkpoint, ...(graphRebind ? { sourceGraphRebind: graphRebind } : {}), sourceUpload: upload } })
       .where(eq(importRuns.id, run.id));
     ctx.setSubject("import_run", run.id);
     return { upload, previousKeys };
@@ -206,6 +218,7 @@ export const beginSourceUpload = defineOrchestratedService({
     id: z.string().uuid(),
     filename: z.string().trim().min(1).max(255),
     bytes: z.number().int().positive(),
+    graph: importGraphVersionSchema.optional(),
   }),
   output: z.object({
     uploadId: uuid,
@@ -249,11 +262,13 @@ const claimChunk = defineService({
     await lockContactIdentityForRead(ctx.tx);
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
+    await markGraphRunWriter(ctx.tx, run);
+    if (checkpointOf(run.checkpoint).sourceGraph) await assertCurrentImportAuthority(ctx, "imports.uploadSourceChunk");
     const upload = uploadOf(run.checkpoint);
     if (!upload || upload.uploadId !== input.uploadId || !sameUploader(upload, ctx.actor)) {
       throw new ServiceError("not_found", "That upload is not here.");
     }
-    assertSourceUploadStageable(run);
+    assertSourceUploadStageable(run, true);
     if (Date.parse(upload.expiresAt) <= Date.now()) {
       throw new ServiceError("conflict", "That upload has expired. Start the upload again.");
     }
@@ -306,6 +321,7 @@ const rememberChunkWrite = defineService({
     // Never accept arbitrary object keys or a caller-supplied actor here.
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!run) throw new ServiceError("conflict", "The source write lost its durable import witness.");
+    await markGraphRunWriter(ctx.tx, run);
     const writes = importSourceWrites(run.checkpoint);
     const attempt = writes.find(write => write.attemptId === input.attemptId);
     if (!attempt || attempt.uploadId !== input.uploadId || attempt.index !== input.index || attempt.bytes !== input.size) throw new ServiceError("conflict", "The source write no longer matches its original attempt.");
@@ -339,7 +355,9 @@ const recordChunk = defineService({
       .limit(1)
       .for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
-    assertSourceUploadStageable(run);
+    await markGraphRunWriter(ctx.tx, run);
+    assertSourceUploadStageable(run, true);
+    if (checkpointOf(run.checkpoint).sourceGraph) await assertCurrentImportAuthority(ctx, "imports.uploadSourceChunk");
     const checkpoint = checkpointOf(run.checkpoint);
     const upload = uploadOf(checkpoint);
     if (!upload || upload.uploadId !== input.uploadId) {
@@ -411,7 +429,7 @@ const uploadSource = defineService({
   permission: "scoped",
   external: false,
   input: z.object({ id: z.string().uuid(), uploadId: z.string().uuid() }),
-  output: z.object({ kind: z.string(), origin: z.string(), keys: z.array(z.string()), bytes: z.number().int(), source: retainedImportSourceSchema, approvedMediaOrigins: approvedMediaOriginsSchema, hasSourceGraph: z.boolean() }),
+  output: z.object({ kind: z.string(), origin: z.string(), keys: z.array(z.string()), bytes: z.number().int(), source: retainedImportSourceSchema, approvedMediaOrigins: approvedMediaOriginsSchema, hasSourceGraph: z.boolean(), rebindSourceGraph: z.boolean() }),
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
@@ -419,14 +437,14 @@ const uploadSource = defineService({
     if (!upload || upload.uploadId !== input.uploadId || !sameUploader(upload, ctx.actor)) {
       throw new ServiceError("not_found", "That upload is not here.");
     }
-    assertSourceUploadStageable(run);
+    assertSourceUploadStageable(run, true);
     if (upload.received.length !== upload.chunks) {
       throw new ServiceError(
         "conflict",
         `Only ${upload.received.length} of ${upload.chunks} chunks have arrived. Send the rest first.`,
       );
     }
-    return { kind: run.kind ?? "html", origin: run.origin ?? "https://example.com", keys: allKeys(upload), bytes: upload.bytes, source: makeRetainedImportSource(run.id, upload), approvedMediaOrigins: approvedMediaOrigins(run.checkpoint), hasSourceGraph: Boolean(checkpointOf(run.checkpoint).sourceGraph) };
+    return { kind: run.kind ?? "html", origin: run.origin ?? "https://example.com", keys: allKeys(upload), bytes: upload.bytes, source: makeRetainedImportSource(run.id, upload), approvedMediaOrigins: approvedMediaOrigins(run.checkpoint), hasSourceGraph: Boolean(checkpointOf(run.checkpoint).sourceGraph), rebindSourceGraph: Boolean(checkpointOf(run.checkpoint).sourceGraphRebind) };
   },
 });
 
@@ -455,6 +473,7 @@ const applyUploaded = defineService({
       .limit(1)
       .for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
+    await markGraphRunWriter(ctx.tx, run);
     const rebind = archiveRebinding(run);
     assertSourceUploadStageable(run);
     const checkpoint = checkpointOf(run.checkpoint);
@@ -505,6 +524,7 @@ const releaseErasedUpload = defineService({
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
+    await markGraphRunWriter(ctx.tx, run);
     assertSourceStageable(run, true);
     const checkpoint = checkpointOf(run.checkpoint), upload = uploadOf(checkpoint);
     if (!upload || upload.uploadId !== input.uploadId || !sameUploader(upload, ctx.actor)) throw new ServiceError("conflict", "The rejected source upload was replaced.");
@@ -571,10 +591,15 @@ export const previewFromUpload = defineOrchestratedService({
   permission: "scoped",
   writeClass: "write",
   input: z.object({ id: z.string().uuid(), uploadId: z.string().uuid() }),
-  output: z.object({ id: uuid, status: z.string(), error: z.string().nullable(), counts: z.unknown() }),
+  output: z.object({ id: uuid, status: z.string(), error: z.string().nullable(), counts: z.unknown(), graph: importGraphVersionSchema.optional(), sourceRestored: z.boolean().optional() }),
   handler: async (input, actor) => {
     const state = await uploadSource.call(input, actor);
     try {
+      if (state.rebindSourceGraph) {
+        const claimed = await claimSourceRebind.call(input, actor);
+        await readRetainedSourceChunk(claimed.source, claimed.index);
+        return await acceptSourceRebindChunk.call({ ...input, ...claimed }, actor);
+      }
       if (state.hasSourceGraph) {
         const claimed = await claimWxrGraph.call(input, actor);
         if (!claimed.leaseToken) throw new ServiceError("internal", "The source phase has no lease.");
@@ -586,8 +611,8 @@ export const previewFromUpload = defineOrchestratedService({
       return { id: input.id, status: "previewed", error: null, counts: staged.counts };
     } catch (error) {
       if (state.kind === "wordpress-wxr" && error instanceof ImporterPhaseLimitError && ["pages", "bytes"].includes(error.limit)) {
-        await claimWxrGraph.call({ ...input, initialize: true }, actor);
-        return { id: input.id, status: "discover", error: null, counts: { indexed: 0 } };
+        const claimed = await claimWxrGraph.call({ ...input, initialize: true }, actor);
+        return { id: input.id, status: "discover", error: null, counts: { indexed: 0 }, graph: { generation: claimed.generation, sourceRevision: claimed.source.revision, planRevision: claimed.planRevision } };
       }
       // An indexed source remains resumable on a failed read or candidate
       // apply; the ordinary preview failure path must not release its bytes.
@@ -606,6 +631,7 @@ export const previewFromUpload = defineOrchestratedService({
 
 export default [
   ...sourceGraphServices,
+  ...graphRebindServices,
   beginApply,
   beginSourceUpload,
   claimChunk,

@@ -11,11 +11,13 @@ import { makeRetainedImportSource, retainedImportSourceSchema, retainedSourceFro
 import { assertSourceStageable } from "./source-lifecycle";
 import { wxrIndexCursorSchema, wxrIndexedEntrySchema } from "./wxr-index";
 import { assertCurrentImportAuthority } from "./authority";
+import { markImportGraphWriter } from "./graph-writer";
+import { importGraphVersionSchema } from "./graph-version";
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? { ...value as Record<string, unknown> } : {};
 const uploadSchema = z.object({ uploadId: z.uuid(), filename: z.string(), bytes: z.number().int().positive(), chunkBytes: z.number().int().positive(), digests: z.record(z.string(), z.string()), received: z.array(z.number().int().nonnegative()), expiresAt: z.iso.datetime() });
 const bindingSchema = z.object({ id: z.uuid(), generation: z.uuid(), sourceRevision: z.string().regex(/^[a-f0-9]{64}$/) });
-const reply = z.object({ id: z.uuid(), status: z.string(), error: z.string().nullable(), counts: z.unknown() });
+const reply = z.object({ id: z.uuid(), status: z.string(), error: z.string().nullable(), counts: z.unknown(), graph: importGraphVersionSchema });
 
 export const claimWxrGraph = defineService({
   name: "imports.claimSourceGraph", orchestratedBy: "imports.previewFromUpload",
@@ -23,10 +25,11 @@ export const claimWxrGraph = defineService({
   kind: "mutation", permission: "scoped", external: false,
   auditInputFields: ["id", "uploadId", "initialize"],
   input: z.object({ id: z.uuid(), uploadId: z.uuid(), initialize: z.boolean().default(false) }),
-  output: z.object({ graphId: z.uuid(), generation: z.uuid(), leaseToken: z.uuid().nullable(), cursor: wxrIndexCursorSchema, source: retainedImportSourceSchema, initialized: z.boolean() }),
+  output: z.object({ graphId: z.uuid(), generation: z.uuid(), planRevision: z.number().int().positive(), leaseToken: z.uuid().nullable(), cursor: wxrIndexCursorSchema, source: retainedImportSourceSchema, initialized: z.boolean() }),
   handler: async (input, ctx) => {
     await assertCurrentImportAuthority(ctx, "imports.previewFromUpload");
     await lockContactIdentityForRead(ctx.tx);
+    await markImportGraphWriter(ctx.tx);
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!run || run.kind !== "wordpress-wxr") throw new ServiceError("not_found", "No such WordPress import.");
     const checkpoint = object(run.checkpoint), upload = uploadSchema.safeParse(checkpoint.sourceUpload);
@@ -38,13 +41,13 @@ export const claimWxrGraph = defineService({
       if (!input.initialize) throw new ServiceError("conflict", "This import has no resumable source graph.");
       assertSourceStageable(run, true);
       const generation = randomUUID(), cursor = wxrIndexCursorSchema.parse({ nextByte: 0, ordinal: 0, bodyBytes: 0, metadataBytes: 0, header: null });
-      [graph] = await ctx.tx.insert(importSourceGraphs).values({ runId: run.id, generation, sourceRevision: source.revision, cursor }).returning();
+      [graph] = await ctx.tx.insert(importSourceGraphs).values({ runId: run.id, generation, sourceRevision: source.revision, sourceStartedAt: new Date(Date.parse(source.expiresAt) - 24 * 60 * 60 * 1000), cursor }).returning();
       if (!graph) throw new ServiceError("internal", "The import source graph could not be reserved.");
       checkpoint.retainedSource = source;
-      checkpoint.sourceGraph = { id: graph.id, generation, sourceRevision: source.revision };
+      checkpoint.sourceGraph = { id: graph.id, generation, sourceRevision: source.revision, planRevision: graph.planRevision };
       await ctx.tx.update(importRuns).set({ status: "discover", error: null, preview: {}, checkpoint, counts: { indexed: 0 } }).where(eq(importRuns.id, run.id));
       ctx.setSubject("import_run", run.id);
-      return { graphId: graph.id, generation, leaseToken: null, cursor, source, initialized: true };
+      return { graphId: graph.id, generation, planRevision: graph.planRevision, leaseToken: null, cursor, source, initialized: true };
     }
     const retained = retainedSourceFromRun(run);
     if (run.status !== "discover" || graph.state !== "indexing" || !binding.success || binding.data.id !== graph.id || binding.data.generation !== graph.generation || binding.data.sourceRevision !== graph.sourceRevision || retained?.uploadId !== source.uploadId || retained.revision !== source.revision || graph.sourceRevision !== source.revision) throw new ServiceError("conflict", "This import source graph was completed, replaced or invalidated.");
@@ -52,7 +55,7 @@ export const claimWxrGraph = defineService({
     const leaseToken = randomUUID();
     await ctx.tx.update(importSourceGraphs).set({ leaseToken, leaseActor: actorString(ctx.actor), leaseUntil: new Date(Date.now() + 120_000), updatedAt: new Date() }).where(eq(importSourceGraphs.id, graph.id));
     ctx.setSubject("import_run", run.id);
-    return { graphId: graph.id, generation: graph.generation, leaseToken, cursor: wxrIndexCursorSchema.parse(graph.cursor), source, initialized: false };
+    return { graphId: graph.id, generation: graph.generation, planRevision: graph.planRevision, leaseToken, cursor: wxrIndexCursorSchema.parse(graph.cursor), source, initialized: false };
   },
 });
 
@@ -65,6 +68,7 @@ export const applyWxrIndex = defineService({
   handler: async (input, ctx) => {
     await assertCurrentImportAuthority(ctx, "imports.previewFromUpload");
     await lockContactIdentityForRead(ctx.tx);
+    await markImportGraphWriter(ctx.tx);
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     const [graph] = await ctx.tx.select().from(importSourceGraphs).where(and(eq(importSourceGraphs.id, input.graphId), eq(importSourceGraphs.runId, input.id))).limit(1).for("update");
     const retained = run && retainedSourceFromRun(run), binding = bindingSchema.safeParse(object(run?.checkpoint).sourceGraph);
@@ -98,9 +102,9 @@ export const applyWxrIndex = defineService({
     // The upload reservation remains until the whole graph is accepted. The
     // retained descriptor keeps the same original objects available later.
     if (input.done) delete checkpoint.sourceUpload;
-    await ctx.tx.update(importRuns).set({ status: input.done ? "previewed" : "discover", error: null, counts: summary, checkpoint, preview: input.done ? { sourceFormat: "durable-wxr", graphId: graph.id, generation: graph.generation, sourceRevision: graph.sourceRevision, version: 1 } : {} }).where(eq(importRuns.id, run.id));
+    await ctx.tx.update(importRuns).set({ status: input.done ? "previewed" : "discover", error: null, counts: summary, checkpoint, preview: input.done ? { sourceFormat: "durable-wxr", graphId: graph.id, generation: graph.generation, sourceRevision: graph.sourceRevision, planRevision: graph.planRevision, version: 1 } : {} }).where(eq(importRuns.id, run.id));
     ctx.setSubject("import_run", run.id);
-    return { id: run.id, status: input.done ? "previewed" : "discover", error: null, counts: summary };
+    return { id: run.id, status: input.done ? "previewed" : "discover", error: null, counts: summary, graph: { generation: graph.generation, sourceRevision: graph.sourceRevision, planRevision: graph.planRevision } };
   },
 });
 

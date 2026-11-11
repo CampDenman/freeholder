@@ -6,6 +6,9 @@ CREATE TABLE import_source_graphs (
  run_id uuid NOT NULL REFERENCES import_runs(id) ON DELETE CASCADE,
  generation uuid NOT NULL,
  source_revision text NOT NULL CHECK (source_revision ~ '^[a-f0-9]{64}$'),
+ source_started_at timestamptz NOT NULL,
+ plan_digest text CHECK (plan_digest IS NULL OR plan_digest ~ '^[a-f0-9]{64}$'),
+ plan_revision integer NOT NULL DEFAULT 1 CHECK (plan_revision > 0),
  parser_version integer NOT NULL DEFAULT 1 CHECK (parser_version = 1),
  state text NOT NULL DEFAULT 'indexing' CHECK (state IN ('indexing','indexed','invalidated')),
  cursor jsonb NOT NULL CHECK (jsonb_typeof(cursor) = 'object' AND octet_length(cursor::text) <= 2048),
@@ -55,3 +58,57 @@ CREATE TABLE import_source_batches (
 CREATE UNIQUE INDEX import_source_batches_index_unique ON import_source_batches(graph_id, batch_index);
 --> statement-breakpoint
 CREATE UNIQUE INDEX import_source_batches_child_unique ON import_source_batches(child_run_id);
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_import_graph_writer() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF current_setting('freeholder.import_graph_writer', true) IS DISTINCT FROM 'v1'
+    AND (EXISTS (SELECT 1 FROM import_source_graphs WHERE run_id=OLD.id)
+      OR EXISTS (SELECT 1 FROM import_source_batches WHERE child_run_id=OLD.id)) THEN
+   RAISE EXCEPTION 'This import requires the guarded source graph writer' USING ERRCODE='55000';
+ END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER import_runs_source_graph_writer BEFORE UPDATE OR DELETE ON import_runs
+ FOR EACH ROW EXECUTE FUNCTION freeholder_guard_import_graph_writer();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_import_graph_identity() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.run_id IS DISTINCT FROM OLD.run_id OR NEW.generation IS DISTINCT FROM OLD.generation
+    OR NEW.source_revision IS DISTINCT FROM OLD.source_revision OR NEW.parser_version IS DISTINCT FROM OLD.parser_version
+    OR NEW.source_started_at IS DISTINCT FROM OLD.source_started_at
+    OR NEW.created_at IS DISTINCT FROM OLD.created_at
+    OR (OLD.plan_digest IS NOT NULL AND (NEW.plan_digest IS DISTINCT FROM OLD.plan_digest OR NEW.plan_revision IS DISTINCT FROM OLD.plan_revision)) THEN
+   RAISE EXCEPTION 'The original source graph identity is immutable' USING ERRCODE='23514';
+ END IF;
+ IF (NEW.cursor->>'ordinal')::integer < (OLD.cursor->>'ordinal')::integer
+    OR NEW.commit_ordinal < OLD.commit_ordinal OR NEW.batch_counter < OLD.batch_counter
+    OR (OLD.state='invalidated' AND NEW.state<>'invalidated')
+    OR (OLD.state='indexed' AND NEW.state='indexing') THEN
+   RAISE EXCEPTION 'An accepted source graph cannot move backwards' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER import_source_graphs_identity_guard BEFORE UPDATE ON import_source_graphs
+ FOR EACH ROW EXECUTE FUNCTION freeholder_guard_import_graph_identity();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_import_entry_identity() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.graph_id IS DISTINCT FROM OLD.graph_id OR NEW.ordinal IS DISTINCT FROM OLD.ordinal
+    OR NEW.source_identity IS DISTINCT FROM OLD.source_identity OR NEW.kind IS DISTINCT FROM OLD.kind
+    OR NEW.start_byte IS DISTINCT FROM OLD.start_byte OR NEW.end_byte IS DISTINCT FROM OLD.end_byte
+    OR NEW.digest IS DISTINCT FROM OLD.digest OR NEW.metadata IS DISTINCT FROM OLD.metadata
+    OR NEW.body_bytes IS DISTINCT FROM OLD.body_bytes THEN
+   RAISE EXCEPTION 'The original indexed entry identity is immutable' USING ERRCODE='23514';
+ END IF;
+ IF NEW.target_slug IS DISTINCT FROM OLD.target_slug
+    AND EXISTS (SELECT 1 FROM import_source_graphs WHERE id=OLD.graph_id AND plan_digest IS NOT NULL) THEN
+   RAISE EXCEPTION 'The accepted import plan is frozen' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER import_source_entries_identity_guard BEFORE UPDATE ON import_source_entries
+ FOR EACH ROW EXECUTE FUNCTION freeholder_guard_import_entry_identity();
