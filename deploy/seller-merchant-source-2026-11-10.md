@@ -137,3 +137,38 @@ Actual enabled provider settlement remains C11.05/C12.26, independent review
 remains C11.10, recovery acceptance remains C11.08, and the final exact-candidate
 signature remains C11.17. Mock transports and disposable database results do
 not supply those sign-offs.
+
+## Card-setup provider evidence
+
+Setup completions normally identify the SetupIntent by reference. After exact
+raw-byte signature and account validation, the adapter retrieves it with its
+payment method expanded on the same account. Its reference, succeeded status,
+off-session usage, customer/method binding and original contact/subscription
+metadata must agree. Incomplete provider evidence produces retryable refusal,
+never an invented payment or a silently accepted card. Unrelated setup events
+do not trigger provider reads. Returned normalized events contain masked method
+evidence and exclude client secrets. These calls follow Stripe's
+[SetupIntent retrieval](https://docs.stripe.com/api/setup_intents/retrieve)
+contract.
+
+The source integration test runs a real-shaped signed unexpanded completion
+through the actual Stripe normalizer, saved-method ledger and paused trial
+activation. Provider HTTP responses in these tests are synthetic; they are
+not real Stripe acceptance. Exact session-bound proof for a previously saved
+card, first-customer creation bound to a durable setup-attempt/request snapshot,
+and the other full integration
+requirements above remain open. C12.38 is not checked and seller-merchant
+activation remains unavailable.
+
+The four-file source run passed 78 checks: 49 database-backed provider/billing
+integration cases and 29 provider-edge cases. That includes actual raw HMAC
+verification and unexpanded SetupIntent normalization into the saved-method
+ledger and paused card-trial activation, with synthetic provider HTTP responses.
+Nine new evidence checks failed on the earlier adapter before the repair.
+The lean final adapter/evidence run passed all 29 cases again. Public SDK
+generation passed all eight checks; no new public service or migration is added.
+The final build on protected core `1d6f1764` and standalone scrub checked 18,779
+files and 226,776,069 bytes without source or environment leakage. Final fast
+gates passed typechecking, lint, licensing, release notes, plan consistency
+and 368 contract checks with one deliberate skip. The evidence matrix retains
+369 rows × 12 criteria. These checks do not close C12.38 or C11.10.

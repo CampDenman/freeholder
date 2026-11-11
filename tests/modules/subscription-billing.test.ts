@@ -4,7 +4,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
-import { randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
+import {createStripePayments} from "@/adapters/payments/stripe";
 import type { PaymentAdapter } from "@/adapters/payments";
 import { contacts } from "@/core/contacts/schema";
 import { beginCustomerCheckout, getCustomerInvoice } from "@/modules/invoicing/customer-service";
@@ -288,19 +289,15 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     await db().update(paymentMethods).set({ providerCustomerRef: "cus_setup", consentSource: "staff" }).where(eq(paymentMethods.id, staffCard.id));
     expect((await failure(startCardTrial.call({ subscriptionId: joined.id, paymentMethodId: staffCard.id }, CUSTOMER))).code).toBe("conflict");
 
-    await processPaymentProviderEvents.call({
-      provider: "stripe",
-      bodySha256: "b".repeat(64),
-      receivedAt: new Date().toISOString(),
-      events: [{
-        id: "evt_trial_card",
-        kind: "saved_method_added",
-        contactId: contact.id,
-        providerCustomerRef: "cus_setup",
-        occurredAt: new Date().toISOString(),
-        method: { providerRef: "pm_trial", providerCustomerRef: "cus_setup", kind: "card", label: "card ending 4242", last4: "4242" },
-      }],
-    }, { kind: "system" });
+    const metadata={freeholder_contact_id:contact.id,freeholder_subscription_id:joined.id};
+    const at=Math.floor(Date.now()/1000);
+    const raw=JSON.stringify({id:"evt_trial_card",type:"checkout.session.completed",created:at,data:{object:{id:"cs_setup",mode:"setup",payment_status:"no_payment_required",customer:"cus_setup",metadata,setup_intent:"seti_trial"}}});
+    const signature=createHmac("sha256","whsec_trial_fixture").update(`${at}.${raw}`).digest("hex");
+    const provider=createStripePayments({secretKey:"sk_trial_fixture",webhookSecrets:["whsec_trial_fixture"],apiBase:"https://stripe.example.test",fetch:async()=>Response.json({id:"seti_trial",status:"succeeded",usage:"off_session",customer:"cus_setup",metadata,payment_method:{id:"pm_trial",type:"card",customer:"cus_setup",card:{brand:"visa",last4:"4242",exp_month:12,exp_year:2030}}})});
+    const receivedAt=new Date().toISOString();
+    const events=await provider.verifyWebhook({headers:{"stripe-signature":`t=${at},v1=${signature}`},body:Uint8Array.from(Buffer.from(raw)),receivedAt});
+    expect(events).toHaveLength(1);
+    await processPaymentProviderEvents.call({provider:"stripe",bodySha256:createHash("sha256").update(raw).digest("hex"),receivedAt,events},{kind:"system"});
     const [method] = await db().select().from(paymentMethods).where(eq(paymentMethods.providerMethodRef, "pm_trial"));
     const started = await startCardTrial.call({ subscriptionId: joined.id, paymentMethodId: method!.id }, CUSTOMER);
     expect(started).toEqual({ id: joined.id, started: true });

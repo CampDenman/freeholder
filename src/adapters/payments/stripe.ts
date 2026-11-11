@@ -164,8 +164,8 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
     if (!checkoutRef) return [];
     const providerRef = typeof value.payment_intent === "string" ? value.payment_intent : checkoutRef;
     const common = { id, providerRef, checkoutRef, amountMinor: number(value.amount_total), currency, occurredAt: created, invoiceId, contactId, providerCustomerRef: customer };
-    // Setup mode never moves money. A completed session can name the saved
-    // method when the provider expanded it; otherwise the attach event does.
+    // Setup mode never moves money. verifyWebhook resolves and validates the
+    // SetupIntent before this normalizer extracts its saved method.
     if (value.mode === "setup") {
       if (type !== "checkout.session.completed" || value.payment_status !== "no_payment_required" || !contactId) return [];
       const setupIntent = object(value.setup_intent);
@@ -576,10 +576,35 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       const parsed = object(payload);
       if (!parsed) throw new AdapterError("payments", "stripe", "invalid_request", "Stripe sent an invalid event.");
       const events = stripePaymentEvents(parsed);
+      const value = object(object(parsed.data)?.object);
+      const metadata=object(value?.metadata);
+      // A partially tagged setup cannot reach the expanded-method normalizer
+      // without the complete binding used by our setup flow.
+      if(value?.mode==="setup" && (!text(metadata?.freeholder_contact_id) || !text(metadata?.freeholder_subscription_id))) return [];
+      if(parsed.type==="checkout.session.completed" && value?.mode==="setup" && value.payment_status==="no_payment_required"
+        && text(metadata?.freeholder_contact_id) && text(metadata?.freeholder_subscription_id)){
+        // Real Checkout events normally contain a SetupIntent ID, not its
+        // expanded payment method. Retrieve only after exact-byte HMAC and
+        // account validation, outside any business-service transaction.
+        const unproven=()=>new AdapterError("payments","stripe","provider_failure","Stripe did not prove this saved payment method on its original account.",true);
+        const setupRef=text(value.setup_intent) ?? text(object(value.setup_intent)?.id);
+        const customer=text(value.customer) ?? text(object(value.customer)?.id);
+        if(!setupRef || !/^seti_[A-Za-z0-9]+$/.test(setupRef) || setupRef.length>200 || !customer) throw unproven();
+        const query=new URLSearchParams({"expand[]":"payment_method"});
+        const intent=await api(`/v1/setup_intents/${encodeURIComponent(setupRef)}?${query}`,{method:"GET"},text(parsed.account));
+        const actualCustomer=text(intent.customer) ?? text(object(intent.customer)?.id);
+        const actualMetadata=object(intent.metadata);
+        const method=object(intent.payment_method);
+        const methodCustomer=text(method?.customer) ?? text(object(method?.customer)?.id);
+        if(intent.id!==setupRef || intent.status!=="succeeded" || intent.usage!=="off_session" || actualCustomer!==customer || methodCustomer!==customer
+          || text(actualMetadata?.freeholder_contact_id)!==text(metadata?.freeholder_contact_id)
+          || text(actualMetadata?.freeholder_subscription_id)!==text(metadata?.freeholder_subscription_id)
+          || !method || !stripeMethod(method)) throw unproven();
+        return stripePaymentEvents({...parsed,data:{...object(parsed.data),object:{...value,setup_intent:{...intent,payment_method:{...method,customer}}}}});
+      }
       // A signed invoice says that its balance is paid. It does not prove
       // which connected PaymentIntent paid it or the fee actually taken.
       // Read that evidence on the original account, outside every DB TX.
-      const value = object(object(parsed.data)?.object);
       const paid = events.find(event => event.kind === "subscription_period_paid" && event.providerAccountId);
       if (!paid || paid.kind !== "subscription_period_paid" || !paid.providerAccountId) return events;
       const invoiceRef = text(value?.id);

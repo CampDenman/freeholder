@@ -87,6 +87,15 @@ a direct charge/refund, and order/invoice recorders cannot duplicate earnings.
 Synthetic provider evidence and seeded browser setup are explicitly limited
 in the source document; they are not live-provider or independent acceptance.
 
+The later Stripe card-setup increment resolves an unexpanded SetupIntent only
+after raw signature/account validation, on the same account. Review succeeded
+off-session status, original reference, customer/method binding and matching
+contact/subscription metadata before the method enters the shared ledger.
+Incomplete evidence returns a retryable refusal without recording money or
+exposing client secrets. First-customer creation must wait for a durable
+request snapshot that freezes profile/customer/account inputs before I/O;
+that and exact fresh-session proof for reused cards remain C12.38 work.
+
 ## Authenticated provider-evidence boundary (C11.10)
 
 The C12.30 PhotoDNA review must also check unsupported formats and malformed
@@ -598,3 +607,5 @@ phase declarations and dangling async work cannot use this binding. No key
 scopes are added and no caller becomes system. Review the async lifetime and
 reentrancy boundaries alongside `tests/core/orchestration-permissions.test.ts`.
 This source evidence does not complete the independent review.
+
+The follow-up review of the saved-card repair reproduced a partial-metadata setup event bypass: a contact-only expanded payload reached the older normalizer. The repaired boundary ignores setup events missing either contact or subscription binding before normalized events can be returned. The new regression failed before repair; all 30 provider edge controls and the complete static gates passed afterward. This remains source evidence, not independent security sign-off or provider acceptance.

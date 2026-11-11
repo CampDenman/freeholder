@@ -157,6 +157,7 @@ describe("Stripe payment adapter", () => {
           ...(includeCustomer ? { customer: "cus_setup" } : {}),
         });
       }
+      if(url.includes("/v1/setup_intents/seti_1?")) return Response.json({id:"seti_1",status:"succeeded",usage:"off_session",customer:"cus_setup",metadata:{freeholder_contact_id:invoice.contactId,freeholder_subscription_id:"30000000-0000-4000-8000-000000000003"},payment_method:{id:"pm_setup",type:"card",customer:"cus_setup",card:{brand:"visa",last4:"4242",exp_month:12,exp_year:2030}}});
       return new Response("not found", { status: 404 });
     }) as typeof fetch;
     const adapter = createStripePayments({
@@ -225,7 +226,7 @@ describe("Stripe payment adapter", () => {
       customer: "cus_setup",
       metadata: { freeholder_contact_id: invoice.contactId, freeholder_subscription_id: subscriptionId },
     };
-    await expect(events(bare)).resolves.toEqual([]);
+    await expect(events(bare)).rejects.toMatchObject({code:"provider_failure"});
     await expect(events({ ...bare, payment_status: "paid", amount_total: 0 })).resolves.toEqual([]);
     const saved = await events({
       ...bare,
