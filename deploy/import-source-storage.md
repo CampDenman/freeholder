@@ -122,3 +122,11 @@ replacement isolation and removal are covered by
 `tests/core/import-source-hold-retention.test.ts`. Internal request/exception
 bindings remain in the database and are excluded from every public import
 run/list DTO; an exact source-only key regression exercises that boundary.
+
+After the payment-customer privacy repair merged, main integration retained its
+universal pending/missing-receipt guard and this source's hold callback. The only
+merge conflict was the four-language pending help text, now covering payment
+customers, recordings, transcripts and stored files together. A fresh isolated
+database run passed 43 source/hold/audit/provider checks across six files; all
+fast gates passed (368 contracts with one deliberate skip). These are combined
+source checks, not independent sign-off or live-provider acceptance.
