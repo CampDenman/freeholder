@@ -562,3 +562,17 @@ job). Transcripts are unavailable until PM ships them. Live paradisemodern
 acceptance remains C3.13 work. Review [provider erasure and recovery](../deploy/provider-recording-erasure.md),
 including the PM-path honesty note and failed-job recovery. This
 implementation and its mocked HTTP tests are not an independent review.
+
+## Explicit private phase authorization (C3.22/C11.10)
+
+The public-source crawler uses private read/apply phases and must work with an
+exact public-operation key. `orchestratedBy` opts a private scoped core phase
+into one same-family public operation's authorization for its original actor.
+`src/core/service-orchestration.ts` bounds this to the active invocation;
+`src/core/service.ts` preserves ordinary authorization, agent/human restrictions,
+transaction rules and audit identity. A query operation cannot authorize a
+mutation phase. Ordinary service composition, another parent or actor, plugin
+phase declarations and dangling async work cannot use this binding. No key
+scopes are added and no caller becomes system. Review the async lifetime and
+reentrancy boundaries alongside `tests/core/orchestration-permissions.test.ts`.
+This source evidence does not complete the independent review.

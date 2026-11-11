@@ -41,6 +41,7 @@ export function registerPluginExecution(plugin: PluginExecution): PluginExecutio
 }
 
 export function bindPluginService(definition: { name: string }, plugin: PluginExecution): void {
+  if ("orchestratedBy" in definition) throw new Error("Private orchestration phase bindings are reserved for core services.");
   if (!definition.name.startsWith(`${pluginNamespace(plugin.name)}.`)) throw new Error("A plugin may register services only in its own namespace.");
   const existing = services.get(definition);
   if (existing && existing !== plugin) throw new Error("A service already belongs to another plugin.");

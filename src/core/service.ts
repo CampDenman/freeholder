@@ -13,6 +13,7 @@
 // traffic through services, and §2 principle 12 requires one transaction per
 // multi-table mutation — so composition must not mean a second transaction on
 // a second connection.
+import { hasOrchestratedAuthorization, withOrchestration } from "@/core/service-orchestration";
 import { isSeeding, SEED_AUDIT_ACTOR } from "@/core/audit-origin";
 import type { z } from "zod";
 import { sql } from "drizzle-orm";
@@ -416,6 +417,12 @@ export interface ServiceDef<In extends z.ZodType, Out> {
    */
   external?: boolean;
   /**
+   * A same-family private scoped phase may use one explicitly named public
+   * orchestrator's existing authorization, only during that invocation and
+   * for its original actor. This never adds scopes or changes audit identity.
+   */
+  orchestratedBy?: string;
+  /**
    * Set by `defineOrchestratedService` only. Such a service refuses to run
    * under a caller's transaction, so generic dispatchers (the agent write
    * gate) must call it top-level after committing their own state.
@@ -484,6 +491,7 @@ function authorizeInput<In extends z.ZodType, Out>(
   def: ServiceDef<In, Out>,
   rawInput: unknown,
   actor: Actor,
+  allowOrchestration = true,
 ): { input: z.output<In>; viaSelfService: boolean } {
   if (env().FREEHOLDER_PLAYGROUND === "1" && actor.kind !== "system" && !playgroundAllows(def.name, def.kind)) {
     throw new ServiceError("permission", PLAYGROUND_REFUSAL);
@@ -495,7 +503,8 @@ function authorizeInput<In extends z.ZodType, Out>(
     !permits(actor, def.permission, def.name, def.kind);
 
   const pluginBridge = actor.kind === "plugin" && def.permission === "system" && def.pluginAccess !== undefined && hasModuleAccess(actor, def.name.split(".")[0]!, def.pluginAccess);
-  if (!viaSelfService && !pluginBridge && !permits(actor, def.permission, def.name, def.kind)) {
+  const inheritedOrchestration = allowOrchestration && !insideServiceTransaction() && actor.kind !== "plugin" && !pluginServiceOwner(def) && !currentPluginExecution() && hasOrchestratedAuthorization(def, actor);
+  if (!viaSelfService && !pluginBridge && !inheritedOrchestration && !permits(actor, def.permission, def.name, def.kind)) {
     throw new ServiceError(
       "permission",
       actor.kind === "anonymous"
@@ -657,7 +666,7 @@ export function defineOrchestratedService<In extends z.ZodType, Out>(
       await ready();
       await enforceRateLimit(def, input, actor);
       const owner = pluginServiceOwner(def);
-      const execute = async () => assertOutput(def, await orchestration.handler(input, actor));
+      const execute = async () => withOrchestration(def.name, def.permission, def.kind, actor, async () => assertOutput(def, await orchestration.handler(input, actor)));
       if (owner) {
         const { runPluginContribution } = await import("@/core/plugins/runtime");
         return runPluginContribution(owner, execute);
@@ -670,6 +679,9 @@ export function defineOrchestratedService<In extends z.ZodType, Out>(
 export function defineService<In extends z.ZodType, Out>(
   def: ServiceDef<In, Out>,
 ): Service<In, Out> {
+  if (def.orchestratedBy && (def.external !== false || def.permission !== "scoped" || def.name.split(".")[0] !== def.orchestratedBy.split(".")[0])) {
+    throw new Error("An orchestration phase must be private, scoped and in the public operation's service family.");
+  }
   return {
     def,
     async call(
@@ -687,6 +699,7 @@ export function defineService<In extends z.ZodType, Out>(
         def,
         rawInput,
         actor,
+        options?.tx === undefined,
       );
       await enforcePlaygroundRowCap(def, actor);
 
