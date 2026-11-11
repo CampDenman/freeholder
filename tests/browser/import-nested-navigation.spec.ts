@@ -5,6 +5,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { eq } from "drizzle-orm";
 import { db, closeDb } from "@/core/db";
+import { importRuns } from "@/core/plugins/schema";
 import { auditLog } from "@/core/events/schema";
 import { sections, pages } from "@/modules/cms/schema";
 import { businessProfile } from "@/core/settings/schema";
@@ -60,6 +61,12 @@ test.describe("nested imported navigation (C3.22)", () => {
       await page.keyboard.press("Enter");
       await expect(page).toHaveURL(/\/nested-about\/team\/member$/);
       await expect(page.getByRole("heading", { name: "Member", level: 1 })).toBeVisible();
+      const [run] = await db().insert(importRuns).values({ source: "wordpress-wxr:https://source.example", origin: "https://source.example", kind: "wordpress-wxr", status: "published", createdBy: `user:${C11_OWNER.userId}`, counts: { menuWarnings: 1 }, checkpoint: { report: { menuIssues: [{ menu: "Source menu", label: "Private future label", reason: "private" }] } } }).returning();
+      await page.goto(`/admin/imports/${run!.id}`);
+      await expect(page.getByText("Private future label", { exact: true })).toBeVisible();
+      await expect(page.getByText(t("imports.menuWarning.private"), { exact: true })).toBeVisible();
+      expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
+      await page.screenshot({ path: test.info().outputPath(`${locale}-owner-warning.png`), fullPage: true });
       await context.close();
     });
   }

@@ -973,6 +973,7 @@ const commitApply = defineService({
 
     // Resolve and retain the source hierarchy. An unresolved ancestor never
     // accidentally attaches its child to the preceding owner's/root item.
+    const menuIssues: Array<{ menu: string; label: string; reason: "target" | "private" }> = [];
     const menus: ResolvedMenu[] = (wordpress?.menus ?? []).map((menu) => {
       const links: NavigationLink[] = [];
       const ancestors: Array<NavigationLink | null> = [];
@@ -989,7 +990,7 @@ const commitApply = defineService({
             href = `/${linkMap.get(path) ?? path}${url.search}${url.hash}`;
           }
         }
-        if (!href || !item.label.trim()) { unresolved += 1; ancestors[depth] = null; continue; }
+        if (!href || !item.label.trim()) { unresolved += 1; ancestors[depth] = null; menuIssues.push({ menu: menu.name, label: item.label.trim().slice(0, 80), reason: "target" }); continue; }
         const actualDepth = ancestors.filter(Boolean).length;
         const id = `import-${before.id}-${createHash("sha256").update(`${menu.slug}:${index}`).digest("hex").slice(0, 16)}`;
         const link: NavigationLink = { id, label: item.label.trim().slice(0, 80), href, ...(actualDepth ? { depth: actualDepth } : {}) };
@@ -1033,6 +1034,7 @@ const commitApply = defineService({
           authors,
           taxonomy: wordpress.taxonomy,
           menus: menus.map(({ slug, name, links, nested, unresolved }) => ({ slug, name, links: links.length, nested, unresolved })),
+          menuIssues: menuIssues.slice(0, REPORT_LIST_MAX),
           // Said out loud so nobody reads a silent zero as "done".
           notRecreated: [
             ...(Number((wordpress.report.comments as { total?: number } | undefined)?.total ?? 0) > commentsImported + commentsStaged ? ["Unsupported comment types, comments on ordinary pages or skipped posts remain in the source export; counts.commentsSkipped reports the difference."] : []),
@@ -1051,6 +1053,7 @@ const commitApply = defineService({
           mediaFailed: mediaFailures.length,
           redirects: redirectIds.length,
           menus: menus.filter((menu) => menu.links.length > 0).length,
+          menuWarnings: menuIssues.length + Object.entries(checkpointOf(wordpress.report.skipped)).filter(([key, value]) => key.startsWith("menu ") && typeof value === "number" && Number.isFinite(value)).reduce((total, [, value]) => total + Number(value), 0),
           categories: wordpress.taxonomy.categories.length,
           tags: wordpress.taxonomy.tags.length,
           authors: authors.length,
@@ -1406,6 +1409,8 @@ export const publishImport = defineService({
       throw new ServiceError("conflict", "Reconcile the import before publishing it.");
     }
     const checkpoint = checkpointOf(before.checkpoint);
+    const profile = z.object({ defaultLocale: z.string() }).nullable().parse(await ctx.call(getService("settings.getBusiness"), {}));
+    const sourceLocale = profile?.defaultLocale ?? "en";
     const drafts = new Set(stringIds(checkpoint.draftPageIds));
     const dates =
       checkpoint.publishedAt && typeof checkpoint.publishedAt === "object"
@@ -1445,7 +1450,7 @@ export const publishImport = defineService({
       for (const alias of aliases.data) {
         if (draftPaths.has(alias.toPath)) continue;
         if (alias.toPath !== "feeds/blog.xml") {
-          const page = await ctx.call(getService("cms.resolvePage"), { slug: alias.toPath, locale: "en" });
+          const page = await ctx.call(getService("cms.resolvePage"), { slug: alias.toPath, locale: sourceLocale });
           const archive = page ? null : await ctx.call(getService("cms.resolveBlogArchive"), { path: alias.toPath });
           if (!page && !archive) { skippedAliases.push({ fromPath: alias.fromPath, reason: "destination is not public" }); continue; }
         }
@@ -1459,7 +1464,7 @@ export const publishImport = defineService({
     let navApplied: z.infer<typeof navAppliedSchema> | undefined;
     const menus = resolvedMenusSchema.safeParse(checkpoint.menus);
     const menu = menus.success ? chooseMenu(menus.data) : undefined;
-    const skippedMenuLinks: Array<{ href: string; reason: string }> = [];
+    const skippedMenuLinks: Array<{ href: string; label?: string; reason: string }> = [];
     if (menu) {
       const landings = z.array(z.object({ path: z.string() })).safeParse(checkpoint.landedPaths);
       const sourcePaths = new Set([...stringIds(checkpoint.menuPagePaths), ...(landings.success ? landings.data.map(page => page.path) : [])]);
@@ -1469,31 +1474,31 @@ export const publishImport = defineService({
         if (!link.href.startsWith("/") || link.href.startsWith("//")) continue;
         const path = new URL(link.href, "https://freeholder.invalid").pathname.replace(/^\/+|\/+$/g, "");
         if (!sourcePaths.has(path)) continue;
-        if (!checked.has(path)) checked.set(path, Boolean(await ctx.call(getService("cms.resolvePage"), { slug: path, locale: "en" })));
-        if (!checked.get(path)) { hidden.push(link); skippedMenuLinks.push({ href: link.href, reason: "imported destination is not public" }); }
+        if (!checked.has(path)) checked.set(path, Boolean(await ctx.call(getService("cms.resolvePage"), { slug: path, locale: sourceLocale })));
+        if (!checked.get(path)) { hidden.push(link); skippedMenuLinks.push({ href: link.href, label: link.label, reason: "imported destination is not public" }); }
       }
       menu.links = removeNavigation(menu.links, hidden);
 
       for (const key of NAV_SECTION_KEYS) {
         const section = z
-          .object({ blocks: z.unknown() })
+          .object({ blocks: z.unknown(), locale: z.string() })
           .nullable()
-          .parse(await ctx.call(getService("cms.getSection"), { key, locale: "en", fallback: false }));
+          .parse(await ctx.call(getService("cms.getSection"), { key, locale: sourceLocale, fallback: true }));
         if (!section || !Array.isArray(section.blocks)) continue;
         const blocks = structuredClone(section.blocks) as BlockNode[];
         const merged = mergeNavMenu(blocks, menu.links);
         if (!merged) continue;
         const { added, blockId } = merged;
         if (added.length > 0) {
-          await ctx.call(getService("cms.updateSection"), { key, locale: "en", blocks });
+          await ctx.call(getService("cms.updateSection"), { key, locale: section.locale, blocks });
         }
-        navApplied = { key, locale: "en", menu: menu.slug, blockId, links: added };
+        navApplied = { key, locale: section.locale, menu: menu.slug, blockId, links: added };
         break;
       }
     }
     const [row] = await ctx.tx
       .update(importRuns)
-      .set({ status: "published", counts: { ...checkpointOf(before.counts), commentsImported: Number(checkpointOf(before.counts).commentsImported ?? 0) + stagedCommentsImported, commentsStaged: 0 }, checkpoint: { ...checkpoint, pendingBlogPosts: [], redirectIds, skippedAliases, skippedMenuLinks, ...(navApplied ? { navApplied } : {}) } })
+      .set({ status: "published", counts: { ...checkpointOf(before.counts), menuWarnings: Number(checkpointOf(before.counts).menuWarnings ?? 0) + skippedMenuLinks.length, commentsImported: Number(checkpointOf(before.counts).commentsImported ?? 0) + stagedCommentsImported, commentsStaged: 0 }, checkpoint: { ...checkpoint, pendingBlogPosts: [], redirectIds, skippedAliases, skippedMenuLinks, report: { ...checkpointOf(checkpoint.report), menuIssues: [...(Array.isArray(checkpointOf(checkpoint.report).menuIssues) ? checkpointOf(checkpoint.report).menuIssues as unknown[] : []), ...skippedMenuLinks.map(link => ({ menu: menu?.name ?? "", label: link.label ?? link.href, reason: "private" }))].slice(0, REPORT_LIST_MAX) }, ...(navApplied ? { navApplied } : {}) } })
       .where(eq(importRuns.id, input.id))
       .returning();
     ctx.setSubject("import_run", row!.id);

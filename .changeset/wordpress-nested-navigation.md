@@ -7,6 +7,9 @@ now offers a translated nesting-level choice, and public menus use accessible
 nested lists on desktop and mobile. Existing owner menu labels and order stay
 intact; imported children join their matching parent.
 
+Cutover updates the business default language and rollback reverses the actual
+section language selected by the CMS fallback.
+
 Menu imports preserve grandchildren, category/tag destinations and ordinary
 query/fragment links. Private or vetoed imported pages do not advertise their
 labels at cutover. Rollback removes additions from the original nav block and

@@ -13,6 +13,7 @@ import { resetStorageForTests } from "@/adapters/storage";
 import { assets } from "@/core/media/schema";
 import { redirects } from "@/core/seo/schema";
 import { pages, sections } from "@/modules/cms/schema";
+import { updateBusiness } from "@/core/settings/service";
 import { ensureDefaults, updateSection } from "@/modules/cms/service";
 import { listBlogPosts } from "@/modules/cms/blog";
 import {
@@ -246,6 +247,24 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
     expect(await publishImport.call({ id: run.id }, OWNER)).toEqual(published);
     const rolled = await rollbackImport.call({ id: run.id }, OWNER);
     expect(await rollbackImport.call({ id: run.id }, OWNER)).toEqual(rolled);
+  });
+
+
+  it.each(["es", "fr", "ar"])("publishes into the site's %s source chrome and reverses that same locale", async locale => {
+    await updateBusiness.call({ name: "Localized source menu", country: "CA", baseCurrency: "CAD", timezone: "America/Vancouver", defaultLocale: locale, enabledLocales: ["en", locale] }, OWNER);
+    await ensureDefaults.call({ locale }, OWNER);
+    const run = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
+    await previewFromSource.call({ id: run.id, payload: FIXTURE }, OWNER);
+    await commitImport.call({ id: run.id }, OWNER); await reconcileImport.call({ id: run.id }, OWNER);
+    const published = await publishImport.call({ id: run.id }, OWNER);
+    expect(published.checkpoint).toMatchObject({ navApplied: { locale } });
+    const [english] = await db().select().from(sections).where(and(eq(sections.key, "nav"), eq(sections.locale, "en")));
+    expect(JSON.stringify(english!.blocks)).not.toContain("/about/team");
+    const [localized] = await db().select().from(sections).where(and(eq(sections.key, "nav"), eq(sections.locale, locale)));
+    expect(JSON.stringify(localized!.blocks)).toContain("/about/team");
+    await rollbackImport.call({ id: run.id }, OWNER);
+    const [reversed] = await db().select().from(sections).where(eq(sections.id, localized!.id));
+    expect(JSON.stringify(reversed!.blocks)).not.toContain("/about/team");
   });
 
   it("records a failed download and still lands the page without it", async () => {

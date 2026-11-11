@@ -5354,7 +5354,15 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   preserving owner-added descendants. Draft/vetoed imported destinations do
   not advertise their navigation labels. Repeated, cyclic, missing-parent,
   deeper-than-four and unresolved source relationships remain explicitly
-  reported. Qualification is in progress; C3.22 stays open for archive/generic
+  reported. Owner reports expose translated warning counts and details.
+  Cutover selects the business default locale and records the actual CMS
+  fallback section locale for reversal; three real localized publish/rollback
+  regressions failed before the repair and pass afterward.
+  Fifty-nine integrated PostgreSQL/native controls and a final 52-check
+  menu/WordPress/chrome/SDK run passed (overlapping counts); eight Chromium
+  journeys passed at 320px in all four locales with keyboard, actual bounds
+  and both-theme Axe. Build/artifact and fast gates passed. Evidence:
+  `deploy/import-navigation.md`. C3.22 stays open for archive/generic
   integration, large-source resumption and actual source-specific acceptance.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile

@@ -37,9 +37,25 @@ links after reversing the batch. Legacy import checkpoints retain their older
 label/address rollback matching. Publish/rollback terminal transitions lock the
 run, and successful retries leave the same stored result.
 
-Local source qualification currently includes 41 native/PostgreSQL controls:
-source hierarchy/taxonomy/link intent, schema and semantic rendering, matching
-owner parents, original-block ownership, private/vetoed labels, successful
-replays and existing chrome behavior. Production-browser, build and protected
-PR qualification are still in progress; no live cutover or stable acceptance
-is claimed by this record.
+Local source qualification passed 59 integrated PostgreSQL/native checks for
+menu planning, source discovery, exact import scopes, ownership, public privacy
+and SDK consistency. After adding the translated owner warning report, the
+final 52-check menu/WordPress/chrome/SDK run passed; these counts overlap.
+The additional three actual publish/rollback controls first failed because
+Spanish, French and Arabic businesses received English menu changes. Cutover
+now selects the business default language and records the actual CMS fallback
+section language so rollback reverses the section it changed.
+
+Eight actual Chromium journeys passed on separate fixture databases: English,
+Spanish, French and Arabic RTL; owner menu-level editing and its real audit;
+public parent/child structure; keyboard navigation; 320px control bounds;
+both-theme Axe scans; translated private-target warnings; and existing public
+source forms. The warning-only fixture seeds report metadata; the native tests
+exercise actual private-target cutover. English light, Arabic dark and Arabic
+owner-warning screenshots were visually inspected.
+
+The final production build and artifact scrub passed (18,783 files,
+228,090,157 bytes), along with type/lint/license/notes/plan and 368 contract
+checks (one deliberate skip). Protected PR and merge-queue qualification are
+still required. No live WordPress cutover, production rollout or stable
+acceptance is claimed by this record.
