@@ -167,3 +167,8 @@ ledger and paused card-trial activation, with synthetic provider HTTP responses.
 Nine new evidence checks failed on the earlier adapter before the repair.
 The lean final adapter/evidence run passed all 29 cases again. Public SDK
 generation passed all eight checks; no new public service or migration is added.
+The final build on protected core `1d6f1764` and standalone scrub checked 18,779
+files and 226,776,069 bytes without source or environment leakage. Final fast
+gates passed typechecking, lint, licensing, release notes, plan consistency
+and 368 contract checks with one deliberate skip. The evidence matrix retains
+369 rows × 12 criteria. These checks do not close C12.38 or C11.10.
