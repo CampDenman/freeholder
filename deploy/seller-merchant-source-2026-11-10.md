@@ -312,6 +312,15 @@ All new mutations now have precise four-locale request/outcome/recovery/cleanup
 labels; requesting setup no longer claims the trial started. The existing
 merchant fixture now supplies the actual expected durable proof shape and
 provider-shaped synthetic account IDs, preserving its account/seller isolation
-assertions. Final audit/translation controls passed35, four owner recovery
+assertions. Final audit/translation controls passed 35, four owner recovery
 journeys passed, and the four affected merchant journeys passed on the final
 artifact. These fixture states remain synthetic, not live provider acceptance.
+
+Archive/setup queue composition preserves both independent-review append
+sections. Against the computed automatic merge tree, only the resolved packet
+markers differ; runtime, SQL, SDK and locales are identical. The composed tree
+passed 21 live SDK/activity/bounded-identity checks, four owner locale journeys,
+all 373 contracts with one exclusion, full fast gates and a fresh production
+scrub of 20,327 files / 242,796,086 bytes. Migration70 remains byte-identical at the
+SHA-256 above. Fresh exact-head protected checks govern requeue; no gate is
+inherited from a differently composed head.
