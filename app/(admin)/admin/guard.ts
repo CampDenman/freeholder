@@ -17,7 +17,9 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { setupState } from "@/core/settings/service";
 import { env } from "@/core/env";
-import { hasModuleAccess, type Actor, type GrantAccess } from "@/core/service";
+import { hasModuleAccess, ServiceError, type Actor, type GrantAccess } from "@/core/service";
+import { listPluginExecutions, pluginNamespace } from "@/core/plugins/context";
+import { assertPluginCanRun } from "@/core/plugins/permission-policy";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
@@ -56,6 +58,15 @@ export async function requireStaffActor(
       redirect(`/admin/unavailable?module=${encodeURIComponent(module)}`);
     }
     redirect(`/admin?denied=${encodeURIComponent(module)}`);
+  }
+  const plugin = module ? listPluginExecutions().find(item => pluginNamespace(item.name) === module) : undefined;
+  if (plugin) {
+    try { await assertPluginCanRun(plugin); }
+    catch (error) {
+      if (!(error instanceof ServiceError) || !["permission", "conflict"].includes(error.code)) throw error;
+      if (actor.role === "owner") redirect(`/admin/plugins?review=${encodeURIComponent(plugin.name)}`);
+      redirect(`/admin?denied=${encodeURIComponent(module ?? plugin.name)}`);
+    }
   }
   return actor;
 }

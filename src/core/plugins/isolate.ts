@@ -14,15 +14,29 @@ export function isolatePlugins(
   manifests: ModuleManifest[],
   installedNames: readonly string[],
 ): IsolatedPlugin[] {
-  return manifests.map((manifest) => {
+  const isolated = manifests.map((manifest): IsolatedPlugin => {
     if (!isPluginManifest(manifest)) return { manifest };
     try {
+      if (manifests.some(other => other !== manifest && other.name === manifest.name)) throw new PluginContractError(`Plugin "${manifest.name}" uses a name already claimed by another module.`);
       assertPluginFitsInstance(manifest, { installed: installedNames });
       return { manifest };
     } catch (error) {
       return { manifest, error: isolateError(error) };
     }
   });
+  // A disabled dependency disables its plugin dependants too; otherwise
+  // topo-sort would turn one incompatible extension into a whole-site crash.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const disabled = new Set(isolated.filter(entry => entry.error).map(entry => entry.manifest.name));
+    for (const entry of isolated) {
+      if (entry.error || !isPluginManifest(entry.manifest)) continue;
+      const missing = entry.manifest.requires?.find(name => disabled.has(name));
+      if (missing) { entry.error = `Plugin dependency "${missing}" is disabled.`; changed = true; }
+    }
+  }
+  return isolated;
 }
 
 export function bootableManifests(isolated: IsolatedPlugin[]): ModuleManifest[] {

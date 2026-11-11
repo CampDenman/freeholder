@@ -151,6 +151,9 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "plugins.trustPublisherKey": "admin.activity.pluginPublisherTrusted",
   "plugins.revokePublisherKey": "admin.activity.pluginPublisherRevoked",
   "plugins.setRegistryPublisherKey": "admin.activity.pluginRegistryKeyChanged",
+  "plugins.approvePermissions": "admin.activity.pluginPermissionsApproved",
+  "plugins.revokePermissions": "admin.activity.pluginPermissionsRevoked",
+  "plugins.reportRuntimeFailure": "admin.activity.pluginRuntimeDisabled",
   "roles.create": "admin.activity.rolesChanged",
   "roles.update": "admin.activity.rolesChanged",
   "roles.delete": "admin.activity.rolesChanged",
@@ -372,6 +375,7 @@ export function ownerActivityLine(
   // work reads as "Freeholder updated…".
   if (entry.actor.startsWith("user:")) return t("admin.activity.teamUpdated", { area });
   if (entry.actor.startsWith("agent:")) return t("admin.activity.agentUpdated", { area });
+  if (entry.actor.startsWith("plugin:")) return t("admin.activity.pluginUpdated", { area, name: entry.actor.slice("plugin:".length) });
   if (entry.actor === "system" || entry.actor.startsWith("system:")) return t("admin.activity.platformUpdated", { area });
   return t("admin.activity.visitorUpdated", { area });
 }

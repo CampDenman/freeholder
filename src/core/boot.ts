@@ -7,10 +7,12 @@
 // folder, run before boot or by the test globalSetup), not per-module. Routes
 // are App Router files, while the HTTP/MCP registries derive from services.
 import { requireProductionEnv } from "@/core/env";
-import { subscribe } from "@/core/events";
+import { subscribe, type BusHandler } from "@/core/events";
 import { sortModules, type ModuleManifest } from "@/core/module";
 import { isolatePlugins, bootableManifests, isolatePluginLoad } from "@/core/plugins/isolate";
 import { isPluginManifest } from "@/core/plugin";
+import { bindPluginBlock, bindPluginService, disablePluginAtBoot, pluginBlockOwner, pluginFailedAtBoot, pluginServiceOwner, registerPluginExecution, resetPluginExecutionsForTests } from "@/core/plugins/context";
+import { pluginJob, pluginListener, resetPluginRuntimeForTests } from "@/core/plugins/runtime";
 import { registerService, type Service } from "@/core/service";
 import { installAbuseRecorder } from "@/core/media/abuse-evidence";
 import { registerDeclaredEvents } from "@/core/events/catalogue";
@@ -27,6 +29,7 @@ import {
  * the instance that swallowed one took a diagnostic job to find.
  */
 function recordDisabled(report: BootReport, module: string, reason: string): void {
+  disablePluginAtBoot(module);
   report.disabled.push({ module, reason });
   console.error(`[freeholder] plugin disabled: ${module}: ${reason}`);
 }
@@ -76,6 +79,7 @@ async function wireManifest(
   manifest: ModuleManifest,
   report: BootReport,
 ): Promise<void> {
+  const plugin = isPluginManifest(manifest) ? registerPluginExecution({ name: manifest.name, version: manifest.version, permissions: manifest.permissions }) : undefined;
   if (manifest.blocks) {
     const loaded = await manifest.blocks();
     const exported = loaded.default;
@@ -84,8 +88,14 @@ async function wireManifest(
         `module "${manifest.name}" declares blocks, but its blocks module has no default export array. Export them as \`export default [ ... ]\`.`,
       );
     }
-    const { registerBlock } = await import("@/modules/cms/blocks/registry");
+    const { getBlock, registerBlock } = await import("@/modules/cms/blocks/registry");
     for (const block of exported) {
+      if (plugin) {
+        const definition = block as Parameters<typeof registerBlock>[0];
+        const existing = getBlock(definition.type);
+        if (existing && pluginBlockOwner(existing)?.name !== plugin.name) throw new Error("A plugin cannot claim another module's block.");
+        bindPluginBlock(definition, plugin);
+      }
       registerBlock(block as Parameters<typeof registerBlock>[0]);
       report.blocks.push((block as { type: string }).type);
     }
@@ -101,7 +111,8 @@ async function wireManifest(
     }
     const { registerJob } = await import("@/core/jobs");
     for (const job of exported) {
-      registerJob(job as Parameters<typeof registerJob>[0]);
+      const definition = job as Parameters<typeof registerJob>[0];
+      registerJob(plugin ? pluginJob(plugin, definition) : definition);
       report.jobs.push((job as { name: string }).name);
     }
   }
@@ -120,6 +131,12 @@ async function wireManifest(
         throw new Error(
           `module "${manifest.name}" exports something that is not a service. Every entry must come from defineService().`,
         );
+      }
+      if (plugin) {
+        const { listServices } = await import("@/core/service");
+        const existing = listServices().get(service.def.name);
+        if (existing && pluginServiceOwner(existing.def)?.name !== plugin.name) throw new Error("A plugin cannot claim another module's service.");
+        bindPluginService(service.def, plugin);
       }
       registerService(service);
       report.services.push(service.def.name);
@@ -143,7 +160,8 @@ async function wireManifest(
     subscribe(
       event,
       `${manifest.name}:${event}:${handlerName}`,
-      handler as (payload: unknown) => void | Promise<void>,
+      plugin ? pluginListener(plugin, handler as BusHandler) : handler as (payload: unknown) => void | Promise<void>,
+      plugin,
     );
     report.listeners.push({
       event,
@@ -193,6 +211,14 @@ export async function boot(
     recordDisabled(report, failed.manifest.name, failed.error ?? "unknown");
   }
   for (const manifest of sortModules(bootableManifests(isolated))) {
+    const failedDependency = manifest.requires?.find(pluginFailedAtBoot);
+    if (failedDependency) {
+      const reason = `Required plugin "${failedDependency}" failed to load.`;
+      if (!isPluginManifest(manifest)) throw new Error(reason);
+      report.modules.push(`${manifest.name} (disabled: ${reason})`);
+      recordDisabled(report, manifest.name, reason);
+      continue;
+    }
     const wired = await isolatePluginLoad(manifest.name, () =>
       wireManifest(manifest, report),
     );
@@ -231,4 +257,6 @@ export function bootOnce(manifests: ModuleManifest[]): Promise<BootReport> {
 export function resetBootForTests(): void {
   booted = undefined;
   resetOnboardingRegistryForTests();
+  resetPluginExecutionsForTests();
+  resetPluginRuntimeForTests();
 }

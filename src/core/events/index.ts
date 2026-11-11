@@ -7,6 +7,7 @@
 // never observes state that later rolled back.
 import { timelineEvents } from "@/core/contacts/schema";
 import type { Tx } from "@/core/service";
+import { withPlatformExecution, type PluginExecution } from "@/core/plugins/context";
 
 export interface TimelineEventInput {
   contactId: string;
@@ -57,6 +58,7 @@ export type BusHandler = (
 export interface BusListener {
   id: string;
   handler: BusHandler;
+  plugin?: PluginExecution;
 }
 
 const listeners = new Map<string, BusListener[]>();
@@ -77,6 +79,7 @@ export function subscribe(
   eventName: string,
   listenerId: string,
   handler: BusHandler,
+  plugin?: PluginExecution,
 ): void {
   if (listenerId.trim().length === 0) {
     throw new Error("event listener id cannot be blank");
@@ -89,7 +92,7 @@ export function subscribe(
       `event listener "${listenerId}" is registered twice for "${eventName}"`,
     );
   }
-  existing.push({ id: listenerId, handler });
+  existing.push({ id: listenerId, handler, plugin });
   listeners.set(eventName, existing);
 }
 
@@ -109,7 +112,11 @@ export async function runEventListener(
   payload: unknown,
   context: EventDeliveryContext,
 ): Promise<void> {
-  await listener.handler(payload, eventName, context);
+  // A core callback starts its own post-commit operation. A plugin that
+  // caused the event cannot lend it execution authority or audit identity.
+  // Plugin listeners retain their own manifest-bound runtime wrapper.
+  if (listener.plugin) await listener.handler(payload, eventName, context);
+  else await withPlatformExecution(() => listener.handler(payload, eventName, context));
 }
 
 /** Fan out a committed event. Listener failures are isolated, not fatal. */
@@ -119,7 +126,7 @@ export async function publish(
 ): Promise<void> {
   for (const listener of eventListeners(eventName)) {
     try {
-      await listener.handler(payload, eventName, {
+      await runEventListener(listener, eventName, payload, {
         listenerId: listener.id,
         attempt: 0,
         replay: false,

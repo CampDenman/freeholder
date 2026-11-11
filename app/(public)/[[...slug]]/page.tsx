@@ -20,7 +20,7 @@ import { cookies, headers } from "next/headers";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import { setupState } from "@/core/settings/service";
-import { collectJsonLd } from "@/modules/cms/blocks/registry";
+import { collectPageJsonLd } from "@/modules/cms/blocks/registry";
 import { renderBlocks } from "@/modules/cms/render";
 import { decodeFormReturn, FORM_RETURN_COOKIE } from "@/core/http/public-form-return";
 import type { BlockNode } from "@/modules/cms/blocks/types";
@@ -423,7 +423,7 @@ export default async function PublicPage({
       providerName: facts?.name ?? null,
       updatedAt: page.updatedAt,
     })),
-    ...collectJsonLd(blocks),
+    ...await collectPageJsonLd(blocks),
   ];
 
   return (

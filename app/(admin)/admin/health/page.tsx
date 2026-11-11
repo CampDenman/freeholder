@@ -35,6 +35,8 @@ function localized(
 ): DoctorCheck {
   const params = check.message?.params ?? {};
   switch (check.message?.key) {
+    case "doctor.pluginPermissions.review":
+      return { ...check, title: t("doctor.pluginPermissions.title"), detail: t("doctor.pluginPermissions.review", params), remedy: t("doctor.pluginPermissions.remedy") };
     case "doctor.pluginTrust.failed":
       return { ...check, title: t("doctor.pluginTrust.title"), detail: t("doctor.pluginTrust.failed", params), remedy: t("doctor.pluginTrust.remedy") };
     case "doctor.timeZone.agree":

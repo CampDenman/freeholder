@@ -48,6 +48,7 @@ export interface PrintifyOrderStatus {
 }
 
 export class PrintifyError extends Error {
+  readonly pluginOperationalFailure = true;
   constructor(message: string, readonly retryable = false) {
     super(message);
     this.name = "PrintifyError";

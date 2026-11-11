@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Installed plugins and import runs (C3.09, C3.11, C3.23).
 import {
+  check,
   index,
   jsonb,
   pgTable,
@@ -10,6 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 export const PLUGIN_STATUSES = ["installed", "enabled", "disabled"] as const;
@@ -63,6 +65,22 @@ export const pluginPublisherKeys = pgTable("plugin_publisher_keys", {
   createdAt: createdAtColumn(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 });
+
+/** Owner consent covers an exact set of scopes, never an API-key approval. */
+export const pluginPermissionConsents = pgTable("plugin_permission_consents", {
+  name: text("name").primaryKey(),
+  scopeHash: text("scope_hash").notNull(),
+  permissions: jsonb("permissions").notNull(),
+  reviewedVersion: text("reviewed_version").notNull(),
+  approvedBy: text("approved_by").notNull(),
+  approvedAt: timestamp("approved_at", { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  runtimeDisabledAt: timestamp("runtime_disabled_at", { withTimezone: true }),
+  disabledReason: text("disabled_reason"),
+}, (t) => [
+  check("plugin_permission_consents_scope_hash_check", sql`${t.scopeHash} ~ '^[a-f0-9]{64}$'`),
+  check("plugin_permission_consents_permissions_check", sql`jsonb_typeof(${t.permissions}) = 'array'`),
+]);
 
 export const pluginRegistries = pgTable(
   "plugin_registries",

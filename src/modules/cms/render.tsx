@@ -7,7 +7,10 @@
 // client component anywhere in this path and no hydration step between an
 // owner publishing and a crawler reading. That is also what makes the SEO gate
 // checkable — what the crawler sees is what this function returned.
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { pluginBlockOwner, withCoreExecution } from "@/core/plugins/context";
+import { runPluginContribution } from "@/core/plugins/runtime";
+import { PluginWidgetBoundary } from "@/core/plugins/WidgetBoundary";
 import { getBlock } from "./blocks/registry";
 import type { BlockNode, BlockRenderContext } from "./blocks/types";
 
@@ -27,6 +30,23 @@ export async function renderBlocks(
 }
 
 async function renderBlock(
+  node: BlockNode,
+  ctx: BlockRenderContext,
+): Promise<ReactNode> {
+  const definition = getBlock(node.type);
+  const plugin = definition ? pluginBlockOwner(definition) : undefined;
+  if (!plugin || !definition) return withCoreExecution(() => renderBlockContents(node, ctx));
+  const unavailable = <div data-plugin-unavailable="" role="status" className="rounded-md border border-rule bg-paper p-3 text-sm text-ink-muted">{ctx.t("plugins.widget.unavailable")}{ctx.identifyBlocks ? <a href="/admin/plugins" className="ms-2 text-accent underline">{ctx.t("plugins.widget.manage")}</a> : null}</div>;
+  try {
+    const rendered = await runPluginContribution(plugin, async () => {
+      const props = definition.schema.parse(node.props) as Record<string, unknown>;
+      return renderBlockContents({ ...node, props }, ctx);
+    });
+    return <PluginWidgetBoundary key={`${plugin.name}:${plugin.version}:${node.id}`} fallback={unavailable}><Suspense fallback={<p role="status" className="text-sm text-ink-muted">{ctx.t("plugins.widget.loading")}</p>}>{rendered}</Suspense></PluginWidgetBoundary>;
+  } catch { return unavailable; }
+}
+
+async function renderBlockContents(
   node: BlockNode,
   ctx: BlockRenderContext,
 ): Promise<ReactNode> {

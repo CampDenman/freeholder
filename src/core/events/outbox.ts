@@ -50,9 +50,20 @@ export async function enqueue(
   eventName: string,
   payload: unknown,
 ): Promise<string> {
+  const inactivePluginListeners: string[] = [];
+  const { assertPluginCanRun } = await import("@/core/plugins/permission-policy");
+  const { ServiceError } = await import("@/core/service");
+  for (const listener of eventListeners(eventName)) {
+    if (!listener.plugin) continue;
+    try { await assertPluginCanRun(listener.plugin, tx); }
+    catch (error) {
+      if (error instanceof ServiceError && ["permission", "conflict"].includes(error.code)) inactivePluginListeners.push(listener.id);
+      else throw error;
+    }
+  }
   const [row] = await tx
     .insert(outboxEvents)
-    .values({ eventName, payload: payload ?? {} })
+    .values({ eventName, payload: payload ?? {}, inactivePluginListeners })
     .returning({ id: outboxEvents.id });
   return row!.id;
 }
@@ -276,11 +287,11 @@ export async function deliverOutboxEvent(event: StoredEvent): Promise<void> {
     .where(
       and(eq(outboxEvents.id, event.id), eq(outboxEvents.status, "pending")),
     )
-    .returning({ attempts: outboxEvents.attempts });
+    .returning({ attempts: outboxEvents.attempts, inactivePluginListeners: outboxEvents.inactivePluginListeners });
   if (!attempted) return;
-  event = { ...event, attempts: attempted.attempts };
+  event = { ...event, attempts: attempted.attempts, inactivePluginListeners: attempted.inactivePluginListeners };
 
-  const registered = eventListeners(event.eventName);
+  const registered = eventListeners(event.eventName).filter(listener => !event.inactivePluginListeners.includes(listener.id));
   if (registered.length > 0) {
     await db()
       .insert(outboxEventDeliveries)
@@ -298,6 +309,11 @@ export async function deliverOutboxEvent(event: StoredEvent): Promise<void> {
     .from(outboxEventDeliveries)
     .where(eq(outboxEventDeliveries.eventId, event.id));
   const byId = new Map(registered.map((listener) => [listener.id, listener]));
+  if (registered.length === 0 && deliveryRows.length === 0 && event.inactivePluginListeners.length > 0) {
+    await db().update(outboxEvents).set({ status: "dispatched", dispatchedAt: new Date(), deadLetteredAt: null, lastError: null })
+      .where(and(eq(outboxEvents.id, event.id), eq(outboxEvents.status, "pending")));
+    return;
+  }
   await Promise.all(
     deliveryRows.map((delivery) =>
       runDelivery(event, delivery, byId.get(delivery.listenerId)),
@@ -321,6 +337,7 @@ export async function dispatchNow(
       replayCount: 0,
       lastError: null,
       createdAt: new Date(),
+      inactivePluginListeners: [],
     };
     try {
       await deliverOutboxEvent(stored);

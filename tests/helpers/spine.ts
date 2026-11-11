@@ -10,6 +10,7 @@ import manifests from "@/modules";
 import type { Actor, ServiceError } from "@/core/service";
 import { seedDefaultRoles } from "@/core/roles/defaults";
 import { seedCoreGuidanceFlows } from "@/core/guidance/definitions";
+import { seedReviewedBuiltinPlugins } from "./plugin-consent";
 
 export const hasDatabase = Boolean(process.env.DATABASE_URL);
 
@@ -87,6 +88,7 @@ export async function truncateSpine(): Promise<void> {
     );
     await seedDefaultRoles(tx);
     await seedCoreGuidanceFlows(tx);
+    await seedReviewedBuiltinPlugins(tx, `user:${OWNER.userId}`);
   });
 }
 

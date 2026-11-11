@@ -54,6 +54,8 @@ export const outboxEvents = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     eventName: text("event_name").notNull(),
     payload: jsonb("payload").notNull().default({}),
+    /** Inactive plugin subscribers were not enrolled when this event committed. */
+    inactivePluginListeners: jsonb("inactive_plugin_listeners").$type<string[]>().notNull().default([]),
     status: text("status", {
       enum: ["pending", "dispatched", "dead_letter"],
     }).notNull().default("pending"),
@@ -74,6 +76,7 @@ export const outboxEvents = pgTable(
     // The sweeper's query: due pending work, oldest first.
     index("outbox_pending_idx").on(t.status, t.nextAttemptAt, t.createdAt),
     index("outbox_dead_letter_idx").on(t.status, t.deadLetteredAt),
+    check("outbox_events_inactive_plugin_listeners_check", sql`jsonb_typeof(${t.inactivePluginListeners}) = 'array'`),
     check("outbox_events_status_check", sql`${t.status} in ('pending', 'dispatched', 'dead_letter')`),
     check("outbox_events_attempts_nonnegative", sql`${t.attempts} >= 0`),
     check("outbox_events_replay_count_nonnegative", sql`${t.replayCount} >= 0`),

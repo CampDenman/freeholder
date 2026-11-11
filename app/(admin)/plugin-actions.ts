@@ -20,6 +20,7 @@ import {
   updatePlugin,
 } from "@/core/plugins/service";
 import { revokePublisherKey, setRegistryPublisherKey, trustPublisherKey } from "@/core/plugins/publisher-keys";
+import { approvePluginPermissions, revokePluginPermissions } from "@/core/plugins/permissions";
 
 export interface PluginActionState {
   error?: string;
@@ -180,4 +181,20 @@ export async function cachePluginRegistryAction(_prev: PluginActionState, form: 
   } catch {
     return { error: t("plugins.catalogRefusal") };
   }
+}
+
+async function permissionChange(work: () => Promise<unknown>): Promise<PluginActionState> {
+  const t = await getT();
+  try { await work(); revalidatePath("/admin/plugins"); return { saved: true }; }
+  catch (error) { return { error: t(error instanceof ServiceError && error.code === "step_up_required" ? "plugins.permissions.verify" : "plugins.permissions.error") }; }
+}
+
+export async function approvePluginPermissionsAction(_prev: PluginActionState, form: FormData): Promise<PluginActionState> {
+  const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+  return permissionChange(() => approvePluginPermissions.call({ name: text(form, "name"), scopeHash: text(form, "scopeHash"), confirmation: form.get("confirmation") === "on" }, actor));
+}
+
+export async function revokePluginPermissionsAction(_prev: PluginActionState, form: FormData): Promise<PluginActionState> {
+  const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+  return permissionChange(() => revokePluginPermissions.call({ name: text(form, "name"), confirmation: form.get("confirmation") === "on" }, actor));
 }

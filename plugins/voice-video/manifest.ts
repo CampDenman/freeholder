@@ -8,7 +8,7 @@ export default definePlugin({
   version: "0.1.0",
   freeholder: "^0.2.0",
   license: "Apache-2.0",
-  permissions: ["contacts:read", "network:external"],
+  permissions: ["contacts:read", "conversations:write", "media:write", "privacy:write", "network:external"],
   requires: ["core"],
   migrations: ["0000_reviewed-baseline.sql", "0002_voice_video_rooms.sql", "0009_daily_voice_video.sql", "0012_owner_storage_refunds.sql", "0019_paradise_voice_video.sql"],
   /**

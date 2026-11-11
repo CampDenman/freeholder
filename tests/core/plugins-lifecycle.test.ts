@@ -19,6 +19,8 @@ import {
 } from "@/core/plugins/service";
 import { signRegistryIndex, type RegistryIndex } from "@/core/plugins/registry";
 import { hashDirectory, publisherPublicKey, signIntegrity } from "@/core/plugins/integrity";
+import { approvePluginPermissions } from "@/core/plugins/permissions";
+import { pluginScopeHash } from "@/core/plugins/permission-policy";
 import { trustPublisherKey } from "@/core/plugins/publisher-keys";
 import { isolatePlugins } from "@/core/plugins/isolate";
 import { definePlugin } from "@freeholder/plugin-kit";
@@ -94,6 +96,7 @@ describe.runIf(hasDatabase)("plugin lifecycle", { timeout: 30_000 }, () => {
     );
     expect(installed.status).toBe("installed");
     expect(installed.integrity).toBe(integrity);
+    await approvePluginPermissions.call({ name: "sample", scopeHash: pluginScopeHash("sample", ["cms:view"]), confirmation: true }, REVIEWER);
     const enabled = await enablePlugin.call({ name: "sample" }, OWNER);
     expect(enabled.status).toBe("enabled");
     const disabled = await disablePlugin.call({ name: "sample", reason: "trying isolation" }, OWNER);

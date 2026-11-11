@@ -7,6 +7,7 @@
 export const DEFAULT_JSON_BODY_LIMIT = 1024 * 1024;
 
 export class RequestBodyError extends Error {
+  readonly pluginOperationalFailure = true;
   constructor(
     public readonly status: 400 | 411 | 413,
     message: string,

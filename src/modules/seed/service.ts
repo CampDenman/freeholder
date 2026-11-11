@@ -16,6 +16,8 @@ import { z } from "zod";
 import sharp from "sharp";
 import { count } from "drizzle-orm";
 import { defineOrchestratedService, defineService, ServiceError } from "@/core/service";
+import { env } from "@/core/env";
+import { seedDemoPluginPermissions } from "@/core/plugins/permissions";
 import { pages } from "@/modules/cms/schema";
 import { updateBusiness, completeSetup } from "@/core/settings/service";
 import { uploadAsset } from "@/core/media/service";
@@ -87,6 +89,7 @@ const installDemoApply = defineService({
     const { BUSINESS, LOCATION, HOURS, FORMS, PAGES, TRANSLATIONS, header, nav, footer } =
       pack;
     const assets = input.assets;
+    if (env().FREEHOLDER_PLAYGROUND === "1") await ctx.callAsSystem(seedDemoPluginPermissions, {});
 
     await ctx.callAsSystem(updateBusiness, BUSINESS);
 

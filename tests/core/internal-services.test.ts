@@ -37,6 +37,8 @@ const INTERNAL = [
   // (2026-10-23 review), never a person or an agent with demo access.
   "demo.installBusy",
   "forms.purgeExpired",
+  "plugins.reportRuntimeFailure",
+  "plugins.seedDemoPermissions",
   "popups.purgeExpired",
   "segments.purgeExpired",
   "views.purgeExpired",
@@ -208,6 +210,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "cms.resolvePageForRender",
   "collections.purgeExpired",
   "forms.purgeExpired",
+  "plugins.reportRuntimeFailure",
+  "plugins.seedDemoPermissions",
   "popups.purgeExpired",
   "segments.purgeExpired",
   "views.purgeExpired",

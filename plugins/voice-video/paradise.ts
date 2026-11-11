@@ -19,6 +19,7 @@ export interface ParadiseConfiguration {
 }
 
 export class ParadiseError extends Error {
+  readonly pluginOperationalFailure = true;
   constructor(
     message: string,
     readonly status?: number,
