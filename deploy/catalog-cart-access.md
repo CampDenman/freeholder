@@ -57,3 +57,8 @@ guest storefront email-verification/checkout journey. The first browser run
 also found an existing unlabeled per-line quantity input; its accessible label
 now uses translated quantity text and the product/sku. No real payment provider
 transaction or launch acceptance is claimed by these source checks.
+
+The photograph-line follow-up keeps one stock hold per variant/location while
+retaining distinct photo lines through editing, merging and named snapshots.
+See `deploy/cart-photo-stock-2026-11-11.md` for the reproduced failures,
+parent-context boundary and renewed qualification.

@@ -81,6 +81,7 @@ export default async function CartDetailPage({
                       <input type="hidden" name="intent" value="setCartQty" />
                       <input type="hidden" name="cartId" value={basket.cart.id} />
                       <input type="hidden" name="variantId" value={line.variantId} />
+                      <input type="hidden" name="lineId" value={line.id} />
                       <input type="hidden" name="returnTo" value={`/admin/carts/${basket.cart.id}`} />
                       <Input name="quantity" aria-label={`${t("catalog.carts.quantity")}: ${line.productName} (${line.sku})`} inputMode="numeric" defaultValue={String(line.quantity)} className="w-20" />
                       <Button type="submit">{t("catalog.carts.quantity")}</Button>

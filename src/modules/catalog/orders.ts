@@ -3,8 +3,8 @@
 // Orders and checkout from a cart (C5.21, C5.22).
 //
 // Checkout creates the order and the invoice in one transaction. Payment
-// settlement stays on the invoicing module; paying the order consumes stock
-// holds. Fulfillment shipments are C5.19.
+// settlement stays on the invoicing module; paying extends stock holds.
+// Physical stock is consumed when C5.19 fulfillment shipments leave.
 
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -26,6 +26,7 @@ import {
 } from "@/modules/invoicing/invoice-service";
 import { ORDER_STATUSES } from "./contract";
 import { releaseReservation, reserveStock } from "./inventory";
+import { aggregateStockLines, releaseCartStock } from "./cart-stock";
 import { attachCartToContact, getCart, requireContactAuthority } from "./cart";
 import { quoteShipping } from "./shipping";
 import { issuePass } from "@/core/entitlements/service";
@@ -174,6 +175,12 @@ export const checkoutCart = defineService({
     // and composes through ctx.callAsSystem.
     requireContactAuthority(ctx, "catalog.checkoutCart");
     let basket = await ctx.callAsSystem(getCart, { cartId: input.cartId });
+    if (basket.cart.status === "open" && basket.cart.kind === "cart" && !basket.cart.contactId) {
+      if (!basket.cart.token) throw new ServiceError("conflict", "The checked-out cart has no private token.");
+      basket = await ctx.callAsSystem(attachCartToContact, { token: basket.cart.token, contactId: input.contactId });
+    }
+    await ctx.tx.select({ id: carts.id }).from(carts).where(eq(carts.id, basket.cart.id)).for("update");
+    basket = await ctx.callAsSystem(getCart, { cartId: basket.cart.id });
     if (basket.cart.status === "converted") {
       const [existing] = await ctx.tx.select().from(orders).where(eq(orders.cartId, basket.cart.id)).limit(1);
       if (existing) return ctx.callAsSystem(getOrder, { id: existing.id });
@@ -184,13 +191,6 @@ export const checkoutCart = defineService({
     }
     if (basket.cart.contactId && basket.cart.contactId !== input.contactId) {
       throw new ServiceError("conflict", "That cart belongs to a different contact.");
-    }
-    if (!basket.cart.contactId) {
-      if (!basket.cart.token) throw new ServiceError("conflict", "The checked-out cart has no private token.");
-      basket = await ctx.callAsSystem(attachCartToContact, {
-        token: basket.cart.token,
-        contactId: input.contactId,
-      });
     }
     if (basket.lines.length === 0) {
       throw new ServiceError("validation", "The cart is empty.");
@@ -464,24 +464,16 @@ export const checkoutCart = defineService({
       await ctx.call(payOrder, { id: order!.id });
     }
 
-    for (const line of basket.lines) {
-      if (line.reservationId) {
-        try {
-          await ctx.callAsSystem(releaseReservation, { id: line.reservationId });
-        } catch {
-          /* already gone */
-        }
-      }
-      if (line.locationId) {
+    await releaseCartStock(ctx, basket.cart.id);
+    for (const group of aggregateStockLines(basket.lines)) {
         await ctx.callAsSystem(reserveStock, {
-          variantId: line.variantId,
-          locationId: line.locationId,
-          quantity: line.quantity,
+          variantId: group.variantId,
+          locationId: group.locationId!,
+          quantity: group.quantity,
           holderType: "order",
           holderId: order!.id,
           expiresAt: new Date(Date.now() + (issued.invoice.paidMinor > 0 ? 30 : 7) * 86_400_000),
         });
-      }
     }
 
     await ctx.tx

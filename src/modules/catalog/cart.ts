@@ -24,7 +24,8 @@ import {
 } from "@/core/service";
 import { managesCartTokens, requireCartAccess, requireOwnedContact, shopperClientKey } from "./cart-access";
 import { CART_KINDS, CART_STATUSES } from "./contract";
-import { availabilityForCart, releaseReservation, reserveStock } from "./inventory";
+import { availabilityForCart } from "./inventory";
+import { lockCartStock, mergeCartStock, reconcileCartStock, releaseCartStock } from "./cart-stock";
 import { resolvePrice } from "./pricing";
 import { cartItems, carts, productVariants, products, wishlistItems, wishlists } from "./schema";
 import { assertSellable } from "./market";
@@ -32,7 +33,6 @@ import { hashCatalogShareToken, newCatalogShareToken } from "./tokens";
 
 const id = z.string().uuid();
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
-const CART_HOLD_MS = 30 * 60 * 1000;
 const ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
 
 const cartRow = row({
@@ -111,18 +111,22 @@ const wishlistItemRow = row({
   productName: z.string(),
 });
 
+async function lockCartRows(tx: Tx, ids: string[]) {
+  if (ids.length) await tx.select({ id: carts.id }).from(carts).where(inArray(carts.id, [...new Set(ids)])).orderBy(asc(carts.id)).for("update");
+}
+
 async function mergeCartLines(tx: Tx, fromCartId: string, toCartId: string) {
   const incoming = await tx.select().from(cartItems).where(eq(cartItems.cartId, fromCartId));
   for (const line of incoming) {
     const [already] = await tx
       .select()
       .from(cartItems)
-      .where(and(eq(cartItems.cartId, toCartId), eq(cartItems.variantId, line.variantId)))
+      .where(and(eq(cartItems.cartId, toCartId), eq(cartItems.variantId, line.variantId), line.assetId ? eq(cartItems.assetId, line.assetId) : isNull(cartItems.assetId)))
       .limit(1);
     if (already) {
       await tx
         .update(cartItems)
-        .set({ quantity: already.quantity + line.quantity, updatedAt: sql`now()` })
+        .set({ quantity: already.quantity + line.quantity, locationId: already.locationId ?? line.locationId, updatedAt: sql`now()` })
         .where(eq(cartItems.id, already.id));
       await tx.delete(cartItems).where(eq(cartItems.id, line.id));
     } else {
@@ -133,7 +137,11 @@ async function mergeCartLines(tx: Tx, fromCartId: string, toCartId: string) {
 
 registerContactReference({
   table: "carts",
-  repoint: async (tx, from, to) => {
+  repoint: async (tx, from, to, context) => {
+    if (context && context.tx !== tx) throw new ServiceError("internal", "The contact merge transaction does not match its service context.");
+    const affected = await tx.select({ id: carts.id }).from(carts).where(inArray(carts.contactId, [from, to]));
+    await lockCartRows(tx, affected.map(cart => cart.id));
+    if (context) await lockCartStock(context, affected.map(cart => cart.id));
     const incoming = await tx.select().from(carts).where(eq(carts.contactId, from));
     const openTargets = await tx
       .select()
@@ -143,7 +151,9 @@ registerContactReference({
     for (const cart of incoming) {
       const target = cart.status === "open" && cart.kind === "cart" ? byCurrency.get(cart.currency) : undefined;
       if (target) {
+        if (!context) throw new ServiceError("internal", "Merging cart stock requires its transactional service context.");
         await mergeCartLines(tx, cart.id, target.id);
+        await mergeCartStock(context, cart.id, target.id);
         await tx
           .update(carts)
           .set({ status: "converted", contactId: to, updatedAt: sql`now()` })
@@ -273,18 +283,6 @@ async function loadCart(tx: Tx, cartId: string) {
   return cart;
 }
 
-async function releaseLineHold(
-  ctx: { callAsSystem: (service: typeof releaseReservation, input: { id: string }) => Promise<unknown> },
-  reservationId: string | null,
-) {
-  if (!reservationId) return;
-  try {
-    await ctx.callAsSystem(releaseReservation, { id: reservationId });
-  } catch {
-    // Already expired, consumed or released — the next reserve is authoritative.
-  }
-}
-
 export const getOrCreateCart = defineService({
   name: "catalog.getOrCreateCart",
   summary: "Open a guest or authorized contact cart and issue its private access token.",
@@ -360,11 +358,11 @@ export const attachCartToContact = defineService({
   handler: async (input, ctx) => {
     const own = await requireOwnedContact(ctx, input.contactId, "catalog.attachCartToContact", "mutation");
     await requireContact(ctx.tx, input.contactId);
-    const [guest] = await ctx.tx.select().from(carts).where(eq(carts.token, input.token)).limit(1);
+    let [guest] = await ctx.tx.select().from(carts).where(eq(carts.token, input.token)).limit(1);
     if (!guest || guest.status !== "open" || guest.kind !== "cart") {
       throw new ServiceError("not_found", "That guest cart is not here.");
     }
-    const [owned] = await ctx.tx
+    let [owned] = await ctx.tx
       .select()
       .from(carts)
       .where(
@@ -377,6 +375,13 @@ export const attachCartToContact = defineService({
         ),
       )
       .limit(1);
+    await lockCartRows(ctx.tx, [guest.id, ...(owned ? [owned.id] : [])]);
+    [guest] = await ctx.tx.select().from(carts).where(eq(carts.id, guest.id)).limit(1);
+    if (!guest || guest.token !== input.token || guest.status !== "open" || guest.kind !== "cart") throw new ServiceError("conflict", "That guest cart changed; try again.");
+    if (owned) {
+      [owned] = await ctx.tx.select().from(carts).where(eq(carts.id, owned.id)).limit(1);
+      if (!owned || owned.contactId !== input.contactId || owned.status !== "open" || owned.kind !== "cart" || owned.currency !== guest.currency) throw new ServiceError("conflict", "The saved cart changed; try again.");
+    }
     if (!owned) {
       await ctx.tx
         .update(carts)
@@ -384,29 +389,8 @@ export const attachCartToContact = defineService({
         .where(eq(carts.id, guest.id));
       return projectCart(ctx, guest.id, own);
     }
-    const incoming = await ctx.tx.select().from(cartItems).where(eq(cartItems.cartId, guest.id));
-    for (const line of incoming) {
-      const [already] = await ctx.tx
-        .select()
-        .from(cartItems)
-        .where(and(eq(cartItems.cartId, owned.id), eq(cartItems.variantId, line.variantId)))
-        .limit(1);
-      if (already) {
-        await releaseLineHold(ctx, line.reservationId);
-        await ctx.tx.delete(cartItems).where(eq(cartItems.id, line.id));
-        await ctx.callAsSystem(addCartItem, {
-          cartId: owned.id,
-          variantId: line.variantId,
-          quantity: line.quantity,
-          locationId: line.locationId ?? already.locationId ?? undefined,
-        });
-      } else {
-        await ctx.tx
-          .update(cartItems)
-          .set({ cartId: owned.id, updatedAt: sql`now()` })
-          .where(eq(cartItems.id, line.id));
-      }
-    }
+    await mergeCartLines(ctx.tx, guest.id, owned.id);
+    await mergeCartStock(ctx, guest.id, owned.id);
     await ctx.tx
       .update(carts)
       .set({ status: "converted", contactId: input.contactId, updatedAt: sql`now()` })
@@ -494,23 +478,10 @@ export const addCartItem = defineService({
         throw new ServiceError("validation", "There is not enough stock to add that quantity.");
       }
     }
-    await releaseLineHold(ctx, existing?.reservationId ?? null);
-    let reservationId: string | null = null;
-    if (locationId) {
-      const hold = await ctx.callAsSystem(reserveStock, {
-        variantId: input.variantId,
-        locationId,
-        quantity: nextQty,
-        holderType: "cart" as const,
-        holderId: cart.id,
-        expiresAt: new Date(Date.now() + CART_HOLD_MS),
-      });
-      reservationId = hold.reservation?.id ?? null;
-    }
     if (existing) {
       await ctx.tx
         .update(cartItems)
-        .set({ quantity: nextQty, locationId, reservationId, updatedAt: sql`now()` })
+        .set({ quantity: nextQty, locationId, updatedAt: sql`now()` })
         .where(eq(cartItems.id, existing.id));
     } else {
       await ctx.tx.insert(cartItems).values({
@@ -518,11 +489,11 @@ export const addCartItem = defineService({
         variantId: input.variantId,
         quantity: nextQty,
         locationId,
-        reservationId,
         galleryId: input.galleryId ?? null,
         assetId: input.assetId ?? null,
       });
     }
+    await reconcileCartStock(ctx, cart.id, [input.variantId]);
     await ctx.tx
       .update(carts)
       .set({ lastActivityAt: sql`now()`, updatedAt: sql`now()` })
@@ -542,6 +513,7 @@ export const setCartItemQuantity = defineService({
     cartId: id,
     cartToken: z.string().uuid().optional(),
     variantId: id,
+    lineId: id.optional(),
     quantity: z.number().int().min(0).max(1_000_000),
     locationId: id.optional(),
   }),
@@ -550,44 +522,37 @@ export const setCartItemQuantity = defineService({
     const access = await requireCartAccess(ctx, input, "catalog.setCartItemQuantity", "mutation");
     if (access.cart.status !== "open") throw new ServiceError("conflict", "That cart is no longer open.");
     if (input.quantity === 0) {
-      await ctx.callAsSystem(removeCartItem, { cartId: input.cartId, variantId: input.variantId });
+      await ctx.callAsSystem(removeCartItem, { cartId: input.cartId, variantId: input.variantId, lineId: input.lineId });
       return projectCart(ctx, input.cartId, access.revealToken);
     }
     const cart = access.cart;
-    const [existing] = await ctx.tx
+    const matching = await ctx.tx
       .select()
       .from(cartItems)
-      .where(and(eq(cartItems.cartId, cart.id), eq(cartItems.variantId, input.variantId)))
-      .limit(1);
+      .where(and(eq(cartItems.cartId, cart.id), eq(cartItems.variantId, input.variantId), input.lineId ? eq(cartItems.id, input.lineId) : undefined))
+      .limit(2);
+    if (matching.length > 1) throw new ServiceError("validation", "Choose the photograph-specific cart line to change.");
+    const existing = matching[0];
     if (!existing) throw new ServiceError("not_found", "That cart line is not here.");
-    const delta = input.quantity - existing.quantity;
-    if (delta > 0) {
-      await ctx.callAsSystem(addCartItem, {
-        cartId: input.cartId,
-        variantId: input.variantId,
-        quantity: delta,
-        locationId: input.locationId ?? existing.locationId ?? undefined,
-      });
-      return projectCart(ctx, input.cartId, access.revealToken);
-    }
-    await releaseLineHold(ctx, existing.reservationId);
-    let reservationId: string | null = null;
     const locationId = input.locationId ?? existing.locationId;
-    if (locationId) {
-      const hold = await ctx.callAsSystem(reserveStock, {
+    const requireAvailable = cart.kind === "cart" && (input.quantity > existing.quantity || locationId !== existing.locationId);
+    if (locationId && requireAvailable) {
+      const colocated = await ctx.tx.select({ id: cartItems.id, quantity: cartItems.quantity }).from(cartItems).where(and(eq(cartItems.cartId, cart.id), eq(cartItems.variantId, input.variantId), eq(cartItems.locationId, locationId)));
+      const quantity = input.quantity + colocated.filter(line => line.id !== existing.id).reduce((total, line) => total + line.quantity, 0);
+      const stock = await ctx.callAsSystem(availabilityForCart, {
+        cartId: cart.id,
         variantId: input.variantId,
         locationId,
-        quantity: input.quantity,
-        holderType: "cart",
-        holderId: cart.id,
-        expiresAt: new Date(Date.now() + CART_HOLD_MS),
+        quantity,
       });
-      reservationId = hold.reservation?.id ?? null;
+      if (!stock.available) throw new ServiceError("validation", "There is not enough stock to add that quantity.");
     }
     await ctx.tx
       .update(cartItems)
-      .set({ quantity: input.quantity, reservationId, updatedAt: sql`now()` })
+      .set({ quantity: input.quantity, locationId, updatedAt: sql`now()` })
       .where(eq(cartItems.id, existing.id));
+    if (cart.kind === "cart") await reconcileCartStock(ctx, cart.id, [input.variantId], { allowPartial: !requireAvailable });
+    else await releaseCartStock(ctx, cart.id);
     await ctx.tx
       .update(carts)
       .set({ lastActivityAt: sql`now()`, updatedAt: sql`now()` })
@@ -601,20 +566,23 @@ export const removeCartItem = defineService({
   summary: "Remove a variant from an open cart and release its hold.",
   kind: "mutation",
   permission: "public",
-  input: z.object({ cartId: id, cartToken: z.string().uuid().optional(), variantId: id }),
+  input: z.object({ cartId: id, cartToken: z.string().uuid().optional(), variantId: id, lineId: id.optional() }),
   output: cartProjection,
   handler: async (input, ctx) => {
     const access = await requireCartAccess(ctx, input, "catalog.removeCartItem", "mutation");
     if (access.cart.status !== "open") throw new ServiceError("conflict", "That cart is no longer open.");
     const cart = access.cart;
-    const [existing] = await ctx.tx
+    const matching = await ctx.tx
       .select()
       .from(cartItems)
-      .where(and(eq(cartItems.cartId, cart.id), eq(cartItems.variantId, input.variantId)))
-      .limit(1);
+      .where(and(eq(cartItems.cartId, cart.id), eq(cartItems.variantId, input.variantId), input.lineId ? eq(cartItems.id, input.lineId) : undefined))
+      .limit(2);
+    if (matching.length > 1) throw new ServiceError("validation", "Choose the photograph-specific cart line to remove.");
+    const existing = matching[0];
     if (!existing) throw new ServiceError("not_found", "That cart line is not here.");
-    await releaseLineHold(ctx, existing.reservationId);
     await ctx.tx.delete(cartItems).where(eq(cartItems.id, existing.id));
+    if (cart.kind === "cart") await reconcileCartStock(ctx, cart.id, [input.variantId], { allowPartial: true });
+    else await releaseCartStock(ctx, cart.id);
     await ctx.tx
       .update(carts)
       .set({ lastActivityAt: sql`now()`, updatedAt: sql`now()` })
@@ -674,6 +642,8 @@ export const saveCart = defineService({
         variantId: line.variantId,
         quantity: line.quantity,
         locationId: line.locationId,
+        galleryId: line.galleryId,
+        assetId: line.assetId,
       });
     }
     ctx.setSubject("cart", saved!.id);
@@ -986,15 +956,10 @@ export const abandonStaleCarts = defineService({
           eq(carts.kind, "cart"),
           lt(carts.lastActivityAt, cutoff),
         ),
-      );
+      ).orderBy(asc(carts.id)).for("update", { skipLocked: true });
+    await lockCartStock(ctx, stale.map(cart => cart.id));
     for (const cart of stale) {
-      const lines = await ctx.tx.select().from(cartItems).where(eq(cartItems.cartId, cart.id));
-      for (const line of lines) {
-        await releaseLineHold(ctx, line.reservationId);
-        if (line.reservationId) {
-          await ctx.tx.update(cartItems).set({ reservationId: null }).where(eq(cartItems.id, line.id));
-        }
-      }
+      await releaseCartStock(ctx, cart.id);
       await ctx.tx
         .update(carts)
         .set({ status: "abandoned", abandonedAt: sql`now()`, updatedAt: sql`now()` })

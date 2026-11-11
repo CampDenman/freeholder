@@ -2524,11 +2524,11 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F05** — `catalog.recordStockMovement`/`adjustStock`/`transferStock`/`listInventory`/`listStockMovements` at /api/v1/catalog.*, MCP `catalog_*`. — surface equivalence: `tests/core/api.test.ts` (every service has an endpoint, spec schema is the validator), `tests/core/sdk-schema.test.ts` (generated client contract) and `tests/core/mcp.test.ts` (registry-derived MCP tools)..
 - **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG over the surfaces the browser suite visits in `tests/browser/accessibility.spec.ts`.
 - **F07** — `tests/core/catalog-inventory.test.ts` covers permission, refusal and recovery.
-- **F08** — `tests/core/catalog-inventory.test.ts` — the item's unit/service/database coverage.
+- **F08** — `tests/core/catalog-inventory.test.ts` and `tests/core/cart-shared-stock.test.ts` — append-only movement/balance coverage plus aggregate photograph holds, owned-pointer refusal, expiry, checkout replay and separate physical shipments.
 - **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared audit/outbox participation it rides on: `tests/core/record-participation.test.ts`.
 - **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; per-item contextual help is not separately evidenced.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping). Changeset `commerce-inventory-ledger.md` named in §43.
-- **F12** — `tests/core/catalog-inventory.test.ts` is the composition proof.
+- **F12** — `tests/core/catalog-inventory.test.ts` and `tests/core/cart-shared-stock.test.ts` prove stock composition through cart merge, order creation, payment and shipment; `deploy/cart-photo-stock-2026-11-11.md` records the finite qualification.
 
 ## C5.17 — Implement safety/reorder levels, incoming stock, backorders
 
@@ -2578,17 +2578,17 @@ this addendum also includes C10.33 instead of weakening either gate.
 ## C5.20 — Build persistent/contact-attached carts, saved carts/wishlists
 
 - **F01** — `db/migrations/0000_reviewed-baseline.sql` — reviewed baseline (C10.19) folding the item's migration tag `0056_flippant_snowbird.sql`; table invariants asserted in `tests/core/catalog-carts.test.ts`, `tests/core/cart-access.test.ts`.
-- **F02** — `tests/core/catalog-carts.test.ts` — typed-service coverage including permission and refusal assertions.
-- **F03** — `tests/core/merge-completeness.test.ts` — merge repointing is enforced by reflection over every module's tables, so any contact reference this item stores is covered; its contact-facing behaviour is exercised in `tests/core/catalog-carts.test.ts`.
-- **F04** — /admin/carts list and detail, with role-gated management controls. — screen file `app/(admin)/admin/carts/page.tsx`.
-- **F05** — `catalog.addCartItem`/`attachCartToContact`/`addWishlistItem`/`checkoutCart` at /api/v1/catalog.*, MCP `catalog_*`. — surface equivalence: `tests/core/api.test.ts` (every service has an endpoint, spec schema is the validator), `tests/core/sdk-schema.test.ts` (generated client contract) and `tests/core/mcp.test.ts` (registry-derived MCP tools)..
-- **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG over the surfaces the browser suite visits in `tests/browser/accessibility.spec.ts`.
-- **F07** — `tests/core/catalog-carts.test.ts` covers permission, refusal and recovery.
-- **F08** — `tests/core/catalog-carts.test.ts`, `tests/core/cart-access.test.ts` — the item's unit/service/database coverage.
+- **F02** — `tests/core/catalog-carts.test.ts` and `tests/core/cart-shared-stock.test.ts` — typed-service coverage including capability refusal, exact line selection and bounded aggregate holds.
+- **F03** — `tests/core/merge-completeness.test.ts` checks reference registration; `tests/core/cart-shared-stock.test.ts` verifies guest/contact merges preserve photograph identities and compose stock through the actual parent transaction, including a contacts.merge-only staff actor whose direct stock mutation is refused.
+- **F04** — Public cart and /admin/carts list/detail controls; `tests/browser/cart-shared-stock.spec.ts` changes the selected photograph through both shopper and owner forms and checks both identities at checkout.
+- **F05** — Registered cart services at /api/v1/catalog.*, MCP `catalog_*`; quantity/removal accept optional lineId and refuse ambiguous variant-only changes. `tests/core/api.test.ts`, `tests/core/mcp.test.ts` and eight regenerated `tests/core/sdk-schema.test.ts` controls verify the shared contract.
+- **F06** — Four actual English/Spanish/French/Arabic RTL photograph-cart journeys use keyboard controls at 320px with both-theme WCAG A/AA scans; English light and Arabic dark screenshots were inspected. `tests/browser/cart-shared-stock.spec.ts` records the scope; shared locale gates remain in force.
+- **F07** — `tests/core/catalog-carts.test.ts`, `tests/core/cart-owned-reservation.test.ts` and `tests/core/cart-shared-stock.test.ts` cover ambiguous selection refusal, foreign/expired holds, concurrent mutation, merge, saved snapshots and checkout/cancellation replay.
+- **F08** — `tests/core/catalog-carts.test.ts`, `tests/core/cart-access.test.ts`, `tests/core/cart-owned-reservation.test.ts` and ten new `tests/core/cart-shared-stock.test.ts` cases; the integrated stock/order/fulfillment/gallery/contact run passes 113 cases.
 - **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared audit/outbox participation it rides on: `tests/core/record-participation.test.ts`.
 - **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; per-item contextual help is not separately evidenced.
-- **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping). Changeset `cart-capability-authorization.md` named in §43.
-- **F12** — `tests/core/catalog-carts.test.ts` is the composition proof.
+- **F11** — `MASTER.md` §43 annotation, `deploy/spec-reconciliation.md` and `deploy/cart-photo-stock-2026-11-11.md`; changesets `cart-capability-authorization.md` and `cart-photo-stock-groups.md` record the changes.
+- **F12** — `tests/core/cart-shared-stock.test.ts` composes guest/contact merges, saved carts, order/payment/shipment and restricted staff authority in the caller's transaction; ten actual browser journeys cover the new photo flow and adjacent existing cart/checkout controls.
 
 ## C5.21 — Build checkout identity/address, fulfillment, tax, discounts
 

@@ -49,6 +49,7 @@ export async function updateCartLineAction(form: FormData): Promise<void> {
         cartId: credential.cartId,
         cartToken: credential.token,
         variantId: text(form, "variantId"),
+        lineId: text(form, "lineId") || undefined,
         quantity,
       },
       { kind: "anonymous" },
@@ -69,6 +70,7 @@ export async function removeCartLineAction(form: FormData): Promise<void> {
         cartId: credential.cartId,
         cartToken: credential.token,
         variantId: text(form, "variantId"),
+        lineId: text(form, "lineId") || undefined,
       },
       { kind: "anonymous" },
     );
@@ -93,7 +95,7 @@ export async function saveForLaterAction(form: FormData): Promise<void> {
     const profile = await myProfile.call({}, actor);
     await addWishlistItem.call({ contactId: profile.contactId, variantId }, actor);
     await removeCartItem.call(
-      { cartId: credential.cartId, cartToken: credential.token, variantId },
+      { cartId: credential.cartId, cartToken: credential.token, variantId, lineId: text(form, "lineId") || undefined },
       { kind: "anonymous" },
     );
   } catch (error) {
