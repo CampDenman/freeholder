@@ -14,11 +14,14 @@
 // device, revoked one, or left — repairs it with a commit before sending.
 import { and, asc, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { lockMemberProfiles, lockMemberConversations, lockConversation } from "../authority-locks";
+import { deliveryAuthority } from "./authority";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { attachmentInput } from "../attachment-store";
 import { activeSelf, directBlocked, participant, send } from "../messages";
 import { memberConversationParticipants, memberConversations, memberDevices, memberGroupCalls, memberKeyPackages, memberMessages, memberMlsGroups, memberMlsLog, memberMlsRoster } from "../schema";
+import "./server-init";
 import { b64, readKeyPackage, unb64 } from "./wire";
 import { assertGeneration, dropFromCalls } from "../call-seats";
 import { attachSealedBlobs } from "../sealed-blobs";
@@ -30,6 +33,12 @@ const base64 = z.string().max(200_000).regex(/^[A-Za-z0-9+/]*={0,2}$/);
 const keyPackageInput = z.object({ id: uuid, keyPackage: base64 });
 
 const membershipChanged = () => new ServiceError("conflict", "Who is in this conversation changed. Your device will catch up and try again.");
+
+async function lockedSelf(ctx: ServiceContext, mode: "share" | "update" = "share") {
+  if (ctx.actor.kind !== "user") throw new ServiceError("permission", "Sign in first.");
+  await lockMemberProfiles(ctx.tx, [ctx.actor.userId], mode);
+  return activeSelf(ctx);
+}
 
 /** A device of the signed-in member that is still in use. */
 async function myDevice(ctx: ServiceContext, userId: string, deviceId: string) {
@@ -89,7 +98,8 @@ export const registerDevice = defineService({
   }),
   output: z.object({ deviceId: uuid }),
   handler: async (input, ctx) => {
-    const me = await activeSelf(ctx);
+    const me = await lockedSelf(ctx, "update");
+    await lockMemberConversations(ctx.tx, me.userId);
     if (unb64(input.signatureKey).length !== 32) throw new ServiceError("validation", "That is not a device key.");
     const [taken] = await ctx.tx.select().from(memberDevices).where(eq(memberDevices.id, input.deviceId));
     // A device retrying after its confirmation was lost is already here.
@@ -171,7 +181,8 @@ export const revokeDevice = defineService({
   input: z.object({ deviceId: uuid }),
   output: okResult,
   handler: async (input, ctx) => {
-    const me = await activeSelf(ctx);
+    const me = await lockedSelf(ctx, "update");
+    await lockMemberConversations(ctx.tx, me.userId);
     await myDevice(ctx, me.userId, input.deviceId);
     await ctx.tx.update(memberDevices).set({ revokedAt: new Date() }).where(eq(memberDevices.id, input.deviceId));
     await ctx.tx.delete(memberKeyPackages).where(eq(memberKeyPackages.deviceId, input.deviceId));
@@ -193,6 +204,8 @@ export const e2eeSync = defineService({
   output: z.object({
     /** Everyone still in the conversation has a device, so it can be encrypted. */
     available: z.boolean(),
+    supportsOpenMlsRefresh: z.literal(true),
+    deliveryFenceVersion: z.literal(1),
     missing: listed(uuid),
     epoch: z.number().int().nullable(),
     inGroup: z.boolean(),
@@ -216,7 +229,8 @@ export const e2eeSync = defineService({
     calls: listed(row({ callId: uuid, generation: z.number().int(), needsKey: z.boolean() })),
   }),
   handler: async (input, ctx) => {
-    const me = await activeSelf(ctx);
+    const me = await lockedSelf(ctx);
+    await lockConversation(ctx.tx, input.conversationId, "share");
     await participant(ctx, input.conversationId, me.userId);
     await myDevice(ctx, me.userId, input.deviceId);
     const [group] = await ctx.tx.select().from(memberMlsGroups).where(eq(memberMlsGroups.conversationId, input.conversationId));
@@ -250,6 +264,8 @@ export const e2eeSync = defineService({
       .where(and(eq(memberKeyPackages.deviceId, input.deviceId), isNull(memberKeyPackages.claimedAt), eq(memberKeyPackages.lastResort, false)));
     return {
       available: missing.length === 0,
+      supportsOpenMlsRefresh: true as const,
+      deliveryFenceVersion: 1 as const,
       missing,
       epoch: group?.epoch ?? null,
       inGroup: Boolean(mine),
@@ -292,7 +308,8 @@ export const claimKeyPackages = defineService({
   input: z.object({ conversationId: uuid, deviceId: uuid, devices: z.array(uuid).min(1).max(200) }),
   output: z.object({ packages: listed(row({ deviceId: uuid, keyPackageId: uuid, keyPackage: z.string() })) }),
   handler: async (input, ctx) => {
-    const me = await activeSelf(ctx);
+    const me = await lockedSelf(ctx);
+    await lockConversation(ctx.tx, input.conversationId, "share");
     await participant(ctx, input.conversationId, me.userId);
     await myDevice(ctx, me.userId, input.deviceId);
     const { devices } = await entitledDevices(ctx, input.conversationId);
@@ -341,6 +358,7 @@ export const claimKeyPackages = defineService({
 
 export const e2eeCommit = defineService({
   name: "members.e2eeCommit",
+  rateLimit: { limit: 120, windowSeconds: 3600, message: "Too many encryption setup attempts. Please wait a little.", subject: (_i, actor) => actor.kind === "user" ? actor.userId : undefined },
   summary: "Create a conversation's encrypted group, or change who is in it, from one of your devices.",
   kind: "mutation",
   permission: "authenticated",
@@ -351,7 +369,10 @@ export const e2eeCommit = defineService({
     deviceId: uuid,
     /** True when this device just created the group; `fromEpoch` is then 0. */
     create: z.boolean().default(false),
+    /** C12.39: an existing device refreshes its own leaf without changing membership. */
+    refresh: z.boolean().default(false),
     fromEpoch: z.number().int().min(0),
+    authority: z.string().regex(/^[0-9a-f]{64}$/),
     commit: base64,
     welcome: base64.optional(),
     added: z.array(z.object({ deviceId: uuid, keyPackageId: uuid })).max(200).default([]),
@@ -359,7 +380,8 @@ export const e2eeCommit = defineService({
   }),
   output: z.object({ epoch: z.number().int() }),
   handler: async (input, ctx) => {
-    const me = await activeSelf(ctx);
+    const me = await lockedSelf(ctx);
+    await lockConversation(ctx.tx, input.conversationId, "update");
     await participant(ctx, input.conversationId, me.userId);
     await myDevice(ctx, me.userId, input.deviceId);
     // Serialise every change to this conversation's group.
@@ -368,6 +390,8 @@ export const e2eeCommit = defineService({
     const { devices, missing } = await entitledDevices(ctx, input.conversationId);
     const entitled = new Set(devices.map((d) => d.id));
     const roster = new Set((await rosterOf(ctx, input.conversationId)).map((r) => r.deviceId));
+    const authority = await deliveryAuthority(input.conversationId, { epoch: group?.epoch ?? null, roster: [...roster], entitled: devices.map(device => ({ userId: device.userId, deviceId: device.id, signatureKey: device.signatureKey })), missing });
+    if (input.authority !== authority) throw membershipChanged();
     if (input.create) {
       if (group) throw membershipChanged();
       if (missing.length) throw new ServiceError("validation", "Everyone needs a device before this conversation can be encrypted.");
@@ -376,7 +400,9 @@ export const e2eeCommit = defineService({
       if (!group || group.epoch !== input.fromEpoch) throw membershipChanged();
       if (!roster.has(input.deviceId)) throw new ServiceError("permission", "This device is not in the conversation's group yet.");
     }
-    if (input.added.length + input.removed.length === 0) throw new ServiceError("validation", "A commit must add or remove a device.");
+    if (!entitled.has(input.deviceId)) throw membershipChanged();
+    if (input.refresh && (input.create || input.added.length || input.removed.length || input.welcome)) throw new ServiceError("validation", "A refresh preserves the group membership.");
+    if (!input.refresh && input.added.length + input.removed.length === 0) throw new ServiceError("validation", "A commit must add or remove a device.");
     if (input.added.length && !input.welcome) throw new ServiceError("validation", "Adding a device needs a welcome.");
     for (const a of input.added) {
       if (!entitled.has(a.deviceId) || roster.has(a.deviceId) || a.deviceId === input.deviceId) throw membershipChanged();
@@ -388,14 +414,15 @@ export const e2eeCommit = defineService({
     }
     // Only devices that should no longer read may be removed: revoked ones and
     // those of people who left. Nobody can push someone else's device out.
-    for (const id of input.removed) if (!roster.has(id) || entitled.has(id)) throw membershipChanged();
+    for (const id of input.removed) if (entitled.has(id)) throw membershipChanged();
 
     const epoch = input.fromEpoch + 1;
+    // Persist even the creator’s receipt: a lost response must be recoverable.
+    await ctx.tx.insert(memberMlsLog).values({ conversationId: input.conversationId, epoch: input.fromEpoch, kind: "commit", senderDeviceId: input.deviceId, payload: input.commit });
     if (input.create) {
       await ctx.tx.insert(memberMlsGroups).values({ conversationId: input.conversationId, epoch });
       await ctx.tx.insert(memberMlsRoster).values({ conversationId: input.conversationId, deviceId: input.deviceId, joinedSeq: 0 });
     } else {
-      await ctx.tx.insert(memberMlsLog).values({ conversationId: input.conversationId, epoch: input.fromEpoch, kind: "commit", senderDeviceId: input.deviceId, payload: input.commit });
       await ctx.tx.update(memberMlsGroups).set({ epoch, updatedAt: new Date() }).where(eq(memberMlsGroups.conversationId, input.conversationId));
     }
     for (const a of input.added) {
@@ -425,6 +452,7 @@ export const sendEncrypted = defineService({
     conversationId: uuid,
     deviceId: uuid,
     epoch: z.number().int().min(1),
+    authority: z.string().regex(/^[0-9a-f]{64}$/),
     ciphertext: base64.max(120_000),
     frankTag: z.string().regex(/^[A-Za-z0-9+/]{43}=$/),
     attachments: attachmentInput,
@@ -433,7 +461,8 @@ export const sendEncrypted = defineService({
   }),
   output: z.object({ id: uuid }),
   handler: async (input, ctx) => {
-    const me = await activeSelf(ctx);
+    const me = await lockedSelf(ctx);
+    await lockConversation(ctx.tx, input.conversationId, "update");
     const part = await participant(ctx, input.conversationId, me.userId);
     if (part.state === "requested") throw new ServiceError("permission", "Accept this request before replying.");
     await myDevice(ctx, me.userId, input.deviceId);
@@ -444,8 +473,10 @@ export const sendEncrypted = defineService({
     const [group] = await ctx.tx.select().from(memberMlsGroups).where(eq(memberMlsGroups.conversationId, input.conversationId));
     if (!group || group.epoch !== input.epoch) throw membershipChanged();
     const roster = new Set((await rosterOf(ctx, input.conversationId)).map((r) => r.deviceId));
-    const { devices } = await entitledDevices(ctx, input.conversationId);
+    const { devices, missing } = await entitledDevices(ctx, input.conversationId);
     if (!roster.has(input.deviceId) || roster.size !== devices.length || devices.some((d) => !roster.has(d.id))) throw membershipChanged();
+    const authority = await deliveryAuthority(input.conversationId, { epoch: group.epoch, roster: [...roster], entitled: devices.map(device => ({ userId: device.userId, deviceId: device.id, signatureKey: device.signatureKey })), missing });
+    if (input.authority !== authority) throw membershipChanged();
     const id = await send(ctx, input.conversationId, me.userId, "", input.attachments, { frankTag: input.frankTag });
     await attachSealedBlobs(ctx, me.userId, input.conversationId, id, input.sealedFiles);
     await ctx.tx.insert(memberMlsLog).values({ conversationId: input.conversationId, epoch: input.epoch, kind: "application", senderDeviceId: input.deviceId, messageId: id, payload: input.ciphertext });
@@ -465,6 +496,7 @@ export const sendCallKey = defineService({
     conversationId: uuid,
     deviceId: uuid,
     epoch: z.number().int().min(1),
+    authority: z.string().regex(/^[0-9a-f]{64}$/),
     callId: uuid,
     /** C12.37: the call's current key generation. */
     generation: z.number().int().min(0).default(0),
@@ -474,7 +506,8 @@ export const sendCallKey = defineService({
   }),
   output: okResult,
   handler: async (input, ctx) => {
-    const me = await activeSelf(ctx);
+    const me = await lockedSelf(ctx);
+    await lockConversation(ctx.tx, input.conversationId, "update");
     const seat = await participant(ctx, input.conversationId, me.userId);
     if (seat.state !== "active") throw new ServiceError("permission", "Accept this conversation before joining its calls.");
     await myDevice(ctx, me.userId, input.deviceId);
@@ -494,8 +527,10 @@ export const sendCallKey = defineService({
     if (!group || group.epoch !== input.epoch) throw membershipChanged();
     // The same rule as messages: the key reaches exactly the devices that should have it.
     const roster = new Set((await rosterOf(ctx, input.conversationId)).map((r) => r.deviceId));
-    const { devices } = await entitledDevices(ctx, input.conversationId);
+    const { devices, missing } = await entitledDevices(ctx, input.conversationId);
     if (!roster.has(input.deviceId) || roster.size !== devices.length || devices.some((d) => !roster.has(d.id))) throw membershipChanged();
+    const authority = await deliveryAuthority(input.conversationId, { epoch: group.epoch, roster: [...roster], entitled: devices.map(device => ({ userId: device.userId, deviceId: device.id, signatureKey: device.signatureKey })), missing });
+    if (input.authority !== authority) throw membershipChanged();
     await ctx.tx.insert(memberMlsLog).values({ conversationId: input.conversationId, epoch: input.epoch, kind: "control", senderDeviceId: input.deviceId, callId: input.callId, callGeneration: input.generation, payload: input.ciphertext });
     return { ok: true as const };
   },

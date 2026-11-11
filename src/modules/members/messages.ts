@@ -15,6 +15,7 @@
 import { attachFiles, attachmentInput, attachmentsFor, attachmentShape } from "./attachment-store";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { lockMemberProfiles, lockConversation } from "./authority-locks";
 import { and, desc, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Actor, type ServiceContext } from "@/core/service";
@@ -166,10 +167,14 @@ export const startConversation = defineService({
     };
     const handles = [...new Set(input.handles)].filter((h) => h !== me.handle);
     if (handles.length === 0) throw new ServiceError("validation", "Choose someone to message.");
-    const people = await ctx.tx
+    let people = await ctx.tx
       .select()
       .from(memberProfiles)
       .where(and(inArray(memberProfiles.handle, handles), eq(memberProfiles.status, "active")));
+    const targetIds = people.map(person => person.userId);
+    await lockMemberProfiles(ctx.tx, [me.userId, ...targetIds], "update");
+    await activeSelf(ctx);
+    people = targetIds.length ? await ctx.tx.select().from(memberProfiles).where(and(inArray(memberProfiles.userId, targetIds), inArray(memberProfiles.handle, handles), eq(memberProfiles.status, "active"))) : [];
     const reachable: (typeof people)[number][] = [];
     for (const p of people) if (!(await relationBetween(ctx, me.userId, p.userId)).blocked) reachable.push(p);
     if (reachable.length !== handles.length) throw new ServiceError("not_found", "One of those members is not available.");
@@ -179,6 +184,7 @@ export const startConversation = defineService({
       const directKey = [me.userId, other.userId].sort().join(":");
       const [existing] = await ctx.tx.select().from(memberConversations).where(eq(memberConversations.directKey, directKey));
       if (existing) {
+        await lockConversation(ctx.tx, existing.id);
         await ctx.tx
           .update(memberConversationParticipants)
           .set({ state: "active" })
@@ -373,6 +379,8 @@ export const answerMessageRequest = defineService({
   output: okResult,
   handler: async (input, ctx) => {
     const me = viewerOf(ctx.actor);
+    await lockMemberProfiles(ctx.tx, [me], "update");
+    await lockConversation(ctx.tx, input.conversationId);
     const part = await participant(ctx, input.conversationId, me);
     if (part.state !== "requested") throw new ServiceError("conflict", "That conversation is not a request.");
     await ctx.tx
@@ -393,6 +401,8 @@ export const leaveConversation = defineService({
   output: okResult,
   handler: async (input, ctx) => {
     const me = viewerOf(ctx.actor);
+    await lockMemberProfiles(ctx.tx, [me], "update");
+    await lockConversation(ctx.tx, input.conversationId);
     await participant(ctx, input.conversationId, me);
     await ctx.tx
       .update(memberConversationParticipants)

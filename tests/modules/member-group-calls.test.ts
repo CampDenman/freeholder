@@ -8,6 +8,11 @@ import { createHmac } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
+import { contacts } from "@/core/contacts/schema";
+import { resolveContact } from "@/core/contacts/service";
+import { createDataRequest, fulfillDataRequest, registerContactPrivacySource, verifyDataRequest } from "@/core/privacy/service";
+import { ServiceError } from "@/core/service";
+import { outboxEvents } from "@/core/events/schema";
 import { resetEnvForTests } from "@/core/env";
 import { ready } from "@/core/runtime";
 import { listNotifications } from "@/core/notifications/service";
@@ -18,7 +23,7 @@ import { activeGroupCall, joinGroupCall, leaveGroupCall, startGroupCall, viewGro
 import { leaveConversation } from "@/modules/members/messages";
 import { revokeDevice } from "@/modules/members/e2ee/service";
 import { setSfuForTests, type SfuAdapter } from "@/modules/members/sfu";
-import { memberMlsLog } from "@/modules/members/schema";
+import { memberDevices, memberGroupCalls, memberMlsLog } from "@/modules/members/schema";
 import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 import { deviceFor } from "../helpers/e2ee";
 
@@ -26,6 +31,33 @@ const RAE = CUSTOMER;
 const SAM = { ...CUSTOMER, userId: "00000000-0000-4000-8000-0000000000c2" };
 const KIM = { ...CUSTOMER, userId: "00000000-0000-4000-8000-0000000000c3" };
 const SECRET = "test-livekit-secret-for-group-calls";
+let refusePrivacyAfterMembers = false;
+let observedSamePrivacyTransaction = false;
+
+function fakeRooms() {
+  const rooms = new Map<string, Set<string>>();
+  const removed: { room: string; identity: string }[] = [];
+  const adapter: SfuAdapter = {
+    id: "fake", url: "ws://sfu.test",
+    issue: ({ room, identity }) => {
+      const members = rooms.get(room) ?? new Set<string>();
+      members.add(identity); rooms.set(room, members);
+      return `token-for-${room}-${identity}`;
+    },
+    participants: async room => [...(rooms.get(room) ?? [])],
+    remove: async (room, identity) => { removed.push({ room, identity }); rooms.get(room)?.delete(identity); },
+  };
+  return { adapter, removed };
+}
+
+async function erasureFor(userId: string) {
+  const [user] = await db().select().from(users).where(eq(users.id, userId));
+  const { contact } = await resolveContact.call({ email: user!.email, name: "Synthetic call member" }, OWNER);
+  await db().update(contacts).set({ userId }).where(eq(contacts.id, contact.id));
+  const request = await createDataRequest.call({ contactId: contact.id, request: { kind: "erasure" } }, OWNER);
+  await verifyDataRequest.call({ id: request.id, method: "Synthetic verified request" }, OWNER);
+  return request.id;
+}
 
 function decodeToken(token: string) {
   const [header, claims, signature] = token.split(".");
@@ -34,8 +66,21 @@ function decodeToken(token: string) {
 }
 
 describe.runIf(hasDatabase)("group calls (C12.24)", () => {
-  beforeAll(async () => { await ready(); }, 60_000);
+  beforeAll(async () => {
+    await ready();
+    registerContactPrivacySource({
+      scope: "group-call-transaction-test", tables: [], eraseOrder: 10_000,
+      exportData: async () => null,
+      erase: async (tx, _contactId, context) => {
+        observedSamePrivacyTransaction = context.service?.tx === tx && context.service.actor.kind === "user" && context.service.actor.userId === OWNER.userId;
+        if (refusePrivacyAfterMembers) throw new ServiceError("conflict", "Synthetic failure after member erasure.");
+        return { affected: 0 };
+      },
+    });
+  }, 60_000);
   beforeEach(async () => {
+    refusePrivacyAfterMembers = false;
+    observedSamePrivacyTransaction = false;
     process.env.LIVEKIT_URL = "ws://127.0.0.1:7880";
     process.env.LIVEKIT_API_KEY = "testkey";
     process.env.LIVEKIT_API_SECRET = SECRET;
@@ -97,6 +142,8 @@ describe.runIf(hasDatabase)("group calls (C12.24)", () => {
     const claims = decodeToken(joined.token);
     expect(claims).toMatchObject({ iss: "testkey", sub: `${SAM.userId}:${samDevice}`, video: { room: `freeholder-${id}`, roomJoin: true } });
     expect(claims.exp).toBeGreaterThan(Date.now() / 1000);
+    expect(claims.exp).toBeLessThanOrEqual(Date.now() / 1000 + 601);
+    expect(joined.generation).toBe(0);
     // A device outside the group cannot get one, even for a member.
     const samLaptop = deviceFor(SAM, "Sam laptop");
     expect((await failure(joinGroupCall.call({ id, deviceId: (await samLaptop.device()).deviceId }, SAM))).code).toBe("permission");
@@ -113,16 +160,8 @@ describe.runIf(hasDatabase)("group calls (C12.24)", () => {
   });
 
   it("drops someone who leaves mid-call from the room, and moves everyone else to a new key (C12.37)", { timeout: 90_000 }, async () => {
-    const room = new Set<string>();
-    const removed: string[] = [];
-    const fake: SfuAdapter = {
-      id: "fake",
-      url: "ws://sfu.test",
-      issue: ({ identity }) => { room.add(identity); return `token-for-${identity}`; },
-      participants: async () => [...room],
-      remove: async (_room, identity) => { removed.push(identity); room.delete(identity); },
-    };
-    setSfuForTests(fake);
+    const { adapter, removed } = fakeRooms();
+    setSfuForTests(adapter);
     await followMember.call({ handle: "rae" }, KIM);
     const rae = deviceFor(RAE, "Rae");
     const sam = deviceFor(SAM, "Sam");
@@ -139,12 +178,16 @@ describe.runIf(hasDatabase)("group calls (C12.24)", () => {
 
     // Kim leaves the conversation: the SFU drops Kim's device, and the call moves to generation 1.
     await leaveConversation.call({ conversationId }, KIM);
-    await expect.poll(() => removed).toEqual([`${KIM.userId}:${kimDevice.deviceId}`]);
+    await expect.poll(() => removed.map(entry => entry.identity).sort()).toEqual([`${KIM.userId}:${kimDevice.deviceId}`, `${RAE.userId}:${raeDevice.deviceId}`, `${SAM.userId}:${samDevice.deviceId}`].sort());
     const next = await sam.currentCallKey(conversationId, id);
     expect(next.generation).toBe(1);
     expect(next.key).toBeTruthy();
     expect(next.key).not.toBe(first);
     expect(await rae.currentCallKey(conversationId, id)).toEqual(next);
+    expect((await failure(joinGroupCall.call({ id, deviceId: samDevice.deviceId, generation: 0 }, SAM))).code).toBe("conflict");
+    for (const [actor, device] of [[RAE, raeDevice], [SAM, samDevice]] as const) {
+      expect(await joinGroupCall.call({ id, deviceId: device.deviceId, generation: 1 }, actor)).toMatchObject({ room: `freeholder-${id}-g1`, generation: 1 });
+    }
     await expect(kim.callKey(conversationId, id)).rejects.toThrow();
     expect((await failure(joinGroupCall.call({ id, deviceId: kimDevice.deviceId }, KIM))).code).toBe("not_found");
 
@@ -155,13 +198,45 @@ describe.runIf(hasDatabase)("group calls (C12.24)", () => {
     expect(await raePhone.callKey(conversationId, id)).toBe(next.key);
     await joinGroupCall.call({ id, deviceId: phone.deviceId }, RAE);
     await revokeDevice.call({ deviceId: phone.deviceId }, RAE);
-    await expect.poll(() => removed.at(-1)).toBe(`${RAE.userId}:${phone.deviceId}`);
+    await expect.poll(() => removed.some(entry => entry.identity === `${RAE.userId}:${phone.deviceId}` && entry.room === `freeholder-${id}-g1`)).toBe(true);
     const third = await sam.currentCallKey(conversationId, id);
     expect(third.generation).toBe(2);
     expect(third.key).not.toBe(next.key);
     expect((await rae.currentCallKey(conversationId, id)).key).toBe(third.key);
     const controls = await db().select().from(memberMlsLog).where(and(eq(memberMlsLog.callId, id), eq(memberMlsLog.kind, "control"), eq(memberMlsLog.callGeneration, 2)));
     expect(controls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it.each([false, true])("privacy erasure retires call authority only if its whole transaction commits (rollback=%s)", { timeout: 90_000 }, async rollback => {
+    const { adapter, removed } = fakeRooms();
+    setSfuForTests(adapter);
+    const rae = deviceFor(RAE, "Rae");
+    const sam = deviceFor(SAM, "Sam");
+    const [a, b] = await Promise.all([rae.device(), sam.device()]);
+    const { id: conversationId } = await startConversation.call({ handles: ["sam"], title: "Privacy call" }, RAE);
+    await rae.send(conversationId, "Call before erasure");
+    const { id } = await startGroupCall.call({ conversationId, media: "voice" }, RAE);
+    await rae.startCallKey(conversationId, id);
+    await sam.callKey(conversationId, id);
+    for (const [actor, device] of [[RAE, a], [SAM, b]] as const) await joinGroupCall.call({ id, deviceId: device.deviceId }, actor);
+    const requestId = await erasureFor(SAM.userId);
+    refusePrivacyAfterMembers = rollback;
+    if (rollback) {
+      expect((await failure(fulfillDataRequest.call({ id: requestId, confirmation: "ERASE" }, OWNER))).code).toBe("conflict");
+      expect((await db().select().from(memberGroupCalls).where(eq(memberGroupCalls.id, id)))[0]?.keyGeneration).toBe(0);
+      expect(await db().select().from(memberDevices).where(eq(memberDevices.id, b.deviceId))).toHaveLength(1);
+      expect(await db().select().from(outboxEvents).where(eq(outboxEvents.eventName, "member.callSeatLost"))).toHaveLength(0);
+      expect(removed).toEqual([]);
+    } else {
+      await fulfillDataRequest.call({ id: requestId, confirmation: "ERASE" }, OWNER);
+      expect((await db().select().from(memberGroupCalls).where(eq(memberGroupCalls.id, id)))[0]?.keyGeneration).toBe(1);
+      expect(await db().select().from(users).where(eq(users.id, SAM.userId))).toEqual([]);
+      expect(await db().select().from(memberDevices).where(eq(memberDevices.id, b.deviceId))).toEqual([]);
+      await expect.poll(() => removed.map(entry => entry.identity).sort()).toEqual([`${RAE.userId}:${a.deviceId}`, `${SAM.userId}:${b.deviceId}`].sort());
+      expect((await rae.currentCallKey(conversationId, id)).generation).toBe(1);
+      expect((await joinGroupCall.call({ id, deviceId: a.deviceId, generation: 1 }, RAE)).room).toBe(`freeholder-${id}-g1`);
+    }
+    expect(observedSamePrivacyTransaction).toBe(true);
   });
 
   it("is not offered without an SFU", async () => {

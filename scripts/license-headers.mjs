@@ -24,6 +24,9 @@ const EXEMPT = [
   // Redistributed, byte-pinned Opus/MIT/BSD codecs. Their original licenses
   // live beside them in NOTICE.txt; never relabel these as Freeholder code.
   /^public\/managed-assistant\/0\.1\.10\/duplex-codec\//,
+  // Reproduced Rust/wasm-bindgen material, byte-pinned by its manifest and
+  // independently regenerated in CI. Its original notices ship beside it.
+  /^public\/_freeholder\/openmls\/0\.1\.0\//,
   /^db\/migrations\//,
   /\.json$/,
   /^next-env\.d\.ts$/,
@@ -52,6 +55,7 @@ const COMMENT = {
   yaml: ["#", ""],
   cjs: ["//", ""],
   py: ["#", ""],
+  rs: ["//", ""],
   nix: ["#", ""],
   // systemd units and Caddy site snippets ship to hosts verbatim; both take
   // `#` comments.
@@ -67,6 +71,7 @@ function commentStyle(file) {
     basename === "Caddyfile" ||
     basename === ".dockerignore" ||
     basename === ".env.example"
+    || basename === "Cargo.toml" || basename === "rust-toolchain.toml"
   ) return ["#", ""];
   return COMMENT[file.split(".").pop() ?? ""];
 }

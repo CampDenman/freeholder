@@ -5251,18 +5251,18 @@ this addendum also includes C10.33 instead of weakening either gate.
 
 ## C12.39 — Move end-to-end encryption from ts-mls to OpenMLS
 
-- **F01** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F02** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F03** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F04** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F05** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F06** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F07** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F08** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F09** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F10** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F11** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
-- **F12** — `deploy/members-platform.md`: Pending — specified 2026-10-15; no implementation is claimed.
+- **F01** — `src/modules/members/e2ee/engine.ts` and `native/openmls/src/lib.rs` bind local versioned snapshots to the original group/device, preserve private history pins and retain the existing normalized delivery schema; no SQL migration or server-side private-key store is introduced. See `deploy/openmls-migration-2026-11-11.md`.
+- **F02** — `src/modules/members/e2ee/service.ts` adds explicit same-membership refresh, current-device permission, epoch CAS, required pre-encryption delivery witnesses, bounded input/rate limits and creator receipts; the driver persists exact retry inputs and a bounded private outgoing journal before transport. `tests/modules/member-e2ee.test.ts` covers accepted-response loss, queue exhaustion, typed refusal and exact own-receipt recovery.
+- **F03** — `src/modules/members/e2ee/service.ts` retains the shared service transaction/audit path. N/A — this cryptographic implementation replacement introduces no contacts or money mutations; existing message/report composition is exercised in `tests/modules/member-e2ee.test.ts`.
+- **F04** — Existing device, conversation, verification, history, file and call UI uses the shared engine, with existing loading/joining/failure states. `tests/browser/member-openmls.spec.ts`, `tests/browser/members.spec.ts` and `tests/browser/member-group-calls.spec.ts` pass actual migration/history/file/media journeys; `deploy/openmls-migration-2026-11-11.md` records recovery and remaining review.
+- **F05** — `src/modules/members/e2ee/service.ts` and `src/modules/members/e2ee/history.ts` keep identical human-session permissions on shared HTTP/SDK/MCP projections; device/key operations remain refused to agents. `tests/modules/member-e2ee.test.ts` proves refusal; `tests/core/sdk.test.ts` gates regenerated contract fidelity.
+- **F06** — `tests/browser/member-openmls.spec.ts` passes keyboard send plus eight 320px English/Spanish/French/Arabic RTL × light/dark Axe and actual document/native-file-input bounds variants. Existing translated strings and tokens are retained; `tests/core/csp.test.ts` confines WebAssembly without JavaScript eval. Evidence: `deploy/openmls-migration-2026-11-11.md`.
+- **F07** — `native/openmls/src/lib.rs`, `e2ee/authority.ts`, `authority-locks.ts`, `tests/core/openmls-legacy.test.ts`, `tests/core/openmls-wire.test.ts` and `tests/modules/member-e2ee.test.ts` cover actual-leaf/current-key authority, after-encryption privacy erasure, stable SQL lock ordering, erased-history pins, exact pending receipts, snapshot substitution, replay/ratchets, old-server refusal and cross-tab coordination; independent C11.10 review remains open in `security/independent-review-packet.md`.
+- **F08** — Partial — fourteen native tests, `tests/core/openmls-legacy.test.ts`, `tests/core/openmls-wire.test.ts`, `tests/core/csp.test.ts`, `tests/modules/member-e2ee.test.ts` and `tests/modules/member-group-calls.test.ts` supply protocol/service evidence. Twenty-five actual browser/SFU journeys pass; final protected checks remain required in `deploy/openmls-migration-2026-11-11.md`.
+- **F09** — `native/openmls/build.mjs` and `.github/workflows/ci.yml` gate pinned byte-identical runtime/license artifacts and RustSec. Existing public directory/ciphertext records retain site backup/erasure behavior; private client state stays local and history moves only through approval. `deploy/openmls-migration-2026-11-11.md` explains recovery and limits.
+- **F10** — `deploy/members-platform.md` explains automatic identity-preserving upgrades, local-state loss and the unchanged compromised-server warning; the engine refuses corrupt state or unsupported cross-tab coordination instead of resetting an identity. `tests/core/openmls-wire.test.ts` and `tests/modules/member-e2ee.test.ts` cover these boundaries.
+- **F11** — `deploy/openmls-migration-2026-11-11.md`, `native/openmls/README.md`, `deploy/members-platform.md`, `deploy/content-security-policy.md` and `.changeset/openmls-device-migration.md` describe the same delivered boundary and remaining acceptance.
+- **F12** — `tests/modules/member-e2ee.test.ts` composes devices, moderated messages, sealed files and approved history; `tests/modules/member-group-calls.test.ts` composes rekeyed call control. `tests/browser/member-openmls.spec.ts`, `tests/browser/members.spec.ts` and `tests/browser/member-group-calls.spec.ts` pass actual browser/SFU integration. `deploy/openmls-migration-2026-11-11.md` retains the independent/protected acceptance limits.
 
 ## C12.30 — Hash-match known abuse imagery on upload
 

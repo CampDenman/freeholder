@@ -13,7 +13,9 @@ import { ServiceError, type ServiceContext } from "@/core/service";
 import { memberGroupCallParticipants, memberGroupCalls } from "./schema";
 import { sfu } from "./sfu";
 
-export const roomOf = (callId: string) => `freeholder-${callId}`;
+// Self-hosted SFUs do not revoke cached JWTs on RemoveParticipant. A token
+// from an old generation must only reach its abandoned transport room.
+export const roomOf = (callId: string, generation = 0) => `freeholder-${callId}${generation === 0 ? "" : `-g${generation}`}`;
 
 /** Bump the key of each running call in these conversations and queue the SFU disconnect. */
 export async function dropFromCalls(ctx: ServiceContext, conversationIds: string[], userId: string, deviceId?: string): Promise<void> {
@@ -30,18 +32,21 @@ export async function dropFromCalls(ctx: ServiceContext, conversationIds: string
         .set({ leftAt: new Date() })
         .where(and(eq(memberGroupCallParticipants.callId, call.id), eq(memberGroupCallParticipants.userId, userId), isNull(memberGroupCallParticipants.leftAt)));
     }
-    ctx.queueEvent("member.callSeatLost", { callId: call.id, userId, deviceId: deviceId ?? null });
+    ctx.queueEvent("member.callSeatLost", { callId: call.id, userId, deviceId: deviceId ?? null, previousGeneration: call.keyGeneration });
   }
 }
 
-/** After commit: disconnect that person (every device) or that one device from the room. */
+/** After commit: retire the old room. Eligible devices reauthorize for the new one. */
 export async function onCallSeatLost(payload: unknown): Promise<void> {
-  const { callId, userId, deviceId } = (payload ?? {}) as { callId?: string; userId?: string; deviceId?: string | null };
+  const { callId, userId, previousGeneration } = (payload ?? {}) as { callId?: string; userId?: string; previousGeneration?: number };
   const adapter = sfu();
   if (!adapter || !callId || !userId) return;
-  const room = roomOf(callId);
-  const targets = deviceId ? [`${userId}:${deviceId}`] : (await adapter.participants(room)).filter((identity) => identity.startsWith(`${userId}:`));
-  for (const identity of targets) await adapter.remove(room, identity);
+  if (previousGeneration !== undefined && (!Number.isSafeInteger(previousGeneration) || previousGeneration < 0)) throw new Error("Invalid retired call generation.");
+  // Also retire the original alias used by clients deployed before room
+  // generations existed, even if their key had already rotated repeatedly.
+  for (const room of new Set([roomOf(callId, previousGeneration ?? 0), roomOf(callId)])) {
+    for (const identity of await adapter.participants(room)) await adapter.remove(room, identity);
+  }
 }
 
 export function assertGeneration(call: { keyGeneration: number }, generation: number): void {

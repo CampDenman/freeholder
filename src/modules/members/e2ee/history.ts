@@ -16,7 +16,8 @@ import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { activeSelf, participant } from "../messages";
 import { memberDevices, memberHistoryRequests, memberHistoryTransfers } from "../schema";
-import { historyStatement, suite, unb64 } from "./wire";
+import "./server-init";
+import { historyStatement, verify, unb64 } from "./wire";
 
 const OPEN_DAYS = 7;
 const base64 = z.string().max(1_400_000).regex(/^[A-Za-z0-9+/]*={0,2}$/);
@@ -49,7 +50,7 @@ export const requestHistory = defineService({
   handler: async (input, ctx) => {
     const me = await activeSelf(ctx);
     const device = await ownDevice(ctx, me.userId, input.deviceId);
-    const ok = await (await suite()).signature.verify(unb64(device.signatureKey), historyStatement(me.userId, device.id, input.publicKey), unb64(input.sig));
+    const ok = await verify(unb64(device.signatureKey), historyStatement(me.userId, device.id, input.publicKey), unb64(input.sig));
     if (!ok) throw new ServiceError("validation", "That request is not signed by this device.");
     await ctx.tx.update(memberHistoryRequests).set({ state: "closed" }).where(and(eq(memberHistoryRequests.deviceId, device.id), eq(memberHistoryRequests.state, "open")));
     const [created] = await ctx.tx.insert(memberHistoryRequests).values({ userId: me.userId, deviceId: device.id, publicKey: input.publicKey, sig: input.sig }).returning({ id: memberHistoryRequests.id });

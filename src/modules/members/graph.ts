@@ -8,6 +8,7 @@
 // symmetric for visibility: neither side can see or reach the other.
 import { avatarUrlFor } from "./profile";
 import { subscribes } from "./subscriber-check";
+import { lockMemberProfiles, lockMemberConversations } from "./authority-locks";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
@@ -389,6 +390,10 @@ export const setMemberRelation = defineService({
   output: okResult,
   handler: async (input, ctx) => {
     const userId = me(ctx.actor);
+    if (input.kind === "block") {
+      await lockMemberProfiles(ctx.tx, [userId], "update");
+      await lockMemberConversations(ctx.tx, userId);
+    }
     const [target] = await ctx.tx.select().from(memberProfiles).where(eq(memberProfiles.handle, input.handle));
     if (!target || target.userId === userId) throw new ServiceError("not_found", "That member is not available.");
     if (!input.on) {

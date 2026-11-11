@@ -328,12 +328,16 @@ from mocked payment, mail or media runs alone.
 
 ## C12.23 — end-to-end encrypted messages (2026-10-15)
 
-- MLS (RFC 9420) through `ts-mls` 1.6.4, ciphersuite 1 (X25519,
-  AES-128-GCM, SHA-256, Ed25519). `ts-mls` has **not had an independent
-  security audit** (its README says so). Commission a review of the library
-  and of `src/modules/members/e2ee/` before telling members their messages
-  are safe against a compromised server. `@noble/hashes` is a direct
-  dependency only because `ts-mls` imports it without declaring it.
+- MLS (RFC 9420) uses the pinned OpenMLS WebAssembly binding for new groups,
+  messages, call keys, payload signatures and history HPKE. Node deployments
+  use the committed assets; Rust is needed only to regenerate them. Existing
+  `ts-mls` 1.6.4 states and Welcomes are read by an isolated compatibility
+  bridge and migrated through a signed external resync using the same device
+  keys. `@noble/hashes` remains a direct legacy dependency because `ts-mls`
+  imports it without declaring it. See `deploy/openmls-migration-2026-11-11.md`
+  and `native/openmls/README.md` for provenance, recovery, tests and remaining
+  qualification. OpenMLS's historical audit does not independently review
+  Freeholder's binding or the pinned current revision; C11.10 remains open.
 - The server is the delivery service and the device directory. It cannot
   read messages, but whoever runs it could register a device in a member's
   name. Device verification (C12.35) makes that visible: devices compute the
@@ -344,8 +348,16 @@ from mocked payment, mail or media runs alone.
   messages, sent sealed after the member approves (C12.34).
 - The delivery log keeps ciphertext so offline devices can catch up;
   unsending and erasure delete it. There is no pruning yet.
-- Tests: `tests/modules/member-e2ee.test.ts` (3 cases) and the C12.23 journey
-  in `tests/browser/members.spec.ts`.
+- Membership commits, messages and call keys carry the authority snapshot
+  used before encryption; erasure or device changes can refuse stale bytes
+  even when the MLS epoch is unchanged. Unconfirmed application/control sends
+  remain only on the device (at most 32 per conversation). An exact accepted
+  receipt recovers the readable message or confirmed call key after restart;
+  uncertain sends are not automatically repeated. After a connection failure,
+  reopen the conversation and check it before sending the same message again.
+- Tests: `tests/modules/member-e2ee.test.ts`, `tests/modules/member-group-calls.test.ts`,
+  `tests/core/openmls-legacy.test.ts`, `tests/core/openmls-wire.test.ts`,
+  `tests/browser/member-openmls.spec.ts` and the existing member journeys.
 
 ## C12.24 — group calls through the SFU (2026-10-15)
 
@@ -353,18 +365,20 @@ from mocked payment, mail or media runs alone.
   `LIVEKIT_URL` (its `wss://` URL), `LIVEKIT_API_KEY` and
   `LIVEKIT_API_SECRET`. Without them, group calls are not offered. The CSP
   allows that origin only on `/call/group/*` pages.
-- Tokens are minted in-process (`src/modules/members/sfu.ts`, HS256, two
-  hours, one room, identity `userId:deviceId`); only a device in the
+- Tokens are minted in-process (`src/modules/members/sfu.ts`, HS256, ten
+  minutes, one generation-specific room, identity `userId:deviceId`); only a device in the
   conversation's MLS group gets one.
 - Media keys never reach the server or the SFU: the starting device sends a
   random 32-byte key to the conversation's MLS group as a control message,
   and any device holding it re-sends it when a device joins the group later.
   LiveKit's frame encryption (insertable streams, AES-GCM) uses it; this is
   LiveKit's own frame format, not the RFC 9605 SFrame wire format.
-- Each call has a key generation. Leaving the conversation or removing a
-  device mid-call bumps it, the SFU disconnects that person or device (room
-  service API, after commit), and a remaining device sends a new key the
-  leaver never receives (C12.37). Every new call gets a new key.
+- Each call has a key generation. Leaving, privacy erasure or device removal
+  advances it and retires the previous SFU room after commit. Remaining devices
+  acquire the new key and reauthorize into the new room, preserving microphone
+  and camera choices. Cached self-hosted SFU credentials can reach only the
+  abandoned room; a short token lifetime does not supply immediate revocation.
+  Every new call gets a new key (C12.37).
 - CI runs the LiveKit release binary (checksum pinned) for
   `tests/browser/member-group-calls.spec.ts`; locally the test is skipped
   unless `LIVEKIT_URL` is set (`livekit-server --dev` uses `devkey`/`secret`).

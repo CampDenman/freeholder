@@ -20,9 +20,10 @@ import { activeSelf, participant } from "./messages";
 import { notifyMember } from "./notify";
 import { memberConversationParticipants, memberConversations, memberDevices, memberGroupCallParticipants, memberGroupCalls, memberMlsGroups, memberMlsRoster, memberProfiles } from "./schema";
 import { sfu } from "./sfu";
-import { roomOf } from "./call-seats";
+import { assertGeneration, roomOf } from "./call-seats";
+import { lockConversation, lockMemberProfiles } from "./authority-locks";
 
-const TOKEN_SECONDS = 2 * 3600;
+const TOKEN_SECONDS = 10 * 60;
 const STALE_MS = 12 * 3600 * 1000;
 
 async function accepted(ctx: ServiceContext, conversationId: string, userId: string) {
@@ -68,12 +69,13 @@ export const startGroupCall = defineService({
   output: z.object({ id: uuid, started: z.boolean() }),
   handler: async (input, ctx) => {
     if(!(await newDeploymentCallAllowed(ctx.tx)))throw new ServiceError("conflict","This site is preparing an update. New calls are paused; existing calls can continue and end normally.");
+    if (ctx.actor.kind === "user") await lockMemberProfiles(ctx.tx, [ctx.actor.userId], "share");
+    await lockConversation(ctx.tx, input.conversationId);
     const me = await activeSelf(ctx);
     await accepted(ctx, input.conversationId, me.userId);
     if (!sfu()) throw new ServiceError("validation", "This site does not host group calls.");
     const [group] = await ctx.tx.select().from(memberMlsGroups).where(eq(memberMlsGroups.conversationId, input.conversationId));
     if (!group) throw new ServiceError("validation", "Group calls need an end-to-end encrypted conversation: everyone here needs a device first.");
-    await ctx.tx.select({ id: memberConversations.id }).from(memberConversations).where(eq(memberConversations.id, input.conversationId)).for("update");
     await endStale(ctx, input.conversationId);
     const [running] = await ctx.tx.select().from(memberGroupCalls).where(and(eq(memberGroupCalls.conversationId, input.conversationId), eq(memberGroupCalls.state, "active")));
     if (running) return { id: running.id, started: false };
@@ -148,11 +150,15 @@ export const joinGroupCall = defineService({
   permission: "authenticated",
   writeClass: "write",
   agentCallable: false,
-  input: z.object({ id: uuid, deviceId: uuid }),
-  output: z.object({ url: z.string(), token: z.string(), room: z.string(), media: z.enum(["voice", "video"]), conversationId: uuid }),
+  input: z.object({ id: uuid, deviceId: uuid, generation: z.number().int().min(0).optional() }),
+  output: z.object({ url: z.string(), token: z.string(), room: z.string(), generation: z.number().int().min(0), media: z.enum(["voice", "video"]), conversationId: uuid }),
   handler: async (input, ctx) => {
+    if (ctx.actor.kind === "user") await lockMemberProfiles(ctx.tx, [ctx.actor.userId], "share");
     const me = await activeSelf(ctx);
+    const before = await liveCall(ctx, input.id);
+    await lockConversation(ctx.tx, before.conversationId);
     const call = await liveCall(ctx, input.id);
+    if (input.generation !== undefined) assertGeneration(call, input.generation);
     await accepted(ctx, call.conversationId, me.userId);
     const adapter = sfu();
     if (!adapter) throw new ServiceError("validation", "This site does not host group calls.");
@@ -167,9 +173,9 @@ export const joinGroupCall = defineService({
       .insert(memberGroupCallParticipants)
       .values({ callId: call.id, userId: me.userId })
       .onConflictDoUpdate({ target: [memberGroupCallParticipants.callId, memberGroupCallParticipants.userId], set: { joinedAt: new Date(), leftAt: null } });
-    const room = roomOf(call.id);
+    const room = roomOf(call.id, call.keyGeneration);
     const token = adapter.issue({ room, identity: `${me.userId}:${input.deviceId}`, name: me.displayName, ttlSeconds: TOKEN_SECONDS });
-    return { url: adapter.url, token, room, media: call.media, conversationId: call.conversationId };
+    return { url: adapter.url, token, room, generation: call.keyGeneration, media: call.media, conversationId: call.conversationId };
   },
 });
 
@@ -182,7 +188,11 @@ export const leaveGroupCall = defineService({
   input: z.object({ id: uuid }),
   output: okResult,
   handler: async (input, ctx) => {
+    if (ctx.actor.kind === "user") await lockMemberProfiles(ctx.tx, [ctx.actor.userId], "share");
     const me = await activeSelf(ctx);
+    const [before] = await ctx.tx.select({ conversationId: memberGroupCalls.conversationId }).from(memberGroupCalls).where(eq(memberGroupCalls.id, input.id));
+    if (!before) throw new ServiceError("not_found", "That call is not available.");
+    await lockConversation(ctx.tx, before.conversationId);
     const [call] = await ctx.tx.select().from(memberGroupCalls).where(eq(memberGroupCalls.id, input.id)).for("update");
     if (!call) throw new ServiceError("not_found", "That call is not available.");
     await participant(ctx, call.conversationId, me.userId);

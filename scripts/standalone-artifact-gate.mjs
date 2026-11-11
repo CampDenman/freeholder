@@ -51,6 +51,7 @@ const FORBIDDEN_ROOTS = new Set([
   "db",
   "deploy",
   "locales",
+  "native",
   "packages",
   "plugins",
   "scripts",

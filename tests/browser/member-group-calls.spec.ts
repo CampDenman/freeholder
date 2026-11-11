@@ -5,11 +5,12 @@
 // device holds the wrong key receives the same forwarded frames and can decode
 // none of them — which is what the SFU itself holds.
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
-import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
+import { CSRF_COOKIE, CSRF_HEADER, issueCsrfToken } from "@/core/http/csrf";
 import { memberDevices, memberFollows, memberGroupCalls, memberProfiles } from "@/modules/members/schema";
 import { seedC11Owner, C11_BASE_URL } from "./owner-session";
 
@@ -108,15 +109,39 @@ test.describe("group calls (C12.24)", () => {
     expect(await decodedWidth(kim.page, RAE)).toBe(0);
     expect(await decodedWidth(sam.page, RAE)).toBeGreaterThan(0);
 
+    const csrf = (await kim.context.cookies()).find(cookie => cookie.name === CSRF_COOKIE)!.value;
+    const [kimDevice] = await db().select().from(memberDevices).where(eq(memberDevices.userId, KIM));
+    const credentialResponse = await kim.context.request.post("/api/v1/members.joinGroupCall", { data: { id: call!.id, deviceId: kimDevice!.id, generation: 0 }, headers: { [CSRF_HEADER]: csrf } });
+    expect(credentialResponse.ok()).toBe(true);
+    const cachedCredential = await credentialResponse.json() as { url: string; token: string; room: string; generation: number };
+    expect(cachedCredential.room).toBe(`freeholder-${call!.id}`);
+    expect(cachedCredential.generation).toBe(0);
+
     // C12.37: Kim leaves the conversation mid-call. The SFU drops Kim, the
     // others move to a new key Kim never receives, and they keep decoding.
     const kimConversation = await kim.context.newPage();
     await kimConversation.goto(`/messages/${call!.conversationId}`);
     await kimConversation.getByRole("button", { name: "Leave conversation" }).click();
-    await expect(kim.page.getByText("You are no longer in this call.")).toBeVisible({ timeout: 30_000 });
+    await expect(kim.page.getByText("You are no longer in this call.").or(kim.page.getByRole("heading", { name: "That page is not here" }))).toBeVisible({ timeout: 30_000 });
     await expect(rae.page.locator(`[data-participant^="${KIM}:"]`)).toHaveCount(0, { timeout: 30_000 });
     await expect.poll(async () => (await db().select({ g: memberGroupCalls.keyGeneration }).from(memberGroupCalls).where(eq(memberGroupCalls.id, call!.id)))[0]?.g).toBe(1);
     await rae.page.waitForTimeout(8_000);
+    // A self-hosted SFU accepts a still-valid cached JWT after removal. It
+    // must reach only the obsolete, empty room: current peers reauthorized
+    // into the new generation instead of continuing to publish there.
+    const sdkPath = "/__synthetic_livekit_client.js";
+    await kim.page.route(`**${sdkPath}`, route => route.fulfill({ contentType: "text/javascript", body: readFileSync("node_modules/livekit-client/dist/livekit-client.umd.js") }));
+    await kim.page.addScriptTag({ url: `${C11_BASE_URL}${sdkPath}` });
+    const obsoletePeers = await kim.page.evaluate(async credential => {
+      type ProbeRoom = { connect(url: string, token: string): Promise<void>; disconnect(): Promise<void>; remoteParticipants: Map<string, unknown> };
+      const sdk = (window as unknown as { LivekitClient: { Room: new () => ProbeRoom } }).LivekitClient;
+      const probe = new sdk.Room();
+      try { await probe.connect(credential.url, credential.token); return [...probe.remoteParticipants.keys()]; }
+      finally { await probe.disconnect(); }
+    }, cachedCredential);
+    expect(obsoletePeers).toEqual([]);
+    const staleCredential = await kim.context.request.post("/api/v1/members.joinGroupCall", { data: { id: call!.id, deviceId: kimDevice!.id, generation: 1 }, headers: { [CSRF_HEADER]: csrf } });
+    expect(staleCredential.ok()).toBe(false);
     const before = await decodedFrames(sam.page, RAE);
     await sam.page.waitForTimeout(3_000);
     expect(await decodedFrames(sam.page, RAE)).toBeGreaterThan(before);

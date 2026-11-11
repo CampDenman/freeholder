@@ -21,6 +21,30 @@ env:
   SESSION_SECRET: ci-build-only-not-a-real-secret-0000000000
 
 jobs:
+  openmls:
+    name: OpenMLS reproducible runtime
+    env:
+      RUSTUP_TOOLCHAIN: 1.99.1
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - name: Install the pinned compiler and WASM tools
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --target wasm32-unknown-unknown
+          cargo +1.99.1 install wasm-bindgen-cli --version 0.2.130 --locked
+          cargo +1.99.1 install cargo-audit --version 0.22.2 --locked
+      - name: Verify native protocol and byte-identical runtime artifacts
+        run: |
+          cargo fmt --manifest-path native/openmls/Cargo.toml --all -- --check
+          cargo test --manifest-path native/openmls/Cargo.toml --locked
+          node native/openmls/build.mjs --check
+          cargo audit --file native/openmls/Cargo.lock --deny unsound
+          node native/openmls/interop.mjs
+
   mobile:
     name: Customer app
     runs-on: ubuntu-latest
@@ -483,7 +507,7 @@ jobs:
     # `checks` and the merge queue lands the candidate (merge-group 33993046449).
     name: checks
     if: ${{ always() }}
-    needs: [mobile, application, security, codeql, tests, ownership, browser, deployment]
+    needs: [openmls, mobile, application, security, codeql, tests, ownership, browser, deployment]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

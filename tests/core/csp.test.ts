@@ -68,6 +68,17 @@ describe("the Content Security Policy contract", () => {
     }
   });
 
+  it("allows WebAssembly only on actual member crypto surfaces (C12.39)", () => {
+    for (const path of ["/messages", "/messages/0b54", "/ar/messages/0b54", "/call/group/0b54", "/fr/call/group/0b54", "/report"]) {
+      const script = directive(contentSecurityPolicy({ nonce: "n", path, production: true }), "script-src");
+      expect(script).toContain("'wasm-unsafe-eval'");
+      expect(script).not.toContain("'unsafe-eval'");
+    }
+    for (const path of ["/", "/admin", "/call/0b54", "/messages-other", "/market"]) {
+      expect(directive(contentSecurityPolicy({ nonce: "n", path, production: true }), "script-src")).not.toContain("'wasm-unsafe-eval'");
+    }
+  });
+
   it("permits embedding only the same-origin editor preview", () => {
     const preview = contentSecurityPolicy({
       nonce: "preview",

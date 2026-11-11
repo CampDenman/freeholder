@@ -3,41 +3,14 @@
 // C12.23: real MLS devices for tests — the engine browsers run, with a memory
 // store, calling the services directly as the member.
 import { ServiceError, type Actor } from "@/core/service";
-import { E2eeDevice, type DeviceRecord, type E2eeStore, type E2eeTransport, type ReadMessage, type StoredKeyPackage } from "@/modules/members/e2ee/engine";
+import { E2eeDevice, type E2eeTransport } from "@/modules/members/e2ee/engine";
 import { claimKeyPackages, e2eeCommit, e2eeSync, publishKeyPackages, registerDevice, sendCallKey, sendEncrypted } from "@/modules/members/e2ee/service";
 import { ackHistory, closeHistoryRequest, historyRequests, receivedHistory, requestHistory, sendHistory } from "@/modules/members/e2ee/history";
 
 type Member = Extract<Actor, { kind: "user" }>;
 
-export function memoryStore(): E2eeStore {
-  let device: DeviceRecord | null = null;
-  const packages = new Map<string, StoredKeyPackage>();
-  const groups = new Map<string, { state: Uint8Array | null; cursor: number }>();
-  const messages = new Map<string, Map<string, ReadMessage>>();
-  const callKeys = new Map<string, string>();
-  const seen = new Map<string, string[]>();
-  let historyKey: Uint8Array | null = null;
-  return {
-    device: async () => device,
-    saveDevice: async (d) => { device = d; },
-    keyPackage: async (id) => packages.get(id) ?? null,
-    saveKeyPackages: async (list) => { for (const p of list) packages.set(p.id, p); },
-    dropKeyPackage: async (id) => { packages.delete(id); },
-    group: async (id) => groups.get(id) ?? null,
-    saveGroup: async (id, state, cursor) => { groups.set(id, { state, cursor }); },
-    messages: async (id) => new Map(messages.get(id) ?? []),
-    saveMessage: async (id, mid, m) => { messages.set(id, new Map(messages.get(id) ?? []).set(mid, m)); },
-    dropMessage: async (id, mid) => { messages.get(id)?.delete(mid); },
-    historyKey: async () => historyKey,
-    saveHistoryKey: async (key) => { historyKey = key; },
-    conversations: async () => [...messages.keys()],
-    seenDevices: async (id) => seen.get(id) ?? null,
-    saveSeenDevices: async (id, devices) => { seen.set(id, devices); },
-    callKey: async (id) => callKeys.get(id) ?? null,
-    saveCallKey: async (id, key) => { callKeys.set(id, key); },
-    clear: async () => { device = null; packages.clear(); groups.clear(); messages.clear(); callKeys.clear(); },
-  };
-}
+export { memoryStore } from "./e2ee-store";
+import { memoryStore } from "./e2ee-store";
 
 /** The services, called as the member, with errors carrying their codes as the server actions do. */
 export function directTransport(actor: Member): E2eeTransport {

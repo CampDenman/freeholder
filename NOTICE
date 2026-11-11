@@ -7,6 +7,10 @@ This product bundles third-party material that remains under its own license:
 
 - Font files under public/fonts/, licensed under the SIL Open Font License 1.1.
   Their license texts are kept alongside the font files.
+- OpenMLS/RustCrypto WebAssembly and wasm-bindgen JavaScript under
+  public/_freeholder/openmls/0.1.0/. NOTICE.txt there reproduces dependency
+  licenses, dependencies.json identifies exact sources, and the unmodified
+  MPL-2.0 HPKE source archives are distributed beside the binary.
 
 Third-party dependencies installed from package registries are not bundled in
 this repository and carry their own licenses.

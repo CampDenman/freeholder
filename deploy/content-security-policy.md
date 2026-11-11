@@ -18,6 +18,10 @@ upgrades insecure subrequests. Its deliberate exceptions are narrow:
 - `script-src` uses a nonce and `strict-dynamic`; development alone permits
   `unsafe-eval` for the Next development runtime. Inline script is never
   broadly allowed.
+- Member message, encrypted-report and group-call pages (including locale
+  paths) permit `wasm-unsafe-eval` for the pinned OpenMLS runtime. This does
+  not allow JavaScript `unsafe-eval`; unrelated public/admin pages do not
+  receive the WebAssembly exception (C12.39).
 - `style-src` requires the nonce for style elements. `style-src-attr` permits
   inline values because React uses bounded style attributes for crop anchors
   and visual bars.
