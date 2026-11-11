@@ -8701,5 +8701,6 @@
   "admin.retention.mail.confirm": "I verified this record belonged to the selected person at the recorded date.",
   "admin.retention.mail.review": "Record verified ownership",
   "mail.retainedAddress": "Address removed; the block remains active. Enter the independently verified original address to release it.",
-  "admin.retention.mail.record": "Historical mail fact"
+  "admin.retention.mail.record": "Historical mail fact",
+  "admin.activity.mailOwnershipReviewed": "Mail ownership was reviewed"
 }

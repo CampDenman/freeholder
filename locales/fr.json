@@ -8701,5 +8701,6 @@
   "admin.retention.mail.confirm": "J’ai vérifié que ce dossier appartenait à la personne sélectionnée à la date indiquée.",
   "admin.retention.mail.review": "Enregistrer la vérification",
   "mail.retainedAddress": "Adresse supprimée ; le blocage reste actif. Saisissez l’adresse d’origine vérifiée indépendamment pour lever le blocage.",
-  "admin.retention.mail.record": "Fait historique du courrier"
+  "admin.retention.mail.record": "Fait historique du courrier",
+  "admin.activity.mailOwnershipReviewed": "Le titulaire du courrier a été vérifié"
 }

@@ -8701,5 +8701,6 @@
   "admin.retention.mail.confirm": "تحقّقت من أن هذا السجل يخص الشخص المحدد في التاريخ المسجّل.",
   "admin.retention.mail.review": "تسجيل الملكية المتحقّق منها",
   "mail.retainedAddress": "أُزيل العنوان؛ ولا يزال الحظر نشطًا. أدخل العنوان الأصلي المتحقّق منه بشكل مستقل لرفع الحظر.",
-  "admin.retention.mail.record": "سجل بريد تاريخي"
+  "admin.retention.mail.record": "سجل بريد تاريخي",
+  "admin.activity.mailOwnershipReviewed": "تمت مراجعة ملكية البريد"
 }

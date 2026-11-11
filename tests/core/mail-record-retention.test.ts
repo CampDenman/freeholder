@@ -10,7 +10,7 @@ import { mailDeliveries, mailOutbox, mailProviderEvents, mailRecordSubjects, mai
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { mergeContacts, resolveContact, undoContactMerge } from "@/core/contacts/service";
-import { addRetentionException, createDataRequest, fulfillDataRequest, verifyDataRequest } from "@/core/privacy/service";
+import { addRetentionException, contactPrivacySources, createDataRequest, fulfillDataRequest, verifyDataRequest } from "@/core/privacy/service";
 import { getJob, stopJobs } from "@/core/jobs";
 import { eraseMailRecords } from "@/core/mail/record-privacy";
 import { reviewLegacyMailOwnership } from "@/core/mail/record-services";
@@ -101,6 +101,29 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     await recordMailProviderEvent.call({ provider: "resend", externalEventId: "owned-late-bounce", recipient: EMAIL, eventType: "hard_bounce", rawDigest: "e".repeat(64), occurredAt: new Date().toISOString() }, { kind: "system" });
     expect((await db().select().from(mailSuppressions))[0]?.email).not.toBe(EMAIL);
     expect((await db().select().from(mailProviderEvents)).every(row => row.recipient !== EMAIL)).toBe(true);
+  });
+  it("exports a minimal owned receipt for a minimized active block without exposing its private address lookup", async () => {
+    const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
+    await recordMailProviderEvent.call({ provider: "resend", externalEventId: "export-retained-block", recipient: EMAIL, eventType: "hard_bounce", rawDigest: "3".repeat(64), occurredAt: new Date().toISOString() }, { kind: "system" });
+    await erasure(contact.id);
+    const [block] = await db().select().from(mailSuppressions);
+    const source = contactPrivacySources().find(item => item.scope === "mail.records")!;
+    const exported = await db().transaction(tx => source.exportData(tx, contact.id)) as { suppressions: Array<{ id: string; active: boolean; redactedAt: Date }> };
+    expect(exported.suppressions).toEqual(expect.arrayContaining([expect.objectContaining({ id: block!.id, active: true, redactedAt: expect.any(Date) })]));
+    expect(JSON.stringify(exported)).not.toContain(EMAIL);
+    expect(JSON.stringify(exported)).not.toMatch(/Digest|encryptedKey|contactId|verifiedBy|evidence/);
+  });
+  it("exports every owned record beyond the bounded query page without truncating the privacy subject", async () => {
+    const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
+    await db().transaction(async tx => {
+      const receipts = await mailReceipts(tx), ids = Array.from({ length: 5_001 }, () => randomUUID());
+      await tx.insert(mailDeliveries).values(ids.map(id => ({ id, purpose: "transactional" as const, provider: "console" as const, recipient: EMAIL, recipientDigest: receipts.digest("address", EMAIL), subject: "Owned page fixture", status: "failed" as const, requestedBy: "system" })));
+      await tx.insert(mailRecordSubjects).values(ids.map(recordId => ({ kind: "delivery" as const, recordId, contactId: contact.id })));
+    });
+    const source = contactPrivacySources().find(item => item.scope === "mail.records")!;
+    const exported = await db().transaction(tx => source.exportData(tx, contact.id)) as { deliveries: Array<{ id: string }> };
+    expect(exported.deliveries).toHaveLength(5_001);
+    expect(new Set(exported.deliveries.map(row => row.id)).size).toBe(5_001);
   });
   it("keeps a named hold attached after the contact's address is anonymized", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);

@@ -17,7 +17,7 @@ import { users } from "@/core/auth/schema";
 import { connectedAccounts, connectionCapabilities } from "@/core/connections/schema";
 import { db } from "@/core/db";
 import { resetEnvForTests } from "@/core/env";
-import { startJobProducer } from "@/core/jobs";
+import { startJobProducer, stopJobs } from "@/core/jobs";
 import { ready } from "@/core/runtime";
 import {
   mailDeliveries,
@@ -75,6 +75,9 @@ describe.runIf(hasDatabase)("mail services", () => {
     environment({ SESSION_SECRET: "mail-outbox-test-secret-material-32-bytes" });
     await truncateSpine();
     await seedOwner();
+    // Direct sendMail fixtures own queue preparation; filtered runs must not
+    // depend on a different service test having initialized the producer.
+    await startJobProducer();
   });
 
   afterEach(() => {
@@ -91,6 +94,7 @@ describe.runIf(hasDatabase)("mail services", () => {
 
   afterAll(async () => {
     await truncateSpine();
+    await stopJobs();
     await closeDb();
   });
 
@@ -589,7 +593,7 @@ describe.runIf(hasDatabase)("mail services", () => {
     expect(delivery).toMatchObject({
       provider: "console",
       status: "failed",
-      attempts: 1,
+      attempts: 0,
       lastError: "The configured mail route changed after this message was queued.",
     });
     expect(await db().select().from(mailOutbox)).toEqual([]);
@@ -653,7 +657,9 @@ describe.runIf(hasDatabase)("mail services", () => {
       lastError: null,
     });
     expect(providerCall).toHaveBeenCalledTimes(2);
-    expect(await db().select().from(mailOutbox)).toEqual([]);
+    // The second request's success is not a final outcome for the first
+    // request whose response was lost. Its private original stays pending.
+    expect(await db().select().from(mailOutbox)).toHaveLength(1);
   });
 
   it("refuses bulk mail without a verified default and refuses suppressed recipients before sending", async () => {

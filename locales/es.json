@@ -8701,5 +8701,6 @@
   "admin.retention.mail.confirm": "Verifiqué que este registro pertenecía a la persona seleccionada en la fecha indicada.",
   "admin.retention.mail.review": "Registrar titularidad verificada",
   "mail.retainedAddress": "Dirección eliminada; el bloqueo sigue activo. Introduce la dirección original verificada de forma independiente para liberarla.",
-  "admin.retention.mail.record": "Registro histórico de correo"
+  "admin.retention.mail.record": "Registro histórico de correo",
+  "admin.activity.mailOwnershipReviewed": "Se revisó la titularidad del correo"
 }

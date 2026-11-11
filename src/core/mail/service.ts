@@ -650,19 +650,21 @@ async function finishQueuedMail(
   values: Partial<typeof mailDeliveries.$inferInsert>,
   /** Saved in the same transaction as the outcome (C3.31: a recorded grant). */
   alsoRecord?: (tx: Tx) => Promise<void>,
+  options: { onlyUnsent?: boolean } = {},
 ): Promise<void> {
   const events: Array<{ id: string; eventName: string; payload: unknown }> = [];
   await db().transaction(async (tx) => {
     const receipts = await mailReceipts(tx);
     const [current] = await tx.select().from(mailDeliveries).where(eq(mailDeliveries.id, deliveryId)).limit(1).for("update");
     if (!current) return;
+    if (options.onlyUnsent && current.attempts > 0) return;
     const [delivery] = await tx
       .update(mailDeliveries)
       .set({ ...values, ...(values.providerRef ? { providerRefDigest: receipts.digest(`provider:${current.provider}`, values.providerRef) } : {}), updatedAt: new Date() })
       .where(eq(mailDeliveries.id, deliveryId))
       .returning({ recipient: mailDeliveries.recipient });
     if (alsoRecord) await alsoRecord(tx);
-    await tx.delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
+    if (current.attempts <= 1) await tx.delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
     if (delivery && (values.status === "suppressed" || values.status === "failed")) {
       const eventName = "mail.deliveryUpdated";
       const payload = { deliveryId, type: values.status };
@@ -703,7 +705,7 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
     await finishQueuedMail(deliveryId, {
       status: "failed",
       lastError: "External mail delivery is disabled in the public playground.",
-    });
+    }, undefined, { onlyUnsent: true });
     return { status: "failed" };
   }
 
@@ -716,7 +718,7 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
     await finishQueuedMail(deliveryId, {
       status: "failed",
       lastError: "The encrypted mail payload could not be read safely.",
-    });
+    }, undefined, { onlyUnsent: true });
     return { status: "failed" };
   }
 
@@ -730,7 +732,7 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
     await finishQueuedMail(deliveryId, {
       status: "suppressed",
       lastError: `Suppressed after a ${suppressed.reason.replace("_", " ")}.`,
-    });
+    }, undefined, { onlyUnsent: true });
     return { status: "suppressed" };
   }
 
@@ -738,21 +740,12 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
     const { canContact } = await import("@/core/privacy/service");
     const consent = await canContact.call({ contactId: message.marketingContactId, purpose: "marketing", channel: "email" }, { kind: "system" });
     if (!consent.allowed) {
-      await finishQueuedMail(deliveryId, { status: "suppressed", lastError: "Marketing email consent was withdrawn before delivery." });
+      await finishQueuedMail(deliveryId, { status: "suppressed", lastError: "Marketing email consent was withdrawn before delivery." }, undefined, { onlyUnsent: true });
       return { status: "suppressed" };
     }
   }
 
-  const claimed = await db().transaction(async tx => {
-    await mailReceipts(tx);
-    const [row] = await tx.update(mailDeliveries).set({ attempts: sql`${mailDeliveries.attempts} + 1`, updatedAt: new Date() }).where(and(
-      eq(mailDeliveries.id, deliveryId), inArray(mailDeliveries.status, ["queued", "failed"]), isNull(mailDeliveries.redactedAt),
-      sql`exists(select 1 from ${mailOutbox} where ${mailOutbox.deliveryId}=${mailDeliveries.id} and ${mailOutbox.createdAt} >= clock_timestamp()-interval '30 days')`,
-    )).returning({ id: mailDeliveries.id });
-    return row;
-  });
-  if (!claimed) return { status: "missing" };
-
+  let dispatchClaimed = false;
   try {
     const sender = queued.delivery.senderId
       ? await getSender(db() as unknown as Tx, queued.delivery.senderId)
@@ -782,6 +775,16 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
             reason: transactionalReason ?? "service_notification",
             eventRef: eventRef ?? `mail-delivery:${deliveryId}`,
           };
+    const claimed = await db().transaction(async tx => {
+      await mailReceipts(tx);
+      const [row] = await tx.update(mailDeliveries).set({ attempts: sql`${mailDeliveries.attempts} + 1`, updatedAt: new Date() }).where(and(
+        eq(mailDeliveries.id, deliveryId), inArray(mailDeliveries.status, ["queued", "failed"]), isNull(mailDeliveries.redactedAt),
+        sql`exists(select 1 from ${mailOutbox} where ${mailOutbox.deliveryId}=${mailDeliveries.id} and ${mailOutbox.createdAt} >= clock_timestamp()-interval '30 days')`,
+      )).returning({ id: mailDeliveries.id });
+      return row;
+    });
+    if (!claimed) return { status: "missing" };
+    dispatchClaimed = true;
     const result = await adapter.send({ ...outbound, deliveryId, ...(permission ? { permission } : {}) });
     // A grant the carrier recorded is remembered with the send's outcome, in
     // one transaction, so a later withdrawal reaches exactly this address and
@@ -804,6 +807,10 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
       error instanceof MailAdapterError
         ? error.retryable
         : !(error instanceof ServiceError);
+    if (!dispatchClaimed && !retryable) {
+      await finishQueuedMail(deliveryId, { status: "failed", lastError: safeDeliveryError(error) }, undefined, { onlyUnsent: true });
+      return { status: "failed" };
+    }
     await db().transaction(async tx => {
       await mailReceipts(tx);
       await tx.update(mailDeliveries).set({

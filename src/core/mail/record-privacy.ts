@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // C3.31: immutable mail ownership, with truthful pending erasure receipts.
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
 import { enqueueJob } from "@/core/jobs";
 import { contactPrivacyIdentity } from "@/core/privacy/contact-identity";
 import { completeErasureJob, registerContactPrivacySource } from "@/core/privacy/service";
-import { ServiceError, type Tx } from "@/core/service";
+import type { Tx } from "@/core/service";
 import { mailDeliveries, mailProviderEvents, mailRecordSubjects, mailSuppressions } from "./schema";
 import { MAIL_RECORDS_SCOPE, minimizeMailRecordsInTransaction, type MailRecordRef } from "./record-retention";
 import { publicMailDelivery, publicMailSuppression } from "./service";
@@ -17,19 +17,28 @@ export const MAIL_RECORD_ERASURE_JOB = "core.eraseMailRecords";
 const refSchema = z.object({ kind: z.enum(["delivery", "event", "suppression"]), id: z.uuid(), requiresReview: z.boolean() });
 const erasurePayload = z.object({ requestId: z.uuid(), originalJobId: z.uuid(), refs: z.array(refSchema).min(1).max(500) });
 type CapturedRef = z.infer<typeof refSchema>;
+async function readChunks<T>(ids: string[], read: (chunk: string[]) => Promise<T[]>): Promise<T[]> {
+  const result: T[] = [];
+  for (let offset = 0; offset < ids.length; offset += 500) result.push(...await read(ids.slice(offset, offset + 500)));
+  return result;
+}
 
-async function capture(tx: Tx, contactId: string): Promise<CapturedRef[]> {
+async function capture(tx: Tx, contactId: string, includeMinimized = false): Promise<CapturedRef[]> {
   const identity = await contactPrivacyIdentity(tx, contactId), refs: CapturedRef[] = [];
   for (const kind of ["delivery", "event", "suppression"] as const) {
     const table = kind === "delivery" ? mailDeliveries : kind === "event" ? mailProviderEvents : mailSuppressions;
     const address = kind === "suppression" ? mailSuppressions.email : kind === "event" ? mailProviderEvents.recipient : mailDeliveries.recipient;
     const owned = sql<boolean>`exists(select 1 from ${mailRecordSubjects} where kind=${kind} and record_id=${table.id} and ${inArray(mailRecordSubjects.contactId, identity.contactIds)})`;
     const unknown = identity.emails.length ? sql<boolean>`not exists(select 1 from ${mailRecordSubjects} where kind=${kind} and record_id=${table.id} and contact_id is not null) and ${inArray(address, identity.emails)}` : sql<boolean>`false`;
-    // Keep the correlated outer-table qualification. Drizzle's single-table
-    // selection shorthand strips it inside computed SELECT expressions.
-    const rows = await tx.execute<{ id: string; owned: boolean }>(sql`select ${table.id} as id,${owned} as owned from ${table} where ${and(isNull(table.redactedAt), or(owned, unknown))} order by ${table.id} limit 5001`);
-    if (rows.length > 5_000) throw new ServiceError("conflict", "Mail privacy needs a bounded record review before this request can complete.");
-    refs.push(...rows.map(row => ({ kind, id: row.id, requiresReview: !row.owned })));
+    let after: string | undefined;
+    for (;;) {
+      // Keep outer qualifications in computed SQL; bounded keyset reads must
+      // not truncate a large subject's export or forget pending erasure work.
+      const rows = await tx.execute<{ id: string; owned: boolean }>(sql`select ${table.id} as id,${owned} as owned from ${table} where ${and(includeMinimized ? undefined : isNull(table.redactedAt), or(owned, unknown), after ? gt(table.id, after) : undefined)} order by ${table.id} limit 500`);
+      refs.push(...rows.map(row => ({ kind, id: row.id, requiresReview: !row.owned })));
+      if (rows.length < 500) break;
+      after = rows.at(-1)!.id;
+    }
   }
   return refs;
 }
@@ -51,12 +60,12 @@ registerContactPrivacySource({
   tables: ["mail_deliveries", "mail_provider_events", "mail_suppressions", "mail_record_subjects"],
   eraseOrder: 20,
   exportData: async (tx, contactId) => {
-    const refs = await capture(tx, contactId), owned = refs.filter(ref => !ref.requiresReview);
+    const refs = await capture(tx, contactId, true), owned = refs.filter(ref => !ref.requiresReview);
     const ids = (kind: MailRecordRef["kind"]) => owned.filter(ref => ref.kind === kind).map(ref => ref.id);
     return {
-      deliveries: ids("delivery").length ? (await tx.select().from(mailDeliveries).where(inArray(mailDeliveries.id, ids("delivery")))).map(publicMailDelivery) : [],
-      events: ids("event").length ? (await tx.select({ id: mailProviderEvents.id, provider: mailProviderEvents.provider, recipient: mailProviderEvents.recipient, eventType: mailProviderEvents.eventType, detail: mailProviderEvents.detail, occurredAt: mailProviderEvents.occurredAt, redactedAt: mailProviderEvents.redactedAt }).from(mailProviderEvents).where(inArray(mailProviderEvents.id, ids("event")))) : [],
-      suppressions: ids("suppression").length ? (await tx.select().from(mailSuppressions).where(inArray(mailSuppressions.id, ids("suppression")))).map(publicMailSuppression) : [],
+      deliveries: await readChunks(ids("delivery"), async chunk => (await tx.select().from(mailDeliveries).where(inArray(mailDeliveries.id, chunk))).map(row => row.redactedAt ? { id: row.id, status: row.status, provider: row.provider, purpose: row.purpose, redactedAt: row.redactedAt } : publicMailDelivery(row))),
+      events: await readChunks(ids("event"), async chunk => (await tx.select({ id: mailProviderEvents.id, provider: mailProviderEvents.provider, recipient: mailProviderEvents.recipient, eventType: mailProviderEvents.eventType, detail: mailProviderEvents.detail, occurredAt: mailProviderEvents.occurredAt, redactedAt: mailProviderEvents.redactedAt }).from(mailProviderEvents).where(inArray(mailProviderEvents.id, chunk))).map(row => row.redactedAt ? { id: row.id, provider: row.provider, eventType: row.eventType, occurredAt: row.occurredAt, redactedAt: row.redactedAt } : row)),
+      suppressions: await readChunks(ids("suppression"), async chunk => (await tx.select().from(mailSuppressions).where(inArray(mailSuppressions.id, chunk))).map(row => row.redactedAt ? { id: row.id, active: row.active, reason: row.reason, provider: row.provider, releasedAt: row.releasedAt, redactedAt: row.redactedAt } : publicMailSuppression(row))),
       ownershipReviewRequired: refs.filter(ref => ref.requiresReview).length,
     };
   },
