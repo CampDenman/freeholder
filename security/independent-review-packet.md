@@ -13,7 +13,7 @@ native suites, including both system-refusal controls, without database skips.
 Address reassignment, current supporting-fact ownership and
 original pending job identities are separate; completed replays are no-ops and
 missing originals require exact backup. SDK 8/audit 7, full fast 373 plus its one
-documented exclusion and production scrub 20,330 files / 242,416,243 bytes passed.
+documented exclusion and production scrub 20,330 files / 242,435,915 bytes passed.
 Four fresh-database locale 320px owner-browser journeys passed in both themes
 with keyboard, Axe, bounds and service/audit assertions. Protected integration
 remains required. Required enabled

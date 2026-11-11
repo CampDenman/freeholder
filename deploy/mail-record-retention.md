@@ -89,10 +89,12 @@ block exports, stale snapshot writes and nullable reviewer metadata refusal.
 The final actual-main composition, based on migration 70 main `1ffec6fa`, passed
 96 actual controls across eight mail routing/privacy/populated-upgrade/adjacent
 suites, with no database skips. Those 97 include both system-actor refusal
-controls; they are not an additional count. SDK generation passed all eight
-catalog checks without drift. TypeScript, lint, licensing, plan checks and the
+controls; they are not an additional count. Rebasing onto actual main `2a4af1e` preserved every mail runtime/test byte.
+The current-main composition passed the actual 501-record regression again,
+SDK generation (eight catalog checks without drift), and 35 locale/activity
+checks; all upstream translation values were preserved. TypeScript, lint, licensing, plan checks and the
 373-contract inventory passed, with its one documented exclusion. The production
-artifact scrub passed 20,330 files /242,416,243 bytes. All four fresh-database
+artifact scrub passed 20,330 files /242,435,915 bytes. All four fresh-database
 English/Spanish/French/Arabic owner review browser journeys passed at 320px in
 both themes with keyboard, Axe, actual element bounds and real service/audit
 assertions. A real 501-record before failure proved that 500 unsettled notice copies could
