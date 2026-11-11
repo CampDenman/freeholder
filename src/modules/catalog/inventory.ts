@@ -679,6 +679,27 @@ export const availability = defineService({
   },
 });
 
+/** C5.16/C5.20: internal cart projection may use that cart's own active holds.
+ * Public availability never accepts a caller-selected reservation exemption.
+ */
+export const availabilityForCart = defineService({
+  name:"catalog.availabilityForCart",
+  summary:"Include only the current cart's active stock holds in its availability.",
+  kind:"query",permission:"system",external:false,
+  input:z.object({cartId:id,variantId:id,locationId:id,quantity:z.number().int().min(1).max(1_000_000)}),
+  output:availabilityResult,
+  handler:async(input,ctx)=>{
+    const result=await ctx.call(availability,{variantId:input.variantId,locationId:input.locationId,quantity:input.quantity});
+    if(!result.tracked) return result;
+    const held=await ctx.tx.select({quantity:stockReservations.quantity}).from(stockReservations)
+      .innerJoin(inventoryItems,eq(inventoryItems.id,stockReservations.inventoryItemId))
+      .where(and(eq(inventoryItems.variantId,input.variantId),eq(inventoryItems.locationId,input.locationId),eq(stockReservations.holderType,"cart"),eq(stockReservations.holderId,input.cartId),eq(stockReservations.status,"active"),gt(stockReservations.expiresAt,sql`now()`)));
+    const canPromise=asCount(result.canPromise+held.reduce((total,hold)=>total+hold.quantity,0));
+    const inStock=canPromise>=input.quantity;
+    return {...result,canPromise,available:inStock || result.available,backordered:inStock ? false : result.backordered,restockAt:inStock ? null : result.restockAt};
+  },
+});
+
 export const reserveStock = defineService({
   name: "catalog.reserveStock",
   summary: "Hold tracked stock for a cart, order or booking until it expires.",
@@ -892,6 +913,7 @@ export default [
   recordDamage,
   transferStock,
   availability,
+  availabilityForCart,
   reserveStock,
   releaseReservation,
   consumeReservation,

@@ -24,7 +24,7 @@ import {
 } from "@/core/service";
 import { managesCartTokens, requireCartAccess, requireOwnedContact, shopperClientKey } from "./cart-access";
 import { CART_KINDS, CART_STATUSES } from "./contract";
-import { availability, releaseReservation, reserveStock } from "./inventory";
+import { availabilityForCart, releaseReservation, reserveStock } from "./inventory";
 import { resolvePrice } from "./pricing";
 import { cartItems, carts, productVariants, products, wishlistItems, wishlists } from "./schema";
 import { assertSellable } from "./market";
@@ -481,10 +481,14 @@ export const addCartItem = defineService({
     const nextQty = (existing?.quantity ?? 0) + input.quantity;
     const locationId = input.locationId ?? existing?.locationId ?? null;
     if (locationId) {
-      const stock = await ctx.callAsSystem(availability, {
+      const colocated=await ctx.tx.select({id:cartItems.id,quantity:cartItems.quantity}).from(cartItems)
+        .where(and(eq(cartItems.cartId,cart.id),eq(cartItems.variantId,input.variantId),eq(cartItems.locationId,locationId)));
+      const quantity=nextQty+colocated.filter(line=>line.id!==existing?.id).reduce((total,line)=>total+line.quantity,0);
+      const stock = await ctx.callAsSystem(availabilityForCart, {
+        cartId:cart.id,
         variantId: input.variantId,
         locationId,
-        quantity: nextQty,
+        quantity,
       });
       if (!stock.available) {
         throw new ServiceError("validation", "There is not enough stock to add that quantity.");
@@ -1028,10 +1032,11 @@ async function projectCart(ctx: ServiceContext, cartId: string, revealToken = fa
       quantity: row.item.quantity,
     });
     const stock = row.item.locationId
-      ? await ctx.callAsSystem(availability, {
+      ? await ctx.callAsSystem(availabilityForCart, {
+          cartId:cart.id,
           variantId: row.item.variantId,
           locationId: row.item.locationId,
-          quantity: row.item.quantity,
+          quantity: rows.filter(line=>line.item.variantId===row.item.variantId && line.item.locationId===row.item.locationId).reduce((total,line)=>total+line.item.quantity,0),
         })
       : { tracked: false, available: true };
     lines.push({
