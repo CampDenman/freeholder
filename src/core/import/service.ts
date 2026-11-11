@@ -13,6 +13,7 @@
 // then one transaction that writes the pages, redirects and report
 // (`imports.commitApply`). A commit interrupted halfway resumes from the
 // files already recorded.
+import { createHash } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
@@ -31,6 +32,8 @@ import { uploadAsset } from "@/core/media/service";
 import { addNavLink, NAV_SECTION_KEYS } from "@/modules/cms/chrome-nav";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS } from "./contract";
+import { crawlPublicSource, type CrawlKind } from "./crawl";
+import { assertSourceStageable, assertNoPendingSourceUpload } from "./source-lifecycle";
 import {
   discoverFromPublicOrigin,
   parseRssOrAtom,
@@ -54,6 +57,7 @@ import {
 
 const HTML_MARKUP_MAX = 20_000;
 const REPORT_LIST_MAX = 100;
+
 
 type PreviewPage = {
   url: string;
@@ -443,6 +447,9 @@ export const previewImport = defineService({
   }),
   output: runRow,
   handler: async (input, ctx) => {
+    const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
+    if (!before) throw new ServiceError("not_found", "No such import run.");
+    assertSourceStageable(before);
     const [row] = await ctx.tx
       .update(importRuns)
       .set({
@@ -471,6 +478,7 @@ const mediaToFetch = z.object({
 /** The read half of a commit: what still has to be fetched. */
 const commitSource = defineService({
   name: "imports.commitSource",
+  orchestratedBy: "imports.commit",
   summary: "List the media a previewed import still has to fetch.",
   kind: "query",
   permission: "scoped",
@@ -480,6 +488,7 @@ const commitSource = defineService({
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
+    assertNoPendingSourceUpload(run);
     if (run.status !== "previewed") {
       throw new ServiceError("conflict", "Preview the import before committing it.");
     }
@@ -501,6 +510,7 @@ const commitSource = defineService({
 /** One fetched (or refused) file, recorded so a retried commit resumes. */
 const recordImportMedia = defineService({
   name: "imports.recordMedia",
+  orchestratedBy: "imports.commit",
   summary: "Record one media file fetched for an import run.",
   kind: "mutation",
   permission: "scoped",
@@ -640,6 +650,7 @@ async function importPostComments(ctx: ServiceContext, runId: string, pageId: st
 
 const commitApply = defineService({
   name: "imports.commitApply",
+  orchestratedBy: "imports.commit",
   summary: "Write a previewed import into the CMS as drafts, with redirects and a report.",
   kind: "mutation",
   permission: "scoped",
@@ -654,6 +665,7 @@ const commitApply = defineService({
       .limit(1)
       .for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
+    assertNoPendingSourceUpload(before);
     if (before.status !== "previewed") {
       throw new ServiceError("conflict", "Preview the import before committing it.");
     }
@@ -1248,6 +1260,9 @@ export const mapImport = defineService({
   }),
   output: runRow,
   handler: async (input, ctx) => {
+    const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
+    if (!before) throw new ServiceError("not_found", "No such import run.");
+    assertSourceStageable(before);
     const [row] = await ctx.tx
       .update(importRuns)
       .set({ status: "mapped", mapping: { pages: input.mapping } })
@@ -1559,8 +1574,9 @@ export const previewFromSource = defineService({
   }),
   output: runRow,
   handler: async (input, ctx) => {
-    const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
+    const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
+    assertSourceStageable(before);
     const origin = before.origin ?? "https://example.com";
     const kind = before.kind ?? "html";
     let preview: Record<string, unknown>;
@@ -1590,6 +1606,84 @@ export const previewFromSource = defineService({
       .returning();
     ctx.setSubject("import_run", row!.id);
     return row!;
+  },
+});
+
+
+/** The digest is a compare-and-swap token, never an authorization grant. */
+function sourceRevision(run: unknown): string {
+  return createHash("sha256").update(JSON.stringify(run)).digest("hex");
+}
+
+const crawlSource = defineService({
+  name: "imports.crawlSource",
+  orchestratedBy: "imports.previewFromUrl",
+  summary: "Read an unchanged stageable import before public-source discovery.",
+  kind: "query",
+  permission: "scoped",
+  external: false,
+  input: z.object({ id: uuid, url: z.string().url() }),
+  output: z.object({ id: uuid, revision: z.string(), kind: z.string(), origin: z.string(), url: z.string() }),
+  handler: async (input, ctx) => {
+    const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
+    if (!run) throw new ServiceError("not_found", "No such import run.");
+    assertSourceStageable(run);
+    if (!["wordpress-rest", "sitemap", "rss", "atom", "html"].includes(run.kind ?? "")) throw new ServiceError("validation", "Upload this source as an export file instead.");
+    let url: URL;
+    try { url = assertPublicHttpUrl(input.url); } catch { throw new ServiceError("validation", "Use a public HTTP or HTTPS source URL without credentials."); }
+    if (url.origin !== run.origin) throw new ServiceError("validation", "The source URL must belong to this import's origin.");
+    return { id: run.id, revision: sourceRevision(run), kind: run.kind!, origin: run.origin, url: url.href };
+  },
+});
+
+const applyCrawl = defineService({
+  name: "imports.applyCrawl",
+  orchestratedBy: "imports.previewFromUrl",
+  summary: "Stage discovery only while the source run still matches its read snapshot.",
+  kind: "mutation",
+  permission: "scoped",
+  external: false,
+  input: z.object({ id: uuid, revision: z.string(), preview: z.record(z.string(), z.unknown()).optional(), counts: z.record(z.string(), z.number()).optional(), report: z.record(z.string(), z.unknown()).optional(), error: z.string().max(2000).optional() }),
+  output: runRow,
+  handler: async (input, ctx) => {
+    const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
+    if (!run) throw new ServiceError("not_found", "No such import run.");
+    assertSourceStageable(run);
+    if (sourceRevision(run) !== input.revision) throw new ServiceError("conflict", "This import changed during discovery. Reload it before trying again.");
+    const [result] = await ctx.tx.update(importRuns).set(input.error
+      ? { status: "failed", error: input.error }
+      : { status: "previewed", preview: input.preview!, counts: input.counts!, error: null, checkpoint: { ...checkpointOf(run.checkpoint), crawl: input.report } }
+    ).where(eq(importRuns.id, input.id)).returning();
+    ctx.setSubject("import_run", run.id);
+    return result!;
+  },
+});
+
+export const previewFromUrl = defineOrchestratedService({
+  name: "imports.previewFromUrl",
+  summary: "Crawl a public WordPress API, sitemap, feed or HTML site into a staged preview. Nothing is published.",
+  kind: "mutation",
+  permission: "scoped",
+  rateLimit: { limit: 10, windowSeconds: 3600, subject: input => input.id, message: "This import has read its source repeatedly. Wait before trying again." },
+  input: z.object({ id: uuid, url: z.string().url().max(2048) }),
+  output: runRow,
+  handler: async (input, actor) => {
+    const source = await crawlSource.call(input, actor);
+    let staged: StagedPreview;
+    let report: Record<string, unknown>;
+    try {
+      const discovered = await crawlPublicSource(source.kind as CrawlKind, source.url);
+      staged = discovered.wordpress
+        ? stageWordpressExport(wordpressExportFromRest(discovered.wordpress, source.origin), source.origin)
+        : { preview: { pages: discovered.pages }, counts: { pages: discovered.pages.length } };
+      staged.counts = { ...staged.counts, crawlBlocked: discovered.report.blocked.length, crawlRequests: discovered.report.requests, crawlBytes: discovered.report.bytes };
+      report = { sourceUrl: discovered.sourceUrl, ...discovered.report };
+    } catch (error) {
+      // Transport errors contain no response body, provider secret or arbitrary source text.
+      const message = error instanceof SyntaxError ? "The source did not return valid UTF-8 JSON." : error instanceof Error ? error.message.slice(0, 2000) : "The source could not be read.";
+      return applyCrawl.call({ id: input.id, revision: source.revision, error: message }, actor);
+    }
+    return applyCrawl.call({ id: input.id, revision: source.revision, ...staged, report }, actor);
   },
 });
 
@@ -1633,6 +1727,9 @@ export default [
   startImport,
   previewImport,
   previewFromSource,
+  crawlSource,
+  applyCrawl,
+  previewFromUrl,
   mapImport,
   reviewImportConflicts,
   commitSource,

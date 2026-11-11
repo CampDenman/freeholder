@@ -25,6 +25,7 @@ import { importRuns } from "@/core/plugins/schema";
 import { storage } from "@/adapters/storage";
 import { DEFAULT_IMPORTER_LIMITS } from "./contract";
 import { stageImportSource, stageWordpressExport } from "./service";
+import { assertSourceStageable } from "./source-lifecycle";
 import { wordpressExportBuilder } from "./wordpress";
 
 /**
@@ -37,7 +38,7 @@ export const IMPORT_SOURCE_MAX_BYTES = 100 * 1024 * 1024;
 /** Under the request proxy's 10 MB buffer, with room to spare. */
 export const IMPORT_SOURCE_CHUNK_BYTES = 4 * 1024 * 1024;
 const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
-const STAGEABLE = new Set(["discover", "mapped", "previewed", "failed"]);
+
 
 const uploadRecord = z.object({
   uploadId: z.string().uuid(),
@@ -94,6 +95,7 @@ function sameUploader(upload: UploadRecord, actor: Actor): boolean {
 
 const beginApply = defineService({
   name: "imports.beginSourceUploadApply",
+  orchestratedBy: "imports.beginSourceUpload",
   summary: "Reserve a chunked upload of an import source file.",
   kind: "mutation",
   permission: "scoped",
@@ -118,9 +120,7 @@ const beginApply = defineService({
       .limit(1)
       .for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
-    if (!STAGEABLE.has(run.status)) {
-      throw new ServiceError("conflict", "This import has already been committed. Start a new import for another file.");
-    }
+    assertSourceStageable(run, true);
     const checkpoint = checkpointOf(run.checkpoint);
     if (Array.isArray(checkpoint.media) && checkpoint.media.length > 0) {
       throw new ServiceError("conflict", "Files from this import were already fetched. Roll it back before staging another export.");
@@ -185,6 +185,7 @@ export const beginSourceUpload = defineOrchestratedService({
 
 const claimChunk = defineService({
   name: "imports.claimSourceChunk",
+  orchestratedBy: "imports.uploadSourceChunk",
   summary: "Check one chunk of an import source upload before it is stored.",
   kind: "query",
   permission: "scoped",
@@ -204,7 +205,7 @@ const claimChunk = defineService({
     if (!upload || upload.uploadId !== input.uploadId || !sameUploader(upload, ctx.actor)) {
       throw new ServiceError("not_found", "That upload is not here.");
     }
-    if (!STAGEABLE.has(run.status)) throw new ServiceError("conflict", "This import is no longer accepting a file.");
+    assertSourceStageable(run, true);
     if (Date.parse(upload.expiresAt) <= Date.now()) {
       throw new ServiceError("conflict", "That upload has expired. Start the upload again.");
     }
@@ -229,6 +230,7 @@ const claimChunk = defineService({
 
 const recordChunk = defineService({
   name: "imports.recordSourceChunk",
+  orchestratedBy: "imports.uploadSourceChunk",
   summary: "Record one stored chunk of an import source upload.",
   kind: "mutation",
   permission: "scoped",
@@ -247,6 +249,7 @@ const recordChunk = defineService({
       .limit(1)
       .for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
+    assertSourceStageable(run, true);
     const checkpoint = checkpointOf(run.checkpoint);
     const upload = uploadOf(checkpoint);
     if (!upload || upload.uploadId !== input.uploadId) {
@@ -301,6 +304,7 @@ export const uploadSourceChunk = defineOrchestratedService({
 
 const uploadSource = defineService({
   name: "imports.sourceUploadState",
+  orchestratedBy: "imports.previewFromUpload",
   summary: "The stored chunks of a finished import source upload, in order.",
   kind: "query",
   permission: "scoped",
@@ -314,7 +318,7 @@ const uploadSource = defineService({
     if (!upload || upload.uploadId !== input.uploadId || !sameUploader(upload, ctx.actor)) {
       throw new ServiceError("not_found", "That upload is not here.");
     }
-    if (!STAGEABLE.has(run.status)) throw new ServiceError("conflict", "This import is no longer accepting a file.");
+    assertSourceStageable(run, true);
     if (upload.received.length !== upload.chunks) {
       throw new ServiceError(
         "conflict",
@@ -327,6 +331,7 @@ const uploadSource = defineService({
 
 const applyUploaded = defineService({
   name: "imports.applyUploadedPreview",
+  orchestratedBy: "imports.previewFromUpload",
   summary: "Write the preview staged from an uploaded import source.",
   kind: "mutation",
   permission: "scoped",
@@ -347,6 +352,7 @@ const applyUploaded = defineService({
       .limit(1)
       .for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
+    assertSourceStageable(run, true);
     const checkpoint = checkpointOf(run.checkpoint);
     const upload = uploadOf(checkpoint);
     if (!upload || upload.uploadId !== input.uploadId) {

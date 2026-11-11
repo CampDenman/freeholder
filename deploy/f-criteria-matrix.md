@@ -1579,18 +1579,18 @@ this addendum also includes C10.33 instead of weakening either gate.
 
 ## C3.22 — Ship complete first-party WordPress REST/WXR and generic-site
 
-- **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/importers.test.ts`.
-- **F02** — `tests/core/importers.test.ts` — typed-contract coverage with validation and refusal assertions; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing).
-- **F03** — N/A — the item touches no contact, money or audit surface — nothing to wire into the spine.
-- **F04** — N/A — first-party plugin seam, not a new screen.
-- **F05** — parsers sit behind `imports.start`/`previewFromSource` at /api/v1/imports.*, MCP `imports_*`; no extra importer family. — surface equivalence: `tests/core/api.test.ts` (every service has an endpoint, spec schema is the validator), `tests/core/sdk-schema.test.ts` (generated client contract) and `tests/core/mcp.test.ts` (registry-derived MCP tools)..
-- **F06** — N/A — no human surface in this item — nothing to translate or scan.
-- **F07** — `tests/core/importers.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing).
-- **F08** — `tests/core/importers.test.ts` — the item's unit/service/database coverage.
-- **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared audit/outbox participation it rides on: `tests/core/record-participation.test.ts`.
-- **F10** — N/A — no owner/staff/customer UI in this item — no setup or help surface of its own.
-- **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping).
-- **F12** — `tests/core/importers.test.ts` is the composition proof.
+- **F01** — `src/core/plugins/schema.ts` owns the existing import-run preview/checkpoint ledger; no new SQL migration. Shared WordPress CMS records are qualified in `tests/core/wordpress-import-flow.test.ts`.
+- **F02** — `tests/core/import-crawl-flow.test.ts` covers stage lifecycle, caller permissions, unchanged-run CAS and retry; `tests/core/orchestration-permissions.test.ts` covers exact-verb phase authorization.
+- **F03** — Shared service audit retains the original caller. Existing WordPress import resolves comment contacts through the shared spine; `tests/core/wordpress-import-flow.test.ts` covers composed records and rollback.
+- **F04** — `app/(admin)/admin/imports/[id]/page.tsx` and `app/(admin)/admin/imports/ImportForms.tsx` read a public source or upload an export, retaining explicit commit/reconcile/publish. Full generic/archive UI remains partial.
+- **F05** — `imports.previewFromUrl` joins existing `imports.*` on HTTP/MCP/SDK; private read/apply phases remain hidden. `tests/core/internal-services.test.ts`, `tests/core/sdk.test.ts`, `tests/core/api.test.ts`.
+- **F06** — Public-source form labels/help in English, Spanish, French and Arabic. Browser/theme acceptance is recorded in `deploy/blog-wordpress-2026-11-07.md`; unfinished source paths are not claimed.
+- **F07** — `tests/core/import-crawl.test.ts` covers complete pagination, same-origin/robots, private/credentialed targets, encoding and byte/depth bounds; shared pinned transport enforces public DNS/IP and no redirects. `tests/core/orchestration-permissions.test.ts` covers identity, private phases, transactions and async lifetime.
+- **F08** — `tests/core/importers.test.ts`, `tests/core/import-crawl.test.ts`, `tests/core/import-crawl-flow.test.ts`, `tests/core/wordpress-import-flow.test.ts`, `tests/core/wordpress-import-upload.test.ts`.
+- **F09** — `src/core/import/service.ts` retains import-run/media ownership and rollback; `tests/core/import-crawl-flow.test.ts` proves recovery ownership. Large-source resumption and full cross-target recovery remain open.
+- **F10** — `app/(admin)/admin/imports/ImportForms.tsx` explains source URL, draft staging and limits; export upload remains available. `tests/browser/import-public-source.spec.ts` exercises owner creation and refusal in all four locales.
+- **F11** — `MASTER.md` C3.22 and `deploy/blog-wordpress-2026-11-07.md` retain exact limits and unfinished criteria.
+- **F12** — `tests/core/import-crawl-flow.test.ts` composes public REST discovery → draft → publish with original date → rollback. Recorded HTTP fixtures are not live-source cutover acceptance.
 
 ## C3.23 — Build the owner import studio and resumable run ledger
 

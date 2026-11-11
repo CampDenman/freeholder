@@ -827,6 +827,7 @@ export const SERVICE_NAMES = [
   "imports.preview",
   "imports.previewFromSource",
   "imports.previewFromUpload",
+  "imports.previewFromUrl",
   "imports.publish",
   "imports.reconcile",
   "imports.reviewConflicts",
@@ -4900,6 +4901,10 @@ export interface ServiceCatalog {
     input: { id: string; uploadId: string };
     output: { id: string; status: string; error: string | null; counts: unknown };
   };
+  "imports.previewFromUrl": {
+    input: { id: string; url: string };
+    output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
   "imports.publish": {
     input: { id: string };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -8921,6 +8926,7 @@ export interface FreeholderApi {
     preview: (input: ServiceCatalog["imports.preview"]["input"]) => Promise<ServiceCatalog["imports.preview"]["output"]>;
     previewFromSource: (input: ServiceCatalog["imports.previewFromSource"]["input"]) => Promise<ServiceCatalog["imports.previewFromSource"]["output"]>;
     previewFromUpload: (input: ServiceCatalog["imports.previewFromUpload"]["input"]) => Promise<ServiceCatalog["imports.previewFromUpload"]["output"]>;
+    previewFromUrl: (input: ServiceCatalog["imports.previewFromUrl"]["input"]) => Promise<ServiceCatalog["imports.previewFromUrl"]["output"]>;
     publish: (input: ServiceCatalog["imports.publish"]["input"]) => Promise<ServiceCatalog["imports.publish"]["output"]>;
     reconcile: (input: ServiceCatalog["imports.reconcile"]["input"]) => Promise<ServiceCatalog["imports.reconcile"]["output"]>;
     reviewConflicts: (input: ServiceCatalog["imports.reviewConflicts"]["input"]) => Promise<ServiceCatalog["imports.reviewConflicts"]["output"]>;

@@ -5333,6 +5333,17 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `src/core/import/service.ts`, `src/core/import/wordpress.ts`,
   `deploy/blog-wordpress-2026-11-07.md`; composed regressions:
   `tests/core/wordpress-import-flow.test.ts`.)*
+  *(Source increment 2026-11-11: `imports.previewFromUrl` adds bounded public
+  WordPress REST pagination for pages/posts and rendered sitemap/feed/HTML
+  discovery, with embedded metadata, robots, pinned transport, origin/byte/
+  depth/rate bounds and unchanged-run compare-and-swap. The owner form and
+  HTTP/MCP/SDK share the same scoped operation. Pasted/manual/upload previews
+  cannot reset a committed run; exact public-verb keys retain their actor
+  through explicitly bound private phases without added grants. The former
+  pasted-REST-only limitation is superseded. Nested menus, larger-than-cap
+  resumability, generic typed media/redirect integration, archive reading and
+  actual source-specific acceptance remain open; see
+  `deploy/blog-wordpress-2026-11-07.md`.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,

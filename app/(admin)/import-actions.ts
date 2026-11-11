@@ -13,6 +13,7 @@ import {
   commitImport,
   mapImport,
   previewImport,
+  previewFromUrl,
   publishImport,
   reconcileImport,
   reviewImportConflicts,
@@ -34,8 +35,9 @@ export async function startImportAction(
   form: FormData,
 ): Promise<ImportActionState> {
   const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+  let started: { id: string };
   try {
-    const started = await startImport.call(
+    started = await startImport.call(
       {
         origin: text(form, "origin"),
         kind: text(form, "kind") as
@@ -49,13 +51,13 @@ export async function startImportAction(
       },
       actor,
     );
-    revalidatePath("/admin/imports");
-    redirect(`/admin/imports/${started.id}`);
   } catch (error) {
     return {
       error: error instanceof ServiceError ? ownerFacing(error.message) : "That import could not start.",
     };
   }
+  revalidatePath("/admin/imports");
+  redirect(`/admin/imports/${started.id}`);
 }
 
 export async function mapImportAction(form: FormData): Promise<void> {
@@ -140,4 +142,17 @@ export async function rollbackImportAction(form: FormData): Promise<void> {
   const id = text(form, "id");
   await rollbackImport.call({ id }, actor);
   revalidatePath(`/admin/imports/${id}`);
+}
+
+
+export async function crawlImportAction(_previous: ImportActionState, form: FormData): Promise<ImportActionState> {
+  const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+  const id = text(form, "id");
+  try {
+    const result = await previewFromUrl.call({ id, url: text(form, "sourceUrl") }, actor);
+    revalidatePath(`/admin/imports/${id}`);
+    return result.error ? { error: result.error } : {};
+  } catch (error) {
+    return { error: error instanceof ServiceError ? ownerFacing(error.message) : "That source could not be read. Check its public URL and try again." };
+  }
 }

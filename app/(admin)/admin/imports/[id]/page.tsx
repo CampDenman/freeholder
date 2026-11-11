@@ -25,6 +25,9 @@ export default async function ImportRunPage({
   const counts = run.counts && typeof run.counts === "object" ? (run.counts as Record<string, unknown>) : {};
   const countLabels: Array<[string, string]> = [
     ["pages", t("imports.count.pages")],
+    ["crawlBlocked", t("imports.count.crawlBlocked")],
+    ["crawlRequests", t("imports.count.crawlRequests")],
+    ["crawlBytes", t("imports.count.crawlBytes")],
     ["posts", t("imports.count.posts")],
     ["media", t("imports.count.media")],
     ["mediaFailed", t("imports.count.mediaFailed")],
@@ -56,6 +59,8 @@ export default async function ImportRunPage({
           <ImportStepForms
             id={run.id}
             status={run.status}
+            sourceKind={run.kind ?? "html"}
+            origin={run.origin ?? ""}
             labels={{
               preview: t("imports.preview"),
               url: t("imports.pageUrl"),
@@ -80,6 +85,10 @@ export default async function ImportRunPage({
               uploading: t("imports.uploading"),
               readingSource: t("imports.readingSource"),
               uploadFailed: t("imports.uploadFailed"),
+              sourceUrl: t("imports.sourceUrl"),
+              crawl: t("imports.crawl"),
+              crawlHint: t("imports.crawlHint"),
+              crawling: t("imports.crawling"),
             }}
           />
         </CardBody>
