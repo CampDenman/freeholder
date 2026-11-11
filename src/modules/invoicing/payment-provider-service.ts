@@ -470,7 +470,9 @@ export const processPaymentProviderEvents = defineService({
   name: "invoicing.processPaymentProviderEvents",
   summary: "Converge authenticated provider events into the money ledger.",
   kind: "mutation",
-  permission: "scoped",
+  // C11.10: provider evidence enters only through verified system composition.
+  permission: "system",
+  external: false,
   input: z.object({
     provider,
     bodySha256: z.string().regex(/^[0-9a-f]{64}$/),
