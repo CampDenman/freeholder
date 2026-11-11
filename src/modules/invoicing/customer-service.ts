@@ -16,6 +16,7 @@ import { customerCheckoutAllowed, requiresSavedMethod } from "./checkout-require
 import { invoiceRow, paymentRow } from "./contract";
 import { assertChargeEvidence, assertProviderAccount, paymentRouting, routingForPayment, verifiedCheckoutSession } from "./merchant-charge";
 import { getInvoiceMarketPolicy, verifyInvoiceMerchant } from "./market-policy";
+import { invoiceIssuer, publicInvoiceIssuer } from "./merchant-identity";
 import { createPayment, failPayment, markInvoiceViewed, settlePayment, startPayment } from "./invoice-service";
 import { invoiceLines, invoices, payments, paymentPlans, paymentPlanInstallments, paymentProviderCustomers } from "./schema";
 import { orderPaymentMilestones, orders } from "@/modules/catalog/schema";
@@ -84,7 +85,7 @@ async function authorizedInvoice(input: z.infer<typeof access>, ctx: ServiceCont
 const customerInvoice = z.object({
   id: z.string().uuid(), number: z.string(), status: z.string(), currency: z.string(),
   // Only public invoice identity is projected; routing and fees stay private.
-  issuerName: z.string().min(1).max(200).nullable(),
+  ...publicInvoiceIssuer.shape,
   subtotalMinor: z.number().int(), discountMinor: z.number().int(), shippingMinor: z.number().int(),
   taxMinor: z.number().int(), totalMinor: z.number().int(), paidMinor: z.number().int(),
   dueAt: z.date().nullable(), memo: z.string().nullable(), requiredTaxLegend: z.string().nullable(),
@@ -114,8 +115,7 @@ export const getCustomerInvoice = defineService({
       .from(invoiceLines).where(eq(invoiceLines.invoiceId, invoice.id)).orderBy(asc(invoiceLines.position)));
     const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: invoice.id });
     const direct = policy?.model === "seller_merchant";
-    const issuerName = direct ? policy.merchantName : null;
-    if (direct && !issuerName?.trim()) throw new ServiceError("conflict", "This invoice's original issuer needs the business to review it.");
+    const issuer = invoiceIssuer(policy);
     const adapter = paymentAdapter(direct ? "stripe" : undefined);
     let merchantAvailable = !direct || adapter.capabilities().sellerMerchantCharges === true;
     if (direct && merchantAvailable) {
@@ -127,7 +127,7 @@ export const getCustomerInvoice = defineService({
       }
     }
     const nextPaymentMinor = payable(invoice) ? await customerCheckoutAmount(invoice, ctx) : null;
-    return { id: invoice.id, number: invoice.number!, status: invoice.status, currency: invoice.currency, issuerName,
+    return { id: invoice.id, number: invoice.number!, status: invoice.status, currency: invoice.currency, ...issuer,
       subtotalMinor: invoice.subtotalMinor, discountMinor: invoice.discountMinor, shippingMinor: invoice.shippingMinor,
       taxMinor: invoice.taxMinor, totalMinor: invoice.totalMinor, paidMinor: invoice.paidMinor,
       dueAt: invoice.dueAt, memo: invoice.memo, requiredTaxLegend: invoice.requiredTaxLegend, lines, canPay: nextPaymentMinor !== null,
@@ -319,12 +319,15 @@ async function authorizedPayment(token: string, ctx: ServiceContext) {
   if (!payment || !validPaymentReturnToken(payment, token)) throw unavailable();
   return payment;
 }
-const receipt = z.object({ status: paymentRow.shape.status, currency: z.string(), amountMinor: z.number().int() });
-const receiptView = (payment: typeof payments.$inferSelect) => ({ status: payment.status, currency: payment.currency, amountMinor: payment.amountMinor });
+const receipt = z.object({ status: paymentRow.shape.status, currency: z.string(), amountMinor: z.number().int(),...publicInvoiceIssuer.shape });
+async function receiptView(payment:typeof payments.$inferSelect,ctx:ServiceContext){
+  const policy=await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:payment.invoiceId});
+  return{status:payment.status,currency:payment.currency,amountMinor:payment.amountMinor,...invoiceIssuer(policy)};
+}
 export const customerPaymentReceipt = defineService({
   name: "invoicing.customerPaymentReceipt", summary: "Read only the payment status and amount from its private provider-return link.",
   kind: "query", permission: "public", input: receiptAccess, output: receipt,
-  handler: async (input, ctx) => receiptView(await authorizedPayment(input.token, ctx)),
+  handler: async (input, ctx) => receiptView(await authorizedPayment(input.token, ctx),ctx),
 });
 export const customerPaymentSource = defineService({
   name: "invoicing.customerPaymentSource", summary: "Authorize a customer provider-status check.",
@@ -337,14 +340,14 @@ export const applyCustomerPayment = defineService({
   kind: "mutation", permission: "public", external: false, input: receiptAccess.extend({ response: capture }), output: receipt,
   handler: async (input, ctx) => {
     const payment = await authorizedPayment(input.token, ctx);
-    if (payment.status === "succeeded") return payment;
+    if (payment.status === "succeeded") return receiptView(payment,ctx);
     const result = input.response;
     assertChargeEvidence(await routingForPayment(ctx, payment.id), result);
     if ((result.amountMinor !== undefined && result.amountMinor !== payment.amountMinor) ||
         (result.currency !== undefined && result.currency !== payment.currency)) throw new ServiceError("conflict", "The payment provider amount does not match the invoice.");
-    if (result.status === "succeeded") return ctx.callAsSystem(settlePayment, { id: payment.id, providerRef: result.providerRef, processedAt: result.occurredAt ? new Date(result.occurredAt) : new Date() });
-    if (result.status === "failed") return ctx.callAsSystem(failPayment, { id: payment.id, code: "provider_failed", message: "The payment provider declined this payment." });
-    return payment;
+    if (result.status === "succeeded") return receiptView(await ctx.callAsSystem(settlePayment, { id: payment.id, providerRef: result.providerRef, processedAt: result.occurredAt ? new Date(result.occurredAt) : new Date() }),ctx);
+    if (result.status === "failed") return receiptView(await ctx.callAsSystem(failPayment, { id: payment.id, code: "provider_failed", message: "The payment provider declined this payment." }),ctx);
+    return receiptView(payment,ctx);
   },
 });
 export const confirmCustomerPayment = defineOrchestratedService({
@@ -353,7 +356,7 @@ export const confirmCustomerPayment = defineOrchestratedService({
   rateLimit: { limit: 20, windowSeconds: 60, subject: (input: z.infer<typeof receiptAccess>) => `invoice-receipt:${input.token.split(".")[0]}`, message: "Please wait before checking payment again." },
   handler: async (input, actor) => {
     const { payment, routing } = await customerPaymentSource.call(input, actor);
-    if (payment.status === "succeeded" || payment.status === "failed" || payment.status === "cancelled") return receiptView(payment);
+    if (payment.status === "succeeded" || payment.status === "failed" || payment.status === "cancelled") return customerPaymentReceipt.call(input,actor);
     if (!payment.providerCheckoutRef) throw new ServiceError("conflict", "This payment is not ready to confirm.");
     try {
       const response = await paymentAdapter(payment.provider).captureCheckout({ checkoutRef: payment.providerCheckoutRef, idempotencyKey: `customer-confirm:${payment.id}`, providerAccountId: routing.providerAccountId });

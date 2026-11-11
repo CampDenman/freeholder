@@ -7,6 +7,7 @@
 // an account can be paid.
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/core/env";
+import { publicMerchantAddress, publicMerchantSupport } from "@/core/commerce/merchant-identity";
 import { AdapterError } from "../types";
 import { object, paymentFetch } from "../payments/http";
 import { createStripePayments } from "../payments/stripe";
@@ -37,7 +38,11 @@ export function stripeMerchantDetails(account: Record<string, unknown>) {
   // Business-profile names are public merchant branding. Never publish a
   // private legal person's identity as a fallback for missing branding.
   const merchantName = text(object(account.business_profile)?.name)?.trim().slice(0, 200) || null;
-  return { status, merchantName, chargesReady: status === "ready" && account.charges_enabled === true && text(object(account.capabilities)?.card_payments) === "active" && merchantName !== null };
+  const profile=object(account.business_profile),address=object(profile?.support_address);
+  const parsedAddress=publicMerchantAddress.safeParse(address?{line1:address.line1,line2:address.line2??null,city:address.city??null,state:address.state??null,postalCode:address.postal_code??null,country:address.country}:null);
+  const email=publicMerchantSupport.shape.email.safeParse(profile?.support_email),phone=publicMerchantSupport.shape.phone.safeParse(profile?.support_phone),url=publicMerchantSupport.shape.url.safeParse(profile?.support_url);
+  const support=publicMerchantSupport.safeParse({email:email.success?email.data:null,phone:phone.success?phone.data:null,url:url.success?url.data:null,address:parsedAddress.success?parsedAddress.data:null});
+  return { status, merchantName, merchantSupport:support.success?support.data:null, chargesReady: status === "ready" && account.charges_enabled === true && text(object(account.capabilities)?.card_payments) === "active" && merchantName !== null };
 }
 
 export function createStripeConnect(options: StripeConnectOptions = {}): PayoutProvider {

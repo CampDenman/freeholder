@@ -23,6 +23,8 @@
 // a review queues a reversal or goes to review — never silently.
 import { and, eq, inArray, isNotNull, lte, ne, sql } from "drizzle-orm";
 import { z } from "zod";
+import { publicMerchantSupport } from "@/core/commerce/merchant-identity";
+import { merchantIdentityErased } from "./merchant-identity-privacy";
 import { processPaymentProviderEvents, providerEvent } from "@/modules/invoicing/payment-provider-service";
 import { okResult, row, uuid, listed } from "@/core/contract";
 import { env } from "@/core/env";
@@ -110,10 +112,12 @@ export const applyPayoutAccount = defineService({
   external: false,
   agentCallable: false,
   writeClass: "money",
-  input: z.object({ adapter: z.string(), externalAccountId: z.string().min(1).max(200), status: z.enum(["pending", "ready", "disabled"]), chargesReady: z.boolean().default(false), merchantName: z.string().trim().min(1).max(200).nullable().default(null) }),
+  input: z.object({ adapter: z.string(), externalAccountId: z.string().min(1).max(200), status: z.enum(["pending", "ready", "disabled"]), chargesReady: z.boolean().default(false), merchantName: z.string().trim().min(1).max(200).nullable().default(null),merchantSupport:publicMerchantSupport.nullable().default(null) }),
+  auditInputFields:["adapter","externalAccountId","status","chargesReady"],
   output: okResult,
   handler: async (input, ctx) => {
     const userId = self(ctx);
+    if(await merchantIdentityErased(ctx.tx,userId))throw new ServiceError("conflict","This member's erased business details cannot be restored.");
     await ctx.tx
       .insert(memberPayoutAccounts)
       .values({ userId, ...input })
@@ -145,7 +149,7 @@ export const startPayoutSetup = defineOrchestratedService({
       .catch((error: unknown) => {
         throw new ServiceError("validation", error instanceof Error ? error.message : "The payout provider refused that.");
       });
-    await applyPayoutAccount.call({ adapter: provider.id, externalAccountId: result.externalAccountId, status: result.status, chargesReady: result.chargesReady, merchantName: result.merchantName }, actor);
+    await applyPayoutAccount.call({ adapter: provider.id, externalAccountId: result.externalAccountId, status: result.status, chargesReady: result.chargesReady, merchantName: result.merchantName,merchantSupport:result.merchantSupport }, actor);
     return { url: result.url ?? null, status: result.status };
   },
 });
@@ -434,11 +438,14 @@ export const applyPayoutWebhook = defineService({
   kind: "mutation",
   permission: "system",
   writeClass: "money",
+  // Canonical financial services retain the exact event evidence. Account
+  // support details must not create an unrelated system-audit personal copy.
+  auditInputFields:["provider"],
   input: z.object({
     provider: z.string(),
     events: z.array(z.union([
       z.object({ kind: z.literal("payment"), event: providerEvent, bodySha256: z.string().regex(/^[0-9a-f]{64}$/), receivedAt: z.string().datetime() }),
-      z.object({ kind: z.literal("account"), externalAccountId: z.string(), status: z.enum(["pending", "ready", "disabled"]), chargesReady: z.boolean().optional(), merchantName: z.string().nullable().optional() }),
+      z.object({ kind: z.literal("account"), externalAccountId: z.string(), status: z.enum(["pending", "ready", "disabled"]), chargesReady: z.boolean().optional(), merchantName: z.string().nullable().optional(),merchantSupport:publicMerchantSupport.nullable().optional() }),
       z.object({ kind: z.literal("transfer"), reference: z.string(), key: z.string().optional(), state: z.enum(["settled", "failed", "unclaimed"]), error: z.string().optional() }),
     ])).max(50),
   }),
@@ -454,12 +461,14 @@ export const applyPayoutWebhook = defineService({
         continue;
       }
       if (event.kind === "account") {
-        const rows = await ctx.tx
-          .update(memberPayoutAccounts)
-          .set({ status: event.status, chargesReady: event.chargesReady ?? false, merchantName: event.merchantName ?? null, updatedAt: new Date() })
-          .where(and(eq(memberPayoutAccounts.adapter, input.provider), eq(memberPayoutAccounts.externalAccountId, event.externalAccountId)))
-          .returning({ userId: memberPayoutAccounts.userId });
-        applied += rows.length;
+        const accounts=await ctx.tx.select({userId:memberPayoutAccounts.userId}).from(memberPayoutAccounts).where(and(eq(memberPayoutAccounts.adapter,input.provider),eq(memberPayoutAccounts.externalAccountId,event.externalAccountId)));
+        for(const account of accounts){
+          const erased=await merchantIdentityErased(ctx.tx,account.userId);
+          const rows=await ctx.tx.update(memberPayoutAccounts).set({status:event.status,chargesReady:erased?false:event.chargesReady??false,
+            ...(erased?{}:{merchantName:event.merchantName??null,merchantSupport:event.merchantSupport??null}),updatedAt:new Date(),
+          }).where(and(eq(memberPayoutAccounts.userId,account.userId),eq(memberPayoutAccounts.adapter,input.provider),eq(memberPayoutAccounts.externalAccountId,event.externalAccountId))).returning({userId:memberPayoutAccounts.userId});
+          applied+=rows.length;
+        }
         continue;
       }
       // An event belongs to exactly one attempt: the one with its reference,

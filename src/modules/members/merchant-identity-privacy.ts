@@ -1,0 +1,73 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// C12.38/C1.08: public commercial copies still belong to the member's data rights.
+import {createHash} from "node:crypto";
+import { and, eq,inArray,isNull,or,sql } from "drizzle-orm";
+import {z} from "zod";
+import { ERASED_MERCHANT_NAME } from "@/core/commerce/merchant-identity";
+import { contacts } from "@/core/contacts/schema";
+import {registerContactReference} from "@/core/contacts/service";
+import { lockContactIdentity, lockContactIdentityForRead } from "@/core/contacts/identity-lock";
+import { registerContactPrivacySource } from "@/core/privacy/service";
+import {ServiceError,type Tx} from "@/core/service";
+import { invoiceMarketPolicies } from "@/modules/invoicing/schema";
+import { subscriptionMarketPolicies } from "@/modules/subscriptions/schema";
+
+export async function merchantIdentityErased(tx:Tx,userId:string):Promise<boolean>{
+  await lockContactIdentityForRead(tx);
+  const [erased]=await tx.select({id:contacts.id}).from(contacts).where(and(eq(contacts.userId,userId),eq(contacts.source,"privacy-erasure"))).limit(1);
+  return Boolean(erased);
+}
+async function merchantForContact(tx:Tx,contactId:string):Promise<string|null>{
+  const [contact]=await tx.select({userId:contacts.userId}).from(contacts).where(eq(contacts.id,contactId)).limit(1);
+  return contact?.userId??null;
+}
+
+registerContactPrivacySource({
+  scope:"members.merchantIdentity",tables:["invoice_market_policies","subscription_market_policies"],
+  retentionScopes:["members","commerce.money"],eraseOrder:5,
+  exportData:async(tx,contactId)=>{
+    const userId=await merchantForContact(tx,contactId);
+    return{
+      invoices:await tx.select({invoiceId:invoiceMarketPolicies.invoiceId,merchantName:invoiceMarketPolicies.merchantName,merchantSupport:invoiceMarketPolicies.merchantSupport}).from(invoiceMarketPolicies).where(or(eq(invoiceMarketPolicies.merchantContactId,contactId),userId?and(isNull(invoiceMarketPolicies.merchantContactId),eq(invoiceMarketPolicies.sellerUserId,userId)):undefined)),
+      agreements:await tx.select({subscriptionId:subscriptionMarketPolicies.subscriptionId,merchantName:subscriptionMarketPolicies.merchantName,merchantSupport:subscriptionMarketPolicies.merchantSupport}).from(subscriptionMarketPolicies).where(or(eq(subscriptionMarketPolicies.merchantContactId,contactId),userId?and(isNull(subscriptionMarketPolicies.merchantContactId),eq(subscriptionMarketPolicies.sellerUserId,userId)):undefined)),
+    };
+  },
+  erase:async(tx,contactId)=>{
+    await lockContactIdentity(tx);
+    const userId=await merchantForContact(tx,contactId);
+    // Keep original opaque money routing and actor/history identities. Erasure
+    // removes commercial personal copies, never rewrites verified money.
+    const invoices=await tx.update(invoiceMarketPolicies).set({merchantName:ERASED_MERCHANT_NAME,merchantSupport:null}).where(or(eq(invoiceMarketPolicies.merchantContactId,contactId),userId?and(isNull(invoiceMarketPolicies.merchantContactId),eq(invoiceMarketPolicies.sellerUserId,userId)):undefined)).returning({id:invoiceMarketPolicies.invoiceId});
+    const agreements=await tx.update(subscriptionMarketPolicies).set({merchantName:ERASED_MERCHANT_NAME,merchantSupport:null}).where(or(eq(subscriptionMarketPolicies.merchantContactId,contactId),userId?and(isNull(subscriptionMarketPolicies.merchantContactId),eq(subscriptionMarketPolicies.sellerUserId,userId)):undefined)).returning({id:subscriptionMarketPolicies.subscriptionId});
+    return{affected:invoices.length+agreements.length};
+  },
+});
+
+const pointer=z.object({id:z.uuid(),contactId:z.uuid().nullable(),fingerprint:z.string().regex(/^[0-9a-f]{64}$/)});
+type Pointer=z.infer<typeof pointer>;
+type RawPointer={id:string;contactId:string|null;material:string};
+function registerIdentityReference(table:string,read:(tx:Tx,ids:string[])=>Promise<RawPointer[]>,repoint:(tx:Tx,from:string,to:string)=>Promise<unknown>,restore:(tx:Tx,ids:string[],contactId:string)=>Promise<unknown>){
+ const snapshot=async(tx:Tx,ids:string[])=>{
+  const rows=await read(tx,ids);return rows.length>5000?null:rows.map(({id,contactId,material}):Pointer=>({id,contactId,fingerprint:createHash("sha256").update(material).digest("hex")}));
+ };
+ registerContactReference({
+  table,columns:["merchant_contact_id"],repoint,
+  captureForUndo:async(tx,from,to)=>{const state=await snapshot(tx,[from,to]);return{state:state??[],undoable:state!==null,...(state===null?{blocker:"Merchant document ownership exceeds the safe undo limit."}:{})};},
+  restoreAfterUndo:async(tx,beforeState,afterState,from,to)=>{
+   const before=pointer.array().max(5000).parse(beforeState),after=pointer.array().max(5000).parse(afterState),current=await snapshot(tx,[from,to]);
+   if(current===null||JSON.stringify(current)!==JSON.stringify(after))throw new ServiceError("conflict","Merchant document identity changed after the contact merge. Keep its financial ownership together.");
+   const moved=before.filter(row=>row.contactId===from).map(row=>row.id);if(moved.length)await restore(tx,moved,from);
+  },
+ });
+}
+registerIdentityReference("invoice_market_policies",
+ (tx,ids)=>tx.select({id:invoiceMarketPolicies.invoiceId,contactId:invoiceMarketPolicies.merchantContactId,material:sql<string>`to_jsonb(${invoiceMarketPolicies})::text`}).from(invoiceMarketPolicies).where(inArray(invoiceMarketPolicies.merchantContactId,ids)).orderBy(invoiceMarketPolicies.invoiceId).limit(5001),
+ (tx,from,to)=>tx.update(invoiceMarketPolicies).set({merchantContactId:to}).where(eq(invoiceMarketPolicies.merchantContactId,from)),
+ (tx,ids,contactId)=>tx.update(invoiceMarketPolicies).set({merchantContactId:contactId}).where(inArray(invoiceMarketPolicies.invoiceId,ids)),
+);
+registerIdentityReference("subscription_market_policies",
+ (tx,ids)=>tx.select({id:subscriptionMarketPolicies.subscriptionId,contactId:subscriptionMarketPolicies.merchantContactId,material:sql<string>`to_jsonb(${subscriptionMarketPolicies})::text`}).from(subscriptionMarketPolicies).where(inArray(subscriptionMarketPolicies.merchantContactId,ids)).orderBy(subscriptionMarketPolicies.subscriptionId).limit(5001),
+ (tx,from,to)=>tx.update(subscriptionMarketPolicies).set({merchantContactId:to}).where(eq(subscriptionMarketPolicies.merchantContactId,from)),
+ (tx,ids,contactId)=>tx.update(subscriptionMarketPolicies).set({merchantContactId:contactId}).where(inArray(subscriptionMarketPolicies.subscriptionId,ids)),
+);

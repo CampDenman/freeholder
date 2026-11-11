@@ -14,6 +14,7 @@
 // What this does own is the calendar: which period a subscription is in, when
 // that period ends, and every state it has passed through.
 import { sql } from "drizzle-orm";
+import type { PublicMerchantSupport } from "@/core/commerce/merchant-identity";
 import {
   bigint,
   boolean,
@@ -247,10 +248,13 @@ export const subscriptionMarketPolicies = pgTable("subscription_market_policies"
   holdDays: integer("hold_days").notNull(),
   sellerUserId: uuid("seller_user_id"),
   merchantName: text("merchant_name"),
+  merchantSupport: jsonb("merchant_support").$type<PublicMerchantSupport>(),
+  merchantContactId: uuid("merchant_contact_id").references(()=>contacts.id,{onDelete:"restrict"}),
   providerAccountId: text("provider_account_id"),
   createdAt: createdAtColumn(),
 }, (t) => [
   check("subscription_market_policies_model_check", sql`${t.model} in ('hold','instant','seller_merchant')`),
+  index("subscription_market_policies_merchant_contact_idx").on(t.merchantContactId),
   check("subscription_market_policies_fee_bps_check", sql`${t.siteFeeBps} between 0 and 10000`),
   check("subscription_market_policies_hold_days_check", sql`${t.holdDays} between 0 and 365`),
   check("subscription_market_policies_merchant_check", sql`${t.model} <> 'seller_merchant' or (${t.adapter} = 'stripe_connect' and ${t.sellerUserId} is not null and ${t.merchantName} is not null and ${t.providerAccountId} is not null)`),

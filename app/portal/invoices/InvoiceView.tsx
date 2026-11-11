@@ -7,6 +7,7 @@ import { Callout, Card, CardBody, Pill } from "@/ui/primitives";
 import { SkipLink } from "@/ui/SkipLink";
 import { payInvoiceAction } from "./actions";
 import { PaymentButton } from "./PaymentButton";
+import { InvoiceIssuer } from "./InvoiceIssuer";
 
 type Invoice = Awaited<ReturnType<typeof getCustomerInvoice.call>>;
 export function InvoiceView({ invoice, token, t, locale, timezone, businessName, checkout, error, backHref }: {
@@ -20,7 +21,7 @@ export function InvoiceView({ invoice, token, t, locale, timezone, businessName,
       <SkipLink target="main">{t("a11y.skipToContent")}</SkipLink>
       <main id="main" tabIndex={-1} className="grid gap-6">
         <header className="grid gap-2">
-          <p className="[overflow-wrap:anywhere] text-sm text-ink-muted"><bdi>{invoice.issuerName ?? businessName}</bdi></p>
+          <InvoiceIssuer issuer={invoice} businessName={businessName} locale={locale} t={t}/>
           <h1 className="text-2xl font-bold">{t("customerInvoice.title", { number: invoice.number })}</h1>
           <div><Pill tone={invoice.status === "paid" ? "success" : "neutral"}>{t(`invoices.status.${invoice.status}`)}</Pill></div>
           {due ? <p className="text-sm text-ink-muted">{t("customerInvoice.due", { date: due })}</p> : null}

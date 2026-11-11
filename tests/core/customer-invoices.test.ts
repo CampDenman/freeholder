@@ -95,6 +95,25 @@ describe.runIf(hasDatabase)("customer invoices", () => {
     expect(await db().select().from(payments)).toHaveLength(0);
   });
 
+  it("preserves the original merchant on pending and settled private payment receipts",async()=>{
+    const {invoice,token,sellerId}=await merchantInvoice(),manual=adapters.createManualPayments();
+    const original={...manual,id:"stripe",capabilities:()=>({...manual.capabilities(),sellerMerchantCharges:true}),
+      createCheckout:vi.fn<adapters.PaymentAdapter["createCheckout"]>().mockResolvedValue({providerRef:"cs_OriginalReceipt",paymentRef:"pi_OriginalReceipt",url:"https://checkout.example.test/original",providerAccountId:"acct_OriginalInvoice"}),
+      captureCheckout:vi.fn<adapters.PaymentAdapter["captureCheckout"]>().mockResolvedValue({providerRef:"pi_OriginalReceipt",status:"succeeded",amountMinor:10000,currency:"CAD",providerAccountId:"acct_OriginalInvoice",applicationFeeMinor:1000}),
+    };
+    vi.spyOn(adapters,"paymentAdapter").mockImplementation(id=>id==="stripe"?original:manual);
+    expect(await beginCustomerCheckout.call({id:invoice.id,token},ANON)).toEqual({url:"https://checkout.example.test/original"});
+    const [payment]=await db().select().from(payments),input={token:paymentReturnToken(payment!)};
+    expect(await customerPaymentReceipt.call(input,ANON)).toMatchObject({issuerName:"Original Merchant Studio",status:"processing",amountMinor:10000,currency:"CAD"});
+    expect(await confirmCustomerPayment.call(input,ANON)).toMatchObject({issuerName:"Original Merchant Studio",status:"succeeded"});
+    await db().update(memberPayoutAccounts).set({merchantName:"Replacement Merchant Studio",externalAccountId:"acct_ReplacementInvoice"}).where(eq(memberPayoutAccounts.userId,sellerId));
+    const receipt=await customerPaymentReceipt.call(input,ANON);
+    expect(receipt).toMatchObject({issuerName:"Original Merchant Studio",status:"succeeded",amountMinor:10000,currency:"CAD"});
+    for(const privateValue of ["acct_OriginalInvoice",sellerId,"providerAccountId","siteFeeBps","feeMinor"])expect(JSON.stringify(receipt)).not.toContain(privateValue);
+    expect(await failure(customerPaymentReceipt.call({token:input.token.slice(0,-1)+"x"},ANON))).toMatchObject({code:"not_found"});
+    expect(original.captureCheckout).toHaveBeenCalledWith(expect.objectContaining({providerAccountId:"acct_OriginalInvoice"}));
+  });
+
   it("serves only the linked contact or exact token and exposes a safe customer projection", async () => {
     const { invoice, token } = await fixture();
     expect(await getCustomerInvoice.call({ id: invoice.id }, CUSTOMER)).toMatchObject({ number: invoice.number, totalMinor: 10_000, issuerName: null });
@@ -310,14 +329,14 @@ describe.runIf(hasDatabase)("customer invoices", () => {
     await beginCustomerCheckout.call({ id: invoice.id, token }, ANON);
     const [payment] = await db().select().from(payments);
     const receipt = { token: paymentReturnToken(payment!) };
-    expect(await customerPaymentReceipt.call(receipt, ANON)).toEqual({ status: "processing", amountMinor: 10_000, currency: "CAD" });
+    expect(await customerPaymentReceipt.call(receipt, ANON)).toEqual({ status: "processing", amountMinor: 10_000, currency: "CAD",issuerName:null,issuerIsMerchant:false,issuerSupport:null });
     captureCheckout.mockResolvedValueOnce({ providerRef: "payment-1", status: "succeeded", amountMinor: 1, currency: "CAD" });
     expect(await failure(confirmCustomerPayment.call(receipt, ANON))).toMatchObject({ code: "conflict" });
     await confirmCustomerPayment.call(receipt, ANON);
     await confirmCustomerPayment.call(receipt, ANON);
     expect(captureCheckout).toHaveBeenCalledTimes(2);
     expect((await getInvoice.call({ id: invoice.id }, OWNER)).invoice).toMatchObject({ status: "paid", paidMinor: 10_000 });
-    expect(await customerPaymentReceipt.call(receipt, ANON)).toEqual({ status: "succeeded", amountMinor: 10_000, currency: "CAD" });
+    expect(await customerPaymentReceipt.call(receipt, ANON)).toEqual({ status: "succeeded", amountMinor: 10_000, currency: "CAD",issuerName:null,issuerIsMerchant:false,issuerSupport:null });
     expect(await failure(getCustomerInvoice.call({ id: invoice.id, token }, ANON))).toMatchObject({ code: "not_found" });
     for (const name of ["invoicing.applyCustomerCheckout", "invoicing.applyCustomerPayment", "invoicing.customerPaymentSource", "invoicing.claimCustomerCheckout"]) {
       expect(() => getExternalService(name)).toThrow();

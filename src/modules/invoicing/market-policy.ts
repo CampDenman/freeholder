@@ -3,6 +3,8 @@
 // C12.38: issued invoices keep their collection model, seller and site fee.
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { publicMerchantSupport } from "@/core/commerce/merchant-identity";
+import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { invoiceMarketPolicies, invoices } from "./schema";
 
@@ -14,6 +16,8 @@ export const invoiceMarketPolicy = z.object({
   feeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   sellerUserId: z.uuid().nullable(),
   merchantName: z.string().min(1).max(200).nullable(),
+  merchantSupport: publicMerchantSupport.nullable().default(null),
+  merchantContactId:z.uuid().nullable().default(null),
   providerAccountId: z.string().min(1).max(200).nullable(),
 });
 export type InvoiceMarketPolicy = z.infer<typeof invoiceMarketPolicy>;
@@ -39,6 +43,7 @@ export const captureInvoiceMarketPolicy = defineService({
   kind: "mutation", permission: "system", external: false,
   input: z.object({ invoiceId: z.uuid() }), output: z.object({ captured: z.boolean() }),
   handler: async ({ invoiceId }, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
     const [existing] = await ctx.tx.select().from(invoiceMarketPolicies).where(eq(invoiceMarketPolicies.invoiceId, invoiceId));
     if (existing) return { captured: true };
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
