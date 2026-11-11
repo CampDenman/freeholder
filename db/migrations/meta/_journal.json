@@ -484,6 +484,13 @@
       "when": 1793310000048,
       "tag": "0068_return_refund_allocations",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1793310000049,
+      "tag": "0069_import_reader_privacy",
+      "breakpoints": true
     }
   ]
 }

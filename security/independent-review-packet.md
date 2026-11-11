@@ -713,3 +713,14 @@ reentrancy boundaries alongside `tests/core/orchestration-permissions.test.ts`.
 This source evidence does not complete the independent review.
 
 The follow-up review of the saved-card repair reproduced a partial-metadata setup event bypass: a contact-only expanded payload reached the older normalizer. The repaired boundary ignores setup events missing either contact or subscription binding before normalized events can be returned. The new regression failed before repair; all 30 provider edge controls and the complete static gates passed afterward. This remains source evidence, not independent security sign-off or provider acceptance.
+## Import reader-source erasure (C2.29/C3.22/C11.10)
+
+Four actual PostgreSQL regressions reproduced retained cached reader details
+and recreation through queued cutover, an older opaque upload and an existing
+reader's changed address. Review `src/core/import/privacy.ts`, its contact
+merge/undo pointers, shared CMS contact binding and import publication row locks
+against `tests/core/import-source-privacy.test.ts`. Migration 0069 follows 0068
+and preserves page/media recovery while quarantining ambiguous legacy reader
+input; SQL refuses cutover by the prior image. Named reader holds stay explicit.
+`deploy/import-reader-privacy.md` describes the source recovery and scope. These
+agent-authored repairs and regression runs do not provide independent sign-off.

@@ -36,6 +36,7 @@ import type { BlockNode } from "@/modules/cms/blocks/types";
 import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS } from "./contract";
 import { crawlPublicSource, type CrawlKind } from "./crawl";
 import { assertSourceStageable, assertNoPendingSourceUpload } from "./source-lifecycle";
+import { assertLegacyReaderSafety, bindReaderSources, stripReaderCopies } from "./privacy";
 import {
   discoverFromPublicOrigin,
   parseRssOrAtom,
@@ -632,7 +633,7 @@ function chooseMenu(menus: ResolvedMenu[]): ResolvedMenu | undefined {
 }
 
 /** The write half of a commit: one transaction for pages, redirects and report. */
-const pendingBlogPost = z.object({ pageId: uuid, key: z.string(), meta: z.record(z.string(), z.unknown()), comments: z.array(z.object({ id: z.string(), parentId: z.string().optional(), name: z.string(), email: z.string().nullable(), body: z.string(), status: z.enum(["pending", "approved", "spam", "trash"]), createdAt: z.string().optional() })) });
+const pendingBlogPost = z.object({ pageId: uuid, key: z.string(), meta: z.record(z.string(), z.unknown()), comments: z.array(z.object({ id: z.string(), parentId: z.string().optional(), name: z.string(), email: z.string().nullable(), contactId: uuid.optional(), body: z.string(), status: z.enum(["pending", "approved", "spam", "trash"]), createdAt: z.string().optional() })) });
 
 async function importPostComments(ctx: ServiceContext, runId: string, pageId: string, key: string, entries: WordpressComment[]): Promise<number> {
   const remaining = [...entries], ids = new Map<string, string>();
@@ -643,6 +644,7 @@ async function importPostComments(ctx: ServiceContext, runId: string, pageId: st
       const saved = z.object({ id: uuid }).parse(await ctx.call(getService("cms.importReaderComment"), {
         runId, externalId: `${key}:${comment.id}`, pageId, parentId: comment.parentId ? ids.get(comment.parentId) ?? null : null,
         name: comment.name, email: comment.email, body: comment.body, status: comment.status,
+        ...(comment.contactId ? { sourceContactId: comment.contactId } : {}),
         ...(comment.createdAt ? { createdAt: comment.createdAt } : {}),
       }));
       ids.set(comment.id, saved.id); remaining.splice(index, 1);
@@ -673,6 +675,7 @@ const commitApply = defineService({
     if (before.status !== "previewed") {
       throw new ServiceError("conflict", "Preview the import before committing it.");
     }
+    await assertLegacyReaderSafety(ctx.tx, before);
     const staged = previewPages(before.preview);
     const wordpress = wordpressPreview(before.preview);
     const decisions = conflictDecisions(before.conflicts);
@@ -1069,7 +1072,7 @@ const commitApply = defineService({
       publishedAt,
       redirectIds,
       displacedRedirects,
-      postSnapshots, pendingBlogPosts,
+      postSnapshots, pendingBlogPosts, readerPrivacyVersion: 1,
       landedPaths: landed.map(({ page, slug }) => ({ sourceUrl: page.url, path: slug, status: page.status ?? "publish", seo: page.seo ?? {} })),
       legacyAliases: [
         ...archiveAliases,
@@ -1091,7 +1094,7 @@ const commitApply = defineService({
     });
     const [row] = await ctx.tx
       .update(importRuns)
-      .set({ status: "committed", checkpoint, counts })
+      .set({ status: "committed", checkpoint, counts, preview: stripReaderCopies(before.preview) })
       .where(eq(importRuns.id, input.id))
       .returning();
     ctx.setSubject("import_run", row!.id);
@@ -1225,11 +1228,12 @@ export const rollbackImport = defineService({
       displacedRedirects: [],
       navApplied: undefined,
       media: [],
+      pendingBlogPosts: [],
       rolledBack: { keptMedia },
     });
     const [row] = await ctx.tx
       .update(importRuns)
-      .set({ status: "rolled_back", checkpoint: next })
+      .set({ status: "rolled_back", checkpoint: next, preview: stripReaderCopies(before.preview) })
       .where(eq(importRuns.id, input.id))
       .returning();
     ctx.setSubject("import_run", row!.id);
@@ -1408,6 +1412,7 @@ export const publishImport = defineService({
     if (before.status !== "reconciled") {
       throw new ServiceError("conflict", "Reconcile the import before publishing it.");
     }
+    await assertLegacyReaderSafety(ctx.tx, before);
     const checkpoint = checkpointOf(before.checkpoint);
     const profile = z.object({ defaultLocale: z.string() }).nullable().parse(await ctx.call(getService("settings.getBusiness"), {}));
     const sourceLocale = profile?.defaultLocale ?? "en";
@@ -1527,6 +1532,7 @@ export function stageWordpressExport(exported: WordpressExport, origin: string):
   const posts = plan.pages.filter((page) => page.kind === "post").length;
   return {
     preview: {
+      readerPrivacyVersion: 1,
       pages: plan.pages,
       wordpress: {
         site: plan.site,
@@ -1624,7 +1630,7 @@ export const previewFromSource = defineService({
       .update(importRuns)
       .set({
         status: "previewed",
-        preview,
+        preview: await bindReaderSources(ctx.tx, preview),
         counts,
         error: null,
       })
@@ -1678,7 +1684,7 @@ const applyCrawl = defineService({
     if (sourceRevision(run) !== input.revision) throw new ServiceError("conflict", "This import changed during discovery. Reload it before trying again.");
     const [result] = await ctx.tx.update(importRuns).set(input.error
       ? { status: "failed", error: input.error }
-      : { status: "previewed", preview: input.preview!, counts: input.counts!, error: null, checkpoint: { ...checkpointOf(run.checkpoint), crawl: input.report } }
+      : { status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview!), counts: input.counts!, error: null, checkpoint: { ...checkpointOf(run.checkpoint), crawl: input.report } }
     ).where(eq(importRuns.id, input.id)).returning();
     ctx.setSubject("import_run", run.id);
     return result!;

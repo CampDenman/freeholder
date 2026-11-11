@@ -3535,7 +3535,7 @@ export interface ServiceCatalog {
     output: { id: string; slug: string; locale: string; name: string; description: string | null; position: number; articleCount: number; [key: string]: unknown }[];
   };
   "cms.importReaderComment": {
-    input: { runId: string; externalId: string; pageId: string; parentId?: string | null; name: string; email: string | null; body: string; status: "pending" | "approved" | "spam" | "trash"; createdAt?: string };
+    input: { runId: string; externalId: string; pageId: string; parentId?: string | null; name: string; email: string | null; sourceContactId?: string; body: string; status: "pending" | "approved" | "spam" | "trash"; createdAt?: string };
     output: { id: string; pageId: string; parentId: string | null; contactId: string | null; authorName: string; body: string; status: "pending" | "approved" | "spam" | "trash"; source: string; externalId: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.leavePresence": {
