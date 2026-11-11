@@ -100,6 +100,7 @@ export const PLAYGROUND_PUBLIC = [
  * refusal that is the point.
  */
 export const PLAYGROUND_PUBLIC_REFUSED: Readonly<Record<string, string>> = {
+  "imports.acceptPreparedMedia": "Private import completion requires the original actor's import authority; playground visitors cannot import provider files.",
   "auth.requestCustomerMagicLink": "Credential flow; the playground sends no mail, so the link could never arrive.",
   "auth.consumeCustomerMagicLink": "Credential flow.",
   "auth.requestPasswordReset": "Credential flow.",

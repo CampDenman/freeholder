@@ -24,6 +24,12 @@ const steps = [
   { name: "release notes", run: "node scripts/changelog-gate.mjs" },
   { name: "plan gate", run: "node scripts/plan-gate.mjs" },
   {
+    // New public-permission completion wrappers need an explicit playground
+    // decision too. Check this registry contract before a full database shard.
+    name: "playground policy",
+    run: "pnpm exec vitest run tests/core/playground.test.ts --testNamePattern 'playground public-site policy'",
+  },
+  {
     // The static-contract suites: they assert things about the source tree
     // rather than about a database, so they are fast and they are the ones
     // that catch a new block, token, service or locale key that has not been
