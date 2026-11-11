@@ -103,6 +103,17 @@ ID, preserves those 500 unresolved attempts and finishes repeated bounded
 passes; that control is included in the 97. Protected PR/merge integration
 remains required.
 
+Protected CI exposed two older assertions expecting discarded unknown-attempt
+ciphertext and a copied recipient in the provider event payload. Their repairs
+assert the exact retained ciphertext, both attempts, the later provider reference
+and the exact minimal event linked to the original bounced recipient. Both
+affected files produced40 passes and one fixture `TRUNCATE` statement timeout
+(`57014`) during observed storage sync contention. With other runs drained,
+the timed-out batching case and both repaired cases passed together (three
+actual passes,38 filtered cases); the25-second fixture deadline and database
+durability were unchanged. Typecheck and focused lint passed. This correction
+changes tests and evidence only; the production artifact is unchanged.
+
 C3.31/C11.08 also require the separate enabled transactional/SMTP physical-send
 recovery increment: freeze original route/request identities, journal each
 physical dispatch and retain unknown legacy outcomes until concrete original

@@ -9,7 +9,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
-import { mailDeliveries, mailOutbox, mailSuppressions, mailSenders } from "@/core/mail/schema";
+import { mailDeliveries, mailOutbox, mailProviderEvents, mailSuppressions, mailSenders } from "@/core/mail/schema";
 import { decryptMailOutbox } from "@/core/mail/outbox-crypto";
 import { resetMailForTests } from "@/adapters/mail";
 import { resetEnvForTests } from "@/core/env";
@@ -788,9 +788,12 @@ describe.runIf(hasDatabase)("broadcasts", () => {
     expect(Object.keys(event!.payload as Record<string, unknown>).sort()).toEqual([
       "deliveryId",
       "eventId",
-      "recipient",
       "type",
     ]);
+    const [feedback] = await db().select().from(mailProviderEvents).where(eq(mailProviderEvents.deliveryId, delivery!.id));
+    expect(event!.payload).toEqual({ deliveryId: delivery!.id, eventId: feedback!.id, type: "hard_bounce" });
+    expect(JSON.stringify(event!.payload)).not.toContain(copy!.email);
+    expect(delivery!.recipient).toBe(copy!.email);
     expect((await broadcastStats.call({ id: saved.id }, OWNER)).bounced).toBe(1);
   });
 
