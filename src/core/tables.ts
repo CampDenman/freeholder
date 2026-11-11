@@ -77,6 +77,8 @@ export {
   mailProviderGrants,
   mailSenders,
   mailSuppressions,
+  mailReceiptKeys,
+  mailRecordSubjects,
 } from "@/core/mail/schema";
 export {
   deviceTokens,
