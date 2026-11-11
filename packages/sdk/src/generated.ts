@@ -5078,7 +5078,7 @@ export interface ServiceCatalog {
   };
   "invoicing.customerInvoice": {
     input: { id: string; token?: string };
-    output: { id: string; number: string; status: string; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; amountMinor: number; totalMinor: number }[]; saveMethodRequired: boolean; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable"; nextPaymentMinor: number | null; awaitingRelease: boolean };
+    output: { id: string; number: string; status: string; currency: string; issuerName: string | null; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; amountMinor: number; totalMinor: number }[]; saveMethodRequired: boolean; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable"; nextPaymentMinor: number | null; awaitingRelease: boolean };
   };
   "invoicing.customerInvoiceLink": {
     input: { id: string };
