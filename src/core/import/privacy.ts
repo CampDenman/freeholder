@@ -1,12 +1,13 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C2.29/C3.22: staged reader comments are personal data, not a second CRM.
-import { and, asc, eq, gt, gte, inArray, isNull } from "drizzle-orm";
-import { contacts, contactMergeOperations } from "@/core/contacts/schema";
+import { and, asc, eq, gt, gte, inArray } from "drizzle-orm";
+import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { importRuns } from "@/core/plugins/schema";
 import { dataRequests } from "@/core/privacy/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { contactPrivacyIdentity } from "@/core/privacy/contact-identity";
 import { ServiceError, type Tx } from "@/core/service";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { z } from "zod";
@@ -68,27 +69,8 @@ export async function assertLegacyReaderSafety(tx: Tx, run: Run): Promise<void> 
 }
 
 async function subject(tx: Tx, contactId: string) {
-  const [contact] = await tx.select({ email: contacts.email }).from(contacts).where(eq(contacts.id, contactId)).limit(1);
-  const emails = new Set<string>();
-  if (email(contact?.email)) emails.add(email(contact?.email));
-  // A merged duplicate's source email still belongs to the surviving subject.
-  // Undone operations are deliberately excluded: their people are separate.
-  const seen = new Set<string>(), pending = [contactId];
-  while (pending.length) {
-    const ids = pending.splice(0).filter(id => !seen.has(id));
-    if (!ids.length) break;
-    for (const id of ids) seen.add(id);
-    const merged = await tx.select().from(contactMergeOperations).where(and(
-      inArray(contactMergeOperations.survivingContactId, ids), isNull(contactMergeOperations.undoneAt),
-    ));
-    for (const operation of merged) {
-      for (const snapshot of [operation.survivorBefore, operation.duplicateBefore, operation.survivorAfter]) {
-        const address = email(object(snapshot).email);
-        if (address) emails.add(address);
-      }
-      pending.push(operation.duplicateContactId);
-    }
-  }
+  const identity = await contactPrivacyIdentity(tx, contactId);
+  const emails = new Set(identity.emails), seen = new Set(identity.contactIds);
   const comments = await tx.select({ source: blogReaderComments.source, externalId: blogReaderComments.externalId })
     .from(blogReaderComments).where(eq(blogReaderComments.contactId, contactId));
   const references = new Set(comments.filter(comment => comment.externalId).map(comment => `${comment.source}:${comment.externalId}`));
@@ -164,7 +146,7 @@ async function readerPointers(tx: Tx, contactIds: string[]): Promise<ReaderPoint
   return result;
 }
 async function rewriteReaderPointers(tx: Tx, transform: (entry: SourceEntry) => string | undefined) {
-  for await (const run of runs(tx, true)) {
+  for await (const run of runs(tx, true, true)) {
     const copy = { ...run, preview: structuredClone(run.preview), checkpoint: structuredClone(run.checkpoint) };
     let changed = false;
     for (const entry of sourceEntries(copy)) {

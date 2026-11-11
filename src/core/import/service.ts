@@ -1072,7 +1072,8 @@ const commitApply = defineService({
       publishedAt,
       redirectIds,
       displacedRedirects,
-      postSnapshots, pendingBlogPosts, readerPrivacyVersion: 1,
+      postSnapshots, pendingBlogPosts,
+      ...(checkpointOf(before.preview).readerPrivacyVersion === 1 ? { readerPrivacyVersion: 1 } : {}),
       landedPaths: landed.map(({ page, slug }) => ({ sourceUrl: page.url, path: slug, status: page.status ?? "publish", seo: page.seo ?? {} })),
       legacyAliases: [
         ...archiveAliases,

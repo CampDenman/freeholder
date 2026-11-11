@@ -17,14 +17,22 @@ Erasure removes their name, email and comment together, preserving article text,
 other readers and page/media recovery ownership. Existing readers bind to their
 unified contact ID when staged; contact merge and conflict-checked undo repoint
 those JSON references. Publication reuses that contact even after an address
-change. Active merge history and exact imported-comment references provide
+change. Import run/list responses strip those internal CRM bindings, including
+for exact source-preview keys that cannot read contacts. The private ledger
+retains them for erasure. Active merge history, the subject's own recorded address changes and exact
+imported-comment references provide
 matching for older cached input. Previewing does not create new CRM contacts.
 
 Commit releases redundant preview reader copies. Pending replacement comments
 remain private until cutover and stay subject to erasure. Rollback discards their
 pending input. Commit, publication and erasure lock the same import run. A merge
 that encounters an active import refuses with a retry message instead of waiting
-while it holds contacts needed by the publisher. Scoped reader-comment legal
+while it holds contacts needed by the publisher. Both snapshot and repoint use
+this refusal, including a new run created between those phases. Audit export
+and erasure follow the same active merged identity. Payload cleanup preserves
+the existing actor-anonymization policy and does not reassign historical actions
+or subject IDs. Undone
+merges keep the other person separate. Scoped reader-comment legal
 holds also retain their cached source scope and report partial erasure.
 
 Unparsed uploads cannot yet be matched to a contact. If erasure completes after
@@ -44,8 +52,12 @@ cutover from the immediately previous image, which cannot interpret the flag;
 this compatibility change is explicitly marked schema-breaking. Recovery must
 respect already acknowledged erasures before anything becomes public again.
 
-Local production build and artifact scrub passed: 18,785 files and 227,330,072
-bytes. The final integrated native/PostgreSQL qualification and protected PR
-checks supply the source acceptance record. No new browser surface is introduced;
-existing owner forms and HTTP/MCP use the same shared mutations and original
-actor audit.
+The final integrated PostgreSQL/native run passed 62 checks, including the
+independently reviewable contact-history repair in PR #662, reader-source privacy,
+merge/undo, exact import-key boundaries and all eight SDK checks. Production build
+and artifact scrub passed: 19,399 files and 236,789,859 bytes. Type, lint, license,
+plan and all 368 contract checks passed (one deliberate contract exclusion).
+Migration 0068 is merged; migration 0069 must retain its journal order and the
+contact-history dependency must land before this source is integrated. Protected
+PR qualification remains required. No new browser surface is introduced; existing
+owner forms and HTTP/MCP use the same shared mutations and original actor audit.

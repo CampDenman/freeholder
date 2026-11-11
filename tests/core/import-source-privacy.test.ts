@@ -6,9 +6,10 @@ import { readFileSync } from "node:fs";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { violates } from "@/core/db/errors";
+import { auditLog } from "@/core/events/schema";
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import { contacts } from "@/core/contacts/schema";
-import { getContact, mergeContacts, resolveContact, undoContactMerge, updateContact } from "@/core/contacts/service";
+import { contactReferences, getContact, mergeContacts, registerContactReference, resolveContact, undoContactMerge, updateContact } from "@/core/contacts/service";
 import { importRuns } from "@/core/plugins/schema";
 import { addRetentionException, contactPrivacySources, createDataRequest, fulfillDataRequest, registerContactPrivacySource, verifyDataRequest } from "@/core/privacy/service";
 import { commitImport, listImports, previewFromSource, publishImport, reconcileImport, reviewImportConflicts, rollbackImport, startImport } from "@/core/import/service";
@@ -152,6 +153,9 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     await mergeContacts.call({ survivingId: survivor.contact.id, duplicateId: duplicate.contact.id }, OWNER);
     await erase(survivor.contact.id);
     expect(JSON.stringify(await savedRun(run.id))).not.toContain(COMMENT);
+    const [history] = await db().select().from(auditLog).where(eq(auditLog.subjectId, duplicate.contact.id));
+    expect(history).toMatchObject({ action: "contacts.resolve", subjectId: duplicate.contact.id, actor: `user:${OWNER.userId}` });
+    expect(history?.diff).toEqual({});
     await commitImport.call({ id: run.id }, OWNER);
     expect(await db().select().from(contacts).where(eq(contacts.email, EMAIL))).toHaveLength(0);
   });
@@ -164,8 +168,25 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     await undoContactMerge.call({ operationId: merged.mergeOperationId }, OWNER);
     await erase(survivor.contact.id);
     expect(JSON.stringify(await savedRun(run.id))).toContain(COMMENT);
+    const [separateHistory] = await db().select().from(auditLog).where(eq(auditLog.subjectId, duplicate.contact.id));
+    expect(separateHistory?.diff).toMatchObject({ email: EMAIL });
     await erase(duplicate.contact.id);
     expect(JSON.stringify(await savedRun(run.id))).not.toContain(COMMENT);
+    const [erasedHistory] = await db().select().from(auditLog).where(eq(auditLog.subjectId, duplicate.contact.id));
+    expect(erasedHistory?.diff).toEqual({});
+  });
+
+  it("erases an older unbound source using this contact's own recorded prior address", async () => {
+    const { run, reader } = await replacement();
+    const saved = await savedRun(run.id);
+    const checkpoint = structuredClone(saved.checkpoint) as { readerPrivacyVersion?: number; pendingBlogPosts: Array<{ comments: Array<{ contactId?: string }> }> };
+    delete checkpoint.readerPrivacyVersion;
+    for (const post of checkpoint.pendingBlogPosts) for (const comment of post.comments) delete comment.contactId;
+    await db().update(importRuns).set({ checkpoint }).where(eq(importRuns.id, run.id));
+    await updateContact.call({ id: reader.id, email: "updated-reader@example.test" }, OWNER);
+    await erase(reader.id);
+    expect(JSON.stringify(await savedRun(run.id))).not.toContain(COMMENT);
+    expect(JSON.stringify(await savedRun(run.id))).not.toContain(EMAIL);
   });
 
   it("refuses an unsafe legacy pending publication after an already-completed erasure and preserves rollback", async () => {
@@ -314,5 +335,44 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     await mergeContacts.call({ survivingId: survivor.contact.id, duplicateId: duplicate.contact.id }, OWNER);
     await erase(survivor.contact.id);
     expect(JSON.stringify(await savedRun(run.id))).not.toContain(COMMENT);
+  });
+
+  it("refuses safely when a new import starts between merge snapshot and repoint", async () => {
+    const duplicate = await resolveContact.call({ email: EMAIL }, OWNER);
+    const survivor = await resolveContact.call({ email: "surviving-reader@example.test" }, OWNER);
+    const original = contactReferences().find(reference => reference.table === "import_runs")!;
+    let entered!: () => void, release!: () => void, pause = true;
+    const captured = new Promise<void>(resolve => { entered = resolve; });
+    const wait = new Promise<void>(resolve => { release = resolve; });
+    registerContactReference({ ...original, captureForUndo: async (...args) => {
+      const state = await original.captureForUndo(...args);
+      if (pause) { pause = false; entered(); await wait; }
+      return state;
+    } });
+    const merging = mergeContacts.call({ survivingId: survivor.contact.id, duplicateId: duplicate.contact.id }, OWNER);
+    void merging.catch(() => undefined);
+    let staging: ReturnType<typeof previewFromSource.call> | undefined;
+    let runId: string | undefined;
+    try {
+      await captured;
+      const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
+      runId = run.id;
+      staging = previewFromSource.call({ id: run.id, payload: SOURCE }, OWNER);
+      void staging.catch(() => undefined);
+      const deadline = Date.now() + 5000;
+      let waitingForContact = false;
+      while (Date.now() < deadline) {
+        const rows = await db().execute(sql`select pid from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and query like '%contacts%'`);
+        if (rows.length) { waitingForContact = true; break; }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      expect(waitingForContact).toBe(true);
+    } finally { release(); registerContactReference(original); }
+    const [merged, staged] = await Promise.allSettled([merging, staging]);
+    expect(merged).toMatchObject({ status: "rejected", reason: { code: "conflict" } });
+    expect(staged).toMatchObject({ status: "fulfilled", value: { status: "previewed" } });
+    await mergeContacts.call({ survivingId: survivor.contact.id, duplicateId: duplicate.contact.id }, OWNER);
+    await erase(survivor.contact.id);
+    expect(JSON.stringify(await savedRun(runId))).not.toContain(COMMENT);
   });
 });
