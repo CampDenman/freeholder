@@ -2601,6 +2601,7 @@
   "contacts.merge.searchLabel": "Search for the duplicate",
   "contacts.merge.searchPlaceholder": "name or email",
   "contacts.merge.submit": "Merge into this contact",
+  "contacts.merge.erased": "An erased contact cannot be merged. Keep the new relationship separate from the erased record.",
   "contacts.merge.title": "Merge a duplicate",
   "contacts.new": "New contact",
   "contacts.new.intro": "Every part of the platform will share this one record.",

@@ -113,6 +113,18 @@ Legacy transaction-start ambiguity is handled conservatively. This is a coding
 agent's repair evidence, not Tony Aly's independent security sign-off. C11.10
 and stable publication remain open.
 
+### Erased-contact merge cutover (C1.07/C1.08/C11.10)
+
+Three actual before-failing service controls reproduced a fresh relationship
+merged with an erased participant in either direction, and an original late
+signed payment recreating erased provider-customer data after its retained
+invoice moved to a fresh survivor with its own acquisition source. Review the
+early `contacts.merge` refusal under the existing identity/ordered row locks
+alongside `tests/core/payment-provider-erasure.test.ts`. No candidate, pointer
+or snapshot may change on refusal. Ordinary merge/undo remains supported;
+genuine late money still settles without restoring personal copies. This is
+agent source evidence and does not supply independent sign-off.
+
 ## OpenMLS migration boundary (C12.39, source qualification)
 
 Review `native/openmls/src/lib.rs`, the pinned upstream/compiler/runtime and

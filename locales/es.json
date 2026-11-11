@@ -2601,6 +2601,7 @@
   "contacts.merge.searchLabel": "Buscar el duplicado",
   "contacts.merge.searchPlaceholder": "nombre o correo",
   "contacts.merge.submit": "Fusionar en este contacto",
+  "contacts.merge.erased": "No se puede fusionar un contacto cuyos datos se han borrado. Mantén la nueva relación separada del registro borrado.",
   "contacts.merge.title": "Fusionar un duplicado",
   "contacts.new": "Nuevo contacto",
   "contacts.new.intro": "Todas las partes de la plataforma compartirán esta misma ficha.",

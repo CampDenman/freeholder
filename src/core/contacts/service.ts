@@ -38,6 +38,13 @@ import { defineService, ServiceError, type ServiceContext, type Tx } from "@/cor
 // "Lead" means one thing, and core says what (§4.7, C9.07).
 import "./funnel";
 
+/** A stable display reason; authorization and refusal remain in the service. */
+export class ErasedContactMergeError extends ServiceError {
+  constructor() {
+    super("conflict", "An erased contact cannot be merged. Keep the new relationship separate from the erased record.");
+  }
+}
+
 const STAGES = ["lead", "prospect", "customer", "repeat"] as const;
 const lifecycleStage = z.enum(STAGES);
 
@@ -837,6 +844,9 @@ export const mergeContacts = defineService({
     const duplicate = byId.get(input.duplicateId);
     if (!surviving || !duplicate) {
       throw new ServiceError("not_found", "One of those contacts no longer exists.");
+    }
+    if (surviving.source === "privacy-erasure" || duplicate.source === "privacy-erasure") {
+      throw new ErasedContactMergeError();
     }
 
     const canonicalIds = [surviving.id, duplicate.id].sort();

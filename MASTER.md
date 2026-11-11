@@ -3899,6 +3899,17 @@ reading chat logs.
   `contact-privacy-lineage.md`; `deploy/privacy-rights.md`. Independent C11.10
   review remains open.
 
+  Erased-contact merge cutover repair 2026-11-11 (C1.07/C1.08/C11.10):
+  three actual service controls reproduced fresh personal data folded into an
+  erased record and late authenticated payment feedback recreating an erased
+  provider customer after invoice ownership moved to a fresh survivor. The
+  shared merge now refuses either erased participant under the existing
+  identity and ordered row locks before candidate/reference writes. A new
+  relationship stays separate; real late money still records without restoring
+  erased personal copies. `tests/core/payment-provider-erasure.test.ts`;
+  changeset `erased-contact-merge-cutover.md`; `deploy/privacy-rights.md`.
+  This is source repair evidence, not independent C11.10 sign-off.
+
 
 #### Jobs, events, files, mail, and notifications
 - [x] **C1.09** Enqueue jobs inside the caller transaction; add idempotency
