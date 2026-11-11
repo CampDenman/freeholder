@@ -5040,8 +5040,8 @@
   "privacy.due": "Suivi avant le",
   "privacy.empty": "Aucune demande de confidentialité ne correspond à cette vue.",
   "privacy.fulfill.confirmation": "Confirmation destructive",
-  "privacy.fulfill.confirmationHint": "Tapez ERASE exactement. Les données personnelles sont anonymisées et l’accès client révoqué; seuls les périmètres juridiques documentés subsistent.",
-  "privacy.fulfill.erasureHint": "L’effacement des données personnelles est irréversible. Les données des modules sont effacées ou anonymisées et seuls les périmètres juridiques documentés subsistent.",
+  "privacy.fulfill.confirmationHint": "Tapez ERASE exactement. Les données personnelles et l’accès client sont supprimés. La suppression du client chez le prestataire retire les cartes enregistrées et annule les abonnements Stripe actifs. Les périmètres de conservation documentés subsistent.",
+  "privacy.fulfill.erasureHint": "L’effacement des données personnelles est irréversible. Les données et identifiants sont effacés ou anonymisés; la suppression du client chez le prestataire annule les abonnements Stripe actifs. La demande attend la fin des opérations requises du prestataire.",
   "privacy.fulfill.hint": "Freeholder crée un reçu JSON avec somme de contrôle et le livre avec authentification pendant 30 jours.",
   "privacy.fulfill.submit": "Traiter la demande",
   "privacy.fulfill.title": "Terminer la demande",
@@ -7057,7 +7057,7 @@
   "subscriptions.detail.billing": "Facturation",
   "subscriptions.detail.manage": "Gérer les abonnements",
   "privacy.erasure.pending.title": "Effacement chez le fournisseur en attente",
-  "privacy.erasure.pending.hint": "L’effacement local a commencé. Les enregistrements et transcriptions du fournisseur doivent être supprimés avant de terminer cette demande. Les opérations échouées peuvent être relancées.",
+  "privacy.erasure.pending.hint": "L’effacement local a commencé. La suppression requise des clients de paiement, enregistrements et transcriptions doit être terminée. Les opérations échouées peuvent être relancées.",
   "privacy.erasure.pending.jobs": "Consulter les tâches en arrière-plan",
   "admin.search.kind.supplier": "Fournisseurs",
   "admin.search.kind.agreement": "Accords",
@@ -8621,5 +8621,9 @@
   "catalog.notifications.return.rejected.body": "Cette demande de retour a été refusée.",
   "catalog.returns.labelUrl": "URL de l’étiquette de retour (facultatif)",
   "catalog.returns.chooseRestock": "Remettre en stock les articles expédiés encore utilisables",
-  "admin.activity.returnRefundPrepared": "Les montants du remboursement du retour ont été préparés"
+  "admin.activity.returnRefundPrepared": "Les montants du remboursement du retour ont été préparés",
+  "privacy.system.identityBeforeErasure": "Identité vérifiée avant l’effacement",
+  "privacy.system.providerPending": "En attente des suppressions requises chez le prestataire.",
+  "privacy.system.completed": "Demande terminée.",
+  "privacy.system.retained": "Terminée avec les exceptions de conservation documentées."
 }

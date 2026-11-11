@@ -11,6 +11,7 @@ import {
   registerContactReference,
 } from "@/core/contacts/service";
 import { contacts } from "@/core/contacts/schema";
+import {queuePaymentProviderErasure} from "./provider-erasure";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {
   clipSnippet,
@@ -292,7 +293,8 @@ registerContactPrivacySource({
       paymentMethods: await tx.select().from(paymentMethods).where(eq(paymentMethods.contactId, contactId)),
     };
   },
-  erase: async (tx, contactId) => {
+  erase: async (tx, contactId, context) => {
+    const providerErasure=await queuePaymentProviderErasure(tx,contactId,context);
     const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId));
     const ids = owned.map((row) => row.id);
     let affected = 0;
@@ -320,7 +322,7 @@ registerContactPrivacySource({
     affected += (
       await tx.delete(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, contactId)).returning({ id: paymentProviderCustomers.id })
     ).length;
-    return { affected };
+    return { affected,pendingJobs:providerErasure.pendingJobs };
   },
 });
 

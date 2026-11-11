@@ -12,6 +12,7 @@ import {
 } from "@/adapters/payments/providers";
 import type { PaymentAdapter, PaymentProviderEvent, SavedPaymentMethodEvidence } from "@/adapters/payments";
 import { AdapterError } from "@/adapters/types";
+import {lockContactIdentity} from "@/core/contacts/identity-lock";
 import { contacts } from "@/core/contacts/schema";
 import { env } from "@/core/env";
 import { listed, row, timestamp, uuid } from "@/core/contract";
@@ -202,10 +203,13 @@ function assertMovement(payment: typeof payments.$inferSelect, event: { amountMi
   }
 }
 
-async function upsertProviderCustomer(tx: Tx, contactId: string, providerId: string, providerCustomerRef?: string, providerAccountId = ""): Promise<void> {
-  if (!providerCustomerRef) return;
+async function upsertProviderCustomer(tx: Tx, contactId: string, providerId: string, providerCustomerRef?: string, providerAccountId = ""): Promise<boolean> {
+  await lockContactIdentity(tx);
+  const [contact]=await tx.select({source:contacts.source}).from(contacts).where(eq(contacts.id,contactId)).limit(1);
+  if(!contact || contact.source==="privacy-erasure")return false;
+  if (!providerCustomerRef) return true;
   const [created] = await tx.insert(paymentProviderCustomers).values({ contactId, provider: providerId, providerAccountId, providerCustomerRef }).onConflictDoNothing().returning({ id: paymentProviderCustomers.id });
-  if (created) return;
+  if (created) return true;
   const [existing] = await tx
     .select()
     .from(paymentProviderCustomers)
@@ -215,6 +219,7 @@ async function upsertProviderCustomer(tx: Tx, contactId: string, providerId: str
     throw new ServiceError("conflict", "The payment provider customer is already linked to a different contact.");
   }
   if (!existing) throw new ServiceError("conflict", "The payment provider customer could not be linked safely.");
+  return true;
 }
 
 async function resolveMethodContact(
@@ -305,9 +310,9 @@ async function processPaymentEvent(providerId: string, event: z.infer<typeof pay
     const [invoice] = await ctx.tx.select({ contactId: invoices.contactId }).from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
     const contactId = invoice?.contactId ?? event.contactId;
     if (contactId) {
-      await upsertProviderCustomer(ctx.tx, contactId, providerId, event.providerCustomerRef ?? event.savedMethod?.providerCustomerRef, event.providerAccountId ?? "");
+      const keepPersonalData=await upsertProviderCustomer(ctx.tx, contactId, providerId, event.providerCustomerRef ?? event.savedMethod?.providerCustomerRef, event.providerAccountId ?? "");
       const metadata = payment.metadata && typeof payment.metadata === "object" && !Array.isArray(payment.metadata) ? payment.metadata as Record<string, unknown> : {};
-      if (event.savedMethod && metadata.saveMethodRequested === true) {
+      if (keepPersonalData && event.savedMethod && metadata.saveMethodRequested === true) {
         const savedPaymentMethodId = await persistMethod(ctx.tx, providerId, contactId, event.savedMethod, "saved_method_added", new Date(event.occurredAt), event.providerAccountId ?? "");
         await ctx.tx.update(payments).set({ metadata: { ...metadata, savedPaymentMethodId } }).where(eq(payments.id, payment.id));
       }
@@ -415,11 +420,16 @@ async function processDisputeEvent(providerId: string, event: z.infer<typeof dis
 }
 
 async function processMethodEvent(providerId: string, event: z.infer<typeof savedMethodEvent>, ctx: ServiceContext): Promise<string> {
+  await lockContactIdentity(ctx.tx);
+  if(event.contactId){
+    const [contact]=await ctx.tx.select({source:contacts.source}).from(contacts).where(eq(contacts.id,event.contactId)).limit(1);
+    if(contact?.source==="privacy-erasure")return "saved_method_after_erasure_ignored";
+  }
   const customerRef = event.providerCustomerRef ?? event.method.providerCustomerRef;
   const contactId = await resolveMethodContact(ctx.tx, providerId, event.contactId, customerRef, event.providerAccountId ?? "");
   if (!contactId && event.providerAccountId) throw new ServiceError("conflict", "The seller method arrived before its authorized customer binding; retry it.");
   if (!contactId) return "saved_method_without_contact_ignored";
-  await upsertProviderCustomer(ctx.tx, contactId, providerId, customerRef, event.providerAccountId ?? "");
+  if(!await upsertProviderCustomer(ctx.tx, contactId, providerId, customerRef, event.providerAccountId ?? ""))return "saved_method_after_erasure_ignored";
   await persistMethod(ctx.tx, providerId, contactId, event.method, event.kind, new Date(event.occurredAt), event.providerAccountId ?? "");
   return event.kind;
 }

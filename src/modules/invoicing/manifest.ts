@@ -9,6 +9,7 @@ export default defineModule({
   requires: ["core"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  jobs: () => import("./jobs"),
   onboarding: () => import("./onboarding"),
   briefing: { contributors: ["invoicing.briefingOverdue"] },
   events: {

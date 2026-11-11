@@ -1197,6 +1197,10 @@ export const updateContact = defineService({
     if (!existing) {
       throw new ServiceError("not_found", "That contact no longer exists.");
     }
+    const changingErasedSource = requested.source !== undefined && requested.source !== "privacy-erasure";
+    if (changingErasedSource && existing.source === "privacy-erasure") {
+      throw new ServiceError("conflict", "That contact was erased. Create a new contact to start a new relationship.");
+    }
     await ensureOrganization(ctx.tx, requested.orgId);
     const changes = {
       ...requested,
@@ -1222,10 +1226,13 @@ export const updateContact = defineService({
       ctx.tx
         .update(contacts)
         .set(changes)
-        .where(eq(contacts.id, id))
+        // Recheck at the write: erasure may commit while field validation waits.
+        .where(and(eq(contacts.id, id), changingErasedSource
+          ? sql`${contacts.source} is distinct from 'privacy-erasure'` : undefined))
         .returning(),
     );
     if (!contact) {
+      if (changingErasedSource) throw new ServiceError("conflict", "That contact changed or was erased. Reload it before editing.");
       throw new ServiceError("not_found", "That contact no longer exists.");
     }
     ctx.setSubject("contact", contact.id);

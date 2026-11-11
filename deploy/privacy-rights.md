@@ -103,6 +103,41 @@ merges, borrowed addresses, other-party recovery data, named holds, exact audit
 scrubbing, timeline payloads, composed transactions and competing identity work.
 These source repairs do not supply the independent C11.10 review.
 
+## Payment-provider customer cleanup
+
+The existing `commerce.money` scope includes both local payment data and its
+merchant-owned provider customer copies. Before deleting local customer/card
+rows, fulfilment queues one durable task per original provider/account/customer,
+including a customer known only from a saved method. The receipt stays
+`in_progress` until every task acknowledges actual cleanup. A documented hold
+on `commerce.money` retains both the provider work and its local references.
+
+`invoicing.eraseProviderCustomer` retries the original account and logical job
+identity outside a service transaction. Stripe must first identify that exact
+customer, then return its deletion acknowledgement; an actual already-deleted
+customer is a successful replay. An outage, wrong identity, denied original
+account or unsupported provider leaves the task pending for repair/retry. No
+request falls back to the platform account. Jobs retain only the minimum
+provider references and request/job IDs, not the erased name or email.
+
+Deleting a Stripe customer removes saved payment details and immediately
+cancels its active Stripe subscriptions. The owner sees this consequence before
+confirming `ERASE`, in English, Spanish, French and Arabic. See Stripe's
+[customer deletion contract](https://docs.stripe.com/api/customers/delete).
+This targets merchant customer profiles and saved methods; retained financial
+records and documented exceptions remain subject to the owner's existing policy.
+
+Provider feedback uses the same nonwaiting identity guard as erasure. A racing
+settlement rolls back for retry, then records real money after cutover without
+recreating the erased customer/card data. Late method-only feedback is ignored.
+The shared contact update service preserves the erased-source marker, including
+a field edit prepared before erasure: the final write checks the current marker
+atomically and refuses an overwrite. A new relationship uses a new Contact.
+Inspect failed/dead-letter work in `/admin/jobs`; repairing credentials or
+original account access and retrying preserves the original privacy task.
+Provider HTTP fixtures and disposable database checks are source evidence;
+actual account acceptance and independent security review remain open.
+
 ## Legal-retention exceptions
 
 An exception belongs to one open erasure request and one registered scope. It

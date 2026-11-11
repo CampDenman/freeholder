@@ -13156,6 +13156,22 @@ whatever is best for the people using the site.
   with the other full integration and actual provider acceptance above.
   See `deploy/seller-merchant-source-2026-11-10.md` and changeset
   `stripe-saved-card-evidence.md`; no direct model is enabled.
+  Provider customer erasure repair 2026-11-11 (C1.08/C12.38/C11.10): five
+  real PostgreSQL controls reproduced false local-only completion, late saved
+  card/customer recreation and customer recreation after real settlement.
+  `commerce.money` now queues original-account customer cleanup before deleting
+  local references and stays pending until actual provider acknowledgement;
+  its existing named hold retains both work and references. Stripe cleanup
+  confirms the exact customer or its deletion tombstone without account fallback.
+  The owner sees subscription-cancellation consequences in all four locales.
+  Late feedback preserves actual money without restoring erased personal copies;
+  a real cutover race rolls back and retries safely. Shared contact updates
+  atomically refuse clearing an erased marker, including a stale prepared edit. Tests:
+  `tests/core/payment-provider-erasure.test.ts`,
+  `tests/core/stripe-customer-erasure.test.ts`; changeset
+  `payment-provider-customer-erasure.md`; `deploy/privacy-rights.md`.
+  Actual provider acceptance and independent review remain open; this source
+  increment closes no C-item and does not enable direct seller collection.
 - [ ] **C12.39** Move end-to-end encryption from `ts-mls` (not independently
   audited) to OpenMLS (audited historically by SRLabs), compiled to WebAssembly
   in pinned CI and committed so deploys stay Node-only. The owner's 2026-11-10

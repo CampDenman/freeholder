@@ -5040,8 +5040,8 @@
   "privacy.due": "Responder antes de",
   "privacy.empty": "Ninguna solicitud de privacidad coincide con esta vista.",
   "privacy.fulfill.confirmation": "Confirmación destructiva",
-  "privacy.fulfill.confirmationHint": "Escriba ERASE exactamente. Se anonimizan los datos personales y se revoca el acceso del cliente; permanecen los ámbitos legales documentados.",
-  "privacy.fulfill.erasureHint": "La eliminación de datos personales es irreversible. Los datos de módulos se eliminan o anonimizan y solo sobreviven los ámbitos legales documentados.",
+  "privacy.fulfill.confirmationHint": "Escriba ERASE exactamente. Se eliminan los datos personales y el acceso del cliente. La eliminación del cliente del proveedor borra las tarjetas guardadas y cancela las suscripciones activas de Stripe. Se mantienen los ámbitos de conservación documentados.",
+  "privacy.fulfill.erasureHint": "La eliminación de datos personales es irreversible. Los datos y las credenciales se eliminan o anonimizan; la eliminación del cliente del proveedor cancela las suscripciones activas de Stripe. La solicitud espera a que finalicen las tareas del proveedor.",
   "privacy.fulfill.hint": "Freeholder crea un recibo JSON con suma de comprobación y lo entrega con autenticación durante 30 días.",
   "privacy.fulfill.submit": "Completar solicitud",
   "privacy.fulfill.title": "Completar la solicitud",
@@ -7057,7 +7057,7 @@
   "subscriptions.detail.billing": "Facturación",
   "subscriptions.detail.manage": "Gestionar suscripciones",
   "privacy.erasure.pending.title": "Eliminación del proveedor pendiente",
-  "privacy.erasure.pending.hint": "La eliminación local ha comenzado. Las grabaciones y transcripciones del proveedor deben eliminarse antes de completar esta solicitud. Las tareas fallidas se pueden reintentar.",
+  "privacy.erasure.pending.hint": "La eliminación local ha comenzado. Deben terminar las tareas necesarias de eliminación de clientes de pago, grabaciones y transcripciones. Las tareas fallidas siguen disponibles para reintentar.",
   "privacy.erasure.pending.jobs": "Consultar tareas en segundo plano",
   "admin.search.kind.supplier": "Proveedores",
   "admin.search.kind.agreement": "Acuerdos",
@@ -8621,5 +8621,9 @@
   "catalog.notifications.return.rejected.body": "Esta solicitud de devolución fue rechazada.",
   "catalog.returns.labelUrl": "URL de la etiqueta de devolución (opcional)",
   "catalog.returns.chooseRestock": "Devolver al inventario los artículos enviados que sean utilizables",
-  "admin.activity.returnRefundPrepared": "Se prepararon los importes del reembolso de la devolución"
+  "admin.activity.returnRefundPrepared": "Se prepararon los importes del reembolso de la devolución",
+  "privacy.system.identityBeforeErasure": "Identidad verificada antes de la eliminación",
+  "privacy.system.providerPending": "Esperando la eliminación requerida del proveedor.",
+  "privacy.system.completed": "Solicitud completada.",
+  "privacy.system.retained": "Completada con excepciones de conservación documentadas."
 }
