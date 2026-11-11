@@ -70,9 +70,6 @@ export function clipSnippet(value: string | null | undefined): string | null {
  */
 export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   mail_record_subjects: "Private ownership join; mail status uses its own scoped service and receipt identities are not searchable titles.",
-  mail_dispatch_requests: "Private immutable request and encrypted route; recovery uses its fresh-human scoped mail service.",
-  mail_dispatches: "Private physical caller evidence; recovery uses its fresh-human scoped mail service.",
-  mail_legacy_resolutions: "Private original-provider review receipts; not searchable customer content.",
   contact_relationships:
     "Join table of two contacts; find each person through the contact source.",
   customer_magic_links:
