@@ -14,7 +14,7 @@ import { addRetentionException, createDataRequest, fulfillDataRequest, verifyDat
 import { getJob, stopJobs } from "@/core/jobs";
 import { eraseMailRecords } from "@/core/mail/record-privacy";
 import { reviewLegacyMailOwnership } from "@/core/mail/record-services";
-import { mailStatus, recordMailProviderEvent, sendMail } from "@/core/mail/service";
+import { deliverQueuedMail, mailStatus, pruneExpiredMailOutbox, recordMailProviderEvent, sendMail } from "@/core/mail/service";
 import { mailReceiptKeys } from "@/core/mail/schema";
 import { mailReceipts, sealMailReceipts } from "@/core/mail/receipts";
 import { resetEnvForTests } from "@/core/env";
@@ -127,6 +127,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     const job = await getJob("core.eraseMailRecords", jobId);
     expect(JSON.stringify(job?.data)).not.toContain(EMAIL);
     await expect(eraseMailRecords(job!.data)).rejects.toThrow(/Unresolved/);
+    await expect(deliverQueuedMail(unknown.id)).resolves.toEqual({ status: "missing" });
     const rows = await db().select().from(mailDeliveries);
     expect(rows.find(row => row.id === unsent.id)?.redactedAt).not.toBeNull();
     expect(rows.find(row => row.id === unknown.id)?.recipient).toBe(EMAIL);
@@ -169,6 +170,13 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     await undoContactMerge.call({ operationId: merged.mergeOperationId }, OWNER);
     expect(await db().select().from(mailRecordSubjects)).toEqual(before);
   });
+  it("allows removal of a reviewer's login reference without dropping original contact ownership", async () => {
+    const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
+    const [legacy] = await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Reviewed fact", status: "failed", requestedBy: "system" }).returning();
+    await reviewLegacyMailOwnership.call({ kind: "delivery", id: legacy!.id, expectedRecipient: EMAIL, contactId: contact.id, evidence: "Synthetic independent original correspondence establishes ownership.", confirmation: "VERIFIED" }, OWNER);
+    await db().delete(users).where(eq(users.id, OWNER.userId));
+    expect((await db().select().from(mailRecordSubjects))[0]).toMatchObject({ contactId: contact.id, verifiedBy: null, basis: "owner_review" });
+  });
   it("preserves random site receipt identity across credential rotation and fails closed after key loss", async () => {
     const digest = await db().transaction(async tx => (await mailReceipts(tx)).digest("address", EMAIL));
     const prior = process.env.CREDENTIAL_KEY;
@@ -183,6 +191,18 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     await db().transaction(tx => sealMailReceipts(tx));
     await expect(db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Old writer", requestedBy: "system" })).rejects.toThrow();
     expect(await db().select().from(mailDeliveries)).toHaveLength(0);
+    await db().transaction(tx => sendMail(tx, { to: EMAIL, subject: "Current guarded writer", text: "Synthetic fixture" }));
+    await expect(db().delete(mailOutbox)).rejects.toThrow();
+    expect(await db().select().from(mailOutbox)).toHaveLength(1);
+  });
+  it("keeps an expired unsent private body under its named hold after anonymization", async () => {
+    const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
+    const queued = await db().transaction(tx => sendMail(tx, { to: EMAIL, subject: "Held original", text: "Synthetic private fixture" }));
+    await db().update(mailOutbox).set({ createdAt: PAST }).where(eq(mailOutbox.deliveryId, queued.id));
+    const erased = await erasure(contact.id, true);
+    expect(erased.request.status).toBe("partially_completed");
+    expect(await pruneExpiredMailOutbox()).toBe(0);
+    expect(await db().select().from(mailOutbox)).toHaveLength(1);
   });
   it("minimizes linked historical staff notices but waits for their outstanding delivery", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
@@ -200,5 +220,27 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     await db().update(notificationDeliveries).set({ status: "delivered", deliveredAt: new Date() }).where(eq(notificationDeliveries.id, attempt!.id));
     await eraseMailRecords(job!.data);
     expect((await db().select().from(mailProviderEvents))[0]?.redactedAt).not.toBeNull();
+  });
+  for (const ambiguous of ["submitted", "multiple"] as const) it(`keeps a derived ${ambiguous} physical mail copy pending even after its outbox disappeared`, async () => {
+    const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
+    await recordMailProviderEvent.call({ provider: "resend", externalEventId: `derived-${ambiguous}`, recipient: EMAIL, eventType: "hard_bounce", rawDigest: "1".repeat(64), occurredAt: new Date().toISOString() }, { kind: "system" });
+    const [source] = await db().select().from(outboxEvents).where(eq(outboxEvents.eventName, "mail.deliveryUpdated"));
+    const [notice] = await db().insert(notifications).values({ recipientUserId: OWNER.userId, topic: "mail.delivery", priority: "warning", title: "Old mail notice", body: `Old reader ${EMAIL}`, dedupeKey: `old-mail:${EMAIL}`, sourceEventName: "mail.deliveryUpdated", sourceEventId: source!.id, idempotencyKey: `derived-${ambiguous}` }).returning();
+    const [attempt] = await db().insert(notificationDeliveries).values({ notificationId: notice!.id, channel: "email", status: "delivered", attempts: 1, deliveredAt: new Date(), lastError: `Old provider detail ${EMAIL}` }).returning();
+    const [copy] = await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "smtp", recipient: "owner@example.test", subject: `Old rendered subject ${EMAIL}`, status: ambiguous === "submitted" ? "submitted" : "delivered", deliveredAt: ambiguous === "multiple" ? new Date() : null, attempts: ambiguous === "multiple" ? 2 : 1, requestedBy: "system:notifications", idempotencyKey: `notification-delivery:${attempt!.id}`, providerRef: "only-original-derived-reference", lastError: `Old rendered error ${EMAIL}` }).returning();
+    const erased = await erasure(contact.id);
+    expect(erased.request.status).toBe("in_progress");
+    expect((await db().select().from(mailDeliveries).where(eq(mailDeliveries.id, copy!.id)))[0]?.providerRef).toBe("only-original-derived-reference");
+  });
+  it("minimizes address-bearing fields of a positively settled derived mail copy", async () => {
+    const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
+    await recordMailProviderEvent.call({ provider: "resend", externalEventId: "derived-settled", recipient: EMAIL, eventType: "hard_bounce", rawDigest: "2".repeat(64), occurredAt: new Date().toISOString() }, { kind: "system" });
+    const [source] = await db().select().from(outboxEvents).where(eq(outboxEvents.eventName, "mail.deliveryUpdated"));
+    const [notice] = await db().insert(notifications).values({ recipientUserId: OWNER.userId, topic: "mail.delivery", priority: "warning", title: "Old mail notice", body: `Old reader ${EMAIL}`, sourceEventName: "mail.deliveryUpdated", sourceEventId: source!.id, idempotencyKey: "derived-settled" }).returning();
+    const [attempt] = await db().insert(notificationDeliveries).values({ notificationId: notice!.id, channel: "email", status: "delivered", attempts: 1, deliveredAt: new Date(), lastError: `Old provider detail ${EMAIL}` }).returning();
+    await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: "owner@example.test", subject: `Old rendered subject ${EMAIL}`, status: "failed", attempts: 0, requestedBy: "system:notifications", idempotencyKey: `notification-delivery:${attempt!.id}`, lastError: `Old rendered error ${EMAIL}` });
+    expect((await erasure(contact.id)).request.status).toBe("completed");
+    expect(JSON.stringify(await db().select().from(mailDeliveries))).not.toContain(EMAIL);
+    expect(JSON.stringify(await db().select().from(notificationDeliveries))).not.toContain(EMAIL);
   });
 });

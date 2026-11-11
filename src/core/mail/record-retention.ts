@@ -64,21 +64,23 @@ async function removeDerivedPersonalFields(tx: Tx, kind: MailRecordKind, ids: st
   await tx.update(outboxEvents).set({ payload: sql`${outboxEvents.payload}-'recipient'` }).where(and(eq(outboxEvents.eventName, "mail.deliveryUpdated"), kind === "event" ? inArray(sql<string>`${outboxEvents.payload}->>'eventId'`, ids) : kind === "delivery" ? inArray(sql<string>`${outboxEvents.payload}->>'deliveryId'`, ids) : sql`false`));
 }
 /** Historical staff notices are app copies of the same provider fact. */
-async function minimizeDerivedNotices(tx: Tx, kind: MailRecordKind, id: string, receipts: MailReceipts): Promise<boolean> {
+async function minimizeDerivedNotices(tx: Tx, kind: MailRecordKind, id: string, address: string, receipts: MailReceipts): Promise<boolean> {
   if (kind === "suppression") return false;
   const events = await tx.select({ id: outboxEvents.id, payload: outboxEvents.payload }).from(outboxEvents).where(and(eq(outboxEvents.eventName, "mail.deliveryUpdated"), eq(sql<string>`${outboxEvents.payload}->>${kind === "event" ? "eventId" : "deliveryId"}`, id)));
   if (!events.length) return false;
   const rows = await tx.select().from(notifications).where(and(eq(notifications.sourceEventName, "mail.deliveryUpdated"), inArray(notifications.sourceEventId, events.map(row => row.id)))).orderBy(notifications.id).for("update");
   if (!rows.length) return false;
   let pending = false;
+  const containsAddress = (value: string | null) => Boolean(value?.toLowerCase().includes(address.toLowerCase()));
   for (const notice of rows) {
     const event = events.find(row => row.id === notice.sourceEventId), payload = event?.payload as Record<string, unknown> | undefined;
-    await tx.update(notifications).set({ body: translator(notice.locale)("notifications.event.mail.body", { type: typeof payload?.type === "string" ? payload.type : "other" }), dedupeKey: `mail:retained:${notice.id}` }).where(eq(notifications.id, notice.id));
+    await tx.update(notifications).set({ body: translator(notice.locale)("notifications.event.mail.body", { type: typeof payload?.type === "string" ? payload.type : "other" }), ...(containsAddress(notice.title) ? { title: translator(notice.locale)("notifications.event.mail.title") } : {}), dedupeKey: `mail:retained:${notice.id}` }).where(eq(notifications.id, notice.id));
     const attempts = await tx.select().from(notificationDeliveries).where(eq(notificationDeliveries.notificationId, notice.id)).orderBy(notificationDeliveries.id).for("update");
     for (const attempt of attempts) {
+      let attemptPending = false;
       // A worker with an old rendered snapshot may still finish provider I/O.
       // Clock expiry and a later successful retry do not settle every attempt.
-      if (attempt.status === "processing" || attempt.attempts > 1 || (attempt.attempts > 0 && !["delivered", "skipped"].includes(attempt.status))) pending = true;
+      if (attempt.status === "processing" || attempt.attempts > 1 || (attempt.attempts > 0 && !["delivered", "skipped"].includes(attempt.status))) attemptPending = true;
       const sendKeys = [`notification-delivery:${attempt.id}`, `notification-escalation:${notice.id}`, ...(attempt.digestId ? [`notification-digest:${attempt.digestId}`] : [])];
       const copies = await tx.select().from(mailDeliveries).where(or(inArray(mailDeliveries.idempotencyKey, sendKeys), inArray(mailDeliveries.idempotencyDigest, sendKeys.map(key => receipts.digest("send", key))))).orderBy(mailDeliveries.id).for("update");
       for (const copy of copies) {
@@ -86,9 +88,13 @@ async function minimizeDerivedNotices(tx: Tx, kind: MailRecordKind, id: string, 
           await tx.update(mailDeliveries).set({ status: "suppressed", holdReason: null, lastError: null }).where(eq(mailDeliveries.id, copy.id));
           await tx.delete(mailOutbox).where(eq(mailOutbox.deliveryId, copy.id));
         }
-        if ((await tx.select({ id: mailOutbox.deliveryId }).from(mailOutbox).where(eq(mailOutbox.deliveryId, copy.id)).limit(1)).length) pending = true;
+        const [settlement] = await tx.execute<{ settled: boolean }>(sql`select (${terminalDelivery}) as settled from ${mailDeliveries} where ${mailDeliveries.id}=${copy.id}`);
+        if (!settlement?.settled) attemptPending = true;
+        else if (containsAddress(copy.subject) || containsAddress(copy.lastError)) await tx.update(mailDeliveries).set({ ...(containsAddress(copy.subject) ? { subject: translator(notice.locale)("notifications.event.mail.title") } : {}), ...(containsAddress(copy.lastError) ? { lastError: null } : {}) }).where(eq(mailDeliveries.id, copy.id));
       }
       if (attempt.attempts === 0 && ["pending", "deferred", "failed"].includes(attempt.status)) await tx.update(notificationDeliveries).set({ status: "skipped", lastError: null }).where(eq(notificationDeliveries.id, attempt.id));
+      else if (!attemptPending && containsAddress(attempt.lastError)) await tx.update(notificationDeliveries).set({ lastError: null }).where(eq(notificationDeliveries.id, attempt.id));
+      pending ||= attemptPending;
     }
   }
   return pending;
@@ -98,7 +104,7 @@ async function redactRows(tx: Tx, kind: MailRecordKind, rows: Row[], receipts: M
   await sealMailReceipts(tx);
   let redacted = 0;
   for (const row of rows) {
-    if (await minimizeDerivedNotices(tx, kind, row.id, receipts)) continue;
+    if (await minimizeDerivedNotices(tx, kind, row.id, row.address, receipts)) continue;
     const addressDigest = row.addressDigest ?? receipts.digest("address", row.address), redactedAt = new Date();
     if (kind === "delivery") await tx.update(mailDeliveries).set({ recipientDigest: addressDigest, idempotencyDigest: row.sendDigest ?? (row.sendKey ? receipts.digest("send", row.sendKey) : null), providerRefDigest: row.refDigest ?? (row.ref ? receipts.digest(`provider:${row.provider}`, row.ref) : null), redactedAt, recipient: `redacted-${row.id}@retained.invalid`, subject: "", lastError: null, idempotencyKey: null, providerRef: null }).where(eq(mailDeliveries.id, row.id));
     else if (kind === "event") await tx.update(mailProviderEvents).set({ recipientDigest: addressDigest, externalEventDigest: row.eventDigest ?? receipts.digest(`event:${row.provider}`, row.eventKey!), providerRefDigest: row.refDigest ?? (row.ref ? receipts.digest(`provider:${row.provider}`, row.ref) : null), redactedAt, recipient: `redacted-${row.id}@retained.invalid`, detail: null, externalEventId: `retained:${row.id}`, providerRef: null }).where(eq(mailProviderEvents.id, row.id));

@@ -5802,15 +5802,20 @@ deployments are portable, testable and incapable of silently forking the truth.
   whichever adapter carries campaigns, and never deleted unwithdrawn:
   without credentials they wait (doctor `mail.providerGrants` warns, the
   erasure stays pending); finished grants age out under the
-  `mail_provider_grants` retention kind. Known gap, not addressed here: the
-  older mail tables (`mail_deliveries`, `mail_suppressions`,
-  `mail_provider_events`) hold addresses but are in no retention kind.
-  *(Retention repair in progress: actual controls reproduce the missing
-  policy kinds and surviving expired recipient/subject/detail copies. The
-  repair preserves active suppressions, unresolved sends and replay receipts;
-  per-site keyed receipt identities and explicit contact ownership are under
-  implementation. Named holds must continue to protect records after contact
-  anonymization and merge/undo. No retention or live-provider closure is claimed.)*
+  `mail_provider_grants` retention kind. *(Legacy mail-record repair,
+  2026-11-11: `0071_mail_record_retention.sql` adds private keyed receipts and
+  contact ownership for `mail_deliveries`, `mail_suppressions` and
+  `mail_provider_events`, three retention kinds and `mail.records` privacy
+  participation. Active blocks survive address removal; holds survive
+  anonymization and merge/undo. Unresolved sends and uncertain ownership keep
+  erasure pending. Fresh human attribution lives at `/admin/retention/mail`.
+  `deploy/mail-record-retention.md` names the model, breaking writer fence and
+  exact-backup recovery. Actual empty-database70/71 qualification passed15
+  mail +8 participation controls, SDK8, type/lint, production scrub and four
+  locale owner-browser journeys. Peer review reproduced an additional
+  derived-copy receipt gap; repair and protected integration qualification
+  remain in progress. This supplies neither independent review nor live
+  provider acceptance.)*
   Unchecked: no live send against the provider.)*
 - [ ] **C3.32** Add a measurement-provider category (`MEASUREMENT_PROVIDER`,
   default `none`) with Paradise Modern as its first adapter (§12, C1.18):

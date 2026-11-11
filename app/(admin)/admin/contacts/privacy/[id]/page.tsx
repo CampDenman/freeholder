@@ -105,7 +105,7 @@ export default async function PrivacyRequestPage({
             ) : null}
             {request.resolution ? <div className="sm:col-span-2"><dt className="text-xs text-ink-muted">{t("privacy.resolution")}</dt><dd>{resolution}</dd></div> : null}
           </dl>
-          {pendingErasure && hasModuleAccess(actor, "mail", "manage") ? <a href="/admin/retention/mail" className="text-sm underline">{t("admin.retention.mail.title")}</a> : null}
+          {pendingErasure && hasModuleAccess(actor, "mail", "manage") ? <a href={`/admin/retention/mail?contactId=${encodeURIComponent(request.contactId)}`} className="text-sm underline">{t("admin.retention.mail.title")}</a> : null}
           {artifact && artifact.expiresAt > new Date() ? (
             <a href={`/privacy/artifacts/${artifact.id}`} className="font-semibold text-accent underline">
               {t("privacy.download")} · {t("privacy.checksum")} {artifact.sha256.slice(0, 12)}…

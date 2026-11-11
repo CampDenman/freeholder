@@ -1,5 +1,18 @@
 # C11.10 independent security-review packet
 
+C3.31 mail-record increment (2026-11-11, agent evidence only): review
+`deploy/mail-record-retention.md`, `src/core/mail/record-retention.ts`,
+`record-privacy.ts`, `record-services.ts`, `ownership.ts`, `receipts.ts` and
+`db/migrations/0071_mail_record_retention.sql`. The random encrypted site key,
+domain-separated private HMAC receipts, stale-writer fences, contact ownership,
+named holds and original pending receipt form one boundary. Actual initial and
+peer regressions cover unresolved/multiple attempts and callback resurrection;
+an additional derived-copy outcome gap is reproduced and being repaired. First
+qualification passed23 native participation controls, SDK8, type/lint, production
+scrub and four locale keyboard/mobile/axe owner-browser journeys. Final repair,
+protected integration, live mail provider acceptance and Tony's independent
+review remain open. No launch approval is inferred from these agent checks.
+
 This is a briefing packet for an independent reviewer. It is **not** the
 review. C11.10 stays open until a reviewer who did not author the surfaces
 below has resolved every critical/high finding and dispositioned every lower
