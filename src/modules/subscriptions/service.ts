@@ -805,7 +805,7 @@ export const subscribe = defineService({
         productVariantId: variantId,
         currency,
         billingMode: plan.billingMode,
-        provider: paymentMethod?.provider ?? null,
+        provider: paymentMethod?.provider ?? (plan.billingMode !== "manual" ? paymentAdapter().id : null),
         paymentMethodId: paymentMethod?.id ?? null,
         status: pending ? "paused" : trialing ? "trialing" : "active",
         signupPending: pending,
@@ -818,6 +818,10 @@ export const subscribe = defineService({
 
     await ctx.callAsSystem(captureSubscriptionMarketPolicy, { subscriptionId: created!.id });
     const merchant = await ctx.callAsSystem(getSubscriptionMarketPolicy, { subscriptionId: created!.id });
+    if (merchant?.model === "seller_merchant" && plan.billingMode !== "manual" && created!.provider !== "stripe") {
+      await ctx.tx.update(subscriptions).set({provider:"stripe"}).where(eq(subscriptions.id,created!.id));
+      created!.provider = "stripe";
+    }
     if (paymentMethod && paymentMethod.providerAccountId !== (merchant?.providerAccountId ?? "")) throw new ServiceError("conflict", "The saved method belongs to a different merchant account.");
     await record(ctx, created!.id, "created");
     if (!pending) await record(ctx, created!.id, trialing ? "trialing" : "activated");

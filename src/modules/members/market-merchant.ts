@@ -10,33 +10,44 @@ import { getInvoiceMarketPolicy, invoiceMarketPolicy, marketFeeMinor, registerIn
 import { orderSellers } from "@/modules/catalog/market";
 import { products } from "@/modules/catalog/schema";
 import { plans, subscriptions } from "@/modules/subscriptions/schema";
-import { getSubscriptionMarketPolicy, registerSubscriptionMarketResolver, registerSubscriptionMerchantVerifier, subscriptionMarketPolicy, type SubscriptionMarketPolicy } from "@/modules/subscriptions/market-policy";
+import { getSubscriptionMarketPolicy, registerSubscriptionMarketResolver, registerSubscriptionPlanMarketResolver, registerSubscriptionMerchantVerifier, subscriptionMarketPolicy, type SubscriptionMarketPolicy } from "@/modules/subscriptions/market-policy";
 import { sellerForInvoice } from "./member-subscriptions";
 import { marketRules } from "./payouts";
-import { memberPayoutAccounts, memberProfiles } from "./schema";
+import { memberPayoutAccounts, memberProfiles, memberSettings } from "./schema";
 
 async function policyForSellers(sellerIds: string[], containsSiteItems: boolean, ctx: ServiceContext): Promise<SubscriptionMarketPolicy> {
+  // A signup/issue transaction keeps its displayed terms stable through
+  // capture. Owner updates wait until this transaction commits.
+  await ctx.tx.select({ id: memberSettings.id }).from(memberSettings).where(eq(memberSettings.id, 1)).for("share");
   const rules = await marketRules(ctx);
   const base = { model: rules.model, adapter: rules.adapter, siteFeeBps: rules.siteFeeBps, holdDays: rules.holdDays };
   if (rules.model !== "seller_merchant") return { ...base, sellerUserId: sellerIds.length === 1 ? sellerIds[0]! : null, merchantName: null, providerAccountId: null };
   if (rules.adapter !== "stripe_connect" || sellerIds.length !== 1 || containsSiteItems) throw new ServiceError("conflict", "Direct seller checkout requires one seller and Stripe Connect.");
   const [seller] = await ctx.tx.select({ account: memberPayoutAccounts, profile: memberProfiles })
     .from(memberPayoutAccounts).innerJoin(memberProfiles, eq(memberProfiles.userId, memberPayoutAccounts.userId))
-    .where(inArray(memberPayoutAccounts.userId, sellerIds));
+    .where(inArray(memberPayoutAccounts.userId, sellerIds)).for("share");
   if (!seller || seller.profile.status !== "active" || seller.account.adapter !== "stripe_connect" || seller.account.status !== "ready" || !seller.account.chargesReady || !seller.account.externalAccountId || !seller.account.merchantName) throw new ServiceError("conflict", "This seller must finish direct-payment setup before an agreement or invoice can be issued.");
   return { ...base, sellerUserId: seller.profile.userId, merchantName: seller.account.merchantName, providerAccountId: seller.account.externalAccountId };
 }
+
+export const resolveSubscriptionPlanMarketPolicy = defineService({
+  name: "members.resolveSubscriptionPlanMarketPolicy", summary: "Resolve a plan's seller and current collection terms before agreement consent.",
+  kind: "query", permission: "system", external: false,
+  input: z.object({ planId: z.uuid() }), output: subscriptionMarketPolicy.nullable(),
+  handler: async ({ planId }, ctx) => {
+    const [plan] = await ctx.tx.select({ sellerUserId: products.sellerUserId }).from(plans).innerJoin(products, eq(products.id, plans.productId)).where(eq(plans.id, planId)).limit(1);
+    return plan?.sellerUserId ? policyForSellers([plan.sellerUserId], false, ctx) : null;
+  },
+});
+registerSubscriptionPlanMarketResolver((planId, ctx) => ctx.callAsSystem(resolveSubscriptionPlanMarketPolicy, { planId }));
 
 export const resolveSubscriptionMarketPolicy = defineService({
   name: "members.resolveSubscriptionMarketPolicy", summary: "Resolve the seller and collection terms when an agreement starts.",
   kind: "query", permission: "system", external: false,
   input: z.object({ subscriptionId: z.uuid() }), output: subscriptionMarketPolicy.nullable(),
   handler: async ({ subscriptionId }, ctx) => {
-    const [subscription] = await ctx.tx.select({ sellerUserId: products.sellerUserId }).from(subscriptions)
-      .innerJoin(plans, eq(plans.id, subscriptions.planId)).innerJoin(products, eq(products.id, plans.productId))
-      .where(eq(subscriptions.id, subscriptionId)).limit(1);
-    if (!subscription?.sellerUserId) return null;
-    return policyForSellers([subscription.sellerUserId], false, ctx);
+    const [subscription] = await ctx.tx.select({ planId: subscriptions.planId }).from(subscriptions).where(eq(subscriptions.id, subscriptionId)).limit(1);
+    return subscription ? ctx.callAsSystem(resolveSubscriptionPlanMarketPolicy, { planId: subscription.planId }) : null;
   },
 });
 registerSubscriptionMarketResolver((subscriptionId, ctx) => ctx.callAsSystem(resolveSubscriptionMarketPolicy, { subscriptionId }));
@@ -111,4 +122,4 @@ export const verifySubscriptionMerchantAccount = defineService({
   },
 });
 registerSubscriptionMerchantVerifier(async (subscriptionId, ctx) => { await ctx.callAsSystem(verifySubscriptionMerchantAccount, { subscriptionId }); });
-export default [resolveInvoiceMarketPolicy, resolveSubscriptionMarketPolicy, verifyInvoiceMerchantAccount, verifySubscriptionMerchantAccount];
+export default [resolveInvoiceMarketPolicy, resolveSubscriptionMarketPolicy, resolveSubscriptionPlanMarketPolicy, verifyInvoiceMerchantAccount, verifySubscriptionMerchantAccount];

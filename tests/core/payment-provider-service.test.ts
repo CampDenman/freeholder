@@ -19,6 +19,7 @@ import {
   getInvoice,
   issueInvoice,
   settlePayment,
+  settleRefund,
   startPayment,
   startRefund,
 } from "@/modules/invoicing/invoice-service";
@@ -90,6 +91,7 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     await db().insert(invoiceMarketPolicies).values({ invoiceId: invoice.id, model: "seller_merchant", adapter: "stripe_connect", siteFeeBps: 1000, holdDays: 14, feeMinor: 1000, sellerUserId: OWNER.userId, merchantName: "Seller Studio", providerAccountId: "acct_seller" });
     await db().insert(paymentMerchantRoutes).values({ paymentId: payment.id, providerAccountId: "acct_seller", applicationFeeMinor: 1000 });
     await startPayment.call({ id: payment.id, providerRef: "pi_seller", providerCheckoutRef: "cs_seller" }, OWNER);
+    await expect(settlePayment.call({id:payment.id,providerRef:"pi_seller"},OWNER)).rejects.toMatchObject({code:"permission"});
     const paid = { id: "evt_seller_paid", kind: "payment_succeeded" as const, providerRef: "pi_seller", invoiceId: invoice.id, amountMinor: 10_000, currency: "CAD", occurredAt: receivedAt, providerAccountId: "acct_seller", applicationFeeMinor: 1000, providerCustomerRef: "cus_seller" };
     const deliver = (event: PaymentProviderEvent) => processPaymentProviderEvents.call({ provider: "stripe", bodySha256: digest, receivedAt, events: [event] }, { kind: "system" });
     for (const wrong of [
@@ -108,6 +110,7 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     await deliver(dispute);
     expect((await db().select().from(paymentDisputes))[0]!.paymentId).toBe(payment.id);
     const refund = await createRefund.call({ paymentId: payment.id, amountMinor: 500, reason: "Recorded seller refund", idempotencyKey: "seller-feedback-refund" }, OWNER);
+    await expect(settleRefund.call({id:refund.id,providerRef:"re_seller"},OWNER)).rejects.toMatchObject({code:"permission"});
     await startRefund.call({ id: refund.id, providerRef: "re_seller" }, OWNER);
     const refunded = { id: "evt_seller_refund", kind: "refund_succeeded" as const, providerRef: "re_seller", paymentProviderRef: "pi_seller", amountMinor: 500, currency: "CAD", occurredAt: receivedAt, providerAccountId: "acct_seller" };
     expect(await failure(deliver({ ...refunded, providerAccountId: "acct_other" }))).toMatchObject({ code: "conflict" });

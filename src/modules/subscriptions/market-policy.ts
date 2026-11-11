@@ -11,10 +11,13 @@ export const subscriptionMarketPolicy = invoiceMarketPolicy.omit({ feeMinor: tru
 export type SubscriptionMarketPolicy = z.infer<typeof subscriptionMarketPolicy>;
 type Resolver = (subscriptionId: string, ctx: ServiceContext) => Promise<SubscriptionMarketPolicy | null>;
 let resolver: Resolver | undefined;
+let planResolver: Resolver | undefined;
 let verifier: ((subscriptionId: string, ctx: ServiceContext) => Promise<void>) | undefined;
 
 /** Trusted startup composition only; the callback must use shared services. */
 export function registerSubscriptionMarketResolver(next: Resolver): void { resolver = next; }
+export function registerSubscriptionPlanMarketResolver(next: Resolver): void { planResolver = next; }
+export async function resolveSubscriptionPlanMarketPolicy(ctx: ServiceContext, planId: string): Promise<SubscriptionMarketPolicy | null> { return await planResolver?.(planId, ctx) ?? null; }
 export function registerSubscriptionMerchantVerifier(next: (subscriptionId: string, ctx: ServiceContext) => Promise<void>): void { verifier = next; }
 
 export async function subscriptionPaymentScope(ctx: ServiceContext, subscriptionId: string, verify = false): Promise<{ providerAccountId?: string; applicationFeePercent?: number }> {

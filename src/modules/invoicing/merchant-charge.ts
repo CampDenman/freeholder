@@ -33,7 +33,12 @@ export async function reserveMerchantCharge(
   if (policy?.model !== "seller_merchant") return { providerAccountId: "", applicationFeeMinor: 0 };
   if (request.provider !== "stripe" || !paymentAdapter(request.provider).capabilities().sellerMerchantCharges || !policy.providerAccountId) throw new ServiceError("conflict", "This seller invoice requires Stripe direct checkout.");
   if (!["hosted_checkout", "saved_method", "provider_schedule"].includes(request.method)) throw new ServiceError("conflict", "Use the seller's online payment flow for this invoice.");
-  await verifyInvoiceMerchant(invoice.id, ctx);
+  if (request.method === "provider_schedule") {
+    // Reconciliation records a charge that already happened on an immutable
+    // agreement. Disabling a seller must not erase authenticated money.
+    // Only core system reconciliation may use this recording path.
+    if (ctx.actor.kind !== "system") throw new ServiceError("permission", "Seller schedule payments require authenticated provider reconciliation.");
+  } else await verifyInvoiceMerchant(invoice.id, ctx);
   const previous = await ctx.tx.select({ payment: payments, fee: paymentMerchantRoutes.applicationFeeMinor }).from(payments)
     .leftJoin(paymentMerchantRoutes, eq(paymentMerchantRoutes.paymentId, payments.id)).where(eq(payments.invoiceId, invoice.id));
   if (previous.some(({ payment }) => ["created", "processing"].includes(payment.status))) throw new ServiceError("conflict", "An existing seller payment needs reconciliation before another attempt.");

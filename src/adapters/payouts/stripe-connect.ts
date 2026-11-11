@@ -5,10 +5,11 @@
 // they are. The site's balance pays each seller with a Transfer (separate
 // charges and transfers), reversed on refund. Connect webhooks report when
 // an account can be paid.
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/core/env";
 import { AdapterError } from "../types";
 import { object, paymentFetch } from "../payments/http";
+import { createStripePayments } from "../payments/stripe";
 import { payoutJson } from "./http";
 import type { PayoutAccountStatus, PayoutProvider } from "./types";
 
@@ -46,6 +47,7 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
   const apiBase = (options.apiBase ?? "https://api.stripe.com").replace(/\/+$/, "");
   const fetcher = options.fetch ?? fetch;
   const tolerance = options.toleranceSeconds ?? 300;
+  const financial = createStripePayments({ secretKey, webhookSecrets, apiBase, fetch: fetcher, toleranceSeconds: tolerance });
 
   async function api(path: string, init: RequestInit & { idempotencyKey?: string } = {}): Promise<Record<string, unknown>> {
     if (!secretKey) throw new AdapterError("payments", "stripe_connect", "unavailable", "Stripe is not configured.");
@@ -133,6 +135,7 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
       return { reference };
     },
     async webhook(request) {
+      const raw = new Uint8Array(request.body);
       if (webhookSecrets.length === 0) throw new AdapterError("payments", "stripe_connect", "unavailable", "Stripe Connect webhooks are not configured.");
       const header = request.headers["stripe-signature"];
       if (!header) throw new AdapterError("payments", "stripe_connect", "authentication", "Stripe signature is missing.");
@@ -143,7 +146,7 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
       if (!Number.isSafeInteger(timestamp) || !Number.isFinite(received) || Math.abs(received / 1000 - timestamp) > tolerance) {
         throw new AdapterError("payments", "stripe_connect", "authentication", "Stripe signature timestamp is outside the accepted window.");
       }
-      const signed = Buffer.concat([Buffer.from(`${timestamp}.`), Buffer.from(request.body)]);
+      const signed = Buffer.concat([Buffer.from(`${timestamp}.`), Buffer.from(raw)]);
       const valid = webhookSecrets.some((secret) => {
         const expected = createHmac("sha256", secret).update(signed).digest();
         return signatures.some((s) => /^[0-9a-f]{64}$/i.test(s) && timingSafeEqual(Buffer.from(s, "hex"), expected));
@@ -151,7 +154,7 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
       if (!valid) throw new AdapterError("payments", "stripe_connect", "authentication", "Stripe signature is invalid.");
       let event: Record<string, unknown> | undefined;
       try {
-        event = object(JSON.parse(Buffer.from(request.body).toString("utf8")));
+        event = object(JSON.parse(Buffer.from(raw).toString("utf8")));
       } catch {
         event = undefined;
       }
@@ -159,6 +162,16 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
       const data = object(object(event.data)?.object);
       if (event.type === "account.updated" && data && text(data.id)) {
         return [{ kind: "account", externalAccountId: text(data.id)!, ...stripeMerchantDetails(data) }];
+      }
+      // Connect financial events use a different endpoint signing secret
+      // from platform payments. Normalize only after verifying these bytes.
+      // Never let an account-less Connect event settle platform money.
+      if (Object.hasOwn(event, "account")) {
+        const bodySha256 = createHash("sha256").update(raw).digest("hex");
+        const headers: Record<string,string> = {};
+        for (const [name,value] of Object.entries(request.headers)) if (value !== undefined) headers[name] = value;
+        const payments = await financial.verifyWebhook({ ...request, headers, body: raw });
+        return payments.map(payment => ({ kind: "payment" as const, event: payment, bodySha256, receivedAt: request.receivedAt }));
       }
       return [];
     },

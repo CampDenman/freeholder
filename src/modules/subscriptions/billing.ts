@@ -977,6 +977,9 @@ async function settlePeriodInvoice(
     periodEnd: Date;
     provider: string;
     providerRef: string;
+    providerAccountId?: string;
+    paymentProviderRef?: string;
+    applicationFeeMinor?: number;
   },
 ): Promise<string | null> {
   const sourceId = `${subscription.id}:${options.periodStart.toISOString()}`;
@@ -1014,7 +1017,15 @@ async function settlePeriodInvoice(
   if (!invoice) return null;
   if (options.currency !== invoice.currency) throw new ServiceError("conflict", "The provider payment currency does not match the membership invoice.");
   const outstanding = invoice.totalMinor - invoice.paidMinor;
-  if (outstanding <= 0) return invoice.id;
+  if (outstanding <= 0) {
+    if (options.providerAccountId) {
+      const previous = await ctx.tx.select().from(payments).where(and(eq(payments.invoiceId,invoice.id),eq(payments.status,"succeeded")));
+      const original = previous.find(payment => payment.providerRef === options.paymentProviderRef);
+      if (!original) throw new ServiceError("conflict", "A different seller charge already paid this period. Reconcile the extra payment.");
+      assertChargeEvidence(await routingForPayment(ctx,original.id), { ...options, status: "succeeded" });
+    }
+    return invoice.id;
+  }
   if (options.amountMinor !== outstanding) throw new ServiceError("conflict", "The provider payment amount does not match the membership invoice balance.");
   const payment = await ctx.call(createPayment, {
     invoiceId: invoice.id,
@@ -1023,9 +1034,12 @@ async function settlePeriodInvoice(
     amountMinor: outstanding,
     idempotencyKey: `subscription-provider:${subscription.id}:${invoice.id}`,
   });
+  const routing = await routingForPayment(ctx, payment.id);
+  assertChargeEvidence(routing, { ...options, status: "succeeded" });
+  if (routing.providerAccountId && !options.paymentProviderRef) throw new ServiceError("conflict", "The seller payment needs its original provider charge reference.");
   await ctx.call(settlePayment, {
     id: payment.id,
-    providerRef: `${options.providerRef}:${invoice.id}`,
+    providerRef: options.paymentProviderRef ?? `${options.providerRef}:${invoice.id}`,
     processedAt: new Date(),
   });
   return invoice.id;
@@ -1041,6 +1055,8 @@ export const reconcileProviderPeriod = defineService({
     provider: z.string().min(1).max(80),
     providerRef: z.string().min(1).max(500),
     providerAccountId: z.string().max(200).default(""),
+    paymentProviderRef: z.string().max(500).optional(),
+    applicationFeeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
     kind: z.enum(["subscription_period_paid", "subscription_period_failed", "subscription_cancelled"]),
     amountMinor: z.number().int().min(0).optional(),
     currency: z.string().length(3).optional(),
@@ -1053,9 +1069,10 @@ export const reconcileProviderPeriod = defineService({
       .select()
       .from(subscriptions)
       .where(and(eq(subscriptions.provider, input.provider), eq(subscriptions.providerRef, input.providerRef)))
-      .limit(1);
+      .limit(1).for("update");
     if (!found) return { applied: false };
-    if (input.providerAccountId) throw new ServiceError("conflict", "Seller recurring reconciliation is not enabled yet.");
+    const routing = await subscriptionPaymentScope(ctx, found.id);
+    assertProviderAccount(routing, { providerAccountId: input.providerAccountId || undefined });
     let subscription = found;
     const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
     if (input.kind === "subscription_cancelled") {
@@ -1080,6 +1097,12 @@ export const reconcileProviderPeriod = defineService({
     const end = input.periodEnd
       ? new Date(input.periodEnd)
       : periodEnd(start, plan?.interval ?? "month", plan?.intervalCount ?? 1);
+    if (routing.providerAccountId) {
+      if (input.provider !== "stripe" || !input.paymentProviderRef || input.applicationFeeMinor === undefined || !input.periodStart || !input.periodEnd) throw new ServiceError("conflict", "The provider must prove this seller period's actual charge, fee and dates.");
+      const expectedStart = end > subscription.currentPeriodEnd && subscription.currentPeriodEnd <= now ? subscription.currentPeriodEnd : subscription.currentPeriodStart;
+      const expectedEnd = expectedStart === subscription.currentPeriodEnd ? periodEnd(expectedStart, plan?.interval ?? "month", plan?.intervalCount ?? 1) : subscription.currentPeriodEnd;
+      if (Math.floor(start.getTime()/1000) !== Math.floor(expectedStart.getTime()/1000) || Math.floor(end.getTime()/1000) !== Math.floor(expectedEnd.getTime()/1000)) throw new ServiceError("conflict", "The seller payment dates do not match the original membership period.");
+    }
     const renewing = end > subscription.currentPeriodEnd && subscription.currentPeriodEnd <= now;
     if (renewing) {
       subscription = await applyPendingPlan(ctx, subscription);
@@ -1093,6 +1116,9 @@ export const reconcileProviderPeriod = defineService({
         : subscription.currentPeriodEnd,
       provider: input.provider,
       providerRef: input.providerRef,
+      providerAccountId: routing.providerAccountId,
+      paymentProviderRef: input.paymentProviderRef,
+      applicationFeeMinor: input.applicationFeeMinor,
     });
     if (subscription.status === "cancelled" || subscription.status === "expired") {
       return { applied: Boolean(invoiceId) };

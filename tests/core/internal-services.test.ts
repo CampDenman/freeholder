@@ -16,6 +16,9 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "invoicing.merchantSettlement",
+  "invoicing.processPaymentProviderEvents",
+  "members.resolveSubscriptionPlanMarketPolicy",
   "subscriptions.paymentScope",
   "members.verifySubscriptionMerchantAccount",
   "invoicing.providerPaymentSource",
@@ -208,6 +211,9 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "invoicing.merchantSettlement",
+  "invoicing.processPaymentProviderEvents",
+  "members.resolveSubscriptionPlanMarketPolicy",
   "subscriptions.paymentScope",
   "members.verifySubscriptionMerchantAccount",
   "subscriptions.captureMarketPolicy",

@@ -19,6 +19,7 @@ import { setPriceListEntry } from "@/modules/catalog/pricing";
 import { products, serviceOfferings } from "@/modules/catalog/schema";
 import { invoices } from "@/modules/invoicing/schema";
 import { getInvoiceMarketPolicy, marketFeeMinor } from "@/modules/invoicing/market-policy";
+import { merchantSettlement } from "@/modules/invoicing/merchant-settlement";
 import { bookings } from "@/core/scheduling/schema";
 import { savePlan } from "@/modules/subscriptions/service";
 import { publicMembershipPlans } from "@/modules/subscriptions/public-signup";
@@ -209,12 +210,16 @@ export const recordInvoicePayout = defineService({
   output: z.object({ recorded: z.boolean() }),
   handler: async (input, ctx) => {
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId));
-    if (invoice?.status !== "paid") return { recorded: false };
-    const sellerUserId = await sellerForInvoice(ctx, invoice);
+    // Orders have one payout per order line, recorded by members.recordPayouts.
+    // Their policy also names a seller; it must not create a second invoice payout.
+    if (invoice?.status !== "paid" || !["subscription","booking"].includes(invoice.sourceType)) return { recorded: false };
+    const frozen = await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:invoice.id});
+    const sellerUserId = frozen?.sellerUserId ?? await sellerForInvoice(ctx, invoice);
     if (!sellerUserId) return { recorded: false };
     const seller = { sellerUserId };
     const subscription = invoice.sourceType === "subscription";
-    const rules = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: invoice.id }) ?? await marketRules(ctx);
+    const rules = frozen ?? await marketRules(ctx);
+    const settled = rules.model === "seller_merchant" ? await ctx.callAsSystem(merchantSettlement,{invoiceId:invoice.id,sellerUserId}) : null;
     // Tax collected belongs to the site, which files it; the seller's share is the pre-tax amount.
     const gross = invoice.totalMinor - invoice.taxMinor;
     const fee = marketFeeMinor(gross, rules.siteFeeBps);
@@ -229,9 +234,11 @@ export const recordInvoicePayout = defineService({
         feeMinor: fee,
         netMinor: gross - fee,
         model: rules.model,
-        state: rules.model === "hold" ? "held" : "due",
+        state: settled?.state ?? (rules.model === "hold" ? "held" : "due"),
+        reference: settled?.reference,
+        paidAt: settled?.paidAt,
         releaseAt: rules.model === "hold" ? new Date(now.getTime() + rules.holdDays * 86_400_000) : null,
-        releasedAt: rules.model === "hold" ? null : now,
+        releasedAt: settled?.paidAt ?? (rules.model === "hold" ? null : now),
       })
       .onConflictDoNothing()
       .returning({ id: memberPayouts.id });

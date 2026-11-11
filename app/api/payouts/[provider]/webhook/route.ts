@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
   try {
     events = await provider.webhook({ headers, body, receivedAt: new Date().toISOString() });
   } catch (error) {
-    if (error instanceof AdapterError) return new Response(null, { status: error.code === "authentication" ? 401 : error.code === "unavailable" ? 503 : 400 });
+    if (error instanceof AdapterError) return new Response(null, { status: error.code === "authentication" ? 401 : error.code === "unavailable" || error.code === "provider_failure" || error.retryable ? 503 : 400 });
     throw error;
   }
   // Events for transfers that are not this site's (a shared provider
