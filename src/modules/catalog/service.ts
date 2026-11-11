@@ -192,6 +192,7 @@ import fulfillmentServices, {
   packFulfillment,
   receiveReturn,
   refundReturn,
+  submitReturnProviderRefund,
   requestReturn,
   shipFulfillment,
 } from "./fulfillment";
@@ -259,6 +260,7 @@ export {
   packFulfillment,
   receiveReturn,
   refundReturn,
+  submitReturnProviderRefund,
   requestReturn,
   shipFulfillment,
   applyCouponToCart,
@@ -1072,3 +1074,5 @@ export default [
   ...browseServices,
   ...storefrontServices,
 ];
+
+export { onReturnRefundSucceeded } from "./fulfillment";

@@ -37,6 +37,7 @@ import {
   releaseOrderPaymentMilestone,
   receiveReturn,
   refundReturn,
+  submitReturnProviderRefund,
   requestReturn,
   shipFulfillment,
   removeCartItem,
@@ -813,6 +814,9 @@ export async function productAction(form: FormData): Promise<void> {
           actor,
         );
         destination = `/admin/returns?id=${field(form, "id")}&saved=receiveReturn`;
+      } else if (intent === "submitReturnProviderRefund") {
+        await submitReturnProviderRefund.call({id:field(form,"id"),idempotencyKey:field(form,"idempotencyKey")},actor);
+        destination = `/admin/returns?id=${field(form,"id")}&saved=submitReturnProviderRefund`;
       } else if (intent === "refundReturn") {
         await refundReturn.call(
           { id: field(form, "id"), idempotencyKey: field(form, "idempotencyKey"), offlineRefundConfirmed: field(form,"offlineRefundConfirmed")==="yes" ? true : undefined },

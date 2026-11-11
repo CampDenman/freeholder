@@ -6753,6 +6753,17 @@ owner operations, never substitute for them.
   complete provider-to-return reconciliation, discounted/taxed return amounts
   and full localized owner/customer journeys remain required before C5.19
   can be checked again. No new deferral or launch acceptance is supplied.
+  Further source work 2026-11-11 adds an original-provider return action:
+  all installments and a draft credit are reserved before provider I/O;
+  signed provider feedback closes the return only after its whole assigned
+  refund succeeds. Unknown outcomes retain their original request; a fresh
+  attempt after definite refusal covers only the remaining balance. Credits
+  preserve original invoice discounts/tax and cumulative rounding across
+  separate returns, including pending draft credits. New checkout order lines
+  retain their exact invoice-line identity. Both owner money actions require
+  fresh human verification and refuse keys/plugins. Mixed offline/provider
+  returns, complete customer journeys and actual enabled-provider acceptance
+  remain required; C5.19 stays open. See `deploy/commerce-payments.md`.
 - [x] **C5.20** Build persistent/contact-attached carts, saved carts/wishlists,
   cross-device restore, price/stock refresh and abandonment events.
   *(Evidence: `carts`, `cart_items`, `wishlists`, `wishlist_items` in

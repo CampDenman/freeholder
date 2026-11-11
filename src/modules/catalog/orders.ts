@@ -325,8 +325,9 @@ export const checkoutCart = defineService({
       })
       .returning();
 
+    const insertedOrderLines: Array<typeof orderItems.$inferSelect> = [];
     for (const line of basket.lines) {
-      await ctx.tx.insert(orderItems).values({
+      const [inserted] = await ctx.tx.insert(orderItems).values({
         orderId: order!.id,
         variantId: line.variantId,
         quantity: line.quantity,
@@ -338,7 +339,8 @@ export const checkoutCart = defineService({
         // for long after the cart is gone.
         galleryId: line.galleryId ?? null,
         assetId: line.assetId ?? null,
-      });
+      }).returning();
+      insertedOrderLines.push(inserted!);
     }
 
     const locations = await ctx.callAsSystem(listLocations, {});
@@ -383,6 +385,13 @@ export const checkoutCart = defineService({
             },
     });
     const issued = await ctx.callAsSystem(issueInvoice, { id: invoice.invoice.id });
+
+    for (let position=0; position<insertedOrderLines.length; position++) {
+      const ordered = insertedOrderLines[position]!;
+      const invoiced = issued.lines.find(line=>line.position===position);
+      if (!invoiced) throw new ServiceError("conflict", "The original order line has no invoice line.");
+      await ctx.tx.update(orderItems).set({snapshot:{...ordered.snapshot,invoiceLineId:invoiced.id}}).where(eq(orderItems.id,ordered.id));
+    }
 
     await ctx.tx
       .update(orders)

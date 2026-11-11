@@ -1228,6 +1228,24 @@ export const createRefund = defineService({
   },
 });
 
+/** C5.19: take payment locks before the caller creates an invoice credit.
+ * This also reserves every installment in the caller's single transaction.
+ */
+export const reserveRefundBatch = defineService({
+  name:"invoicing.reserveRefundBatch",
+  summary:"Reserve all original-payment installments before an invoice credit.",
+  kind:"mutation",permission:"system",external:false,
+  input:z.object({refunds:z.array(createRefund.def.input).min(1).max(1000)}),
+  output:z.array(refundRow),
+  handler:async(input,ctx)=>{
+    for(const key of [...new Set(input.refunds.map(refund=>refund.idempotencyKey))].sort()) await lock(ctx.tx,"refund-idempotency",key);
+    for(const paymentId of [...new Set(input.refunds.map(refund=>refund.paymentId))].sort()) await lock(ctx.tx,"payment",paymentId);
+    const reserved=[];
+    for(const refund of input.refunds) reserved.push(await ctx.call(createRefund,refund));
+    return reserved;
+  },
+});
+
 export const startRefund = defineService({
   name: "invoicing.startRefund",
   summary: "Move a created provider refund into processing.",
@@ -1505,6 +1523,7 @@ export default [
   cancelPayment,
   settlePayment,
   createRefund,
+  reserveRefundBatch,
   startRefund,
   failRefund,
   cancelRefund,
