@@ -25,7 +25,9 @@ export default async function ImportRunPage({
   if (!run) notFound();
   const counts = run.counts && typeof run.counts === "object" ? (run.counts as Record<string, unknown>) : {};
   const checkpoint = run.checkpoint && typeof run.checkpoint === "object" ? run.checkpoint as Record<string, unknown> : {};
-  const staged = ["discover", "mapped", "previewed", "failed"].includes(run.status) || run.status === "rolled_back" && !Array.isArray(checkpoint.createdPageIds);
+  const rollback = checkpoint.rolledBack && typeof checkpoint.rolledBack === "object" ? checkpoint.rolledBack as Record<string, unknown> : {};
+  const reportStatus = run.status === "rolled_back" && typeof rollback.fromStatus === "string" ? rollback.fromStatus : run.status;
+  const staged = ["discover", "mapped", "previewed", "failed"].includes(reportStatus);
   const countLabels: Array<[string, string]> = [
     ["pages", t(staged ? "imports.count.pagesStaged" : "imports.count.pages")],
     ["crawlBlocked", t("imports.count.crawlBlocked")],

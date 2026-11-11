@@ -1379,7 +1379,7 @@ export const rollbackImport = defineService({
       media: [],
       pendingBlogPosts: [],
       mediaClaims: [],
-      rolledBack: { keptMedia },
+      rolledBack: { keptMedia, fromStatus: before.status },
     });
     await releaseImportSources(ctx, before, next);
     const [row] = await ctx.tx

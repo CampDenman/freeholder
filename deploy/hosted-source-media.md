@@ -32,11 +32,21 @@ The six existing generic transaction controls also passed in the initial
 combined run; its one failure was the now-repaired CDN conversion assertion.
 SDK generation passed all eight live registry controls.
 
-The first production build/artifact scrub passed: 19,441 files, 237,983,478
-bytes. A real English owner browser then reproduced a cancelled staged-only
-preview falsely labelling files as imported despite zero accepted assets.
-The report now keeps staged labels for that case; final build/four-locale
-browser verification is pending.
+Final production build/artifact scrub passed: 19,441 files, 237,983,843 bytes.
+Four real owner journeys pass in English, Spanish, French and Arabic at 320px,
+with keyboard, both-theme Axe, actual approval persistence, staged media and
+cancellation. A real before-test exposed cancelled staged previews labelled
+as imported despite zero accepted assets. Rollback now records its prior phase
+so normalized checkpoint lists cannot erase that distinction. All four final
+journeys prove the truthful cancelled report.
+
+Complete fast gates passed 373 contracts plus one deliberate skip before that
+small cancellation-marker correction; production TypeScript and targeted lint
+passed afterward. The seven existing owner activity-label controls also pass
+and now join the cheap gate inventory after a separate PR exposed missing
+financial action labels in CI. Final dependency integration rechecks the full
+updated inventory. Bounded agent source review found no concrete blocker in
+origin consent, exact media identity, fresh policy or actor/receipt boundaries.
 
 This is application/source qualification using synthetic network fixtures.
 Actual hosted-provider accounts, dynamic client-rendered builder content,
