@@ -189,7 +189,10 @@ receipt contains task IDs rather than provider routing. The owner is told in
 all four locales that Stripe customer deletion cancels active Stripe subscriptions.
 Late authenticated feedback cannot restore erased saved cards or customer
 bindings; real financial settlement still records. A real transaction-race
-control verifies rollback and safe retry across erasure cutover.
+control verifies rollback and safe retry across erasure cutover. Another
+request cannot discard the first pending receipt. A missing applied receipt
+requires the exact original backup and original job reconciliation; it cannot
+be replaced by a fabricated completion. See `deploy/privacy-rights.md`.
 
 `tests/core/payment-provider-erasure.test.ts` and
 `tests/core/stripe-customer-erasure.test.ts` are the source controls. Actual

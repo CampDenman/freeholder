@@ -138,6 +138,45 @@ original account access and retrying preserves the original privacy task.
 Provider HTTP fixtures and disposable database checks are source evidence;
 actual account acceptance and independent security review remain open.
 
+## Recovering a missing pending receipt
+
+Only one erasure for a Contact can be handled at a time. Another request cannot
+remove its pending artifact. An already-applied request with no usable pending
+receipt refuses fulfilment and denial; it needs recovery of its original work.
+The canonical verification marker and the immutable fulfilment audit identity
+provide this fail-closed check without recovering erased personal information.
+
+Before upgrading an existing site, the owner can run this read-only query
+against their database to identify missing artifacts needing investigation:
+
+```sql
+SELECT r.id, r.status
+FROM data_requests r
+WHERE r.kind = 'erasure' AND r.status = 'in_progress'
+  AND NOT EXISTS (
+    SELECT 1 FROM data_request_artifacts a WHERE a.data_request_id = r.id
+  )
+  AND (
+    r.verification_method = 'identity verified before erasure'
+    OR EXISTS (
+      SELECT 1 FROM audit_log l
+      WHERE l.action = 'contacts.fulfillDataRequest'
+        AND l.subject_type = 'dataRequest' AND l.subject_id = r.id::text
+    )
+  );
+```
+
+Restore only the exact original receipt from a trusted backup after verifying
+its SHA-256, request identity and original task identities. Preserve its receipt
+ID and contents, then repair/redrive the original durable provider tasks through
+the existing job controls. The normal worker acknowledgement must establish the
+actual cleanup outcome before completion. A missing backup or unavailable
+provider proof remains unresolved; do not invent a replacement receipt, infer
+success from elapsed time or a missing lookup, or directly mark the request
+complete. The database regression restores a checksum-verified original receipt
+and then exercises the original task against a synthetic Stripe deletion
+acknowledgement; it does not supply production recovery or provider acceptance.
+
 ## Legal-retention exceptions
 
 An exception belongs to one open erasure request and one registered scope. It

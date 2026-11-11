@@ -68,7 +68,7 @@ own open checklist items.
 
 Review `invoicing/provider-erasure.ts`, the existing `commerce.money` source,
 Stripe's customer erasure method and late-feedback guards in the authenticated
-provider processor. Five before-failing database controls proved false
+provider processor. Before-failing database controls proved false
 completion after local deletion and card/customer recreation after erasure.
 Durable work now snapshots original provider/account/customer references before
 local deletion, acknowledges only actual cleanup and shares the existing money
@@ -83,7 +83,16 @@ actual enabled account acceptance and the independent C11.10 review remain open.
 Two additional actual controls reproduced an ordinary source-field edit and a
 stale prepared edit clearing the erased marker. Shared contacts.update now
 refuses that change at the final atomic write. The real lock-barrier race and
-late feedback control cover the repaired boundary.
+late feedback control cover the repaired boundary. Another real control found
+a later erasure discarding the first request’s pending receipt. Common
+fulfilment now refuses another in-progress erasure; a lost applied receipt
+fails closed. Review the checksum-verified original receipt restoration and
+original job replay control and the recovery limits in `deploy/privacy-rights.md`.
+
+The merge-group chronology regression in guidance is repaired with exact SQL
+start boundaries and operation-time start/reset/form-capture writes. Five new
+real database controls cover earlier/later work within one millisecond or
+composed transaction. The audit actor/action/subject fields are unchanged.
 
 ## Contact merge/undo privacy lineage repair (2026-11-11)
 

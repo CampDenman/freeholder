@@ -3891,7 +3891,10 @@ reading chat logs.
   Operation-time chronology and a nonwaiting identity guard cover composed
   transactions and concurrent merge/undo/fulfilment. Named retention scopes
   remain independent, and action/reference history remains subject to existing
-  login-actor anonymization.
+  login-actor anonymization. A second request cannot erase another in-progress
+  erasure receipt, and an applied request with a lost receipt fails closed for
+  recovery rather than declaring completion or allowing denial. Exact original
+  receipt restoration still requires the original provider tasks to finish.
   `tests/core/contact-privacy-lineage.test.ts`; changeset
   `contact-privacy-lineage.md`; `deploy/privacy-rights.md`. Independent C11.10
   review remains open.
@@ -4126,6 +4129,11 @@ reading chat logs.
   customer isolation, forbidden-control and axe coverage in the four-test
   real-browser gate; 91-file/1,098-test Vitest suite; production build;
   operator guide `deploy/role-guidance.md`; changeset `role-guidance.md` **F04** `/admin/guidance` resumable onboarding. **F05** `guidance.list`/`start`/`dismiss`/`reset`/`contexts` at `/api/v1/guidance.*`, MCP `guidance_*`. **F07** `tests/core/guidance-definitions.test.ts`, `tests/core/guidance-ui.test.ts`, `tests/core/guidance.test.ts` cover validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** operator runbook `deploy/role-guidance.md`. **F12** `tests/core/guidance*.test.ts` is the composition proof.)
+  Chronology repair 2026-11-11 (C1.25): outcome reconciliation preserves
+  PostgreSQL microseconds and uses actual start/reset and form-capture time.
+  Earlier work in the same millisecond or composed transaction cannot count
+  as a new win; genuine later work remains eligible. Five real database
+  controls extend `tests/core/guidance.test.ts`.
 - [x] **C1.26** Build the normalized, versioned `DemoScenario` definition/run/
   provenance model and typed public manifest contract through which core,
   modules and plugins contribute fixtures, guidance steps, locale variants,
@@ -13156,9 +13164,10 @@ whatever is best for the people using the site.
   with the other full integration and actual provider acceptance above.
   See `deploy/seller-merchant-source-2026-11-10.md` and changeset
   `stripe-saved-card-evidence.md`; no direct model is enabled.
-  Provider customer erasure repair 2026-11-11 (C1.08/C12.38/C11.10): five
+  Provider customer erasure repair 2026-11-11 (C1.08/C12.38/C11.10):
   real PostgreSQL controls reproduced false local-only completion, late saved
-  card/customer recreation and customer recreation after real settlement.
+  card/customer recreation, stale marker edits, and loss of an earlier
+  request’s pending receipt when another erasure runs.
   `commerce.money` now queues original-account customer cleanup before deleting
   local references and stays pending until actual provider acknowledgement;
   its existing named hold retains both work and references. Stripe cleanup

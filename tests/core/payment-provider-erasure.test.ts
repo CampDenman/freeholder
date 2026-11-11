@@ -2,19 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.08/C12.38/C11.10: payment-provider cleanup and late feedback boundaries.
 import {afterAll,beforeEach,describe,expect,it,vi} from "vitest";
-import {randomUUID} from "node:crypto";
+import {createHash,randomUUID} from "node:crypto";
 import * as adapters from "@/adapters/payments";
 import {createStripePayments} from "@/adapters/payments/stripe";
 import {eq,sql} from "drizzle-orm";
 import {db} from "@/core/db";
 import {createContact,updateContact} from "@/core/contacts/service";
 import {contacts,organizations} from "@/core/contacts/schema";
-import {createDataRequest,verifyDataRequest,fulfillDataRequest,addRetentionException,registerContactPrivacySource} from "@/core/privacy/service";
+import {createDataRequest,verifyDataRequest,fulfillDataRequest,downloadDataRequestArtifact,denyDataRequest,addRetentionException,registerContactPrivacySource} from "@/core/privacy/service";
 import {createDraftInvoice,issueInvoice,createPayment,startPayment} from "@/modules/invoicing/invoice-service";
 import {processPaymentProviderEvents} from "@/modules/invoicing/payment-provider-service";
 import {paymentMethods,paymentProviderCustomers,paymentProviderEvents,payments} from "@/modules/invoicing/schema";
 import {erasePaymentProviderCustomer,providerCustomerErasureScope} from "@/modules/invoicing/provider-erasure";
-import {dataRequests} from "@/core/privacy/schema";
+import {dataRequests,dataRequestArtifacts} from "@/core/privacy/schema";
 import {getJob,stopJobs,type JobExecutionContext} from "@/core/jobs";
 import {OWNER,closeDb,hasDatabase,truncateSpine} from "../helpers/spine";
 let raceGate:{contactId:string;entered:()=>void;resume:Promise<void>}|undefined;
@@ -180,6 +180,39 @@ describe.runIf(hasDatabase)("payment-provider erasure (C1.08/C12.38/C11.10)",()=
   }finally{resume();await held;}
   expect(await editing).toMatchObject({error:{code:"conflict"}});
   expect((await db().select().from(contacts).where(eq(contacts.id,contact.id)))[0]!.source).toBe("privacy-erasure");
+ });
+
+ it("does not let another erasure request forget an existing provider promise",async()=>{
+  const contact=await subject("second-erasure-promise");
+  await db().insert(paymentProviderCustomers).values({contactId:contact.id,provider:"stripe",providerAccountId:"acct_original",providerCustomerRef:"cus_pending_second"});
+  const first=await erase(contact.id);expect(first.request.status).toBe("in_progress");
+  await expect(erase(contact.id)).rejects.toMatchObject({code:"conflict"});
+  const [artifact]=await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,first.request.id));
+  expect(artifact!.sha256).toBe(first.artifact.sha256);
+  expect(artifact!.body).toEqual(first.artifact.body);
+  expect((await db().select().from(dataRequests).where(eq(dataRequests.id,first.request.id)))[0]!.status).toBe("in_progress");
+ });
+
+ it("does not declare an already-applied legacy erasure complete when its pending receipt is missing",async()=>{
+  const contact=await subject("lost-erasure-receipt");
+  await db().insert(paymentProviderCustomers).values({contactId:contact.id,provider:"stripe",providerAccountId:"acct_original",providerCustomerRef:"cus_LostReceipt"});
+  const first=await erase(contact.id);expect(first.request.status).toBe("in_progress");
+  const backup=await downloadDataRequestArtifact.call({id:first.artifact.id},OWNER);
+  expect(createHash("sha256").update(backup.content).digest("hex")).toBe(backup.sha256);
+  await db().delete(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,first.request.id));
+  await expect(fulfillDataRequest.call({id:first.request.id,confirmation:"ERASE"},OWNER)).rejects.toMatchObject({code:"conflict"});
+  await expect(denyDataRequest.call({id:first.request.id,resolution:"Do not discard pending provider work"},OWNER)).rejects.toMatchObject({code:"conflict"});
+  expect((await db().select().from(dataRequests).where(eq(dataRequests.id,first.request.id)))[0]!.status).toBe("in_progress");
+  // Restore the exact checksum-verified original receipt; no provider outcome
+  // is invented. Its actual durable task still has to perform cleanup.
+  await db().insert(dataRequestArtifacts).values({id:backup.id,dataRequestId:first.request.id,filename:backup.filename,mime:backup.mime,body:JSON.parse(backup.content) as unknown,sha256:backup.sha256,expiresAt:backup.expiresAt});
+  const id=jobIds(first)[0]!,queued=await getJob(erasePaymentProviderCustomer.name,id);
+  let deleted=false;
+  const provider=createStripePayments({secretKey:"sk_erasure_fixture",webhookSecrets:["whsec_erasure_fixture"],apiBase:"https://stripe.example.test",fetch:async(_input,init)=>{if(init?.method==="DELETE")deleted=true;return Response.json({id:"cus_LostReceipt",deleted});}});
+  vi.spyOn(adapters,"paymentAdapter").mockReturnValue(provider);
+  await erasePaymentProviderCustomer.handler(queued!.data,jobContext(randomUUID()));
+  expect(deleted).toBe(true);
+  expect((await db().select().from(dataRequests).where(eq(dataRequests.id,first.request.id)))[0]!.status).toBe("completed");
  });
 
 });
