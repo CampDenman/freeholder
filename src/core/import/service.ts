@@ -14,7 +14,7 @@
 // (`imports.commitApply`). A commit interrupted halfway resumes from the
 // files already recorded.
 import { createHash } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
@@ -26,7 +26,7 @@ import {
   type Actor,
   type ServiceContext,
 } from "@/core/service";
-import { importRuns } from "@/core/plugins/schema";
+import { importRuns, importSourceBatches } from "@/core/plugins/schema";
 import { getPinnedBytes, PinnedDownloadError } from "@/core/http/pinned-download";
 import { uploadAsset } from "@/core/media/service";
 import { importedMediaFilename } from "@/core/media/validation";
@@ -48,8 +48,9 @@ import { approvedMediaOrigins, approvedMediaOriginsSchema, allowedMediaOrigins }
 import { parseGenericFeed } from "./generic-feed";
 import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
 import importMediaReceiptServices, { bindImportMediaBytes, claimImportMedia } from "./media-receipts";
-import { assertImportBatchAccess, isPrivateImportBatch } from "./batch-context";
-import { invalidateImportGraph } from "./graph-state";
+import { assertImportBatchAccess, isPrivateImportBatch, callImportService, currentImportBatch, importBatchTargets, lockImportBatchParent, recordImportBatchTarget } from "./batch-context";
+import graphBatchServices, { advanceGraphCommit } from "./graph-batches";
+import { advanceGraphLifecycle } from "./graph-lifecycle";
 import {
   discoverFromPublicOrigin,
   parseSitemap,
@@ -340,24 +341,24 @@ function cmsSlug(value: string): string {
 async function restoreReplacedPage(ctx: ServiceContext, snapshot: CmsPageRef): Promise<void> {
   let current: CmsPageRef;
   try {
-    current = cmsPageRef.parse(await ctx.call(getService("cms.getPage"), { id: snapshot.id }));
+    current = cmsPageRef.parse(await callImportService(ctx, getService("cms.getPage"), { id: snapshot.id }));
   } catch (error) {
     if (error instanceof ServiceError && error.code === "not_found") return;
     throw error;
   }
   if (current.status === "published" && snapshot.status === "draft") {
-    await ctx.call(getService("cms.publishPage"), { id: snapshot.id, published: false });
+    await callImportService(ctx, getService("cms.publishPage"), { id: snapshot.id, published: false });
   }
-  await ctx.call(getService("cms.updatePage"), {
+  await callImportService(ctx, getService("cms.updatePage"), {
     id: snapshot.id,
     title: snapshot.title,
     blocks: snapshot.blocks,
     seo: snapshot.seo ?? {},
   });
   if (snapshot.status === "published") {
-    await ctx.call(getService("cms.publishPage"), { id: snapshot.id, published: true, ...(snapshot.publishedAt ? { publishedAt: snapshot.publishedAt.toISOString() } : {}) });
+    await callImportService(ctx, getService("cms.publishPage"), { id: snapshot.id, published: true, ...(snapshot.publishedAt ? { publishedAt: snapshot.publishedAt.toISOString() } : {}) });
     if (snapshot.workingTitle != null || snapshot.workingBlocks != null || snapshot.workingSeo != null) {
-      await ctx.call(getService("cms.updatePage"), { id: snapshot.id, title: snapshot.workingTitle ?? snapshot.title, blocks: snapshot.workingBlocks ?? snapshot.blocks, seo: snapshot.workingSeo ?? snapshot.seo ?? {} });
+      await callImportService(ctx, getService("cms.updatePage"), { id: snapshot.id, title: snapshot.workingTitle ?? snapshot.title, blocks: snapshot.workingBlocks ?? snapshot.blocks, seo: snapshot.workingSeo ?? snapshot.seo ?? {} });
     }
   }
 }
@@ -525,13 +526,15 @@ const commitSource = defineService({
   permission: "scoped",
   external: false,
   input: z.object({ id: z.string().uuid() }),
-  output: z.object({ media: z.array(mediaToFetch), delayMs: z.number().int().nonnegative(), previewDigest: z.string(), archive: archiveCommitSourceSchema.optional(), generic: genericPlanSchema.optional(), completed: runRow.optional() }),
+  output: z.object({ media: z.array(mediaToFetch), delayMs: z.number().int().nonnegative(), previewDigest: z.string(), archive: archiveCommitSourceSchema.optional(), generic: genericPlanSchema.optional(), sourceGraph: z.boolean().default(false), completed: runRow.optional() }),
   handler: async (input, ctx) => {
+    await lockImportBatchParent(ctx, input.id);
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
     assertImportBatchAccess(run);
     const previewDigest = archivePreviewDigest(run.preview);
     if (["committed", "reconciled", "published"].includes(run.status)) return { media: [], delayMs: 0, previewDigest, completed: run };
+    if (checkpointOf(run.checkpoint).sourceGraph) return { media: [], delayMs: 0, previewDigest, sourceGraph: true };
     assertNoPendingSourceUpload(run);
     if (run.status !== "previewed") {
       throw new ServiceError("conflict", "Preview the import before committing it.");
@@ -702,7 +705,7 @@ async function importPostComments(ctx: ServiceContext, runId: string, pageId: st
     for (let index = remaining.length - 1; index >= 0; index -= 1) {
       const comment = remaining[index]!;
       if (comment.parentId && remaining.some(parent => parent.id === comment.parentId)) continue;
-      const saved = z.object({ id: uuid }).parse(await ctx.call(getService("cms.importReaderComment"), {
+      const saved = z.object({ id: uuid }).parse(await callImportService(ctx, getService("cms.importReaderComment"), {
         runId, externalId: `${key}:${comment.id}`, pageId, parentId: comment.parentId ? ids.get(comment.parentId) ?? null : null,
         name: comment.name, email: comment.email, body: comment.body, status: comment.status,
         ...(comment.contactId ? { sourceContactId: comment.contactId } : {}),
@@ -725,6 +728,7 @@ const commitApply = defineService({
   input: z.object({ id: z.string().uuid() }),
   output: runRow,
   handler: async (input, ctx) => {
+    await lockImportBatchParent(ctx, input.id);
     const [before] = await ctx.tx
       .select()
       .from(importRuns)
@@ -745,7 +749,8 @@ const commitApply = defineService({
     if (archive) archiveCommitSource(before);
     const typedContent = Boolean(wordpress || nonWordpress);
     const decisions = conflictDecisions(before.conflicts);
-    const existing = listedCmsPages(await ctx.call(getService("cms.listPages"), {}));
+    const candidateSlugs = [...new Set([...staged.map(page => cmsSlug(page.slug)), ...[...decisions.values()].flatMap(decision => decision.renamedSlug ? [cmsSlug(decision.renamedSlug)] : []), "blog", ""])];
+    const existing = listedCmsPages(await callImportService(ctx, getService("cms.listPages"), currentImportBatch() ? { slugs: candidateSlugs } : {}));
     const bySlug = new Map(existing.map((page) => [page.slug, page]));
     const used = new Set(bySlug.keys());
 
@@ -789,17 +794,17 @@ const commitApply = defineService({
     const pendingBlogPosts: z.infer<typeof pendingBlogPost>[] = [];
     const directoryRows = z.array(z.object({ id: z.string(), slug: z.string(), email: z.string().nullable().optional() }));
     if (wordpress) {
-      const existingAuthors = directoryRows.element.extend({ path: z.string() }).array().parse(await ctx.call(getService("cms.listAuthors"), {}));
+      const existingAuthors = directoryRows.element.extend({ path: z.string() }).array().parse(await callImportService(ctx, getService("cms.listAuthors"), {}));
       for (const author of wordpress.authors) {
         const slug = toCmsSlug(author.login).replaceAll("/", "-") || "author";
         const existing = existingAuthors.find(row => row.slug === slug || (author.email && row.email?.toLowerCase() === author.email.toLowerCase()));
-        const saved = existing ?? z.object({ id: z.string() }).parse(await ctx.call(getService("cms.saveAuthor"), {
+        const saved = existing ?? z.object({ id: z.string() }).parse(await callImportService(ctx, getService("cms.saveAuthor"), {
           name: author.displayName || author.login, slug, email: author.email ?? null, path: `author/${slug}`, source: blogSource,
         }));
         authorIds.set(author.login, saved.id);
         if (existing && existing.path !== `author/${slug}`) archiveAliases.push({ fromPath: `author/${slug}`, toPath: existing.path });
       }
-      const existingTerms = z.array(z.object({ id: z.string(), slug: z.string(), taxonomy: z.string(), path: z.string() })).parse(await ctx.call(getService("cms.listTerms"), {}));
+      const existingTerms = z.array(z.object({ id: z.string(), slug: z.string(), taxonomy: z.string(), path: z.string() })).parse(await callImportService(ctx, getService("cms.listTerms"), {}));
       for (const taxonomy of ["category", "tag"] as const) {
         const items = taxonomy === "category" ? wordpress.taxonomy.categories : wordpress.taxonomy.tags;
         const ids = taxonomy === "category" ? categoryIds : tagIds;
@@ -812,7 +817,7 @@ const commitApply = defineService({
             const slug = toCmsSlug(term.slug).replaceAll("/", "-");
             const path = parentSlug && categoryPaths.has(parentSlug) ? `${categoryPaths.get(parentSlug)}/${slug}` : `${taxonomy}/${slug}`;
             const existing = existingTerms.find(row => row.taxonomy === taxonomy && row.slug === slug);
-            const saved = existing ?? z.object({ id: z.string() }).parse(await ctx.call(getService("cms.saveTerm"), {
+            const saved = existing ?? z.object({ id: z.string() }).parse(await callImportService(ctx, getService("cms.saveTerm"), {
               taxonomy, name: term.name || slug, slug, description: term.description ?? null,
               parentId: parentSlug ? ids.get(parentSlug) ?? null : null,
               // WordPress archive addresses are kept, independent of Freeholder's defaults.
@@ -839,7 +844,7 @@ const commitApply = defineService({
       for (const media of nonWordpress.media) {
         const assetId = assetByKey.get(media.key);
         if (!assetId) throw new ServiceError("conflict", "A source file has not been imported. Retry the commit before publishing pages.");
-        const asset = z.object({ id: uuid, kind: z.enum(["image", "video", "audio", "doc"]), filename: z.string(), status: z.string() }).parse(await ctx.call(getService("media.get"), { id: assetId }));
+        const asset = z.object({ id: uuid, kind: z.enum(["image", "video", "audio", "doc"]), filename: z.string(), status: z.string() }).parse(await callImportService(ctx, getService("media.get"), { id: assetId }));
         if (asset.status !== "ready") throw new ServiceError("conflict", "A source file is not ready. Resolve its media warning before committing the pages.");
         archiveAssets.set(asset.id, { assetId: asset.id, kind: asset.kind, filename: asset.filename });
       }
@@ -879,7 +884,8 @@ const commitApply = defineService({
       if (nonWordpress && assetId && archiveAssets.get(assetId)?.kind !== "image") return null;
       return assetId ? { assetId, alt: key ? altByKey.get(key) : undefined } : null;
     };
-    const linkMap = new Map<string, string>(archiveAliases.map(alias => [alias.fromPath, alias.toPath]));
+    const globalTargets = await importBatchTargets(ctx);
+    const linkMap = new Map<string, string>([...globalTargets.flatMap(target => target.sourcePath !== undefined ? [[target.sourcePath, target.targetSlug] as const] : []), ...archiveAliases.map(alias => [alias.fromPath, alias.toPath] as const)]);
     for (const { page, slug } of placements) {
       const target = slug;
       if (page.redirectFrom) linkMap.set(page.redirectFrom, target);
@@ -917,7 +923,7 @@ const commitApply = defineService({
     const publishedAt: Record<string, string> = {};
     const skippedPages: Array<{ url: string; slug: string; reason: string }> = [];
     const unresolvedImages: string[] = [];
-    const slugByWpId = new Map<string, string>();
+    const slugByWpId = new Map<string, string>(globalTargets.flatMap(target => target.wpId ? [[target.wpId, target.targetSlug] as const] : []));
     let droppedEmbeds = 0;
     let flattenedHtml = 0;
     let posts = 0;
@@ -928,6 +934,8 @@ const commitApply = defineService({
       const { page, slug } = placement;
       if (placement.action === "keep") {
         if (page.wpId) slugByWpId.set(page.wpId, slug);
+        const current = bySlug.get(slug);
+        if (current) await recordImportBatchTarget(ctx, slug, current.id);
         continue;
       }
       let blocks: unknown[];
@@ -971,7 +979,7 @@ const commitApply = defineService({
       }
       let id: string;
       if (placement.action === "replace") {
-        await ctx.call(getService("cms.updatePage"), {
+        await callImportService(ctx, getService("cms.updatePage"), {
           id: placement.current!.id,
           title: page.title,
           blocks,
@@ -981,7 +989,7 @@ const commitApply = defineService({
         id = placement.current!.id;
       } else {
         const created = createdCmsPage(
-          await ctx.call(getService("cms.createPage"), {
+          await callImportService(ctx, getService("cms.createPage"), {
             slug,
             title: page.title || slug || "Imported page",
             blocks,
@@ -992,12 +1000,13 @@ const commitApply = defineService({
         id = created.id;
       }
       if (page.status === "draft") draftPageIds.push(id);
+      await recordImportBatchTarget(ctx, slug, id);
       if ((wordpress || generic) && placement.action === "replace") {
-        postSnapshots.push(await ctx.call(getService("cms.getPostMeta"), { pageId: id }));
+        postSnapshots.push(await callImportService(ctx, getService("cms.getPostMeta"), { pageId: id }));
         if (page.kind !== "post") {
           const meta = { pageId: id, isPost: false };
           if (placement.current?.status === "published") pendingBlogPosts.push({ pageId: id, key: page.wpId ?? slug, meta, comments: [] });
-          else await ctx.call(getService("cms.setPostMeta"), meta);
+          else await callImportService(ctx, getService("cms.setPostMeta"), meta);
         }
       }
       if ((wordpress || generic) && page.kind === "post") {
@@ -1010,7 +1019,7 @@ const commitApply = defineService({
         if (placement.action === "replace" && placement.current?.status === "published") {
           pendingBlogPosts.push({ pageId: id, key: page.wpId ?? slug, meta, comments: page.readerComments ?? [] });
         } else {
-          await ctx.call(getService("cms.setPostMeta"), meta);
+          await callImportService(ctx, getService("cms.setPostMeta"), meta);
           commentsImported += await importPostComments(ctx, before.id, id, page.wpId ?? slug, page.readerComments ?? []);
         }
       }
@@ -1024,7 +1033,7 @@ const commitApply = defineService({
     let blogIndexPageId: string | undefined;
     if ((wordpress || generic) && posts > 0 && !used.has("blog") && !bySlug.has("blog")) {
       const created = createdCmsPage(
-        await ctx.call(getService("cms.createPage"), {
+        await callImportService(ctx, getService("cms.createPage"), {
           slug: "blog",
           title: "Blog",
           blocks: [
@@ -1043,10 +1052,10 @@ const commitApply = defineService({
     const displacedRedirects: Array<z.infer<typeof redirectSnapshot>> = [];
     const skippedRedirects: Array<{ fromPath: string; reason: string }> = [];
     if (typedContent) {
-      const redirectLocale = z.object({ defaultLocale: z.string() }).nullable().parse(await ctx.call(getService("settings.getBusiness"), {}))?.defaultLocale ?? "en";
+      const redirectLocale = z.object({ defaultLocale: z.string() }).nullable().parse(await callImportService(ctx, getService("settings.getBusiness"), {}))?.defaultLocale ?? "en";
       const existingRedirects = z
         .array(redirectSnapshot.extend({ id: z.string() }))
-        .parse(await ctx.call(getService("seo.listRedirects"), {}));
+        .parse(await callImportService(ctx, getService("seo.listRedirects"), {}));
       const byFrom = new Map(existingRedirects.map((redirect) => [`${redirect.locale}:${redirect.fromPath}`, redirect]));
       const livePaths = new Set([...bySlug.keys(), ...landed.map((placement) => placement.slug)]);
       for (const { page, slug } of landed) {
@@ -1068,7 +1077,7 @@ const commitApply = defineService({
           byFrom.delete(`${redirectLocale}:${slug}`);
         }
         const recorded = z.object({ id: z.string() }).parse(
-          await ctx.call(getService("seo.recordRedirect"), { fromPath, toPath: slug, locale: redirectLocale, source: "import" }),
+          await callImportService(ctx, getService("seo.recordRedirect"), { fromPath, toPath: slug, locale: redirectLocale, source: "import" }),
         );
         redirectIds.push(recorded.id);
         byFrom.set(`${redirectLocale}:${fromPath}`, { id: recorded.id, fromPath, toPath: slug, status: "301", locale: redirectLocale, source: "import" });
@@ -1109,7 +1118,7 @@ const commitApply = defineService({
       try {
         accounts = z
           .array(z.object({ id: z.string(), email: z.string() }))
-          .parse(await ctx.call(getService("roles.users"), {}));
+          .parse(await callImportService(ctx, getService("roles.users"), {}));
       } catch (error) {
         if (!(error instanceof ServiceError) || error.code !== "permission") throw error;
       }
@@ -1231,6 +1240,7 @@ export const commitImport = defineOrchestratedService({
   handler: async (input, actor) => {
     const source = await commitSource.call({ id: input.id }, actor);
     if (source.completed) return publicImportRun(source.completed);
+    if (source.sourceGraph) return advanceGraphCommit(input.id, actor);
     let genericPolicy: Map<string, string> | undefined;
     if (source.generic && source.media.length) {
       genericPolicy = new Map();
@@ -1301,11 +1311,12 @@ export const rollbackImport = defineService({
   input: z.object({ id: z.string().uuid() }),
   output: runRow,
   handler: async (input, ctx) => {
+    await lockImportBatchParent(ctx, input.id);
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
     if (before.status === "rolled_back") return publicImportRun(before);
     const checkpoint = checkpointOf(before.checkpoint);
-    if (checkpoint.sourceGraph) await invalidateImportGraph(ctx.tx, before);
+    if (checkpoint.sourceGraph) return advanceGraphLifecycle(ctx, before, "imports.rollback");
 
     // Menu links the import added, and only those, come off the nav.
     const nav = navAppliedSchema.safeParse(checkpoint.navApplied);
@@ -1313,11 +1324,11 @@ export const rollbackImport = defineService({
       const section = z
         .object({ blocks: z.unknown() })
         .nullable()
-        .parse(await ctx.call(getService("cms.getSection"), { key: nav.data.key, locale: nav.data.locale, fallback: false }));
+        .parse(await callImportService(ctx, getService("cms.getSection"), { key: nav.data.key, locale: nav.data.locale, fallback: false }));
       if (section) {
         const blocks = structuredClone(section.blocks) as BlockNode[];
         if (Array.isArray(blocks) && withoutNavLinks(blocks, nav.data.links, nav.data.blockId)) {
-          await ctx.call(getService("cms.updateSection"), { key: nav.data.key, locale: nav.data.locale, blocks });
+          await callImportService(ctx, getService("cms.updateSection"), { key: nav.data.key, locale: nav.data.locale, blocks });
         }
       }
     }
@@ -1327,12 +1338,12 @@ export const rollbackImport = defineService({
     }
     for (const id of createdPageIdsFrom(before.checkpoint)) {
       try {
-        await ctx.call(getService("cms.publishPage"), { id, published: false });
+        await callImportService(ctx, getService("cms.publishPage"), { id, published: false });
       } catch (error) {
         if (!(error instanceof ServiceError) || error.code !== "not_found") throw error;
       }
       try {
-        await ctx.call(getService("cms.deleteDraftPage"), { id });
+        await callImportService(ctx, getService("cms.deleteDraftPage"), { id });
       } catch (error) {
         if (!(error instanceof ServiceError) || (error.code !== "not_found" && error.code !== "conflict")) {
           throw error;
@@ -1340,21 +1351,21 @@ export const rollbackImport = defineService({
       }
     }
     for (const snapshot of Array.isArray(checkpoint.postSnapshots) ? checkpoint.postSnapshots : []) {
-      await ctx.call(getService("cms.setPostMeta"), snapshot);
+      await callImportService(ctx, getService("cms.setPostMeta"), snapshot);
     }
-    await ctx.call(getService("cms.rollbackImportedBlogProfiles"), { runId: before.id });
-    await ctx.call(getService("cms.rollbackImportedReaderComments"), { runId: before.id });
+    await callImportService(ctx, getService("cms.rollbackImportedBlogProfiles"), { runId: before.id });
+    await callImportService(ctx, getService("cms.rollbackImportedReaderComments"), { runId: before.id });
 
     for (const id of stringIds(checkpoint.redirectIds)) {
       try {
-        await ctx.call(getService("seo.deleteRedirect"), { id });
+        await callImportService(ctx, getService("seo.deleteRedirect"), { id });
       } catch (error) {
         if (!isMissing(error)) throw error;
       }
     }
     const displaced = z.array(redirectSnapshot).safeParse(checkpoint.displacedRedirects);
     for (const redirect of displaced.success ? displaced.data : []) {
-      await ctx.call(getService("seo.recordRedirect"), redirect);
+      await callImportService(ctx, getService("seo.recordRedirect"), redirect);
     }
 
     // Imported files go to the recoverable trash unless something now uses them.
@@ -1363,13 +1374,13 @@ export const rollbackImport = defineService({
       if (!record.assetId) continue;
       const usage = z
         .object({ pages: z.number(), sections: z.number() })
-        .parse(await ctx.call(getService("media.usage"), { id: record.assetId }));
+        .parse(await callImportService(ctx, getService("media.usage"), { id: record.assetId }));
       if (usage.pages + usage.sections > 0) {
         keptMedia.push(record.assetId);
         continue;
       }
       try {
-        await ctx.call(getService("media.trash"), { id: record.assetId });
+        await callImportService(ctx, getService("media.trash"), { id: record.assetId });
       } catch (error) {
         if (!isMissing(error)) throw error;
       }
@@ -1405,7 +1416,7 @@ export const listImports = defineService({
   input: z.object({}),
   output: listed(runRow),
   handler: async (input, ctx) =>
-    (await ctx.tx.select().from(importRuns).orderBy(desc(importRuns.createdAt))).filter(run => !isPrivateImportBatch(run)).map(publicImportRun),
+    (await ctx.tx.select().from(importRuns).where(sql`not exists (select 1 from ${importSourceBatches} where ${importSourceBatches.childRunId} = ${importRuns.id})`).orderBy(desc(importRuns.createdAt))).filter(run => !isPrivateImportBatch(run)).map(publicImportRun),
 });
 
 export const mapImport = defineService({
@@ -1486,8 +1497,10 @@ export const reconcileImport = defineService({
   }),
   output: runRow,
   handler: async (input, ctx) => {
-    const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
+    await lockImportBatchParent(ctx, input.id);
+    const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
+    if (checkpointOf(before.checkpoint).sourceGraph) return advanceGraphLifecycle(ctx, before, "imports.reconcile");
     if (before.status !== "committed") {
       throw new ServiceError("conflict", "Commit the import before reconciling it.");
     }
@@ -1495,7 +1508,7 @@ export const reconcileImport = defineService({
     let pagesFound = 0;
     for (const id of pageIdsFrom(checkpoint)) {
       try {
-        await ctx.call(getService("cms.getPage"), { id });
+        await callImportService(ctx, getService("cms.getPage"), { id });
         pagesFound += 1;
       } catch (error) {
         if (!(error instanceof ServiceError) || error.code !== "not_found") throw error;
@@ -1507,7 +1520,7 @@ export const reconcileImport = defineService({
       try {
         const asset = z
           .object({ status: z.string() })
-          .parse(await ctx.call(getService("media.get"), { id: record.assetId }));
+          .parse(await callImportService(ctx, getService("media.get"), { id: record.assetId }));
         if (asset.status !== "trashed") mediaFound += 1;
       } catch (error) {
         if (!(error instanceof ServiceError) || error.code !== "not_found") throw error;
@@ -1518,7 +1531,7 @@ export const reconcileImport = defineService({
       ? 0
       : z
           .array(z.object({ id: z.string() }))
-          .parse(await ctx.call(getService("seo.listRedirects"), {}))
+          .parse(await callImportService(ctx, getService("seo.listRedirects"), {}))
           .filter((redirect) => redirectIds.has(redirect.id)).length;
     const found = { pages: pagesFound, media: mediaFound, redirects: redirectsFound };
     const committed = reconcileCounts.partial().safeParse(before.counts);
@@ -1561,15 +1574,17 @@ export const publishImport = defineService({
   input: z.object({ id: z.string().uuid() }),
   output: runRow,
   handler: async (input, ctx) => {
+    await lockImportBatchParent(ctx, input.id);
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
+    if (checkpointOf(before.checkpoint).sourceGraph) return advanceGraphLifecycle(ctx, before, "imports.publish");
     if (before.status === "published") return publicImportRun(before);
     if (before.status !== "reconciled") {
       throw new ServiceError("conflict", "Reconcile the import before publishing it.");
     }
     await assertLegacyReaderSafety(ctx.tx, before);
     const checkpoint = checkpointOf(before.checkpoint);
-    const profile = z.object({ defaultLocale: z.string() }).nullable().parse(await ctx.call(getService("settings.getBusiness"), {}));
+    const profile = z.object({ defaultLocale: z.string() }).nullable().parse(await callImportService(ctx, getService("settings.getBusiness"), {}));
     const sourceLocale = profile?.defaultLocale ?? "en";
     const drafts = new Set(stringIds(checkpoint.draftPageIds));
     const dates =
@@ -1582,7 +1597,7 @@ export const publishImport = defineService({
       const raw = dates[id];
       const date = typeof raw === "string" ? raw : undefined;
       const usable = date && !Number.isNaN(Date.parse(date)) && Date.parse(date) <= now ? date : undefined;
-      await ctx.call(getService("cms.publishPage"), {
+      await callImportService(ctx, getService("cms.publishPage"), {
         id,
         published: true,
         ...(usable ? { publishedAt: usable } : {}),
@@ -1592,7 +1607,7 @@ export const publishImport = defineService({
     const pending = pendingBlogPost.array().parse(checkpoint.pendingBlogPosts ?? []);
     let stagedCommentsImported = 0;
     for (const post of pending) {
-      await ctx.call(getService("cms.setPostMeta"), post.meta);
+      await callImportService(ctx, getService("cms.setPostMeta"), post.meta);
       stagedCommentsImported += await importPostComments(ctx, before.id, post.pageId, post.key, post.comments);
     }
 
@@ -1605,17 +1620,21 @@ export const publishImport = defineService({
     if (aliases.success) {
       const landings = z.array(z.object({ path: z.string(), status: z.string() })).safeParse(checkpoint.landedPaths);
       const draftPaths = new Set(landings.success ? landings.data.filter(page => page.status === "draft").map(page => page.path) : []);
-      const existing = z.array(z.object({ fromPath: z.string() })).parse(await ctx.call(getService("seo.listRedirects"), {}));
+      const existing = z.array(z.object({ fromPath: z.string() })).parse(await callImportService(ctx, getService("seo.listRedirects"), {}));
       const occupied = new Set(existing.map(row => row.fromPath));
+      const publicTargets = new Map<string, boolean>();
       for (const alias of aliases.data) {
         if (draftPaths.has(alias.toPath)) continue;
         if (alias.toPath !== "feeds/blog.xml") {
-          const page = await ctx.call(getService("cms.resolvePage"), { slug: alias.toPath, locale: sourceLocale });
-          const archive = page ? null : await ctx.call(getService("cms.resolveBlogArchive"), { path: alias.toPath });
-          if (!page && !archive) { skippedAliases.push({ fromPath: alias.fromPath, reason: "destination is not public" }); continue; }
+          if (!publicTargets.has(alias.toPath)) {
+            const page = await callImportService(ctx, getService("cms.resolvePage"), { slug: alias.toPath, locale: sourceLocale });
+            const archive = page ? null : await callImportService(ctx, getService("cms.resolveBlogArchive"), { path: alias.toPath });
+            publicTargets.set(alias.toPath, Boolean(page || archive));
+          }
+          if (!publicTargets.get(alias.toPath)) { skippedAliases.push({ fromPath: alias.fromPath, reason: "destination is not public" }); continue; }
         }
         if (occupied.has(alias.fromPath)) { skippedAliases.push({ fromPath: alias.fromPath, reason: "existing redirect preserved" }); continue; }
-        const created = z.object({ id: z.string() }).parse(await ctx.call(getService("seo.recordRedirect"), { ...alias, source: "import" }));
+        const created = z.object({ id: z.string() }).parse(await callImportService(ctx, getService("seo.recordRedirect"), { ...alias, source: "import" }));
         redirectIds.push(created.id); occupied.add(alias.fromPath);
       }
     }
@@ -1634,7 +1653,7 @@ export const publishImport = defineService({
         if (!link.href.startsWith("/") || link.href.startsWith("//")) continue;
         const path = new URL(link.href, "https://freeholder.invalid").pathname.replace(/^\/+|\/+$/g, "");
         if (!sourcePaths.has(path)) continue;
-        if (!checked.has(path)) checked.set(path, Boolean(await ctx.call(getService("cms.resolvePage"), { slug: path, locale: sourceLocale })));
+        if (!checked.has(path)) checked.set(path, Boolean(await callImportService(ctx, getService("cms.resolvePage"), { slug: path, locale: sourceLocale })));
         if (!checked.get(path)) { hidden.push(link); skippedMenuLinks.push({ href: link.href, label: link.label, reason: "imported destination is not public" }); }
       }
       menu.links = removeNavigation(menu.links, hidden);
@@ -1643,14 +1662,14 @@ export const publishImport = defineService({
         const section = z
           .object({ blocks: z.unknown(), locale: z.string() })
           .nullable()
-          .parse(await ctx.call(getService("cms.getSection"), { key, locale: sourceLocale, fallback: true }));
+          .parse(await callImportService(ctx, getService("cms.getSection"), { key, locale: sourceLocale, fallback: true }));
         if (!section || !Array.isArray(section.blocks)) continue;
         const blocks = structuredClone(section.blocks) as BlockNode[];
         const merged = mergeNavMenu(blocks, menu.links);
         if (!merged) continue;
         const { added, blockId } = merged;
         if (added.length > 0) {
-          await ctx.call(getService("cms.updateSection"), { key, locale: section.locale, blocks });
+          await callImportService(ctx, getService("cms.updateSection"), { key, locale: section.locale, blocks });
         }
         navApplied = { key, locale: section.locale, menu: menu.slug, blockId, links: added };
         break;
@@ -1904,6 +1923,7 @@ export const wordpressVerificationPlan = defineService({
 });
 
 export default [
+  ...graphBatchServices,
   ...importMediaReceiptServices,
   wordpressVerificationPlan,
   startImport,

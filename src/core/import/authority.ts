@@ -6,15 +6,19 @@ import { apiKeys } from "@/core/apikeys/schema";
 import { roleGrants, sessions, totpFactors, users, webauthnCredentials } from "@/core/auth/schema";
 import { isPrivilegedGrants } from "@/core/auth/two-factor-crypto";
 import { STEP_UP_TTL_MS } from "@/core/auth/sessions";
-import { permits, ServiceError, type Actor, type ServiceContext } from "@/core/service";
+import { permits, ServiceError, type Actor, type ServiceContext, type Permission } from "@/core/service";
+
+const checked = new WeakMap<object, WeakMap<Actor, Actor>>();
 
 /** Original audit actor stays unchanged; this is an additional refusal fence. */
-async function currentAuthority(ctx: ServiceContext, parent: string): Promise<void> {
+async function currentAuthority(ctx: ServiceContext): Promise<Actor> {
   const actor = ctx.actor;
+  const cached = checked.get(ctx.tx)?.get(actor);
+  if (cached) return cached;
   let current: Actor = actor;
   if ((actor.kind === "agent" || actor.kind === "user") && actor.keyId) {
     const [key] = await ctx.tx.select({ id: apiKeys.id, name: apiKeys.name, scopes: apiKeys.scopes, actsAsUserId: apiKeys.actsAsUserId, revokedAt: apiKeys.revokedAt, expiresAt: apiKeys.expiresAt }).from(apiKeys).where(eq(apiKeys.id, actor.keyId)).limit(1).for("share", { noWait: true });
-    if (!key || key.revokedAt || (key.expiresAt && key.expiresAt.getTime() <= Date.now()) || (actor.kind === "agent" ? key.actsAsUserId !== null || key.name !== actor.keyName : key.actsAsUserId !== actor.userId)) throw new ServiceError("permission", "The original import credential is no longer active.");
+    if (!key || key.revokedAt || (key.expiresAt && key.expiresAt.getTime() <= Date.now()) || (actor.kind === "agent" ? key.actsAsUserId !== null : key.actsAsUserId !== actor.userId)) throw new ServiceError("permission", "The original import credential is no longer active.");
     current = actor.kind === "agent" ? { ...actor, scopes: key.scopes } : { ...actor, keyScopes: key.scopes };
   } else if (actor.kind === "agent") {
     // A friendly name is reusable after revocation. It never identifies the
@@ -34,11 +38,18 @@ async function currentAuthority(ctx: ServiceContext, parent: string): Promise<vo
     const grants = await ctx.tx.select({ module: roleGrants.module, access: roleGrants.access }).from(roleGrants).where(eq(roleGrants.roleKey, person.role)).for("share", { noWait: true });
     current = { ...current, role: person.role, grants, ...(current.security ? { security: { ...current.security, twoFactorRequired: isPrivilegedGrants(grants) } } : {}) };
   }
-  if (current.kind === "system" || current.kind === "anonymous" || current.kind === "plugin" || !permits(current, "scoped", parent, "mutation")) throw new ServiceError("permission", "The original caller no longer has permission to advance this import.");
+  if (current.kind === "system" || current.kind === "anonymous" || current.kind === "plugin") throw new ServiceError("permission", "The original caller no longer has permission to advance this import.");
+  let actors = checked.get(ctx.tx);
+  if (!actors) { actors = new WeakMap(); checked.set(ctx.tx, actors); }
+  actors.set(actor, current);
+  return current;
 }
 
-export async function assertCurrentImportAuthority(ctx: ServiceContext, parent: string): Promise<void> {
-  try { await currentAuthority(ctx, parent); }
+export async function assertCurrentImportAuthority(ctx: ServiceContext, parent: string, kind: "query" | "mutation" = "mutation", permission: Permission = "scoped"): Promise<void> {
+  try {
+    const current = await currentAuthority(ctx);
+    if (!permits(current, permission, parent, kind)) throw new ServiceError("permission", "The original caller no longer has permission to advance this import.");
+  }
   catch (error) {
     // Identity/erasure callers may already hold their own rows. Never wait
     // while holding another authorization row in the opposite order.

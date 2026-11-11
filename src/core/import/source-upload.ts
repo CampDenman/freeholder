@@ -59,6 +59,7 @@ const uploadRecord = z.object({
   digests: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/)).default({}),
   keyPrefix: z.string(),
   createdBy: z.string(),
+  uploaderIdentity: z.object({ kind: z.enum(["key", "user"]), id: z.uuid() }).optional(),
   expiresAt: z.string(),
 });
 type UploadRecord = z.infer<typeof uploadRecord>;
@@ -101,7 +102,11 @@ export function sourceLooksRight(kind: string, prefix: string): boolean {
 }
 
 function sameUploader(upload: UploadRecord, actor: Actor): boolean {
-  return actor.kind === "system" || upload.createdBy === actorString(actor);
+  if (actor.kind === "system") return true;
+  if (upload.uploaderIdentity) return (actor.kind === "agent" || actor.kind === "user") && (actor.keyId ? upload.uploaderIdentity.kind === "key" && upload.uploaderIdentity.id === actor.keyId : actor.kind === "user" && upload.uploaderIdentity.kind === "user" && upload.uploaderIdentity.id === actor.userId);
+  // Legacy names cannot prove which live API credential supplied the bytes.
+  if ((actor.kind === "agent" || actor.kind === "user") && actor.keyId) return false;
+  return upload.createdBy === actorString(actor);
 }
 
 type SourceRun = typeof importRuns.$inferSelect;
@@ -169,6 +174,7 @@ const beginApply = defineService({
       digests: {},
       keyPrefix: `imports/${run.id}/${uploadId}`,
       createdBy: actorString(ctx.actor),
+      ...((ctx.actor.kind === "agent" || ctx.actor.kind === "user") && ctx.actor.keyId ? { uploaderIdentity: { kind: "key" as const, id: ctx.actor.keyId } } : ctx.actor.kind === "user" ? { uploaderIdentity: { kind: "user" as const, id: ctx.actor.userId } } : {}),
       expiresAt: new Date(Date.now() + UPLOAD_TTL_MS).toISOString(),
     };
     // Reserve cleanup before the first provider write. Abandoned uploads and
@@ -572,7 +578,7 @@ export const previewFromUpload = defineOrchestratedService({
       if (state.hasSourceGraph) {
         const claimed = await claimWxrGraph.call(input, actor);
         if (!claimed.leaseToken) throw new ServiceError("internal", "The source phase has no lease.");
-        const indexed = await indexWxrPhase(importSourceRanges(claimed.source, index => readRetainedSourceChunk(claimed.source, index)), claimed.cursor);
+        const indexed = await indexWxrPhase(importSourceRanges(claimed.source, index => readRetainedSourceChunk(claimed.source, index)), claimed.cursor, state.origin);
         return await applyWxrIndex.call({ ...input, graphId: claimed.graphId, generation: claimed.generation, leaseToken: claimed.leaseToken, source: claimed.source, previous: claimed.cursor, ...indexed }, actor);
       }
       const staged = await stageStoredSource(state);

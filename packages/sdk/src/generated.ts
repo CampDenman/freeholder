@@ -3562,7 +3562,7 @@ export interface ServiceCatalog {
     output: { id: string; pageId: string; revisionId: string | null; blockId: string | null; parentId: string | null; body: string; mentions: string[]; kind: "comment" | "review_request"; reviewer: string | null; reviewState: "none" | "requested" | "approved" | "changes_requested"; resolvedAt: string | null; resolvedBy: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
   "cms.listPages": {
-    input: { trashedOnly?: boolean };
+    input: { trashedOnly?: boolean; slugs?: string[] };
     output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
   "cms.listPostPages": {

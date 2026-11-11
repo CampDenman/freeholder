@@ -25,7 +25,7 @@ export interface CorpusDocument {
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export async function collectDocuments(tx: Tx): Promise<CorpusDocument[]> {
+export async function collectDocuments(tx: Tx, pageId?: string): Promise<CorpusDocument[]> {
   const docs: CorpusDocument[] = [];
 
   const published = await tx
@@ -38,7 +38,7 @@ export async function collectDocuments(tx: Tx): Promise<CorpusDocument[]> {
       helpCategoryId: pages.helpCategoryId,
     })
     .from(pages)
-    .where(eq(pages.status, "published"));
+    .where(and(eq(pages.status, "published"), pageId ? eq(pages.id, pageId) : undefined));
   for (const page of published) {
     const body = clip([page.title, textFromBlocks(page.blocks)].filter(Boolean).join("\n"));
     if (!body) continue;
@@ -50,6 +50,8 @@ export async function collectDocuments(tx: Tx): Promise<CorpusDocument[]> {
       body,
     });
   }
+
+  if (pageId) return docs;
 
   const catalog = await tx
     .select({

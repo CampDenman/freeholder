@@ -906,6 +906,12 @@ function imageRef(node: DefaultTreeAdapterTypes.Element): { src: string; wpId?: 
  * Turn an export into a staged plan: final slugs, redirects, the media to
  * fetch, menus and the report. `origin` is the run's approved origin.
  */
+export function wordpressItemPlacement(item: Pick<WordpressItem, "url" | "slug" | "kind">, site: WordpressExport["site"], origin: string): { sourcePath: string | null; slug: string } {
+  const sourcePath = wordpressPath(item.url, siteHosts(origin, site), sitePath(site, origin));
+  const wpSlug = toCmsSlug(item.slug || slugFromUrl(item.url));
+  return { sourcePath, slug: sourcePath !== null ? toCmsSlug(sourcePath) : item.kind === "post" ? `blog/${(wpSlug.split("/").at(-1) ?? wpSlug) || "post"}` : wpSlug };
+}
+
 export function planWordpressImport(exported: WordpressExport, origin: string): WordpressPlan {
   const hosts = siteHosts(origin, exported.site);
   const basePath = sitePath(exported.site, origin);
@@ -973,13 +979,8 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
   const authorPosts = new Map<string, number>();
 
   for (const item of exported.items) {
-    const oldPath = wordpressPath(item.url, hosts, basePath);
-    const wpSlug = toCmsSlug(item.slug || slugFromUrl(item.url));
-    const slug = unique(
-      oldPath !== null
-          ? toCmsSlug(oldPath)
-          : item.kind === "post" ? `blog/${(wpSlug.split("/").at(-1) ?? wpSlug) || "post"}` : wpSlug,
-    );
+    const { sourcePath: oldPath, slug: candidate } = wordpressItemPlacement(item, exported.site, origin);
+    const slug = unique(candidate);
     if (item.wpId) wpIdToSlug.set(item.wpId, slug);
 
     for (const ref of bodyImageRefs(item.body)) {

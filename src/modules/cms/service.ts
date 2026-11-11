@@ -477,13 +477,15 @@ export const listPages = defineService({
   input: z.object({
     /** The recovery view: trashed pages only (C11.14). */
     trashedOnly: z.boolean().default(false),
+    /** Bounded recovery callers need only the candidate paths they own. */
+    slugs: z.array(z.string().max(2_048)).max(1_002).optional(),
   }),
   output: listed(pageRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()
       .from(pages)
-      .where(input.trashedOnly ? isNotNull(pages.trashedAt) : isNull(pages.trashedAt))
+      .where(and(input.trashedOnly ? isNotNull(pages.trashedAt) : isNull(pages.trashedAt), input.slugs ? inArray(pages.slug, input.slugs) : undefined))
       .orderBy(desc(pages.updatedAt)),
 });
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C3.47: source indexing commits one bounded, parent-authorized phase at a time.
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { importRuns, importSourceEntries, importSourceGraphs } from "@/core/plugins/schema";
@@ -76,7 +76,20 @@ export const applyWxrIndex = defineService({
       next++; end = entry.end; bodyBytes += entry.bodyBytes; metadataBytes += Buffer.byteLength(JSON.stringify(entry.metadata));
     }
     if (input.cursor.ordinal !== next || input.cursor.bodyBytes !== bodyBytes || input.cursor.metadataBytes !== metadataBytes || input.cursor.nextByte !== (input.done ? input.source.bytes : end) || (!input.done && !input.entries.length) || (input.previous.header && JSON.stringify(input.previous.header) !== JSON.stringify(input.cursor.header))) throw new ServiceError("conflict", "The indexed source cursor does not match the bounded phase.");
-    if (input.entries.length) await ctx.tx.insert(importSourceEntries).values(input.entries.map(entry => ({ graphId: graph.id, ordinal: entry.ordinal, sourceIdentity: entry.identity, kind: entry.kind, startByte: entry.start, endByte: entry.end, digest: entry.digest, metadata: entry.metadata, bodyBytes: entry.bodyBytes })));
+    const seen = new Set(input.entries.map(entry => entry.identity));
+    if (seen.size !== input.entries.length || (seen.size && (await ctx.tx.select({ id: importSourceEntries.id }).from(importSourceEntries).where(and(eq(importSourceEntries.graphId, graph.id), inArray(importSourceEntries.sourceIdentity, [...seen]))).limit(1)).length)) throw new ServiceError("validation", "The source repeats an entity identity. Review the export before importing it.");
+    const usedTargets = new Set((await ctx.tx.select({ slug: importSourceEntries.targetSlug }).from(importSourceEntries).where(eq(importSourceEntries.graphId, graph.id))).flatMap(row => row.slug === null ? [] : [row.slug]));
+    const rows = input.entries.map(entry => {
+      let targetSlug = entry.metadata.targetSlug ?? null;
+      if (targetSlug !== null) {
+        const original = targetSlug;
+        for (let suffix = 2; usedTargets.has(targetSlug); suffix++) targetSlug = `${original || "home"}-${suffix}`;
+        if (targetSlug.length > 2_048) throw new ServiceError("validation", "The source target path exceeds the graph budget.");
+        usedTargets.add(targetSlug);
+      }
+      return { graphId: graph.id, ordinal: entry.ordinal, sourceIdentity: entry.identity, kind: entry.kind, startByte: entry.start, endByte: entry.end, digest: entry.digest, metadata: entry.metadata, bodyBytes: entry.bodyBytes, targetSlug };
+    });
+    if (rows.length) await ctx.tx.insert(importSourceEntries).values(rows);
     await ctx.tx.update(importSourceGraphs).set({ cursor: input.cursor, state: input.done ? "indexed" : "indexing", leaseToken: null, leaseActor: null, leaseUntil: null, updatedAt: new Date() }).where(eq(importSourceGraphs.id, graph.id));
     const counts = await ctx.tx.select({ kind: importSourceEntries.kind, total: sql<number>`count(*)::int` }).from(importSourceEntries).where(eq(importSourceEntries.graphId, graph.id)).groupBy(importSourceEntries.kind);
     const total = (kind: string) => counts.find(row => row.kind === kind)?.total ?? 0;

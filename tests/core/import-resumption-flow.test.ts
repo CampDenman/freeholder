@@ -11,9 +11,10 @@ import { apiKeys } from "@/core/apikeys/schema";
 import { mintApiKey } from "@/core/apikeys/tokens";
 import { actorFromRequest } from "@/core/http/actor";
 import { ensureDefaults } from "@/modules/cms/service";
-import { commitImport, publishImport, reconcileImport, rollbackImport, startImport } from "@/core/import/service";
+import { commitImport, listImports, publishImport, reconcileImport, rollbackImport, startImport } from "@/core/import/service";
 import { beginSourceUpload, previewFromUpload, uploadSourceChunk } from "@/core/import/source-upload";
 import { hasDatabase, OWNER, truncateSpine, failure } from "../helpers/spine";
+import { runImportResumptionProcess } from "../helpers/import-resumption-process";
 
 const ORIGIN = "https://resumption-source.example";
 function source(count: number): Uint8Array<ArrayBuffer> {
@@ -23,6 +24,28 @@ function source(count: number): Uint8Array<ArrayBuffer> {
 describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 180_000 }, () => {
   beforeEach(async () => { await truncateSpine(); resetStorageForTests(); await ensureDefaults.call({}, OWNER); });
   afterAll(closeDb);
+  it.each(["renamed", "replaced"])("binds the source upload to the immutable key when its friendly name is %s", async change => {
+    const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501), credential = mintApiKey();
+    const scopes = ["imports.beginSourceUpload", "imports.uploadSourceChunk", "imports.previewFromUpload"];
+    const [key] = await db().insert(apiKeys).values({ name: "Original source uploader", prefix: credential.prefix, tokenHash: credential.tokenHash, scopes }).returning();
+    const request = (token: string) => new Request("https://instance.example/api/mcp", { headers: { authorization: `Bearer ${token}` } });
+    const original = await actorFromRequest(request(credential.token));
+    await expect.poll(async () => (await db().select({ seen: apiKeys.lastUsedAt }).from(apiKeys).where(eq(apiKeys.id, key!.id)))[0]!.seen).not.toBeNull();
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-key-owned.xml", bytes: bytes.byteLength }, original);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, original);
+    await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, original);
+    expect(JSON.stringify(await listImports.call({}, OWNER))).not.toContain(key!.id);
+    let token = credential.token;
+    if (change === "renamed") await db().update(apiKeys).set({ name: "Renamed source uploader" }).where(eq(apiKeys.id, key!.id));
+    else {
+      await db().update(apiKeys).set({ revokedAt: new Date() }).where(eq(apiKeys.id, key!.id));
+      const replacement = mintApiKey(); token = replacement.token;
+      await db().insert(apiKeys).values({ name: key!.name, prefix: replacement.prefix, tokenHash: replacement.tokenHash, scopes });
+    }
+    const current = await actorFromRequest(request(token));
+    if (change === "renamed") expect(await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, current)).toMatchObject({ status: "discover", counts: { indexed: 500 } });
+    else expect(await failure(previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, current))).toMatchObject({ code: "not_found" });
+  });
   it.each(["revoked", "expired", "scopes narrowed"])("rechecks the exact HTTP key after I/O when it is %s", async outcome => {
     const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501);
     const credential = mintApiKey();
@@ -74,9 +97,13 @@ describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 18
     const upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-indexed-export.xml", bytes: bytes.byteLength }, OWNER);
     for (let index = 0; index < upload.chunkCount; index++) await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index, bytes: bytes.slice(index * upload.chunkBytes, (index + 1) * upload.chunkBytes) }, OWNER);
     expect(await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER)).toMatchObject({ status: "discover", counts: { indexed: 0 } });
-    expect(await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER)).toMatchObject({ status: "discover", counts: { indexed: 500 } });
     await closeDb(); resetStorageForTests();
-    expect(await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER)).toMatchObject({ status: "previewed", counts: { indexed: 501, pages: 501 } });
+    const firstProcess = await runImportResumptionProcess(run.id, upload.uploadId);
+    expect(firstProcess.pid).not.toBe(process.pid);
+    expect(firstProcess.result).toMatchObject({ status: "discover", counts: { indexed: 500 } });
+    const secondProcess = await runImportResumptionProcess(run.id, upload.uploadId);
+    expect(secondProcess.pid).not.toBe(firstProcess.pid);
+    expect(secondProcess.result).toMatchObject({ status: "previewed", counts: { indexed: 501, pages: 501 } });
     const entries = await db().select().from(importSourceEntries);
     expect(entries).toHaveLength(501);
     expect(new Set(entries.map(entry => entry.sourceIdentity)).size).toBe(501);
@@ -89,6 +116,8 @@ describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 18
     expect(JSON.stringify(entries)).not.toContain("Original source page");
   });
   it("indexes and commits 501 source pages through bounded resumable phases, then publishes and rolls back", async () => {
+    let phaseStarted = performance.now();
+    const mark = (phase: string) => { const now = performance.now(); console.info(`[durable import qualification] ${phase}: ${Math.round(now - phaseStarted)}ms`); phaseStarted = now; };
     const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501);
     const upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-resumable-export.xml", bytes: bytes.byteLength }, OWNER);
     for (let index = 0; index < upload.chunkCount; index++) await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index, bytes: bytes.slice(index * upload.chunkBytes, (index + 1) * upload.chunkBytes) }, OWNER);
@@ -99,6 +128,7 @@ describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 18
     await closeDb(); resetStorageForTests();
     for (let phase = 0; phase < 8 && staged.status === "discover"; phase++) staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
     expect(staged).toMatchObject({ status: "previewed", error: null, counts: { pages: 501 } });
+    mark("upload and index");
     let committed = await commitImport.call({ id: run.id }, OWNER);
     for (let phase = 0; phase < 8 && committed.status === "previewed"; phase++) committed = await commitImport.call({ id: run.id }, OWNER);
     expect(committed).toMatchObject({ status: "committed", counts: { pages: 501 } });
@@ -106,13 +136,20 @@ describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 18
     expect(imported).toHaveLength(501);
     expect(new Set(imported.map(page => page.id)).size).toBe(501);
     expect(imported.every(page => page.status === "draft")).toBe(true);
-    await reconcileImport.call({ id: run.id }, OWNER);
+    mark("commit");
+    let reconciled = await reconcileImport.call({ id: run.id }, OWNER);
+    for (let phase = 0; phase < 8 && reconciled.status === "committed"; phase++) reconciled = await reconcileImport.call({ id: run.id }, OWNER);
+    expect(reconciled).toMatchObject({ status: "reconciled", counts: { pages: 501 }, checkpoint: { reconciliation: { found: { pages: 501 }, matches: true } } });
+    mark("reconcile");
     let published = await publishImport.call({ id: run.id }, OWNER);
     for (let phase = 0; phase < 8 && published.status === "reconciled"; phase++) published = await publishImport.call({ id: run.id }, OWNER);
     expect(published.status).toBe("published");
+    expect((await db().select().from(pages).where(sql`${pages.slug} like 'resumed/page-%'`)).filter(page => page.status === "published")).toHaveLength(501);
+    mark("publish");
     let rolledBack = await rollbackImport.call({ id: run.id }, OWNER);
     for (let phase = 0; phase < 8 && rolledBack.status !== "rolled_back"; phase++) rolledBack = await rollbackImport.call({ id: run.id }, OWNER);
     expect(rolledBack.status).toBe("rolled_back");
     expect(await db().select().from(pages).where(sql`${pages.slug} like 'resumed/page-%'`)).toHaveLength(0);
+    mark("rollback");
   });
 });

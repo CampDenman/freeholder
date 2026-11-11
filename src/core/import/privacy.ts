@@ -129,6 +129,11 @@ export function publicImportRun(run: Run): Run {
     for (const field of privateFields) delete visible[field];
     checkpoint = visible;
   }
+  if (Object.hasOwn(object(object(checkpoint).sourceUpload), "uploaderIdentity")) {
+    const upload = { ...object(object(checkpoint).sourceUpload) };
+    delete upload.uploaderIdentity;
+    checkpoint = { ...object(checkpoint), sourceUpload: upload };
+  }
   return { ...run, preview: project(run.preview, "pages", "readerComments"), checkpoint };
 }
 
@@ -262,7 +267,7 @@ registerContactPrivacySource({
         inArray(auditLog.action, ["imports.previewFromSource", "imports.preview", "imports.applyCrawl", "imports.applyUploadedPreview", "imports.claimSourceChunk"]),
       ));
       const keys = await ownedSourceKeys(tx, run);
-      if (keys.length && object(run.checkpoint).sourceGraph) await invalidateImportGraph(tx, run);
+      if (keys.length && object(run.checkpoint).sourceGraph && !["committed", "reconciled", "published"].includes(run.status)) await invalidateImportGraph(tx, run);
       for (let offset = 0; offset < keys.length; offset += 25) {
         if (!context.service) throw new ServiceError("internal", "Source-object erasure requires the real privacy service context.");
         const originalJobId = randomUUID();

@@ -9,6 +9,8 @@ import { assets } from "@/core/media/schema";
 import { defineService, permits, ServiceError, type ServiceContext } from "@/core/service";
 import { archivePreviewDigest } from "./archive-plan";
 import { assertNoPendingSourceUpload } from "./source-lifecycle";
+import { currentImportBatch, lockImportBatchParent } from "./batch-context";
+import { assertCurrentImportAuthority } from "./authority";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 export const importMediaReceiptSchema = z.object({ runId: z.uuid(), key: z.string().min(1).max(4_096), previewDigest: digest, token: z.uuid(), digest, bytes: z.number().int().positive().max(25 * 1024 * 1024) });
@@ -46,6 +48,8 @@ export function importMediaNote(runId: string, witness: string, key: string): st
   return `Freeholder import ${runId}/${witness}/${createHash("sha256").update(key).digest("hex")}`;
 }
 async function lockedRun(ctx: ServiceContext, runId: string): Promise<Run> {
+  await lockImportBatchParent(ctx, runId);
+  if (currentImportBatch()) await assertCurrentImportAuthority(ctx, "media.upload");
   const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, runId)).limit(1).for("update");
   if (!run) throw new ServiceError("not_found", "No such import run.");
   return run;

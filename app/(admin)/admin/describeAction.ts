@@ -335,6 +335,7 @@ export const OWNER_HIDDEN_ACTIONS: ReadonlySet<string> = new Set([
   "analytics.track",
   "analytics.identify",
   "analytics.recordExperimentConversion",
+  "assistant.reindexPage",
   "catalog.attachCartToContact",
   "catalog.quoteCartPromotions",
   "catalog.resolveCartPromotions",
