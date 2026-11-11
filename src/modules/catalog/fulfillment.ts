@@ -21,7 +21,8 @@ import {
   issueCreditNote,
   settleRefund,
 } from "@/modules/invoicing/invoice-service";
-import { QUANTITY_SCALE } from "@/modules/invoicing/money";
+import { extendMinor, QUANTITY_SCALE, sumMinor } from "@/modules/invoicing/money";
+import { getInvoiceMarketPolicy } from "@/modules/invoicing/market-policy";
 import {
   FULFILLMENT_KINDS,
   FULFILLMENT_STATUSES,
@@ -671,11 +672,15 @@ export const requestReturn = defineService({
   }),
   output: returnDetail,
   handler: async (input, ctx) => {
-    const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.orderId)).limit(1);
+    const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.orderId)).limit(1).for("update");
     if (!order) throw new ServiceError("not_found", "That order is not here.");
     if (!["paid", "fulfilling", "fulfilled"].includes(order.status)) {
       throw new ServiceError("conflict", "Only a paid order can be returned.");
     }
+    if (new Set(input.items.map(line=>line.orderItemId)).size!==input.items.length) throw new ServiceError("validation","Choose each returned order line only once.");
+    const existing = await ctx.tx.select({orderItemId:returnItems.orderItemId,quantity:returnItems.quantity}).from(returnItems)
+      .innerJoin(returnRequests,eq(returnRequests.id,returnItems.returnId))
+      .where(and(eq(returnRequests.orderId,order.id),ne(returnRequests.status,"rejected")));
     for (const line of input.items) {
       const [item] = await ctx.tx
         .select()
@@ -683,7 +688,8 @@ export const requestReturn = defineService({
         .where(and(eq(orderItems.id, line.orderItemId), eq(orderItems.orderId, order.id)))
         .limit(1);
       if (!item) throw new ServiceError("not_found", "That order line is not here.");
-      if (line.quantity > item.quantity) {
+      const previous = existing.filter(entry=>entry.orderItemId===item.id).reduce((total,entry)=>total+entry.quantity,0);
+      if (previous + line.quantity > item.quantity) {
         throw new ServiceError("validation", "A return cannot exceed the ordered quantity.");
       }
     }
@@ -856,14 +862,18 @@ export const receiveReturn = defineService({
 
 export const refundReturn = defineService({
   name: "catalog.refundReturn",
-  summary: "Issue a credit note and refund the returned amount on the original invoice.",
+  summary: "Credit a received return and record its fully returned offline payment.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({ id, idempotencyKey: z.string().trim().min(8).max(240) }),
+  stepUp: true,
+  agentCallable: false,
+  writeClass: "money",
+  input: z.object({ id, idempotencyKey: z.string().trim().min(8).max(240), offlineRefundConfirmed: z.literal(true) }),
   output: returnDetail,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.id, input.id)).for("update");
     if (!row) throw new ServiceError("not_found", "That return is not here.");
+    if (row.status === "refunded") return ctx.call(getReturn, { id: row.id });
     if (row.status !== "received") throw new ServiceError("conflict", "Receive the return before refunding it.");
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, row.orderId)).limit(1);
     if (!order?.invoiceId) throw new ServiceError("conflict", "That order has no invoice to refund.");
@@ -873,8 +883,8 @@ export const refundReturn = defineService({
     for (const line of items) {
       const [orderLine] = await ctx.tx.select().from(orderItems).where(eq(orderItems.id, line.orderItemId)).limit(1);
       if (!orderLine) continue;
-      const subtotalMinor = orderLine.unitAmountMinor * line.quantity;
-      amountMinor += subtotalMinor;
+      const subtotalMinor = extendMinor(orderLine.unitAmountMinor, line.quantity * QUANTITY_SCALE);
+      amountMinor = sumMinor([amountMinor, subtotalMinor], "Return amount");
       creditLines.push({
         description: `Return ${line.quantity} × order line`,
         quantityMicros: line.quantity * QUANTITY_SCALE,
@@ -885,31 +895,44 @@ export const refundReturn = defineService({
     if (!creditLines.length || amountMinor <= 0) {
       throw new ServiceError("validation", "There is nothing to refund on this return.");
     }
+    const invoice = await ctx.callAsSystem(getInvoice, { id: order.invoiceId });
+    const captured = invoice.payments.filter(payment => payment.status === "succeeded").sort((a,b)=>a.createdAt.getTime()-b.createdAt.getTime() || a.id.localeCompare(b.id));
+    const policy = await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:order.invoiceId});
+    // C5.19/C11.10: this transaction records a person's offline attestation.
+    // It cannot call a provider or invent the evidence of a card refund.
+    if (policy?.model === "seller_merchant" || captured.some(payment=>payment.provider!=="manual")) {
+      throw new ServiceError("conflict", "Refund card or provider payments through their original payment provider. This action records only an offline refund already returned to the customer.");
+    }
+    const allocations = captured.map(payment=>({payment,available:payment.amountMinor-sumMinor(invoice.refunds.filter(refund=>refund.paymentId===payment.id && ["created","processing","succeeded"].includes(refund.status)).map(refund=>refund.amountMinor),"Reserved refunds")}));
+    if (allocations.some(entry=>entry.available<0) || sumMinor(allocations.map(entry=>entry.available),"Available refund balance")<amountMinor) {
+      throw new ServiceError("conflict", "The original payments cannot cover this whole return. Reconcile existing refunds before recording another.");
+    }
     const credit = await ctx.callAsSystem(createCreditNote, {
       invoiceId: order.invoiceId,
-      idempotencyKey: `${input.idempotencyKey}:credit`,
+      idempotencyKey: `return:${row.id}:credit`,
       reason: row.reason,
       lines: creditLines,
     });
-    const issued = "id" in credit ? credit : credit;
-    const creditId = "id" in issued ? issued.id : (issued as { id: string }).id;
+    const creditId = credit.id;
     await ctx.callAsSystem(issueCreditNote, { id: creditId });
-    const invoice = await ctx.callAsSystem(getInvoice, { id: order.invoiceId });
-    const payment = invoice.payments.find((entry) => entry.status === "succeeded");
-    let refundId: string | null = null;
-    if (payment) {
-      const refundAmount = Math.min(amountMinor, payment.amountMinor - (payment.refundedMinor ?? 0));
+    const refundIds: string[] = [];
+    let outstanding = amountMinor;
+    for (const {payment,available} of allocations) {
+      const refundAmount = Math.min(outstanding, available);
       if (refundAmount > 0) {
         const refund = await ctx.callAsSystem(createRefund, {
           paymentId: payment.id,
           amountMinor: refundAmount,
-          idempotencyKey: `${input.idempotencyKey}:refund`,
+          idempotencyKey: `return:${row.id}:refund:${payment.id}`,
           reason: row.reason,
         });
-        await ctx.callAsSystem(settleRefund, { id: refund.id, providerRef: `return:${row.id}` });
-        refundId = refund.id;
+        await ctx.callAsSystem(settleRefund, { id: refund.id, providerRef: `manual-return:${row.id}:${payment.id}` });
+        refundIds.push(refund.id);
+        outstanding -= refundAmount;
       }
     }
+    if (outstanding !== 0) throw new ServiceError("conflict", "The whole offline refund must be recorded before closing this return.");
+    const refundId = refundIds[0]!;
     await ctx.tx
       .update(returnRequests)
       .set({ status: "refunded", creditNoteId: creditId, refundId, updatedAt: sql`now()` })
@@ -919,7 +942,8 @@ export const refundReturn = defineService({
       .from(returnRequests)
       .where(and(eq(returnRequests.orderId, order.id), ne(returnRequests.status, "rejected")));
     const allRefunded = remaining.every((entry) => entry.status === "refunded");
-    if (allRefunded && invoice.invoice.status === "refunded") {
+    const settledInvoice = await ctx.callAsSystem(getInvoice, { id: order.invoiceId });
+    if (allRefunded && settledInvoice.invoice.status === "refunded") {
       await ctx.tx.update(orders).set({ status: "refunded", updatedAt: sql`now()` }).where(eq(orders.id, order.id));
     }
     await ctx.emitTimeline({
@@ -927,14 +951,14 @@ export const refundReturn = defineService({
       eventType: "return.refunded",
       subjectType: "return",
       subjectId: row.id,
-      payload: { orderId: order.id, creditNoteId: creditId, refundId },
+      payload: { orderId: order.id, creditNoteId: creditId, refundId, refundIds },
     });
     await notifyContact(
       ctx,
       row.contactId,
       "return.refunded",
-      "Your refund is on the way",
-      "The returned items were credited on the original invoice.",
+      "Your refund was recorded",
+      "The returned items were credited and your offline refund was recorded on the original invoice.",
       `return-refunded:${row.id}`,
     );
     ctx.queueEvent("catalog.returnRefunded", { returnId: row.id, creditNoteId: creditId, refundId });

@@ -190,6 +190,32 @@ claim/apply phases and their system elevation, and per-client rate limits
 where no trusted client-IP header is set. This is agent work, not independent
 review. C11.10 stays open.
 
+## Return refund evidence (C5.19/C11.10)
+
+The audit reproduced `catalog.refundReturn` recording a purported provider
+refund without contacting the provider, closing a return after refunding only
+the first payment's available balance, and failing a safe replay of an
+installment return. The repair reserves and settles only fully covered,
+human-attested offline refunds, requires fresh verification, refuses agent
+keys/personal keys/plugins, and binds credit/refund identities to the return
+and original payments. Return requests lock their order and bound quantities
+across duplicate lines and previous non-rejected returns. Review these
+boundaries in `src/modules/catalog/fulfillment.ts` and
+`tests/core/catalog-fulfillment.test.ts`.
+
+Three pre-repair regressions reproduced the failures. All 11 repaired
+financial/manual journey cases and eight live SDK checks passed. Four real
+Chromium owner journeys cover explicit confirmation and full installment
+recording, keyboard use, 320px, both-theme Axe scans and all four locales in
+`tests/browser/return-refund.spec.ts`. Settlements are seeded offline evidence,
+not a real provider transaction. The production build/artifact scrub passed.
+
+C5.19 is reopened for complete provider-to-return reconciliation, correct
+discount/tax handling and localized owner/customer acceptance. Refusing to
+invent a hosted refund is a safety repair; it does not complete that journey
+or supply C11.10 sign-off. Historical/manual C11.02 evidence retains its
+explicit scope. No historical ledger was rewritten by this repair.
+
 ## How to use this packet
 
 1. Read `SECURITY.md` for reporting, dependency policy, and 2FA/recovery.
