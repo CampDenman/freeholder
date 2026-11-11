@@ -69,7 +69,7 @@ const GALLERY_MAX = 24;
 export type WordpressStatus = "publish" | "draft";
 
 export type WordpressTerm = { slug: string; name: string; parentSlug?: string; description?: string };
-export type WordpressComment = { id: string; parentId?: string; name: string; email: string | null; body: string; status: "pending" | "approved" | "spam" | "trash"; createdAt?: string };
+export type WordpressComment = { id: string; parentId?: string; name: string; email: string | null; /** Existing unified contact, bound only by the staging service. */ contactId?: string; body: string; status: "pending" | "approved" | "spam" | "trash"; createdAt?: string };
 
 export type WordpressSeo = { title?: string; description?: string; preserveTitle?: boolean; preserveDescription?: boolean; noindex?: boolean; nofollow?: boolean; canonical?: string; ogTitle?: string; ogDescription?: string; ogImage?: string };
 

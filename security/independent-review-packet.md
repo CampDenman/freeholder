@@ -713,3 +713,42 @@ reentrancy boundaries alongside `tests/core/orchestration-permissions.test.ts`.
 This source evidence does not complete the independent review.
 
 The follow-up review of the saved-card repair reproduced a partial-metadata setup event bypass: a contact-only expanded payload reached the older normalizer. The repaired boundary ignores setup events missing either contact or subscription binding before normalized events can be returned. The new regression failed before repair; all 30 provider edge controls and the complete static gates passed afterward. This remains source evidence, not independent security sign-off or provider acceptance.
+## Import reader-source erasure (C2.29/C3.22/C11.10)
+
+Four actual PostgreSQL regressions reproduced retained cached reader details
+and recreation through queued cutover, an older opaque upload and an existing
+reader's changed address. Review `src/core/import/privacy.ts`, its contact
+merge/undo pointers, shared CMS contact binding and import publication row locks
+against `tests/core/import-source-privacy.test.ts`. Migration 0069 follows 0068
+and preserves page/media recovery while quarantining ambiguous legacy reader
+input; SQL refuses cutover by the prior image. Named reader holds stay explicit.
+`deploy/import-reader-privacy.md` describes the source recovery and scope. These
+agent-authored repairs and regression runs do not provide independent sign-off.
+
+Review of the reader binding increment also reproduced an exact source-preview
+key learning the existing CRM ID despite contact-read refusal. Explicit public
+run/list projections now remove internal reader bindings while the ledger keeps
+them for privacy and merge. The regression failed before projection and passes
+after it; schemas or production validation fallbacks do not enforce this
+redaction boundary. This is still agent source evidence, not independent review.
+
+Further actual controls reproduced a new import appearing after merge snapshot
+and defeating capture-only NOWAIT, a legacy cache losing its address match, and
+a merged duplicate's audit payload surviving erasure. Both merge pointer phases
+now refuse contention; `src/core/privacy/contact-identity.ts` supplies active
+owned IDs and recorded addresses to reader matching and audit export/erasure.
+Strict empty-payload equality failed against the original audit path and passes
+after repair, while immutable actor/action/subject metadata and undone third
+parties remain separate. These are source regressions, not independent sign-off.
+
+The refreshed import increment consumes the separate contact-history repair in
+PR #662. Its final integrated local run passes 62 checks, all eight SDK controls,
+368 contracts (one deliberate exclusion), and the production artifact scrub
+(19,399 files, 236,789,859 bytes). These checks are engineering evidence; Tony's
+independent review and source-specific acceptance remain outstanding.
+
+After merged-core integration, a fresh contiguous-schema run passed 44 checks
+and the production scrub passed 19,423 files / 237,159,757 bytes. A separate
+actual follow-up reproduced a completed erasure receipt with reader details
+still in an opaque original WXR object. The parsed-cache repair does not cover
+that provider acknowledgement; raw-object work remains required before sign-off.

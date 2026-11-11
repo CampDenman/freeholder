@@ -4952,6 +4952,16 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 - [ ] **C2.29** Public blog comments: moderated threads with owner controls,
   spam/honeypot and rate limits, unified contacts resolution/merge/privacy,
   notifications and WordPress comment import. Never expose a comment email.
+  *(Import-reader privacy repair 2026-11-11: actual PostgreSQL repros found
+  retained preview details and queued cutover/upload/address-change paths
+  recreating erased reader contacts or comments. Cached readers now join
+  shared export/erasure, known contact identity and merge/undo; publication
+  serializes against erasure. Migration 0069 follows 0068, clears redundant
+  legacy copies and requires source review/rollback/re-import for ambiguous
+  inputs, with prior-image cutover refused by SQL. Named reader holds retain
+  their scope. Evidence and limits: `deploy/import-reader-privacy.md`,
+  `tests/core/import-source-privacy.test.ts`. Independent review and actual
+  source-specific acceptance remain open.)*
   *(Implementation and qualification in progress 2026-11-07; owner: CMS/importer.
   Reproductions: a live replacement exposed imported post metadata before
   cutover; direct public metadata/comment queries could bypass a registered

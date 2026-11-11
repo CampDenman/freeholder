@@ -8,6 +8,7 @@ import { defineService, getService, ServiceError } from "@/core/service";
 import { resolveContact, registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { users } from "@/core/auth/schema";
+import { contacts } from "@/core/contacts/schema";
 import { pages } from "./schema";
 import { blogPosts } from "./blog-schema";
 import { blogReaderComments as comments } from "./blog-comments-schema";
@@ -89,17 +90,19 @@ export const listReaderCommentsForOwner = defineService({
 export const importReaderComment = defineService({
   name: "cms.importReaderComment", summary: "Import one WordPress reader comment idempotently, preserving its date and moderation state.",
   kind: "mutation", permission: "scoped", writeClass: "message",
-  input: z.object({ runId: uuid, externalId: z.string().min(1).max(200), pageId: uuid, parentId: uuid.nullable().optional(), name: z.string().min(1).max(200), email: z.string().email().nullable(), body: z.string().min(1).max(10000), status: state, createdAt: z.iso.datetime({ offset: true }).optional() }), output: privateRow,
+  input: z.object({ runId: uuid, externalId: z.string().min(1).max(200), pageId: uuid, parentId: uuid.nullable().optional(), name: z.string().min(1).max(200), email: z.string().email().nullable(), sourceContactId: uuid.optional(), body: z.string().min(1).max(10000), status: state, createdAt: z.iso.datetime({ offset: true }).optional() }), output: privateRow,
   handler: async (input, ctx) => {
     const source = `import:${input.runId}`;
     const [prior] = await ctx.tx.select().from(comments).where(and(eq(comments.source, source), eq(comments.externalId, input.externalId))).limit(1);
     if (prior) return prior;
-    const resolved = input.email ? await ctx.callAsSystem(resolveContact, { name: input.name, email: input.email, source: "wordpress-comment" }) : null;
+    const bound = input.sourceContactId ? (await ctx.tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.id, input.sourceContactId)).limit(1))[0] : undefined;
+    if (input.sourceContactId && !bound) throw new ServiceError("conflict", "The imported reader's contact changed. Review the source before importing this comment.");
+    const resolved = !bound && input.email ? await ctx.callAsSystem(resolveContact, { name: input.name, email: input.email, source: "wordpress-comment" }) : null;
     if (input.parentId) {
       const [parent] = await ctx.tx.select({ id: comments.id }).from(comments).where(and(eq(comments.id, input.parentId), eq(comments.pageId, input.pageId))).limit(1);
       if (!parent) throw new ServiceError("validation", "The imported parent comment belongs to another post.");
     }
-    const [saved] = await ctx.tx.insert(comments).values({ source, externalId: input.externalId, pageId: input.pageId, parentId: input.parentId ?? null, authorName: input.name, body: input.body, status: input.status, contactId: resolved?.contact.id ?? null, ...(input.createdAt ? { createdAt: new Date(input.createdAt) } : {}) }).returning();
+    const [saved] = await ctx.tx.insert(comments).values({ source, externalId: input.externalId, pageId: input.pageId, parentId: input.parentId ?? null, authorName: input.name, body: input.body, status: input.status, contactId: bound?.id ?? resolved?.contact.id ?? null, ...(input.createdAt ? { createdAt: new Date(input.createdAt) } : {}) }).returning();
     ctx.setSubject("blog_comment", saved!.id); return saved!;
   },
 });

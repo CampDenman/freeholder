@@ -26,6 +26,7 @@ import { storage } from "@/adapters/storage";
 import { DEFAULT_IMPORTER_LIMITS } from "./contract";
 import { stageImportSource, stageWordpressExport } from "./service";
 import { assertSourceStageable } from "./source-lifecycle";
+import { assertReaderUploadWindow, bindReaderSources } from "./privacy";
 import { wordpressExportBuilder } from "./wordpress";
 
 /**
@@ -358,13 +359,14 @@ const applyUploaded = defineService({
     if (!upload || upload.uploadId !== input.uploadId) {
       throw new ServiceError("conflict", "That upload was replaced while it was being read.");
     }
+    if (input.preview) await assertReaderUploadWindow(ctx.tx, input.preview, new Date(Date.parse(upload.expiresAt) - UPLOAD_TTL_MS));
     delete checkpoint.sourceUpload;
     checkpoint.source = { filename: upload.filename, bytes: upload.bytes, stagedAt: new Date().toISOString() };
     await ctx.tx
       .update(importRuns)
       .set(
         input.preview && input.counts
-          ? { status: "previewed", preview: input.preview, counts: input.counts, error: null, checkpoint }
+          ? { status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview), counts: input.counts, error: null, checkpoint }
           : { status: "failed", error: input.error ?? "That file could not be read.", checkpoint },
       )
       .where(eq(importRuns.id, run.id));
