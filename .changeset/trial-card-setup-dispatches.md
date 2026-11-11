@@ -13,4 +13,4 @@ Limit generic setup/recovery audit inputs to operation identities and outcomes; 
 
 Require subscription management and fresh human verification to inspect private recovery evidence through the API as well as the UI. Let authorized managers review the exact recorded evidence.
 
-Preserve safe contact merge undo by comparing locked setup/dispatch fingerprints without copying personal inputs into recovery snapshots. New or changed provider work blocks unsafe identity separation; upgrade and prior-image merge records retain this undo boundary.
+Preserve safe contact merge undo by comparing locked setup/dispatch fingerprints without copying personal inputs into recovery snapshots. The combined history is bounded to 5,000 records; overflow makes the merge non-undoable, and later growth beyond the bound refuses separation. New or changed provider work blocks unsafe identity separation; upgrade and prior-image merge records retain this undo boundary.

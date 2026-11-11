@@ -283,7 +283,12 @@ following a subscription back to the separated person. Setup/dispatch state now
 participates in the parent's undo boundary through exact locked fingerprints;
 merge history stores only IDs/hashes, never another copy of customer inputs.
 Unchanged pre-merge requests remain undoable, while new or changed provider
-work refuses separation. Migration70 seeds empty witnesses for pre-existing
+work refuses separation. Two ordered queries bound the combined setup and
+physical-dispatch witness to 5,000 records; either overflow records a
+non-undoable merge with no partial snapshot. Later overflow also refuses undo,
+so rows outside a capped prefix cannot escape the identity boundary. Actual
+over-cap controls cover parent records, child dispatches and later growth.
+Migration70 seeds empty witnesses for pre-existing
 active operations and fences prior-image inserts that omit the new family;
 the populated upgrade rehearsal verifies both protections without inventing
 any provider records.

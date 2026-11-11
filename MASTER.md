@@ -13239,7 +13239,9 @@ whatever is best for the people using the site.
   evidence separately from machine responses; completed resources also undergo
   positive original-account checks. Merge undo fingerprints private setup and
   dispatch state without copying inputs and refuses later provider work crossing
-  separated identities; unchanged requests stay undoable. Legacy merge records
+  separated identities; unchanged requests stay undoable. Setup plus physical
+  dispatch history is bounded to 5,000 records; overflow is non-undoable and
+  later overflow refuses separation without comparing a partial prefix. Legacy merge records
   receive the new undo witness. SQL fences old-image trial/erasure shortcuts.
   Four-locale owner recovery and customer exact-card journeys use shared
   services. `tests/modules/subscription-billing.test.ts`,

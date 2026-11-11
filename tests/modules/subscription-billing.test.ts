@@ -45,7 +45,7 @@ import {createDataRequest,verifyDataRequest,fulfillDataRequest,completeErasureJo
 import {dataRequests} from "@/core/privacy/schema";
 import {auditLog} from "@/core/events/schema";
 import {reconcileTrialSetupDispatch,listTrialSetupDispatches} from "@/modules/subscriptions/setup-reconciliation";
-import {setupRequest} from "@/modules/subscriptions/card-setup";
+import {setupRequest,MAX_SETUP_UNDO_RECORDS} from "@/modules/subscriptions/card-setup";
 import {getJob,type JobExecutionContext} from "@/core/jobs";
 import {eraseTrialSetupCustomers} from "@/modules/subscriptions/setup-erasure";
 import {erasePaymentProviderCustomer} from "@/modules/invoicing/provider-erasure";
@@ -1229,6 +1229,42 @@ describe.runIf(hasDatabase)("subscription billing", () => {
       expect((await db().select().from(subscriptions).where(eq(subscriptions.id,joined.id)))[0]!.contactId).toBe(contact.id);
       expect((await db().select().from(subscriptionCardSetups))[0]!.request).toMatchObject({contactId:contact.id,customer:{email:contact.email}});
     }
+  });
+
+
+  it.each(["setup","dispatch"] as const)("marks an over-cap %s witness non-undoable without retaining a truncated prefix",async family=>{
+    const {contact,joined}=await pausedCardTrial(`setup-cap-${family}`),survivor=await person(`setup-cap-root-${family}`);
+    mocks.createSetupCustomer.mockRejectedValue(new Error("Synthetic unresolved provider creation"));
+    await expect(beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER)).rejects.toMatchObject({code:"conflict"});
+    const [attempt]=await db().select().from(subscriptionCardSetups),[dispatch]=await db().select().from(subscriptionSetupDispatches);
+    if(family==="setup"){
+      const createdAt=new Date("2020-01-01T00:00:00Z"),closedAt=new Date("2020-01-02T00:00:00Z");
+      const rows=Array.from({length:MAX_SETUP_UNDO_RECORDS},(_,index)=>{
+        const id=randomUUID(),request=setupRequest.parse({...attempt!.request,setupAttemptId:id,idempotencyKey:`trial-card:${joined.id}:${id}`});
+        return {id,subscriptionId:joined.id,provider:"stripe",request,requestHash:createHash("sha256").update(JSON.stringify(request)).digest("hex"),providerCustomerRef:"cus_Capacity",providerCheckoutRef:`cs_Capacity${index}`,createdAt,closedAt,closedReason:"expired"};
+      });
+      await db().insert(subscriptionCardSetups).values(rows);
+    }else{
+      await db().insert(subscriptionSetupDispatches).values(Array.from({length:MAX_SETUP_UNDO_RECORDS},()=>({setupId:attempt!.id,kind:"customer" as const,state:"unknown" as const,requestHash:dispatch!.requestHash,initiatedBy:"synthetic-capacity-history",finishedAt:new Date()})));
+    }
+    const merged=await mergeContacts.call({survivingId:survivor.id,duplicateId:contact.id},OWNER);
+    const [operation]=await db().select().from(contactMergeOperations).where(eq(contactMergeOperations.id,merged.mergeOperationId));
+    expect(operation!.undoable).toBe(false);
+    expect(operation!.undoBlockers.some(item=>item.includes("safe undo limit"))).toBe(true);
+    const witness=(operation!.referenceState as Array<{table:string;before:unknown;after:unknown}>).find(item=>item.table==="subscription_card_setups")!;
+    expect(witness).toEqual({table:"subscription_card_setups",before:[],after:[]});
+    await expect(undoContactMerge.call({operationId:merged.mergeOperationId},OWNER)).rejects.toMatchObject({code:"conflict"});
+  });
+
+  it("refuses later dispatch overflow instead of comparing only a previously captured prefix",async()=>{
+    const {contact,joined}=await pausedCardTrial("setup-later-cap"),survivor=await person("setup-later-cap-root");
+    mocks.createSetupCustomer.mockRejectedValue(new Error("Synthetic unresolved provider creation"));
+    await expect(beginTrialCardSetup.call({subscriptionId:joined.id,saveMethodConsent:true},CUSTOMER)).rejects.toMatchObject({code:"conflict"});
+    const [attempt]=await db().select().from(subscriptionCardSetups),[dispatch]=await db().select().from(subscriptionSetupDispatches);
+    const merged=await mergeContacts.call({survivingId:survivor.id,duplicateId:contact.id},OWNER);
+    await db().insert(subscriptionSetupDispatches).values(Array.from({length:MAX_SETUP_UNDO_RECORDS},()=>({setupId:attempt!.id,kind:"customer" as const,state:"unknown" as const,requestHash:dispatch!.requestHash,initiatedBy:"synthetic-later-capacity-history",finishedAt:new Date()})));
+    await expect(undoContactMerge.call({operationId:merged.mergeOperationId},OWNER)).rejects.toMatchObject({code:"conflict"});
+    expect((await db().select().from(subscriptions).where(eq(subscriptions.id,joined.id)))[0]!.contactId).toBe(survivor.id);
   });
 
 });

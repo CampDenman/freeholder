@@ -79,23 +79,30 @@ export async function applySetupEvidence(tx:Tx,input:{attemptId:string;methodId:
 }
 
 
-const setupUndoState=z.array(z.object({id:z.uuid(),fingerprint:z.string().regex(/^[a-f0-9]{64}$/)}));
+export const MAX_SETUP_UNDO_RECORDS=5_000;
+const setupUndoState=z.array(z.object({kind:z.enum(["setup","dispatch"]),id:z.uuid(),fingerprint:z.string().regex(/^[a-f0-9]{64}$/)})).max(MAX_SETUP_UNDO_RECORDS);
 async function setupIdentityState(tx:Tx,duplicateId:string,survivingId:string){
- const rows=await tx.select({id:subscriptionCardSetups.id,material:sql<string>`jsonb_build_object(
-  'setup',to_jsonb(${subscriptionCardSetups}),
-  'dispatches',coalesce((select jsonb_agg(to_jsonb(dispatch) order by dispatch.id) from ${subscriptionSetupDispatches} dispatch where dispatch.setup_id=${subscriptionCardSetups.id}),'[]'::jsonb)
- )::text`}).from(subscriptionCardSetups).innerJoin(subscriptions,eq(subscriptions.id,subscriptionCardSetups.subscriptionId)).where(inArray(subscriptions.contactId,[duplicateId,survivingId])).orderBy(subscriptionCardSetups.id).for("update",{of:subscriptionCardSetups});
- // Never copy frozen customer inputs or provider evidence into merge history.
- return rows.map(row=>({id:row.id,fingerprint:createHash("sha256").update(row.material).digest("hex")}));
+ const parents=await tx.select({id:subscriptionCardSetups.id,material:sql<string>`to_jsonb(${subscriptionCardSetups})::text`}).from(subscriptionCardSetups).innerJoin(subscriptions,eq(subscriptions.id,subscriptionCardSetups.subscriptionId)).where(inArray(subscriptions.contactId,[duplicateId,survivingId])).orderBy(subscriptionCardSetups.id).limit(MAX_SETUP_UNDO_RECORDS+1).for("update",{of:subscriptionCardSetups});
+ if(parents.length>MAX_SETUP_UNDO_RECORDS)return {state:[],overflow:true};
+ const remaining=MAX_SETUP_UNDO_RECORDS-parents.length;
+ const dispatches=parents.length?await tx.select({id:subscriptionSetupDispatches.id,material:sql<string>`to_jsonb(${subscriptionSetupDispatches})::text`}).from(subscriptionSetupDispatches).where(inArray(subscriptionSetupDispatches.setupId,parents.map(row=>row.id))).orderBy(subscriptionSetupDispatches.id).limit(remaining+1):[];
+ if(dispatches.length>remaining)return {state:[],overflow:true};
+ // Parent locks serialize every legitimate dispatch writer. Never aggregate
+ // unbounded child history or copy personal inputs into merge snapshots.
+ const fingerprint=(row:{id:string;material:string},kind:"setup"|"dispatch")=>({kind,id:row.id,fingerprint:createHash("sha256").update(row.material).digest("hex")});
+ return {state:[...parents.map(row=>fingerprint(row,"setup")),...dispatches.map(row=>fingerprint(row,"dispatch"))],overflow:false};
 }
 registerContactReference({
  table:"subscription_card_setups",columns:[],
  // The subscription owns the pointer. Original provider metadata is immutable.
  repoint:async()=>{},
- captureForUndo:async(tx,duplicateId,survivingId)=>({state:await setupIdentityState(tx,duplicateId,survivingId),undoable:true}),
+ captureForUndo:async(tx,duplicateId,survivingId)=>{
+  const snapshot=await setupIdentityState(tx,duplicateId,survivingId);
+  return {state:snapshot.state,undoable:!snapshot.overflow,...(snapshot.overflow?{blocker:"Card-setup history exceeds the safe undo limit, so this merge cannot be undone."}:{})};
+ },
  restoreAfterUndo:async(tx,_before,after,duplicateId,survivingId)=>{
   const expected=setupUndoState.parse(after),current=await setupIdentityState(tx,duplicateId,survivingId);
-  if(JSON.stringify(current)!==JSON.stringify(expected))throw new ServiceError("conflict","A card-setup request changed after this merge. Leave the merge in place and reconcile its original provider work before separating identities.");
+  if(current.overflow || JSON.stringify(current.state)!==JSON.stringify(expected))throw new ServiceError("conflict","A card-setup request changed or exceeded the safe undo limit. Leave the merge in place and reconcile its original provider work before separating identities.");
  },
 });
 
