@@ -325,7 +325,7 @@ async function receiptView(payment:typeof payments.$inferSelect,ctx:ServiceConte
   return{status:payment.status,currency:payment.currency,amountMinor:payment.amountMinor,...invoiceIssuer(policy)};
 }
 export const customerPaymentReceipt = defineService({
-  name: "invoicing.customerPaymentReceipt", summary: "Read only the payment status and amount from its private provider-return link.",
+  name: "invoicing.customerPaymentReceipt", summary: "Read the original public supplier, payment status and amount from its private provider-return link.",
   kind: "query", permission: "public", input: receiptAccess, output: receipt,
   handler: async (input, ctx) => receiptView(await authorizedPayment(input.token, ctx),ctx),
 });

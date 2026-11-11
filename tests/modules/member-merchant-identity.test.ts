@@ -141,6 +141,16 @@ describe.runIf(hasDatabase)("frozen merchant commercial identity (C12.38)",()=>{
   expect(await db().select().from(memberPayoutAccounts).where(eq(memberPayoutAccounts.userId,SELLER.userId))).toHaveLength(0);
   expect((await db().select().from(invoiceMarketPolicies))[0]).toMatchObject({merchantSupport:null,merchantName:"[privacy-erased-merchant]"});
  });
+ it("preserves an earlier request's commercial hold until explicit release across a later erasure",async()=>{
+  await issued();const first=await request("erasure"),hold=await addRetentionException.call({dataRequestId:first,scope:"members.merchantIdentity",reason:"accounting_tax",legalBasis:"Keep the original supplier identity while this specific accounting review remains active."},OWNER);
+  await fulfillDataRequest.call({id:first,confirmation:"ERASE"},OWNER);
+  const later=await fulfillDataRequest.call({id:await request("erasure"),confirmation:"ERASE"},OWNER);
+  expect(later.request.status).toBe("partially_completed");
+  expect((await db().select().from(invoiceMarketPolicies))[0]).toMatchObject({merchantSupport:support,merchantContactId:sellerContact});
+  await removeRetentionException.call({id:hold.id},OWNER);
+  await fulfillDataRequest.call({id:await request("erasure"),confirmation:"ERASE"},OWNER);
+  expect((await db().select().from(invoiceMarketPolicies))[0]).toMatchObject({merchantSupport:null,merchantName:"[privacy-erased-merchant]"});
+ });
  it("repoints commercial ownership on contact merge and restores unchanged documents without copying support into recovery history",async()=>{
   const {invoice,started}=await issued(),other=(await resolveContact.call({email:"merchant-duplicate@example.test",name:"Same merchant duplicate"},OWNER)).contact;
   const merged=await mergeContacts.call({duplicateId:sellerContact,survivingId:other.id},OWNER);

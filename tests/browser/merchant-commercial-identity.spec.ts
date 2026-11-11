@@ -54,7 +54,7 @@ test.describe("original public commercial identity (C12.38)",()=>{
  test.afterAll(closeDb);
  for(const locale of["en","es","fr","ar"]as const){
   test(`${locale}: original invoice support and current seller preview stay distinct`,async({browser})=>{
-   const seeded=await fixture(locale),context=await browser.newContext({baseURL:C11_BASE_URL,viewport:{width:320,height:900}}),page=await context.newPage();
+   const seeded=await fixture(locale),context=await browser.newContext({baseURL:C11_BASE_URL,locale,viewport:{width:320,height:900}}),page=await context.newPage();
    try{
     await context.addCookies([{name:SESSION_COOKIE,value:seeded.buyerSession,url:C11_BASE_URL}]);
     for(const theme of["light","dark"]){
@@ -70,15 +70,20 @@ test.describe("original public commercial identity (C12.38)",()=>{
     await db().update(businessProfile).set({name:"Replacement Platform"}).where(eq(businessProfile.id,1));
     await db().update(memberPayoutAccounts).set({merchantName:"Replacement Studio",merchantSupport:replacement,externalAccountId:"acct_ReplacementCommercial"}).where(eq(memberPayoutAccounts.userId,seeded.sellerId));
     await page.reload();await expect(page.getByRole("link",{name:support.email,exact:true})).toBeVisible();await expect(page.locator("main#main > header")).not.toContainText("Replacement");
-    await context.clearCookies();await context.addCookies([{name:SESSION_COOKIE,value:seeded.sellerSession,url:C11_BASE_URL}]);await page.goto("/portal/payouts");
-    await expect(page.getByRole("heading",{name:messages[locale]["members.payouts.businessDetails"],exact:true})).toBeVisible();
-    await expect(page.getByRole("link",{name:replacement.email,exact:true})).toBeVisible();await expect(page.getByText("Replacement Studio",{exact:true})).toBeVisible();
-    await expect(page.getByRole("link",{name:support.email,exact:true})).toHaveCount(0);
-    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth)).toBe(true);
+    await context.clearCookies();await context.addCookies([{name:SESSION_COOKIE,value:seeded.sellerSession,url:C11_BASE_URL}]);
+    for(const theme of["light","dark"]){
+     await context.addCookies([{name:THEME_COOKIE,value:theme,url:C11_BASE_URL}]);await page.goto("/portal/payouts");
+     await expect(page.getByRole("heading",{name:messages[locale]["members.payouts.businessDetails"],exact:true})).toBeVisible();
+     await expect(page.getByRole("link",{name:replacement.email,exact:true})).toBeVisible();await expect(page.getByText("Replacement Studio",{exact:true})).toBeVisible();
+     await expect(page.getByRole("link",{name:support.email,exact:true})).toHaveCount(0);
+     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth)).toBe(true);
+     expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+     await page.screenshot({path:test.info().outputPath(`${locale}-${theme}-seller-public-business.png`),fullPage:true});
+    }
    }finally{await context.close();}
   });
   test(`${locale}: pending receipt stays truthful and never becomes platform-branded after supplier removal`,async({browser})=>{
-   const seeded=await fixture(locale),context=await browser.newContext({baseURL:C11_BASE_URL,viewport:{width:320,height:900}}),page=await context.newPage(),token=paymentReturnToken(seeded.payment);
+   const seeded=await fixture(locale),context=await browser.newContext({baseURL:C11_BASE_URL,locale,viewport:{width:320,height:900}}),page=await context.newPage(),token=paymentReturnToken(seeded.payment);
    const path=`/portal/invoices/confirmation/${token}`;
    try{
     for(const theme of["light","dark"]){
