@@ -87,6 +87,15 @@ a direct charge/refund, and order/invoice recorders cannot duplicate earnings.
 Synthetic provider evidence and seeded browser setup are explicitly limited
 in the source document; they are not live-provider or independent acceptance.
 
+The later Stripe card-setup increment resolves an unexpanded SetupIntent only
+after raw signature/account validation, on the same account. Review succeeded
+off-session status, original reference, customer/method binding and matching
+contact/subscription metadata before the method enters the shared ledger.
+Incomplete evidence returns a retryable refusal without recording money or
+exposing client secrets. First-customer creation must wait for a durable
+request snapshot that freezes profile/customer/account inputs before I/O;
+that and exact fresh-session proof for reused cards remain C12.38 work.
+
 ## Authenticated provider-evidence boundary (C11.10)
 
 The audit found that `invoicing.processPaymentProviderEvents` was declared as

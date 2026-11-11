@@ -13030,6 +13030,14 @@ whatever is best for the people using the site.
   exact recurring tax/fee rounding, full setup/refund/recovery/erasure integration,
   complete localized journeys and actual provider acceptance remain required.
   See the source evidence document for the precise limits; C12.38 stays open.)*
+  Further source work 2026-11-11 resolves the unexpanded SetupIntent only
+  after exact-byte signature/account validation. Confirmed off-session usage,
+  customer/method identity and membership metadata must agree before saving
+  the method; setup never records money. First-customer creation, immutable
+  orchestration inputs and fresh session-bound proof for reused cards remain required, along
+  with the other full integration and actual provider acceptance above.
+  See `deploy/seller-merchant-source-2026-11-10.md` and changeset
+  `stripe-saved-card-evidence.md`; no direct model is enabled.
 - [ ] **C12.39** Move end-to-end encryption from `ts-mls` (not independently
   audited) to OpenMLS (audited by SRLabs), compiled to WebAssembly in CI and
   committed so deploys stay Node-only. Deferred by Tony on 2026-10-15; until
