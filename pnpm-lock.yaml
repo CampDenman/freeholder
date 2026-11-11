@@ -74,7 +74,7 @@ importers:
         version: 16.4.2(@opentelemetry/api@1.9.1)(@playwright/test@1.62.1)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       nodemailer:
         specifier: ^10.2.0
-        version: 10.2.0
+        version: 10.4.0
       parse5:
         specifier: 8.0.1
         version: 8.0.1
@@ -2305,8 +2305,8 @@ packages:
       encoding:
         optional: true
 
-  nodemailer@10.2.0:
-    resolution: {integrity: sha512-/XyGw6kX2stMdKGUJdAQmYAeY1FscWfdRydfd2NtK3A3KDfUUXCqZzExSNAt2xhh90X2qLCR+o2Gd48YPJcJwA==}
+  nodemailer@10.4.0:
+    resolution: {integrity: sha512-fyy6r4Q5euRJ9Qr3Cts9K7SZrfe9zmz9oLOYiAR02MEJRDRci+99y0OoYBYBgpLffOqkkjXrB/d26VfiMje/kA==}
     engines: {node: '>=20.0.0'}
 
   non-error@0.1.0:
@@ -4791,7 +4791,7 @@ snapshots:
     dependencies:
       whatwg-url: 5.0.0
 
-  nodemailer@10.2.0: {}
+  nodemailer@10.4.0: {}
 
   non-error@0.1.0: {}
 
