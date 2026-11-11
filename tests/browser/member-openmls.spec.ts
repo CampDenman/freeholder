@@ -124,6 +124,25 @@ test.describe("existing member devices migrate to OpenMLS (C12.39)", () => {
     await expect(sam.page.getByText("First real tab concurrent send", { exact: true })).toBeVisible();
     await expect(sam.page.getByText("Second real tab concurrent send", { exact: true })).toBeVisible();
     await secondTab.close();
+    let lostAcceptedResponse = false;
+    await rae.page.route(`**/messages/${id}`, async route => {
+      const request = route.request();
+      if (!lostAcceptedResponse && request.method() === "POST" && request.headers()["next-action"] && request.postData()?.includes("frankTag")) {
+        const accepted = await route.fetch();
+        expect(accepted.ok()).toBe(true);
+        lostAcceptedResponse = true;
+        await route.abort("failed");
+      } else await route.continue();
+    });
+    await rae.page.locator("textarea[name=body]").fill("Accepted before browser response loss");
+    await rae.page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect.poll(() => lostAcceptedResponse).toBe(true);
+    await expect(rae.page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+    await rae.page.unroute(`**/messages/${id}`);
+    await rae.page.reload();
+    await expect(rae.page.getByText("Accepted before browser response loss", { exact: true })).toHaveCount(1);
+    await sam.page.reload();
+    await expect(sam.page.getByText("Accepted before browser response loss", { exact: true })).toHaveCount(1);
     const actualDevices = await rae.page.evaluate(async (conversationId) => {
       const open = indexedDB.open("freeholder-e2ee");
       const database = await new Promise<IDBDatabase>((resolve) => { open.onsuccess = () => resolve(open.result); });

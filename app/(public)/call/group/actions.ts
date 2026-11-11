@@ -22,7 +22,7 @@ async function run<T>(work: (actor: Awaited<ReturnType<typeof actorFromToken>>) 
 export async function startGroupCallAction(input: { conversationId: string; media: "voice" | "video" }) {
   return run((actor) => startGroupCall.call(input, actor));
 }
-export async function joinGroupCallAction(input: { id: string; deviceId: string }) {
+export async function joinGroupCallAction(input: { id: string; deviceId: string; generation?: number }) {
   return run((actor) => joinGroupCall.call(input, actor));
 }
 export async function leaveGroupCallAction(input: { id: string }) {

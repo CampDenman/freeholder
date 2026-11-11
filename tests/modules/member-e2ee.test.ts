@@ -7,18 +7,25 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
+import { contacts } from "@/core/contacts/schema";
+import { resolveContact } from "@/core/contacts/service";
+import { createDataRequest, verifyDataRequest, fulfillDataRequest } from "@/core/privacy/service";
 import { ready } from "@/core/runtime";
 import { joinSite, updateMyMembership } from "@/modules/members/service";
 import { followMember } from "@/modules/members/graph";
 import { leaveConversation, sendMessage, startConversation, unsendMessage, viewConversation } from "@/modules/members/messages";
 import { reportContent } from "@/modules/members/reports";
 import { claimKeyPackages, e2eeSync, registerDevice, revokeDevice, sendEncrypted } from "@/modules/members/e2ee/service";
-import { E2eeDevice, type E2eeStore } from "@/modules/members/e2ee/engine";
+import { E2eeDevice, MAX_UNCONFIRMED_OUTGOING, type E2eeStore } from "@/modules/members/e2ee/engine";
+import { startGroupCall } from "@/modules/members/group-calls";
+import { setSfuForTests } from "@/modules/members/sfu";
 import { deviceFor, memoryStore, directTransport } from "../helpers/e2ee";
 import { LegacyE2eeDevice } from "../helpers/legacy-e2ee";
-import { memberKeyPackages, memberReports, memberSealedBlobs } from "@/modules/members/schema";
+import { memberKeyPackages, memberReports, memberSealedBlobs, memberConversations, memberProfiles } from "@/modules/members/schema";
 import { purgeSealedBlobs, sealedBlobAccess, uploadSealedBlob } from "@/modules/members/sealed-blobs";
-import { openFile, sealFile } from "@/modules/members/e2ee/wire";
+import { openFile, sealFile, b64, utf8 } from "@/modules/members/e2ee/wire";
+import { openMls } from "@/modules/members/e2ee/crypto";
+import { deliveryAuthority } from "@/modules/members/e2ee/authority";
 import { storage } from "@/adapters/storage";
 import { requestHistory } from "@/modules/members/e2ee/history";
 import { memberHistoryTransfers } from "@/modules/members/schema";
@@ -88,7 +95,7 @@ describe.runIf(hasDatabase)("end-to-end encrypted messages (C12.23)", () => {
     await revokeDevice.call({ deviceId: tabletId }, SAM);
     const deviceId = (await rae.device()).deviceId;
     const stale = await e2eeSync.call({ conversationId: id, deviceId, after: 0 }, RAE);
-    expect((await failure(sendEncrypted.call({ conversationId: id, deviceId, epoch: stale.epoch!, ciphertext: "AAAA", frankTag: "A".repeat(43) + "=", attachments: [] }, RAE))).code).toBe("conflict");
+    expect((await failure(sendEncrypted.call({ conversationId: id, deviceId, epoch: stale.epoch!, authority: "0".repeat(64), ciphertext: "AAAA", frankTag: "A".repeat(43) + "=", attachments: [] }, RAE))).code).toBe("conflict");
     await rae.send(id, "Changed plans: south gate");
     expect(await bodies(sam, id)).toContain("Changed plans: south gate");
     await expect(samTablet.sync(id)).rejects.toThrow(/removed/);
@@ -331,6 +338,340 @@ describe.runIf(hasDatabase)("end-to-end encrypted messages (C12.23)", () => {
     expect((await rae.sync(id)).ready).toBe(false);
     await expect(rae.send(id, "must wait for server")).rejects.toMatchObject({ code: "not_ready" });
     expect((await db().execute(sql`select count(*)::int as n from member_mls_groups`))[0]).toEqual({ n: 0 });
+  });
+
+  it("preserves a prepared commit while receiving another member's application message (C12.39)", { timeout: 60_000 }, async () => {
+    const store = memoryStore(), transport = directTransport(RAE);
+    const rae = new E2eeDevice(RAE.userId, store, transport, "Rae"), sam = deviceFor(SAM, "Sam");
+    const device = await rae.device();
+    await sam.device();
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await rae.send(id, "Before prepared refresh");
+    await sam.sync(id);
+    const saved = (await store.group(id))!;
+    const snapshot = JSON.parse(new TextDecoder().decode(saved.state!).split("\n").slice(1).join("\n")) as { value: { state: string } };
+    const fresh = await transport.sync({ conversationId: id, deviceId: device.deviceId, after: Number.MAX_SAFE_INTEGER });
+    const value = await openMls<{ state: string; pending: { commit: string } }>({ op: "commit", state: snapshot.value.state, context: { groupId: id, identity: { userId: RAE.userId, deviceId: device.deviceId, privateKey: b64(device.signKey), publicKey: b64(device.publicKey) }, directory: fresh.directory, entitled: fresh.entitled.map(entry => entry.deviceId), serverEpoch: fresh.epoch }, add: [], remove: [] });
+    // Simulate a closed browser after durable preparation, before transport.
+    const request = { conversationId: id, deviceId: device.deviceId, create: false, refresh: true, fromEpoch: fresh.epoch!, authority: await deliveryAuthority(id, fresh), commit: value.pending.commit, added: [], removed: [] };
+    await store.saveGroup(id, utf8("freeholder:openmls:v1\n" + JSON.stringify({ kind: "openmls", value, request })), saved.cursor);
+    let attemptedOnOldServer = false;
+    const olderServer = new E2eeDevice(RAE.userId, store, { ...transport,
+      async sync(input) { return { ...await transport.sync(input), deliveryFenceVersion: undefined }; },
+      async commit(input) { attemptedOnOldServer = true; return transport.commit(input); },
+    }, "Same device against older server");
+    expect((await olderServer.sync(id)).ready).toBe(false);
+    expect(attemptedOnOldServer).toBe(false);
+    await sam.send(id, "While the refresh was prepared");
+    const restarted = new E2eeDevice(RAE.userId, store, transport, "Same device after preparation");
+    const status = await restarted.sync(id);
+    expect(status.ready).toBe(true);
+    expect([...status.messages.values()].map(message => message.body)).toContain("While the refresh was prepared");
+    await restarted.send(id, "After recovered preparation");
+    expect(await bodies(sam, id)).toContain("After recovered preparation");
+  });
+
+  it("refuses ciphertext prepared for a device erased between encryption and delivery (C12.39/C11.10)", { timeout: 90_000 }, async () => {
+    await followMember.call({ handle: "rae" }, KIM);
+    await followMember.call({ handle: "kim" }, RAE);
+    const { contact } = await resolveContact.call({ email: "kim@example.test", name: "Kim" }, OWNER);
+    await db().update(contacts).set({ userId: KIM.userId }).where(eq(contacts.id, contact.id));
+    const erasure = await createDataRequest.call({ contactId: contact.id, request: { kind: "erasure" } }, OWNER);
+    await verifyDataRequest.call({ id: erasure.id, method: "Synthetic member erasure proof" }, OWNER);
+    const base = directTransport(RAE);
+    let eraseBeforeDelivery = false;
+    let staleAccepted = false;
+    let staleRefused = false;
+    const rae = new E2eeDevice(RAE.userId, memoryStore(), { ...base, async send(input) {
+      const stale = eraseBeforeDelivery;
+      if (stale) {
+        eraseBeforeDelivery = false;
+        await fulfillDataRequest.call({ id: erasure.id, confirmation: "ERASE" }, OWNER);
+      }
+      try {
+        const sent = await base.send(input);
+        if (stale) staleAccepted = true;
+        return sent;
+      } catch (error) {
+        if (stale && error && typeof error === "object" && "code" in error && error.code === "conflict") staleRefused = true;
+        throw error;
+      }
+    } }, "Rae");
+    const sam = deviceFor(SAM, "Sam"), kim = deviceFor(KIM, "Kim");
+    await Promise.all([rae.device(), sam.device(), kim.device()]);
+    const { id } = await startConversation.call({ handles: ["sam", "kim"], title: "Erasure fence proof" }, RAE);
+    await rae.send(id, "Before erasure");
+    await Promise.all([sam.sync(id), kim.sync(id)]);
+    eraseBeforeDelivery = true;
+    await rae.send(id, "Only the remaining devices may read this");
+    expect(staleAccepted).toBe(false);
+    expect(staleRefused).toBe(true);
+    expect(await bodies(sam, id)).toContain("Only the remaining devices may read this");
+  });
+
+  it("keeps legacy writers without an encryption-time authority witness read-only (C12.39)", { timeout: 60_000 }, async () => {
+    const rae = deviceFor(RAE, "Rae"), sam = deviceFor(SAM, "Sam");
+    await Promise.all([rae.device(), sam.device()]);
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await rae.send(id, "Current protected writer");
+    const deviceId = (await rae.device()).deviceId;
+    const epoch = (await e2eeSync.call({ conversationId: id, deviceId, after: 0 }, RAE)).epoch!;
+    const oldCall = sendEncrypted.call.bind(sendEncrypted) as (input: unknown, actor: Member) => Promise<unknown>;
+    expect((await failure(oldCall({ conversationId: id, deviceId, epoch, ciphertext: "AAAA", frankTag: "A".repeat(43) + "=", attachments: [] }, RAE))).code).toBe("validation");
+    expect((await viewConversation.call({ id }, SAM)).messages).toHaveLength(1);
+  });
+
+  it("refuses prepared group secrets after unchanged-epoch erasure and safely rebuilds the commit (C12.39)", { timeout: 90_000 }, async () => {
+    await followMember.call({ handle: "rae" }, KIM);
+    await followMember.call({ handle: "kim" }, RAE);
+    const { contact } = await resolveContact.call({ email: "kim@example.test", name: "Kim" }, OWNER);
+    await db().update(contacts).set({ userId: KIM.userId }).where(eq(contacts.id, contact.id));
+    const erasure = await createDataRequest.call({ contactId: contact.id, request: { kind: "erasure" } }, OWNER);
+    await verifyDataRequest.call({ id: erasure.id, method: "Synthetic prepared-commit erasure proof" }, OWNER);
+    const base = directTransport(RAE);
+    let erase = false, staleAccepted = false, staleRefused = false;
+    const rae = new E2eeDevice(RAE.userId, memoryStore(), { ...base, async commit(input) {
+      const stale = erase;
+      if (stale) { erase = false; await fulfillDataRequest.call({ id: erasure.id, confirmation: "ERASE" }, OWNER); }
+      try { const ack = await base.commit(input); if (stale) staleAccepted = true; return ack; }
+      catch (error) { if (stale && error && typeof error === "object" && "code" in error && error.code === "conflict") staleRefused = true; throw error; }
+    } }, "Rae");
+    const sam = deviceFor(SAM, "Sam"), kim = deviceFor(KIM, "Kim");
+    await Promise.all([rae.device(), sam.device(), kim.device()]);
+    const { id } = await startConversation.call({ handles: ["sam", "kim"], title: "Prepared commit fence" }, RAE);
+    await rae.send(id, "Before prepared commit");
+    await Promise.all([sam.sync(id), kim.sync(id)]);
+    const phone = deviceFor(SAM, "New entitled phone");
+    await phone.device();
+    erase = true;
+    await rae.send(id, "Only current devices receive group secrets");
+    expect(staleAccepted).toBe(false);
+    expect(staleRefused).toBe(true);
+    expect(await bodies(sam, id)).toContain("Only current devices receive group secrets");
+    expect(await bodies(phone, id)).toEqual(["Only current devices receive group secrets"]);
+  });
+
+  it("serializes an in-flight privacy erasure before a new encrypted snapshot (C12.39/C11.10)", { timeout: 90_000 }, async () => {
+    await followMember.call({ handle: "rae" }, KIM);
+    await followMember.call({ handle: "kim" }, RAE);
+    const { contact } = await resolveContact.call({ email: "kim@example.test", name: "Kim" }, OWNER);
+    await db().update(contacts).set({ userId: KIM.userId }).where(eq(contacts.id, contact.id));
+    const erasure = await createDataRequest.call({ contactId: contact.id, request: { kind: "erasure" } }, OWNER);
+    await verifyDataRequest.call({ id: erasure.id, method: "Synthetic locked erasure proof" }, OWNER);
+    const base = directTransport(RAE);
+    let observe = false, signalSync!: () => void;
+    const syncStarted = new Promise<void>(resolve => { signalSync = resolve; });
+    const deliveredEpochs: number[] = [];
+    const rae = new E2eeDevice(RAE.userId, memoryStore(), { ...base,
+      async sync(input) { if (observe) signalSync(); return base.sync(input); },
+      async send(input) { if (observe) deliveredEpochs.push(input.epoch); return base.send(input); },
+    }, "Rae");
+    const sam = deviceFor(SAM, "Sam"), kim = deviceFor(KIM, "Kim");
+    await Promise.all([rae.device(), sam.device(), kim.device()]);
+    const { id } = await startConversation.call({ handles: ["sam", "kim"], title: "Locked erasure proof" }, RAE);
+    await rae.send(id, "Before locked erasure");
+    await Promise.all([sam.sync(id), kim.sync(id)]);
+    let release!: () => void, acquired!: () => void;
+    const unlock = new Promise<void>(resolve => { release = resolve; });
+    const locked = new Promise<void>(resolve => { acquired = resolve; });
+    const mutex = db().transaction(async tx => {
+      await tx.select({ id: memberConversations.id }).from(memberConversations).where(eq(memberConversations.id, id)).for("update");
+      acquired(); await unlock;
+    });
+    await locked;
+    const erasing = fulfillDataRequest.call({ id: erasure.id, confirmation: "ERASE" }, OWNER);
+    let sending: Promise<string | null> | undefined;
+    try {
+      await expect.poll(async () => {
+        try {
+          await db().transaction(async tx => { await tx.select({ id: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.userId, KIM.userId)).for("share", { noWait: true }); });
+          return false;
+        } catch (error) {
+          let cause: unknown = error;
+          for (let depth = 0; depth < 5 && cause && typeof cause === "object"; depth++) {
+            if ("code" in cause && cause.code === "55P03") return true;
+            cause = "cause" in cause ? cause.cause : undefined;
+          }
+          throw error;
+        }
+      }).toBe(true);
+      observe = true;
+      sending = rae.send(id, "After locked erasure");
+      await syncStarted;
+      release();
+      await Promise.all([mutex, erasing, sending]);
+      expect(deliveredEpochs).toEqual([2]);
+      expect(await bodies(sam, id)).toContain("After locked erasure");
+    } finally {
+      release();
+      await Promise.allSettled([mutex, erasing, ...(sending ? [sending] : [])]);
+    }
+  });
+
+  it("retains its own accepted message across response loss and device restart (C12.39)", { timeout: 60_000 }, async () => {
+    const store = memoryStore(), base = directTransport(RAE);
+    let loseResponse = false;
+    const rae = new E2eeDevice(RAE.userId, store, { ...base, async send(input) {
+      const accepted = await base.send(input);
+      if (loseResponse) { loseResponse = false; throw new Error("Synthetic lost accepted message response"); }
+      return accepted;
+    } }, "Rae");
+    const sam = deviceFor(SAM, "Sam");
+    await Promise.all([rae.device(), sam.device()]);
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await rae.send(id, "Before response loss");
+    await sam.sync(id);
+    loseResponse = true;
+    await expect(rae.send(id, "Accepted before the response was lost")).rejects.toThrow("Synthetic lost accepted message response");
+    expect(await bodies(sam, id)).toContain("Accepted before the response was lost");
+    const restarted = new E2eeDevice(RAE.userId, store, base, "Same device after restart");
+    expect(await bodies(restarted, id)).toContain("Accepted before the response was lost");
+  });
+
+  it("keeps an uncertain send private until an exact own receipt arrives, without retransmitting (C12.39)", { timeout: 60_000 }, async () => {
+    const store = memoryStore(), base = directTransport(RAE);
+    let lost = false, corrupt = false, sends = 0, deviceId = "";
+    const transport = { ...base,
+      async send(input: Parameters<typeof base.send>[0]) { sends++; const ack = await base.send(input); if (lost) throw new Error("Synthetic uncertain delivery"); return ack; },
+      async sync(input: Parameters<typeof base.sync>[0]) {
+        const value = await base.sync(input);
+        return corrupt ? { ...value, log: value.log.map(entry => entry.kind === "application" && entry.senderDeviceId === deviceId ? { ...entry, frankTag: "A".repeat(43) + "=" } : entry) } : value;
+      },
+    };
+    const rae = new E2eeDevice(RAE.userId, store, transport, "Rae"), sam = deviceFor(SAM, "Sam");
+    deviceId = (await rae.device()).deviceId;
+    await sam.device();
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await rae.send(id, "Before uncertainty");
+    lost = true;
+    await expect(rae.send(id, "Only after an exact receipt")).rejects.toThrow("Synthetic uncertain delivery");
+    const before = (await store.group(id))!;
+    expect([...(await store.messages(id)).values()].map(message => message.body)).not.toContain("Only after an exact receipt");
+    const restarted = new E2eeDevice(RAE.userId, store, transport, "Rae restarted");
+    corrupt = true;
+    await expect(restarted.sync(id)).rejects.toThrow(/receipt/);
+    expect((await store.group(id))!.cursor).toBe(before.cursor);
+    expect([...(await store.messages(id)).values()].map(message => message.body)).not.toContain("Only after an exact receipt");
+    corrupt = false;
+    expect(await bodies(restarted, id)).toContain("Only after an exact receipt");
+    expect(sends).toBe(2);
+    expect((await viewConversation.call({ id }, SAM)).messages).toHaveLength(2);
+  });
+
+  it("bounds uncertain deliveries and refuses a full queue without advancing its ratchet (C12.39)", { timeout: 120_000 }, async () => {
+    const store = memoryStore(), base = directTransport(RAE);
+    let unavailable = false, sends = 0;
+    const transport = { ...base, async send(input: Parameters<typeof base.send>[0]) { sends++; if (unavailable) throw new Error("Synthetic transport unavailable"); return base.send(input); } };
+    const rae = new E2eeDevice(RAE.userId, store, transport, "Rae"), sam = deviceFor(SAM, "Sam");
+    await Promise.all([rae.device(), sam.device()]);
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await rae.send(id, "Before outage");
+    unavailable = true;
+    for (let i = 0; i < MAX_UNCONFIRMED_OUTGOING; i++) await expect(rae.send(id, `Uncertain ${i}`)).rejects.toThrow("Synthetic transport unavailable");
+    const restarted = new E2eeDevice(RAE.userId, store, transport, "Same device");
+    await restarted.sync(id);
+    const before = (await store.group(id))!;
+    await expect(restarted.send(id, "Queue is full")).rejects.toMatchObject({ code: "not_ready" });
+    expect((await store.group(id))!.state).toEqual(before.state);
+    expect(sends).toBe(MAX_UNCONFIRMED_OUTGOING + 1);
+    expect((await viewConversation.call({ id }, SAM)).messages).toHaveLength(1);
+  });
+
+  it("clears an explicitly refused candidate while preserving the advanced sender ratchet (C12.39)", { timeout: 60_000 }, async () => {
+    const store = memoryStore(), base = directTransport(RAE);
+    let refuse = false;
+    const rae = new E2eeDevice(RAE.userId, store, { ...base, async send(input) {
+      if (refuse) throw Object.assign(new Error("Synthetic explicit validation refusal"), { code: "validation" });
+      return base.send(input);
+    } }, "Rae");
+    const sam = deviceFor(SAM, "Sam");
+    await Promise.all([rae.device(), sam.device()]);
+    const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+    await rae.send(id, "Before refusal");
+    await sam.sync(id);
+    const before = (await store.group(id))!.state;
+    refuse = true;
+    await expect(rae.send(id, "Refused private candidate")).rejects.toMatchObject({ code: "validation" });
+    const after = (await store.group(id))!.state!;
+    expect(after).not.toEqual(before);
+    expect(new TextDecoder().decode(after)).not.toContain("Refused private candidate");
+    refuse = false;
+    const restarted = new E2eeDevice(RAE.userId, store, base, "Same advanced device");
+    await restarted.send(id, "After refusal");
+    expect(await bodies(sam, id)).toEqual(["Before refusal", "After refusal"]);
+  });
+
+  it("recovers accepted call keys after a lost response (C12.39)", { timeout: 60_000 }, async () => {
+    setSfuForTests({ id: "synthetic", url: "ws://sfu.test", issue: () => "synthetic-token", participants: async () => [], remove: async () => undefined });
+    try {
+      const store = memoryStore(), base = directTransport(RAE);
+      let lose = true, sends = 0;
+      const rae = new E2eeDevice(RAE.userId, store, { ...base, async sendCallKey(input) { sends++; await base.sendCallKey(input); if (lose) throw new Error("Synthetic lost call-key response"); return { ok: true }; } }, "Rae");
+      const sam = deviceFor(SAM, "Sam");
+      await Promise.all([rae.device(), sam.device()]);
+      const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+      await rae.send(id, "Call preparation");
+      const call = await startGroupCall.call({ conversationId: id, media: "voice" }, RAE);
+      await expect(rae.startCallKey(id, call.id)).rejects.toThrow("Synthetic lost call-key response");
+      expect(await store.callKey(call.id)).toBeNull();
+      const winner = await sam.callKey(id, call.id);
+      expect(winner).toBeTruthy();
+      lose = false;
+      const restarted = new E2eeDevice(RAE.userId, store, base, "Rae restarted");
+      expect(await restarted.startCallKey(id, call.id)).toBe(winner);
+      expect(await store.callKey(call.id)).toBe(winner);
+      expect(sends).toBe(1);
+    } finally { setSfuForTests(undefined); }
+  });
+
+  it("keeps uncertain call keys out of the official slot and refuses blind replacements (C12.39)", { timeout: 60_000 }, async () => {
+    setSfuForTests({ id: "synthetic", url: "ws://sfu.test", issue: () => "synthetic-token", participants: async () => [], remove: async () => undefined });
+    try {
+      const store = memoryStore(), base = directTransport(RAE);
+      let sends = 0;
+      const transport = { ...base, async sendCallKey() { sends++; throw new Error("Synthetic uncertain call delivery"); } };
+      const rae = new E2eeDevice(RAE.userId, store, transport, "Rae"), sam = deviceFor(SAM, "Sam");
+      await Promise.all([rae.device(), sam.device()]);
+      const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+      await rae.send(id, "Call preparation");
+      const call = await startGroupCall.call({ conversationId: id, media: "voice" }, RAE);
+      await expect(rae.startCallKey(id, call.id)).rejects.toThrow("Synthetic uncertain call delivery");
+      const restarted = new E2eeDevice(RAE.userId, store, { ...transport, async sendCallKey(input) {
+        if (!input.fresh) return base.sendCallKey(input);
+        return transport.sendCallKey();
+      } }, "Same device");
+      await restarted.sync(id);
+      await expect(restarted.startCallKey(id, call.id)).rejects.toMatchObject({ code: "not_ready" });
+      expect(sends).toBe(1);
+      expect(await store.callKey(call.id)).toBeNull();
+      const winner = await sam.startCallKey(id, call.id);
+      expect(await restarted.callKey(id, call.id)).toBe(winner);
+      const phone = deviceFor(RAE, "Rae phone after uncertain candidate");
+      await phone.device();
+      await restarted.send(id, "Admit the phone with the confirmed winning key");
+      expect(await phone.callKey(id, call.id)).toBe(winner);
+    } finally { setSfuForTests(undefined); }
+  });
+
+  it("discards a refused call-key candidate and adopts the actual winning device key (C12.39)", { timeout: 60_000 }, async () => {
+    setSfuForTests({ id: "synthetic", url: "ws://sfu.test", issue: () => "synthetic-token", participants: async () => [], remove: async () => undefined });
+    try {
+      const store = memoryStore(), base = directTransport(RAE), sam = deviceFor(SAM, "Sam");
+      let winner: string | null = null, sends = 0;
+      const rae = new E2eeDevice(RAE.userId, store, { ...base, async sendCallKey(input) {
+        sends++;
+        expect(await store.callKey(input.callId)).toBeNull();
+        winner = await sam.startCallKey(input.conversationId, input.callId);
+        return base.sendCallKey(input);
+      } }, "Rae");
+      await Promise.all([rae.device(), sam.device()]);
+      const { id } = await startConversation.call({ handles: ["sam"] }, RAE);
+      await rae.send(id, "Call preparation");
+      const call = await startGroupCall.call({ conversationId: id, media: "voice" }, RAE);
+      expect(await rae.startCallKey(id, call.id)).toBe(winner);
+      expect(await store.callKey(call.id)).toBe(winner);
+      expect(sends).toBe(1);
+    } finally { setSfuForTests(undefined); }
   });
 
   it("stays plaintext, and says so, until everyone has a device", async () => {

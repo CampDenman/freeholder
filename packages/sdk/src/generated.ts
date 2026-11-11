@@ -5789,12 +5789,12 @@ export interface ServiceCatalog {
     output: { id: string; orderId: string; sellerId: string; sellerHandle: string; reason: string; state: string; createdAt: string; [key: string]: unknown }[];
   };
   "members.e2eeCommit": {
-    input: { conversationId: string; deviceId: string; create?: boolean; refresh?: boolean; fromEpoch: number; commit: string; welcome?: string; added?: { deviceId: string; keyPackageId: string }[]; removed?: string[] };
+    input: { conversationId: string; deviceId: string; create?: boolean; refresh?: boolean; fromEpoch: number; authority: string; commit: string; welcome?: string; added?: { deviceId: string; keyPackageId: string }[]; removed?: string[] };
     output: { epoch: number };
   };
   "members.e2eeSync": {
     input: { conversationId: string; deviceId: string; after?: number };
-    output: { available: boolean; supportsOpenMlsRefresh: true; missing: string[]; epoch: number | null; inGroup: boolean; roster: string[]; entitled: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; directory: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; log: { seq: number; epoch: number; kind: "commit" | "welcome" | "application" | "control"; senderDeviceId: string | null; keyPackageId: string | null; messageId: string | null; callId: string | null; callGeneration: number | null; frankTag: string | null; payload: string; [key: string]: unknown }[]; more: boolean; unclaimed: number; calls: { callId: string; generation: number; needsKey: boolean; [key: string]: unknown }[] };
+    output: { available: boolean; supportsOpenMlsRefresh: true; deliveryFenceVersion: 1; missing: string[]; epoch: number | null; inGroup: boolean; roster: string[]; entitled: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; directory: { deviceId: string; userId: string; signatureKey: string; [key: string]: unknown }[]; log: { seq: number; epoch: number; kind: "commit" | "welcome" | "application" | "control"; senderDeviceId: string | null; keyPackageId: string | null; messageId: string | null; callId: string | null; callGeneration: number | null; frankTag: string | null; payload: string; [key: string]: unknown }[]; more: boolean; unclaimed: number; calls: { callId: string; generation: number; needsKey: boolean; [key: string]: unknown }[] };
   };
   "members.editPost": {
     input: { id: string; body?: string; visibility?: "public" | "followers" | "friends" | "subscribers" | "only_me" };
@@ -5845,8 +5845,8 @@ export interface ServiceCatalog {
     output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; fediverseAliases: string[]; movedTo: string | null; createdAt: string; [key: string]: unknown };
   };
   "members.joinGroupCall": {
-    input: { id: string; deviceId: string };
-    output: { url: string; token: string; room: string; media: "voice" | "video"; conversationId: string };
+    input: { id: string; deviceId: string; generation?: number };
+    output: { url: string; token: string; room: string; generation: number; media: "voice" | "video"; conversationId: string };
   };
   "members.latest": {
     input: { before?: string; tag?: string };
@@ -6077,11 +6077,11 @@ export interface ServiceCatalog {
     output: { id: string };
   };
   "members.sendCallKey": {
-    input: { conversationId: string; deviceId: string; epoch: number; callId: string; generation?: number; fresh?: boolean; ciphertext: string };
+    input: { conversationId: string; deviceId: string; epoch: number; authority: string; callId: string; generation?: number; fresh?: boolean; ciphertext: string };
     output: { ok: true };
   };
   "members.sendEncrypted": {
-    input: { conversationId: string; deviceId: string; epoch: number; ciphertext: string; frankTag: string; attachments?: { assetId: string; altText?: string }[]; sealedFiles?: string[] };
+    input: { conversationId: string; deviceId: string; epoch: number; authority: string; ciphertext: string; frankTag: string; attachments?: { assetId: string; altText?: string }[]; sealedFiles?: string[] };
     output: { id: string };
   };
   "members.sendHistory": {

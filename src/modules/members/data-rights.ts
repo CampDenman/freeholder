@@ -29,7 +29,9 @@ import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
-import { ServiceError, type Tx } from "@/core/service";
+import { ServiceError, type Tx, type ServiceContext } from "@/core/service";
+import { dropFromCalls } from "./call-seats";
+import { lockMemberProfiles, lockMemberConversations } from "./authority-locks";
 import { products } from "@/modules/catalog/schema";
 import { assets } from "@/core/media/schema";
 import { openMessage, sealMessage } from "./message-crypto";
@@ -44,6 +46,7 @@ import {
   memberFederationDeliveries,
   memberFollows,
   memberHistoryRequests,
+  memberGroupCalls,
   memberFriendships,
   memberListings,
   memberMentions,
@@ -125,7 +128,10 @@ async function exportMember(tx: Tx, userId: string) {
   };
 }
 
-async function eraseMember(tx: Tx, userId: string): Promise<number> {
+async function eraseMember(tx: Tx, userId: string, service?: ServiceContext): Promise<number> {
+  if (service && service.tx !== tx) throw new ServiceError("internal", "The privacy transaction does not match its service context.");
+  await lockMemberProfiles(tx, [userId], "update");
+  const conversationIds = await lockMemberConversations(tx, userId);
   const [profile] = await tx.select({ userId: memberProfiles.userId }).from(memberProfiles).where(eq(memberProfiles.userId, userId));
   const owed = await tx
     .select({ id: memberPayouts.id })
@@ -153,6 +159,13 @@ async function eraseMember(tx: Tx, userId: string): Promise<number> {
   count(await tx.update(memberSealedBlobs).set({ deletedAt: now }).where(eq(memberSealedBlobs.ownerId, userId)).returning({ id: memberSealedBlobs.id }));
   // History on its way between their devices (C12.34).
   count(await tx.delete(memberHistoryRequests).where(eq(memberHistoryRequests.userId, userId)).returning({ id: memberHistoryRequests.id }));
+  // Erasure rotates active call keys and schedules the same transactional SFU
+  // eviction as leaving/revocation, before deleting device/participant rows.
+  if (service) await dropFromCalls(service, conversationIds, userId);
+  else if (conversationIds.length) {
+    const live = await tx.select({ id: memberGroupCalls.id }).from(memberGroupCalls).where(and(inArray(memberGroupCalls.conversationId, conversationIds), eq(memberGroupCalls.state, "active"))).limit(1);
+    if (live.length) throw new ServiceError("internal", "Active-call erasure requires its transactional service context.");
+  }
   // Their devices, key packages and group seats (C12.23), and their presence on the fediverse (C12.18).
   count(await tx.delete(memberDevices).where(eq(memberDevices.userId, userId)).returning({ id: memberDevices.id }));
   count(await tx.delete(memberRemoteFollowers).where(eq(memberRemoteFollowers.userId, userId)).returning({ id: memberRemoteFollowers.id }));
@@ -242,8 +255,8 @@ registerContactPrivacySource({
     const userId = await loginOf(tx, contactId);
     return userId ? exportMember(tx, userId) : null;
   },
-  erase: async (tx, contactId) => {
+  erase: async (tx, contactId, context) => {
     const userId = await loginOf(tx, contactId);
-    return { affected: userId ? await eraseMember(tx, userId) : 0 };
+    return { affected: userId ? await eraseMember(tx, userId, context.service) : 0 };
   },
 });

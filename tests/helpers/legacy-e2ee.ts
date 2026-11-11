@@ -1,6 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// C12.39: frozen pre-migration engine fixture; never imported by production.
+// C12.39: pre-migration crypto fixture; never imported by production.
+// Its delivery adapter computes the new fence from ACTUAL legacy leaves before
+// encryption, solely to create old-state fixtures on a protected new server.
+// Old clients lacking this proof are tested separately and remain read-only.
 // C12.23: one device's side of end-to-end encrypted messages. The same code
 // runs in the browser (IndexedDB store, server-action transport) and in tests
 // (memory store, services called directly), so what the tests prove is what
@@ -29,6 +32,7 @@ import {
   type Credential,
   type PrivateKeyPackage,
 } from "ts-mls";
+import { deliveryAuthority } from "@/modules/members/e2ee/authority";
 import { defaultClientConfig } from "ts-mls/clientConfig.js";
 import { b64, deviceCode, digitGroups, frankTag, historyStatement, identityOf, openCallKey, openPayload, parseIdentity, sameTag, sealCallKey, sealPayload, suite, unb64, utf8, type SealedFile } from "./legacy-e2ee-wire";
 
@@ -108,9 +112,9 @@ export interface E2eeTransport {
   publish(input: { deviceId: string; keyPackages: { id: string; keyPackage: string }[] }): Promise<unknown>;
   sync(input: { conversationId: string; deviceId: string; after: number }): Promise<SyncResult>;
   claim(input: { conversationId: string; deviceId: string; devices: string[] }): Promise<{ packages: { deviceId: string; keyPackageId: string; keyPackage: string }[] }>;
-  commit(input: { conversationId: string; deviceId: string; create: boolean; fromEpoch: number; commit: string; welcome?: string; added: { deviceId: string; keyPackageId: string }[]; removed: string[] }): Promise<{ epoch: number }>;
-  send(input: { conversationId: string; deviceId: string; epoch: number; ciphertext: string; frankTag: string; attachments: { assetId: string; altText: string }[]; sealedFiles?: string[] }): Promise<{ id: string }>;
-  sendCallKey(input: { conversationId: string; deviceId: string; epoch: number; callId: string; generation: number; fresh: boolean; ciphertext: string }): Promise<unknown>;
+  commit(input: { conversationId: string; deviceId: string; create: boolean; fromEpoch: number; authority: string; commit: string; welcome?: string; added: { deviceId: string; keyPackageId: string }[]; removed: string[] }): Promise<{ epoch: number }>;
+  send(input: { conversationId: string; deviceId: string; epoch: number; authority: string; ciphertext: string; frankTag: string; attachments: { assetId: string; altText: string }[]; sealedFiles?: string[] }): Promise<{ id: string }>;
+  sendCallKey(input: { conversationId: string; deviceId: string; epoch: number; authority: string; callId: string; generation: number; fresh: boolean; ciphertext: string }): Promise<unknown>;
   requestHistory(input: { deviceId: string; publicKey: string; sig: string }): Promise<{ id: string }>;
   historyRequests(input: { deviceId: string }): Promise<{ requests: { id: string; deviceId: string; label: string; signatureKey: string; publicKey: string; sig: string }[] }>;
   sendHistory(input: { requestId: string; deviceId: string; conversationId: string; enc: string; ct: string }): Promise<unknown>;
@@ -359,16 +363,16 @@ export class LegacyE2eeDevice {
       const ownPackage = decodeMlsMessage(unb64(own!.publicPackage), 0)![0];
       if (ownPackage.wireformat !== "mls_key_package") return false;
       const created = await createGroup(utf8(conversationId), ownPackage.keyPackage, own!.privatePackage, [], cs, this.config(sync.directory));
-      return this.change(conversationId, device, created, cursor, true, others, []);
+      return this.change(conversationId, device, created, cursor, true, others, [], await deliveryAuthority(conversationId, sync));
     }
     if (!sync.inGroup || !state) return false;
     const add = sync.entitled.map((d) => d.deviceId).filter((id) => !sync.roster.includes(id));
     const remove = sync.roster.filter((id) => !entitled.has(id));
     if (!add.length && !remove.length) return false;
-    return this.change(conversationId, device, state, cursor, false, add, remove);
+    return this.change(conversationId, device, state, cursor, false, add, remove, await deliveryAuthority(conversationId, sync));
   }
 
-  private async change(conversationId: string, device: DeviceRecord, state: ClientState, cursor: number, create: boolean, add: string[], remove: string[]): Promise<boolean> {
+  private async change(conversationId: string, device: DeviceRecord, state: ClientState, cursor: number, create: boolean, add: string[], remove: string[], authority: string): Promise<boolean> {
     const cs = await suite();
     const claimed = add.length ? (await this.transport.claim({ conversationId, deviceId: device.deviceId, devices: add })).packages : [];
     const proposals = [];
@@ -386,6 +390,7 @@ export class LegacyE2eeDevice {
       conversationId,
       deviceId: device.deviceId,
       create,
+      authority,
       fromEpoch: Number(state.groupContext.epoch),
       commit: b64(encodeMlsMessage(result.commit)),
       welcome: result.welcome ? b64(encodeMlsMessage({ welcome: result.welcome, wireformat: "mls_welcome", version: "mls10" })) : undefined,
@@ -397,16 +402,29 @@ export class LegacyE2eeDevice {
     return true;
   }
 
+  private async authority(conversationId: string, device: DeviceRecord, state: ClientState): Promise<string> {
+    const fresh = await this.transport.sync({ conversationId, deviceId: device.deviceId, after: Number.MAX_SAFE_INTEGER });
+    const actual = state.ratchetTree.flatMap(node => {
+      if (node?.nodeType !== "leaf" || node.leaf.credential.credentialType !== "basic") return [];
+      const who = parseIdentity(node.leaf.credential.identity);
+      return who ? [{ ...who, signatureKey: b64(node.leaf.signaturePublicKey) }] : [];
+    });
+    if (Number(state.groupContext.epoch) !== fresh.epoch || actual.length !== fresh.entitled.length || !fresh.entitled.every(d => actual.some(leaf => leaf.deviceId === d.deviceId && leaf.userId === d.userId && leaf.signatureKey === d.signatureKey))) throw Object.assign(new Error("Legacy fixture authority changed."), { code: "conflict" });
+    return deliveryAuthority(conversationId, { ...fresh, roster: actual.map(d => d.deviceId) });
+  }
+
   private async sendControl(conversationId: string, device: DeviceRecord, callId: string, generation: number, key: string, fresh: boolean) {
     const cs = await suite();
     const { state, cursor } = await this.load(conversationId, []);
     if (!state) throw Object.assign(new Error("not ready"), { code: "conflict" });
+    const authority = await this.authority(conversationId, device, state);
     const message = await createApplicationMessage(state, await sealCallKey(conversationId, callId, generation, key, device), cs);
     await this.save(conversationId, message.newState, cursor);
     await this.transport.sendCallKey({
       conversationId,
       deviceId: device.deviceId,
       epoch: Number(state.groupContext.epoch),
+      authority,
       callId,
       generation,
       fresh,
@@ -631,6 +649,7 @@ export class LegacyE2eeDevice {
           const cs = await suite();
           const { state, cursor } = await this.load(conversationId, []);
           if (!state) throw Object.assign(new Error("not ready"), { code: "conflict" });
+          const authority = await this.authority(conversationId, device, state);
           const sealed = await sealPayload(conversationId, body, device, files);
           const message = await createApplicationMessage(state, sealed.bytes, cs);
           // The ratchet moves forward before anything leaves the device, so a
@@ -640,6 +659,7 @@ export class LegacyE2eeDevice {
             conversationId,
             deviceId: device.deviceId,
             epoch: Number(state.groupContext.epoch),
+            authority,
             ciphertext: b64(encodeMlsMessage({ privateMessage: message.privateMessage, wireformat: "mls_private_message", version: "mls10" })),
             frankTag: await frankTag(unb64(sealed.fk), conversationId, this.userId, body),
             attachments,

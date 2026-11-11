@@ -12,6 +12,7 @@
 // key the directory published for it.
 import type { PrivateKeyPackage } from "ts-mls";
 import { openMls } from "./crypto";
+import { deliveryAuthority } from "./authority";
 import { joinLegacy, legacyDevices, loadLegacy, migrationInfo, processLegacy, saveLegacy, type LegacyState } from "./legacy";
 import { b64, deviceCode, digitGroups, frankTag, historyStatement, openCallKey, openPayload, sameTag, sealCallKey, sealPayload, sign, verify, unb64, utf8, fromUtf8, type SealedFile } from "./wire";
 
@@ -74,6 +75,7 @@ type LogEntry = { seq: number; epoch: number; kind: "commit" | "welcome" | "appl
 export interface SyncResult {
   available: boolean;
   supportsOpenMlsRefresh?: boolean;
+  deliveryFenceVersion?: 1;
   missing: string[];
   epoch: number | null;
   inGroup: boolean;
@@ -92,9 +94,9 @@ export interface E2eeTransport {
   publish(input: { deviceId: string; keyPackages: { id: string; keyPackage: string }[] }): Promise<unknown>;
   sync(input: { conversationId: string; deviceId: string; after: number }): Promise<SyncResult>;
   claim(input: { conversationId: string; deviceId: string; devices: string[] }): Promise<{ packages: { deviceId: string; keyPackageId: string; keyPackage: string }[] }>;
-  commit(input: { conversationId: string; deviceId: string; create: boolean; refresh?: boolean; fromEpoch: number; commit: string; welcome?: string; added: { deviceId: string; keyPackageId: string }[]; removed: string[] }): Promise<{ epoch: number }>;
-  send(input: { conversationId: string; deviceId: string; epoch: number; ciphertext: string; frankTag: string; attachments: { assetId: string; altText: string }[]; sealedFiles?: string[] }): Promise<{ id: string }>;
-  sendCallKey(input: { conversationId: string; deviceId: string; epoch: number; callId: string; generation: number; fresh: boolean; ciphertext: string }): Promise<unknown>;
+  commit(input: { conversationId: string; deviceId: string; create: boolean; refresh?: boolean; fromEpoch: number; authority: string; commit: string; welcome?: string; added: { deviceId: string; keyPackageId: string }[]; removed: string[] }): Promise<{ epoch: number }>;
+  send(input: { conversationId: string; deviceId: string; epoch: number; authority: string; ciphertext: string; frankTag: string; attachments: { assetId: string; altText: string }[]; sealedFiles?: string[] }): Promise<{ id: string }>;
+  sendCallKey(input: { conversationId: string; deviceId: string; epoch: number; authority: string; callId: string; generation: number; fresh: boolean; ciphertext: string }): Promise<unknown>;
   requestHistory(input: { deviceId: string; publicKey: string; sig: string }): Promise<{ id: string }>;
   historyRequests(input: { deviceId: string }): Promise<{ requests: { id: string; deviceId: string; label: string; signatureKey: string; publicKey: string; sig: string }[] }>;
   sendHistory(input: { requestId: string; deviceId: string; conversationId: string; enc: string; ct: string }): Promise<unknown>;
@@ -153,7 +155,26 @@ const codeOf = (error: unknown): string | undefined => (error && typeof error ==
 
 type CommitInput = Parameters<E2eeTransport["commit"]>[0];
 type NativeGroup = { state: string; epoch: number; members: string[]; devices: DeviceEntry[]; active: boolean; pending: { fromEpoch: number; roster: string[]; commit: string; welcome: string | null } | null; payload?: string | null; sender?: string; message?: string };
-type Group = { kind: "openmls"; value: NativeGroup; request?: CommitInput; backup?: string } | { kind: "legacy"; value: LegacyState };
+type Outgoing = { conversationId: string; deviceId: string; epoch: number; ciphertext: string } & (
+  | { kind: "application"; frankTag: string; read: ReadMessage }
+  | { kind: "control"; callId: string; generation: number; key: string }
+);
+type OpenGroup = { kind: "openmls"; value: NativeGroup; request?: CommitInput; backup?: string; outgoing?: Outgoing[] };
+type Group = OpenGroup | { kind: "legacy"; value: LegacyState };
+export const MAX_UNCONFIRMED_OUTGOING = 32;
+const EXPLICIT_REFUSALS = new Set(["validation", "permission", "not_found", "conflict", "rate_limited", "step_up_required"]);
+function nativeGroup(before: Group | null, value: NativeGroup): OpenGroup {
+  const prior = before?.kind === "openmls" ? before : undefined;
+  const samePending = value.pending && value.pending.commit === prior?.value.pending?.commit;
+  return { kind: "openmls", value, ...(prior?.outgoing?.length ? { outgoing: prior.outgoing } : {}), ...(samePending && prior?.request ? { request: prior.request, ...(prior.backup ? { backup: prior.backup } : {}) } : {}) };
+}
+function validOutgoing(value: unknown, conversationId: string, userId: string): value is Outgoing {
+  if (!value || typeof value !== "object") return false;
+  const sent = value as Outgoing;
+  if (sent.conversationId !== conversationId || typeof sent.deviceId !== "string" || !/^[0-9a-f-]{36}$/.test(sent.deviceId) || !Number.isSafeInteger(sent.epoch) || sent.epoch < 1 || typeof sent.ciphertext !== "string" || sent.ciphertext.length > 120_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(sent.ciphertext)) return false;
+  if (sent.kind === "application") return Boolean(sent.read && typeof sent.read.body === "string" && sent.read.body.length <= 10_000 && typeof sent.read.fk === "string" && /^[A-Za-z0-9+/]{43}=$/.test(sent.read.fk) && sent.read.senderUserId === userId && sent.read.ok === true && /^[A-Za-z0-9+/]{43}=$/.test(sent.frankTag));
+  return sent.kind === "control" && typeof sent.callId === "string" && /^[0-9a-f-]{36}$/.test(sent.callId) && Number.isSafeInteger(sent.generation) && sent.generation >= 0 && typeof sent.key === "string" && /^[A-Za-z0-9+/]{43}=$/.test(sent.key);
+}
 const MARKER = "freeholder:openmls:v1\n";
 const queues = new WeakMap<E2eeStore, Map<string, Promise<unknown>>>();
 const conflict = () => Object.assign(new Error("The conversation changed; try again."), { code: "conflict" });
@@ -242,20 +263,53 @@ export class E2eeDevice {
   private async load(conversationId: string, directory: DeviceEntry[]): Promise<{ state: Group | null; cursor: number }> {
     const saved = await this.store.group(conversationId);
     if (!saved?.state) return { state: null, cursor: saved?.cursor ?? 0 };
+    if (saved.state.byteLength > 32 * 1024 * 1024) throw new Error("The saved encryption state exceeds its bound.");
     const text = fromUtf8(saved.state);
     if (text.startsWith(MARKER)) {
       const state = JSON.parse(text.slice(MARKER.length)) as Group;
       if (state.kind !== "openmls" || typeof state.value?.state !== "string") throw new Error("Invalid saved encryption state.");
+      if (state.outgoing !== undefined && (!Array.isArray(state.outgoing) || state.outgoing.length > MAX_UNCONFIRMED_OUTGOING || state.outgoing.some(sent => !validOutgoing(sent, conversationId, this.userId)) || new Set(state.outgoing.map(sent => sent.ciphertext)).size !== state.outgoing.length)) throw new Error("Invalid saved pending delivery state.");
       return { state, cursor: saved.cursor };
     }
     return { state: { kind: "legacy", value: loadLegacy(saved.state, directory) }, cursor: saved.cursor };
   }
   private async save(conversationId: string, state: Group | null, cursor: number) {
     const bytes = !state ? null : state.kind === "legacy" ? saveLegacy(state.value) : utf8(MARKER + JSON.stringify(state));
+    if (bytes && bytes.byteLength > 32 * 1024 * 1024) throw Object.assign(new Error("The saved encryption state exceeds its bound."), { code: "not_ready" });
     await this.store.saveGroup(conversationId, bytes, cursor);
   }
+  private assertOutgoingRoom(state: OpenGroup) {
+    if ((state.outgoing?.length ?? 0) >= MAX_UNCONFIRMED_OUTGOING) throw Object.assign(new Error("This device has too many unconfirmed sends. Reconnect and check the conversation before sending again."), { code: "not_ready" });
+  }
+  private async settleOutgoing(conversationId: string, device: DeviceRecord, candidate: Outgoing, messageId?: string, refused = false): Promise<void> {
+    const currentDevice = await this.store.device();
+    if (currentDevice?.userId !== device.userId || currentDevice.deviceId !== device.deviceId) return;
+    const { state, cursor } = await this.load(conversationId, []);
+    if (!state || state.kind !== "openmls" || !state.outgoing?.some(sent => sent.ciphertext === candidate.ciphertext)) return;
+    if (!refused) {
+      if (candidate.kind === "application") {
+        if (!messageId) throw new Error("The message receipt is incomplete.");
+        await this.store.saveMessage(conversationId, messageId, candidate.read);
+      } else await this.store.saveCallKey(keySlot(candidate.callId, candidate.generation), candidate.key);
+    }
+    await this.save(conversationId, { ...state, outgoing: state.outgoing.filter(sent => sent.ciphertext !== candidate.ciphertext) }, cursor);
+  }
+  private async ownReceipt(conversationId: string, device: DeviceRecord, state: OpenGroup, entry: LogEntry): Promise<OpenGroup> {
+    const candidate = state.outgoing?.find(sent => sent.ciphertext === entry.payload);
+    if (!candidate) return state;
+    if (candidate.conversationId !== conversationId || candidate.deviceId !== device.deviceId || entry.senderDeviceId !== device.deviceId || candidate.epoch !== entry.epoch || candidate.kind !== entry.kind) throw new Error("The encrypted delivery receipt does not match this device's pending send.");
+    if (candidate.kind === "application") {
+      if (!entry.messageId || entry.frankTag !== candidate.frankTag) throw new Error("The encrypted message receipt does not match its pending send.");
+      await this.store.saveMessage(conversationId, entry.messageId, candidate.read);
+    } else {
+      if (entry.callId !== candidate.callId || (entry.callGeneration ?? 0) !== candidate.generation) throw new Error("The encrypted call receipt does not match its pending send.");
+      await this.store.saveCallKey(keySlot(candidate.callId, candidate.generation), candidate.key);
+    }
+    return { ...state, outgoing: state.outgoing!.filter(sent => sent.ciphertext !== candidate.ciphertext) };
+  }
+
   private ready(state: Group | null, sync: SyncResult | null): boolean {
-    if (!state || state.kind !== "openmls" || state.value.pending || !state.value.active || !sync?.supportsOpenMlsRefresh || !sync.inGroup || state.value.epoch !== sync.epoch) return false;
+    if (!state || state.kind !== "openmls" || state.value.pending || !state.value.active || !sync?.supportsOpenMlsRefresh || sync.deliveryFenceVersion !== 1 || !sync.inGroup || state.value.epoch !== sync.epoch) return false;
     const members = membersOf(state);
     return members.length === sync.entitled.length && sync.entitled.every((d) => members.includes(d.deviceId) && state.value.devices.some((leaf) => leaf.deviceId === d.deviceId && leaf.userId === d.userId && leaf.signatureKey === d.signatureKey));
   }
@@ -311,20 +365,23 @@ export class E2eeDevice {
       for (const entry of result.log) {
         if (state?.kind === "openmls" && state.value.pending && entry.kind === "commit" && entry.epoch === state.value.pending.fromEpoch) {
           if (entry.payload === state.value.pending.commit && entry.senderDeviceId === device.deviceId) {
-            state = { kind: "openmls", value: await openMls<NativeGroup>({ op: "acceptPending", context, state: state.value.state, commit: entry.payload }) };
+            state = nativeGroup(state, await openMls<NativeGroup>({ op: "acceptPending", context, state: state.value.state, commit: entry.payload }));
             await this.save(conversationId, state, entry.seq); cursor = entry.seq; continue;
           }
           if (state.backup) state = { kind: "legacy", value: loadLegacy(unb64(state.backup), result.directory) };
-          else state = { kind: "openmls", value: await openMls<NativeGroup>({ op: "abandonPending", context, state: state.value.state }) };
+          else state = nativeGroup(state, await openMls<NativeGroup>({ op: "abandonPending", context, state: state.value.state }));
           await this.save(conversationId, state, cursor);
         }
-        if (entry.senderDeviceId === device.deviceId && entry.kind !== "welcome") { cursor = entry.seq; await this.save(conversationId, state, cursor); continue; }
+        if (entry.senderDeviceId === device.deviceId && entry.kind !== "welcome") {
+          if (state?.kind === "openmls" && (entry.kind === "application" || entry.kind === "control")) state = await this.ownReceipt(conversationId, device, state, entry);
+          cursor = entry.seq; await this.save(conversationId, state, cursor); continue;
+        }
         if (entry.kind === "welcome") {
           // Never replace a newer state with a historical Welcome on replay.
           if (!state || epochOf(state) < entry.epoch) {
             const kp = entry.keyPackageId ? await this.store.keyPackage(entry.keyPackageId) : null;
             if (!kp) throw new Error("This device's welcome key is missing.");
-            if (typeof kp.privatePackage === "string") state = { kind: "openmls", value: await openMls<NativeGroup>({ op: "join", context, state: kp.privatePackage, welcome: entry.payload }) };
+            if (typeof kp.privatePackage === "string") state = nativeGroup(state, await openMls<NativeGroup>({ op: "join", context, state: kp.privatePackage, welcome: entry.payload }));
             else state = { kind: "legacy", value: await joinLegacy(entry.payload, kp.publicPackage, kp.privatePackage, result.directory) };
             // Persist the joined state before consuming a one-time package.
             await this.save(conversationId, state, entry.seq);
@@ -336,7 +393,7 @@ export class E2eeDevice {
           try {
             if (state.kind === "openmls") {
               const processed = await openMls<NativeGroup>({ op: "process", context, state: state.value.state, message: entry.payload });
-              state = { kind: "openmls", value: processed };
+              state = nativeGroup(state, processed);
               plaintext = processed.payload ? unb64(processed.payload) : null;
               senderIdentity = processed.sender;
             } else {
@@ -367,8 +424,15 @@ export class E2eeDevice {
       }
     } while (result.more);
     // Retry an uncertain transport outcome with the identical prepared commit.
-    if (state?.kind === "openmls" && state.request) {
-      if (result.epoch === state.request.fromEpoch || (state.request.create && result.epoch === null)) await this.deliverPending(conversationId, device, state, cursor, result);
+    if (state?.kind === "openmls" && state.request && result.supportsOpenMlsRefresh && result.deliveryFenceVersion === 1) {
+      if (result.epoch === state.request.fromEpoch || (state.request.create && result.epoch === null)) {
+        if (state.request.authority !== await deliveryAuthority(conversationId, result)) {
+          // Erasure can change authority without advancing the MLS epoch.
+          // Discard only the unaccepted commit, preserving sender ratchets.
+          state = state.backup ? { kind: "legacy", value: loadLegacy(unb64(state.backup), result.directory) } : nativeGroup(state, await openMls<NativeGroup>({ op: "abandonPending", context: this.context(conversationId, device, result), state: state.value.state }));
+          await this.save(conversationId, state, cursor);
+        } else await this.deliverPending(conversationId, device, state, cursor, result);
+      }
       else if (state.value.pending) throw conflict();
     }
     return result;
@@ -379,20 +443,21 @@ export class E2eeDevice {
     const receipt = await this.transport.commit(state.request);
     if (receipt.epoch !== state.value.pending.fromEpoch + 1) throw new Error("Invalid commit receipt.");
     const accepted = await openMls<NativeGroup>({ op: "acceptPending", context: this.context(conversationId, device, sync), state: state.value.state, commit: state.value.pending.commit });
-    await this.save(conversationId, { kind: "openmls", value: accepted }, cursor);
+    await this.save(conversationId, nativeGroup(state, accepted), cursor);
   }
 
   /** Reconcile the actual cryptographic leaves, including erased old leaves. */
   private async reconcile(conversationId: string, device: DeviceRecord, sync: SyncResult): Promise<boolean> {
-    if (!sync.supportsOpenMlsRefresh) return false;
+    if (!sync.supportsOpenMlsRefresh || sync.deliveryFenceVersion !== 1) return false;
     const loaded = await this.load(conversationId, sync.directory);
     let state = loaded.state;
     const cursor = loaded.cursor;
     const context = this.context(conversationId, device, sync);
+    const authority = await deliveryAuthority(conversationId, sync);
     if (state?.kind === "legacy") {
       if (!sync.inGroup || epochOf(state) !== sync.epoch) return false;
       const migrated = await openMls<NativeGroup>({ op: "migrate", context: this.context(conversationId, device, sync, membersOf(state)), groupInfo: await migrationInfo(state.value) });
-      const request: CommitInput = { conversationId, deviceId: device.deviceId, create: false, refresh: true, fromEpoch: sync.epoch, commit: migrated.pending!.commit, added: [], removed: [] };
+      const request: CommitInput = { conversationId, deviceId: device.deviceId, create: false, refresh: true, fromEpoch: sync.epoch, authority, commit: migrated.pending!.commit, added: [], removed: [] };
       const pending: Group = { kind: "openmls", value: migrated, backup: b64(saveLegacy(state.value)), request };
       await this.save(conversationId, pending, cursor);
       await this.deliverPending(conversationId, device, pending, cursor, sync);
@@ -409,8 +474,8 @@ export class E2eeDevice {
     if (!add.length && !remove.length) return false;
     const claimed = add.length ? (await this.transport.claim({ conversationId, deviceId: device.deviceId, devices: add })).packages : [];
     const changed = await openMls<NativeGroup>({ op: "commit", context, state: state.value.state, add: claimed.map((c) => c.keyPackage), remove });
-    const request: CommitInput = { conversationId, deviceId: device.deviceId, create, fromEpoch: changed.pending!.fromEpoch, commit: changed.pending!.commit, ...(changed.pending!.welcome ? { welcome: changed.pending!.welcome } : {}), added: claimed.map((c) => ({ deviceId: c.deviceId, keyPackageId: c.keyPackageId })), removed: remove };
-    const pending: Group = { kind: "openmls", value: changed, request };
+    const request: CommitInput = { conversationId, deviceId: device.deviceId, create, fromEpoch: changed.pending!.fromEpoch, authority, commit: changed.pending!.commit, ...(changed.pending!.welcome ? { welcome: changed.pending!.welcome } : {}), added: claimed.map((c) => ({ deviceId: c.deviceId, keyPackageId: c.keyPackageId })), removed: remove };
+    const pending: Group = { ...nativeGroup(state, changed), request };
     await this.save(conversationId, pending, cursor);
     await this.deliverPending(conversationId, device, pending, cursor, sync);
     return true;
@@ -420,9 +485,24 @@ export class E2eeDevice {
     const sync = await this.transport.sync({ conversationId, deviceId: device.deviceId, after: Number.MAX_SAFE_INTEGER });
     const { state, cursor } = await this.load(conversationId, sync.directory);
     if (!state || state.kind !== "openmls" || !this.ready(state, sync)) throw conflict();
+    this.assertOutgoingRoom(state);
+    // A separately confirmed winning key can still reach a newly admitted
+    // device while an older, different candidate remains uncertain. Never
+    // replace/rebroadcast an uncertain candidate's own key automatically.
+    if (state.outgoing?.some(sent => sent.kind === "control" && sent.callId === callId && sent.generation === generation && (fresh || sent.key === key))) throw Object.assign(new Error("The previous call-key delivery is still unconfirmed."), { code: "not_ready" });
+    if (!fresh && await this.store.callKey(keySlot(callId, generation)) !== key) throw conflict();
+    const authority = await deliveryAuthority(conversationId, sync);
     const encrypted = await openMls<NativeGroup>({ op: "encrypt", context: this.context(conversationId, device, sync), state: state.value.state, message: b64(await sealCallKey(conversationId, callId, generation, key, device)) });
-    await this.save(conversationId, { kind: "openmls", value: encrypted }, cursor);
-    await this.transport.sendCallKey({ conversationId, deviceId: device.deviceId, epoch: state.value.epoch, callId, generation, fresh, ciphertext: encrypted.message! });
+    const candidate: Outgoing = { kind: "control", conversationId, deviceId: device.deviceId, epoch: state.value.epoch, ciphertext: encrypted.message!, callId, generation, key };
+    if (!validOutgoing(candidate, conversationId, this.userId)) throw Object.assign(new Error("The encrypted call key exceeds its delivery bounds."), { code: "validation" });
+    await this.save(conversationId, { ...nativeGroup(state, encrypted), outgoing: [...(state.outgoing ?? []), candidate] }, cursor);
+    try {
+      await this.transport.sendCallKey({ conversationId, deviceId: device.deviceId, epoch: candidate.epoch, authority, callId, generation, fresh, ciphertext: candidate.ciphertext });
+      await this.settleOutgoing(conversationId, device, candidate);
+    } catch (error) {
+      if (EXPLICIT_REFUSALS.has(codeOf(error) ?? "")) await this.settleOutgoing(conversationId, device, candidate, undefined, true);
+      throw error;
+    }
   }
 
   /**
@@ -435,8 +515,10 @@ export class E2eeDevice {
   private async tendCallKeys(conversationId: string, device: DeviceRecord, calls: SyncResult["calls"]) {
     for (const call of calls) {
       if (!call.needsKey) continue;
+      const persisted = await this.load(conversationId, []);
       const tolerate = (error: unknown) => { if (codeOf(error) !== "conflict") throw error; };
       const current = await this.store.callKey(keySlot(call.callId, call.generation));
+      if (persisted.state?.kind === "openmls" && persisted.state.outgoing?.some(sent => sent.kind === "control" && sent.callId === call.callId && sent.generation === call.generation && (!current || sent.key === current))) continue;
       if (current) {
         await this.sendControl(conversationId, device, call.callId, call.generation, current, false).catch(tolerate);
         continue;
@@ -469,6 +551,8 @@ export class E2eeDevice {
         if (attempt < RETRIES - 1) continue;
         throw Object.assign(new Error("This device has not been added to the conversation yet."), { code: "not_ready" });
       }
+      const confirmed = await this.store.callKey(callId);
+      if (confirmed) return confirmed;
       try {
         await this.serial(conversationId, () => this.sendControl(conversationId, device, callId, 0, key, true));
         await this.store.saveCallKey(callId, key);
@@ -648,22 +732,24 @@ export class E2eeDevice {
           const fresh = await this.transport.sync({ conversationId, deviceId: device.deviceId, after: Number.MAX_SAFE_INTEGER });
           const { state, cursor } = await this.load(conversationId, fresh.directory);
           if (!state || state.kind !== "openmls" || !this.ready(state, fresh)) throw conflict();
+          this.assertOutgoingRoom(state);
+          const authority = await deliveryAuthority(conversationId, fresh);
           const sealed = await sealPayload(conversationId, body, device, files);
           const message = await openMls<NativeGroup>({ op: "encrypt", context: this.context(conversationId, device, fresh), state: state.value.state, message: b64(sealed.bytes) });
-          // The ratchet moves forward before anything leaves the device, so a
-          // key is never used twice even if the server refuses this message.
-          await this.save(conversationId, { kind: "openmls", value: message }, cursor);
-          const { id } = await this.transport.send({
-            conversationId,
-            deviceId: device.deviceId,
-            epoch: state.value.epoch,
-            ciphertext: message.message!,
-            frankTag: await frankTag(unb64(sealed.fk), conversationId, this.userId, body),
-            attachments,
-            sealedFiles: files.map((f) => f.blob),
-          });
-          await this.store.saveMessage(conversationId, id, { body, fk: sealed.fk, senderUserId: this.userId, ok: true, ...(files.length ? { files } : {}) });
-          return id;
+          const tag = await frankTag(unb64(sealed.fk), conversationId, this.userId, body);
+          const candidate: Outgoing = { kind: "application", conversationId, deviceId: device.deviceId, epoch: state.value.epoch, ciphertext: message.message!, frankTag: tag, read: { body, fk: sealed.fk, senderUserId: this.userId, ok: true, ...(files.length ? { files } : {}) } };
+          if (!validOutgoing(candidate, conversationId, this.userId)) throw Object.assign(new Error("The encrypted message exceeds its delivery bounds."), { code: "validation" });
+          // Persist ratchet AND local recovery content before transport. Unknown
+          // outcomes are retained; catching up never retransmits them blindly.
+          await this.save(conversationId, { ...nativeGroup(state, message), outgoing: [...(state.outgoing ?? []), candidate] }, cursor);
+          try {
+            const { id } = await this.transport.send({ conversationId, deviceId: device.deviceId, epoch: candidate.epoch, authority, ciphertext: candidate.ciphertext, frankTag: tag, attachments, sealedFiles: files.map(file => file.blob) });
+            await this.settleOutgoing(conversationId, device, candidate, id);
+            return id;
+          } catch (error) {
+            if (EXPLICIT_REFUSALS.has(codeOf(error) ?? "")) await this.settleOutgoing(conversationId, device, candidate, undefined, true);
+            throw error;
+          }
         });
       } catch (error) {
         if (codeOf(error) !== "conflict") throw error;

@@ -82,9 +82,37 @@ MLS leaves, current directory and current entitlement/epoch to agree. Legacy
 fallback must not resume new-message encryption after migration or bypass an
 older server's missing refresh capability.
 
+Review `e2ee/authority.ts`, `authority-locks.ts`, member privacy erasure and the
+shared privacy context seam. A reproduced after-encryption erasure race showed
+that epoch equality alone was insufficient. Verify that every commit, application and
+call-key write requires the exact pre-encryption delivery witness and compares
+it under the conversation lock, that old writers cannot omit it, and that
+privacy/device/membership changes use the profile-then-conversation lock order.
+No transport may attach fresh authority to stale ciphertext. Erasure must
+continue to hard-delete directory keys rather than retain a public history map.
+
+Check the bounded private outgoing application/control journal: ratchet and
+candidate persist before transport; an exact own acknowledgement/log receipt
+alone materializes a readable message or confirmed call key; unknown outcomes
+never trigger blind retransmission; explicit refusals remove only the candidate.
+Queue exhaustion refuses a new send without advancing its ratchet. Competing
+call-key candidates must never overwrite a confirmed winning key, and confirmed
+older generations must remain available to prove rekey holding.
+
+Review generation-specific SFU rooms in `members/call-seats.ts`,
+`members/group-calls.ts` and `call/group/GroupCallRoom.tsx`. Self-hosted LiveKit
+does not invalidate a cached JWT on participant removal. The authorized local
+probe confirmed this documented behavior. Check transactional retirement of
+the previous room, generation-bound reauthorization, the original room alias
+used before this change, and preservation of microphone/camera choices.
+Short credential lifetimes do not replace this boundary. A removed credential
+must never reach legitimate peers in the new generation; the actual browser
+regression uses only the synthetic loopback SFU.
+
 `deploy/openmls-migration-2026-11-11.md` records fourteen native, seventeen
-core, fifteen PostgreSQL, eight SDK and twenty-five actual browser journeys,
-plus the final eight locale/theme and transient-WASM-retry browser variants.
+core, twenty-nine PostgreSQL, eight SDK and twenty-five actual browser journeys,
+plus the final four affected reruns, eight locale/theme variants, transient-WASM
+retry, accepted-response loss and cached-old-credential SFU isolation.
 Final protected checks and independent acceptance remain open. RustSec reports zero vulnerabilities with a visible informational
 maintenance warning for an uncompiled verification dependency; no advisory is
 ignored. OpenMLS's historical audit does not audit this upstream revision,

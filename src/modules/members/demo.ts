@@ -4,6 +4,8 @@
 // each other, post, talk and sell, so a new site and the playground show the
 // member features working. Every record is tracked by the demo run that made
 // it and only those are removed on purge.
+import { lockMemberProfiles, lockMemberConversations } from "./authority-locks";
+import { dropFromCalls } from "./call-seats";
 import { eq, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
@@ -140,6 +142,9 @@ export const purgeDemoCommunity = defineService({
     await requireDemoHandlerRun(ctx.tx, input, CONTRIBUTION, "purge");
     const productIds = input.records.filter((r) => r.subjectType === "product").map((r) => r.subjectId);
     const memberIds = input.records.filter((r) => r.subjectType === "member").map((r) => r.subjectId);
+    await lockMemberProfiles(ctx.tx, memberIds, "update");
+    const affectedConversations = await lockMemberConversations(ctx.tx, memberIds);
+    for (const userId of memberIds) await dropFromCalls(ctx, affectedConversations, userId);
     if (productIds.length) {
       await ctx.tx.delete(memberListings).where(inArray(memberListings.productId, productIds));
       await ctx.tx.delete(priceListEntries).where(inArray(priceListEntries.variantId, ctx.tx.select({ id: productVariants.id }).from(productVariants).where(inArray(productVariants.productId, productIds))));

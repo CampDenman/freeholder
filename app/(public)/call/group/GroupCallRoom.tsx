@@ -70,17 +70,34 @@ export function GroupCallRoom({ callId, conversationId, userId, media, labels }:
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [mic, setMic] = useState(true);
   const [camera, setCamera] = useState(media === "video");
+  const [connectionRevision, setConnectionRevision] = useState(0);
+  const leaving = useRef(false);
+  const microphoneWanted = useRef(true);
+  const cameraWanted = useRef(media === "video");
+  const connectionAttempts = useRef(0);
   const roomRef = useRef<Room | null>(null);
   const audio = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let stopped = false;
+    let restarting = false;
+    let installed: Room | undefined;
+    let worker: Worker | undefined;
     let resync: ReturnType<typeof setInterval> | undefined;
     const device = deviceFor(userId);
+    setPhase("connecting");
+    setTiles([]);
+    const restart = () => {
+      if (stopped || restarting || leaving.current) return;
+      if (connectionAttempts.current >= 4) { setPhase("failed"); return; }
+      restarting = true;
+      void installed?.disconnect();
+      setConnectionRevision(revision => revision + 1);
+    };
     async function connect() {
+      connectionAttempts.current++;
       const me = await device.device();
       await device.sync(conversationId);
-      const credentials = await unwrap(joinGroupCallAction({ id: callId, deviceId: me.deviceId }));
       setPhase("key");
       let key: string | null = null;
       let generation = 0;
@@ -88,12 +105,17 @@ export function GroupCallRoom({ callId, conversationId, userId, media, labels }:
         ({ key, generation } = await device.currentCallKey(conversationId, callId));
         if (!key) await new Promise((resolve) => setTimeout(resolve, 1000));
       }
-      if (!key || stopped) throw new Error("No media key arrived.");
+      if (stopped || leaving.current) return;
+      if (!key) throw new Error("No media key arrived.");
+      const credentials = await unwrap(joinGroupCallAction({ id: callId, deviceId: me.deviceId, generation }));
+      if (credentials.generation !== generation) { restart(); return; }
+      if (stopped || leaving.current) return;
       const keyProvider = new ExternalE2EEKeyProvider();
-      const worker = new Worker(new URL("livekit-client/e2ee-worker", import.meta.url));
+      worker = new Worker(new URL("livekit-client/e2ee-worker", import.meta.url));
       const room = new Room({ encryption: { keyProvider, worker }, adaptiveStream: true, dynacast: true });
+      installed = room;
       roomRef.current = room;
-      const refresh = () => setTiles(tilesOf(room));
+      const refresh = () => { if (!stopped && !restarting) setTiles(tilesOf(room)); };
       room
         .on(RoomEvent.ParticipantConnected, refresh)
         .on(RoomEvent.ParticipantDisconnected, refresh)
@@ -104,37 +126,47 @@ export function GroupCallRoom({ callId, conversationId, userId, media, labels }:
         .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => { track.detach().forEach((el) => el.remove()); refresh(); })
         .on(RoomEvent.LocalTrackPublished, refresh)
         .on(RoomEvent.ParticipantEncryptionStatusChanged, refresh)
-        .on(RoomEvent.Disconnected, () => { if (!stopped) setPhase("removed"); });
+        .on(RoomEvent.Disconnected, restart);
       await keyProvider.setKey(unb64(key).buffer as ArrayBuffer);
       await room.setE2EEEnabled(true);
       await room.connect(credentials.url, credentials.token);
-      await room.localParticipant.setMicrophoneEnabled(true);
-      if (media === "video") await room.localParticipant.setCameraEnabled(true);
+      if (stopped || leaving.current) { await room.disconnect(); return; }
+      await room.localParticipant.setMicrophoneEnabled(microphoneWanted.current);
+      if (media === "video" && !stopped && !leaving.current) await room.localParticipant.setCameraEnabled(cameraWanted.current);
+      if (stopped || leaving.current) { await room.disconnect(); return; }
       refresh();
       setPhase("live");
+      connectionAttempts.current = 0;
       // Keep the group current, so a device that joins gets the key, and move
       // to the new key when someone has left (C12.37).
       resync = setInterval(() => {
         void device
           .currentCallKey(conversationId, callId)
-          .then(async (next) => {
-            if (next.key && next.generation > generation) {
-              generation = next.generation;
-              await keyProvider.setKey(unb64(next.key).buffer as ArrayBuffer);
-            }
+          .then((next) => {
+            // Even before the new key arrives, stop publishing in a room
+            // reachable with a removed participant's cached credential.
+            if (next.generation !== generation) restart();
           })
           .catch(() => undefined);
       }, 3000);
     }
-    connect().catch(() => { if (!stopped) setPhase("failed"); });
+    connect().catch((error: unknown) => {
+      if (stopped || leaving.current) return;
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : undefined;
+      if (code === "conflict" && connectionAttempts.current < 4) restart();
+      else setPhase(code === "permission" || code === "not_found" ? "removed" : "failed");
+    });
     return () => {
       stopped = true;
       if (resync) clearInterval(resync);
-      void roomRef.current?.disconnect();
+      if (roomRef.current === installed) roomRef.current = null;
+      if (installed) void installed.disconnect().finally(() => worker?.terminate());
+      else worker?.terminate();
     };
-  }, [callId, conversationId, media, userId]);
+  }, [callId, conversationId, media, userId, connectionRevision]);
 
   async function leave() {
+    leaving.current = true;
     await roomRef.current?.disconnect();
     await leaveGroupCallAction({ id: callId });
     router.push(`/messages/${conversationId}`);
@@ -152,8 +184,8 @@ export function GroupCallRoom({ callId, conversationId, userId, media, labels }:
       </ul>
       <div ref={audio} hidden />
       <div className="flex flex-wrap gap-2">
-        <Button variant="quiet" disabled={phase !== "live"} onClick={() => { const next = !mic; setMic(next); void roomRef.current?.localParticipant.setMicrophoneEnabled(next); }}>{mic ? labels.mute : labels.unmute}</Button>
-        {media === "video" ? <Button variant="quiet" disabled={phase !== "live"} onClick={() => { const next = !camera; setCamera(next); void roomRef.current?.localParticipant.setCameraEnabled(next); }}>{camera ? labels.cameraOff : labels.cameraOn}</Button> : null}
+        <Button variant="quiet" disabled={phase !== "live"} onClick={() => { const next = !mic; microphoneWanted.current = next; setMic(next); void roomRef.current?.localParticipant.setMicrophoneEnabled(next); }}>{mic ? labels.mute : labels.unmute}</Button>
+        {media === "video" ? <Button variant="quiet" disabled={phase !== "live"} onClick={() => { const next = !camera; cameraWanted.current = next; setCamera(next); void roomRef.current?.localParticipant.setCameraEnabled(next); }}>{camera ? labels.cameraOff : labels.cameraOn}</Button> : null}
         <Button variant="danger" onClick={() => { void leave(); }}>{labels.leave}</Button>
       </div>
     </div>

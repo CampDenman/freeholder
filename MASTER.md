@@ -13042,7 +13042,7 @@ whatever is best for the people using the site.
   actual-leaf/current-epoch entitlement checks, private historical pins after
   erasure, and browser cross-tab locking prevent unsafe retries or new sharing
   with removed devices. Fourteen native tests, seventeen core integration/CSP
-  checks and fifteen PostgreSQL message/group-call controls pass; independently
+  checks and twenty-nine PostgreSQL message/group-call controls pass; independently
   located builds reproduce the committed runtime and license bundle. RustSec
   reports zero vulnerabilities with its documented uncompiled maintenance
   warning visible. See `deploy/openmls-migration-2026-11-11.md` and
@@ -13050,7 +13050,17 @@ whatever is best for the people using the site.
   including encrypted SFU media, wrong-key refusal, removal/rekey and the full
   existing member suite. The final migration rerun also passed recovery from an
   aborted WASM download, two real tabs, approved history and eight 320px locale/
-  theme variants with Axe and native-input bounds checks. Final protected
+  theme variants with Axe and native-input bounds checks. Follow-up review
+  reproduced an erasure-after-encryption delivery race; the PR was removed
+  from the merge queue for correction. Required pre-encryption authority
+  witnesses on commits/messages/call keys and ordered profile/conversation locks now fence erasure and
+  device/membership changes. Bounded private outgoing records recover exact
+  accepted messages/call keys after acknowledgement loss without blindly
+  resending uncertain ciphertext or rewinding ratchets. Calls reauthorize into
+  generation-specific rooms; an actual cached removed credential reaches only
+  the abandoned room while remaining peers keep decoding. The complete member
+  browser suite and final four affected reruns passed; renewed qualification
+  is recorded in the evidence document. Final protected
   checks and independent review remain required. A historical OpenMLS
   audit does not audit this revision or integration; members are still not told
   their messages are safe against a compromised server.

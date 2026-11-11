@@ -41,6 +41,7 @@ import {
   defineService,
   ServiceError,
   type Actor,
+  type ServiceContext,
   type Tx,
 } from "@/core/service";
 
@@ -141,7 +142,10 @@ export interface ContactPrivacySource {
   erase: (
     tx: Tx,
     contactId: string,
-    context: { requestId: string },
+    // Production supplies the real parent context so a source can compose
+    // audited services and queue after-commit work in this same transaction.
+    // Optional only for existing direct source-level tests and integrations.
+    context: { requestId: string; service?: ServiceContext },
   ) => Promise<{ affected: number; pendingJobs?: string[] }>;
 }
 
@@ -1433,9 +1437,10 @@ registerContactPrivacySource({
 });
 
 async function eraseContact(
-  tx: Tx,
+  ctx: ServiceContext,
   request: typeof dataRequests.$inferSelect,
 ) {
+  const tx = ctx.tx;
   const now = new Date();
   const exceptions = (
     await tx
@@ -1460,6 +1465,7 @@ async function eraseContact(
     }
     const result = await source.erase(tx, request.contactId, {
       requestId: request.id,
+      service: ctx,
     });
     outcomes.push({
       scope: source.scope,
@@ -1628,7 +1634,7 @@ export const fulfillDataRequest = defineService({
       if (existingArtifact && pendingErasureReceipt(existingArtifact.body)) {
         return { request, artifact: existingArtifact };
       }
-      const result = await eraseContact(ctx.tx, request);
+      const result = await eraseContact(ctx, request);
       status = result.pending ? "in_progress" : result.partiallyCompleted ? "partially_completed" : "completed";
       artifactBody = {
         format: "freeholder.erasure-receipt",
