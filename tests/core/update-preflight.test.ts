@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { generateKeyPairSync } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { PLATFORM_VERSION } from "@/core/platform";
 import { installPlugin } from "@/core/plugins/service";
+import { hashDirectory, publisherPublicKey, signIntegrity } from "@/core/plugins/integrity";
+import { trustPublisherKey } from "@/core/plugins/publisher-keys";
 import { pluginCompatibility, runPreflight } from "@/core/update/preflight";
 import { preflightUpdate } from "@/core/update/service";
 import {
@@ -81,7 +84,12 @@ describe.runIf(hasDatabase)("update preflight (C10.05)", { timeout: 60_000 }, ()
   });
 
   it("blocks an update that leaves an installed plugin outside its range", async () => {
-    await installPlugin.call({ path: join("plugins", "gift-registry") }, OWNER);
+    const signer = generateKeyPairSync("ed25519");
+    const publicKey = signer.publicKey.export({ type: "spki", format: "pem" }).toString();
+    const reviewer = { ...OWNER, security: { twoFactorRequired: true, twoFactorEnrolled: true, twoFactorVerified: true, stepUpValid: true } };
+    await trustPublisherKey.call({ publisher: "Preflight fixture", publicKey, fingerprint: publisherPublicKey(publicKey).keyId, confirmation: true }, reviewer);
+    const path = join("plugins", "gift-registry");
+    await installPlugin.call({ path, signature: signIntegrity(await hashDirectory(path), signer.privateKey) }, OWNER);
 
     const current = await runPreflight({});
     expect(current.steps.find((step) => step.id === "plugins")?.verdict).toBe("ok");

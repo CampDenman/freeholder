@@ -141,8 +141,8 @@ appears in MASTER.md or any New string is missing.
 - Old: `AuditLog` records every plugin's service calls under `actor: plugin:<name>`.
 - New: today a plugin's service calls are audited under the actor who triggered them.
 - Old: 3. **Signed releases (§39.3).** Platform images
-- New: Publisher public keys (Ed25519) are C3.42.
-- Why: the row was marked Evidence, but no code enforces a plugin's declared scopes. Plugin code runs with the caller's actor; `network:external` is checked only for importers (`packages/plugin-kit/src/importer.ts`); `/admin/plugins` shows no scopes or consent; no actor kind is `plugin:<name>` (`src/core/service.ts` `actorString`); isolation is boot-time only (`src/core/plugins/isolate.ts`, C3.10). Plugin and registry signatures are HMACs over a caller-supplied shared secret (`src/core/plugins/integrity.ts`, `src/core/plugins/registry.ts`), not Ed25519 like the release feed. The v1 gaps are open items C3.40–C3.42; sandboxing, C3.43, is deferred to v2 under §43.18 (owner decision 2026-11-05).
+- New: Plugin artifacts and registry indexes now use Ed25519 signatures against public keys the freshly verified owner explicitly trusts
+- Why: the row was marked Evidence, but no code enforces a plugin's declared scopes. Plugin code runs with the caller's actor; `network:external` is checked only for importers (`packages/plugin-kit/src/importer.ts`); `/admin/plugins` shows no scopes or consent; no actor kind is `plugin:<name>` (`src/core/service.ts` `actorString`); isolation is boot-time only (`src/core/plugins/isolate.ts`, C3.10). C3.42 now replaces caller-supplied HMAC secrets with Ed25519 publisher signatures (`src/core/plugins/integrity.ts`, `src/core/plugins/registry.ts`, `src/core/plugins/publisher-keys.ts`); native PostgreSQL, CLI, migration and owner-browser proofs are described in `deploy/plugin-publisher-trust.md`. The remaining v1 gaps are open items C3.40/C3.41; sandboxing, C3.43, is deferred to v2 under §43.18 (owner decision 2026-11-05).
 
 ### S12 — §25 · Plugin scaffolding and install paths
 - Kind: Narrowed

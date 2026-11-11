@@ -1888,18 +1888,18 @@ this addendum also includes C10.33 instead of weakening either gate.
 
 ## C3.42 — Publisher Ed25519 signatures for plugins and registry indexes
 
-- **F01** — `src/core/plugins/schema.ts`: Pending — trusted publisher and registry public keys, with rotation status.
-- **F02** — `src/core/plugins/integrity.ts`: Pending — Ed25519 verification replaces the HMAC over a caller-supplied shared secret; `src/core/update/feed.ts` is the release-feed precedent.
-- **F03** — N/A — signature verification touches no contact or money record; install and refusal are audited by the existing plugin services.
-- **F04** — `app/(admin)/admin/plugins/page.tsx`: Pending — the owner sees which key signed a plugin or registry and adds or retires trusted keys.
-- **F05** — `src/core/plugins/service.ts`: Pending — `plugins.install` and `plugins.cacheRegistry` take a publisher signature instead of `signingSecret`.
-- **F06** — `locales/en.json`: Pending — signer and refusal copy.
-- **F07** — `tests/core/plugins-lifecycle.test.ts`: Pending — an unsigned, forged or untrusted-key plugin or index is refused.
-- **F08** — `tests/core/plugins-lifecycle.test.ts`: Pending — sign, verify, rotate and refuse on real PostgreSQL.
-- **F09** — `src/core/update/keys.ts`: Pending — key rotation keeps a retiring key until every supported release ships its successor, as release keys do.
-- **F10** — N/A — one signature check per install or registry refresh, not per request.
-- **F11** — `deploy/doc-claim-mapping.md`: strike S11 records the gap in MASTER §26 item 3; changeset when it ships.
-- **F12** — `tests/core/plugins-lifecycle.test.ts`: Pending — publisher signs → registry index verified → plugin installed and verified.
+- **F01** — `db/migrations/0065_plugin_publisher_trust.sql`, `src/core/plugins/schema.ts`: constrained public key records, permanent revocations, registry-key FK and previous artifact snapshot. Real 64→65 rehearsal preserves metadata, disables legacy registrations and creates no trust.
+- **F02** — `src/core/plugins/integrity.ts`, `publisher-keys.ts`, `service.ts`: bounded length-framed hashes, purpose-separated Ed25519, typed errors and one transaction/lock for trust and artifact changes. An identical update retry preserves actual rollback history.
+- **F03** — `src/core/plugins/publisher-keys.ts`: no contact or money records are added. Successful shared-service mutations set audit subjects and queue declared events transactionally; refused mutations roll back. There is no new persistent denial log.
+- **F04** — `app/(admin)/admin/plugins/page.tsx`: owner key/fingerprint confirmation, signer status, signed install/update, registry pin/refresh, permanent revocation confirmation, inline refusal and expired-verification recovery. Browser journey exercises the composed controls.
+- **F05** — `src/core/plugins/service.ts`, `packages/sdk/src/generated.ts`: shared services and generated SDK require signatures; caller verification secrets cannot establish trust. `trustPublisherKey`, `revokePublisherKey` and `setRegistryPublisherKey` refuse agents, personal keys, staff and system actors; UI/HTTP/MCP share those checks.
+- **F06** — en/fr/es/ar labels, refusal and recovery copy; keyboard flow, 320px reflow and both-theme Axe in `tests/browser/plugin-publisher-trust.spec.ts`; localized Doctor trust remedy.
+- **F07** — `tests/core/plugin-publisher-trust-postgres.test.ts`: native tests refuse unsigned, forged, wrong-purpose, unknown/revoked-key and URL-replayed signatures, linked manifests, private PEM and silent publisher changes. Fresh owner trust, destructive confirmation, serialized revocation, immutable release guidance and verified rollback; no sandbox claim.
+- **F08** — `tests/core/plugin-publisher-trust.test.ts`, `tests/core/plugin-publisher-trust-postgres.test.ts`, `tests/core/plugins-lifecycle.test.ts`: real keys, offline CLI and PostgreSQL refusals, rotation, retry/rollback and concurrency. Owner-browser journey and live SDK schema verification supplement production build/artifact checks.
+- **F09** — `src/core/doctor/index.ts` checks enabled artifact bytes and cached registry trust. Public keys, pins and revocations are normal core backup/restore tables. Keep retiring keys during supported-release overlap; revoke compromised keys immediately. No publisher private key, customer erasure data or job is added.
+- **F10** — `app/(admin)/admin/plugins/PluginForms.tsx`: existing Plugins screen supplies key, registry and artifact setup, contextual help and fresh-verification recovery; migration leaves legacy installations disabled for explicit review. Hashing is streamed and bounded; verification makes no provider request or seed change.
+- **F11** — `deploy/plugin-publisher-trust.md`, MASTER §26, `.changeset/plugin-publisher-keys.md`, SDK and independent-review packet describe the implemented boundary. S11 remains narrowed for unfinished C3.40/C3.41, and C11.10 independent review remains open.
+- **F12** — `tests/browser/plugin-publisher-trust.spec.ts`: owner-browser proof: trust → verify catalogue → signed install/update → rotate registry key → refresh → revoke → refused rollback/enable. The actual previous artifact and preserved history are also exercised on PostgreSQL.
 
 ## C3.44 — WordPress-easy manual install on any host, native first, Docker optional
 

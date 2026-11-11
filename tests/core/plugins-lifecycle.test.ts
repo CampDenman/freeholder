@@ -3,6 +3,7 @@
 // Plugin install, enable, update, rollback, uninstall (C3.09–C3.11).
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
+import { generateKeyPairSync } from "node:crypto";
 import {
   addPluginRegistry,
   cachePluginRegistry,
@@ -17,7 +18,8 @@ import {
   updatePlugin,
 } from "@/core/plugins/service";
 import { signRegistryIndex, type RegistryIndex } from "@/core/plugins/registry";
-import { hashDirectory, signIntegrity } from "@/core/plugins/integrity";
+import { hashDirectory, publisherPublicKey, signIntegrity } from "@/core/plugins/integrity";
+import { trustPublisherKey } from "@/core/plugins/publisher-keys";
 import { isolatePlugins } from "@/core/plugins/isolate";
 import { definePlugin } from "@freeholder/plugin-kit";
 import {
@@ -40,6 +42,9 @@ import {
   truncateSpine,
 } from "../helpers/spine";
 
+const SIGNER = generateKeyPairSync("ed25519");
+const PUBLIC_KEY = SIGNER.publicKey.export({ type: "spki", format: "pem" }).toString();
+const REVIEWER = { ...OWNER, security: { twoFactorRequired: true, twoFactorEnrolled: true, twoFactorVerified: true, stepUpValid: true } };
 const FIXTURE = fileURLToPath(new URL("../fixtures/sample-plugin", import.meta.url));
 
 describe("plugin isolation (C3.10)", () => {
@@ -74,14 +79,17 @@ describe("importer contract (C3.21)", () => {
 });
 
 describe.runIf(hasDatabase)("plugin lifecycle", { timeout: 30_000 }, () => {
-  beforeEach(truncateSpine);
+  beforeEach(async () => {
+    await truncateSpine();
+    await trustPublisherKey.call({ publisher: "Test publisher", publicKey: PUBLIC_KEY, fingerprint: publisherPublicKey(PUBLIC_KEY).keyId, confirmation: true }, REVIEWER);
+  });
   afterAll(closeDb);
 
   it("installs from a directory, checks integrity, enables and uninstalls", async () => {
     const integrity = await hashDirectory(FIXTURE);
-    const signed = signIntegrity(integrity, "test-secret");
+    const signed = signIntegrity(integrity, SIGNER.privateKey);
     const installed = await installPlugin.call(
-      { path: FIXTURE, expectedIntegrity: integrity, signature: signed, signingSecret: "test-secret" },
+      { path: FIXTURE, expectedIntegrity: integrity, signature: signed },
       OWNER,
     );
     expect(installed.status).toBe("installed");
@@ -97,21 +105,20 @@ describe.runIf(hasDatabase)("plugin lifecycle", { timeout: 30_000 }, () => {
     expect(await listInstalledPlugins.call({}, OWNER)).toHaveLength(0);
   });
 
-  it("refuses a forged signature and records a rollback version", async () => {
+  it("refuses a forged signature and treats an identical update as a retry", async () => {
     const integrity = await hashDirectory(FIXTURE);
     await expect(
       failure(
         installPlugin.call(
-          { path: FIXTURE, signature: "sha256:deadbeef", signingSecret: "test-secret" },
+          { path: FIXTURE, signature: "sha256:deadbeef" },
           OWNER,
         ),
       ),
     ).resolves.toMatchObject({ code: "permission" });
-    await installPlugin.call({ path: FIXTURE, expectedIntegrity: integrity }, OWNER);
-    const updated = await updatePlugin.call({ path: FIXTURE }, OWNER);
-    expect(updated.previousVersion).toBe("0.1.0");
-    const rolled = await rollbackPlugin.call({ name: "sample" }, OWNER);
-    expect(rolled.version).toBe("0.1.0");
+    await installPlugin.call({ path: FIXTURE, expectedIntegrity: integrity, signature: signIntegrity(integrity, SIGNER.privateKey) }, REVIEWER);
+    const updated = await updatePlugin.call({ path: FIXTURE, signature: signIntegrity(integrity, SIGNER.privateKey) }, REVIEWER);
+    expect(updated.previousVersion).toBeNull();
+    expect(await failure(rollbackPlugin.call({ name: "sample" }, REVIEWER))).toMatchObject({ code: "conflict" });
   });
 
   it("stores a registry URL", async () => {
@@ -135,18 +142,19 @@ describe.runIf(hasDatabase)("plugin lifecycle", { timeout: 30_000 }, () => {
           license: "Apache-2.0",
           permissions: ["contacts:read"],
           freeholder: ">=0.0.0",
-          integrity: "sha256:abc",
+          integrity: `sha256:${"a".repeat(64)}`,
           changelog: "Initial release.",
         },
       ],
     };
-    const signature = signRegistryIndex(index, "registry-secret");
+    const url = "https://plugins.freeholder.ai/index.json";
+    await addPluginRegistry.call({ name: "Official", url, publisherKeyId: publisherPublicKey(PUBLIC_KEY).keyId }, REVIEWER);
+    const signature = signRegistryIndex(index, url, SIGNER.privateKey);
     await cachePluginRegistry.call(
       {
         url: "https://plugins.freeholder.ai/index.json",
         index,
         signature,
-        signingSecret: "registry-secret",
       },
       OWNER,
     );

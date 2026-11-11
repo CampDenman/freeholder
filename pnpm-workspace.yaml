@@ -89,3 +89,7 @@ overrides:
   # devDependency at the patched floor: as vitest's auto-installed peer it was
   # not re-resolved by an override.
   launch-editor: ">=2.14.2 <3"
+  # GHSA-474x-hrwr-fgx4: quadratic unterminated stop-node scanning. The
+  # application parser is pinned directly; Replit's Google Cloud storage
+  # dependency also needs the patched 5.x floor.
+  "@google-cloud/storage>fast-xml-parser": ">=5.12.0 <6"
