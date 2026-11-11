@@ -1987,6 +1987,21 @@ inside a carrier consent/retry protocol, nor live carrier acceptance.
 - **F11** — Release notes and qualified claims: `.changeset/blog-wordpress-structure.md`, `deploy/blog-wordpress-2026-11-07.md`.
 - **F12** — Partial software evidence: `tests/core/wordpress-import-flow.test.ts`, `tests/core/blog-structure-comments.test.ts`; deployment and source URL acceptance remain open in `deploy/blog-wordpress-2026-11-07.md`.
 
+## C3.47 — Durable large-source import phases
+
+- **F01** — `db/migrations/0073_import_source_graph.sql` normalizes source identities, entry ranges, bounded batches and shared file receipts. Original source/accepted plan guards and old-writer refusal remain part of the migration contract; populated upgrade qualification remains pending.
+- **F02** — `src/core/import/source-graph.ts`, `src/core/import/graph-batches.ts` and `src/core/import/graph-lifecycle.ts` reuse ordinary import/CMS services with static private parent phases and fresh current caller checks.
+- **F03** — `src/core/import/privacy.ts` invalidates unfinished old source graphs during reader erasure. `tests/core/import-resumption-privacy.test.ts` proves late-result refusal and named raw-source holds through rollback. Historical reader-address ownership remains required under C2.29.
+- **F04** — `app/(admin)/admin/imports/GraphImportControls.tsx` exposes pause, explicit continuation, reviewed conflicts and identical-source restore; `app/(admin)/admin/imports/[id]/page.tsx` renders bounded source/file windows. Actual owner browser qualification is pending.
+- **F05** — `src/core/import/graph-query.ts` adds a typed bounded public query alongside existing registry import operations. `src/core/import/graph-version.ts` binds mutations to the observed generation/source/plan revision; `packages/sdk/src/generated.ts` was regenerated through all eight live SDK controls on the composed schema.
+- **F06** — `locales/en.json`, `locales/es.json`, `locales/fr.json` and `locales/ar.json` contain the saved-import labels. `tests/browser/import-source-resumption.spec.ts` is written for four locales, 320px, keyboard and both-theme Axe; it has not yet run.
+- **F07** — `tests/core/import-resumption-flow.test.ts`, `tests/core/import-resumption-media.test.ts` and `tests/core/import-authority-telemetry.test.ts` cover original key identity, revocation/expiry/scope fences, immutable manifests, resource bounds and shared receipt ownership. The native evidence and unfinished cases are recorded in `deploy/import-source-graph.md`.
+- **F08** — `tests/core/wxr-index.test.ts`, `tests/core/wxr-source-offsets.test.ts`, `tests/core/import-resumption-flow.test.ts`, `tests/core/import-resumption-media.test.ts` and `tests/core/import-resumption-privacy.test.ts` exercise bounded parsing, independent processes, recovery and reversal. Final composed native/static qualification remains pending.
+- **F09** — `src/core/import/graph-read-recovery.ts` releases only a proven failed source-read lease. `src/core/import/media-receipts.ts` commits Asset, receipt and shared mapping atomically; uncertain physical PUT ownership and original storage namespace recovery remain required in the separate core-media lane.
+- **F10** — `app/(admin)/admin/imports/GraphImportControls.tsx` explains saved progress, source restoration and total source/file budgets. A fresh authenticated request advances each phase; no stored credential or fabricated unattended actor is introduced.
+- **F11** — `.changeset/resumable-wordpress-source.md` and `deploy/import-source-graph.md` identify the WXR increment and unfinished adapters, upgrade/browser checks, physical writes and actual acceptance. MASTER remains the sole product/status authority.
+- **F12** — Actual local 501-page publication/rollback, cross-process indexing, media/menu recovery, stale review refusal and privacy/hold evidence are recorded in `deploy/import-source-graph.md`. This partial WXR evidence closes neither C3.22 nor C3.47 and supplies no independent review or stable release signature.
+
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/agents-board.test.ts`.

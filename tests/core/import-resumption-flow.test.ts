@@ -31,6 +31,9 @@ describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 18
   beforeEach(async () => { await truncateSpine(); resetStorageForTests(); await ensureDefaults.call({}, OWNER); });
   afterAll(closeDb);
   it("keeps one real author and category across 501 posts and reverses their original owning batch", async () => {
+    // Defaults already owns a blog index. Remove that synthetic fixture page
+    // so this case actually exercises an index created and owned by the import.
+    await db().delete(pages).where(eq(pages.slug, "blog"));
     const original = new TextDecoder().decode(source(501));
     const header = '<wp:author><wp:author_login>fictional-writer</wp:author_login><wp:author_display_name>Fictional writer</wp:author_display_name><wp:author_email>fictional-writer@example.test</wp:author_email></wp:author><wp:category><wp:term_id>3</wp:term_id><wp:category_nicename>fictional-notes</wp:category_nicename><wp:cat_name>Fictional notes</wp:cat_name></wp:category>';
     const bytes = new TextEncoder().encode(original.replace('xmlns:wp=', 'xmlns:dc="urn:dc" xmlns:wp=').replace("<wp:wxr_version>", `${header}<wp:wxr_version>`).replaceAll("<wp:post_type>page</wp:post_type>", '<wp:post_type>post</wp:post_type><dc:creator>fictional-writer</dc:creator><category domain="category" nicename="fictional-notes">Fictional notes</category>'));
@@ -40,7 +43,7 @@ describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 18
     for (let phase = 0; phase < 4 && staged.status === "discover"; phase++) staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
     let committed = await commitImport.call({ id: run.id, graph: staged.graph }, OWNER);
     for (let phase = 0; phase < 4 && committed.status === "previewed"; phase++) committed = await commitImport.call({ id: run.id, graph: staged.graph }, OWNER);
-    expect(committed).toMatchObject({ status: "committed", counts: { posts: 501, pages: 501 } });
+    expect(committed).toMatchObject({ status: "committed", counts: { posts: 501, pages: 502 } });
     expect(await db().select().from(pages).where(eq(pages.slug, "blog"))).toHaveLength(1);
     const authors = await db().select().from(blogAuthors), terms = await db().select().from(blogTerms), posts = await db().select().from(blogPosts);
     expect(authors).toHaveLength(1); expect(terms).toHaveLength(1); expect(posts).toHaveLength(501);

@@ -74,20 +74,27 @@ replacement comments keep their existing privacy-controlled cutover checkpoint.
   observed-version review, the complete 501-page lifecycle and paginated URL
   manifest, shared media/menu recovery, real erasure with a late source result,
   and a named legal hold surviving rollback. The eighth case stopped at an
-  incorrect test expectation counting the automatic blog index as an imported
-  source page. Its expectation is corrected; author/category rollback still
-  requires its own completed rerun.
+  incorrect test expectation counting the already-existing default blog index
+  as an imported source page. A composed quiet rerun reached its last assertion
+  after correctly reversing all 501 posts, authors and terms, then correctly
+  preserved that original default index. The fixture now explicitly removes
+  its synthetic default first so it exercises an import-created index; that
+  final ownership variant still requires its own completed rerun.
 - Current pure WordPress/index/i18n checks passed 99 cases. These overlap earlier
   parser checks and are not an additional combined total. SDK regeneration
   passed eight inventory controls before the latest review/manifest additions;
-  it must be repeated for the final contracts.
+  the composed final contract regeneration subsequently passed all eight in
+  3.11 seconds on a fresh database migrated through 73.
+- The first composed production build passed with 20,362 files and 243,484,458
+  artifact bytes. The standalone scrub reported no source/environment leakage.
+  This is preparation for browser qualification, not deployment acceptance.
 
 ## Work still required
 
 The expanded media/choice implementation needs its final complete native rerun,
 including the real-post ownership rollback control. The four-locale actual
 browser journey is written but has not run. Browser qualification, production
-build, final SDK generation, populated 72→73
+the final production candidate, populated 72→73
 rehearsal and protected checks. Other source adapters must receive the durable
 continuation contract; the WXR vertical alone does not complete C3.22.
 

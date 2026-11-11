@@ -143,7 +143,7 @@ export default async function ImportRunPage({
             <h2 className="text-sm font-semibold">{t("imports.resume.media")}</h2>
             <ul className="grid min-w-0 list-none gap-3 p-0">{graph.media.map(file => <li key={file.key} className="grid min-w-0 gap-1 rounded-md border border-rule p-3 text-sm">
               <bdi dir="ltr" className="break-all">{file.sourceUrl}</bdi>
-              {file.error ? <p className="break-words text-danger">{file.error}</p> : null}
+              {file.error ? <p className="break-words text-danger">{t("imports.resume.failed")}</p> : null}
             </li>)}</ul>
             {graph.nextMediaKey !== null ? <Link href={`/admin/imports/${id}?mediaAfter=${encodeURIComponent(graph.nextMediaKey)}`} className="text-sm">{t("imports.resume.nextMedia")}</Link> : null}
           </div> : null}
@@ -155,7 +155,7 @@ export default async function ImportRunPage({
           <CardBody>
             {run.error ? (
               <p role="alert" className="text-sm font-medium text-danger">
-                {run.error}
+                {graph ? t("imports.resume.failed") : run.error}
               </p>
             ) : null}
             {shown.length > 0 ? (

@@ -259,7 +259,7 @@ export function SourceUploadForm({
       for (let verified = 1; staged.sourceRestored === false && verified < reserved.chunkCount; verified++) {
         staged = await apiJson("/api/v1/imports.previewFromUpload", { method: "POST", body: JSON.stringify({ id, uploadId: reserved.uploadId }) });
       }
-      if (staged.status === "failed") setError(staged.error ?? labels.uploadFailed);
+      if (staged.status === "failed") setError(graph ? labels.uploadFailed : staged.error ?? labels.uploadFailed);
       setProgress(null);
       router.refresh();
     } catch (failure) {

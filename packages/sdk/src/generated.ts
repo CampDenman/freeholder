@@ -4947,7 +4947,7 @@ export interface ServiceCatalog {
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "imports.reviewConflicts": {
-    input: { id: string; conflicts: { slug: string; resolution: "keep-existing" | "replace" | "rename"; renamedSlug?: string }[] };
+    input: { id: string; graph?: { generation: string; sourceRevision: string; planRevision: number }; conflicts: { slug: string; resolution: "keep-existing" | "replace" | "rename"; renamedSlug?: string }[] };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "imports.rollback": {
@@ -4955,8 +4955,8 @@ export interface ServiceCatalog {
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "imports.sourceGraph": {
-    input: { id: string; afterOrdinal?: number; limit?: number };
-    output: { id: string; status: string; origin: string; version: { generation: string; sourceRevision: string; planRevision: number }; indexComplete: boolean; indexed: number; planFrozen: boolean; upload: { uploadId: string; chunks: number; received: number; expiresAt: string } | null; counts: { [key: string]: number }; entries: { ordinal: number; kind: string; sourceUrl: string | null; title: string | null; destinationPath: string | null; sourceStatus: string | null; applied: boolean; reason: string | null }[]; nextOrdinal: number | null };
+    input: { id: string; afterOrdinal?: number; afterMediaKey?: string; limit?: number };
+    output: { id: string; status: string; origin: string; version: { generation: string; sourceRevision: string; planRevision: number }; indexComplete: boolean; indexed: number; planFrozen: boolean; planReady: boolean; invalidated: boolean; upload: { uploadId: string; chunks: number; received: number; expiresAt: string } | null; counts: { [key: string]: number }; entries: { ordinal: number; kind: string; sourceUrl: string | null; title: string | null; destinationPath: string | null; sourceStatus: string | null; resolution: ("keep-existing" | "replace" | "rename") | null; applied: boolean; reason: string | null }[]; nextOrdinal: number | null; media: { key: string; sourceUrl: string; filename: string; assetId: string | null; bytes: number | null; error: string | null }[]; nextMediaKey: string | null };
   };
   "imports.start": {
     input: { origin: string; kind: "wordpress-rest" | "wordpress-wxr" | "sitemap" | "rss" | "atom" | "html" | "archive"; approvedMediaOrigins?: string[] };
@@ -4967,8 +4967,8 @@ export interface ServiceCatalog {
     output: { received: number; chunks: number; complete: boolean };
   };
   "imports.wordpressVerificationPlan": {
-    input: { id: string };
-    output: { sourceOrigin: string; status: string; checks: { sourceUrl: string; requestPath: string; destinationPath: string; redirect: boolean; expected: { [key: string]: unknown } }[]; warnings: string[] };
+    input: { id: string; afterOrdinal?: number; limit?: number };
+    output: { sourceOrigin: string; status: string; checks: { sourceUrl: string; requestPath: string; destinationPath: string; redirect: boolean; expected: { [key: string]: unknown } }[]; warnings: string[]; nextOrdinal?: number | null };
   };
   "invitations.accept": {
     input: { token: string; password: string };
