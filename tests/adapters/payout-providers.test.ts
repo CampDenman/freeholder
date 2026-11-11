@@ -149,6 +149,19 @@ describe("Stripe Connect payouts (C12.26)", () => {
     for(const privateValue of ["private-owner","Private corporate","Private registered","Private Person","private-person"])expect(JSON.stringify(details)).not.toContain(privateValue);
   });
 
+  it.each([
+    {},{support_url:"javascript:alert(1)"},{support_url:"https://private:password@example.test/help"},{support_url:"file:///private/address"},
+    {support_email:"private\r\nBcc: someone@example.test"},{support_phone:"private\u0000phone"},
+    {support_address:{line1:"Public studio",city:"Victoria"}},{support_email:`${"a".repeat(260)}@example.test`},
+  ])("never fills missing or invalid public support from private representative fields: %j",businessProfile=>{
+    expect(stripeMerchantDetails({business_profile:{name:"Original studio",...businessProfile},email:"private-owner@example.test",country:"CA",company:{phone:"+12505550123",address:{line1:"Private registered address",country:"CA"}},individual:{email:"private-person@example.test",address:{line1:"Private home address",country:"CA"}}})).toMatchObject({merchantName:"Original studio",merchantSupport:null});
+  });
+  it("refuses another account's public merchant details on an original-account refresh",async()=>{
+    const {fetcher}=recorder(()=>({id:"acct_OtherMerchant",payouts_enabled:true,charges_enabled:true,capabilities:{transfers:"active",card_payments:"active"},business_profile:{name:"Other Studio",support_email:"other@studio.example"}}));
+    const stripe=createStripeConnect({secretKey:"synthetic-test-only",webhookSecrets:["synthetic-test-only"],fetch:fetcher});
+    await expect(stripe.accountDetails!("acct_OriginalMerchant")).rejects.toThrow("original connected account");
+  });
+
   it("does not round a large site's fee up by a minor unit (C12.38)", () => {
     // Floating-point multiplication previously produced 208967022709991.
     expect(marketFeeMinor(Number.MAX_SAFE_INTEGER, 232)).toBe(208967022709990);

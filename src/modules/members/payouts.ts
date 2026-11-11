@@ -10,6 +10,7 @@
 // keeps every amount. Provider-backed adapters (Stripe Connect, PayPal
 // Payouts, Razorpay Route: C12.26–C12.27) are in provider-payouts.ts.
 import { z } from "zod";
+import {publicMerchantSupport} from "@/core/commerce/merchant-identity";
 import { and, desc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
@@ -291,6 +292,8 @@ export const myPayoutAccount = defineService({
     manual: z.boolean(),
     status: z.enum(["none", "pending", "ready", "disabled"]),
     instructions: z.string().nullable(),
+    merchantName:z.string().min(1).max(200).nullable(),
+    merchantSupport:publicMerchantSupport.nullable(),
   }),
   handler: async (_input, ctx) => {
     const userId = me(ctx);
@@ -301,6 +304,8 @@ export const myPayoutAccount = defineService({
       manual: adapters.get(rules.adapter)?.manual ?? true,
       status: account && account.adapter === rules.adapter ? account.status : "none",
       instructions: account?.instructionsSealed ? openMessage(account.instructionsSealed, `payout:${userId}`) : null,
+      merchantName:account?.adapter===rules.adapter?account.merchantName:null,
+      merchantSupport:account?.adapter===rules.adapter?account.merchantSupport:null,
     };
   },
 });

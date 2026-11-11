@@ -13,9 +13,9 @@ import {ServiceError,type Tx} from "@/core/service";
 import { invoiceMarketPolicies } from "@/modules/invoicing/schema";
 import { subscriptionMarketPolicies } from "@/modules/subscriptions/schema";
 
-export async function merchantIdentityErased(tx:Tx,userId:string):Promise<boolean>{
+export async function merchantIdentityErased(tx:Tx,userId:string,contactId?:string|null):Promise<boolean>{
   await lockContactIdentityForRead(tx);
-  const [erased]=await tx.select({id:contacts.id}).from(contacts).where(and(eq(contacts.userId,userId),eq(contacts.source,"privacy-erasure"))).limit(1);
+  const [erased]=await tx.select({id:contacts.id}).from(contacts).where(and(or(eq(contacts.userId,userId),contactId?eq(contacts.id,contactId):undefined),eq(contacts.source,"privacy-erasure"))).limit(1);
   return Boolean(erased);
 }
 async function merchantForContact(tx:Tx,contactId:string):Promise<string|null>{

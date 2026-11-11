@@ -67,11 +67,13 @@ describe.runIf(hasDatabase)("customer invoices", () => {
   async function merchantInvoice(){
     const context=await fixture("original-merchant-invoice"),sellerId=randomUUID();
     await db().insert(users).values({id:sellerId,email:"original-merchant@example.test",role:"customer"});
+    const merchantContact=await createContact.call({name:"Original Merchant Studio",email:"original-merchant@example.test"},OWNER);
+    await db().update(contacts).set({userId:sellerId}).where(eq(contacts.id,merchantContact.id));
     await db().insert(memberProfiles).values({userId:sellerId,handle:"invoice_merchant",displayName:"Current seller profile",status:"active",ageAttestedAt:new Date()});
     await db().insert(memberPayoutAccounts).values({userId:sellerId,adapter:"stripe_connect",externalAccountId:"acct_OriginalInvoice",status:"ready",chargesReady:true,merchantName:"Original Merchant Studio"});
     // The direct mode stays unavailable to owner configuration. This synthetic
     // frozen-invoice fixture exercises its required customer read boundary.
-    await db().insert(invoiceMarketPolicies).values({invoiceId:context.invoice.id,model:"seller_merchant",adapter:"stripe_connect",sellerUserId:sellerId,merchantName:"Original Merchant Studio",providerAccountId:"acct_OriginalInvoice",siteFeeBps:1000,feeMinor:1000,holdDays:0});
+    await db().insert(invoiceMarketPolicies).values({invoiceId:context.invoice.id,model:"seller_merchant",adapter:"stripe_connect",sellerUserId:sellerId,merchantName:"Original Merchant Studio",merchantContactId:merchantContact.id,providerAccountId:"acct_OriginalInvoice",siteFeeBps:1000,feeMinor:1000,holdDays:0});
     return {...context,sellerId};
   }
 

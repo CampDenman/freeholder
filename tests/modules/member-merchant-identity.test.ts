@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C1.08: synthetic provider→agreement→invoice→receipt and data rights.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
-import {eq} from "drizzle-orm";
+import {readFileSync} from "node:fs";
+import {eq,sql} from "drizzle-orm";
 import {db} from "@/core/db";
 import {users} from "@/core/auth/schema";
 import {contacts,contactMergeOperations} from "@/core/contacts/schema";
@@ -10,14 +11,16 @@ import {resolveContact,mergeContacts,undoContactMerge} from "@/core/contacts/ser
 import {ready} from "@/core/runtime";
 import {updateBusiness} from "@/core/settings/service";
 import {contactPrivacySources,createDataRequest,fulfillDataRequest,verifyDataRequest,addRetentionException,removeRetentionException} from "@/core/privacy/service";
-import {dataRequestArtifacts} from "@/core/privacy/schema";
+import {dataRequestArtifacts,dataRequests} from "@/core/privacy/schema";
 import {createStripeConnect} from "@/adapters/payouts/stripe-connect";
 import {setPayoutProviderForTests} from "@/adapters/payouts";
 import * as paymentAdapters from "@/adapters/payments";
 import {joinSite,updateMembershipRules} from "@/modules/members/service";
 import {createMemberPlan} from "@/modules/members/member-subscriptions";
+import{myPayoutAccount}from"@/modules/members/payouts";
 import {refreshPayoutAccount,applyPayoutAccount,applyPayoutWebhook} from "@/modules/members/provider-payouts";
 import {memberPayoutAccounts,memberSettings} from "@/modules/members/schema";
+import {merchantIdentityErased} from "@/modules/members/merchant-identity-privacy";
 import {getSubscriptionMarketPolicy} from "@/modules/subscriptions/market-policy";
 import {renewDue,savePlan,subscribe} from "@/modules/subscriptions/service";
 import {plans,subscriptions,subscriptionMarketPolicies} from "@/modules/subscriptions/schema";
@@ -71,9 +74,13 @@ describe.runIf(hasDatabase)("frozen merchant commercial identity (C12.38)",()=>{
  }
  it("keeps provider public support through agreement, renewal, customer invoice and original-account receipt",async()=>{
   expect((await db().select().from(memberPayoutAccounts))[0]).toMatchObject({merchantName:"Original Studio",merchantSupport:support});
+  expect(await myPayoutAccount.call({},SELLER)).toMatchObject({merchantName:"Original Studio",merchantSupport:support});
+  expect(await myPayoutAccount.call({},BUYER)).toMatchObject({merchantName:null,merchantSupport:null});
+  expect(await failure(myPayoutAccount.call({},ANONYMOUS))).toMatchObject({code:"permission"});
   const started=await agreement();
   expect(await getSubscriptionMarketPolicy.call({subscriptionId:started.subscription.id},SYSTEM)).toMatchObject({merchantSupport:support,merchantContactId:sellerContact});
   currentSupport=replacement;await refreshPayoutAccount.call({},SELLER);
+  expect(await myPayoutAccount.call({},SELLER)).toMatchObject({merchantSupport:replacement});
   await db().update(subscriptions).set({currentPeriodStart:new Date("2026-01-01T00:00:00Z"),currentPeriodEnd:new Date("2026-02-01T00:00:00Z"),trialEndsAt:new Date("2026-02-01T00:00:00Z")}).where(eq(subscriptions.id,started.subscription.id));
   expect((await renewDue.call({},SYSTEM)).renewed).toBe(1);
   const [invoice]=await db().select().from(invoices);
@@ -119,11 +126,20 @@ describe.runIf(hasDatabase)("frozen merchant commercial identity (C12.38)",()=>{
   await fulfillDataRequest.call({id,confirmation:"ERASE"},OWNER);
   expect(await db().select().from(users).where(eq(users.id,SELLER.userId))).toHaveLength(0);
   expect((await db().select().from(contacts).where(eq(contacts.id,sellerContact)))[0]?.userId).toBeNull();
+  expect(await db().transaction(tx=>merchantIdentityErased(tx,SELLER.userId,sellerContact))).toBe(true);
   const source=contactPrivacySources().find(item=>item.scope==="members.merchantIdentity")!;
   expect(JSON.stringify(await db().transaction(tx=>source.exportData(tx,sellerContact)))).toContain(support.email);
   await removeRetentionException.call({id:exception.id},OWNER);
   await fulfillDataRequest.call({id:await request("erasure"),confirmation:"ERASE"},OWNER);
   expect(JSON.stringify(await db().transaction(tx=>source.exportData(tx,sellerContact)))).not.toContain(support.email);
+ });
+ it("erases an unheld payout account when only the minimal login has a retention hold",async()=>{
+  await issued();const id=await request("erasure");
+  await addRetentionException.call({dataRequestId:id,scope:"contact.credentials",reason:"legal_claim",legalBasis:"Retain only the minimal login parent for this specific legal claim."},OWNER);
+  await fulfillDataRequest.call({id,confirmation:"ERASE"},OWNER);
+  expect(await db().select().from(users).where(eq(users.id,SELLER.userId))).toHaveLength(1);
+  expect(await db().select().from(memberPayoutAccounts).where(eq(memberPayoutAccounts.userId,SELLER.userId))).toHaveLength(0);
+  expect((await db().select().from(invoiceMarketPolicies))[0]).toMatchObject({merchantSupport:null,merchantName:"[privacy-erased-merchant]"});
  });
  it("repoints commercial ownership on contact merge and restores unchanged documents without copying support into recovery history",async()=>{
   const {invoice,started}=await issued(),other=(await resolveContact.call({email:"merchant-duplicate@example.test",name:"Same merchant duplicate"},OWNER)).contact;
@@ -143,10 +159,58 @@ describe.runIf(hasDatabase)("frozen merchant commercial identity (C12.38)",()=>{
   expect(await failure(undoContactMerge.call({operationId:merged.mergeOperationId},OWNER))).toMatchObject({code:"conflict"});
   expect((await db().select().from(subscriptionMarketPolicies)).every(row=>row.merchantContactId===other.id)).toBe(true);
  });
+ it("fences a pre74 merge after owner backfill without inventing financial recovery before-images",async()=>{
+  const {invoice}=await issued();
+  // A pre74 record had no merchant_contact_id column or reference witness.
+  await db().update(invoiceMarketPolicies).set({merchantContactId:null});
+  await db().update(subscriptionMarketPolicies).set({merchantContactId:null});
+  const other=(await resolveContact.call({email:"legacy-canonical@example.test",name:"Same merchant canonical contact"},OWNER)).contact;
+  const merged=await mergeContacts.call({duplicateId:sellerContact,survivingId:other.id},OWNER),[operation]=await db().select().from(contactMergeOperations).where(eq(contactMergeOperations.id,merged.mergeOperationId));
+  const legacyState=(operation!.referenceState as {table:string}[]).filter(row=>!["invoice_market_policies","subscription_market_policies"].includes(row.table));
+  await db().update(contactMergeOperations).set({referenceState:legacyState}).where(eq(contactMergeOperations.id,merged.mergeOperationId));
+  const upgrade=readFileSync("db/migrations/0074_merchant_commercial_identity.sql","utf8").split("--> statement-breakpoint").filter(statement=>statement.includes("SET merchant_contact_id=c.id")||statement.includes("UPDATE contact_merge_operations m SET undoable=false"));
+  expect(upgrade).toHaveLength(3);for(const statement of upgrade)await db().execute(sql.raw(statement));
+  expect(await failure(undoContactMerge.call({operationId:merged.mergeOperationId},OWNER))).toMatchObject({code:"conflict"});
+  expect((await db().select().from(contacts).where(eq(contacts.userId,SELLER.userId)))[0]?.id).toBe(other.id);
+  expect(await getInvoiceMarketPolicy.call({invoiceId:invoice.id},SYSTEM)).toMatchObject({merchantContactId:other.id,merchantSupport:support,providerAccountId:"acct_OriginalCommercial",feeMinor:100});
+ });
+ it.each(["invoice","agreement"] as const)("moves all 5,001 %s owner pointers while refusing an unbounded undo witness",async kind=>{
+  if(kind==="invoice"){
+   await db().execute(sql`WITH seeded AS (
+    INSERT INTO invoices(contact_id,idempotency_key,request_hash,status,currency)
+    SELECT ${buyerContact}::uuid,'merchant-cap-'||n,repeat('0',64),'draft','CAD' FROM generate_series(1,5001) n RETURNING id
+   ) INSERT INTO invoice_market_policies(invoice_id,model,adapter,site_fee_bps,hold_days,fee_minor,seller_user_id,merchant_name,merchant_support,merchant_contact_id,provider_account_id)
+   SELECT id,'seller_merchant','stripe_connect',0,0,0,${SELLER.userId}::uuid,'Original Studio',${JSON.stringify(support)}::jsonb,${sellerContact}::uuid,'acct_OriginalCommercial' FROM seeded`);
+  }else{
+   const original=await agreement();
+   await db().execute(sql`WITH seeded AS (
+    INSERT INTO subscriptions(contact_id,plan_id,product_variant_id,currency,billing_mode,status,current_period_start,current_period_end)
+    SELECT s.contact_id,s.plan_id,s.product_variant_id,s.currency,s.billing_mode,s.status,s.current_period_start,s.current_period_end
+    FROM subscriptions s CROSS JOIN generate_series(1,5000) n WHERE s.id=${original.subscription.id}::uuid RETURNING id
+   ) INSERT INTO subscription_market_policies(subscription_id,model,adapter,site_fee_bps,hold_days,seller_user_id,merchant_name,merchant_support,merchant_contact_id,provider_account_id)
+   SELECT n.id,p.model,p.adapter,p.site_fee_bps,p.hold_days,p.seller_user_id,p.merchant_name,p.merchant_support,p.merchant_contact_id,p.provider_account_id
+   FROM seeded n CROSS JOIN subscription_market_policies p WHERE p.subscription_id=${original.subscription.id}::uuid`);
+  }
+  const other=(await resolveContact.call({email:"bounded-canonical@example.test",name:"Same merchant canonical contact"},OWNER)).contact;
+  const merged=await mergeContacts.call({duplicateId:sellerContact,survivingId:other.id},OWNER),table=kind==="invoice"?invoiceMarketPolicies:subscriptionMarketPolicies;
+  const [moved]=await db().select({count:sql<number>`count(*)::integer`}).from(table).where(eq(table.merchantContactId,other.id));expect(moved!.count).toBe(5001);
+  const [operation]=await db().select().from(contactMergeOperations).where(eq(contactMergeOperations.id,merged.mergeOperationId));
+  expect(operation!.undoable).toBe(false);expect(JSON.stringify(operation!.referenceState)).not.toContain(support.email);
+  expect(await failure(undoContactMerge.call({operationId:merged.mergeOperationId},OWNER))).toMatchObject({code:"conflict"});
+ });
  it("refuses late provider refresh and ignores personal copies in signed account feedback after the erasure marker",async()=>{
   await db().update(contacts).set({source:"privacy-erasure"}).where(eq(contacts.id,sellerContact));
   expect(await failure(applyPayoutAccount.call({adapter:"stripe_connect",externalAccountId:"acct_OriginalCommercial",status:"ready",chargesReady:true,merchantName:"Recreated Studio",merchantSupport:replacement},SELLER))).toMatchObject({code:"conflict"});
   await applyPayoutWebhook.call({provider:"stripe_connect",events:[{kind:"account",externalAccountId:"acct_OriginalCommercial",status:"ready",chargesReady:true,merchantName:"Recreated Studio",merchantSupport:replacement}]},SYSTEM);
   expect((await db().select().from(memberPayoutAccounts))[0]).toMatchObject({merchantName:"Original Studio",merchantSupport:support,chargesReady:false});
+ });
+ it("refuses a prior writer that skips owned commercial erasure instead of acknowledging completion",async()=>{
+  await issued();const id=await request("erasure"),source=contactPrivacySources().find(item=>item.scope==="members.merchantIdentity")!,original=source.erase;
+  // An older image has no adapter for these new personal columns.
+  source.erase=async()=>({affected:0});let failure:unknown;
+  try{await fulfillDataRequest.call({id,confirmation:"ERASE"},OWNER);}catch(error){failure=error;}finally{source.erase=original;}
+  expect(failure).toMatchObject({cause:{code:"23514"}});
+  expect((await db().select().from(dataRequests).where(eq(dataRequests.id,id)))[0]?.status).toBe("verified");
+  expect((await db().select().from(invoiceMarketPolicies))[0]).toMatchObject({merchantName:"Original Studio",merchantSupport:support});
  });
 });

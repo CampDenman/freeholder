@@ -74,7 +74,7 @@ export const resolveInvoiceMarketPolicy = defineService({
       const seller = await sellerForInvoice(ctx, invoice);
       if (!policy && !seller) return null;
       if (!policy || policy.sellerUserId !== seller) throw new ServiceError("conflict", "The agreement's original seller needs reconciliation before billing.");
-      const erased=policy.sellerUserId&&await merchantIdentityErased(ctx.tx,policy.sellerUserId);
+      const erased=policy.sellerUserId&&await merchantIdentityErased(ctx.tx,policy.sellerUserId,policy.merchantContactId);
       return { ...policy,...(erased?{merchantName:ERASED_MERCHANT_NAME,merchantSupport:null}:{}), feeMinor: marketFeeMinor(invoice.totalMinor - invoice.taxMinor, policy.siteFeeBps) };
     }
     const rules = await marketRules(ctx);
@@ -115,7 +115,7 @@ registerInvoiceMerchantVerifier(async (invoiceId, ctx) => { await ctx.callAsSyst
 
 async function verifyMerchantPolicy(policy: SubscriptionMarketPolicy, ctx: ServiceContext): Promise<void> {
   if (!policy.sellerUserId) throw new ServiceError("conflict", "The original seller is missing.");
-  if(await merchantIdentityErased(ctx.tx,policy.sellerUserId))throw new ServiceError("conflict","This seller's erased business details cannot authorize new collection.");
+  if(await merchantIdentityErased(ctx.tx,policy.sellerUserId,policy.merchantContactId))throw new ServiceError("conflict","This seller's erased business details cannot authorize new collection.");
   const [seller] = await ctx.tx.select({ account: memberPayoutAccounts, profile: memberProfiles })
     .from(memberPayoutAccounts).innerJoin(memberProfiles, eq(memberProfiles.userId, memberPayoutAccounts.userId))
     .where(eq(memberPayoutAccounts.userId, policy.sellerUserId)).limit(1);

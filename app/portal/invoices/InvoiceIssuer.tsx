@@ -13,7 +13,7 @@ export function InvoiceIssuer({issuer,businessName,locale,t}:{issuer:z.infer<typ
     {support?<address className="grid gap-1 not-italic" aria-label={t("customerInvoice.merchantSupport")}>
       <p className="font-medium">{t("customerInvoice.merchantSupport")}</p>
       {support.email?<a className="text-accent underline" href={`mailto:${encodeURIComponent(support.email)}`}><bdi>{support.email}</bdi></a>:null}
-      {phone?dial&&/^\+?[0-9]{3,30}$/.test(dial)?<a className="text-accent underline" href={`tel:${dial}`}><bdi>{phone}</bdi></a>:<p><bdi>{phone}</bdi></p>:null}
+      {phone?dial&&/^\+?[0-9]{3,30}$/.test(dial)?<a className="text-accent underline" href={`tel:${dial}`}><bdi dir="ltr">{phone}</bdi></a>:<p><bdi dir="ltr">{phone}</bdi></p>:null}
       {support.url?<a className="text-accent underline" href={support.url} rel="noreferrer"><bdi>{support.url}</bdi></a>:null}
       {address?<div>{[address.line1,address.line2,[address.city,address.state,address.postalCode].filter(Boolean).join(", "),new Intl.DisplayNames([locale],{type:"region"}).of(address.country)??address.country].filter(Boolean).map((line,index)=><p key={index}><bdi>{line}</bdi></p>)}</div>:null}
     </address>:null}

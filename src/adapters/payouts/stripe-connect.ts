@@ -109,7 +109,9 @@ export function createStripeConnect(options: StripeConnectOptions = {}): PayoutP
       return stripeAccountStatus(await api(`/v1/accounts/${encodeURIComponent(accountId)}`, { method: "GET" }));
     },
     async accountDetails(accountId) {
-      return stripeMerchantDetails(await api(`/v1/accounts/${encodeURIComponent(accountId)}`, { method: "GET" }));
+      const account=await api(`/v1/accounts/${encodeURIComponent(accountId)}`, { method: "GET" });
+      if(account.id!==accountId)throw new AdapterError("payments","stripe_connect","provider_failure","Stripe did not return the original connected account.");
+      return stripeMerchantDetails(account);
     },
     async transfer(request) {
       const value = await api("/v1/transfers", {
