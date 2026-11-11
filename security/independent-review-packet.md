@@ -822,3 +822,13 @@ private projections against `tests/core/import-media-receipts.test.ts` and
 `tests/core/archive-import-flow.test.ts`. Claims and reader bindings must stay
 private on first acceptance and replay. These agent-authored controls provide
 engineering evidence, not Tony's independent sign-off or C3.22 completion.
+
+Generic HTML/feed integration also uses those receipts. Review
+`src/core/import/generic-plan.ts`, `generic-feed.ts` and the shared commit
+branches for source-controlled URLs, bounded XML/DOM parsing, fresh robots
+checks and exact actor/media grants. Query-bearing media URLs remain distinct;
+unsupported assets remain visible omissions. `tests/core/generic-import-flow.test.ts`
+covers actual CMS/media/redirect/replay/rollback and future-entry refusal.
+`tests/browser/import-generic-content.spec.ts` follows the real native fragment
+target in all four locales. See `deploy/generic-site-import.md`; these controls
+do not supply the independent review or source-specific production acceptance.

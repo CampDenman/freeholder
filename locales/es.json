@@ -8636,5 +8636,8 @@
   "imports.note.generic": "Revisa los medios, enlaces y metadatos antes de publicar. Los medios ajenos a esta fuente o bloqueados por su política de acceso necesitan revisión.",
   "imports.sourceWarning.query-address": "Revisa esta dirección con parámetros antes de cambiar el sitio; no se crea automáticamente una redirección específica para sus parámetros.",
   "imports.sourceWarning.discovery-only": "Solo se proporcionó la dirección de la página. Lee la URL pública de origen para obtener su contenido antes de confirmar.",
-  "cms.block.anchor": "Destino del enlace"
+  "cms.block.anchor": "Destino del enlace",
+  "imports.count.pagesStaged": "Páginas preparadas",
+  "imports.count.mediaFound": "Archivos encontrados",
+  "imports.count.redirectsProposed": "Redirecciones propuestas"
 }

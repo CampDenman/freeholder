@@ -8636,5 +8636,8 @@
   "imports.note.generic": "Vérifiez les médias, liens et métadonnées avant publication. Les médias extérieurs à cette source ou bloqués par ses règles d’accès nécessitent une vérification.",
   "imports.sourceWarning.query-address": "Vérifiez cette adresse avec paramètres avant la bascule ; sa redirection spécifique aux paramètres n’est pas créée automatiquement.",
   "imports.sourceWarning.discovery-only": "Seule l’adresse de la page a été fournie. Lisez l’URL publique de la source pour récupérer son contenu avant de valider.",
-  "cms.block.anchor": "Cible de lien"
+  "cms.block.anchor": "Cible de lien",
+  "imports.count.pagesStaged": "Pages préparées",
+  "imports.count.mediaFound": "Fichiers trouvés",
+  "imports.count.redirectsProposed": "Redirections proposées"
 }

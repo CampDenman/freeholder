@@ -8636,5 +8636,8 @@
   "imports.note.generic": "Review the source media, links and metadata before publishing. Media outside this source or blocked by its access policy needs your attention.",
   "imports.sourceWarning.query-address": "Review this query-based address before cutover; its query-specific redirect is not created automatically.",
   "imports.sourceWarning.discovery-only": "Only the page address was supplied. Read the public source URL to fetch its content before committing.",
-  "cms.block.anchor": "Link target"
+  "cms.block.anchor": "Link target",
+  "imports.count.pagesStaged": "Pages staged",
+  "imports.count.mediaFound": "Files found",
+  "imports.count.redirectsProposed": "Redirects proposed"
 }

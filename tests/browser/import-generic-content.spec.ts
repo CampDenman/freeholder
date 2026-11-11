@@ -34,6 +34,10 @@ test.describe("generic source owner and public journey (C3.22)", () => {
     await page.getByRole("button", { name: t("imports.stage"), exact: true }).focus(); await page.keyboard.press("Enter");
     await expect(page.getByRole("button", { name: t("imports.commit"), exact: true })).toBeVisible();
     await expect(page.getByText(t("imports.note.generic"), { exact: true })).toBeVisible();
+    await expect(page.getByText(t("imports.count.pagesStaged"), { exact: true })).toBeVisible();
+    await expect(page.getByText(t("imports.count.mediaFound"), { exact: true })).toBeVisible();
+    await expect(page.getByText(t("imports.count.redirectsProposed"), { exact: true })).toBeVisible();
+    await expect(page.getByText(t("imports.count.pages"), { exact: true })).toHaveCount(0);
     await expect(page.getByText(t("imports.sourceWarning.query-address"), { exact: true })).toBeVisible();
     await expect(page.getByText("https://outside.example/portrait.png", { exact: true })).toBeVisible();
     if (locale === "ar") await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
@@ -46,6 +50,8 @@ test.describe("generic source owner and public journey (C3.22)", () => {
     }
     await page.getByRole("button", { name: t("imports.commit"), exact: true }).focus(); await page.keyboard.press("Enter");
     await expect(page.getByRole("button", { name: t("imports.reconcile"), exact: true })).toBeVisible();
+    await expect(page.getByText(t("imports.count.pages"), { exact: true })).toBeVisible();
+    await expect(page.getByText(t("imports.count.media"), { exact: true })).toBeVisible();
     await page.getByRole("button", { name: t("imports.reconcile"), exact: true }).focus(); await page.keyboard.press("Enter");
     await expect(page.getByRole("button", { name: t("imports.publish"), exact: true })).toBeVisible();
     await page.getByRole("button", { name: t("imports.publish"), exact: true }).focus(); await page.keyboard.press("Enter");

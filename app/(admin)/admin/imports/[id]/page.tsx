@@ -24,15 +24,16 @@ export default async function ImportRunPage({
   const run = runs.find((item) => item.id === id);
   if (!run) notFound();
   const counts = run.counts && typeof run.counts === "object" ? (run.counts as Record<string, unknown>) : {};
+  const staged = ["discover", "mapped", "previewed", "failed"].includes(run.status);
   const countLabels: Array<[string, string]> = [
-    ["pages", t("imports.count.pages")],
+    ["pages", t(staged ? "imports.count.pagesStaged" : "imports.count.pages")],
     ["crawlBlocked", t("imports.count.crawlBlocked")],
     ["crawlRequests", t("imports.count.crawlRequests")],
     ["crawlBytes", t("imports.count.crawlBytes")],
     ["posts", t("imports.count.posts")],
-    ["media", t("imports.count.media")],
+    ["media", t(staged ? "imports.count.mediaFound" : "imports.count.media")],
     ["mediaFailed", t("imports.count.mediaFailed")],
-    ["redirects", t("imports.count.redirects")],
+    ["redirects", t(staged ? "imports.count.redirectsProposed" : "imports.count.redirects")],
     ["menus", t("imports.count.menus")],
     ["menuWarnings", t("imports.count.menuWarnings")],
     ["categories", t("imports.count.categories")],
@@ -146,10 +147,10 @@ export default async function ImportRunPage({
                 { label: t("imports.count.mediaWarnings"), values: mediaWarnings.success ? mediaWarnings.data : [] },
               ].filter(group => group.values.length).map(group => <div key={group.label} className="grid min-w-0 gap-2">
                 <h3 className="text-sm font-semibold">{group.label}</h3>
-                <ul className="grid min-w-0 list-none gap-1 p-0">{group.values.slice(0, 100).map((value, index) => <li key={index} className="min-w-0 break-all text-sm text-ink-muted">{value.startsWith("data:") ? t("imports.mediaWarning.inline") : value.slice(0, 2_048)}</li>)}</ul>
+                <ul className="grid min-w-0 list-none gap-1 p-0">{group.values.slice(0, 100).map((value, index) => <li key={index} dir={value.startsWith("data:") ? undefined : "ltr"} className={`min-w-0 text-sm text-ink-muted ${value.startsWith("data:") ? "break-words" : "break-all"}`}>{value.startsWith("data:") ? t("imports.mediaWarning.inline") : value.slice(0, 2_048)}</li>)}</ul>
               </div>)}
-              {sourceWarnings.success && sourceWarnings.data.length ? <ul className="grid min-w-0 list-none gap-3 p-0">{sourceWarnings.data.map((warning, index) => <li key={index} className="min-w-0 break-all text-sm">
-                <p>{t(`imports.sourceWarning.${warning.code}`)}</p><p className="text-ink-muted">{warning.url}</p>
+              {sourceWarnings.success && sourceWarnings.data.length ? <ul className="grid min-w-0 list-none gap-3 p-0">{sourceWarnings.data.map((warning, index) => <li key={index} className="min-w-0 text-sm">
+                <p className="break-words">{t(`imports.sourceWarning.${warning.code}`)}</p><p dir="ltr" className="break-all text-ink-muted">{warning.url}</p>
               </li>)}</ul> : null}
             </div> : null}
             {wordpress ? (

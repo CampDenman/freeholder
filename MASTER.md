@@ -5443,13 +5443,18 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   bounds. Protected CI remains pending. Limits and
   evidence: `deploy/static-archive-import.md`. This does not close C3.22,
   large-source resumption or source-specific cutover.)*
-  *(Generic parity work in progress: the heading/raw-HTML path reproduced
-  missing media, metadata and source-path identity. New typed generic plans
-  use the shared media receipts and CMS converter without WordPress records;
-  actual draft/publish/replay/rollback and fresh robots refusal/retry controls
-  pass, retaining the independent media-read permission. RSS/Atom XML content,
-  dates/enclosures and visible source warnings are under qualification. This
-  does not close C3.22, query-address intent, large-source resumption or live
+  *(Generic content increment 2026-11-11: the heading/raw-HTML path reproduced
+  missing media, metadata and source-path identity. Typed HTML/RSS/Atom plans
+  now use shared media receipts and CMS conversion without WordPress records.
+  Real dates, feed bodies/enclosures, exact query-bearing media identities,
+  metadata and actual fragment targets survive staging and publication.
+  Seventy-one pure controls and all 38 unique integrated controls passed
+  across the final run and affected fixture rerun, including fresh robots
+  refusal/retry, future-post refusal and independent media-read permission.
+  Four-locale owner/public browser journeys, staged/completed count labels,
+  Arabic URL direction and final production build are qualified separately.
+  See `deploy/generic-site-import.md`. C3.22 remains open for full page-query
+  intent, durable large-source resumption, hosted/CDN paths and actual
   source-specific acceptance.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile

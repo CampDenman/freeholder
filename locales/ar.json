@@ -8636,5 +8636,8 @@
   "imports.note.generic": "راجع الوسائط والروابط والبيانات الوصفية قبل النشر. تحتاج الوسائط الخارجية أو المحظورة بسياسة الوصول إلى مراجعتك.",
   "imports.sourceWarning.query-address": "راجع هذا العنوان الذي يتضمن معاملات قبل نقل الموقع؛ لا تُنشأ إعادة توجيه خاصة بمعاملاته تلقائيًا.",
   "imports.sourceWarning.discovery-only": "تم تقديم عنوان الصفحة فقط. اقرأ رابط المصدر العام لجلب محتواها قبل تثبيت الاستيراد.",
-  "cms.block.anchor": "هدف الرابط"
+  "cms.block.anchor": "هدف الرابط",
+  "imports.count.pagesStaged": "الصفحات المُجهّزة",
+  "imports.count.mediaFound": "الملفات المكتشفة",
+  "imports.count.redirectsProposed": "عمليات إعادة التوجيه المقترحة"
 }

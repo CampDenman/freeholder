@@ -107,12 +107,13 @@ describe.runIf(hasDatabase)("typed generic import lifecycle (C3.22)", { timeout:
   it("keeps a future feed entry from changing a live page or its public metadata", async () => {
     const existing = await createPage.call({ slug: "live", title: "Existing live page", blocks: [{ id: "existing-heading", type: "heading", props: { text: "Existing live page", level: 1 } }] }, OWNER);
     await publishPage.call({ id: existing.id, published: true }, OWNER);
+    const [before] = await db().select().from(pages).where(eq(pages.id, existing.id));
     const run = await startImport.call({ kind: "atom", origin: "https://source.example/feed.xml" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: '<feed><entry><title>Future source story</title><link href="https://source.example/live.html"/><published>2050-01-02T09:00:00Z</published><content>Future private draft body</content></entry></feed>' }, OWNER);
     await reviewImportConflicts.call({ id: run.id, conflicts: [{ slug: "live", resolution: "replace" }] }, OWNER);
     expect((await failure(commitImport.call({ id: run.id }, OWNER))).code).toBe("conflict");
     const [page] = await db().select().from(pages).where(eq(pages.id, existing.id));
-    expect(page).toMatchObject({ title: "Existing live page", status: "published", workingBlocks: null });
+    expect(page).toEqual(before);
     expect(JSON.stringify(page)).not.toContain("Future private draft body");
     expect(await getPostMeta.call({ pageId: existing.id }, OWNER)).toMatchObject({ isPost: false });
   });

@@ -41,7 +41,7 @@ export function StartImportForm({
         </p>
       ) : null}
       <Field htmlFor="origin" label={labels.origin}>
-        <Input id="origin" name="origin" type="url" required />
+        <Input id="origin" name="origin" type="url" dir="ltr" required />
       </Field>
       <Field htmlFor="kind" label={labels.kind}>
         <Select id="kind" name="kind" defaultValue="html" required>
@@ -292,7 +292,7 @@ function CrawlSourceForm({ id, origin, labels }: { id: string; origin: string; l
   return <form action={action} className="grid min-w-0 gap-3">
     <input type="hidden" name="id" value={id} />
     <Field htmlFor="import-source-url" label={labels.sourceUrl}>
-      <Input id="import-source-url" name="sourceUrl" type="url" defaultValue={origin} required aria-describedby="import-crawl-hint" />
+      <Input id="import-source-url" name="sourceUrl" type="url" dir="ltr" defaultValue={origin} required aria-describedby="import-crawl-hint" />
     </Field>
     <p id="import-crawl-hint" className="text-sm text-ink-muted">{labels.crawlHint}</p>
     {state.error ? <p role="alert" className="text-sm font-medium text-danger">{state.error}</p> : null}
