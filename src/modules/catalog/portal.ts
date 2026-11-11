@@ -17,7 +17,7 @@ registerPortalSection({
   detail: async (ctx, contactId, id) => {
     const detail = await ctx.callAsSystem(getOrder, {id});
     if (detail.order.contactId !== contactId) throw new Error("Order ownership changed.");
-    return { lines: detail.lines.map(line => ({description: `${line.quantity} × ${(line.snapshot as {productName?:string})?.productName ?? line.variantId.slice(0,8)}`, amountMinor:line.lineTotalMinor,currency:detail.order.currency})), links:detail.order.invoiceId ? [{labelKey:"portal.record.invoice",href:`/portal/invoices/${detail.order.invoiceId}`}] : [] };
+    return { lines: detail.lines.map(line => ({description: `${line.quantity} × ${(line.snapshot as {productName?:string})?.productName ?? line.variantId.slice(0,8)}`, amountMinor:line.lineTotalMinor,currency:detail.order.currency})), links:[{labelKey:"catalog.customerReturns.title",href:`/portal/orders/${detail.order.id}/returns`},...(detail.order.invoiceId ? [{labelKey:"portal.record.invoice",href:`/portal/invoices/${detail.order.invoiceId}`}] : [])] };
   },
   // `catalog.listOrders` takes no limit; the room asks for everything this
   // person bought and shows the newest first, which is the order it returns.

@@ -329,6 +329,7 @@ export const SERVICE_NAMES = [
   "catalog.getProduct",
   "catalog.getProductVariants",
   "catalog.getReturn",
+  "catalog.getReturnRefundPlan",
   "catalog.getServiceOffering",
   "catalog.giftCardByShareToken",
   "catalog.grantDigitalFulfillment",
@@ -373,9 +374,11 @@ export const SERVICE_NAMES = [
   "catalog.marketListings",
   "catalog.moveMyBooking",
   "catalog.myBookingSelection",
+  "catalog.myOrderReturns",
   "catalog.packFulfillment",
   "catalog.payOrder",
   "catalog.placePurchaseOrder",
+  "catalog.prepareReturnRefund",
   "catalog.productCardImages",
   "catalog.productHeroImage",
   "catalog.publicBookingQuote",
@@ -402,6 +405,7 @@ export const SERVICE_NAMES = [
   "catalog.removeProductRelation",
   "catalog.removeWishlistItem",
   "catalog.reorderCollectionProducts",
+  "catalog.requestMyReturn",
   "catalog.requestReturn",
   "catalog.reserveStock",
   "catalog.resolvePrice",
@@ -2910,6 +2914,10 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { return: { id: string; orderId: string; contactId: string; status: "requested" | "approved" | "received" | "refunded" | "rejected"; reason: string; restock: boolean; labelUrl: string | null; creditNoteId: string | null; refundId: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; items: { id: string; returnId: string; orderItemId: string; quantity: number; restockedQuantity: number; createdAt: string; [key: string]: unknown }[] };
   };
+  "catalog.getReturnRefundPlan": {
+    input: { id: string };
+    output: { prepared: boolean; available: boolean; currency: string; amountMinor: number; offlineMinor: number; onlineMinor: number; offlineConfirmedMinor: number; onlineConfirmedMinor: number };
+  };
   "catalog.getServiceOffering": {
     input: { productId: string };
     output: { id: string; productId: string; durationMin: number; bufferBeforeMin: number; bufferAfterMin: number; locationType: "in_person" | "virtual" | "client_site"; depositType: "none" | "fixed" | "percent"; depositValue: number; cancellationPolicyId: string | null; intakeFormId: string | null; waiverTemplateId: string | null; waiverTitle: string | null; waiverBody: string | null; reminderOffsetsMin: number[]; capacity: number; assignment: "specific" | "pool" | "round_robin"; calendarIds: string[]; travelTimeMin: number; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
@@ -3086,6 +3094,10 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { productId: string; offeringId: string; calendarId: string; seats: number };
   };
+  "catalog.myOrderReturns": {
+    input: { orderId: string };
+    output: { orderId: string; canRequest: boolean; items: { id: string; description: string; quantity: number; available: number }[]; returns: { id: string; status: "requested" | "approved" | "received" | "refunded" | "rejected"; reason: string; labelUrl: string | null; items: { orderItemId: string; quantity: number }[]; refund: { amountMinor: number; confirmedMinor: number; currency: string } }[] };
+  };
   "catalog.packFulfillment": {
     input: { id: string; boxId?: string; weightG?: number };
     output: { fulfillment: { id: string; orderId: string; locationId: string | null; kind: "physical" | "digital"; status: "pending" | "picking" | "packed" | "shipped" | "delivered" | "failed" | "returned"; boxId: string | null; weightG: number | null; carrier: string | null; service: string | null; trackingNumber: string | null; trackingUrl: string | null; shippedAt: string | null; deliveredAt: string | null; note: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; items: { id: string; fulfillmentId: string; orderItemId: string; quantity: number; createdAt: string; [key: string]: unknown }[] };
@@ -3097,6 +3109,10 @@ export interface ServiceCatalog {
   "catalog.placePurchaseOrder": {
     input: { id: string };
     output: { id: string; supplierId: string; locationId: string; status: "draft" | "ordered" | "partial" | "received" | "cancelled"; currency: string; expectedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "catalog.prepareReturnRefund": {
+    input: { id: string; idempotencyKey: string };
+    output: { return: { id: string; orderId: string; contactId: string; status: "requested" | "approved" | "received" | "refunded" | "rejected"; reason: string; restock: boolean; labelUrl: string | null; creditNoteId: string | null; refundId: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; items: { id: string; returnId: string; orderItemId: string; quantity: number; restockedQuantity: number; createdAt: string; [key: string]: unknown }[] };
   };
   "catalog.productCardImages": {
     input: { slugs: string[] };
@@ -3143,7 +3159,7 @@ export interface ServiceCatalog {
     output: { line: { id: string; purchaseOrderId: string; variantId: string; quantity: number; receivedQty: number; unitCostMinor: number; createdAt: string; updatedAt: string; [key: string]: unknown }; status: "draft" | "ordered" | "partial" | "received" | "cancelled" };
   };
   "catalog.receiveReturn": {
-    input: { id: string; locationId?: string };
+    input: { id: string; locationId?: string; restock?: boolean };
     output: { return: { id: string; orderId: string; contactId: string; status: "requested" | "approved" | "received" | "refunded" | "rejected"; reason: string; restock: boolean; labelUrl: string | null; creditNoteId: string | null; refundId: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; items: { id: string; returnId: string; orderItemId: string; quantity: number; restockedQuantity: number; createdAt: string; [key: string]: unknown }[] };
   };
   "catalog.recordCouponRedemption": {
@@ -3163,7 +3179,7 @@ export interface ServiceCatalog {
     output: { sent: number };
   };
   "catalog.refundReturn": {
-    input: { id: string; idempotencyKey: string; offlineRefundConfirmed: true };
+    input: { id: string; idempotencyKey: string; offlineRefundConfirmed: true; offlineRefundAmountMinor?: number };
     output: { return: { id: string; orderId: string; contactId: string; status: "requested" | "approved" | "received" | "refunded" | "rejected"; reason: string; restock: boolean; labelUrl: string | null; creditNoteId: string | null; refundId: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; items: { id: string; returnId: string; orderItemId: string; quantity: number; restockedQuantity: number; createdAt: string; [key: string]: unknown }[] };
   };
   "catalog.releaseOrderPaymentMilestone": {
@@ -3201,6 +3217,10 @@ export interface ServiceCatalog {
   "catalog.reorderCollectionProducts": {
     input: { collectionId: string; productIds: string[] };
     output: { collectionId: string; count: number; [key: string]: unknown };
+  };
+  "catalog.requestMyReturn": {
+    input: { orderId: string; reason: string; items: { orderItemId: string; quantity: number }[] };
+    output: { id: string };
   };
   "catalog.requestReturn": {
     input: { orderId: string; reason: string; restock?: boolean; items: { orderItemId: string; quantity: number }[] };
@@ -8389,6 +8409,7 @@ export interface FreeholderApi {
     getProduct: (input: ServiceCatalog["catalog.getProduct"]["input"]) => Promise<ServiceCatalog["catalog.getProduct"]["output"]>;
     getProductVariants: (input: ServiceCatalog["catalog.getProductVariants"]["input"]) => Promise<ServiceCatalog["catalog.getProductVariants"]["output"]>;
     getReturn: (input: ServiceCatalog["catalog.getReturn"]["input"]) => Promise<ServiceCatalog["catalog.getReturn"]["output"]>;
+    getReturnRefundPlan: (input: ServiceCatalog["catalog.getReturnRefundPlan"]["input"]) => Promise<ServiceCatalog["catalog.getReturnRefundPlan"]["output"]>;
     getServiceOffering: (input: ServiceCatalog["catalog.getServiceOffering"]["input"]) => Promise<ServiceCatalog["catalog.getServiceOffering"]["output"]>;
     giftCardByShareToken: (input: ServiceCatalog["catalog.giftCardByShareToken"]["input"]) => Promise<ServiceCatalog["catalog.giftCardByShareToken"]["output"]>;
     grantDigitalFulfillment: (input: ServiceCatalog["catalog.grantDigitalFulfillment"]["input"]) => Promise<ServiceCatalog["catalog.grantDigitalFulfillment"]["output"]>;
@@ -8433,9 +8454,11 @@ export interface FreeholderApi {
     marketListings: (input?: ServiceCatalog["catalog.marketListings"]["input"]) => Promise<ServiceCatalog["catalog.marketListings"]["output"]>;
     moveMyBooking: (input: ServiceCatalog["catalog.moveMyBooking"]["input"]) => Promise<ServiceCatalog["catalog.moveMyBooking"]["output"]>;
     myBookingSelection: (input: ServiceCatalog["catalog.myBookingSelection"]["input"]) => Promise<ServiceCatalog["catalog.myBookingSelection"]["output"]>;
+    myOrderReturns: (input: ServiceCatalog["catalog.myOrderReturns"]["input"]) => Promise<ServiceCatalog["catalog.myOrderReturns"]["output"]>;
     packFulfillment: (input: ServiceCatalog["catalog.packFulfillment"]["input"]) => Promise<ServiceCatalog["catalog.packFulfillment"]["output"]>;
     payOrder: (input: ServiceCatalog["catalog.payOrder"]["input"]) => Promise<ServiceCatalog["catalog.payOrder"]["output"]>;
     placePurchaseOrder: (input: ServiceCatalog["catalog.placePurchaseOrder"]["input"]) => Promise<ServiceCatalog["catalog.placePurchaseOrder"]["output"]>;
+    prepareReturnRefund: (input: ServiceCatalog["catalog.prepareReturnRefund"]["input"]) => Promise<ServiceCatalog["catalog.prepareReturnRefund"]["output"]>;
     productCardImages: (input: ServiceCatalog["catalog.productCardImages"]["input"]) => Promise<ServiceCatalog["catalog.productCardImages"]["output"]>;
     productHeroImage: (input: ServiceCatalog["catalog.productHeroImage"]["input"]) => Promise<ServiceCatalog["catalog.productHeroImage"]["output"]>;
     publicBookingQuote: (input: ServiceCatalog["catalog.publicBookingQuote"]["input"]) => Promise<ServiceCatalog["catalog.publicBookingQuote"]["output"]>;
@@ -8462,6 +8485,7 @@ export interface FreeholderApi {
     removeProductRelation: (input: ServiceCatalog["catalog.removeProductRelation"]["input"]) => Promise<ServiceCatalog["catalog.removeProductRelation"]["output"]>;
     removeWishlistItem: (input: ServiceCatalog["catalog.removeWishlistItem"]["input"]) => Promise<ServiceCatalog["catalog.removeWishlistItem"]["output"]>;
     reorderCollectionProducts: (input: ServiceCatalog["catalog.reorderCollectionProducts"]["input"]) => Promise<ServiceCatalog["catalog.reorderCollectionProducts"]["output"]>;
+    requestMyReturn: (input: ServiceCatalog["catalog.requestMyReturn"]["input"]) => Promise<ServiceCatalog["catalog.requestMyReturn"]["output"]>;
     requestReturn: (input: ServiceCatalog["catalog.requestReturn"]["input"]) => Promise<ServiceCatalog["catalog.requestReturn"]["output"]>;
     reserveStock: (input: ServiceCatalog["catalog.reserveStock"]["input"]) => Promise<ServiceCatalog["catalog.reserveStock"]["output"]>;
     resolvePrice: (input: ServiceCatalog["catalog.resolvePrice"]["input"]) => Promise<ServiceCatalog["catalog.resolvePrice"]["output"]>;

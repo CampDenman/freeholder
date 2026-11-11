@@ -297,8 +297,19 @@ recording, keyboard use, 320px, both-theme Axe scans and all four locales in
 `tests/browser/return-refund.spec.ts`. Settlements are seeded offline evidence,
 not a real provider transaction. The production build/artifact scrub passed.
 
-C5.19 remains open for mixed offline/provider returns, complete localized
-customer journeys and actual enabled-provider acceptance. The subsequent
+The next source repair introduces migration68 immutable original-tender plans,
+separate exact offline attestations and actual provider/balance confirmation,
+and masked own-customer return request/progress services in four locales.
+Failed provider attempts retain their owed payment budget. Shared service and
+database guards reject generic manufactured settlement of prepared returns;
+old-image settlement fails closed. Review lock ordering, legacy-plan import,
+account routing, mixed sequencing, budget/confirmation triggers and customer
+ownership. Agent review found no remaining issue in these bounded money
+changes. The 32 return/private/journey and 49 adjacent targets have passing
+native coverage, with a final fresh-process 11-case recovery run; eight SDK checks, static
+gates, production scrub, actual 67→68 upgrade, 16 browser journeys and 4 final
+affected owner/customer reruns pass. Browser provider feedback remains seeded.
+C5.19 remains open for actual enabled-provider and full fulfillment acceptance. The subsequent
 provider action and original discount/tax allocation above extend the source
 repair; neither supplies C11.10 sign-off. Historical/manual C11.02 evidence
 retains its explicit scope. No historical ledger was rewritten by this repair.

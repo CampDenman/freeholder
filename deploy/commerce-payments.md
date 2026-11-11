@@ -217,16 +217,20 @@ real, billable, sandbox, or live provider request.
 
 ## Returned-item refunds (C5.19/C11.10, source repair)
 
-`catalog.refundReturn` records only a full offline refund already returned
+`catalog.prepareReturnRefund` freezes every original-payment allocation and
+reserves its shared refund-ledger attempt before any money moves. Review the
+amounts in `/admin/returns`. The allocation records original payment, currency,
+provider, private original account and application fee; it cannot be edited.
+
+`catalog.refundReturn` records only the actual offline portion already returned
 to the customer. It requires a person with fresh verification and an explicit
-`offlineRefundConfirmed: true`; API keys and plugins cannot attest. The
-original successful payments must all be manual, and their unreserved balance
-must cover the entire return. It records across original installments in one
-transaction, with identities bound to the return and payment rather than a
-new caller key on every click. A shortage leaves the return, credits and
-refund ledger untouched. A completed return replays without sending or
-recording more money. Return requests cannot duplicate a line or exceed the
-order's quantities across earlier non-rejected returns.
+`offlineRefundConfirmed: true`; API keys and plugins cannot attest. For a mixed
+return, `offlineRefundAmountMinor` must exactly match the displayed remaining
+offline amount. It never records an online provider refund. Old all-manual
+requests remain compatible. The return stays received and its credit stays
+draft until all original portions are confirmed. A completed return replays
+without recording more money. Return requests cannot duplicate a line or exceed
+the order's quantities across earlier non-rejected returns.
 
 `catalog.submitReturnProviderRefund` submits a received return through the
 original payments' shared provider-refund orchestrator. Its private claim
@@ -239,11 +243,12 @@ confirmed assigned refunds cover the whole credit. A completed return replays
 without another provider request.
 
 A connection failure reuses the same frozen provider request. A definite
-refusal releases only that attempt's reservation: after reloading, a fresh
+refusal releases only that attempt's active ledger reservation; the original
+allocation remains owed and cannot be consumed by another refund. After reloading, a fresh
 human request can retry the remaining balance without sending a successful
 installment again. Ambiguous created/processing attempts keep their reservation
 and cannot be replaced. Voided credits require owner reconciliation and never
-close a return automatically. Both money actions require fresh human
+close a return automatically. All three preparation/money actions require fresh human
 verification; keys and plugins cannot impersonate that confirmation.
 
 Return amounts use the original immutable invoice line's discounted subtotal
@@ -253,8 +258,27 @@ orders bind each order line to its invoice line; an old ambiguous mapping is
 refused for reconciliation. Shipping remains outside returned-item refunds.
 All affected original payment balances are locked before invoice credit work.
 The original C11.02 journey supplies only offline integration evidence.
-Mixed offline/provider returns, complete customer journeys and actual enabled
-provider acceptance remain open in MASTER.md C5.19; no ledger history is rewritten.
+Customers request and follow only their own returns at
+`/portal/orders/<order-id>/returns`, linked from their order. The shared services
+bind the current signed-in contact, bound remaining quantities, show safe label
+links and masked refund totals, and expose no private payment/account routing.
+The owner still approves, receives and confirms refunds. Notifications use the
+contact's preferred locale, with the business locale as fallback. Restocking
+is bounded by quantities that actually shipped, under the order lock.
+
+Migration68 adds the allocation table and database guards. It preserves old
+rows and imports only a whole, provable legacy allocation during reconciliation.
+Ambiguous history requires reconciliation. The previous image remains readable,
+but generic settlement of a new prepared return fails closed; its provider
+callbacks must retry on the new image. Complete rollback requires restoring
+the pre-upgrade database and objects, as the release declaration already requires.
+Financial allocations follow their parent return's contact merge reference,
+are exported without private routing, and remain excluded from generic search
+and retention until the original financial obligations are resolved.
+
+The mixed flow and customer return journey have source qualification below.
+Actual enabled-provider and full fulfillment acceptance remain open in
+MASTER.md C5.19; no historical ledger is rewritten.
 
 The private refund claim is bound to its exact public operation and runs with
 the original person's actor. Its committed audit names that person; nested
@@ -300,3 +324,38 @@ the advanced tables. Roll back the image normally. Do not drop balance,
 allocation, fee, or payout evidence during an incident. Disable hosted checkout
 by selecting `manual`, retain webhook endpoints until outstanding attempts and
 payouts settle, and reconcile before removing credentials.
+
+
+Further mixed-return source qualification on 2026-11-11 covered all 32
+return/private/catalog-journey and 49 adjacent provider/balance/orchestration/
+customer-invoice targets across native runs. A final fresh-process 11-case
+focused run passed after four PostgreSQL reset timeouts and three stale module
+inventory expectations during main integration; the other 33 selected-file
+cases were intentionally filtered in that focused run. These are recovery
+runs, not additional unique accepted cases. Source remained frozen during the
+final focused run. Eight live-registry SDK checks and all static gates passed
+(368 contract checks, one deliberate skip). The final production build and
+scrub checked 19,399 files and 228,036,131 bytes with no source/environment
+leakage. The real historical schema67→68 rehearsal preserved the original
+refund row and proved immutable plans, prior-image confirmation/budget refusal
+and exact trusted settlement. The explicit schema compatibility gate passed;
+the restore rollback requirement remains in the release declaration.
+
+Sixteen actual Chromium journeys passed at 320px across English, Spanish,
+French and Arabic RTL: full offline attestations, pending provider installments,
+mixed offline/provider portions, and customer request→owner approval→receipt→
+refund→customer progress. Four final affected customer/owner journeys passed
+again after adding safe return-label handoff, explicit owner restocking and
+shipment order locking. They include keyboard submission and both-theme Axe
+scans for the customer and owner decision screens. English/light and Arabic/
+dark owner screenshots were inspected. Provider feedback is synthetic in the
+browser; native provider application boundaries are tested separately. None
+of these results supplies actual provider-account acceptance, independent
+security sign-off or permission to announce stable.
+
+A further focused account-credit composition case passed through real balance
+funding, invoice payment, prepared return and balance refund: the original
+customer credit was restored exactly once, a human offline claim was refused,
+and the shipping remainder stayed outside the item refund. The other 25 cases
+in that focused file were intentionally filtered. This raises the return/
+private/catalog target set to 32; it adds no live-provider acceptance.

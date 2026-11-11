@@ -56,6 +56,8 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "catalog.shipFulfillment": "admin.activity.orderShipped",
   "catalog.deliverFulfillment": "admin.activity.orderDelivered",
   "catalog.requestReturn": "admin.activity.returnRequested",
+  "catalog.requestMyReturn": "admin.activity.returnRequested",
+  "catalog.prepareReturnRefund": "admin.activity.returnRefundPrepared",
   "catalog.refundReturn": "admin.activity.refundUpdated",
   "catalog.submitReturnProviderRefund": "admin.activity.refundUpdated",
   "catalog.claimReturnProviderRefund": "admin.activity.refundUpdated",

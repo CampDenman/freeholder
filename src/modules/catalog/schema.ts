@@ -23,7 +23,7 @@ import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import { contacts } from "@/core/contacts/schema";
 import { segments } from "@/core/segments/schema";
 import { assets } from "@/core/media/schema";
-import { taxCategories } from "@/modules/invoicing/schema";
+import { payments, taxCategories } from "@/modules/invoicing/schema";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import {
   ATTRIBUTE_KINDS,
@@ -1413,6 +1413,25 @@ export const returnItems = pgTable(
     check("return_items_restocked", sql`${t.restockedQuantity} >= 0 and ${t.restockedQuantity} <= ${t.quantity}`),
   ],
 );
+
+/** C5.19: one immutable refund allocation per return/original payment. */
+export const returnRefundAllocations = pgTable("return_refund_allocations",{
+  id:uuid("id").primaryKey().defaultRandom(),
+  returnId:uuid("return_id").notNull().references(()=>returnRequests.id,{onDelete:"cascade"}),
+  paymentId:uuid("payment_id").notNull().references(()=>payments.id,{onDelete:"restrict"}),
+  amountMinor:bigint("amount_minor",{mode:"number"}).notNull(),
+  currency:text("currency").notNull(),
+  provider:text("provider").notNull(),
+  providerAccountId:text("provider_account_id").notNull().default(""),
+  applicationFeeMinor:bigint("application_fee_minor",{mode:"number"}).notNull().default(0),
+  createdAt:createdAtColumn(),
+},table=>[
+  uniqueIndex("return_refund_allocations_payment_idx").on(table.returnId,table.paymentId),
+  check("return_refund_allocations_amount_check",sql`${table.amountMinor} between 1 and 9007199254740991`),
+  check("return_refund_allocations_currency_check",sql`${table.currency} ~ '^[A-Z]{3}$'`),
+  check("return_refund_allocations_fee_check",sql`${table.applicationFeeMinor} between 0 and 9007199254740991`),
+  check("return_refund_allocations_account_check",sql`${table.providerAccountId} = '' or (${table.provider} = 'stripe' and ${table.providerAccountId} ~ '^acct_[A-Za-z0-9]+$')`),
+]);
 
 export const coupons = pgTable(
   "coupons",

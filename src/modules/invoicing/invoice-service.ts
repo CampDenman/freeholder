@@ -1211,6 +1211,8 @@ export const createRefund = defineService({
     if (sumMinor([reservedMinor, input.amountMinor], "Refund reservation") > payment.amountMinor) {
       throw new ServiceError("validation", "Refunds cannot exceed the successful payment amount.");
     }
+    const available=await ctx.tx.execute<{allowed:boolean}>(sql`select freeholder_refund_amount_available(${payment.id}::uuid,${input.idempotencyKey},${input.amountMinor}::bigint) as allowed`);
+    if(!available[0]?.allowed) throw new ServiceError("conflict","That original payment amount is reserved for another prepared return. Finish or reconcile that return first.");
     const [created] = await ctx.tx.insert(refunds).values({
       paymentId: payment.id,
       invoiceId: payment.invoiceId,
@@ -1235,10 +1237,15 @@ export const reserveRefundBatch = defineService({
   name:"invoicing.reserveRefundBatch",
   summary:"Reserve all original-payment installments before an invoice credit.",
   kind:"mutation",permission:"system",external:false,
-  input:z.object({refunds:z.array(createRefund.def.input).min(1).max(1000)}),
+  input:z.object({refunds:z.array(createRefund.def.input).min(1).max(1000),lockForSettlement:z.boolean().default(false)}),
   output:z.array(refundRow),
   handler:async(input,ctx)=>{
     for(const key of [...new Set(input.refunds.map(refund=>refund.idempotencyKey))].sort()) await lock(ctx.tx,"refund-idempotency",key);
+    if(input.lockForSettlement){
+      const keys=input.refunds.map(refund=>refund.idempotencyKey);
+      const existing=await ctx.tx.select({id:refunds.id}).from(refunds).where(inArray(refunds.idempotencyKey,keys));
+      for(const refundId of existing.map(row=>row.id).sort()) await lock(ctx.tx,"refund",refundId);
+    }
     for(const paymentId of [...new Set(input.refunds.map(refund=>refund.paymentId))].sort()) await lock(ctx.tx,"payment",paymentId);
     const reserved=[];
     for(const refund of input.refunds) reserved.push(await ctx.call(createRefund,refund));
@@ -1328,6 +1335,8 @@ export const settleRefund = defineService({
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.id)).limit(1);
     if (!refund) throw new ServiceError("not_found", "That refund is not here.");
     if (ctx.actor.kind!=="system" && (await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:refund.invoiceId}))?.model === "seller_merchant") throw new ServiceError("permission","A direct seller refund must be confirmed through its original provider account.");
+    const prepared=await ctx.tx.execute<{bound:boolean}>(sql`select freeholder_refund_is_prepared_return(${refund.id}::uuid) as bound`);
+    if(prepared[0]?.bound && ctx.actor.kind!=="system") throw new ServiceError("permission","Confirm a prepared return through its original provider or its verified offline return action.");
     if (refund.status === "succeeded") {
       if (refund.providerRef !== input.providerRef) throw new ServiceError("conflict", "That refund already settled under a different provider reference.");
       return refund;
@@ -1344,6 +1353,7 @@ export const settleRefund = defineService({
     const invoiceRefunded = sumMinor([invoice.refundedMinor, refund.amountMinor], "Invoice refunded balance");
     if (paymentRefunded > payment.amountMinor || invoiceRefunded > invoice.paidMinor) throw new ServiceError("conflict", "Settling this refund would exceed the paid balance.");
     const invoiceStatus = invoiceRefunded === invoice.paidMinor ? "refunded" as const : invoice.status;
+    if(prepared[0]?.bound) await ctx.tx.execute(sql`select set_config('freeholder.confirmed_return_refund',${refund.id},true)`);
     const [updatedRefund] = await ctx.tx.update(refunds).set({ status: "succeeded", providerRef: input.providerRef, processedAt: input.processedAt, failureCode: null, failureMessage: null }).where(eq(refunds.id, refund.id)).returning();
     await ctx.tx.update(payments).set({ refundedMinor: paymentRefunded }).where(eq(payments.id, payment.id));
     await ctx.tx.update(invoices).set({ refundedMinor: invoiceRefunded, status: invoiceStatus }).where(eq(invoices.id, invoice.id));

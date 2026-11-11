@@ -6798,9 +6798,21 @@ owner operations, never substitute for them.
   separate returns, including pending draft credits. New checkout order lines
   retain their exact invoice-line identity. Both owner money actions require
   fresh human verification and refuse keys/plugins; the bound private claim
-  commits its audit under the original authorizing person. Mixed offline/provider
-  returns, complete customer journeys and actual enabled-provider acceptance
-  remain required; C5.19 stays open. See `deploy/commerce-payments.md` and
+  commits its audit under the original authorizing person. The next source
+  repair adds immutable original-payment allocations in migration68, separate
+  exact offline attestation and actual online/balance confirmation, and a
+  customer's own return request/progress portal in all four locales. Failed
+  attempts retain their owed original-payment budget. Prepared-return settlement
+  is guarded in the service and database; unshipped units cannot inflate stock.
+  Owners explicitly choose restocking on receipt and can provide a safe return
+  label. Source qualification covers the 32 return/private/journey and 49
+  adjacent native targets, with a final 11-case frozen-process rerun after
+  fixture timeouts and main-integration reload; eight SDK checks, full static gates, a real
+  67→68 upgrade and production artifact scrub pass. Sixteen Chromium journeys
+  passed across four locales, followed by four final owner/customer label and
+  restock journeys with keyboard, 320px and both-theme Axe scans. Provider
+  browser feedback is seeded; actual enabled-provider and full fulfillment
+  acceptance remain required. C5.19 stays open. See `deploy/commerce-payments.md` and
   changeset `return-provider-reconciliation.md`.
 - [x] **C5.20** Build persistent/contact-attached carts, saved carts/wishlists,
   cross-device restore, price/stock refresh and abandonment events.
