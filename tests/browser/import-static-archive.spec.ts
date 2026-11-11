@@ -10,6 +10,7 @@ import { importRuns } from "@/core/plugins/schema";
 import { businessProfile } from "@/core/settings/schema";
 import { THEME_COOKIE } from "@/core/design/theme";
 import { translator } from "@/core/i18n";
+import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { cleanupOrphanedMedia } from "@/core/media/service";
 import { C11_BASE_URL, seedC11Owner, useOwnerSession } from "./owner-session";
 
@@ -22,6 +23,7 @@ test.describe("static archive owner journey (C3.22)", () => {
       await db().update(businessProfile).set({ defaultLocale: locale, enabledLocales: ["en", "es", "fr", "ar"] }).where(eq(businessProfile.id, 1));
       const context = await browser.newContext({ baseURL: C11_BASE_URL, viewport: { width: 320, height: 900 } });
       await useOwnerSession(context, session);
+      await context.addCookies([{ name: CSRF_COOKIE, value: issueCsrfToken(), url: C11_BASE_URL }]);
       const page = await context.newPage(), t = translator(locale);
       await page.goto("/admin/imports");
       await page.locator("#origin").fill("https://archive.example/legacy/");

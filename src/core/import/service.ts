@@ -1199,7 +1199,7 @@ export const commitImport = defineOrchestratedService({
   output: runRow,
   handler: async (input, actor) => {
     const source = await commitSource.call({ id: input.id }, actor);
-    if (source.completed) return source.completed;
+    if (source.completed) return publicImportRun(source.completed);
     if (source.archive) {
       const archive = source.archive, completed = new Set(archive.completedKeys);
       if (archive.plan.media.some(item => !completed.has(item.key))) await restoreStaticArchive(
