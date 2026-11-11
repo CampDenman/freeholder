@@ -578,6 +578,9 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       const events = stripePaymentEvents(parsed);
       const value = object(object(parsed.data)?.object);
       const metadata=object(value?.metadata);
+      // A partially tagged setup cannot reach the expanded-method normalizer
+      // without the complete binding used by our setup flow.
+      if(value?.mode==="setup" && (!text(metadata?.freeholder_contact_id) || !text(metadata?.freeholder_subscription_id))) return [];
       if(parsed.type==="checkout.session.completed" && value?.mode==="setup" && value.payment_status==="no_payment_required"
         && text(metadata?.freeholder_contact_id) && text(metadata?.freeholder_subscription_id)){
         // Real Checkout events normally contain a SetupIntent ID, not its

@@ -55,6 +55,11 @@ describe("Stripe setup evidence (C12.38/C11.10)",()=>{
     await expect(adapter.verifyWebhook(signed(session,"other-account"))).rejects.toMatchObject({code:"invalid_request"});
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it("ignores contact-only setup metadata even when the signed payload expands a payment method",async()=>{
+    const {adapter,fetcher}=provider();
+    expect(await adapter.verifyWebhook(signed({...session,metadata:{freeholder_contact_id:contactId},setup_intent:{...intent,payment_method:method}}))).toEqual([]);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it("ignores unrelated setup sessions and preserves retryable provider failures",async()=>{
     const {adapter,fetcher}=provider({error:{message:"synthetic temporary outage"}},503);
     expect(await adapter.verifyWebhook(signed({...session,metadata:{}}))).toEqual([]);
