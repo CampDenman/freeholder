@@ -25,3 +25,8 @@ An erasure-refused WXR releases only that rejected raw upload through a typed,
 private, original-parent phase. Ownership removal and cleanup commit together
 before the refusal is returned, preserving existing immediate byte removal
 without releasing active archives or unrelated retry state.
+
+A rejected PUT promise now retains its exact attempt as unknown instead of
+inferring provider cancellation. Only an acknowledged successful write clears
+its own witness. Late writes after a client-side error remain discoverable;
+cleanup and erasure must wait for actual provider outcome evidence.

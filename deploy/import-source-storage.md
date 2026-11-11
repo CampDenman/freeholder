@@ -69,3 +69,12 @@ first reproduced the keeper retaining those bytes; the repaired exact public
 preview-key control proves immediate removal with the original agent audit and
 continued CRM refusal. Other transient/stale-source conflicts do not release
 retained archive/media ownership.
+
+A separate actual control reproduced PUT rejection before a later provider
+write: clearing the attempt on that error let expiry forget the key. The final
+post-I/O phase clears only an acknowledged successful PUT; any error preserves
+its exact attempt as `unknown`. Later identical success, an absent object or
+elapsed time cannot settle a different unknown request. Those witnesses remain
+visible for recovery and block byte-deletion/erasure acknowledgement until actual
+provider completion or cancellation evidence exists. Unknown provider requests
+are deliberately not garbage-collected as if their client error proved failure.

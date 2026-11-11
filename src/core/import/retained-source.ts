@@ -24,6 +24,7 @@ export type RetainedImportSource = z.infer<typeof retainedImportSourceSchema>;
 type Upload = { uploadId: string; filename: string; bytes: number; chunkBytes: number; digests?: Record<string, string>; expiresAt: string };
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 export const importSourceWriteSchema = z.object({
+  state: z.enum(["running", "unknown"]).default("running"),
   attemptId: z.uuid(), uploadId: z.uuid(), index: z.number().int().nonnegative().max(24),
   bytes: z.number().int().positive().max(IMPORT_SOURCE_CHUNK_BYTES), startedAt: z.iso.datetime(),
 });

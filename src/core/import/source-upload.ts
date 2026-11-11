@@ -246,7 +246,7 @@ const claimChunk = defineService({
     if (writes.length >= 100) throw new ServiceError("conflict", "This import has unresolved source writes. Wait for storage recovery before sending more chunks.");
     const attemptId = randomUUID();
     upload.digests[String(input.index)] = input.digest;
-    writes.push({ attemptId, uploadId: input.uploadId, index: input.index, bytes: input.size, startedAt: new Date().toISOString() });
+    writes.push({ state: "running", attemptId, uploadId: input.uploadId, index: input.index, bytes: input.size, startedAt: new Date().toISOString() });
     await ctx.tx.update(importRuns).set({ checkpoint: { ...checkpointOf(run.checkpoint), sourceUpload: upload, sourceWrites: writes } }).where(eq(importRuns.id, run.id));
     await reservePendingMediaObject(ctx, { key, role: "staged", contentType: "application/octet-stream", bytes: input.size });
     return { key, received: upload.received.length, chunks: upload.chunks, alreadyReceived: false, attemptId };
@@ -261,7 +261,7 @@ const rememberChunkWrite = defineService({
   orchestratedBy: "imports.uploadSourceChunk",
   summary: "Keep attempted source writes recoverable after provider I/O.",
   kind: "mutation", permission: "scoped", external: false,
-  input: z.object({ id: z.uuid(), uploadId: z.uuid(), attemptId: z.uuid(), index: z.number().int().nonnegative().max(24), size: z.number().int().nonnegative().max(IMPORT_SOURCE_CHUNK_BYTES) }),
+  input: z.object({ id: z.uuid(), uploadId: z.uuid(), attemptId: z.uuid(), settled: z.boolean(), index: z.number().int().nonnegative().max(24), size: z.number().int().nonnegative().max(IMPORT_SOURCE_CHUNK_BYTES) }),
   output: z.object({ ok: z.literal(true) }),
   handler: async (input, ctx) => {
     // The live parent already authorized and claimed these exact coordinates.
@@ -274,7 +274,7 @@ const rememberChunkWrite = defineService({
     const key = `imports/${input.id}/${input.uploadId}/${String(input.index).padStart(5, "0")}.part`;
     await reservePendingMediaObject(ctx, { key, role: "staged", contentType: "application/octet-stream", bytes: input.size });
     await ctx.queueJob("core.deleteCaptureObjects", { keys: [key] });
-    await ctx.tx.update(importRuns).set({ checkpoint: { ...checkpointOf(run.checkpoint), sourceWrites: writes.filter(write => write.attemptId !== input.attemptId) } }).where(eq(importRuns.id, run.id));
+    await ctx.tx.update(importRuns).set({ checkpoint: { ...checkpointOf(run.checkpoint), sourceWrites: input.settled ? writes.filter(write => write.attemptId !== input.attemptId) : writes.map(write => write.attemptId === input.attemptId ? { ...write, state: "unknown" as const } : write) } }).where(eq(importRuns.id, run.id));
     ctx.setSubject("import_run", input.id);
     return { ok: true as const };
   },
@@ -353,10 +353,12 @@ export const uploadSourceChunk = defineOrchestratedService({
     );
     if (claimed.alreadyReceived) return { received: claimed.received, chunks: claimed.chunks, complete: claimed.received === claimed.chunks };
     if (!claimed.attemptId) throw new ServiceError("internal", "The source write has no durable attempt.");
+    let settled = false;
     try {
       await storage().put(claimed.key, bytes, "application/octet-stream");
+      settled = true;
     } finally {
-      await rememberChunkWrite.call({ id: input.id, uploadId: input.uploadId, index: input.index, size: bytes.byteLength, attemptId: claimed.attemptId }, actor);
+      await rememberChunkWrite.call({ id: input.id, uploadId: input.uploadId, index: input.index, size: bytes.byteLength, attemptId: claimed.attemptId, settled }, actor);
     }
     const recorded = await recordChunk.call({ id: input.id, uploadId: input.uploadId, index: input.index }, actor);
     return { ...recorded, complete: recorded.received === recorded.chunks };

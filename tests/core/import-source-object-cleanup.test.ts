@@ -69,7 +69,7 @@ describe.runIf(hasDatabase)("raw import-source byte cleanup", () => {
     } finally { Object.defineProperty(store, "isPublic", descriptor); }
   });
 
-  it("recovers bytes from an ambiguous upload failure after the provider accepted them", async () => {
+  it("keeps ambiguous accepted writes discoverable until their provider outcome is proven", async () => {
     const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
     const upload = await beginSourceUpload.call({ id: run.id, filename: "source.xml", bytes: source.byteLength }, OWNER);
     const key = `imports/${run.id}/${upload.uploadId}/00000.part`;
@@ -79,7 +79,9 @@ describe.runIf(hasDatabase)("raw import-source byte cleanup", () => {
     expect(await store.get(key)).toBeDefined();
     lostAck.mockRestore();
     await cleanupOrphanedMedia(new Date(Date.now() + 25 * 60 * 60 * 1000));
-    expect(await store.get(key)).toBeUndefined();
+    expect(await store.get(key)).toEqual(source);
+    const [saved] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
+    expect((saved!.checkpoint as Record<string, unknown>).sourceWrites).toEqual([expect.objectContaining({ state: "unknown", uploadId: upload.uploadId })]);
   });
 
   it("freezes chunk bytes before storage and makes identical received retries read-only", async () => {
@@ -155,7 +157,7 @@ describe.runIf(hasDatabase)("raw import-source byte cleanup", () => {
     expect(result?.status).toBe("rejected");
     expect(await db().select().from(mediaObjects).where(eq(mediaObjects.key, key))).toHaveLength(1);
     await cleanupOrphanedMedia(new Date(Date.now() + 25 * 60 * 60 * 1000));
-    expect(await store.get(key)).toBeUndefined();
+    expect(await store.get(key)).toEqual(lostAcknowledgement ? source : undefined);
   });
   it("keeps each identical concurrent write unresolved until its own provider outcome", async () => {
     const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
@@ -218,6 +220,29 @@ describe.runIf(hasDatabase)("raw import-source byte cleanup", () => {
     const rows = await db().select().from(auditLog).where(eq(auditLog.subjectId, run.id));
     expect(rows.find(row => row.action === "imports.releaseErasedSourceUpload")).toMatchObject({ actor: `agent:${actor.keyName}`, diff: { id: run.id, uploadId: upload.uploadId } });
     expect(JSON.stringify(rows)).not.toContain(EMAIL);
+  });
+
+  it("does not infer cancellation when PUT rejects before a provider write finishes later", async () => {
+    const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "source.xml", bytes: source.byteLength }, OWNER);
+    const key = `imports/${run.id}/${upload.uploadId}/00000.part`, store = storage(), put = store.put.bind(store);
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let providerCompletion: ReturnType<typeof put> | undefined;
+    vi.spyOn(store, "put").mockImplementationOnce(async (...args) => {
+      providerCompletion = gate.then(() => put(...args));
+      throw new Error("Synthetic client outcome unknown while provider is still running");
+    });
+    try {
+      await expect(uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes: source }, OWNER)).rejects.toThrow(/outcome unknown/);
+      await cleanupOrphanedMedia(new Date(Date.now() + 25 * 3_600_000));
+      expect(await db().select().from(mediaObjects).where(eq(mediaObjects.key, key))).toHaveLength(1);
+      release(); await providerCompletion;
+      await cleanupOrphanedMedia(new Date(Date.now() + 25 * 3_600_000));
+      expect(await store.get(key)).toEqual(source);
+      const [saved] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
+      expect((saved!.checkpoint as Record<string, unknown>).sourceWrites).toEqual([expect.objectContaining({ uploadId: upload.uploadId, index: 0, state: "unknown" })]);
+    } finally { release(); await providerCompletion; }
   });
 
 });
