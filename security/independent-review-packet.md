@@ -268,14 +268,28 @@ a direct charge/refund, and order/invoice recorders cannot duplicate earnings.
 Synthetic provider evidence and seeded browser setup are explicitly limited
 in the source document; they are not live-provider or independent acceptance.
 
+### Customer invoice issuer and collection preview
+
+The authorized `invoicing.customerInvoice` projection now exposes only the
+immutable public merchant name, after the existing customer/private-link
+ownership check. Review the explicit output and original-account verification
+in `customer-service.ts`: default adapters, private routing/fee fields and
+current seller profile names must not replace the original invoice identity.
+Changed or unavailable collection must keep the original document readable
+without offering a default offline flow. The portal isolates bidirectional
+names and wraps long names; the live SDK includes only the public scalar.
+Review token retirement, other-customer refusals, original provider capability,
+account replacement and the four-locale browser controls. This source slice
+does not enable direct collection or supply independent/provider acceptance.
+
 The later Stripe card-setup increment resolves an unexpanded SetupIntent only
 after raw signature/account validation, on the same account. Review succeeded
 off-session status, original reference, customer/method binding and matching
 contact/subscription metadata before the method enters the shared ledger.
 Incomplete evidence returns a retryable refusal without recording money or
-exposing client secrets. First-customer creation must wait for a durable
-request snapshot that freezes profile/customer/account inputs before I/O;
-that and exact fresh-session proof for reused cards remain C12.38 work.
+exposing client secrets. Review durable pre-I/O customer/request snapshots and
+exact fresh-session proof for reused cards in the original trial-setup section
+above; full C12.38 integration and actual acceptance remain required.
 
 ### Refund parent and definite cancellation repair
 

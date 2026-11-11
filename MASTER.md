@@ -13216,6 +13216,18 @@ whatever is best for the people using the site.
   destination charges at checkout through the payout provider (Stripe
   Connect first), with the site fee taken as an application fee, refunds
   and disputes on the seller's account. Split from C12.26 on 2026-10-15.
+  Customer-invoice identity source progress 2026-11-11: the existing authorized
+  customer query projects only the frozen public issuer name, and the invoice
+  header uses it instead of current site branding. Original Stripe capability
+  and account verification determine collection preview; unavailable or changed
+  merchants remain readable but cannot offer a default offline payment flow.
+  Private routing/fee fields stay out of customer results. Shared customer/token
+  authority and legacy site invoices are preserved; names isolate bidirectional
+  text and wrap at narrow widths. `tests/core/customer-invoices.test.ts`,
+  `tests/browser/merchant-invoice-identity.spec.ts`; changeset
+  `merchant-customer-invoice-identity.md`; `deploy/commerce-payments.md`.
+  Full C12.38 integration and actual acceptance remain required; this source
+  slice enables no direct collection model and supplies no stable sign-off.
   *(In progress 2026-11-10: an immutable internal invoice market-policy
   snapshot freezes collection model and fees at issue; subscription agreements
   capture seller terms before trials and preserve them on renewal. Existing held/instant

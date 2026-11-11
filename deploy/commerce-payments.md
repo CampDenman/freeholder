@@ -215,6 +215,19 @@ Repeat the checklist for each provider an instance plans to enable. The
 repository tests use deterministic mocked provider HTTP only. They never make a
 real, billable, sandbox, or live provider request.
 
+## Customer invoice issuer (C12.38, source integration)
+
+Customer invoices expose the frozen public issuer through `issuerName` when
+their original collection policy names a direct seller. Site-issued invoices
+return `null` and keep the existing site-branding behavior. The same customer
+session/private-link ownership check runs before policy lookup; routing,
+account IDs, seller IDs and application fees remain private. A changed site
+default cannot relabel the original seller or offer offline instructions for
+that online invoice. Collection preview uses the original Stripe capability
+and account verifier; if unavailable or changed, the document remains readable
+while payment is unavailable. The portal uses bidirectional isolation and
+wraps long names. This read-model integration enables no direct collection.
+
 ## Returned-item refunds (C5.19/C11.10, source repair)
 
 Authenticated refund feedback must match the recorded original payment
