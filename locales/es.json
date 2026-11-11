@@ -7057,7 +7057,7 @@
   "subscriptions.detail.billing": "Facturación",
   "subscriptions.detail.manage": "Gestionar suscripciones",
   "privacy.erasure.pending.title": "Eliminación del proveedor pendiente",
-  "privacy.erasure.pending.hint": "La eliminación local ha comenzado. Deben terminar las tareas necesarias de eliminación de clientes de pago, grabaciones y transcripciones. Las tareas fallidas siguen disponibles para reintentar.",
+  "privacy.erasure.pending.hint": "La eliminación sigue en curso hasta confirmar la limpieza necesaria de clientes de pago, grabaciones, transcripciones y archivos almacenados. Las tareas fallidas o sin resolver siguen disponibles para su recuperación.",
   "privacy.erasure.pending.jobs": "Consultar tareas en segundo plano",
   "admin.search.kind.supplier": "Proveedores",
   "admin.search.kind.agreement": "Acuerdos",

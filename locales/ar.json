@@ -5625,7 +5625,7 @@
   "subscriptions.detail.billing": "الفوترة",
   "subscriptions.detail.manage": "إدارة العضويات",
   "privacy.erasure.pending.title": "محو المزود معلق",
-  "privacy.erasure.pending.hint": "بدأ المحو المحلي. يجب إتمام حذف بيانات عملاء الدفع والتسجيلات والنصوص المطلوبة قبل إتمام الطلب. تبقى الأعمال الفاشلة متاحة لإعادة المحاولة.",
+  "privacy.erasure.pending.hint": "يبقى المحو قيد التنفيذ حتى تأكيد حذف بيانات عملاء الدفع والتسجيلات والنصوص والملفات المخزنة المطلوبة. وتظل المهام الفاشلة أو غير المحسومة متاحة للاسترداد.",
   "privacy.erasure.pending.jobs": "فحص المهام الخلفية",
   "search.kind.marketplaceOrder": "طلب سوق",
   "search.kind.privacyRequest": "طلب خصوصية",

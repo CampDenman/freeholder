@@ -7,3 +7,9 @@ export async function lockContactIdentity(tx:Tx):Promise<void>{
  const result=await tx.execute<{locked:boolean}>(sql`select pg_try_advisory_xact_lock(hashtext('contact-identity-privacy')) as locked`);
  if(!result[0]?.locked)throw new ServiceError("conflict","Another contact merge or privacy request is in progress. Please retry when it finishes.");
 }
+
+/** Ordinary writers may run together, but never across merge/erasure cutover. */
+export async function lockContactIdentityForRead(tx: Tx): Promise<void> {
+ const result = await tx.execute<{locked: boolean}>(sql`select pg_try_advisory_xact_lock_shared(hashtext('contact-identity-privacy')) as locked`);
+ if (!result[0]?.locked) throw new ServiceError("conflict", "Another contact merge or privacy request is in progress. Please retry when it finishes.");
+}

@@ -10,6 +10,7 @@
 // time by `imports.previewFromUpload`. A WXR file is parsed as it streams, so
 // memory holds one chunk and one `<item>` rather than the whole export. The
 // chunks are deleted once the preview is staged, whether it succeeded or not.
+import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { createHash, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -110,6 +111,7 @@ const beginApply = defineService({
   }),
   output: z.object({ upload: uploadRecord, previousKeys: z.array(z.string()) }),
   handler: async (input, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
     if (input.bytes > IMPORT_SOURCE_MAX_BYTES) {
       throw new ServiceError(
         "validation",
@@ -209,6 +211,7 @@ const claimChunk = defineService({
   }),
   output: z.object({ key: z.string(), received: z.number().int(), chunks: z.number().int(), alreadyReceived: z.boolean(), attemptId: z.uuid().nullable() }),
   handler: async (input, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!run) throw new ServiceError("not_found", "No such import run.");
     const upload = uploadOf(run.checkpoint);
@@ -394,6 +397,7 @@ const uploadSource = defineService({
 
 const applyUploaded = defineService({
   name: "imports.applyUploadedPreview",
+  auditInputFields: ["id", "uploadId", "counts", "archivePreviewDigest"],
   orchestratedBy: "imports.previewFromUpload",
   summary: "Write the preview staged from an uploaded import source.",
   kind: "mutation",

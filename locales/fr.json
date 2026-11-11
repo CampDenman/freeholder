@@ -7057,7 +7057,7 @@
   "subscriptions.detail.billing": "Facturation",
   "subscriptions.detail.manage": "Gérer les abonnements",
   "privacy.erasure.pending.title": "Effacement chez le fournisseur en attente",
-  "privacy.erasure.pending.hint": "L’effacement local a commencé. La suppression requise des clients de paiement, enregistrements et transcriptions doit être terminée. Les opérations échouées peuvent être relancées.",
+  "privacy.erasure.pending.hint": "L’effacement reste en cours jusqu’à la confirmation des suppressions requises des clients de paiement, enregistrements, transcriptions et fichiers stockés. Les tâches échouées ou non résolues restent disponibles pour récupération.",
   "privacy.erasure.pending.jobs": "Consulter les tâches en arrière-plan",
   "admin.search.kind.supplier": "Fournisseurs",
   "admin.search.kind.agreement": "Accords",

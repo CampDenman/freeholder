@@ -422,6 +422,20 @@ export const deleteCaptureObjects = defineJob({
   },
 });
 
+/** Raw import copies must be confirmed gone before privacy acknowledges them. */
+export const eraseImportSourceObjects = defineJob({
+  name: "core.eraseImportSourceObjects",
+  summary: "Confirm removal of original private import chunks for an erasure receipt.",
+  retry: { limit: 40, delaySeconds: 60, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 1,
+  handler: async (data, context) => {
+    if (!context) throw new Error("Import-source erasure requires a durable worker identity.");
+    await context.throwIfCancelled();
+    const { eraseImportSourceObjects: erase } = await import("@/core/import/source-erasure");
+    return erase(data);
+  },
+});
+
 /** Unconfirmed recordings and leftover chunks must not outlive the session. */
 export const expireCaptureSessions = defineJob({
   name: "core.expireCaptureSessions",
@@ -1056,6 +1070,7 @@ export default [
   sweepMediaOrphans,
   expireCaptureSessions,
   deleteCaptureObjects,
+  eraseImportSourceObjects,
   expireAgentApprovals,
   runPlaybooks,
   assembleBriefings,

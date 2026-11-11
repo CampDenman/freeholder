@@ -1,12 +1,15 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import { createHash, randomUUID } from "node:crypto";
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, getService, ServiceError } from "@/core/service";
 import { resolveContact, registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { auditLog } from "@/core/events/schema";
+import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
+import { contactPrivacyIdentity } from "@/core/privacy/contact-identity";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { pages } from "./schema";
@@ -32,9 +35,18 @@ registerContactReference({
   },
 });
 registerContactPrivacySource({
-  scope: "cms.readerComments", tables: ["blog_reader_comments"],
+  scope: "cms.readerComments", tables: ["blog_reader_comments"], eraseOrder: 20,
   exportData: (tx, contactId) => tx.select().from(comments).where(eq(comments.contactId, contactId)),
-  erase: async (tx, contactId) => ({ affected: (await tx.delete(comments).where(eq(comments.contactId, contactId)).returning({ id: comments.id })).length }),
+  erase: async (tx, contactId) => {
+    const identity = await contactPrivacyIdentity(tx, contactId);
+    const owned = await tx.select({ id: comments.id }).from(comments).where(inArray(comments.contactId, identity.contactIds));
+    await tx.update(auditLog).set({ diff: sql`${auditLog.diff} - 'name' - 'email' - 'body' - 'website' - 'sourceContactId'` }).where(and(
+      inArray(auditLog.action, ["cms.submitReaderComment", "cms.importReaderComment"]),
+      or(owned.length ? and(eq(auditLog.subjectType, "blog_comment"), inArray(auditLog.subjectId, owned.map(row => row.id))) : sql`false`,
+        identity.emails.length ? inArray(sql<string>`lower(${auditLog.diff}->>'email')`, identity.emails) : sql`false`),
+    ));
+    return { affected: (await tx.delete(comments).where(inArray(comments.contactId, identity.contactIds)).returning({ id: comments.id })).length };
+  },
 });
 
 export const listReaderComments = defineService({
@@ -48,6 +60,7 @@ export const listReaderComments = defineService({
 });
 
 export const submitReaderComment = defineService({
+  auditInputFields: ["pageId", "parentId"],
   name: "cms.submitReaderComment", summary: "Submit a reader comment for moderation; this never publishes immediately or subscribes the contact to marketing.",
   kind: "mutation", permission: "public", writeClass: "message",
   input: z.object({ pageId: uuid, parentId: uuid.nullable().optional(), name: z.string().trim().min(1).max(200), email: z.string().trim().toLowerCase().email().max(320), body: z.string().trim().min(1).max(10000), website: z.string().max(200).default("") }),
@@ -55,6 +68,7 @@ export const submitReaderComment = defineService({
   output: z.object({ ok: z.literal(true), id: uuid }),
   handler: async (input, ctx) => {
     if (input.website) return { ok: true as const, id: randomUUID() };
+    await lockContactIdentityForRead(ctx.tx);
     const settings = await loadBlogSettings(ctx.tx);
     const [post] = await ctx.tx.select({ id: pages.id, slug: pages.slug, title: pages.title, enabled: blogPosts.commentsEnabled }).from(pages).innerJoin(blogPosts, eq(blogPosts.pageId, pages.id)).where(and(eq(pages.id, input.pageId), eq(pages.status, "published"), isNull(pages.trashedAt))).limit(1);
     if (!post || !settings.commentsEnabled || !post.enabled || !await isPublicPage(ctx, post)) throw new ServiceError("validation", "Comments are closed on this post.");
@@ -88,14 +102,17 @@ export const listReaderCommentsForOwner = defineService({
 });
 
 export const importReaderComment = defineService({
+  auditInputFields: ["runId", "externalId", "pageId", "parentId", "status", "createdAt"],
   name: "cms.importReaderComment", summary: "Import one WordPress reader comment idempotently, preserving its date and moderation state.",
   kind: "mutation", permission: "scoped", writeClass: "message",
   input: z.object({ runId: uuid, externalId: z.string().min(1).max(200), pageId: uuid, parentId: uuid.nullable().optional(), name: z.string().min(1).max(200), email: z.string().email().nullable(), sourceContactId: uuid.optional(), body: z.string().min(1).max(10000), status: state, createdAt: z.iso.datetime({ offset: true }).optional() }), output: privateRow,
   handler: async (input, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
     const source = `import:${input.runId}`;
     const [prior] = await ctx.tx.select().from(comments).where(and(eq(comments.source, source), eq(comments.externalId, input.externalId))).limit(1);
     if (prior) return prior;
-    const bound = input.sourceContactId ? (await ctx.tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.id, input.sourceContactId)).limit(1))[0] : undefined;
+    const bound = input.sourceContactId ? (await ctx.tx.select({ id: contacts.id, source: contacts.source }).from(contacts).where(eq(contacts.id, input.sourceContactId)).limit(1))[0] : undefined;
+    if (bound?.source === "privacy-erasure") throw new ServiceError("conflict", "That reader was erased. Review the original source before importing comments.");
     if (input.sourceContactId && !bound) throw new ServiceError("conflict", "The imported reader's contact changed. Review the source before importing this comment.");
     const resolved = !bound && input.email ? await ctx.callAsSystem(resolveContact, { name: input.name, email: input.email, source: "wordpress-comment" }) : null;
     if (input.parentId) {
