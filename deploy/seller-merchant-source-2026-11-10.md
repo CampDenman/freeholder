@@ -298,10 +298,20 @@ SDK controls, 20 setup/identity/privacy-lineage controls, and six bounded
 witness controls. The earlier seven-suite integration exercised 146 unique
 cases: 144 passed initially; two invalid fixture assumptions were corrected
 and their affected suites passed. It was not one wholly green 146-case run.
-The final production artifact contains 20,320 files / 242,439,763 bytes and
+The final production artifact contains 20,320 files / 242,450,117 bytes and
 passes the standalone source/environment scrub. Eight actual Chromium journeys
 passed on a fresh schema70 database in English, Spanish, French and Arabic,
 including keyboard submission, 320px reflow and both-theme Axe scans. Final
 type, lint, licensing, plan and 373 contract checks passed across the main run
 and the generated-changelog correction retry. Bounded peer review found no
 remaining source blocker; it does not supply independent security sign-off.
+
+Protected CI found nine missing activity-feed labels and an older merchant-card
+browser fixture that relied on a card-age event without exact setup proof.
+All new mutations now have precise four-locale request/outcome/recovery/cleanup
+labels; requesting setup no longer claims the trial started. The existing
+merchant fixture now supplies the actual expected durable proof shape and
+provider-shaped synthetic account IDs, preserving its account/seller isolation
+assertions. Final audit/translation controls passed35, four owner recovery
+journeys passed, and the four affected merchant journeys passed on the final
+artifact. These fixture states remain synthetic, not live provider acceptance.
