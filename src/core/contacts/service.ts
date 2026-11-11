@@ -5,6 +5,7 @@
 // them) and lands in the audit log via the service wrapper. No module gets
 // its own notion of "customer" — this is the only door.
 import { z } from "zod";
+import {lockContactIdentity} from "./identity-lock";
 import {
   and,
   arrayContains,
@@ -815,6 +816,7 @@ export const mergeContacts = defineService({
   }),
   output: mergedContact,
   handler: async (input, ctx) => {
+    await lockContactIdentity(ctx.tx);
     if (input.survivingId === input.duplicateId) {
       throw new ServiceError(
         "validation",
@@ -985,6 +987,7 @@ export const mergeContacts = defineService({
     const [operation] = await ctx.tx
       .insert(contactMergeOperations)
       .values({
+        mergedAt: sql`clock_timestamp()`,
         candidateId: candidate?.id,
         survivingContactId: surviving.id,
         duplicateContactId: duplicate.id,
@@ -1050,6 +1053,7 @@ export const undoContactMerge = defineService({
     restoredContact: contactRow,
   }),
   handler: async (input, ctx) => {
+    await lockContactIdentity(ctx.tx);
     const [operation] = await ctx.tx
       .select()
       .from(contactMergeOperations)
@@ -1141,7 +1145,7 @@ export const undoContactMerge = defineService({
     }
     await ctx.tx
       .update(contactMergeOperations)
-      .set({ undoneAt: new Date() })
+      .set({ undoneAt: sql`clock_timestamp()` })
       .where(eq(contactMergeOperations.id, operation.id));
 
     ctx.setSubject("merge", operation.id);

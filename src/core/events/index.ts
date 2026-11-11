@@ -5,6 +5,7 @@
 // a mutation that didn't commit must be impossible. Bus events are the
 // opposite: they fan out to other modules only *after* commit, so a listener
 // never observes state that later rolled back.
+import { sql } from "drizzle-orm";
 import { timelineEvents } from "@/core/contacts/schema";
 import type { Tx } from "@/core/service";
 import { withPlatformExecution, type PluginExecution } from "@/core/plugins/context";
@@ -25,6 +26,7 @@ export async function writeTimelineEvent(
 ): Promise<void> {
   await tx.insert(timelineEvents).values({
     contactId: event.contactId,
+    occurredAt: sql`clock_timestamp()`,
     actor,
     eventType: event.eventType,
     subjectType: event.subjectType,

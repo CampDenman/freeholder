@@ -3883,6 +3883,20 @@ reading chat logs.
   `tests/core/merge-completeness.test.ts`; changeset
   `contact-privacy-rights.md`; operator guide `deploy/privacy-rights.md` **F04** `/admin/contacts/privacy` access/export/erasure. **F05** `contacts.createDataRequest`/`fulfillDataRequest`/`recordConsent` and `privacy.getMyProfile`/`createMyDataRequest`/`downloadMyDataRequestArtifact` at `/api/v1/contacts.*` and `/api/v1/privacy.*`; MCP `privacy_*`/`contacts_*`. **F07** `tests/core/contact-privacy-rights.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/privacy-rights.md`. **F12** `tests/core/contact-privacy-rights.test.ts` is the composition proof.)
 
+  Privacy lineage repair 2026-11-11 (C1.08/C11.10): actual merge/undo controls
+  reproduced other-party snapshot disclosure, transitive retained copies and
+  overly broad erasure. Shared subject-history projection now excludes owner
+  recovery payloads and other-party snapshots; erasure scrubs active and
+  historical shared payloads while preserving a separate undone subject.
+  Operation-time chronology and a nonwaiting identity guard cover composed
+  transactions and concurrent merge/undo/fulfilment. Named retention scopes
+  remain independent, and action/reference history remains subject to existing
+  login-actor anonymization.
+  `tests/core/contact-privacy-lineage.test.ts`; changeset
+  `contact-privacy-lineage.md`; `deploy/privacy-rights.md`. Independent C11.10
+  review remains open.
+
+
 #### Jobs, events, files, mail, and notifications
 - [x] **C1.09** Enqueue jobs inside the caller transaction; add idempotency
   keys, retry/backoff policy, concurrency limits, cancellation, and leases.

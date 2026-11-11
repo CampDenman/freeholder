@@ -64,6 +64,25 @@ automated alert does not establish their security. Live provider acceptance,
 cross-target object-byte recovery and actual platform launches retain their
 own open checklist items.
 
+## Contact merge/undo privacy lineage repair (2026-11-11)
+
+Review `core/privacy/contact-identity.ts`, the merge-history/timeline/audit privacy
+sources and the shared nonwaiting contact-identity guard. Real service/database
+controls reproduced disclosure of a separate undone contact, retained transitive
+snapshots, borrowed-address attribution, owner recovery payload disclosure and
+shared timeline payload retention. Subject exports now redact ambiguous/shared
+history and exclude recovery checkpoints; erasure removes shared personal
+payloads without destroying another separated contact's before-image. Named
+scope holds and retained action/reference history remain explicit limits;
+existing login-actor anonymization still applies.
+
+Review actual operation-time timestamps for audit/timeline/merge/undo writes and
+the guard taken before fulfilment reads a profile, including composed transaction
+and competing identity controls in `tests/core/contact-privacy-lineage.test.ts`.
+Legacy transaction-start ambiguity is handled conservatively. This is a coding
+agent's repair evidence, not Tony Aly's independent security sign-off. C11.10
+and stable publication remain open.
+
 ## OpenMLS migration boundary (C12.39, source qualification)
 
 Review `native/openmls/src/lib.rs`, the pinned upstream/compiler/runtime and
