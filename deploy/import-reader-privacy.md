@@ -55,9 +55,16 @@ respect already acknowledged erasures before anything becomes public again.
 The final integrated PostgreSQL/native run passed 62 checks, including the
 independently reviewable contact-history repair in PR #662, reader-source privacy,
 merge/undo, exact import-key boundaries and all eight SDK checks. Production build
-and artifact scrub passed: 19,399 files and 236,789,859 bytes. Type, lint, license,
+and artifact scrub passed: 19,423 files and 237,159,757 bytes. Type, lint, license,
 plan and all 368 contract checks passed (one deliberate contract exclusion).
-Migration 0068 is merged; migration 0069 must retain its journal order and the
-contact-history dependency must land before this source is integrated. Protected
-PR qualification remains required. No new browser surface is introduced; existing
+The contact-history dependency and migration 0068 are merged. A fresh database
+with contiguous migrations through 0069 passes another 44 source, contact-lineage,
+exact-key and SDK controls. Migration 0069 retains journal order. Protected PR
+qualification remains required. No new browser surface is introduced; existing
 owner forms and HTTP/MCP use the same shared mutations and original actor audit.
+
+A separate actual reproduction after this parsed-cache repair found an erasure
+receipt can complete while an opaque original WXR still contains reader data.
+The retained-source cleanup follow-up must make that receipt wait for confirmed
+provider cleanup. This increment does not claim full raw-object erasure or close
+C2.29/C11.10.

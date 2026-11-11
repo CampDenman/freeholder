@@ -746,3 +746,9 @@ PR #662. Its final integrated local run passes 62 checks, all eight SDK controls
 368 contracts (one deliberate exclusion), and the production artifact scrub
 (19,399 files, 236,789,859 bytes). These checks are engineering evidence; Tony's
 independent review and source-specific acceptance remain outstanding.
+
+After merged-core integration, a fresh contiguous-schema run passed 44 checks
+and the production scrub passed 19,423 files / 237,159,757 bytes. A separate
+actual follow-up reproduced a completed erasure receipt with reader details
+still in an opaque original WXR object. The parsed-cache repair does not cover
+that provider acknowledgement; raw-object work remains required before sign-off.
