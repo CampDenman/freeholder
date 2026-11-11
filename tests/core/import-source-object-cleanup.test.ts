@@ -52,7 +52,7 @@ describe.runIf(hasDatabase)("raw import-source byte cleanup", () => {
 
   it("refuses a public storage configuration before reserving or writing private source input", async () => {
     const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
-    const store = storage(), descriptor = Object.getOwnPropertyDescriptor(store, "isPublic");
+    const store = storage(), descriptor = Object.getOwnPropertyDescriptor(store, "isPublic")!;
     const put = vi.spyOn(store, "put");
     Object.defineProperty(store, "isPublic", { value: true, configurable: true });
     try {
