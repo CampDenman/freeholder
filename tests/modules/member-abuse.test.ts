@@ -13,6 +13,7 @@ import { users } from "@/core/auth/schema";
 import { ready } from "@/core/runtime";
 import { rescanAsset, trashAsset, uploadAsset } from "@/core/media/service";
 import { createCompositeScanner, resetMalwareScannerForTests, setMalwareScannerForTests } from "@/adapters/malware";
+import { createPhotoDna } from "@/adapters/abuse-scan/photodna";
 import type { MalwareScanner } from "@/adapters/malware/types";
 import { joinSite } from "@/modules/members/service";
 import { abuseReportQueue, linkAbuseReports, markAbuseReported } from "@/modules/members/abuse";
@@ -110,5 +111,21 @@ describe.runIf(hasDatabase)("known abuse imagery on upload (C12.30)", () => {
     const reports = await db().select().from(abuseReports);
     expect(new Set(reports.map((r) => r.assetId)).size).toBe(2);
     expect(reports.map((r) => r.uploadedBy).sort()).toEqual([`user:${RAE.userId}`, `user:${SAM.userId}`].sort());
+  });
+
+  it("keeps unsupported and malformed PhotoDNA checks quarantined without accusing an uploader", async () => {
+    const adapter = createPhotoDna({ subscriptionKey: "test-only-key", fetch: async () => Response.json({}) });
+    setMalwareScannerForTests(createCompositeScanner(cleanScanner, adapter));
+    const png = new Uint8Array(await sharp(await image(30)).png().toBuffer());
+    const webp = new Uint8Array(await sharp(png).webp().toBuffer());
+    const unsupported = await uploadAsset.call({ filename: "test-only.webp", contentType: "image/webp", bytes: webp }, RAE);
+    const malformed = await uploadAsset.call({ filename: "test-only.png", contentType: "image/png", bytes: png }, RAE);
+    for (const held of [unsupported, malformed]) expect(held).toMatchObject({ status: "quarantined", scanStatus: "error", scanEngine: "abuse-hash-error:photodna" });
+    expect(await db().select().from(abuseReports)).toEqual([]);
+    expect(await linkAbuseReports.call({}, { kind: "system" })).toEqual({ linked: 0, suspended: 0 });
+    expect((await db().select().from(memberProfiles).where(eq(memberProfiles.userId, RAE.userId)))[0]?.status).toBe("active");
+    expect((await trashAsset.call({ id: unsupported.id }, OWNER)).status).toBe("trashed");
+    setMalwareScannerForTests(createCompositeScanner(cleanScanner, createPhotoDna({ subscriptionKey: "test-only-key", fetch: async () => Response.json({ IsMatch: false, Status: { Code: 3000 } }) })));
+    expect((await rescanAsset.call({ id: malformed.id }, OWNER)).status).toBe("ready");
   });
 });
