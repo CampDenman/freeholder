@@ -72,6 +72,7 @@ export function ImportStepForms({
     preview: string;
     url: string;
     slug: string;
+    slugHint: string;
     title: string;
     pageKind: string;
     page: string;
@@ -145,8 +146,8 @@ export function ImportStepForms({
       {status === "previewed" ? (
         <form action={reviewImportConflictsAction} className="grid min-w-0 gap-3">
           <input type="hidden" name="id" value={id} />
-          <Field htmlFor="conflict-slug" label={labels.slug}>
-            <Input id="conflict-slug" name="slug" required />
+          <Field htmlFor="conflict-slug" label={labels.slug} hint={labels.slugHint}>
+            <Input id="conflict-slug" name="slug" />
           </Field>
           <Field htmlFor="conflict-resolution" label={labels.review}>
             <Select id="conflict-resolution" name="resolution" defaultValue="keep-existing">

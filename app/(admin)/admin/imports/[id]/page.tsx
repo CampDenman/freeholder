@@ -42,16 +42,24 @@ export default async function ImportRunPage({
     ["commentsStaged", t("imports.count.commentsStaged")],
     ["commentsSkipped", t("imports.count.commentsSkipped")],
     ["skippedPages", t("imports.count.skippedPages")],
+    ["filesNotImported", t("imports.count.filesNotImported")],
+    ["mediaWarnings", t("imports.count.mediaWarnings")],
+    ["elementsNotImported", t("imports.count.elementsNotImported")],
   ];
   const shown = countLabels.filter(([key]) => typeof counts[key] === "number");
   const wordpress = run.source.startsWith("wordpress-");
   const checkpoint = run.checkpoint && typeof run.checkpoint === "object" ? run.checkpoint as Record<string, unknown> : {};
-  const report = checkpoint.report && typeof checkpoint.report === "object" ? checkpoint.report as Record<string, unknown> : {};
+  const preview = run.preview && typeof run.preview === "object" ? run.preview as Record<string, unknown> : {};
+  const archive = preview.archive && typeof preview.archive === "object" ? preview.archive as Record<string, unknown> : {};
+  const reportValue = checkpoint.report ?? archive.report;
+  const report = reportValue && typeof reportValue === "object" ? reportValue as Record<string, unknown> : {};
+  const filesNotImported = z.array(z.string()).safeParse(report.ignored);
+  const mediaWarnings = z.array(z.string()).safeParse(report.unresolvedImages);
   const parsedIssues = z.array(z.object({ menu: z.string(), label: z.string(), reason: z.enum(["target", "private"]) })).safeParse(report.menuIssues);
   const menuIssues = parsedIssues.success ? parsedIssues.data.slice(0, 100) : [];
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 gap-6">
       <div>
         <Link href="/admin/imports" className="text-sm text-ink-muted">
           {t("imports.back")}
@@ -71,6 +79,7 @@ export default async function ImportRunPage({
               preview: t("imports.preview"),
               url: t("imports.pageUrl"),
               slug: t("imports.slug"),
+              slugHint: t("cms.field.slugHint"),
               title: t("imports.pageTitle"),
               pageKind: t("imports.pageKind"),
               page: t("imports.kindPage"),
@@ -126,6 +135,16 @@ export default async function ImportRunPage({
                   <p className="text-ink-muted">{t(`imports.menuWarning.${issue.reason}`)}</p>
                 </li>)}
               </ul>
+            </div> : null}
+            {run.kind === "archive" ? <div className="mt-4 grid min-w-0 gap-3">
+              <p className="max-w-prose text-sm text-ink-muted">{t("imports.note.archive")}</p>
+              {[
+                { label: t("imports.count.filesNotImported"), values: filesNotImported.success ? filesNotImported.data : [] },
+                { label: t("imports.count.mediaWarnings"), values: mediaWarnings.success ? mediaWarnings.data : [] },
+              ].filter(group => group.values.length).map(group => <div key={group.label} className="grid min-w-0 gap-2">
+                <h3 className="text-sm font-semibold">{group.label}</h3>
+                <ul className="grid min-w-0 list-none gap-1 p-0">{group.values.slice(0, 100).map((value, index) => <li key={index} className="min-w-0 break-all text-sm text-ink-muted">{value.startsWith("data:") ? t("imports.mediaWarning.inline") : value.slice(0, 2_048)}</li>)}</ul>
+              </div>)}
             </div> : null}
             {wordpress ? (
               <p className="mt-4 max-w-prose text-sm text-ink-muted">{t("imports.note.wordpress")}</p>

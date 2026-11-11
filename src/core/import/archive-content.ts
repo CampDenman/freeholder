@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C3.22: retain owned audio/video/document intent through the shared converter.
 import { parseFragment, serialize, type DefaultTreeAdapterTypes } from "parse5";
+import { randomUUID } from "node:crypto";
 import { budgetMessage } from "@/modules/cms/budgets";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { wordpressBodyToBlocks, type BodyContext, type BodyConversion } from "./wordpress";
@@ -16,6 +17,7 @@ function words(node: Node): string {
 
 export function archiveBodyToBlocks(body: string, context: BodyContext & { resolveMedia(src: string): ArchiveMediaMatch | null }): BodyConversion {
   const document = parseFragment(body);
+  const referenceBase = `https://${randomUUID()}.static-archive.invalid/`;
   const references = new Map<string, { media: ArchiveMediaMatch; presentation: "video" | "file"; label: string }>();
   const walk = (parent: DefaultTreeAdapterTypes.ParentNode) => {
     for (let index = 0; index < parent.childNodes.length; index++) {
@@ -27,7 +29,7 @@ export function archiveBodyToBlocks(body: string, context: BodyContext & { resol
         const token = `archive-media-${references.size}`;
         references.set(token, { media, presentation: node.tagName === "video" && media.kind === "video" ? "video" : "file", label: words(node).replace(/\s+/g, " ").trim().slice(0, 200) || media.filename.slice(0, 200) });
         const replacement = parseFragment("<img>").childNodes[0] as Element;
-        replacement.attrs = [{ name: "src", value: `https://static-archive.invalid/${token}` }];
+        replacement.attrs = [{ name: "src", value: `${referenceBase}${token}` }];
         replacement.parentNode = parent;
         parent.childNodes[index] = replacement;
       } else walk(node);
@@ -37,8 +39,8 @@ export function archiveBodyToBlocks(body: string, context: BodyContext & { resol
   const converted = wordpressBodyToBlocks(serialize(document), {
     ...context,
     resolveImage(src, wpId) {
-      if (src.startsWith("https://static-archive.invalid/")) {
-        const token = src.slice("https://static-archive.invalid/".length);
+      if (src.startsWith(referenceBase)) {
+        const token = src.slice(referenceBase.length);
         if (references.has(token)) return { assetId: token };
       }
       return context.resolveImage(src, wpId);

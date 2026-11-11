@@ -41,6 +41,7 @@ import { archivePlanSchema, archivePreviewDigest, archiveSourcePath, staticArchi
 import { archiveBodyToBlocks, type ArchiveMediaMatch } from "./archive-content";
 import { archiveRangeSource } from "./archive-source";
 import { restoreStaticArchive } from "./archive-commit";
+import { safeImportHref } from "./content-links";
 import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
 import importMediaReceiptServices, { bindImportMediaBytes, claimImportMedia } from "./media-receipts";
 import {
@@ -861,6 +862,7 @@ const commitApply = defineService({
     }
     const rewriteHref = (href: string): string => {
       if (!typedContent) return href;
+      if (!safeImportHref(href, archive?.site.url ?? wordpress?.site.url ?? "https://invalid.invalid/")) return "";
       if (archive) {
         const mediaKey = resolveMediaKey(href);
         const assetId = mediaKey ? assetByKey.get(mediaKey) : undefined;
@@ -1145,7 +1147,7 @@ const commitApply = defineService({
           skippedPages: skippedPages.length,
         }
       : archive
-        ? { pages: createdPageIds.length + replacedPages.length, media: mediaImported, mediaFailed: mediaFailures.length, redirects: redirectIds.length, skippedPages: skippedPages.length }
+        ? { pages: createdPageIds.length + replacedPages.length, media: mediaImported, mediaFailed: mediaFailures.length, redirects: redirectIds.length, skippedPages: skippedPages.length, filesNotImported: archive.report.ignored.length, mediaWarnings: new Set([...archive.report.unresolvedImages, ...unresolvedImages]).size, elementsNotImported: droppedEmbeds }
         : { pages: createdPageIds.length + replacedPages.length, media: 0, redirects: 0 };
 
     const checkpoint = withImportPages(before.checkpoint, createdPageIds, replacedPages);

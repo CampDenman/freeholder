@@ -38,7 +38,7 @@ export async function stageStaticArchive(source: ArchiveSource, origin: string):
   const result = await readStaticArchive(source, origin, async () => {});
   return {
     preview: { sourceFormat: "static-archive", pages: result.pages, archive: archivePlan(result) },
-    counts: { pages: result.pages.length, media: result.assets.length, redirects: result.pages.filter(page => page.redirectFrom).length },
+    counts: { pages: result.pages.length, media: result.assets.length, redirects: result.pages.filter(page => page.redirectFrom).length, filesNotImported: result.report.ignored.length, mediaWarnings: result.report.unresolvedImages.length },
   };
 }
 
