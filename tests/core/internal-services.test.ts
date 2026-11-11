@@ -16,6 +16,8 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "invoicing.reserveRefundBatch",
+  "catalog.reconcileReturnProviderRefunds",
   "invoicing.merchantSettlement",
   "members.resolveSubscriptionPlanMarketPolicy",
   "subscriptions.paymentScope",
@@ -210,6 +212,9 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "catalog.claimReturnProviderRefund",
+  "catalog.reconcileReturnProviderRefunds",
+  "invoicing.reserveRefundBatch",
   "invoicing.merchantSettlement",
   "members.resolveSubscriptionPlanMarketPolicy",
   "subscriptions.paymentScope",

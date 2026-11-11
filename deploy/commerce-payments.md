@@ -228,12 +228,50 @@ refund ledger untouched. A completed return replays without sending or
 recording more money. Return requests cannot duplicate a line or exceed the
 order's quantities across earlier non-rejected returns.
 
-For a card/provider payment, use the original payment's provider-refund path;
-the return action refuses to fabricate settlement evidence. Complete automatic
-provider-to-return reconciliation and correct discounted/taxed return amounts
-remain open in MASTER.md C5.19. The old manual-only C11.02 journey does not
-prove that integration. No existing ledger entries are rewritten, and no
-external provider request is made by these source tests.
+`catalog.submitReturnProviderRefund` submits a received return through the
+original payments' shared provider-refund orchestrator. Its private claim
+reserves every installment and a draft credit in one transaction before
+provider I/O. Account routing and application-fee refunds come from the original
+payment, never the caller or current seller defaults. The return remains
+received while any refund is created, processing or failed. The durable
+`refund.succeeded` listener issues its credit and closes the return only when
+confirmed assigned refunds cover the whole credit. A completed return replays
+without another provider request.
+
+A connection failure reuses the same frozen provider request. A definite
+refusal releases only that attempt's reservation: after reloading, a fresh
+human request can retry the remaining balance without sending a successful
+installment again. Ambiguous created/processing attempts keep their reservation
+and cannot be replaced. Voided credits require owner reconciliation and never
+close a return automatically. Both money actions require fresh human
+verification; keys and plugins cannot impersonate that confirmation.
+
+Return amounts use the original immutable invoice line's discounted subtotal
+and tax. Cumulative integer allocation preserves every rounding remainder as
+units are returned separately, including earlier pending draft credits. New
+orders bind each order line to its invoice line; an old ambiguous mapping is
+refused for reconciliation. Shipping remains outside returned-item refunds.
+All affected original payment balances are locked before invoice credit work.
+The original C11.02 journey supplies only offline integration evidence.
+Mixed offline/provider returns, complete customer journeys and actual enabled
+provider acceptance remain open in MASTER.md C5.19; no ledger history is rewritten.
+
+The private refund claim is bound to its exact public operation and runs with
+the original person's actor. Its committed audit names that person; nested
+provider applications and authenticated feedback remain system phases.
+
+Source qualification on 2026-11-11 passed 49 financial/private/audit cases,
+including the original provider suite. After the original-actor refinement,
+a separate final 37-case run passed return recovery, private inventory, human
+audit and shared orchestration boundaries. These are overlapping runs, not
+86 distinct cases. All eight live SDK checks passed again. The final production
+build and scrub checked 19,277 files and 227,809,507 bytes with no source or
+environment leakage. Eight actual Chromium journeys passed at 320px across
+English, Spanish, French and Arabic RTL with keyboard submission and both-theme
+Axe scans: four offline attestations and four pending-to-confirmed provider
+returns. Provider feedback is seeded in those browser journeys; they do not
+make real provider requests or supply live financial acceptance. English/light
+and Arabic/dark provider screenshots were also inspected.
 
 The three pre-repair reproductions failed on the old source as expected.
 The repaired `tests/core/catalog-fulfillment.test.ts` and existing manual

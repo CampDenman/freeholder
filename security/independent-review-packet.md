@@ -203,6 +203,17 @@ review. C11.10 stays open.
 
 ## Return refund evidence (C5.19/C11.10)
 
+The subsequent original-provider action reserves every installment and a draft
+credit before provider I/O. Original account/fee routing remains private in
+the shared payment orchestrator. Durable refund confirmations close the RMA
+only after the entire assigned amount succeeds; unknown outcomes retain their
+reservation and a new attempt after definite refusal covers only the remaining
+balance. Both return money actions require fresh human verification and refuse
+keys/plugins. Original discounted consideration and tax use cumulative integer
+allocation, including earlier draft credits. Review the private reservation and
+reconciliation services, partial-success retry, original-account feedback and
+concurrent rounding cases. This source work supplies no independent sign-off.
+
 The audit reproduced `catalog.refundReturn` recording a purported provider
 refund without contacting the provider, closing a return after refunding only
 the first payment's available balance, and failing a safe replay of an
@@ -221,11 +232,11 @@ recording, keyboard use, 320px, both-theme Axe scans and all four locales in
 `tests/browser/return-refund.spec.ts`. Settlements are seeded offline evidence,
 not a real provider transaction. The production build/artifact scrub passed.
 
-C5.19 is reopened for complete provider-to-return reconciliation, correct
-discount/tax handling and localized owner/customer acceptance. Refusing to
-invent a hosted refund is a safety repair; it does not complete that journey
-or supply C11.10 sign-off. Historical/manual C11.02 evidence retains its
-explicit scope. No historical ledger was rewritten by this repair.
+C5.19 remains open for mixed offline/provider returns, complete localized
+customer journeys and actual enabled-provider acceptance. The subsequent
+provider action and original discount/tax allocation above extend the source
+repair; neither supplies C11.10 sign-off. Historical/manual C11.02 evidence
+retains its explicit scope. No historical ledger was rewritten by this repair.
 
 ## How to use this packet
 

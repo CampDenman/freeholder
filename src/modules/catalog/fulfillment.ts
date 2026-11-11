@@ -7,21 +7,24 @@
 // Digital lines never enter a carton. Returns restock through the ledger and
 // refund through the existing invoice.
 
+import { createHash } from "node:crypto";
 import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { createNotification } from "@/core/notifications/service";
-import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import { actorString, defineOrchestratedService, defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import { paymentAdapter, isHostedPaymentProvider } from "@/adapters/payments";
+import { submitProviderRefund } from "@/modules/invoicing/payment-provider-service";
 import {
   createCreditNote,
-  createRefund,
+  reserveRefundBatch,
   getInvoice,
   issueCreditNote,
   settleRefund,
 } from "@/modules/invoicing/invoice-service";
-import { extendMinor, QUANTITY_SCALE, sumMinor } from "@/modules/invoicing/money";
+import { QUANTITY_SCALE, sumMinor } from "@/modules/invoicing/money";
 import { getInvoiceMarketPolicy } from "@/modules/invoicing/market-policy";
 import {
   FULFILLMENT_KINDS,
@@ -45,6 +48,38 @@ import {
 } from "./schema";
 
 const id = z.string().uuid();
+
+/** C5.19: return only the discounted consideration and tax actually invoiced.
+ * Cumulative integer allocation leaves the final returned unit every rounding
+ * remainder, without recalculating historical tax using today's rules.
+ */
+async function returnCredit(ctx: ServiceContext, request: typeof returnRequests.$inferSelect, invoice: Awaited<ReturnType<typeof getInvoice.call>>) {
+  const items = await ctx.tx.select().from(returnItems).where(eq(returnItems.returnId, request.id));
+  const prior = await ctx.tx.select({ orderItemId: returnItems.orderItemId, quantity: returnItems.quantity })
+    .from(returnItems).innerJoin(returnRequests, eq(returnRequests.id, returnItems.returnId))
+    .where(and(eq(returnRequests.orderId, request.orderId), ne(returnRequests.id, request.id), sql`${returnRequests.creditNoteId} is not null`));
+  const creditLines = [];
+  for (const item of items) {
+    const [ordered] = await ctx.tx.select().from(orderItems).where(and(eq(orderItems.id,item.orderItemId),eq(orderItems.orderId,request.orderId)));
+    if (!ordered) throw new ServiceError("conflict", "The original returned order line is missing.");
+    const candidates = invoice.lines.filter(line => line.sourceType === "variant" && line.sourceId === ordered.variantId
+      && line.quantityMicros === ordered.quantity * QUANTITY_SCALE && line.unitAmountMinor === ordered.unitAmountMinor);
+    const original = typeof ordered.snapshot.invoiceLineId === "string"
+      ? candidates.find(line=>line.id===ordered.snapshot.invoiceLineId)
+      : candidates.length === 1 ? candidates[0] : undefined;
+    if (!original) throw new ServiceError("conflict", "Reconcile this return with its original invoice line before refunding it.");
+    const previous = prior.filter(line=>line.orderItemId===item.orderItemId).reduce((n,line)=>n+line.quantity,0);
+    if (previous + item.quantity > ordered.quantity) throw new ServiceError("conflict", "Credited units exceed the original order line.");
+    const share = (amount: number) => Number(BigInt(amount) * BigInt(previous + item.quantity) / BigInt(ordered.quantity)
+      - BigInt(amount) * BigInt(previous) / BigInt(ordered.quantity));
+    creditLines.push({ invoiceLineId: original.id, description: original.description,
+      quantityMicros: item.quantity * QUANTITY_SCALE,
+      subtotalMinor: share(original.subtotalMinor - original.discountMinor), taxMinor: share(original.taxMinor) });
+  }
+  const amountMinor = sumMinor(creditLines.flatMap(line=>[line.subtotalMinor,line.taxMinor]),"Return amount");
+  if (!creditLines.length || amountMinor <= 0) throw new ServiceError("validation", "There is nothing to refund on this return.");
+  return { creditLines, amountMinor };
+}
 
 const fulfillmentRow = row({
   id: uuid,
@@ -871,31 +906,16 @@ export const refundReturn = defineService({
   input: z.object({ id, idempotencyKey: z.string().trim().min(8).max(240), offlineRefundConfirmed: z.literal(true) }),
   output: returnDetail,
   handler: async (input, ctx) => {
-    const [row] = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.id, input.id)).for("update");
+    const [source] = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.id,input.id));
+    if (!source) throw new ServiceError("not_found", "That return is not here.");
+    const [order] = await ctx.tx.select().from(orders).where(eq(orders.id,source.orderId)).for("update");
+    const [row] = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.id,input.id)).for("update");
     if (!row) throw new ServiceError("not_found", "That return is not here.");
-    if (row.status === "refunded") return ctx.call(getReturn, { id: row.id });
+    if (row.status === "refunded") return ctx.call(getReturn,{id:row.id});
     if (row.status !== "received") throw new ServiceError("conflict", "Receive the return before refunding it.");
-    const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, row.orderId)).limit(1);
     if (!order?.invoiceId) throw new ServiceError("conflict", "That order has no invoice to refund.");
-    const items = await ctx.tx.select().from(returnItems).where(eq(returnItems.returnId, row.id));
-    const creditLines = [];
-    let amountMinor = 0;
-    for (const line of items) {
-      const [orderLine] = await ctx.tx.select().from(orderItems).where(eq(orderItems.id, line.orderItemId)).limit(1);
-      if (!orderLine) continue;
-      const subtotalMinor = extendMinor(orderLine.unitAmountMinor, line.quantity * QUANTITY_SCALE);
-      amountMinor = sumMinor([amountMinor, subtotalMinor], "Return amount");
-      creditLines.push({
-        description: `Return ${line.quantity} × order line`,
-        quantityMicros: line.quantity * QUANTITY_SCALE,
-        subtotalMinor,
-        taxMinor: 0,
-      });
-    }
-    if (!creditLines.length || amountMinor <= 0) {
-      throw new ServiceError("validation", "There is nothing to refund on this return.");
-    }
     const invoice = await ctx.callAsSystem(getInvoice, { id: order.invoiceId });
+    const { creditLines, amountMinor } = await returnCredit(ctx,row,invoice);
     const captured = invoice.payments.filter(payment => payment.status === "succeeded").sort((a,b)=>a.createdAt.getTime()-b.createdAt.getTime() || a.id.localeCompare(b.id));
     const policy = await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:order.invoiceId});
     // C5.19/C11.10: this transaction records a person's offline attestation.
@@ -907,31 +927,24 @@ export const refundReturn = defineService({
     if (allocations.some(entry=>entry.available<0) || sumMinor(allocations.map(entry=>entry.available),"Available refund balance")<amountMinor) {
       throw new ServiceError("conflict", "The original payments cannot cover this whole return. Reconcile existing refunds before recording another.");
     }
-    const credit = await ctx.callAsSystem(createCreditNote, {
-      invoiceId: order.invoiceId,
-      idempotencyKey: `return:${row.id}:credit`,
-      reason: row.reason,
-      lines: creditLines,
-    });
-    const creditId = credit.id;
-    await ctx.callAsSystem(issueCreditNote, { id: creditId });
-    const refundIds: string[] = [];
     let outstanding = amountMinor;
+    const requests = [];
     for (const {payment,available} of allocations) {
-      const refundAmount = Math.min(outstanding, available);
-      if (refundAmount > 0) {
-        const refund = await ctx.callAsSystem(createRefund, {
-          paymentId: payment.id,
-          amountMinor: refundAmount,
-          idempotencyKey: `return:${row.id}:refund:${payment.id}`,
-          reason: row.reason,
-        });
-        await ctx.callAsSystem(settleRefund, { id: refund.id, providerRef: `manual-return:${row.id}:${payment.id}` });
-        refundIds.push(refund.id);
-        outstanding -= refundAmount;
-      }
+      const amount = Math.min(outstanding,available);
+      if (amount<=0) continue;
+      requests.push({paymentId:payment.id,amountMinor:amount,idempotencyKey:`return:${row.id}:refund:${payment.id}`,reason:row.reason});
+      outstanding -= amount;
     }
-    if (outstanding !== 0) throw new ServiceError("conflict", "The whole offline refund must be recorded before closing this return.");
+    if(outstanding!==0) throw new ServiceError("conflict","The whole offline refund must be recorded before closing this return.");
+    const reserved = await ctx.callAsSystem(reserveRefundBatch,{refunds:requests});
+    const credit = await ctx.callAsSystem(createCreditNote,{invoiceId:order.invoiceId,idempotencyKey:`return:${row.id}:credit`,reason:row.reason,lines:creditLines});
+    const creditId=credit.id;
+    await ctx.callAsSystem(issueCreditNote,{id:creditId});
+    const refundIds=[];
+    for(const refund of reserved){
+      await ctx.callAsSystem(settleRefund,{id:refund.id,providerRef:`manual-return:${row.id}:${refund.paymentId}`});
+      refundIds.push(refund.id);
+    }
     const refundId = refundIds[0]!;
     await ctx.tx
       .update(returnRequests)
@@ -966,6 +979,119 @@ export const refundReturn = defineService({
   },
 });
 
+const providerReturnInput = z.object({ id, idempotencyKey: z.string().trim().min(8).max(240) });
+const providerReturnAttempt = z.object({ paymentId: id, amountMinor: z.number().int().positive(), reason: z.string(), idempotencyKey: z.string() });
+function assignedReturnRefunds(invoice:Awaited<ReturnType<typeof getInvoice.call>>,returnId:string){
+  return invoice.refunds.filter(refund=>refund.idempotencyKey.startsWith(`return:${returnId}:provider:`) && refund.idempotencyKey.endsWith(`:${refund.paymentId}`));
+}
+
+/** The whole return is reserved atomically before any provider receives money instructions. */
+export const claimReturnProviderRefund = defineService({
+  name: "catalog.claimReturnProviderRefund",
+  summary: "Reserve all original provider payments for one received return.",
+  kind: "mutation", permission: "scoped", external: false,
+  orchestratedBy: "catalog.submitReturnProviderRefund",
+  stepUp:true,agentCallable:false,writeClass:"money",
+  input: providerReturnInput,
+  output: z.object({ invoiceId:id, attempts:z.array(providerReturnAttempt) }),
+  handler: async (input,ctx) => {
+    const [source] = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.id,input.id));
+    if (!source) throw new ServiceError("not_found","That return is not here.");
+    const [order] = await ctx.tx.select().from(orders).where(eq(orders.id,source.orderId)).for("update");
+    const [request] = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.id,input.id)).for("update");
+    if (!request || !order?.invoiceId) throw new ServiceError("conflict","That return has no original invoice.");
+    if (request.status === "refunded") return {invoiceId:order.invoiceId,attempts:[]};
+    if (request.status !== "received") throw new ServiceError("conflict","Receive the return before refunding it.");
+    const invoice = await ctx.callAsSystem(getInvoice,{id:order.invoiceId});
+    const previousCredit=request.creditNoteId ? invoice.creditNotes.find(note=>note.id===request.creditNoteId) : undefined;
+    if(request.creditNoteId && (!previousCredit || previousCredit.status==="void")) throw new ServiceError("conflict","Reconcile this return's existing credit before sending more money.");
+    const calculated=previousCredit ? undefined : await returnCredit(ctx,request,invoice);
+    const amountMinor=previousCredit?.totalMinor ?? calculated!.amountMinor;
+    const active=assignedReturnRefunds(invoice,request.id).filter(refund=>["created","processing","succeeded"].includes(refund.status));
+    const reservedMinor=sumMinor(active.map(refund=>refund.amountMinor),"Return refund reservation");
+    if(reservedMinor>amountMinor) throw new ServiceError("conflict","Return refund reservations exceed its original credit.");
+    const attempts: z.infer<typeof providerReturnAttempt>[] = active.map(refund=>({paymentId:refund.paymentId,amountMinor:refund.amountMinor,reason:refund.reason ?? request.reason,idempotencyKey:refund.idempotencyKey}));
+    let remaining=amountMinor-reservedMinor;
+    if(!remaining) return {invoiceId:order.invoiceId,attempts};
+    const captured = invoice.payments.filter(payment=>payment.status==="succeeded").sort((a,b)=>a.createdAt.getTime()-b.createdAt.getTime() || a.id.localeCompare(b.id));
+    if (!captured.length || captured.some(payment=>!payment.providerRef || !isHostedPaymentProvider(payment.provider) || !paymentAdapter(payment.provider).capabilities().refunds)) {
+      throw new ServiceError("conflict","This return requires reconciliation of its offline or unsupported original payments.");
+    }
+    const allocations = captured.map(payment=>({payment,available:payment.amountMinor-sumMinor(invoice.refunds.filter(refund=>refund.paymentId===payment.id && ["created","processing","succeeded"].includes(refund.status)).map(refund=>refund.amountMinor),"Reserved refunds")}));
+    if (allocations.some(item=>item.available<0) || sumMinor(allocations.map(item=>item.available),"Available refund balance")<remaining) throw new ServiceError("conflict","The original payments cannot cover this whole return.");
+    const generation=createHash("sha256").update(input.idempotencyKey).digest("hex");
+    const additions: z.infer<typeof providerReturnAttempt>[]=[];
+    for(const {payment,available} of allocations){
+      const amount=Math.min(remaining,available);
+      if(amount<=0) continue;
+      additions.push({paymentId:payment.id,amountMinor:amount,reason:request.reason,idempotencyKey:`return:${request.id}:provider:${generation}:${payment.id}`});
+      remaining-=amount;
+    }
+    if(remaining!==0) throw new ServiceError("conflict","The whole return must be reserved before asking its provider.");
+    const reserved=await ctx.callAsSystem(reserveRefundBatch,{refunds:additions});
+    if(reserved.some(refund=>["failed","cancelled"].includes(refund.status))) throw new ServiceError("conflict","This refund attempt was refused or cancelled. Reload the return to request a new attempt for its remaining balance.");
+    attempts.push(...additions);
+    const firstRefundId=reserved[0]!.id;
+    const credit = previousCredit ?? await ctx.callAsSystem(createCreditNote,{invoiceId:order.invoiceId,idempotencyKey:`return:${request.id}:credit`,reason:request.reason,lines:calculated!.creditLines});
+    await ctx.tx.update(returnRequests).set({creditNoteId:credit.id,refundId:request.refundId ?? firstRefundId,updatedAt:sql`now()`}).where(eq(returnRequests.id,request.id));
+    await ctx.emitTimeline({contactId:request.contactId,eventType:"return.refundRequested",subjectType:"return",subjectId:request.id,payload:{orderId:order.id,amountMinor,initiatedBy:actorString(ctx.actor)}});
+    ctx.setSubject("return",request.id);
+    return {invoiceId:order.invoiceId,attempts};
+  },
+});
+
+export const reconcileReturnProviderRefunds = defineService({
+  name: "catalog.reconcileReturnProviderRefunds",
+  summary: "Close credited returns only after every original provider refund succeeds.",
+  kind:"mutation",permission:"system",external:false,
+  input:z.object({invoiceId:id}), output:z.object({changed:z.number().int()}),
+  handler:async(input,ctx)=>{
+    const [order]=await ctx.tx.select().from(orders).where(eq(orders.invoiceId,input.invoiceId)).for("update");
+    if (!order) return {changed:0};
+    const requests=await ctx.tx.select().from(returnRequests).where(and(eq(returnRequests.orderId,order.id),eq(returnRequests.status,"received"))).for("update");
+    const invoice=await ctx.callAsSystem(getInvoice,{id:input.invoiceId});
+    let changed=0;
+    for(const request of requests){
+      if(!request.creditNoteId) continue;
+      const credit=invoice.creditNotes.find(note=>note.id===request.creditNoteId);
+      const assigned=assignedReturnRefunds(invoice,request.id).filter(refund=>["created","processing","succeeded"].includes(refund.status));
+      if(!credit || !assigned.length || assigned.some(refund=>refund.status!=="succeeded") || sumMinor(assigned.map(refund=>refund.amountMinor),"Confirmed return refunds")!==credit.totalMinor) continue;
+      await ctx.callAsSystem(issueCreditNote,{id:credit.id});
+      await ctx.tx.update(returnRequests).set({status:"refunded",updatedAt:sql`now()`}).where(eq(returnRequests.id,request.id));
+      await ctx.emitTimeline({contactId:request.contactId,eventType:"return.refunded",subjectType:"return",subjectId:request.id,payload:{orderId:order.id,creditNoteId:credit.id,refundIds:assigned.map(refund=>refund.id)}});
+      await notifyContact(ctx,request.contactId,"return.refunded","Your refund was confirmed","The original payment provider confirmed the refund for your returned items.",`return-refunded:${request.id}`);
+      ctx.queueEvent("catalog.returnRefunded",{returnId:request.id,creditNoteId:credit.id,refundId:assigned[0]!.id});
+      changed++;
+    }
+    if(changed && invoice.invoice.status==="refunded") {
+      const remaining=await ctx.tx.select().from(returnRequests).where(and(eq(returnRequests.orderId,order.id),ne(returnRequests.status,"rejected"),ne(returnRequests.status,"refunded")));
+      if(!remaining.length) await ctx.tx.update(orders).set({status:"refunded",updatedAt:sql`now()`}).where(eq(orders.id,order.id));
+    }
+    return {changed};
+  },
+});
+
+export const submitReturnProviderRefund = defineOrchestratedService({
+  name:"catalog.submitReturnProviderRefund",
+  summary:"Refund every original provider installment for a received return.",
+  kind:"mutation",permission:"scoped",stepUp:true,agentCallable:false,writeClass:"money",
+  input:providerReturnInput,output:returnDetail,
+  handler:async(input,caller)=>{
+    const system={kind:"system",request:caller.request} as const;
+    const {invoiceId,attempts}=await claimReturnProviderRefund.call(input,caller);
+    // Each original-payment orchestrator commits its claim, contacts its own
+    // provider/account outside a transaction, then applies actual feedback.
+    for(const attempt of attempts) await submitProviderRefund.call(attempt,system);
+    await reconcileReturnProviderRefunds.call({invoiceId},system);
+    return getReturn.call({id:input.id},system);
+  },
+});
+
+export async function onReturnRefundSucceeded(payload:unknown):Promise<void>{
+  const invoiceId=(payload as {invoiceId?:string}|null)?.invoiceId;
+  if(invoiceId) await reconcileReturnProviderRefunds.call({invoiceId},{kind:"system"});
+}
+
 export const listFulfillmentQueue = defineService({
   name: "catalog.listFulfillmentQueue",
   summary: "Paid and in-progress orders that still need a shipment or exception work.",
@@ -998,5 +1124,8 @@ export default [
   decideReturn,
   receiveReturn,
   refundReturn,
+  claimReturnProviderRefund,
+  reconcileReturnProviderRefunds,
+  submitReturnProviderRefund,
   listFulfillmentQueue,
 ];

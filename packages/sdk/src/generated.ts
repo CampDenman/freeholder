@@ -425,6 +425,7 @@ export const SERVICE_NAMES = [
   "catalog.shipFulfillment",
   "catalog.shopperCheckout",
   "catalog.shopperOrder",
+  "catalog.submitReturnProviderRefund",
   "catalog.subscribeBackInStock",
   "catalog.transferStock",
   "catalog.updateCollection",
@@ -3291,6 +3292,10 @@ export interface ServiceCatalog {
   "catalog.shopperOrder": {
     input: { cartId: string; cartToken: string };
     output: { order: { id: string; status: "pending_payment" | "partially_paid" | "paid" | "fulfilling" | "fulfilled" | "refunded" | "cancelled"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; createdAt: string; [key: string]: unknown }; lines: { productName: string; sku: string; quantity: number; unitAmountMinor: number; lineTotalMinor: number; [key: string]: unknown }[]; shippingMethodName: string | null; invoice: { id: string; number: string | null; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; totalMinor: number; paidMinor: number; currency: string; [key: string]: unknown } | null; payHref: string | null };
+  };
+  "catalog.submitReturnProviderRefund": {
+    input: { id: string; idempotencyKey: string };
+    output: { return: { id: string; orderId: string; contactId: string; status: "requested" | "approved" | "received" | "refunded" | "rejected"; reason: string; restock: boolean; labelUrl: string | null; creditNoteId: string | null; refundId: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; items: { id: string; returnId: string; orderItemId: string; quantity: number; restockedQuantity: number; createdAt: string; [key: string]: unknown }[] };
   };
   "catalog.subscribeBackInStock": {
     input: { variantId: string; contactId: string; locationId?: string };
@@ -8475,6 +8480,7 @@ export interface FreeholderApi {
     shipFulfillment: (input: ServiceCatalog["catalog.shipFulfillment"]["input"]) => Promise<ServiceCatalog["catalog.shipFulfillment"]["output"]>;
     shopperCheckout: (input: ServiceCatalog["catalog.shopperCheckout"]["input"]) => Promise<ServiceCatalog["catalog.shopperCheckout"]["output"]>;
     shopperOrder: (input: ServiceCatalog["catalog.shopperOrder"]["input"]) => Promise<ServiceCatalog["catalog.shopperOrder"]["output"]>;
+    submitReturnProviderRefund: (input: ServiceCatalog["catalog.submitReturnProviderRefund"]["input"]) => Promise<ServiceCatalog["catalog.submitReturnProviderRefund"]["output"]>;
     subscribeBackInStock: (input: ServiceCatalog["catalog.subscribeBackInStock"]["input"]) => Promise<ServiceCatalog["catalog.subscribeBackInStock"]["output"]>;
     transferStock: (input: ServiceCatalog["catalog.transferStock"]["input"]) => Promise<ServiceCatalog["catalog.transferStock"]["output"]>;
     updateCollection: (input: ServiceCatalog["catalog.updateCollection"]["input"]) => Promise<ServiceCatalog["catalog.updateCollection"]["output"]>;
