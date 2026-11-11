@@ -13279,6 +13279,26 @@ whatever is best for the people using the site.
   destination charges at checkout through the payout provider (Stripe
   Connect first), with the site fee taken as an application fee, refunds
   and disputes on the seller's account. Split from C12.26 on 2026-10-15.
+  Discounted-order earnings repair in qualification 2026-11-11: a real service
+  journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
+  promising $36.00 net to the seller. A shared original-invoice revenue query
+  now binds exact lines before issue captures commission. New earnings use
+  discounted revenue; known older frozen fees and existing payment/payout
+  records remain unchanged. Ambiguous original allocations refuse new earnings
+  pending reconciliation. `tests/modules/member-discounted-order.test.ts`;
+  changeset `discounted-marketplace-earnings.md`. Final qualification and the
+  remaining full integration/actual acceptance are required; no model is enabled.
+  A separate prior-image payout probe actually dispatched $36.00 from the old
+  ledger against that $20.00 invoice. Source admission now checks the original
+  revenue before creating or retrying a provider transfer, preserving old
+  financial amounts for review and unknown/confirmed provider outcomes. Release
+  and still-owed actions cannot authorize the invalid amount again. The five
+  prior-transfer histories passed native qualification. A fully discounted
+  invoice also reproduced an actual zero-amount provider submission; its exact
+  after control passed with no provider call or transfer row. Zero earnings
+  finalize locally, while unknown older attempts still require a provider check.
+  Additional old zero-amount queue controls and CI are pending; this is no claim
+  of a live provider result, an independent sign-off or completed C12.38.
   Customer-invoice identity source progress 2026-11-11: the existing authorized
   customer query projects only the frozen public issuer name, and the invoice
   header uses it instead of current site branding. Original Stripe capability

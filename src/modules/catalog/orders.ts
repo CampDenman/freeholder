@@ -384,14 +384,15 @@ export const checkoutCart = defineService({
               reason: "This checkout has no taxable origin and destination pair.",
             },
     });
-    const issued = await ctx.callAsSystem(issueInvoice, { id: invoice.invoice.id });
-
+    // Bind the exact draft lines before issue captures the original seller
+    // fee. This also distinguishes two photographs of the same variant.
     for (let position=0; position<insertedOrderLines.length; position++) {
       const ordered = insertedOrderLines[position]!;
-      const invoiced = issued.lines.find(line=>line.position===position);
+      const invoiced = invoice.lines.find(line=>line.position===position);
       if (!invoiced) throw new ServiceError("conflict", "The original order line has no invoice line.");
       await ctx.tx.update(orderItems).set({snapshot:{...ordered.snapshot,invoiceLineId:invoiced.id}}).where(eq(orderItems.id,ordered.id));
     }
+    const issued = await ctx.callAsSystem(issueInvoice, { id: invoice.invoice.id });
 
     await ctx.tx
       .update(orders)

@@ -7,7 +7,7 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { okResult } from "@/core/contract";
 import { invoices } from "@/modules/invoicing/schema";
 import { getInvoiceMarketPolicy, invoiceMarketPolicy, marketFeeMinor, registerInvoiceMarketResolver, registerInvoiceMerchantVerifier } from "@/modules/invoicing/market-policy";
-import { orderSellers } from "@/modules/catalog/market";
+import { orderInvoiceRevenue,orderSellers } from "@/modules/catalog/market";
 import { products } from "@/modules/catalog/schema";
 import { plans, subscriptions } from "@/modules/subscriptions/schema";
 import { getSubscriptionMarketPolicy, registerSubscriptionMarketResolver, registerSubscriptionPlanMarketResolver, registerSubscriptionMerchantVerifier, subscriptionMarketPolicy, type SubscriptionMarketPolicy } from "@/modules/subscriptions/market-policy";
@@ -76,7 +76,12 @@ export const resolveInvoiceMarketPolicy = defineService({
       catch (error) { if (error instanceof ServiceError && error.code === "not_found") return null; throw error; }
       sellerIds = [...new Set(order.lines.map(line => line.sellerUserId))];
       containsSiteItems = order.containsSiteItems;
-      feeMinor = order.lines.reduce((total, line) => total + marketFeeMinor(line.lineTotalMinor, rules.siteFeeBps), 0);
+      const revenue=await ctx.callAsSystem(orderInvoiceRevenue,{orderId:order.orderId,invoiceId});
+      feeMinor = order.lines.reduce((total, line) => {
+        const original=revenue.find(row=>row.orderItemId===line.orderItemId);
+        if(!original)throw new ServiceError("conflict","The original seller line has no invoice revenue.");
+        return total+marketFeeMinor(original.revenueMinor,rules.siteFeeBps);
+      }, 0);
     } else {
       const seller = await sellerForInvoice(ctx, invoice);
       sellerIds = seller ? [seller] : [];

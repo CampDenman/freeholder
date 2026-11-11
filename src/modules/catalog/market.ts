@@ -9,6 +9,8 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { PRODUCT_KINDS } from "./contract";
 import { orderItems, orders, priceListEntries, priceLists, productVariants, products } from "./schema";
 import { hiddenListings } from "./listing-gate";
+import {getInvoice} from "@/modules/invoicing/invoice-service";
+import {QUANTITY_SCALE} from "@/modules/invoicing/money";
 
 
 const listing = row({
@@ -154,6 +156,32 @@ export const orderSellers = defineService({
   },
 });
 
+export const orderInvoiceRevenue = defineService({
+  name:"catalog.orderInvoiceRevenue",
+  summary:"Read each original order line's discounted invoice revenue for its seller ledger.",
+  kind:"query",permission:"system",external:false,
+  input:z.object({orderId:uuid,invoiceId:uuid}),
+  output:listed(row({orderItemId:uuid,invoiceLineId:uuid,originalMinor:z.number().int().nonnegative(),revenueMinor:z.number().int().nonnegative()})),
+  handler:async(input,ctx)=>{
+    const [order]=await ctx.tx.select().from(orders).where(eq(orders.id,input.orderId));
+    if(!order)throw new ServiceError("not_found","That order does not exist.");
+    const invoice=await ctx.callAsSystem(getInvoice,{id:input.invoiceId});
+    if(invoice.invoice.sourceType!=="order" || invoice.invoice.sourceId!==order.id || invoice.invoice.contactId!==order.contactId || invoice.invoice.currency!==order.currency || (order.invoiceId!==null && order.invoiceId!==input.invoiceId))throw new ServiceError("conflict","The original order and invoice need reconciliation before seller earnings are recorded.");
+    const ordered=await ctx.tx.select().from(orderItems).where(eq(orderItems.orderId,order.id)).orderBy(orderItems.id);
+    const used=new Set<string>();
+    return ordered.map(item=>{
+      const bound=typeof item.snapshot.invoiceLineId==="string"?item.snapshot.invoiceLineId:null;
+      const candidates=invoice.lines.filter(line=>line.sourceType==="variant" && line.sourceId===item.variantId && line.quantityMicros===item.quantity*QUANTITY_SCALE && line.unitAmountMinor===item.unitAmountMinor);
+      // Pre-binding orders may use an unambiguous original variant/quantity/
+      // price. A stored pointer never falls back to another invoice line.
+      const original=bound?candidates.find(line=>line.id===bound):candidates.length===1?candidates[0]:undefined;
+      if(!original || used.has(original.id))throw new ServiceError("conflict","The original order line needs its exact invoice line before seller earnings are recorded.");
+      used.add(original.id);
+      return{orderItemId:item.id,invoiceLineId:original.id,originalMinor:item.lineTotalMinor,revenueMinor:original.subtotalMinor-original.discountMinor};
+    });
+  },
+});
+
 export const orderForInvoice = defineService({
   name: "catalog.orderForInvoice",
   summary: "The order an invoice belongs to, if any.",
@@ -188,4 +216,4 @@ export const memberOrdersForContact = defineService({
   },
 });
 
-export default [marketListings, orderSellers, orderForInvoice, memberOrdersForContact];
+export default [marketListings, orderSellers, orderInvoiceRevenue, orderForInvoice, memberOrdersForContact];
