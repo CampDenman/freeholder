@@ -72,6 +72,7 @@ export function ImportStepForms({
     preview: string;
     url: string;
     slug: string;
+    slugHint: string;
     title: string;
     pageKind: string;
     page: string;
@@ -103,7 +104,7 @@ export function ImportStepForms({
       {status === "discover" || status === "mapped" || status === "failed" || status === "previewed" ? (
         <div className="grid min-w-0 gap-6">
           {["wordpress-rest", "sitemap", "rss", "atom", "html"].includes(sourceKind) ? <CrawlSourceForm id={id} origin={origin} labels={labels} /> : null}
-          <SourceUploadForm id={id} labels={labels} />
+          <SourceUploadForm id={id} labels={labels} sourceKind={sourceKind} />
         </div>
       ) : null}
       {status === "discover" ? (
@@ -145,8 +146,8 @@ export function ImportStepForms({
       {status === "previewed" ? (
         <form action={reviewImportConflictsAction} className="grid min-w-0 gap-3">
           <input type="hidden" name="id" value={id} />
-          <Field htmlFor="conflict-slug" label={labels.slug}>
-            <Input id="conflict-slug" name="slug" required />
+          <Field htmlFor="conflict-slug" label={labels.slug} hint={labels.slugHint}>
+            <Input id="conflict-slug" name="slug" />
           </Field>
           <Field htmlFor="conflict-resolution" label={labels.review}>
             <Select id="conflict-resolution" name="resolution" defaultValue="keep-existing">
@@ -198,8 +199,10 @@ export function ImportStepForms({
 function SourceUploadForm({
   id,
   labels,
+  sourceKind,
 }: {
   id: string;
+  sourceKind: string;
   labels: {
     upload: string;
     uploadHint: string;
@@ -265,7 +268,7 @@ function SourceUploadForm({
           id="source-file"
           name="file"
           type="file"
-          accept=".xml,.json,.html,.htm,.rss,.atom,application/xml,text/xml,application/json,text/html"
+          accept={sourceKind === "archive" ? ".zip,application/zip,application/x-zip-compressed" : ".xml,.json,.html,.htm,.rss,.atom,application/xml,text/xml,application/json,text/html"}
           required
           disabled={progress !== null}
           className="w-full min-w-0 max-w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"

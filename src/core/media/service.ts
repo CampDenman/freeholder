@@ -53,6 +53,7 @@ import {
   type MediaKind,
 } from "@/core/media/validation";
 import captureServices from "./capture";
+import { acceptPreparedImportMedia, importMediaNote, importMediaReceiptSchema, verifyPreparedImportMedia } from "@/core/import/media-receipts";
 import {
   allRenditionKeys,
   buildRenditions,
@@ -636,6 +637,7 @@ const proxyUploadInput = z.object({
   bytes: z.instanceof(Uint8Array),
   altText: z.string().max(500).optional(),
   uploadId: z.string().uuid().optional(),
+  importReceipt: importMediaReceiptSchema.optional(),
   source: sourceSchema.default("upload"),
   provenance: provenanceSchema,
   metadata: mediaMetadataSchema,
@@ -728,6 +730,7 @@ const applyStoredOriginal = defineService({
     }),
     checksumSha256: z.string().min(1),
     uploadId: z.string().uuid().optional(),
+    importReceipt: importMediaReceiptSchema.optional(),
     method: z.enum(["proxy", "direct_multipart"]),
     variants: z.unknown(),
     trackedKeys: z.array(z.string().min(1)).min(1).max(64),
@@ -736,6 +739,7 @@ const applyStoredOriginal = defineService({
   }),
   output: assetRow,
   handler: async (input, ctx) => {
+    if (input.importReceipt && input.uploadId) throw new ServiceError("validation", "An import receipt uses its own source claim, not an upload-session claim.");
     if (
       input.provenance.captureToken ||
       input.provenance.captureSessionId ||
@@ -770,7 +774,18 @@ const applyStoredOriginal = defineService({
         );
       }
     }
-    return insertPreparedAsset(
+    if (input.importReceipt) {
+      if (input.source !== "import" || provenance.purpose || provenance.captureToken || provenance.captureSessionId) throw new ServiceError("validation", "An import receipt cannot attach a capture or private form upload.");
+      const accepted = await ctx.call(verifyPreparedImportMedia, { receipt: input.importReceipt, checksum: input.checksumSha256, bytes: input.bytes });
+      if (accepted.assetId) {
+        const [existing] = await ctx.tx.select().from(assets).where(eq(assets.id, accepted.assetId)).limit(1);
+        if (!existing) throw new ServiceError("conflict", "The accepted import asset is missing.");
+        ctx.setSubject("asset", existing.id);
+        return existing;
+      }
+      provenance = { ...provenance, note: importMediaNote(input.importReceipt.runId, input.importReceipt.previewDigest, input.importReceipt.key) };
+    }
+    const saved = await insertPreparedAsset(
       {
         filename: input.filename,
         mime: input.mime,
@@ -795,6 +810,8 @@ const applyStoredOriginal = defineService({
       },
       ctx,
     );
+    if (input.importReceipt) await ctx.call(acceptPreparedImportMedia, { receipt: input.importReceipt, assetId: saved.id });
+    return saved;
   },
 });
 
@@ -807,6 +824,10 @@ export const uploadAsset = defineOrchestratedService({
   input: proxyUploadInput,
   output: assetRow,
   handler: async (input, actor) => {
+    if (input.importReceipt) {
+      if (!permits(actor, "scoped", "imports.commit", "mutation")) throw new ServiceError("permission", "This connection cannot commit imports.");
+      if (input.uploadId || input.source !== "import" || input.provenance.purpose || input.provenance.captureToken || input.provenance.captureSessionId) throw new ServiceError("validation", "An import receipt uses its own source claim, not a capture or upload-session claim.");
+    }
     if (actor.kind === "anonymous" && !input.uploadId && !input.provenance.captureToken) {
       throw new ServiceError("permission", "Sign in or use an upload link.");
     }
@@ -891,6 +912,7 @@ export const uploadAsset = defineOrchestratedService({
           scan,
           checksumSha256: createHash("sha256").update(body).digest("hex"),
           uploadId,
+          importReceipt: input.importReceipt,
           method: "proxy",
           variants: prepared.variants,
           trackedKeys: prepared.trackedKeys,

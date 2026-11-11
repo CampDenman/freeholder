@@ -91,7 +91,7 @@ describe("playground public-site policy (2026-10-22)", () => {
     for (const name of ["forms.submit", "newsletters.subscribe", "events.register", "catalog.addCartItem", "catalog.shopperCheckout", "cms.submitSiteChat", "cms.submitReaderComment", "share.shareVia", "popups.capture", "reviews.submit"]) {
       expect(playgroundAllows(name, "mutation"), name).toBe(true);
     }
-    for (const name of ["auth.requestCustomerMagicLink", "portal.requestSignIn", "invoicing.beginCustomerCheckout", "invoicing.claimCustomerCheckout", "assistant.answer", "assistant.previewCall", "assistant.saveCallCaption", "media.signUploadClaim"]) {
+    for (const name of ["auth.requestCustomerMagicLink", "portal.requestSignIn", "invoicing.beginCustomerCheckout", "invoicing.claimCustomerCheckout", "assistant.answer", "assistant.previewCall", "assistant.saveCallCaption", "media.signUploadClaim", "imports.acceptPreparedMedia"]) {
       expect(playgroundAllows(name, "mutation"), name).toBe(false);
     }
   });

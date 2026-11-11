@@ -272,6 +272,10 @@ const CALLER_AUTHORIZED_PHASES = [
   "imports.commitApply",
   "imports.commitSource",
   "imports.recordMedia",
+  "imports.claimMedia",
+  "imports.bindMediaBytes",
+  "imports.verifyPreparedMedia",
+  "imports.acceptPreparedMedia",
   // C3.22: source discovery read/CAS phases never become public tools.
   "imports.crawlSource",
   "imports.applyCrawl",

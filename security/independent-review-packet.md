@@ -804,3 +804,21 @@ the keeper checks the actual still-active exception before expiry/terminal
 cleanup. Public import projections remove those private bindings. Review the
 hold, replacement, rollback, removal and exact-key DTO controls alongside provider
 acknowledgement; neither a clock nor lookup absence settles an unresolved PUT.
+
+## Original static archives and atomic media receipts (C3.22/C11.10)
+
+Review `src/core/import/archive.ts`, `archive-source.ts` and `archive-commit.ts`.
+Original private chunks, canonical preview fingerprints and CRC/SHA identities
+bind reviewed bytes to accepted content without extraction or client-selected
+storage keys. Provider I/O remains outside transactions; private ownership,
+unknown PUT witnesses and explicit holds include ignored ZIP entries.
+
+`src/core/import/media-receipts.ts` fences prepared files under the import-run
+lock before asset locks. `media.applyStoredOriginal` accepts an asset and its
+receipt in one transaction, preserving lost-response recovery for archive and
+WordPress sources. Tokens cannot supply the real actor's public import/media/CMS
+permissions. Review expired claims, matching-source rebind, unknown failures and
+private projections against `tests/core/import-media-receipts.test.ts` and
+`tests/core/archive-import-flow.test.ts`. Claims and reader bindings must stay
+private on first acceptance and replay. These agent-authored controls provide
+engineering evidence, not Tony's independent sign-off or C3.22 completion.

@@ -4,7 +4,7 @@
 import { ServiceError } from "@/core/service";
 
 export const STAGEABLE = new Set(["discover", "mapped", "previewed", "failed"]);
-const OWNED_LISTS = ["media", "createdPageIds", "replacedPages", "pageIds", "redirectIds", "displacedRedirects", "postSnapshots", "pendingBlogPosts"];
+const OWNED_LISTS = ["media", "mediaClaims", "createdPageIds", "replacedPages", "pageIds", "redirectIds", "displacedRedirects", "postSnapshots", "pendingBlogPosts"];
 
 function checkpointOf(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};

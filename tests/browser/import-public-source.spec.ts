@@ -9,6 +9,7 @@ import { db, closeDb } from "@/core/db";
 import { importRuns } from "@/core/plugins/schema";
 import { businessProfile } from "@/core/settings/schema";
 import { THEME_COOKIE } from "@/core/design/theme";
+import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { C11_BASE_URL, seedC11Owner, useOwnerSession } from "./owner-session";
 
 test.describe("public source import owner form (C3.22)", () => {
@@ -20,6 +21,7 @@ test.describe("public source import owner form (C3.22)", () => {
       await db().update(businessProfile).set({ defaultLocale: locale, enabledLocales: ["en", "es", "fr", "ar"] }).where(eq(businessProfile.id, 1));
       const context = await browser.newContext({ baseURL: C11_BASE_URL, viewport: { width: 320, height: 900 } });
       await useOwnerSession(context, token);
+      await context.addCookies([{ name: CSRF_COOKIE, value: issueCsrfToken(), url: C11_BASE_URL }]);
       const page = await context.newPage();
       await page.goto("/admin/imports");
       await page.locator("#origin").fill("https://source.example");
@@ -48,6 +50,7 @@ test.describe("public source import owner form (C3.22)", () => {
       await expect(form.getByRole("button")).toBeFocused();
       await page.keyboard.press("Enter");
       await expect(form.getByRole("alert")).toBeVisible();
+      await expect(form.getByRole("alert")).toContainText("public HTTP or HTTPS source URL");
       const [saved] = await db().select().from(importRuns).where(eq(importRuns.id, id));
       expect(saved).toMatchObject({ status: "discover", preview: {}, counts: {} });
       await context.close();

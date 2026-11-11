@@ -73,15 +73,18 @@ describe("legacy redirect HTTP projection", () => {
     const url = input as URL;
     expect(url.origin).toBe("http://127.0.0.1:3219");
     expect(url.searchParams.get("path")).toBe("?p=20");
+    expect(url.searchParams.has("locale")).toBe(false);
     expect(options!.headers).toEqual({ accept: "application/json" });
     expect(options!.redirect).toBe("error");
   });
   it("collapses slash and old-path moves into one redirect, preserving the locale and pagination target", async () => {
     process.env.APP_URL = "https://destination.example.test";
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ toPath: "blog/category/new?page=2", status: "301" })));
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ toPath: "blog/category/new?page=2", status: "301" }));
+    vi.stubGlobal("fetch", fetcher);
     const response = await legacyRedirect(new NextRequest("https://destination.example.test/fr/category/old/page/2/"));
     expect(response?.status).toBe(301);
     expect(response?.headers.get("location")).toBe("https://destination.example.test/fr/blog/category/new?page=2");
+    expect((fetcher.mock.calls[0]![0] as URL).searchParams.get("locale")).toBe("fr");
   });
   it("does not intercept private routes, writes or media, and keeps a page available when the resolver fails", async () => {
     process.env.APP_URL = "https://destination.example.test";

@@ -8,7 +8,7 @@ import { db } from "@/core/db";
 import { privacyRetentionExceptions } from "@/core/privacy/schema";
 import { importRuns } from "@/core/plugins/schema";
 import { insideServiceTransaction } from "@/core/plugins/context";
-import { ServiceError } from "@/core/service";
+import { ServiceError, type ServiceContext } from "@/core/service";
 import { storage } from "@/adapters/storage";
 import { registerPendingObjectOwner } from "@/core/media/object-ledger";
 
@@ -49,6 +49,26 @@ export function retainedSourceFromRun(run: { id: string; checkpoint: unknown }):
 export function retainedSourceChunkKey(source: RetainedImportSource, index: number): string {
   if (!Number.isInteger(index) || index < 0 || index >= source.chunkDigests.length) throw new ServiceError("validation", "That source chunk is outside the manifest.");
   return `imports/${source.runId}/${source.uploadId}/${String(index).padStart(5, "0")}.part`;
+}
+
+/** Only server-derived, run-owned names can enter source cleanup jobs. */
+export function importSourceObjectKeys(run: { id: string; checkpoint: unknown }): string[] {
+  const keys = new Set<string>(), retained = retainedSourceFromRun(run);
+  if (retained) for (let index = 0; index < retained.chunkDigests.length; index++) keys.add(retainedSourceChunkKey(retained, index));
+  const upload = activeUploadSchema.safeParse(object(run.checkpoint).sourceUpload);
+  if (upload.success && upload.data.chunkBytes === IMPORT_SOURCE_CHUNK_BYTES && upload.data.bytes <= IMPORT_SOURCE_MAX_BYTES) {
+    const count = Math.ceil(upload.data.bytes / upload.data.chunkBytes);
+    for (let index = 0; index < count; index++) keys.add(`imports/${run.id}/${upload.data.uploadId}/${String(index).padStart(5, "0")}.part`);
+  }
+  return [...keys];
+}
+
+/** Release authority and its durable deletion task share the caller's TX. */
+export async function releaseImportSources(ctx: ServiceContext, run: { id: string; checkpoint: unknown }, checkpoint: Record<string, unknown>): Promise<void> {
+  const keys = importSourceObjectKeys(run);
+  delete checkpoint.retainedSource;
+  delete checkpoint.sourceUpload;
+  if (keys.length) await ctx.queueJob("core.deleteCaptureObjects", { keys });
 }
 /** The descriptor comes from an authorized service; no arbitrary key is read. */
 export async function readRetainedSourceChunk(input: RetainedImportSource, index: number): Promise<Uint8Array<ArrayBuffer>> {
