@@ -13,7 +13,7 @@ import { resetStorageForTests } from "@/adapters/storage";
 import { assets } from "@/core/media/schema";
 import { redirects } from "@/core/seo/schema";
 import { pages, sections } from "@/modules/cms/schema";
-import { ensureDefaults } from "@/modules/cms/service";
+import { ensureDefaults, updateSection } from "@/modules/cms/service";
 import { listBlogPosts } from "@/modules/cms/blog";
 import {
   commitImport,
@@ -28,6 +28,7 @@ import {
 import { saveAuthor, setPostMeta, postMetaAt, resolveBlogArchive } from "@/modules/cms/blog-service";
 import { listReaderComments } from "@/modules/cms/blog-comments";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
+import { registerPublishVeto } from "@/core/privacy/publish-veto";
 import { resolveRedirect } from "@/core/seo/service";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
@@ -164,11 +165,13 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
       .select()
       .from(sections)
       .where(and(eq(sections.key, "nav"), eq(sections.locale, "en")));
-    // Top-level items only: the nav block is flat, so "Team" stays on record.
-    expect((nav!.blocks as Array<{ props: { links: unknown[] } }>)[0]!.props.links).toEqual([
-      { label: "About", href: "/about" },
-      { label: "Journal", href: "/2025/03/first-wood-firing" },
+    const navLinks = (nav!.blocks as Array<{ props: { links: Array<{ id: string; label: string; href: string; depth?: number }> } }>)[0]!.props.links;
+    expect(navLinks.map(link => [link.label, link.href, link.depth ?? 0])).toEqual([
+      ["About", "/about", 0],
+      ["Team", "/about/team", 1],
+      ["Journal", "/2025/03/first-wood-firing", 0],
     ]);
+    expect(navLinks.every(link => link.id.startsWith(`import-${started.id}-`))).toBe(true);
 
     const rolled = await rollbackImport.call({ id: started.id }, OWNER);
     expect(rolled.status).toBe("rolled_back");
@@ -181,6 +184,68 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
       .from(sections)
       .where(and(eq(sections.key, "nav"), eq(sections.locale, "en")));
     expect(JSON.stringify(navAfter!.blocks)).not.toContain("/about");
+  });
+
+
+  it("merges children below the matching owner parent and reverses only new identities", async () => {
+    const existing = [{ label: "Owner About", href: "/about" }, { label: "Our story", href: "/our-story", depth: 1 }, { label: "Work", href: "/work" }];
+    await updateSection.call({ key: "nav", locale: "en", blocks: [{ id: "nav", type: "nav", props: { links: existing } }] }, OWNER);
+    const run = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
+    await previewFromSource.call({ id: run.id, payload: FIXTURE }, OWNER);
+    await commitImport.call({ id: run.id }, OWNER); await reconcileImport.call({ id: run.id }, OWNER); await publishImport.call({ id: run.id }, OWNER);
+    const [section] = await db().select().from(sections).where(and(eq(sections.key, "nav"), eq(sections.locale, "en")));
+    const links = (section!.blocks as Array<{ props: { links: Array<{ label: string; href: string; depth?: number }> } }>)[0]!.props.links;
+    expect(links.map(link => [link.label, link.depth ?? 0])).toEqual([["Owner About", 0], ["Our story", 1], ["Team", 1], ["Work", 0], ["Journal", 0]]);
+    await rollbackImport.call({ id: run.id }, OWNER);
+    const [after] = await db().select().from(sections).where(and(eq(sections.key, "nav"), eq(sections.locale, "en")));
+    expect((after!.blocks as Array<{ props: { links: unknown } }>)[0]!.props.links).toEqual(existing);
+  });
+
+
+  it("preserves a later owner-duplicated nav block during import rollback", async () => {
+    const run = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
+    await previewFromSource.call({ id: run.id, payload: FIXTURE }, OWNER);
+    await commitImport.call({ id: run.id }, OWNER); await reconcileImport.call({ id: run.id }, OWNER); await publishImport.call({ id: run.id }, OWNER);
+    const [section] = await db().select().from(sections).where(and(eq(sections.key, "nav"), eq(sections.locale, "en")));
+    const blocks = section!.blocks as Array<{ id: string; type: string; props: Record<string, unknown> }>;
+    const copy = { ...structuredClone(blocks[0]!), id: "owner-menu-copy" };
+    await updateSection.call({ key: "nav", locale: "en", blocks: [...blocks, copy] }, OWNER);
+    await rollbackImport.call({ id: run.id }, OWNER);
+    const [after] = await db().select().from(sections).where(and(eq(sections.key, "nav"), eq(sections.locale, "en")));
+    const ownerCopy = (after!.blocks as typeof blocks).find(block => block.id === "owner-menu-copy");
+    expect(ownerCopy).toEqual(copy);
+  });
+
+  it("does not publish an imported draft's navigation label", async () => {
+    // The source menu points to a future/private post but advertises a label.
+    const source = FIXTURE.replace('<![CDATA[_menu_item_object_id]]></wp:meta_key><wp:meta_value><![CDATA[30]]>', '<![CDATA[_menu_item_object_id]]></wp:meta_key><wp:meta_value><![CDATA[22]]>').replace('<title><![CDATA[About]]></title>\n\t\t<link>https://old.example.org/?p=50</link>', '<title><![CDATA[Private future title]]></title>\n\t\t<link>https://old.example.org/?p=50</link>');
+    expect(source).toContain("Private future title");
+    const run = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
+    await previewFromSource.call({ id: run.id, payload: source }, OWNER);
+    await commitImport.call({ id: run.id }, OWNER); await reconcileImport.call({ id: run.id }, OWNER);
+    const published = await publishImport.call({ id: run.id }, OWNER);
+    expect(published.checkpoint).toMatchObject({ skippedMenuLinks: [{ href: "/blog/upcoming-sale", reason: "imported destination is not public" }] });
+    const [section] = await db().select().from(sections).where(and(eq(sections.key, "nav"), eq(sections.locale, "en")));
+    expect(JSON.stringify(section!.blocks)).not.toContain("/blog/upcoming-sale");
+    expect(JSON.stringify(section!.blocks)).not.toContain("Private future title");
+  });
+
+
+  it("refuses vetoed labels at cutover and makes publish/rollback retries stable", async () => {
+    const run = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
+    await previewFromSource.call({ id: run.id, payload: FIXTURE }, OWNER);
+    await commitImport.call({ id: run.id }, OWNER); await reconcileImport.call({ id: run.id }, OWNER);
+    const about = (await pageAt("about"))!;
+    registerPublishVeto({ id: `test.import-nav-${run.id}`, appliesTo: page => page.id === about.id, blocks: async () => true });
+    const published = await publishImport.call({ id: run.id }, OWNER);
+    expect(published.checkpoint).toMatchObject({ skippedMenuLinks: [{ href: "/about", reason: "imported destination is not public" }] });
+    const [section] = await db().select().from(sections).where(and(eq(sections.key, "nav"), eq(sections.locale, "en")));
+    const links = (section!.blocks as Array<{ props: { links: Array<{ href: string; depth?: number }> } }>)[0]!.props.links;
+    expect(links[0]).toMatchObject({ href: "/about/team" });
+    expect(links[0]?.depth ?? 0).toBe(0);
+    expect(await publishImport.call({ id: run.id }, OWNER)).toEqual(published);
+    const rolled = await rollbackImport.call({ id: run.id }, OWNER);
+    expect(await rollbackImport.call({ id: run.id }, OWNER)).toEqual(rolled);
   });
 
   it("records a failed download and still lands the page without it", async () => {

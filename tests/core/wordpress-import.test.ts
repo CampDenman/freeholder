@@ -271,3 +271,44 @@ describe("WordPress REST payloads (C3.22)", () => {
     });
   });
 });
+
+describe("WordPress menu hierarchy and target intent (C3.22)", () => {
+  it("reconstructs parent order and genuine grandchildren from unsorted source rows", () => {
+    const exported = parseWordpressExport(FIXTURE);
+    exported.menuItems = [
+      { wpId: "c", menu: "primary-menu", label: "Member", order: 0, type: "post_type", object: "post", objectId: "20", parentItemId: "b" },
+      { wpId: "b", menu: "primary-menu", label: "Team", order: 1, type: "post_type", object: "page", objectId: "31", parentItemId: "a" },
+      { wpId: "a", menu: "primary-menu", label: "About", order: 2, type: "post_type", object: "page", objectId: "30" },
+    ];
+    expect(planWordpressImport(exported, ORIGIN).menus[0]?.items.map(item => [item.label, item.depth])).toEqual([["About", 0], ["Team", 1], ["Member", 2]]);
+  });
+
+  it("keeps category/tag targets, custom query/fragments and WordPress query-ID links", () => {
+    const exported = parseWordpressExport(FIXTURE);
+    const base = { menu: "primary-menu", order: 0, type: "taxonomy", object: "category" };
+    exported.menuItems = [
+      { ...base, wpId: "a", label: "News", objectId: "3" },
+      { ...base, wpId: "b", label: "Firing", object: "post_tag", objectId: "5" },
+      { ...base, wpId: "c", label: "Details", type: "custom", url: `${ORIGIN}/about/?view=profile#team` },
+      { ...base, wpId: "d", label: "Old post link", type: "custom", url: `${ORIGIN}/?p=20#firing` },
+      { ...base, wpId: "e", label: "Unsafe", type: "custom", url: "javascript:alert(1)" },
+      { ...base, wpId: "f", label: "Current-page section", type: "custom", url: "#section" },
+    ];
+    const planned = planWordpressImport(exported, ORIGIN).menus[0]!.items;
+    expect(planned[0]).toMatchObject({ href: "/category/studio-news" });
+    expect(planned[1]).toMatchObject({ href: "/tag/firing" });
+    expect(planned[2]).toMatchObject({ href: "/about?view=profile#team" });
+    expect(planned[3]).toMatchObject({ targetWpId: "20", fragment: "#firing" });
+    expect(planned[4]?.href).toBeUndefined();
+    expect(planned[5]?.href).toBe("#section");
+  });
+
+  it("retains disconnected/cyclic links with an explicit warning instead of losing or hanging them", () => {
+    const exported = parseWordpressExport(FIXTURE);
+    const base = { menu: "primary-menu", order: 0, type: "custom", object: "custom", url: "/about" };
+    exported.menuItems = [{ ...base, wpId: "orphan", label: "Orphan", parentItemId: "absent" }, { ...base, wpId: "a", label: "A", parentItemId: "b" }, { ...base, wpId: "b", label: "B", parentItemId: "a" }];
+    const plan = planWordpressImport(exported, ORIGIN);
+    expect(plan.menus[0]?.items).toHaveLength(3);
+    expect(plan.report.skipped).toMatchObject({ "menu parent missing: promoted item": 1, "menu hierarchy cycle: link retained as a root": 1 });
+  });
+});

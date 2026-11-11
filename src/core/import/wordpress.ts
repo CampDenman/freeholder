@@ -42,6 +42,7 @@ import {
   PAGE_HTML_CHARS_BUDGET,
   PAGE_IMAGE_BUDGET,
 } from "@/modules/cms/budgets";
+import { MAX_NAV_DEPTH } from "@/modules/cms/navigation-tree";
 import { DEFAULT_IMPORTER_LIMITS, enforceImporterLimits } from "./contract";
 
 /* ------------------------------------------------------------------ limits */
@@ -126,6 +127,7 @@ export type WordpressExport = {
   authors: WordpressAuthor[];
   taxonomy?: { categories: WordpressTerm[]; tags: WordpressTerm[] };
   menus: { slug: string; name: string }[];
+  taxonomyIds?: { categories: Record<string, string>; tags: Record<string, string> };
   menuItems: WordpressMenuItem[];
   /** Items left out on purpose, by reason ("post type: product", "status: trash"). */
   skipped: Record<string, number>;
@@ -179,6 +181,7 @@ export type PlannedMenu = {
     targetWpId?: string;
     href?: string;
     note?: string;
+    fragment?: string;
   }>;
 };
 
@@ -463,6 +466,7 @@ export function wordpressExportBuilder() {
   let site: WordpressExport["site"] = { title: "", url: "" };
   let authors: WordpressAuthor[] = [];
   let taxonomy: NonNullable<WordpressExport["taxonomy"]> = { categories: [], tags: [] };
+  const taxonomyIds: NonNullable<WordpressExport["taxonomyIds"]> = { categories: {}, tags: {} };
   let menus: WordpressExport["menus"] = [];
   const items: WordpressItem[] = [];
   const attachments: WordpressAttachment[] = [];
@@ -496,6 +500,14 @@ export function wordpressExportBuilder() {
         description: htmlText(child(inner, "wp:tag_description", masked, "raw")) || undefined,
       })).filter(term => term.slug),
     };
+    for (const { inner } of elements(text, "wp:category")) {
+      const id = child(inner, "wp:term_id", masked), slug = child(inner, "wp:category_nicename", masked);
+      if (id && slug) taxonomyIds.categories[id] = slug;
+    }
+    for (const { inner } of elements(text, "wp:tag")) {
+      const id = child(inner, "wp:term_id", masked), slug = child(inner, "wp:tag_slug", masked);
+      if (id && slug) taxonomyIds.tags[id] = slug;
+    }
     menus = elements(text, "wp:term")
       .filter(({ inner }) => child(inner, "wp:term_taxonomy", masked) === "nav_menu")
       .map(({ inner }) => ({
@@ -540,6 +552,7 @@ export function wordpressExportBuilder() {
     if (type === "nav_menu_item") {
       const menu = terms.find((term) => term.domain === "nav_menu");
       if (!menu || !wpId) return;
+      enforceImporterLimits({ pages: menuItems.length + 1, bytes: 0, depth: 1 });
       menuItems.push({
         wpId,
         menu: menu.slug,
@@ -618,7 +631,7 @@ export function wordpressExportBuilder() {
 
   return {
     reader: () => new WxrStreamReader(head, item),
-    finish: (): WordpressExport => ({ site, items, attachments, authors, taxonomy, menus, menuItems, skipped }),
+    finish: (): WordpressExport => ({ site, items, attachments, authors, taxonomy, taxonomyIds, menus, menuItems, skipped }),
   };
 }
 
@@ -1036,37 +1049,67 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
 
   // Menus: targets resolve to final slugs at commit, after conflict review.
   const menus: PlannedMenu[] = [];
-  const itemsById = new Map(exported.menuItems.map((item) => [item.wpId, item]));
+  const categoryPath = (slug: string): string | undefined => {
+    const parts: string[] = [], seen = new Set<string>();
+    let current: string | undefined = slug;
+    while (current) {
+      if (seen.has(current)) return undefined;
+      seen.add(current); parts.unshift(current);
+      current = exported.taxonomy?.categories.find(term => term.slug === current)?.parentSlug;
+    }
+    return `/category/${parts.join("/")}`;
+  };
+  const safeMenuHref = (href: string | undefined): string | undefined => {
+    if (!href || !safeRichHref(href)) return undefined;
+    try { const parsed = new URL(href, origin); if (parsed.username || parsed.password) return undefined; } catch { return undefined; }
+    return href;
+  };
   for (const menu of exported.menus) {
-    const items = exported.menuItems
-      .filter((item) => item.menu === menu.slug)
-      .sort((a, b) => a.order - b.order);
-    if (items.length === 0) continue;
-    menus.push({
-      slug: menu.slug,
-      name: menu.name,
-      items: items.map((item) => {
-        const depth = item.parentItemId && item.parentItemId !== "0" && itemsById.has(item.parentItemId) ? 1 : 0;
-        if (item.type === "post_type" && item.objectId) {
-          const target = exported.items.find((candidate) => candidate.wpId === item.objectId);
-          return {
-            label: item.label || target?.title || "",
-            depth,
-            targetWpId: item.objectId,
-            note: target ? undefined : "target not in this export",
-          };
-        }
-        if (item.type === "taxonomy" || item.type === "post_type_archive") {
-          return { label: item.label || item.object, depth, href: "/blog", note: "archive mapped to the blog listing" };
-        }
-        const path = item.url ? wordpressPath(item.url, hosts, basePath) : null;
-        return {
-          label: item.label || item.url || "",
-          depth,
-          href: path !== null ? `/${toCmsSlug(path)}`.replace(/\/$/, "") || "/" : item.url,
-        };
-      }),
-    });
+    const items = exported.menuItems.filter(item => item.menu === menu.slug).sort((a, b) => a.order - b.order);
+    if (!items.length) continue;
+    enforceImporterLimits({ pages: items.length, bytes: 0, depth: 1 });
+    const byId = new Map(items.map(item => [item.wpId, item]));
+    if (byId.size !== items.length) throw new Error("The WordPress menu repeats an item identity.");
+    const children = new Map<string, WordpressMenuItem[]>();
+    const roots: WordpressMenuItem[] = [];
+    for (const item of items) {
+      if (!item.parentItemId || item.parentItemId === "0" || !byId.has(item.parentItemId)) {
+        roots.push(item);
+        if (item.parentItemId && item.parentItemId !== "0") bump(report.skipped, "menu parent missing: promoted item");
+      } else children.set(item.parentItemId, [...(children.get(item.parentItemId) ?? []), item]);
+    }
+    const planned: PlannedMenu["items"] = [];
+    const visited = new Set<string>();
+    const walk = (item: WordpressMenuItem, actualDepth: number): void => {
+      if (visited.has(item.wpId)) return;
+      visited.add(item.wpId);
+      const depth = Math.min(actualDepth, MAX_NAV_DEPTH);
+      if (actualDepth > MAX_NAV_DEPTH) bump(report.skipped, "menu depth beyond four: link retained at level four");
+      const path = item.url ? wordpressPath(item.url, hosts, basePath) : null;
+      let query = "", fragment = "";
+      try { if (item.url) { const url = new URL(item.url, origin); query = url.search; fragment = url.hash; } } catch { /* Invalid source address stays unresolved. */ }
+      if (item.type === "post_type" && item.objectId) {
+        const target = exported.items.find(candidate => candidate.wpId === item.objectId);
+        planned.push({ label: item.label || target?.title || "", depth, targetWpId: item.objectId, note: target ? undefined : "target not in this export", ...(fragment ? { fragment } : {}) });
+      } else if (item.type === "taxonomy") {
+        const slug = item.objectId ? (item.object === "category" ? exported.taxonomyIds?.categories[item.objectId] : item.object === "post_tag" ? exported.taxonomyIds?.tags[item.objectId] : undefined) : undefined;
+        const href = slug ? item.object === "category" ? categoryPath(slug) : `/tag/${slug}` : path !== null ? `/${path}` : undefined;
+        planned.push({ label: item.label || item.object, depth, href, ...(href ? {} : { note: "taxonomy target not in this export" }) });
+      } else if (item.type === "post_type_archive") {
+        planned.push({ label: item.label || item.object, depth, ...(item.object === "post" ? { href: "/blog" } : { note: "unsupported post-type archive" }) });
+      } else {
+        let targetWpId: string | undefined;
+        try {
+          const url = item.url ? new URL(item.url, origin) : undefined;
+          if (url && hosts.includes(url.host.toLowerCase())) targetWpId = url.searchParams.get("p") ?? url.searchParams.get("page_id") ?? undefined;
+        } catch { /* Malformed source links are reported, never made executable. */ }
+        planned.push({ label: item.label || item.url || "", depth, ...(targetWpId ? { targetWpId, ...(fragment ? { fragment } : {}) } : { href: safeMenuHref(item.url?.trim().startsWith("#") ? item.url.trim() : path !== null ? `${`/${toCmsSlug(path)}`.replace(/\/$/, "") || "/"}${query}${fragment}` : item.url) }) });
+      }
+      for (const child of children.get(item.wpId) ?? []) walk(child, actualDepth + 1);
+    };
+    roots.forEach(item => walk(item, 0));
+    for (const item of items) if (!visited.has(item.wpId)) { bump(report.skipped, "menu hierarchy cycle: link retained as a root"); walk(item, 0); }
+    menus.push({ slug: menu.slug, name: menu.name, items: planned });
   }
 
   return {
