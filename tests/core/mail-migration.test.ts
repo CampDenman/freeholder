@@ -14,6 +14,7 @@ import {
 } from "../helpers/spine";
 import { users } from "@/core/auth/schema";
 import { reviewMigration } from "../../scripts/schema-compat-gate.mjs";
+import { historicalMailFixture } from "../helpers/mail-fixture";
 
 const MIGRATION = "db/migrations/0000_reviewed-baseline.sql";
 const OUTBOX_MIGRATION = "db/migrations/0000_reviewed-baseline.sql";
@@ -111,14 +112,14 @@ describe.runIf(hasDatabase)("the migrated mail constraints", () => {
 
   it("refuses unbounded or mixed-case addresses and invalid OAuth return paths", async () => {
     await expect(
-      db().insert(mailDeliveries).values({
+      historicalMailFixture(tx => tx.insert(mailDeliveries).values({
         purpose: "transactional",
         provider: "console",
         recipient: "Person@Example.Test",
         subject: "Subject",
         requestedBy: "system",
-      }),
-    ).rejects.toThrow();
+      })),
+    ).rejects.toMatchObject({ cause: { code: "23514", constraint_name: "mail_deliveries_recipient_lower" } });
     await expect(
       db().insert(mailOauthStates).values({
         tokenHash: "a".repeat(64),

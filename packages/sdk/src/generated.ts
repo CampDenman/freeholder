@@ -972,12 +972,15 @@ export const SERVICE_NAMES = [
   "loyalty.tiers",
   "mail.beginOAuth",
   "mail.completeOAuth",
+  "mail.listDispatchRecovery",
   "mail.listHeld",
   "mail.listLegacyRecords",
   "mail.openHeld",
   "mail.readiness",
+  "mail.reconcileDispatch",
   "mail.registerSender",
   "mail.releaseSuppression",
+  "mail.retryReconciled",
   "mail.reviewLegacyOwnership",
   "mail.setDefaultSender",
   "mail.status",
@@ -5490,6 +5493,10 @@ export interface ServiceCatalog {
     input: { provider: "google" | "microsoft"; state: string; code: string };
     output: { senderId: string; email: string; returnTo: string };
   };
+  "mail.listDispatchRecovery": {
+    input: { afterId?: string; limit?: number };
+    output: { rows: { deliveryId: string; recipient: string; subject: string; provider: string; providerRef: string | null; attempts: number; retryQueued: boolean; createdAt: string; legacy: boolean; originalRoute: { provider: string; purpose: "transactional" | "bulk"; from: string; senderId: string | null; connectionId: string | null; providerAccountId: string | null; host: string | null; port: number | null; tlsMode: ("implicit_tls" | "required_starttls") | null; user: string | null; providerIdentity: string | null } | null; dispatches: { id: string; attempt: number; state: "running" | "unknown" | "submitted" | "not_submitted"; providerRef: string | null; replyProviderRef: string | null; initialReviewedAt: string | null; createdAt: string; resolutionSource: ("adapter" | "human_provider_confirmation") | null }[] }[]; nextCursor: string | null };
+  };
   "mail.listHeld": {
     input: { limit?: number };
     output: { preview: boolean; allowList: string[]; dailyCap: number; sentLast24Hours: number; held: { id: string; recipient: string; subject: string; reason: "recipient" | "cap" | "no_adapter"; requestedBy: string; createdAt: string; readable: boolean }[] };
@@ -5506,6 +5513,10 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { transactional: boolean; bulk: boolean };
   };
+  "mail.reconcileDispatch": {
+    input: { deliveryId: string; dispatchId?: string; outcome: "submitted" | "not_submitted"; expectedAttempts: number; expectedRecipient: string; expectedProviderRef: string | null; originalRouteEvidence: string; finalProviderEvidence: string; stoppedCallerEvidence: string; providerOperationRef: string; confirmation: "ORIGINAL PROVIDER OUTCOME VERIFIED" };
+    output: { deliveryId: string; outcome: "submitted" | "not_submitted"; source: "human_provider_confirmation" | "adapter"; legacy: boolean };
+  };
   "mail.registerSender": {
     input: { purpose: "transactional" | "bulk"; provider: "smtp" | "resend" | "postmark" | "ses" | "paradise"; email: string; displayName?: string; providerIdentity?: string };
     output: { id: string; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "paradise"; connectedAccountId: string | null; email: string; displayName: string | null; providerIdentity: string | null; verificationStatus: "pending" | "verified" | "failed"; status: "active" | "paused" | "needs_attention"; isDefault: boolean; verificationDetail: unknown; lastVerifiedAt: string | null; lastError: string | null; createdBy: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -5513,6 +5524,10 @@ export interface ServiceCatalog {
   "mail.releaseSuppression": {
     input: { email: string; confirmation: string };
     output: { email: string; reason: "hard_bounce" | "complaint" | "provider" | "manual"; provider: "resend" | "postmark" | "ses" | "manual"; sourceEventId: string | null; detail: string | null; active: boolean; releasedAt: string | null; releasedBy: string | null; createdAt: string; updatedAt: string; redactedAt: string | null; [key: string]: unknown };
+  };
+  "mail.retryReconciled": {
+    input: { deliveryId: string; confirmation: "RETRY THE ORIGINAL MESSAGE" };
+    output: { queued: true };
   };
   "mail.reviewLegacyOwnership": {
     input: { kind: "delivery" | "event" | "suppression"; id: string; expectedRecipient: string; contactId: string; evidence: string; confirmation: "VERIFIED" };
@@ -5524,7 +5539,7 @@ export interface ServiceCatalog {
   };
   "mail.status": {
     input: { limit?: number };
-    output: { configuration: { transactional: { provider: "smtp" | "console" | "gmail" | "outlook" | "paradise"; delivers: boolean; missing: string[]; fromAddress: string | null }; oauth: { provider: "google" | "microsoft"; configured: boolean; missing: string[] }[]; bulk: { provider: "resend" | "postmark" | "ses" | "paradise" | "none"; sendConfigured: boolean; feedbackConfigured: boolean; missing: string[]; webhookPath: string | null; fromAddress: string | null } }; senders: { id: string; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "paradise"; email: string; displayName: string | null; verificationStatus: "pending" | "verified" | "failed"; status: "active" | "paused" | "needs_attention"; isDefault: boolean; lastVerifiedAt: string | null; lastError: string | null; verificationDetail: unknown; createdAt: string; accountStatus: ("active" | "needs_reconnect" | "revoked") | null; capabilityEnabled: boolean | null; [key: string]: unknown }[]; deliveries: { id: string; senderId: string | null; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "paradise" | "none"; recipient: string; subject: string; status: "queued" | "submitted" | "delivered" | "bounced" | "complained" | "failed" | "suppressed" | "held"; holdReason: ("recipient" | "cap" | "no_adapter") | null; providerRef: string | null; idempotencyKey: string | null; requestedBy: string; attempts: number; lastError: string | null; submittedAt: string | null; deliveredAt: string | null; providerStatusAt: string | null; createdAt: string; updatedAt: string; redactedAt: string | null; [key: string]: unknown }[]; suppressions: { email: string; reason: "hard_bounce" | "complaint" | "provider" | "manual"; provider: "resend" | "postmark" | "ses" | "manual"; sourceEventId: string | null; detail: string | null; active: boolean; releasedAt: string | null; releasedBy: string | null; createdAt: string; updatedAt: string; redactedAt: string | null; [key: string]: unknown }[] };
+    output: { configuration: { transactional: { provider: "smtp" | "console" | "gmail" | "outlook" | "paradise"; delivers: boolean; missing: string[]; fromAddress: string | null }; oauth: { provider: "google" | "microsoft"; configured: boolean; missing: string[] }[]; bulk: { provider: "resend" | "postmark" | "ses" | "paradise" | "none"; sendConfigured: boolean; feedbackConfigured: boolean; missing: string[]; webhookPath: string | null; fromAddress: string | null } }; senders: { id: string; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "paradise"; email: string; displayName: string | null; verificationStatus: "pending" | "verified" | "failed"; status: "active" | "paused" | "needs_attention"; isDefault: boolean; lastVerifiedAt: string | null; lastError: string | null; verificationDetail: unknown; createdAt: string; accountStatus: ("active" | "needs_reconnect" | "revoked") | null; capabilityEnabled: boolean | null; [key: string]: unknown }[]; deliveries: { id: string; senderId: string | null; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses" | "paradise" | "none"; recipient: string; subject: string; status: "queued" | "submitted" | "unknown" | "delivered" | "bounced" | "complained" | "failed" | "suppressed" | "held"; holdReason: ("recipient" | "cap" | "no_adapter") | null; providerRef: string | null; idempotencyKey: string | null; requestedBy: string; attempts: number; lastError: string | null; submittedAt: string | null; deliveredAt: string | null; providerStatusAt: string | null; createdAt: string; updatedAt: string; redactedAt: string | null; [key: string]: unknown }[]; suppressions: { email: string; reason: "hard_bounce" | "complaint" | "provider" | "manual"; provider: "resend" | "postmark" | "ses" | "manual"; sourceEventId: string | null; detail: string | null; active: boolean; releasedAt: string | null; releasedBy: string | null; createdAt: string; updatedAt: string; redactedAt: string | null; [key: string]: unknown }[] };
   };
   "mail.testSend": {
     input: { id: string };
@@ -9130,12 +9145,15 @@ export interface FreeholderApi {
   mail: {
     beginOAuth: (input: ServiceCatalog["mail.beginOAuth"]["input"]) => Promise<ServiceCatalog["mail.beginOAuth"]["output"]>;
     completeOAuth: (input: ServiceCatalog["mail.completeOAuth"]["input"]) => Promise<ServiceCatalog["mail.completeOAuth"]["output"]>;
+    listDispatchRecovery: (input?: ServiceCatalog["mail.listDispatchRecovery"]["input"]) => Promise<ServiceCatalog["mail.listDispatchRecovery"]["output"]>;
     listHeld: (input?: ServiceCatalog["mail.listHeld"]["input"]) => Promise<ServiceCatalog["mail.listHeld"]["output"]>;
     listLegacyRecords: (input?: ServiceCatalog["mail.listLegacyRecords"]["input"]) => Promise<ServiceCatalog["mail.listLegacyRecords"]["output"]>;
     openHeld: (input: ServiceCatalog["mail.openHeld"]["input"]) => Promise<ServiceCatalog["mail.openHeld"]["output"]>;
     readiness: (input?: ServiceCatalog["mail.readiness"]["input"]) => Promise<ServiceCatalog["mail.readiness"]["output"]>;
+    reconcileDispatch: (input: ServiceCatalog["mail.reconcileDispatch"]["input"]) => Promise<ServiceCatalog["mail.reconcileDispatch"]["output"]>;
     registerSender: (input: ServiceCatalog["mail.registerSender"]["input"]) => Promise<ServiceCatalog["mail.registerSender"]["output"]>;
     releaseSuppression: (input: ServiceCatalog["mail.releaseSuppression"]["input"]) => Promise<ServiceCatalog["mail.releaseSuppression"]["output"]>;
+    retryReconciled: (input: ServiceCatalog["mail.retryReconciled"]["input"]) => Promise<ServiceCatalog["mail.retryReconciled"]["output"]>;
     reviewLegacyOwnership: (input: ServiceCatalog["mail.reviewLegacyOwnership"]["input"]) => Promise<ServiceCatalog["mail.reviewLegacyOwnership"]["output"]>;
     setDefaultSender: (input: ServiceCatalog["mail.setDefaultSender"]["input"]) => Promise<ServiceCatalog["mail.setDefaultSender"]["output"]>;
     status: (input?: ServiceCatalog["mail.status"]["input"]) => Promise<ServiceCatalog["mail.status"]["output"]>;

@@ -5825,7 +5825,9 @@ deployments are portable, testable and incapable of silently forking the truth.
   SDK 8, audit labels 7, full fast 373 plus one documented exclusion and production
   scrub 20,330 files / 242,435,915 bytes passed. All four fresh-database locale
   owner-browser journeys passed at 320px in both themes with keyboard, Axe,
-  bounds and service/audit assertions. Protected integration remains required. The required
+  bounds and service/audit assertions. Protected PR #672 merged at
+  `4039dfe66f4b2d66c0f0be3e2321c802388b3c70` after merge-group
+  run `43103837092` passed. The required
   enabled transactional/SMTP per-dispatch provenance and unknown-outcome
   recovery (C11.08) continue as a separate source increment; no old account or
   physical-attempt facts are invented. This supplies neither independent
@@ -5836,8 +5838,16 @@ deployments are portable, testable and incapable of silently forking the truth.
   human provider and stopped-caller evidence is distinct from adapter proof.
   SMTP requires verified TLS and exact-recipient final acceptance. Holds,
   erasure, late conflicting replies and prior-image fences are covered by
-  focused native/wire controls while broader mail, SDK, browser and protected
-  qualification continues. See `deploy/mail-dispatch-recovery.md`. This does
+  focused native/wire controls. An observed positive reply survives a refused
+  local apply without resending or inventing local completion. The final
+  actual-main 19 targeted cases passed across one fixture-only retry; the
+  separate observed-reply recovery case and live SDK 8 passed. Full fast
+  380 plus one documented exclusion and production scrub 20,353 files /
+  242,882,917 bytes passed. Four fresh-database owner-browser journeys passed
+  in en/es/fr/ar at 320px in both themes, with keyboard, Axe, bounds, private
+  receipt omission and both unknown/retry and retained-positive workflows.
+  Protected qualification remains required. See
+  `deploy/mail-dispatch-recovery.md`. This does
   not close carrier-specific source acceptance, live sends or independent review.)*
   Unchecked: no live send against the provider.)*
 - [ ] **C3.32** Add a measurement-provider category (`MEASUREMENT_PROVIDER`,

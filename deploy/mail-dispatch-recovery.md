@@ -87,6 +87,15 @@ recipient erasure and losing a later reply that contradicts human evidence.
 An additional actual identity-fence failure demonstrated a dropped positive
 reply during local apply; the repaired case preserves it without resending.
 Current finite PostgreSQL, loopback TLS, privacy and populated-upgrade controls
-are being integrated with the broader mail, SDK, owner-browser and protected
-CI checks. Carrier-specific consent/retry protocols and live inbox placement
+cover the original request and exact physical outcome boundary. Final local
+actual-main qualification includes 19 targeted recovery/privacy/affected-mail
+cases completed across one fixture-only retry, the distinct observed-reply
+case, live SDK generation's eight cases, 380 static contract checks plus one
+documented exclusion, and production artifact scrub (20,353 files /
+242,882,917 bytes). Four fresh-database owner journeys passed in en/es/fr/ar
+at 320px in both themes, with keyboard, Axe, bounds and private receipt omission.
+Each exercises both unknown/no-submission/retry and retained-positive reply
+review. English light and Arabic dark screenshots were inspected. Protected
+CI checks remain required.
+Carrier-specific consent/retry protocols and live inbox placement
 require their own C3.31 evidence; SMTP tests do not claim those acceptances.
