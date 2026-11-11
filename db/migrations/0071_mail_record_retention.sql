@@ -125,7 +125,7 @@ BEGIN
   IF TG_OP='INSERT' AND current_setting('freeholder.mail_receipts_v1',true)='1' AND (NEW.recipient_digest IS NULL OR NEW.external_event_digest IS NULL) THEN
    RAISE EXCEPTION 'New mail event needs keyed receipts' USING ERRCODE='23514';
   END IF;
-  IF TG_OP='INSERT' AND EXISTS(
+  IF TG_OP='INSERT' AND NEW.delivery_id IS NULL AND EXISTS(
    SELECT 1 FROM mail_deliveries WHERE recipient_digest=NEW.recipient_digest AND redacted_at IS NOT NULL
    UNION ALL SELECT 1 FROM mail_provider_events WHERE recipient_digest=NEW.recipient_digest AND redacted_at IS NOT NULL
    UNION ALL SELECT 1 FROM mail_suppressions WHERE email_digest=NEW.recipient_digest AND redacted_at IS NOT NULL

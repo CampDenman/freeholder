@@ -40,7 +40,8 @@ Old address-only mail requires review at `/admin/retention/mail`. A pending
 privacy request links to its original contact. The reviewer checks authoritative
 correspondence and the recorded date before attributing the record. Today's
 address match alone is insufficient. Agents cannot supply this fresh human
-review. Only a private keyed evidence receipt, reviewer identity and time are
+review; background system workers cannot supply it either. Only a private keyed
+evidence receipt, reviewer identity and time are
 stored; the evidence text and address do not enter the mutation audit. Contact
 read and mail permissions still apply. Stale recipients and already-bound
 records are refused. Unknown ownership keeps erasure pending until reviewed.
@@ -52,7 +53,17 @@ legacy review, cover late children of captured deliveries, and acknowledge only
 the original receipt. Historical staff notification copies tied to the exact
 outbox event are also covered. A disappeared mail outbox is not positive evidence
 that a derived physical send settled; later retries do not settle earlier sends.
-New mail notices use the existing localized address-free text.
+New mail notices use the existing localized address-free text. A callback's
+recipient must match its original delivery. Unmatched historical feedback is
+never assigned by today's contact address or creation date. A proven fresh
+holder's delivery is separate from an earlier holder's minimized records.
+Exports show only a generic retained block receipt when its current supporting
+fact belongs to someone else. Initial erasure and old workers use that same
+current-fact ownership boundary, so they cannot minimize a new holder's fact.
+Completed receipt replays are no-ops; missing original records or receipts fail
+closed for exact-backup recovery. If an authorized retention run already
+minimized a captured candidate, recognizing that completion does not invent
+historical ownership.
 
 Migration `0071_mail_record_retention.sql` follows migration70. It adds stable
 suppression IDs and private metadata without guessing legacy contact ownership.
@@ -75,14 +86,14 @@ Local evidence (2026-11-11): actual initial and peer failures reproduced missing
 policy kinds, retained personal fields, loss of multiple-attempt evidence,
 callback plaintext restoration, uncertain derived mail copies, hidden retained
 block exports, stale snapshot writes and nullable reviewer metadata refusal.
-The latest mail/upgrade run passed23 actual controls, including a populated N-1
-upgrade; the preceding combined routing/privacy run passed44. Exact SDK8,
-audit-labels7, TypeScript and the373-contract fast inventory passed; final lint
-recheck uses equivalent explicit receipt assertions. First production scrub
-passed20,500 files /242,750,885 bytes; four real-owner browser journeys passed in
-English, Spanish, French and Arabic at320px in both themes, with keyboard,
-accessibility and actual service/audit assertions. Final composed build/browser
-and protected integration are still in progress.
+The combined mail routing/privacy/populated-upgrade run passed53 controls;
+two additional actual system-actor refusal controls passed after the narrow
+human-only guards. TypeScript and focused lint are clean. Exact SDK8, audit7
+and the373-contract inventory passed earlier; final composed55/SDK/static
+confirmation is pending. First artifact scrub passed20,500 files /242,750,885
+bytes and four locale owner review browser journeys passed at320px in both
+themes with keyboard, accessibility and real service/audit assertions. The final
+composed production build/browser and protected integration remain pending.
 
 C3.31/C11.08 also require the separate enabled transactional/SMTP physical-send
 recovery increment: freeze original route/request identities, journal each

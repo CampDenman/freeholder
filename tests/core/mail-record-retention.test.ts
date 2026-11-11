@@ -9,19 +9,21 @@ import { ready } from "@/core/runtime";
 import { mailDeliveries, mailOutbox, mailProviderEvents, mailRecordSubjects, mailSuppressions } from "@/core/mail/schema";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
-import { mergeContacts, resolveContact, undoContactMerge } from "@/core/contacts/service";
+import { mergeContacts, resolveContact, undoContactMerge, updateContact } from "@/core/contacts/service";
 import { addRetentionException, contactPrivacySources, createDataRequest, fulfillDataRequest, verifyDataRequest } from "@/core/privacy/service";
 import { getJob, stopJobs } from "@/core/jobs";
 import { eraseMailRecords } from "@/core/mail/record-privacy";
 import { reviewLegacyMailOwnership } from "@/core/mail/record-services";
-import { deliverQueuedMail, mailStatus, pruneExpiredMailOutbox, recordMailProviderEvent, sendMail } from "@/core/mail/service";
+import { deliverQueuedMail, mailStatus, pruneExpiredMailOutbox, recordMailProviderEvent, releaseMailSuppression, sendMail } from "@/core/mail/service";
 import { mailReceiptKeys } from "@/core/mail/schema";
 import { mailReceipts, sealMailReceipts } from "@/core/mail/receipts";
+import { bindMailRecord } from "@/core/mail/ownership";
 import { resetEnvForTests } from "@/core/env";
 import { auditLog, outboxEvents } from "@/core/events/schema";
 import { notificationDeliveries, notifications } from "@/core/notifications/schema";
 import { applyRetentionPolicies, listRetentionPolicies } from "@/core/retention/service";
 import { retentionPolicies } from "@/core/retention/schema";
+import { dataRequests } from "@/core/privacy/schema";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const EMAIL = "retention-subject@example.test";
@@ -36,6 +38,22 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     await verifyDataRequest.call({ id: request.id, method: "Fictional fixture identity verified" }, OWNER);
     if (held) await addRetentionException.call({ dataRequestId: request.id, scope: "mail.records", reason: "legal_obligation", legalBasis: "Fictional open dispute requiring these exact mail facts" }, OWNER);
     return fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER);
+  }
+  async function ownedDelivery(contactId: string, key: string) {
+    const providerRef = `synthetic-owned:${key}`;
+    await db().transaction(async tx => {
+      const receipts = await mailReceipts(tx);
+      const [delivery] = await tx.insert(mailDeliveries).values({ purpose: "bulk", provider: "resend", recipient: EMAIL, recipientDigest: receipts.digest("address", EMAIL), providerRef, providerRefDigest: receipts.digest("provider:resend", providerRef), subject: "Synthetic owned provider send", status: "submitted", attempts: 1, requestedBy: "system" }).returning();
+      await bindMailRecord(tx, "delivery", delivery!.id, { contactId });
+    });
+    return { provider: "resend" as const, providerRef, externalEventId: key, recipient: EMAIL, eventType: "hard_bounce" as const, detail: "Synthetic original provider fact", rawDigest: "5".repeat(64), occurredAt: new Date().toISOString() };
+  }
+  async function ownedFeedback(contactId: string, key: string) {
+    return recordMailProviderEvent.call(await ownedDelivery(contactId, key), { kind: "system" });
+  }
+  async function originalJob(result: Awaited<ReturnType<typeof fulfillDataRequest.call>>) {
+    const receipt = result.artifact.body as { outcomes: Array<{ scope: string; pendingJobs?: string[] }> };
+    return (await getJob("core.eraseMailRecords", receipt.outcomes.find(row => row.scope === "mail.records")!.pendingJobs![0]!))!;
   }
   it("offers explicit retention policies for all three address-bearing stores", async () => {
     const result = await listRetentionPolicies.call({}, OWNER);
@@ -90,8 +108,8 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("erases an active suppression's plaintext while preserving the effective block and late-callback refusal to unredact", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
-    await recordMailProviderEvent.call({ provider: "resend", externalEventId: "owned-first-bounce", recipient: EMAIL, eventType: "hard_bounce", rawDigest: "d".repeat(64), occurredAt: new Date().toISOString() }, { kind: "system" });
-    expect((await db().select().from(mailRecordSubjects)).map(row => row.contactId)).toEqual([contact.id, contact.id]);
+    await ownedFeedback(contact.id, "owned-first-bounce");
+    expect((await db().select().from(mailRecordSubjects)).map(row => row.contactId)).toEqual([contact.id, contact.id, contact.id]);
     const erased = await erasure(contact.id);
     expect(erased.request.status).toBe("completed");
     expect((await db().select().from(mailSuppressions))[0]).toMatchObject({ active: true });
@@ -104,7 +122,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("exports a minimal owned receipt for a minimized active block without exposing its private address lookup", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
-    await recordMailProviderEvent.call({ provider: "resend", externalEventId: "export-retained-block", recipient: EMAIL, eventType: "hard_bounce", rawDigest: "3".repeat(64), occurredAt: new Date().toISOString() }, { kind: "system" });
+    await ownedFeedback(contact.id, "export-retained-block");
     await erasure(contact.id);
     const [block] = await db().select().from(mailSuppressions);
     const source = contactPrivacySources().find(item => item.scope === "mail.records")!;
@@ -192,6 +210,97 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
     expect(encoded).not.toMatch(/Digest|encryptedKey|wrappingFingerprint|verifiedBy|evidence|contactId/);
     expect((await db().select().from(mailRecordSubjects))[0]?.evidenceDigest).toMatch(/^[a-f0-9]{64}$/);
   });
+  it("does not let a background system actor supply the human legacy ownership review", async () => {
+    const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
+    const [legacy] = await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Unreviewed history", status: "failed", requestedBy: "system" }).returning();
+    await expect(reviewLegacyMailOwnership.call({ kind: "delivery", id: legacy!.id, expectedRecipient: EMAIL, contactId: contact.id, evidence: "Automated text cannot supply independent human ownership review.", confirmation: "VERIFIED" }, { kind: "system" })).rejects.toMatchObject({ code: "permission" });
+    expect(await db().select().from(mailRecordSubjects)).toHaveLength(0);
+  });
+  it("does not let a background system actor independently verify and release an address block", async () => {
+    await db().insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual" });
+    await expect(releaseMailSuppression.call({ email: EMAIL, confirmation: EMAIL }, { kind: "system" })).rejects.toMatchObject({ code: "permission" });
+    expect((await db().select().from(mailSuppressions))[0]?.active).toBe(true);
+  });
+  it("does not assign unmatched historical feedback to a person who acquired the address later", async () => {
+    const { contact } = await resolveContact.call({ email: "original-different-address@example.test" }, OWNER);
+    await db().update(contacts).set({ createdAt: PAST }).where(eq(contacts.id, contact.id));
+    await updateContact.call({ id: contact.id, email: EMAIL }, OWNER);
+    await recordMailProviderEvent.call({ provider: "resend", externalEventId: "historical-reassigned-address", recipient: EMAIL, eventType: "hard_bounce", rawDigest: "4".repeat(64), occurredAt: new Date("2021-01-01T00:00:00Z").toISOString() }, { kind: "system" });
+    expect(await db().select().from(mailRecordSubjects)).toHaveLength(0);
+  });
+  it("preserves a held fresh address holder's proven callback after the previous holder was erased", async () => {
+    const old = await resolveContact.call({ email: EMAIL }, OWNER);
+    await ownedFeedback(old.contact.id, "old-holder-held-case"); await erasure(old.contact.id);
+    const fresh = await resolveContact.call({ email: EMAIL, name: "New fictional address holder" }, OWNER);
+    const fact = await ownedDelivery(fresh.contact.id, "fresh-holder-held-case");
+    const request = await createDataRequest.call({ contactId: fresh.contact.id, request: { kind: "erasure" } }, OWNER);
+    await addRetentionException.call({ dataRequestId: request.id, scope: "mail.records", reason: "legal_obligation", legalBasis: "Synthetic dispute holding the new person's original callback" }, OWNER);
+    await recordMailProviderEvent.call(fact, { kind: "system" });
+    const [event] = await db().select().from(mailProviderEvents).where(eq(mailProviderEvents.externalEventDigest, await db().transaction(async tx => (await mailReceipts(tx)).digest("event:resend", fact.externalEventId))));
+    expect(event).toMatchObject({ recipient: EMAIL, detail: fact.detail, redactedAt: null });
+  });
+  it("refuses a known delivery callback whose recipient disagrees with its original receipt", async () => {
+    const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
+    const fact = await ownedDelivery(contact.id, "wrong-recipient");
+    await expect(recordMailProviderEvent.call({ ...fact, recipient: "different-person@example.test" }, { kind: "system" })).rejects.toMatchObject({ code: "conflict" });
+    expect(await db().select().from(mailProviderEvents)).toHaveLength(0);
+  });
+  it("does not export another address holder's current suppression fact through the original retained receipt", async () => {
+    const old = await resolveContact.call({ email: EMAIL }, OWNER);
+    await ownedFeedback(old.contact.id, "old-holder-export-case"); await erasure(old.contact.id);
+    const fresh = await resolveContact.call({ email: EMAIL, name: "New fictional address holder" }, OWNER);
+    const fact = await ownedDelivery(fresh.contact.id, "fresh-holder-export-case");
+    await recordMailProviderEvent.call({ ...fact, eventType: "complaint" }, { kind: "system" });
+    const source = contactPrivacySources().find(item => item.scope === "mail.records")!;
+    const exported = await db().transaction(tx => source.exportData(tx, old.contact.id));
+    expect(JSON.stringify(exported)).not.toContain("complaint");
+  });
+  it("does not let an old erasure worker or its completed replay minimize a later holder's current block", async () => {
+    const old = await resolveContact.call({ email: EMAIL }, OWNER);
+    const [block] = await db().insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", detail: "Original old holder's fact", createdAt: PAST, updatedAt: PAST }).returning();
+    const erased = await erasure(old.contact.id), job = await originalJob(erased);
+    await reviewLegacyMailOwnership.call({ kind: "suppression", id: block!.id, expectedRecipient: EMAIL, contactId: old.contact.id, evidence: "Original dated correspondence verifies the old holder's block.", confirmation: "VERIFIED" }, OWNER);
+    await releaseMailSuppression.call({ email: EMAIL, confirmation: EMAIL }, OWNER);
+    const fresh = await resolveContact.call({ email: EMAIL, name: "New fictional address holder" }, OWNER);
+    const fact = await ownedDelivery(fresh.contact.id, "late-new-holder-block");
+    await recordMailProviderEvent.call(fact, { kind: "system" });
+    await eraseMailRecords(job.data);
+    expect((await db().select().from(mailSuppressions))[0]).toMatchObject({ email: EMAIL, detail: fact.detail, redactedAt: null });
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, erased.request.id)))[0]?.status).toBe("completed");
+    await recordMailProviderEvent.call({ ...fact, externalEventId: "new-holder-after-old-receipt", detail: "New holder's later fact", occurredAt: new Date().toISOString() }, { kind: "system" });
+    await eraseMailRecords(job.data);
+    expect((await db().select().from(mailSuppressions))[0]).toMatchObject({ email: EMAIL, detail: "New holder's later fact", redactedAt: null });
+  });
+  it("does not apply an initial old-holder erasure to a global block whose current fact belongs to the new holder", async () => {
+    const old = await resolveContact.call({ email: EMAIL }, OWNER);
+    const [block] = await db().insert(mailSuppressions).values({ email: EMAIL, reason: "manual", provider: "manual", createdAt: PAST, updatedAt: PAST }).returning();
+    await reviewLegacyMailOwnership.call({ kind: "suppression", id: block!.id, expectedRecipient: EMAIL, contactId: old.contact.id, evidence: "Original dated correspondence verifies the old holder's block.", confirmation: "VERIFIED" }, OWNER);
+    await updateContact.call({ id: old.contact.id, email: "old-holder-new-address@example.test" }, OWNER);
+    await releaseMailSuppression.call({ email: EMAIL, confirmation: EMAIL }, OWNER);
+    const fresh = await resolveContact.call({ email: EMAIL, name: "New fictional address holder" }, OWNER);
+    const fact = await ownedDelivery(fresh.contact.id, "new-holder-before-old-erasure");
+    await recordMailProviderEvent.call(fact, { kind: "system" });
+    expect((await erasure(old.contact.id)).request.status).toBe("completed");
+    expect((await db().select().from(mailSuppressions))[0]).toMatchObject({ email: EMAIL, detail: fact.detail, redactedAt: null });
+  });
+  it("does not acknowledge an unresolved captured delivery after its original ledger was lost", async () => {
+    const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
+    const fact = await ownedDelivery(contact.id, "missing-original-ledger");
+    const erased = await erasure(contact.id), job = await originalJob(erased);
+    await db().transaction(async tx => { await mailReceipts(tx); await tx.delete(mailDeliveries).where(eq(mailDeliveries.providerRef, fact.providerRef)); });
+    await expect(eraseMailRecords(job.data)).rejects.toThrow(/original.*record|backup/i);
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, erased.request.id)))[0]?.status).toBe("in_progress");
+  });
+  it("acknowledges an unreviewed candidate only after the authorized retention worker already minimized it", async () => {
+    const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
+    await db().insert(mailDeliveries).values({ purpose: "transactional", provider: "console", recipient: EMAIL, subject: "Old unreviewed but terminal fact", status: "failed", requestedBy: "system", createdAt: PAST, updatedAt: PAST });
+    const erased = await erasure(contact.id), job = await originalJob(erased);
+    await db().insert(retentionPolicies).values({ kind: "mail_deliveries", ttlDays: 1 });
+    await applyRetentionPolicies();
+    expect((await db().select().from(mailDeliveries))[0]?.redactedAt).not.toBeNull();
+    await eraseMailRecords(job.data);
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, erased.request.id)))[0]?.status).toBe("completed");
+  });
   it("keeps ownership through merge and restores the exact original join on undo", async () => {
     const a = (await resolveContact.call({ email: "mail-merge-a@example.test" }, OWNER)).contact;
     const b = (await resolveContact.call({ email: EMAIL }, OWNER)).contact;
@@ -241,7 +350,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("minimizes linked historical staff notices but waits for their outstanding delivery", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
-    const event = await recordMailProviderEvent.call({ provider: "resend", externalEventId: "notice-original", recipient: EMAIL, eventType: "hard_bounce", rawDigest: "f".repeat(64), occurredAt: new Date().toISOString() }, { kind: "system" });
+    const event = await ownedFeedback(contact.id, "notice-original");
     expect(event.duplicate).toBe(false);
     const [source] = await db().select().from(outboxEvents).where(eq(outboxEvents.eventName, "mail.deliveryUpdated"));
     const [notice] = await db().insert(notifications).values({ recipientUserId: OWNER.userId, topic: "mail.delivery", priority: "warning", locale: "fr", title: "Ancien signalement", body: `Private ${EMAIL}`, dedupeKey: `mail:${EMAIL}:hard_bounce`, sourceEventName: "mail.deliveryUpdated", sourceEventId: source!.id, idempotencyKey: "notice-original" }).returning();
@@ -258,7 +367,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   for (const ambiguous of ["submitted", "multiple"] as const) it(`keeps a derived ${ambiguous} physical mail copy pending even after its outbox disappeared`, async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
-    await recordMailProviderEvent.call({ provider: "resend", externalEventId: `derived-${ambiguous}`, recipient: EMAIL, eventType: "hard_bounce", rawDigest: "1".repeat(64), occurredAt: new Date().toISOString() }, { kind: "system" });
+    await ownedFeedback(contact.id, `derived-${ambiguous}`);
     const [source] = await db().select().from(outboxEvents).where(eq(outboxEvents.eventName, "mail.deliveryUpdated"));
     const [notice] = await db().insert(notifications).values({ recipientUserId: OWNER.userId, topic: "mail.delivery", priority: "warning", title: "Old mail notice", body: `Old reader ${EMAIL}`, dedupeKey: `old-mail:${EMAIL}`, sourceEventName: "mail.deliveryUpdated", sourceEventId: source!.id, idempotencyKey: `derived-${ambiguous}` }).returning();
     const [attempt] = await db().insert(notificationDeliveries).values({ notificationId: notice!.id, channel: "email", status: "delivered", attempts: 1, deliveredAt: new Date(), lastError: `Old provider detail ${EMAIL}` }).returning();
@@ -269,7 +378,7 @@ describe.runIf(hasDatabase)("legacy mail-record retention (C3.31)", { timeout: 6
   });
   it("minimizes address-bearing fields of a positively settled derived mail copy", async () => {
     const { contact } = await resolveContact.call({ email: EMAIL }, OWNER);
-    await recordMailProviderEvent.call({ provider: "resend", externalEventId: "derived-settled", recipient: EMAIL, eventType: "hard_bounce", rawDigest: "2".repeat(64), occurredAt: new Date().toISOString() }, { kind: "system" });
+    await ownedFeedback(contact.id, "derived-settled");
     const [source] = await db().select().from(outboxEvents).where(eq(outboxEvents.eventName, "mail.deliveryUpdated"));
     const [notice] = await db().insert(notifications).values({ recipientUserId: OWNER.userId, topic: "mail.delivery", priority: "warning", title: "Old mail notice", body: `Old reader ${EMAIL}`, sourceEventName: "mail.deliveryUpdated", sourceEventId: source!.id, idempotencyKey: "derived-settled" }).returning();
     const [attempt] = await db().insert(notificationDeliveries).values({ notificationId: notice!.id, channel: "email", status: "delivered", attempts: 1, deliveredAt: new Date(), lastError: `Old provider detail ${EMAIL}` }).returning();

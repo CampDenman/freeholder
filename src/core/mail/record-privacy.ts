@@ -9,15 +9,18 @@ import { enqueueJob } from "@/core/jobs";
 import { contactPrivacyIdentity } from "@/core/privacy/contact-identity";
 import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { completeErasureJob, registerContactPrivacySource } from "@/core/privacy/service";
+import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
 import type { Tx } from "@/core/service";
 import { mailDeliveries, mailProviderEvents, mailRecordSubjects, mailSuppressions } from "./schema";
 import { MAIL_RECORDS_SCOPE, minimizeMailRecordsInTransaction, type MailRecordRef } from "./record-retention";
 import { publicMailDelivery, publicMailSuppression } from "./service";
 import { sealMailReceipts } from "./receipts";
+import { lockMailRecord } from "./ownership";
 
 export const MAIL_RECORD_ERASURE_JOB = "core.eraseMailRecords";
 const refSchema = z.object({ kind: z.enum(["delivery", "event", "suppression"]), id: z.uuid(), requiresReview: z.boolean() });
 const erasurePayload = z.object({ requestId: z.uuid(), originalJobId: z.uuid(), refs: z.array(refSchema).min(1).max(500) });
+const receiptSchema = z.object({ format: z.literal("freeholder.erasure-receipt"), outcomes: z.array(z.object({ scope: z.string(), outcome: z.string(), pendingJobs: z.array(z.uuid()).optional() })) });
 type CapturedRef = z.infer<typeof refSchema>;
 async function fenceLegacyWriters(tx: Tx): Promise<void> {
   await lockContactIdentity(tx);
@@ -50,17 +53,34 @@ async function capture(tx: Tx, contactId: string, includeMinimized = false): Pro
   }
   return refs;
 }
-async function resolvedRefs(tx: Tx, refs: CapturedRef[], contactId: string): Promise<MailRecordRef[]> {
-  const identity = await contactPrivacyIdentity(tx, contactId), result: MailRecordRef[] = [];
+async function resolvedRefs(tx: Tx, refs: CapturedRef[], contactId: string): Promise<{ ready: MailRecordRef[]; awaitingReview: CapturedRef[] }> {
+  const identity = await contactPrivacyIdentity(tx, contactId), ready: MailRecordRef[] = [], awaitingReview: CapturedRef[] = [];
   for (const ref of refs) {
-    if (!ref.requiresReview) { result.push(ref); continue; }
-    const reviewed = await tx.select({ contactId: mailRecordSubjects.contactId }).from(mailRecordSubjects).where(and(eq(mailRecordSubjects.kind, ref.kind), eq(mailRecordSubjects.recordId, ref.id), eq(mailRecordSubjects.basis, "owner_review")));
-    if (!reviewed.length || reviewed.some(row => !row.contactId)) throw new Error("Historical mail ownership requires the owner's verified review before erasure can complete.");
-    if (reviewed.some(row => identity.contactIds.includes(row.contactId!))) result.push(ref);
+    const record = await lockMailRecord(tx, ref.kind, ref.id);
+    if (!record) throw new Error("The original captured mail record is missing. Restore its exact backup before acknowledging erasure.");
+    // Another authorized retention run can finish the personal-field work;
+    // recognizing that fact does not assign historical ownership to anyone.
+    if (record.redactedAt) { ready.push(ref); continue; }
+    if (ref.requiresReview) {
+      const reviewed = await tx.select({ contactId: mailRecordSubjects.contactId }).from(mailRecordSubjects).where(and(eq(mailRecordSubjects.kind, ref.kind), eq(mailRecordSubjects.recordId, ref.id), eq(mailRecordSubjects.basis, "owner_review")));
+      if (!reviewed.length || reviewed.some(row => !row.contactId)) { awaitingReview.push(ref); continue; }
+      if (!reviewed.some(row => identity.contactIds.includes(row.contactId!))) continue;
+      if (reviewed.some(row => !identity.contactIds.includes(row.contactId!))) { awaitingReview.push(ref); continue; }
+    }
     // An explicit review identifying another person is evidence to leave that
     // person's record alone. Today's address match is never such evidence.
+    if (ref.kind === "suppression") {
+      const [current] = await tx.select({ sourceEventId: mailSuppressions.sourceEventId }).from(mailSuppressions).where(eq(mailSuppressions.id, ref.id)).limit(1);
+      if (current?.sourceEventId) {
+        const owners = await tx.select({ contactId: mailRecordSubjects.contactId }).from(mailRecordSubjects).where(and(eq(mailRecordSubjects.kind, "event"), eq(mailRecordSubjects.recordId, current.sourceEventId)));
+        if (!owners.length || owners.some(row => !row.contactId)) { awaitingReview.push(ref); continue; }
+        if (!owners.some(row => identity.contactIds.includes(row.contactId!))) continue;
+        if (owners.some(row => !identity.contactIds.includes(row.contactId!))) { awaitingReview.push(ref); continue; }
+      }
+    }
+    ready.push(ref);
   }
-  return result;
+  return { ready, awaitingReview };
 }
 
 registerContactPrivacySource({
@@ -71,10 +91,13 @@ registerContactPrivacySource({
   exportData: async (tx, contactId) => {
     const refs = await capture(tx, contactId, true), owned = refs.filter(ref => !ref.requiresReview);
     const ids = (kind: MailRecordRef["kind"]) => owned.filter(ref => ref.kind === kind).map(ref => ref.id);
+    const ownEvents = new Set(ids("event"));
     return {
       deliveries: await readChunks(ids("delivery"), async chunk => (await tx.select().from(mailDeliveries).where(inArray(mailDeliveries.id, chunk))).map(row => row.redactedAt ? { id: row.id, status: row.status, provider: row.provider, purpose: row.purpose, redactedAt: row.redactedAt } : publicMailDelivery(row))),
       events: await readChunks(ids("event"), async chunk => (await tx.select({ id: mailProviderEvents.id, provider: mailProviderEvents.provider, recipient: mailProviderEvents.recipient, eventType: mailProviderEvents.eventType, detail: mailProviderEvents.detail, occurredAt: mailProviderEvents.occurredAt, redactedAt: mailProviderEvents.redactedAt }).from(mailProviderEvents).where(inArray(mailProviderEvents.id, chunk))).map(row => row.redactedAt ? { id: row.id, provider: row.provider, eventType: row.eventType, occurredAt: row.occurredAt, redactedAt: row.redactedAt } : row)),
-      suppressions: await readChunks(ids("suppression"), async chunk => (await tx.select().from(mailSuppressions).where(inArray(mailSuppressions.id, chunk))).map(row => row.redactedAt ? { id: row.id, active: row.active, reason: row.reason, provider: row.provider, releasedAt: row.releasedAt, redactedAt: row.redactedAt } : publicMailSuppression(row))),
+      suppressions: await readChunks(ids("suppression"), async chunk => (await tx.select().from(mailSuppressions).where(inArray(mailSuppressions.id, chunk))).map(row => row.sourceEventId && !ownEvents.has(row.sourceEventId)
+        ? { id: row.id, status: "retained", redactedAt: row.redactedAt }
+        : row.redactedAt ? { id: row.id, active: row.active, reason: row.reason, provider: row.provider, releasedAt: row.releasedAt, redactedAt: row.redactedAt } : publicMailSuppression(row))),
       ownershipReviewRequired: refs.filter(ref => ref.requiresReview).length,
     };
   },
@@ -82,9 +105,9 @@ registerContactPrivacySource({
     await fenceLegacyWriters(tx);
     const refs = await capture(tx, contactId);
     if (!refs.length) return { affected: 0 };
-    const known = refs.filter(ref => !ref.requiresReview);
-    const result = await minimizeMailRecordsInTransaction(tx, known, { cancelUnsent: true });
-    const pending = refs.filter(ref => ref.requiresReview || result.pending.some(row => row.kind === ref.kind && row.id === ref.id));
+    const scoped = await resolvedRefs(tx, refs, contactId);
+    const result = await minimizeMailRecordsInTransaction(tx, scoped.ready, { cancelUnsent: true });
+    const pending = refs.filter(ref => scoped.awaitingReview.some(row => row.kind === ref.kind && row.id === ref.id) || result.pending.some(row => row.kind === ref.kind && row.id === ref.id));
     const pendingJobs: string[] = [];
     for (let offset = 0; offset < pending.length; offset += 500) {
       const originalJobId = randomUUID();
@@ -98,11 +121,17 @@ registerContactPrivacySource({
 export async function eraseMailRecords(data: Record<string, unknown>): Promise<{ redacted: number }> {
   const input = erasurePayload.parse(data);
   const result = await db().transaction(async tx => {
-    const { dataRequests } = await import("@/core/privacy/schema");
     const [request] = await tx.select({ contactId: dataRequests.contactId }).from(dataRequests).where(eq(dataRequests.id, input.requestId)).limit(1);
     if (!request) throw new Error("The original mail erasure request is unavailable.");
-    const refs = await resolvedRefs(tx, input.refs, request.contactId);
-    const result = await minimizeMailRecordsInTransaction(tx, refs, { cancelUnsent: true });
+    const [artifact] = await tx.select({ body: dataRequestArtifacts.body }).from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, input.requestId)).limit(1);
+    const receipt = receiptSchema.safeParse(artifact?.body);
+    if (!receipt.success) throw new Error("The original mail erasure receipt is unavailable. Restore its exact backup before retrying.");
+    const outcome = receipt.data.outcomes.find(row => row.scope === MAIL_RECORDS_SCOPE);
+    if (!outcome) throw new Error("The original mail erasure scope is unavailable.");
+    if (outcome.outcome !== "pending" || !outcome.pendingJobs?.includes(input.originalJobId)) return { redacted: 0, pending: [] as MailRecordRef[], reviewPending: false, alreadyHandled: true };
+    await fenceLegacyWriters(tx);
+    const scoped = await resolvedRefs(tx, input.refs, request.contactId), refs = scoped.ready;
+    const result = { ...await minimizeMailRecordsInTransaction(tx, refs, { cancelUnsent: true }), reviewPending: scoped.awaitingReview.length > 0, alreadyHandled: false };
     const deliveries = refs.filter(ref => ref.kind === "delivery").map(ref => ref.id);
     if (deliveries.length) {
       // The delivery lock/minimized marker makes later callbacks minimal at
@@ -117,6 +146,8 @@ export async function eraseMailRecords(data: Record<string, unknown>): Promise<{
     }
     return result;
   });
+  if (result.alreadyHandled) return { redacted: 0 };
+  if (result.reviewPending) throw new Error("Historical mail ownership or its current fact needs verified review before erasure can complete.");
   if (result.pending.length) throw new Error("Unresolved mail delivery or a named hold keeps this erasure receipt pending.");
   await completeErasureJob.call({ requestId: input.requestId, scope: MAIL_RECORDS_SCOPE, jobId: input.originalJobId }, { kind: "system" });
   return { redacted: result.redacted };

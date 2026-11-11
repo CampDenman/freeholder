@@ -20,11 +20,14 @@ export default async function MailOwnershipPage({ searchParams }: { searchParams
     getLocale(),
   ]);
   const choices = selected && people && !people.rows.some(person => person.id === selected.id) ? [selected, ...people.rows] : people?.rows ?? [];
+  const canReview = actor.kind === "user" && Boolean(actor.security?.stepUpValid);
+  const reviewPath = `/admin/retention/mail${selected ? `?contactId=${encodeURIComponent(selected.id)}` : ""}`;
   const date = (value: Date) => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(value);
   return <div className="grid gap-6">
     <div><h1 className="text-xl font-bold">{t("admin.retention.mail.title")}</h1><p className="mt-2 max-w-prose text-sm text-ink-muted">{t("admin.retention.mail.intro")}</p></div>
     {query.saved ? <p role="status">{t("admin.retention.mail.saved")}</p> : null}
     {query.error ? <p role="alert" className="text-danger">{t("admin.retention.mail.failed")}</p> : null}
+    {!canReview ? <a className="text-sm underline" href={`/security/verify?returnTo=${encodeURIComponent(reviewPath)}`}>{t("security.verify.title")}</a> : null}
     <form method="get" className="grid gap-3 sm:grid-cols-2">
       {selected ? <input type="hidden" name="contactId" value={selected.id} /> : null}
       <Field label={t("admin.retention.mail.address")} htmlFor="mail-recipient"><Input id="mail-recipient" name="recipient" type="email" defaultValue={query.recipient} /></Field>
@@ -43,7 +46,7 @@ export default async function MailOwnershipPage({ searchParams }: { searchParams
           </Field>
           <Field label={t("admin.retention.mail.evidence")} htmlFor={`mail-evidence-${record.id}`}><textarea id={`mail-evidence-${record.id}`} name="evidence" required minLength={20} maxLength={4000} rows={3} className="w-full min-w-0 rounded-md border border-rule bg-field p-2" /></Field>
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" name="confirmation" value="VERIFIED" required className="mt-1" /><span>{t("admin.retention.mail.confirm")}</span></label>
-          <Button type="submit">{t("admin.retention.mail.review")}</Button>
+          <Button type="submit" disabled={!canReview}>{t("admin.retention.mail.review")}</Button>
         </form>
       </CardBody>
     </Card>)}

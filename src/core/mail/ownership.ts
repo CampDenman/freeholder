@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.31: explicit mail-to-spine ownership; no address-only second customer list.
-import { and, asc, eq, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
@@ -16,7 +16,7 @@ export async function lockMailRecord(tx: Tx, kind: MailRecordKind, recordId: str
   if (kind === "event") { const [row] = await tx.select().from(mailProviderEvents).where(eq(mailProviderEvents.id, recordId)).limit(1).for("update"); return row ? { email: row.recipient, redactedAt: row.redactedAt } : null; }
   const [row] = await tx.select().from(mailSuppressions).where(eq(mailSuppressions.id, recordId)).limit(1).for("update"); return row ? { email: row.email, redactedAt: row.redactedAt } : null;
 }
-export async function bindMailRecord(tx: Tx, kind: MailRecordKind, recordId: string, source: { email?: string; at?: Date; contactId?: string; parent?: { kind: MailRecordKind; id: string } }): Promise<void> {
+export async function bindMailRecord(tx: Tx, kind: MailRecordKind, recordId: string, source: { email?: string; contactId?: string; parent?: { kind: MailRecordKind; id: string } }): Promise<void> {
   await lockContactIdentityForRead(tx);
   if (!await lockMailRecord(tx, kind, recordId)) throw new ServiceError("not_found", "That mail record is not here.");
   let ids: string[];
@@ -29,7 +29,10 @@ export async function bindMailRecord(tx: Tx, kind: MailRecordKind, recordId: str
     const [row] = await tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.id, source.contactId)).limit(1);
     ids = row ? [row.id] : [];
   } else if (source.email) {
-    const rows = await tx.select({ id: contacts.id }).from(contacts).where(and(eq(contacts.email, source.email.trim().toLowerCase()), lte(contacts.createdAt, source.at ?? new Date()))).limit(1);
+    // This path is for a newly staged delivery. Historical/provider facts
+    // require their immutable parent, never a creation-date/address guess.
+    if (kind !== "delivery") throw new ServiceError("conflict", "Historical mail ownership requires its original delivery or verified review.");
+    const rows = await tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.email, source.email.trim().toLowerCase())).limit(1);
     ids = rows.map(row => row.id);
   } else ids = [];
   const existing = await tx.select({ contactId: mailRecordSubjects.contactId }).from(mailRecordSubjects).where(and(eq(mailRecordSubjects.kind, kind), eq(mailRecordSubjects.recordId, recordId)));

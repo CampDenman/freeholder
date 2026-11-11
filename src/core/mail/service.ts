@@ -1389,6 +1389,7 @@ export const releaseMailSuppression = defineService({
   input: z.object({ email: address, confirmation: z.string() }),
   output: mailSuppressionRow,
   handler: async (input, ctx) => {
+    if (ctx.actor.kind !== "user") throw new ServiceError("permission", "Sign in as a person to independently verify and release an address block.");
     refuseAgent(ctx.actor, "release");
     if (input.confirmation !== input.email) {
       throw new ServiceError("validation", "Type the exact email address to release it.");
@@ -1469,7 +1470,7 @@ export const recordMailProviderEvent = defineService({
     const providerRefDigest = input.providerRef ? receipts.digest(`provider:${input.provider}`, input.providerRef) : undefined;
     const [delivery] = input.providerRef
       ? await ctx.tx
-          .select({ id: mailDeliveries.id, redactedAt: mailDeliveries.redactedAt })
+          .select({ id: mailDeliveries.id, recipient: mailDeliveries.recipient, recipientDigest: mailDeliveries.recipientDigest, redactedAt: mailDeliveries.redactedAt })
           .from(mailDeliveries)
           .where(
             and(
@@ -1479,6 +1480,9 @@ export const recordMailProviderEvent = defineService({
           )
           .limit(1)
       : [];
+    if (delivery && (delivery.recipientDigest ?? receipts.digest("address", delivery.recipient)) !== recipientDigest) {
+      throw new ServiceError("conflict", "The provider callback recipient does not match its original delivery receipt.");
+    }
     const occurredAt = new Date(input.occurredAt);
     const [priorMinimized] = await ctx.tx.execute<{ present: boolean }>(sql`select exists(
       select 1 from ${mailDeliveries} where ${mailDeliveries.recipientDigest}=${recipientDigest} and ${mailDeliveries.redactedAt} is not null
@@ -1493,7 +1497,7 @@ export const recordMailProviderEvent = defineService({
         externalEventDigest: receipts.digest(`event:${input.provider}`, input.externalEventId),
         providerRefDigest,
         deliveryId: delivery?.id,
-        redactedAt: priorMinimized?.present ? new Date() : null,
+        redactedAt: delivery ? delivery.redactedAt : priorMinimized?.present ? new Date() : null,
         occurredAt,
       })
       .onConflictDoNothing()
@@ -1501,7 +1505,9 @@ export const recordMailProviderEvent = defineService({
     if (!event) {
       return { duplicate: true } as const;
     }
-    await bindMailRecord(ctx.tx, "event", event.id, { email: input.recipient, at: occurredAt, ...(delivery ? { parent: { kind: "delivery", id: delivery.id } } : {}) });
+    // Today's owner of an address is not proof of who owned an unregistered
+    // historical send. Only its original delivery supplies automatic lineage.
+    if (delivery) await bindMailRecord(ctx.tx, "event", event.id, { parent: { kind: "delivery", id: delivery.id } });
     const status =
       input.eventType === "delivered"
         ? "delivered"

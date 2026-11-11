@@ -8,8 +8,11 @@ private HMAC receipts, statement-before-row stale-writer fences, immutable
 contact ownership, nullable metadata cleanup, holds and original pending receipt
 form one boundary. Actual peer failures cover callback resurrection, uncertain
 derived physical attempts, hidden retained block exports and stale snapshot
-writes. Latest mail/populated-upgrade23 and preceding combined routing/privacy44,
-SDK8, audit labels7 and first four locale owner-browser journeys passed. Final
+writes. Actual combined routing/privacy/populated-upgrade53 plus two system-refusal
+controls passed. Address reassignment, current supporting-fact ownership and
+original pending job identities are separate; completed replays are no-ops and
+missing originals require exact backup. Earlier SDK8, audit7 and four locale
+owner-browser journeys passed. Final
 composed artifact/browser/protected qualification is pending. Required enabled
 SMTP/transactional physical-dispatch recovery continues separately without
 inventing old route/attempt facts or clearing unknowns on elapsed time. All live

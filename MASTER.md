@@ -5810,9 +5810,12 @@ deployments are portable, testable and incapable of silently forking the truth.
   anonymization and merge/undo. Unresolved sends and uncertain ownership keep
   erasure pending. Fresh human attribution lives at `/admin/retention/mail`.
   `deploy/mail-record-retention.md` names the model, breaking writer fence and
-  exact-backup recovery. Actual latest mail/populated-upgrade qualification
-  passed23 controls; preceding combined routing/privacy44, SDK8, audit labels7,
-  first artifact scrub and four locale owner-browser journeys passed. Final
+  exact-backup recovery. Actual combined mail routing/privacy/populated-upgrade qualification
+  passed53 controls, plus two background-system refusal controls after the
+  human-only guard. Address generations and original pending receipts remain
+  separate; current-fact ownership prevents cross-holder erasure or export.
+  Earlier SDK8, audit labels7, first artifact scrub and four locale owner-browser
+  journeys passed. Final
   composed build/browser/protected integration remains in progress. Required
   enabled transactional/SMTP per-dispatch provenance and unknown-outcome
   recovery (C11.08) continue as a separate source increment; no old account or

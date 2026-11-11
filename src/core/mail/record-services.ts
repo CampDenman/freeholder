@@ -43,6 +43,8 @@ export const reviewLegacyMailOwnership = defineService({
   auditInputFields: ["kind", "id"],
   output: z.object({ ok: z.literal(true) }),
   handler: async (input, ctx) => {
+    const actor = ctx.actor;
+    if (actor.kind !== "user") throw new ServiceError("permission", "Sign in as a person to verify historical mail ownership.");
     await lockContactIdentityForRead(ctx.tx);
     const contact = z.object({ id: z.uuid() }).nullable().parse(await ctx.call(getService("contacts.get"), { id: input.contactId }));
     if (!contact) throw new ServiceError("not_found", "That contact is not here.");
@@ -50,7 +52,7 @@ export const reviewLegacyMailOwnership = defineService({
     if (!row || row.redactedAt || row.email !== input.expectedRecipient) throw new ServiceError("conflict", "This mail record changed. Reload it and verify the original ownership before retrying.");
     const [bound] = await ctx.tx.select({ id: mailRecordSubjects.id }).from(mailRecordSubjects).where(and(eq(mailRecordSubjects.kind, input.kind), eq(mailRecordSubjects.recordId, input.id), isNotNull(mailRecordSubjects.contactId))).limit(1);
     if (bound) throw new ServiceError("conflict", "This record already has established ownership. Review that history instead of assigning another person.");
-    await ctx.tx.insert(mailRecordSubjects).values({ kind: input.kind, recordId: input.id, contactId: input.contactId, basis: "owner_review", verifiedBy: ctx.actor.kind === "user" ? ctx.actor.userId : null, evidenceDigest: receipts.digest("ownership-evidence", JSON.stringify({ kind: input.kind, id: input.id, recipient: input.expectedRecipient, contactId: input.contactId, evidence: input.evidence, actor: ctx.actor.kind === "user" ? ctx.actor.userId : ctx.actor.kind })) });
+    await ctx.tx.insert(mailRecordSubjects).values({ kind: input.kind, recordId: input.id, contactId: input.contactId, basis: "owner_review", verifiedBy: actor.userId, evidenceDigest: receipts.digest("ownership-evidence", JSON.stringify({ kind: input.kind, id: input.id, recipient: input.expectedRecipient, contactId: input.contactId, evidence: input.evidence, actor: actor.userId })) });
     ctx.setSubject("mail_record", input.id);
     return { ok: true as const };
   },
