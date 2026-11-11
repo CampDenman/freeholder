@@ -3,9 +3,9 @@
 
 This is implementation and qualification evidence. `MASTER.md` §43 remains
 the delivery authority. C3.22, C3.46 and C3.47 remain unchecked. The local
-implementation is unfinished and migration 73 is not journalled: migration 72
-must be integrated first. Nothing here authorizes release, deployment or a
-stable announcement.
+implementation is under qualification. Migration 73 is journalled immediately
+after the merged mail-recovery migration 72; the source branch is based on
+`dba1b242`. Nothing here authorizes release, deployment or a stable announcement.
 
 The initial adapter indexes an original WXR file into normalized source entry,
 batch and shared media tables. Original private chunks preserve the immutable
@@ -79,7 +79,10 @@ replacement comments keep their existing privacy-controlled cutover checkpoint.
   after correctly reversing all 501 posts, authors and terms, then correctly
   preserved that original default index. The fixture now explicitly removes
   its synthetic default first so it exercises an import-created index; that
-  final ownership variant still requires its own completed rerun.
+  corrected ownership variant and the populated 72→73 admission fixture then
+  both passed in 51.24 seconds. That fixture preserves ordinary previews and
+  retained manifests and proves the new database trigger rejects unguarded
+  old root and child writes; it is not an old application image boot.
 - Current pure WordPress/index/i18n checks passed 99 cases. These overlap earlier
   parser checks and are not an additional combined total. SDK regeneration
   passed eight inventory controls before the latest review/manifest additions;
@@ -88,15 +91,45 @@ replacement comments keep their existing privacy-controlled cutover checkpoint.
 - The first composed production build passed with 20,362 files and 243,484,458
   artifact bytes. The standalone scrub reported no source/environment leakage.
   This is preparation for browser qualification, not deployment acceptance.
+- The English production-browser journey passed in 59.5 seconds after the
+  fixture awaited actual bounded RPC receipts. It covers keyboard pause,
+  interrupted request, reload, identical-source restore, a renamed cross-batch
+  link, publication and complete reversal of 501 pages, plus both-theme mobile
+  accessibility and overflow checks. Spanish, French and Arabic subsequently
+  all passed in 3.8 minutes against the same production artifact and schema,
+  including Arabic RTL. The browser fixture waits for each real phase receipt
+  before inspecting its next control or beginning another locale.
+- A real older production artifact from the mail-72 worktree then passed the
+  opt-in HTTP writer probe in 4.55 seconds. An ordinary finite import committed;
+  graph-root and private-child commit and rollback requests all failed at the
+  database's SQLSTATE 55000 guard and preserved their original statuses and all
+  CMS pages. This is an older artifact compatibility probe, not a reproducible
+  source-attested `dba1b242` image: that worktree's head was `6dabec18`, before
+  the held-member fix. The disposable server was stopped and its database had
+  no active writers before the shared PostgreSQL slot was returned.
+
+The opt-in older-artifact fixture is `tests/fixtures/import-old-image.probe.ts`.
+After the ordinary browser owner fixture exists in an explicitly named test
+database, boot an older standalone build on a separate localhost port with
+workers and migration disabled. Set `TEST_DATABASE_URL`, `APP_URL`, the matching
+test `SESSION_SECRET`, and `FREEHOLDER_OLD_IMPORT_IMAGE_URL`, then run
+`node tests/fixtures/run-import-old-image-probe.mjs`. It adds isolated proof
+imports and a fixture-owner session without truncating the database. Never
+point this fixture or its older application at a real instance.
 
 ## Work still required
 
-The expanded media/choice implementation needs its final complete native rerun,
-including the real-post ownership rollback control. The four-locale actual
-browser journey is written but has not run. Browser qualification, the final
-production candidate, populated 72→73 rehearsal and protected checks remain
-required. Other source adapters must receive the durable
-continuation contract; the WXR vertical alone does not complete C3.22.
+Final protected checks remain required. Local typecheck, lint, license,
+changeset and plan checks pass; the 42-file static contract run passed 380
+cases with one documented exclusion. The final authority/matrix/encoding
+documentation checks subsequently passed all 26 cases.
+An initial sandboxed rerun was invalidated by nested git/listen EPERM errors;
+the affected checks were rerun with those local capabilities and passed.
+The native suite's corrected real-post ownership control and populated 72→73
+fixture have passed; earlier failures above remain recorded to distinguish
+fixture corrections from green evidence. Other source adapters must receive
+the durable continuation contract; the WXR vertical alone does not complete
+C3.22.
 
 Core media's physical PUT ownership has five genuine before failures in the
 separate primitive lane. A successful physical write followed by a lost Asset

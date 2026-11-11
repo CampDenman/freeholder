@@ -6197,14 +6197,16 @@ deployments are portable, testable and incapable of silently forking the truth.
   500 entries through review, interrupted resume, publication and rollback;
   parser-only counts or a larger synchronous limit do not complete this item.
   This splits a required delivery portion from C3.22; both remain open until
-  their complete source and acceptance criteria pass. Migration 73 is reserved
-  after mail recovery 72; no migration journal gap may be queued.
+  their complete source and acceptance criteria pass. Migration 73 follows
+  merged mail recovery 72 in the contiguous journal.
   *(Update 2026-11-11: local WXR qualification now includes an actual 501-page
   publication/rollback with two independent indexing processes, identical-source
   restore after a committed batch, global media receipt recovery and nested
-  cross-batch menu publication. The expanded implementation, resource/authority
-  boundaries, other source adapters, privacy/holds, browser and upgrade gates
-  remain under qualification. Physical media PUT and original storage namespace
+  cross-batch menu publication. Local resource/authority, privacy/hold,
+  populated-upgrade and four-locale owner browser controls pass for this WXR
+  slice, including an older artifact's HTTP writer refusal. Other durable source
+  adapters, historical reader ownership, actual cutover and protected checks
+  remain required. Physical media PUT and original storage namespace
   recovery are separate required dependencies. Source/evidence:
   `deploy/import-source-graph.md`; no completion or release claim.)*
 
