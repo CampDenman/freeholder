@@ -912,7 +912,7 @@ export function wordpressItemPlacement(item: Pick<WordpressItem, "url" | "slug" 
   return { sourcePath, slug: sourcePath !== null ? toCmsSlug(sourcePath) : item.kind === "post" ? `blog/${(wpSlug.split("/").at(-1) ?? wpSlug) || "post"}` : wpSlug };
 }
 
-export function planWordpressImport(exported: WordpressExport, origin: string): WordpressPlan {
+export function planWordpressImport(exported: WordpressExport, origin: string, indexedImages: ReadonlyArray<{ src: string; wpId?: string }> = [], indexedTargets: ReadonlyArray<Pick<WordpressItem, "wpId" | "title">> = []): WordpressPlan {
   const hosts = siteHosts(origin, exported.site);
   const basePath = sitePath(exported.site, origin);
   const report: WordpressPlan["report"] = {
@@ -961,6 +961,21 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
     }
     return undefined;
   };
+  const referenceImage = (ref: { src: string; wpId?: string }) => {
+    const found = findMedia(ref.src, ref.wpId);
+    if (found) { found.referenced = true; return; }
+    if (!ref.src) return;
+    let host = "";
+    try { host = new URL(ref.src, `https://${hosts[0] ?? "invalid.invalid"}/`).host.toLowerCase(); } catch { /* An invalid URL is reported below. */ }
+    const absolute = (() => { try { return new URL(ref.src, `https://${hosts[0] ?? "invalid.invalid"}/`).href; } catch { return ref.src; } })();
+    if (hosts.includes(host)) {
+      const added = addMedia(absolute);
+      if (added) added.referenced = true;
+    } else if (!report.externalImages.includes(absolute)) report.externalImages.push(absolute);
+  };
+  // These references come from the verified original entry index. They let
+  // the durable planner resolve attachments before any page batch is emitted.
+  for (const ref of indexedImages) referenceImage(ref);
 
   // Pages and posts: final slugs, unique within the import.
   const used = new Set<string>();
@@ -984,31 +999,7 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
     if (item.wpId) wpIdToSlug.set(item.wpId, slug);
 
     for (const ref of bodyImageRefs(item.body)) {
-      const found = findMedia(ref.src, ref.wpId);
-      if (found) {
-        found.referenced = true;
-        continue;
-      }
-      if (!ref.src) continue;
-      let host = "";
-      try {
-        host = new URL(ref.src, `https://${hosts[0] ?? "invalid.invalid"}/`).host.toLowerCase();
-      } catch {
-        /* Unparseable sources are external by definition. */
-      }
-      const absolute = (() => {
-        try {
-          return new URL(ref.src, `https://${hosts[0] ?? "invalid.invalid"}/`).href;
-        } catch {
-          return ref.src;
-        }
-      })();
-      if (hosts.includes(host)) {
-        const added = addMedia(absolute);
-        if (added) added.referenced = true;
-      } else if (!report.externalImages.includes(absolute)) {
-        report.externalImages.push(absolute);
-      }
+      referenceImage(ref);
     }
     let featuredMedia: string | undefined;
     const featured = item.featuredWpId
@@ -1116,7 +1107,7 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
       let query = "", fragment = "";
       try { if (sourceHref) { const url = new URL(sourceHref, origin); query = url.search; fragment = url.hash; } } catch { /* Invalid source address stays unresolved. */ }
       if (item.type === "post_type" && item.objectId) {
-        const target = exported.items.find(candidate => candidate.wpId === item.objectId);
+        const target = exported.items.find(candidate => candidate.wpId === item.objectId) ?? indexedTargets.find(candidate => candidate.wpId === item.objectId);
         planned.push({ label: item.label || target?.title || "", depth, targetWpId: item.objectId, note: target ? undefined : "target not in this export", ...(fragment ? { fragment } : {}) });
       } else if (item.type === "taxonomy") {
         const slug = item.objectId ? (item.object === "category" ? exported.taxonomyIds?.categories[item.objectId] : item.object === "post_tag" ? exported.taxonomyIds?.tags[item.objectId] : undefined) : undefined;

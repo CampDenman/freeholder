@@ -9,10 +9,11 @@ import { importRuns, importSourceEntries, importSourceGraphs } from "@/core/plug
 import { actorString, defineService, ServiceError } from "@/core/service";
 import { makeRetainedImportSource, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
 import { assertSourceStageable } from "./source-lifecycle";
-import { wxrIndexCursorSchema, wxrIndexedEntrySchema } from "./wxr-index";
+import { wxrIndexCursorSchema, wxrIndexedEntrySchema, wxrHeaderMetadataSchema } from "./wxr-index";
 import { assertCurrentImportAuthority } from "./authority";
 import { markImportGraphWriter } from "./graph-writer";
 import { importGraphVersionSchema } from "./graph-version";
+import { archivePreviewDigest } from "./archive-plan";
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? { ...value as Record<string, unknown> } : {};
 const uploadSchema = z.object({ uploadId: z.uuid(), filename: z.string(), bytes: z.number().int().positive(), chunkBytes: z.number().int().positive(), digests: z.record(z.string(), z.string()), received: z.array(z.number().int().nonnegative()), expiresAt: z.iso.datetime() });
@@ -63,7 +64,7 @@ export const applyWxrIndex = defineService({
   name: "imports.applySourceGraphIndex", orchestratedBy: "imports.previewFromUpload",
   summary: "Atomically accept a verified source-index phase and release its exact lease.",
   kind: "mutation", permission: "scoped", external: false, auditInputFields: ["id", "graphId", "done"],
-  input: z.object({ id: z.uuid(), graphId: z.uuid(), generation: z.uuid(), leaseToken: z.uuid(), source: retainedImportSourceSchema, previous: wxrIndexCursorSchema, cursor: wxrIndexCursorSchema, entries: wxrIndexedEntrySchema.array().max(500), done: z.boolean() }),
+  input: z.object({ id: z.uuid(), graphId: z.uuid(), generation: z.uuid(), leaseToken: z.uuid(), source: retainedImportSourceSchema, previous: wxrIndexCursorSchema, cursor: wxrIndexCursorSchema, entries: wxrIndexedEntrySchema.array().max(500), done: z.boolean(), headerMetadata: wxrHeaderMetadataSchema }),
   output: reply,
   handler: async (input, ctx) => {
     await assertCurrentImportAuthority(ctx, "imports.previewFromUpload");
@@ -73,6 +74,7 @@ export const applyWxrIndex = defineService({
     const [graph] = await ctx.tx.select().from(importSourceGraphs).where(and(eq(importSourceGraphs.id, input.graphId), eq(importSourceGraphs.runId, input.id))).limit(1).for("update");
     const retained = run && retainedSourceFromRun(run), binding = bindingSchema.safeParse(object(run?.checkpoint).sourceGraph);
     if (!run || run.status !== "discover" || !graph || graph.state !== "indexing" || graph.generation !== input.generation || graph.leaseToken !== input.leaseToken || graph.leaseActor !== actorString(ctx.actor) || !graph.leaseUntil || graph.leaseUntil.getTime() <= Date.now() || !binding.success || binding.data.id !== graph.id || binding.data.generation !== graph.generation || retained?.uploadId !== input.source.uploadId || retained.revision !== input.source.revision || retained.expiresAt !== input.source.expiresAt || Date.parse(retained.expiresAt) <= Date.now() || graph.sourceRevision !== input.source.revision || JSON.stringify(wxrIndexCursorSchema.parse(graph.cursor)) !== JSON.stringify(input.previous)) throw new ServiceError("conflict", "This source phase lost its original source, caller or lease. Reload before retrying.");
+    if (Buffer.byteLength(JSON.stringify(input.headerMetadata)) > 1024 * 1024 || (Object.keys(object(graph.headerMetadata)).length && archivePreviewDigest(graph.headerMetadata) !== archivePreviewDigest(input.headerMetadata))) throw new ServiceError("conflict", "The original source header metadata changed or exceeds its graph budget.");
     let next = input.previous.ordinal, end = input.previous.nextByte;
     let bodyBytes = input.previous.bodyBytes, metadataBytes = input.previous.metadataBytes;
     for (const entry of input.entries) {
@@ -94,7 +96,7 @@ export const applyWxrIndex = defineService({
       return { graphId: graph.id, ordinal: entry.ordinal, sourceIdentity: entry.identity, kind: entry.kind, startByte: entry.start, endByte: entry.end, digest: entry.digest, metadata: entry.metadata, bodyBytes: entry.bodyBytes, targetSlug };
     });
     if (rows.length) await ctx.tx.insert(importSourceEntries).values(rows);
-    await ctx.tx.update(importSourceGraphs).set({ cursor: input.cursor, state: input.done ? "indexed" : "indexing", leaseToken: null, leaseActor: null, leaseUntil: null, updatedAt: new Date() }).where(eq(importSourceGraphs.id, graph.id));
+    await ctx.tx.update(importSourceGraphs).set({ cursor: input.cursor, headerMetadata: input.headerMetadata, state: input.done ? "indexed" : "indexing", leaseToken: null, leaseActor: null, leaseUntil: null, updatedAt: new Date() }).where(eq(importSourceGraphs.id, graph.id));
     const counts = await ctx.tx.select({ kind: importSourceEntries.kind, total: sql<number>`count(*)::int` }).from(importSourceEntries).where(eq(importSourceEntries.graphId, graph.id)).groupBy(importSourceEntries.kind);
     const total = (kind: string) => counts.find(row => row.kind === kind)?.total ?? 0;
     const summary = { indexed: input.cursor.ordinal, pages: total("page"), posts: total("post"), media: total("attachment"), menus: total("menu"), skipped: total("skipped") };

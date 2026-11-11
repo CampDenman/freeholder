@@ -48,11 +48,13 @@ import { approvedMediaOrigins, approvedMediaOriginsSchema, allowedMediaOrigins }
 import { parseGenericFeed } from "./generic-feed";
 import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
 import importMediaReceiptServices, { bindImportMediaBytes, claimImportMedia } from "./media-receipts";
-import { assertImportBatchAccess, isPrivateImportBatch, callImportService, currentImportBatch, importBatchTargets, lockImportBatchParent, recordImportBatchTarget } from "./batch-context";
+import { assertImportBatchAccess, isPrivateImportBatch, callImportService, currentImportBatch, importBatchTargets, importBatchSharedMedia, lockImportBatchParent, recordImportBatchTarget, recordImportBatchMedia } from "./batch-context";
 import graphBatchServices, { advanceGraphCommit } from "./graph-batches";
 import { advanceGraphLifecycle } from "./graph-lifecycle";
 import { importGraphVersionSchema } from "./graph-version";
 import graphQueryServices from "./graph-query";
+import { reviewGraphConflicts } from "./graph-review";
+import { graphVerificationWindow } from "./graph-verification";
 import {
   discoverFromPublicOrigin,
   parseSitemap,
@@ -547,7 +549,7 @@ const commitSource = defineService({
     const archive = archiveCommitSource(run);
     if (run.kind === "archive" && !archive) throw new ServiceError("conflict", "Upload and preview a ZIP before committing this archive import.");
     const done = new Set(
-      mediaRecordsFrom(run.checkpoint)
+      [...mediaRecordsFrom(run.checkpoint), ...await importBatchSharedMedia(ctx)]
         .filter((record) => record.assetId)
         .map((record) => record.key),
     );
@@ -581,6 +583,7 @@ const recordImportMedia = defineService({
   }),
   output: z.object({ ok: z.literal(true) }),
   handler: async (input, ctx) => {
+    await lockImportBatchParent(ctx, input.id);
     const [run] = await ctx.tx
       .select()
       .from(importRuns)
@@ -599,6 +602,7 @@ const recordImportMedia = defineService({
     const mediaClaims = z.array(z.object({ key: z.string(), token: z.uuid() }).passthrough()).parse(checkpointOf(run.checkpoint).mediaClaims ?? []);
     if (!mediaClaims.some(claim => claim.key === input.key && claim.token === input.claimToken)) throw new ServiceError("conflict", "This import file claim was replaced.");
     const records = allRecords.filter((record) => record.key !== input.key);
+    await recordImportBatchMedia(ctx, input.key, { assetId: input.assetId, error: input.error });
     records.push({
       key: input.key,
       sourceUrl: planned.sourceUrl,
@@ -751,8 +755,8 @@ const commitApply = defineService({
     if (archive) archiveCommitSource(before);
     const typedContent = Boolean(wordpress || nonWordpress);
     const decisions = conflictDecisions(before.conflicts);
-    const candidateSlugs = [...new Set([...staged.map(page => cmsSlug(page.slug)), ...[...decisions.values()].flatMap(decision => decision.renamedSlug ? [cmsSlug(decision.renamedSlug)] : []), "blog", ""])];
-    const existing = listedCmsPages(await callImportService(ctx, getService("cms.listPages"), currentImportBatch() ? { slugs: candidateSlugs } : {}));
+    const candidateSlugs = [...new Set([...staged.map(page => cmsSlug(page.slug)), ...(currentImportBatch(before.id) ? staged.flatMap(page => page.redirectFrom && page.redirectFrom.length <= 2_048 ? [page.redirectFrom] : []) : []), ...[...decisions.values()].flatMap(decision => decision.renamedSlug ? [cmsSlug(decision.renamedSlug)] : []), "blog", ""])];
+    const existing = listedCmsPages(await callImportService(ctx, getService("cms.listPages"), currentImportBatch(before.id) ? { slugs: candidateSlugs } : {}));
     const bySlug = new Map(existing.map((page) => [page.slug, page]));
     const used = new Set(bySlug.keys());
 
@@ -837,7 +841,14 @@ const commitApply = defineService({
 
     // Typed bodies share media/link conversion, without inventing WordPress
     // author, taxonomy, feed, query-ID or comment records for a static export.
-    const records = mediaRecordsFrom(before.checkpoint);
+    const ownedRecords = mediaRecordsFrom(before.checkpoint);
+    const sharedRecords = (await importBatchSharedMedia(ctx)).filter(record => wordpress?.media.some(media => media.key === record.key));
+    for (const record of sharedRecords) {
+      if (!record.assetId) throw new ServiceError("conflict", "Finish restoring the shared source media before creating page drafts.");
+      const asset = z.object({ status: z.string() }).parse(await callImportService(ctx, getService("media.get"), { id: record.assetId }));
+      if (asset.status !== "ready") throw new ServiceError("conflict", "A shared source file is no longer ready.");
+    }
+    const records = [...ownedRecords, ...sharedRecords];
     const assetByKey = new Map(
       records.filter((record) => record.assetId).map((record) => [record.key, record.assetId!]),
     );
@@ -1135,7 +1146,7 @@ const commitApply = defineService({
     }));
 
     const commentsStaged = pendingBlogPosts.reduce((total, post) => total + post.comments.length, 0);
-    const mediaImported = records.filter((record) => record.assetId).length;
+    const mediaImported = ownedRecords.filter((record) => record.assetId).length;
     const mediaFailures = records.filter((record) => !record.assetId);
     const report = wordpress
       ? {
@@ -1215,18 +1226,18 @@ const commitApply = defineService({
         ...landed.flatMap(({ page, slug }) => page.wpId ? ["p", "page_id"].flatMap(key => ["", "index.php"].map(root => ({ fromPath: `${root}?${key}=${page.wpId}`, toPath: slug }))) : []),
       ],
       menus,
-      menuPagePaths: [...new Set(placements.map(placement => placement.slug))],
+      menuPagePaths: [...new Set([...placements.map(placement => placement.slug), ...(currentImportBatch(before.id)?.kind === "navigation" ? globalTargets.map(target => target.targetSlug) : [])])],
       ...(blogIndexPageId ? { blogIndexPageId } : {}),
       ...(report ? { report } : {}),
     });
     await releaseImportSources(ctx, before, checkpoint);
     const [row] = await ctx.tx
       .update(importRuns)
-      .set({ status: "committed", checkpoint, counts, preview: stripReaderCopies(before.preview) })
+      .set({ status: "committed", checkpoint, counts, preview: currentImportBatch(before.id) ? { sourceFormat: "durable-source-batch", version: 1 } : stripReaderCopies(before.preview) })
       .where(eq(importRuns.id, input.id))
       .returning();
     ctx.setSubject("import_run", row!.id);
-    ctx.queueEvent("import.committed", { id: row!.id });
+    if (!currentImportBatch(before.id)) ctx.queueEvent("import.committed", { id: row!.id });
     return publicImportRun(row!);
   },
 });
@@ -1405,11 +1416,11 @@ export const rollbackImport = defineService({
     await releaseImportSources(ctx, before, next);
     const [row] = await ctx.tx
       .update(importRuns)
-      .set({ status: "rolled_back", checkpoint: next, preview: stripReaderCopies(before.preview) })
+      .set({ status: "rolled_back", checkpoint: next, preview: currentImportBatch(before.id) ? { sourceFormat: "durable-source-batch", version: 1 } : stripReaderCopies(before.preview) })
       .where(eq(importRuns.id, input.id))
       .returning();
     ctx.setSubject("import_run", row!.id);
-    ctx.queueEvent("import.rolledBack", { id: row!.id });
+    if (!currentImportBatch(before.id)) ctx.queueEvent("import.rolledBack", { id: row!.id });
     return publicImportRun(row!);
   },
 });
@@ -1464,16 +1475,21 @@ export const reviewImportConflicts = defineService({
   permission: "scoped",
   input: z.object({
     id: z.string().uuid(),
+    graph: importGraphVersionSchema.optional(),
     conflicts: z.array(
       z.object({
         slug: z.string(),
         resolution: z.enum(["keep-existing", "replace", "rename"]),
         renamedSlug: z.string().optional(),
       }),
-    ),
+    ).max(500),
   }),
   output: runRow,
   handler: async (input, ctx) => {
+    const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
+    if (!before) throw new ServiceError("not_found", "No such import run.");
+    if (isPrivateImportBatch(before)) throw new ServiceError("not_found", "No such import run.");
+    if (checkpointOf(before.checkpoint).sourceGraph) return reviewGraphConflicts(ctx, before, input.graph, input.conflicts);
     const [row] = await ctx.tx
       .update(importRuns)
       .set({ conflicts: input.conflicts })
@@ -1688,7 +1704,7 @@ export const publishImport = defineService({
       .where(eq(importRuns.id, input.id))
       .returning();
     ctx.setSubject("import_run", row!.id);
-    ctx.queueEvent("import.published", { id: row!.id });
+    if (!currentImportBatch(before.id)) ctx.queueEvent("import.published", { id: row!.id });
     return publicImportRun(row!);
   },
 });
@@ -1897,14 +1913,15 @@ export const previewFromUrl = defineOrchestratedService({
 export const wordpressVerificationPlan = defineService({
   name: "imports.wordpressVerificationPlan",
   summary: "A read-only URL and metadata acceptance manifest for a committed WordPress migration; unresolved source features remain explicit.",
-  kind: "query", permission: "scoped", input: z.object({ id: uuid }),
-  output: z.object({ sourceOrigin: z.string(), status: z.string(), checks: z.array(z.object({ sourceUrl: z.string(), requestPath: z.string(), destinationPath: z.string(), redirect: z.boolean(), expected: z.record(z.string(), z.unknown()) })), warnings: z.array(z.string()) }),
+  kind: "query", permission: "scoped", input: z.object({ id: uuid, afterOrdinal: z.number().int().min(-1).max(9_999).default(-1), limit: z.number().int().min(1).max(50).default(50) }),
+  output: z.object({ sourceOrigin: z.string(), status: z.string(), checks: z.array(z.object({ sourceUrl: z.string(), requestPath: z.string(), destinationPath: z.string(), redirect: z.boolean(), expected: z.record(z.string(), z.unknown()) })), warnings: z.array(z.string()), nextOrdinal: z.number().int().nonnegative().nullable().optional() }),
   handler: async (input, ctx) => {
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!run) throw new ServiceError("not_found", "No such import run.");
-    assertImportBatchAccess(run);
     if (!run.kind?.startsWith("wordpress-")) throw new ServiceError("validation", "URL acceptance manifests apply to WordPress imports.");
+    if (isPrivateImportBatch(run)) throw new ServiceError("not_found", "No such import run.");
     const checkpoint = checkpointOf(run.checkpoint);
+    if (checkpoint.sourceGraph) return graphVerificationWindow(ctx, run, input.afterOrdinal, input.limit);
     const landed = z.array(z.object({ sourceUrl: z.string(), path: z.string(), status: z.string(), seo: z.record(z.string(), z.unknown()) })).safeParse(checkpoint.landedPaths);
     if (!landed.success) throw new ServiceError("conflict", "Commit a WordPress import with URL acceptance records before requesting verification.");
     const published = landed.data.filter(page => page.status !== "draft");

@@ -6199,6 +6199,14 @@ deployments are portable, testable and incapable of silently forking the truth.
   This splits a required delivery portion from C3.22; both remain open until
   their complete source and acceptance criteria pass. Migration 73 is reserved
   after mail recovery 72; no migration journal gap may be queued.
+  *(Update 2026-11-11: local WXR qualification now includes an actual 501-page
+  publication/rollback with two independent indexing processes, identical-source
+  restore after a committed batch, global media receipt recovery and nested
+  cross-batch menu publication. The expanded implementation, resource/authority
+  boundaries, other source adapters, privacy/holds, browser and upgrade gates
+  remain under qualification. Physical media PUT and original storage namespace
+  recovery are separate required dependencies. Source/evidence:
+  `deploy/import-source-graph.md`; no completion or release claim.)*
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

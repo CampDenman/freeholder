@@ -7,7 +7,7 @@
 // the tests are about the three properties that keep that from being a
 // liability: the secret is useless at rest, a scoped key stays scoped, and a
 // key cannot become a bigger key.
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { apiKeys } from "@/core/apikeys/schema";
@@ -276,15 +276,9 @@ describe.runIf(hasDatabase)("presenting a key", () => {
   it("records that it was used", async () => {
     const key = await createApiKey.call({ name: "Seen", scopes: [] }, OWNER);
     const { touchApiKey } = await import("@/core/apikeys/tokens");
-    touchApiKey(key.id);
-    // Fire-and-forget by design, so poll for the write rather than guessing how long it takes.
-    await vi.waitFor(
-      async () => {
-        const [row] = await db().select().from(apiKeys).where(eq(apiKeys.id, key.id));
-        expect(row?.lastUsedAt).not.toBeNull();
-      },
-      { timeout: 5_000, interval: 50 },
-    );
+    await touchApiKey(key.id);
+    const [row] = await db().select().from(apiKeys).where(eq(apiKeys.id, key.id));
+    expect(row?.lastUsedAt).not.toBeNull();
   });
 });
 

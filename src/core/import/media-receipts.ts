@@ -9,7 +9,7 @@ import { assets } from "@/core/media/schema";
 import { defineService, permits, ServiceError, type ServiceContext } from "@/core/service";
 import { archivePreviewDigest } from "./archive-plan";
 import { assertNoPendingSourceUpload } from "./source-lifecycle";
-import { currentImportBatch, lockImportBatchParent } from "./batch-context";
+import { currentImportBatch, lockImportBatchParent, bindImportBatchMedia, recordImportBatchMedia } from "./batch-context";
 import { assertCurrentImportAuthority } from "./authority";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
@@ -49,7 +49,7 @@ export function importMediaNote(runId: string, witness: string, key: string): st
 }
 async function lockedRun(ctx: ServiceContext, runId: string): Promise<Run> {
   await lockImportBatchParent(ctx, runId);
-  if (currentImportBatch()) await assertCurrentImportAuthority(ctx, "media.upload", "mutation", "public");
+  if (currentImportBatch(runId)) await assertCurrentImportAuthority(ctx, "media.upload", "mutation", "public");
   const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, runId)).limit(1).for("update");
   if (!run) throw new ServiceError("not_found", "No such import run.");
   return run;
@@ -83,6 +83,7 @@ export const bindImportMediaBytes = defineService({
     const run = await lockedRun(ctx, input.runId); snapshot(run, input.previewDigest); planned(run, input.key);
     const all = claims(run.checkpoint), claim = all.find(entry => entry.key === input.key && entry.token === input.token && entry.previewDigest === input.previewDigest);
     if (run.status !== "previewed" || !claim || (claim.digest && claim.digest !== input.digest) || (claim.bytes !== undefined && claim.bytes !== input.bytes)) throw new ServiceError("conflict", "This import file claim changed or its source bytes differ.");
+    await bindImportBatchMedia(ctx, input.key, input.digest, input.bytes);
     await ctx.tx.update(importRuns).set({ checkpoint: { ...object(run.checkpoint), mediaClaims: all.map(entry => entry.key === input.key ? { ...entry, digest: input.digest, bytes: input.bytes } : entry) } }).where(eq(importRuns.id, run.id));
     ctx.setSubject("import_run", run.id);
     return input;
@@ -120,6 +121,7 @@ export const acceptPreparedImportMedia = defineService({
     const { run, item, assetId } = await verify(ctx, input.receipt, asset.checksumSha256 ?? "", asset.bytes);
     if (assetId && assetId !== asset.id) throw new ServiceError("conflict", "This import file already accepted another asset.");
     const checkpoint = object(run.checkpoint);
+    await recordImportBatchMedia(ctx, item.key, { assetId: asset.id });
     await ctx.tx.update(importRuns).set({ checkpoint: { ...checkpoint, media: [...records(checkpoint).filter(entry => entry.key !== item.key), { key: item.key, sourceUrl: item.sourceUrl, assetId: asset.id }], mediaClaims: claims(checkpoint).filter(entry => entry.key !== item.key) } }).where(eq(importRuns.id, run.id));
     ctx.setSubject("import_run", run.id);
     return { ok: true as const };

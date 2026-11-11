@@ -9,7 +9,9 @@
 // object storage outside any transaction, and then read back one chunk at a
 // time by `imports.previewFromUpload`. A WXR file is parsed as it streams, so
 // memory holds one chunk and one `<item>` rather than the whole export. The
-// chunks are deleted once the preview is staged, whether it succeeded or not.
+// Ordinary text previews release their chunks after staging. Static archives
+// and durable source graphs retain their immutable originals until acceptance,
+// cancellation or expiry; unknown writes and named holds keep their witnesses.
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { createHash, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -35,6 +37,8 @@ import { markGraphRunWriter } from "./graph-writer";
 import { importGraphVersionSchema } from "./graph-version";
 import { assertCurrentImportAuthority } from "./authority";
 import graphRebindServices, { beginGraphSourceRebind, claimSourceRebind, acceptSourceRebindChunk } from "./graph-rebind";
+import { prepareSourceGraphPlan } from "./graph-plan";
+import { releaseIndexRead } from "./graph-read-recovery";
 import { approvedMediaOrigins, approvedMediaOriginsSchema } from "./media-origins";
 import { stageImportSource, stageWordpressExport } from "./service";
 import { assertSourceStageable } from "./source-lifecycle";
@@ -47,7 +51,7 @@ import { archiveRangeSource } from "./archive-source";
  * One export file. WordPress's own exporter has no size cap, and real WXR
  * files for a few hundred posts with comments run 5–60 MB; 100 MB leaves
  * headroom without inviting a multi-gigabyte upload. What the import then
- * keeps is still bounded by the importer limits (500 items, 20 MB of bodies).
+ * reads in one phase is still bounded by 500 items and 20 MB of bodies.
  */
 /** Under the request proxy's 10 MB buffer, with room to spare. */
 const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
@@ -582,7 +586,9 @@ export const previewFromUpload = defineOrchestratedService({
   name: "imports.previewFromUpload",
   summary: "Stage a preview from an export file uploaded with imports.beginSourceUpload and its chunks.",
   rateLimit: {
-    limit: 30,
+    // A complete source can need 20 index phases plus 25 restore reads.
+    // Each remains bounded; the ordinary one-shot rate no longer fits it.
+    limit: 120,
     windowSeconds: 3600,
     message: "That import has read a lot of files in an hour. Wait a little and try again.",
     subject: (input) => input.id,
@@ -597,14 +603,22 @@ export const previewFromUpload = defineOrchestratedService({
     try {
       if (state.rebindSourceGraph) {
         const claimed = await claimSourceRebind.call(input, actor);
-        await readRetainedSourceChunk(claimed.source, claimed.index);
-        return await acceptSourceRebindChunk.call({ ...input, ...claimed }, actor);
+        let accepted;
+        try {
+          await readRetainedSourceChunk(claimed.source, claimed.index);
+          accepted = await acceptSourceRebindChunk.call({ ...input, ...claimed }, actor);
+        } catch (error) { await releaseIndexRead.call({ id: input.id, generation: claimed.generation, leaseToken: claimed.leaseToken }, actor).catch(() => undefined); throw error; }
+        if (accepted.sourceRestored && accepted.status === "previewed") return { ...await prepareSourceGraphPlan.call({ id: input.id, version: accepted.graph }, actor), sourceRestored: true };
+        return accepted;
       }
       if (state.hasSourceGraph) {
         const claimed = await claimWxrGraph.call(input, actor);
         if (!claimed.leaseToken) throw new ServiceError("internal", "The source phase has no lease.");
-        const indexed = await indexWxrPhase(importSourceRanges(claimed.source, index => readRetainedSourceChunk(claimed.source, index)), claimed.cursor, state.origin);
-        return await applyWxrIndex.call({ ...input, graphId: claimed.graphId, generation: claimed.generation, leaseToken: claimed.leaseToken, source: claimed.source, previous: claimed.cursor, ...indexed }, actor);
+        try {
+          const indexed = await indexWxrPhase(importSourceRanges(claimed.source, index => readRetainedSourceChunk(claimed.source, index)), claimed.cursor, state.origin);
+          const accepted = await applyWxrIndex.call({ ...input, graphId: claimed.graphId, generation: claimed.generation, leaseToken: claimed.leaseToken, source: claimed.source, previous: claimed.cursor, ...indexed }, actor);
+          return indexed.done ? await prepareSourceGraphPlan.call({ id: input.id, version: accepted.graph }, actor) : accepted;
+        } catch (error) { await releaseIndexRead.call({ id: input.id, graphId: claimed.graphId, generation: claimed.generation, leaseToken: claimed.leaseToken }, actor).catch(() => undefined); throw error; }
       }
       const staged = await stageStoredSource(state);
       await applyUploaded.call({ ...input, preview: staged.preview, counts: staged.counts, archivePreviewDigest: staged.archivePreviewDigest }, actor);
@@ -632,6 +646,8 @@ export const previewFromUpload = defineOrchestratedService({
 export default [
   ...sourceGraphServices,
   ...graphRebindServices,
+  prepareSourceGraphPlan,
+  releaseIndexRead,
   beginApply,
   beginSourceUpload,
   claimChunk,

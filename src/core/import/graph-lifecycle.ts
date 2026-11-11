@@ -3,6 +3,7 @@
 // C3.47: reconcile, publish and reverse one owned bounded batch per mutation.
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
+import { z } from "zod";
 import { importRuns, importSourceBatches, importSourceGraphs } from "@/core/plugins/schema";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { actorString, ServiceError, type ServiceContext } from "@/core/service";
@@ -36,7 +37,7 @@ export async function advanceGraphLifecycle(ctx: ServiceContext, before: Run, op
   const [next] = await ctx.tx.select({ batch: importSourceBatches, run: importRuns }).from(importSourceBatches).innerJoin(importRuns, eq(importRuns.id, importSourceBatches.childRunId)).where(and(eq(importSourceBatches.graphId, graph.id), ne(importRuns.status, target))).orderBy(operation === "imports.rollback" ? desc(importSourceBatches.batchIndex) : asc(importSourceBatches.batchIndex)).limit(1).for("update");
   if (next) {
     if (!graph.planDigest) throw new ServiceError("conflict", "The accepted graph has no frozen plan identity.");
-    const context: ImportBatchContext = { rootId: before.id, childId: next.run.id, graphId: graph.id, generation: graph.generation, planDigest: graph.planDigest, leaseToken, startOrdinal: next.batch.startOrdinal, endOrdinal: next.batch.endOrdinal, operation };
+    const context: ImportBatchContext = { rootId: before.id, childId: next.run.id, graphId: graph.id, generation: graph.generation, planDigest: graph.planDigest, leaseToken, startOrdinal: next.batch.startOrdinal, endOrdinal: next.batch.endOrdinal, kind: next.batch.kind, operation };
     await ctx.tx.update(importRuns).set({ checkpoint: { ...object(next.run.checkpoint), sourceGraphBatch: context } }).where(eq(importRuns.id, next.run.id));
     await withinImportBatch(context, () => operation === "imports.rollback" ? ctx.call(rollbackImport, { id: next.run.id }) : operation === "imports.publish" ? ctx.call(publishImport, { id: next.run.id }) : ctx.call(reconcileImport, { id: next.run.id }));
   }
@@ -54,10 +55,13 @@ export async function advanceGraphLifecycle(ctx: ServiceContext, before: Run, op
   }
   if (!remaining && operation === "imports.rollback") {
     await releaseImportSources(ctx, before, checkpoint);
-    checkpoint.rolledBack = { fromStatus: before.status, keptMedia: [] };
+    const summaries = await ctx.tx.select({ kept: sql<unknown>`${importRuns.checkpoint}->'rolledBack'->'keptMedia'` }).from(importSourceBatches).innerJoin(importRuns, eq(importRuns.id, importSourceBatches.childRunId)).where(eq(importSourceBatches.graphId, graph.id));
+    const keptMedia = [...new Set(summaries.flatMap(summary => z.array(z.uuid()).max(500).parse(summary.kept ?? [])))];
+    checkpoint.rolledBack = { fromStatus: before.status, keptMedia };
   }
   await ctx.tx.update(importSourceGraphs).set({ leaseToken: null, leaseActor: null, leaseUntil: null, updatedAt: new Date() }).where(eq(importSourceGraphs.id, graph.id));
   const [row] = await ctx.tx.update(importRuns).set({ status: remaining ? before.status : target, checkpoint, counts, error: null }).where(eq(importRuns.id, before.id)).returning();
   ctx.setSubject("import_run", before.id);
+  if (!remaining && operation !== "imports.reconcile") ctx.queueEvent(operation === "imports.publish" ? "import.published" : "import.rolledBack", { id: before.id });
   return publicImportRun(row!);
 }

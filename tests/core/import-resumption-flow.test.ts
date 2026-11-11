@@ -3,15 +3,19 @@
 // C3.47: actual large-source phases retain their original bytes and CMS ownership.
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { db, closeDb } from "@/core/db";
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import { pages } from "@/modules/cms/schema";
+import { blogAuthors, blogPosts, blogPostTerms, blogTerms } from "@/modules/cms/blog-schema";
 import { importRuns, importSourceEntries, importSourceGraphs } from "@/core/plugins/schema";
 import { apiKeys } from "@/core/apikeys/schema";
 import { mintApiKey } from "@/core/apikeys/tokens";
 import { actorFromRequest } from "@/core/http/actor";
-import { ensureDefaults } from "@/modules/cms/service";
-import { commitImport, listImports, publishImport, reconcileImport, rollbackImport, startImport } from "@/core/import/service";
+import { createPage, ensureDefaults } from "@/modules/cms/service";
+import { commitImport, listImports, previewFromSource, publishImport, reconcileImport, reviewImportConflicts, rollbackImport, startImport, wordpressVerificationPlan } from "@/core/import/service";
+import { currentImportBatch } from "@/core/import/batch-context";
+import { outboxEvents } from "@/core/events/schema";
 import { beginSourceUpload, previewFromUpload, uploadSourceChunk } from "@/core/import/source-upload";
 import { hasDatabase, OWNER, truncateSpine, failure } from "../helpers/spine";
 import { runImportResumptionProcess } from "../helpers/import-resumption-process";
@@ -26,6 +30,105 @@ function source(count: number): Uint8Array<ArrayBuffer> {
 describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 180_000 }, () => {
   beforeEach(async () => { await truncateSpine(); resetStorageForTests(); await ensureDefaults.call({}, OWNER); });
   afterAll(closeDb);
+  it("keeps one real author and category across 501 posts and reverses their original owning batch", async () => {
+    const original = new TextDecoder().decode(source(501));
+    const header = '<wp:author><wp:author_login>fictional-writer</wp:author_login><wp:author_display_name>Fictional writer</wp:author_display_name><wp:author_email>fictional-writer@example.test</wp:author_email></wp:author><wp:category><wp:term_id>3</wp:term_id><wp:category_nicename>fictional-notes</wp:category_nicename><wp:cat_name>Fictional notes</wp:cat_name></wp:category>';
+    const bytes = new TextEncoder().encode(original.replace('xmlns:wp=', 'xmlns:dc="urn:dc" xmlns:wp=').replace("<wp:wxr_version>", `${header}<wp:wxr_version>`).replaceAll("<wp:post_type>page</wp:post_type>", '<wp:post_type>post</wp:post_type><dc:creator>fictional-writer</dc:creator><category domain="category" nicename="fictional-notes">Fictional notes</category>'));
+    const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-real-post-metadata.xml", bytes: bytes.byteLength }, OWNER);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER);
+    let staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    for (let phase = 0; phase < 4 && staged.status === "discover"; phase++) staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    let committed = await commitImport.call({ id: run.id, graph: staged.graph }, OWNER);
+    for (let phase = 0; phase < 4 && committed.status === "previewed"; phase++) committed = await commitImport.call({ id: run.id, graph: staged.graph }, OWNER);
+    expect(committed).toMatchObject({ status: "committed", counts: { posts: 501, pages: 501 } });
+    expect(await db().select().from(pages).where(eq(pages.slug, "blog"))).toHaveLength(1);
+    const authors = await db().select().from(blogAuthors), terms = await db().select().from(blogTerms), posts = await db().select().from(blogPosts);
+    expect(authors).toHaveLength(1); expect(terms).toHaveLength(1); expect(posts).toHaveLength(501);
+    expect(new Set(posts.map(post => post.authorId))).toEqual(new Set([authors[0]!.id]));
+    expect(await db().select().from(blogPostTerms)).toHaveLength(501);
+    const children = await db().select().from(importRuns).where(sql`${importRuns.checkpoint} ? 'sourceGraphBatch'`);
+    expect(JSON.stringify(children.map(child => child.preview))).not.toContain("fictional-writer@example.test");
+    let reversed = await rollbackImport.call({ id: run.id, graph: staged.graph }, OWNER);
+    for (let phase = 0; phase < 4 && reversed.status !== "rolled_back"; phase++) reversed = await rollbackImport.call({ id: run.id, graph: staged.graph }, OWNER);
+    expect(reversed.status).toBe("rolled_back");
+    expect(await db().select().from(blogPosts)).toEqual([]);
+    expect(await db().select().from(blogPostTerms)).toEqual([]);
+    expect(await db().select().from(blogAuthors)).toEqual([]);
+    expect(await db().select().from(blogTerms)).toEqual([]);
+    expect(await db().select().from(pages).where(eq(pages.slug, "blog"))).toEqual([]);
+  });
+  it("keeps an unrelated ordinary import independent of an inherited private batch scope", async () => {
+    const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-scope-boundary.xml", bytes: bytes.byteLength }, OWNER);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER);
+    let staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    for (let phase = 0; phase < 4 && staged.status === "discover"; phase++) staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    const original = commitImport.call.bind(commitImport);
+    let ordinaryId = "", entered = false;
+    const spy = vi.spyOn(commitImport, "call").mockImplementation(async (input, actor) => {
+      if (!entered && currentImportBatch(z.object({ id: z.uuid() }).parse(input).id)) {
+        entered = true;
+        const independent = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, actor);
+        ordinaryId = independent.id;
+        await previewFromSource.call({ id: ordinaryId, payload: new TextDecoder().decode(source(1)) }, actor);
+        await original({ id: ordinaryId }, actor);
+        throw new Error("Fictional interruption before private child entry");
+      }
+      return original(input, actor);
+    });
+    try { await expect(commitImport.call({ id: run.id, graph: staged.graph }, OWNER)).rejects.toThrow("Fictional interruption before private child entry"); }
+    finally { spy.mockRestore(); }
+    expect(entered).toBe(true);
+    const [ordinary] = await db().select().from(importRuns).where(eq(importRuns.id, ordinaryId));
+    expect(ordinary!.status).toBe("committed");
+    expect(JSON.stringify(ordinary!.preview)).toContain("Original source page 0.");
+    const events = await db().select().from(outboxEvents).where(eq(outboxEvents.eventName, "import.committed"));
+    expect(events.map(event => event.payload)).toEqual([{ id: ordinaryId }]);
+    expect(await rollbackImport.call({ id: run.id, graph: staged.graph }, OWNER)).toMatchObject({ status: "rolled_back" });
+    expect(await db().select().from(pages).where(eq(pages.slug, "resumed/page-0"))).toHaveLength(1);
+  });
+  it("releases a failed read lease without advancing the original cursor, then retries immediately", async () => {
+    const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-read-recovery.xml", bytes: bytes.byteLength }, OWNER);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER);
+    await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    const read = vi.spyOn(storage(), "get").mockRejectedValueOnce(new Error("Fictional temporary source read failure"));
+    await expect(previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER)).rejects.toThrow("Fictional temporary source read failure");
+    read.mockRestore();
+    expect((await db().select().from(importSourceGraphs))[0]).toMatchObject({ leaseToken: null, cursor: { ordinal: 0 } });
+    expect(await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER)).toMatchObject({ status: "discover", counts: { indexed: 500 } });
+  });
+  it("freezes reviewed keep, replace and rename choices across batches and restores original owner pages", async () => {
+    const originalSchema = z.object({ id: z.uuid(), title: z.string(), blocks: z.array(z.unknown()) });
+    const originals: Array<z.infer<typeof originalSchema>> = [];
+    for (const index of [1, 2, 500]) originals.push(originalSchema.parse(await createPage.call({ slug: `resumed/page-${index}`, title: `Original owner page ${index}`, blocks: [], seo: {} }, OWNER)));
+    const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-owner-choices.xml", bytes: bytes.byteLength }, OWNER);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER);
+    let staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    for (let phase = 0; phase < 4 && staged.status === "discover"; phase++) staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
+    await reviewImportConflicts.call({ id: run.id, graph: staged.graph, conflicts: [{ slug: "resumed/page-1", resolution: "keep-existing" }, { slug: "resumed/page-2", resolution: "replace" }, { slug: "resumed/page-500", resolution: "rename", renamedSlug: "resumed/renamed-final" }] }, OWNER);
+    const current = await sourceGraphReview.call({ id: run.id, afterOrdinal: 499 }, OWNER);
+    expect(current.entries[0]).toMatchObject({ destinationPath: "resumed/renamed-final", resolution: "rename" });
+    expect(current.version.planRevision).toBe(staged.graph!.planRevision + 1);
+    expect(await failure(commitImport.call({ id: run.id, graph: staged.graph }, OWNER))).toMatchObject({ code: "conflict" });
+    let accepted = await commitImport.call({ id: run.id, graph: current.version }, OWNER);
+    expect(await failure(reviewImportConflicts.call({ id: run.id, graph: current.version, conflicts: [{ slug: "resumed/page-3", resolution: "replace" }] }, OWNER))).toMatchObject({ code: "conflict" });
+    for (let phase = 0; phase < 4 && accepted.status === "previewed"; phase++) accepted = await commitImport.call({ id: run.id, graph: current.version }, OWNER);
+    expect(accepted).toMatchObject({ status: "committed", counts: { pages: 500 } });
+    const imported = await db().select().from(pages).where(sql`${pages.slug} like 'resumed/%'`);
+    expect(imported).toHaveLength(502);
+    expect(imported.find(page => page.id === originals[0]!.id)!.title).toBe("Original owner page 1");
+    expect(imported.find(page => page.id === originals[1]!.id)!.title).toBe("Fictional page 2");
+    expect(imported.find(page => page.id === originals[2]!.id)!.title).toBe("Original owner page 500");
+    expect(JSON.stringify(imported.find(page => page.slug === "resumed/page-0")!.blocks)).toContain("/resumed/renamed-final");
+    let reversed = await rollbackImport.call({ id: run.id, graph: current.version }, OWNER);
+    for (let phase = 0; phase < 4 && reversed.status !== "rolled_back"; phase++) reversed = await rollbackImport.call({ id: run.id, graph: current.version }, OWNER);
+    expect(reversed.status).toBe("rolled_back");
+    const restored = await db().select().from(pages).where(sql`${pages.slug} like 'resumed/%'`);
+    expect(restored).toHaveLength(3);
+    for (const original of originals) expect(restored.find(page => page.id === original.id)).toMatchObject({ title: original.title, blocks: original.blocks });
+  });
   it("fences overlapping restore workers and a verified source result arriving after cancellation", async () => {
     const run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source(501);
     const initial = await beginSourceUpload.call({ id: run.id, filename: "fictional-restore-race.xml", bytes: bytes.byteLength }, OWNER);
@@ -106,6 +209,8 @@ describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 18
     const last = await sourceGraphReview.call({ id: run.id, afterOrdinal: 499 }, reviewer);
     expect(last.entries.map(entry => entry.ordinal)).toEqual([500]);
     expect(last.nextOrdinal).toBeNull();
+    await db().update(apiKeys).set({ revokedAt: new Date() }).where(eq(apiKeys.id, key!.id));
+    expect(await failure(sourceGraphReview.call({ id: run.id }, reviewer))).toMatchObject({ code: "permission" });
     expect(await failure(commitImport.call({ id: run.id, graph: first.version }, reviewer))).toMatchObject({ code: "permission" });
     expect(await failure(commitImport.call({ id: run.id }, OWNER))).toMatchObject({ code: "conflict" });
     expect(await failure(commitImport.call({ id: run.id, graph: { ...first.version, planRevision: first.version.planRevision + 1 } }, OWNER))).toMatchObject({ code: "conflict" });
@@ -254,6 +359,18 @@ describe.runIf(hasDatabase)("durable large-source import (C3.47)", { timeout: 18
     let committed = await commitImport.call({ id: run.id, graph: staged.graph }, OWNER);
     for (let phase = 0; phase < 8 && committed.status === "previewed"; phase++) committed = await commitImport.call({ id: run.id, graph: staged.graph }, OWNER);
     expect(committed).toMatchObject({ status: "committed", counts: { pages: 501 } });
+    const verifiedPaths = new Set<string>();
+    let afterOrdinal = -1;
+    for (let window = 0; window < 12; window++) {
+      const manifest = await wordpressVerificationPlan.call({ id: run.id, afterOrdinal, limit: 50 }, OWNER);
+      expect(manifest.checks.length).toBeLessThanOrEqual(253);
+      for (const check of manifest.checks) verifiedPaths.add(check.requestPath);
+      const nextOrdinal = z.object({ nextOrdinal: z.number().int().nonnegative().nullable() }).parse(manifest).nextOrdinal;
+      if (nextOrdinal === null) break;
+      expect(nextOrdinal).toBeGreaterThan(afterOrdinal);
+      afterOrdinal = nextOrdinal;
+    }
+    expect(verifiedPaths.size).toBe(501 * 5 + 3);
     const imported = await db().select().from(pages).where(sql`${pages.slug} like 'resumed/page-%'`);
     expect(imported).toHaveLength(501);
     expect(new Set(imported.map(page => page.id)).size).toBe(501);

@@ -80,7 +80,7 @@ export async function resolveApiKey(request: Request): Promise<Actor | undefined
   const key = await verifyApiKey(header.slice("bearer ".length).trim());
   if (!key) return undefined;
 
-  touchApiKey(key.id);
+  await touchApiKey(key.id);
   if (key.actsAsUserId) {
     // C12.14: a person's own key acts as them, with their grants narrowed to
     // the key's scopes (`permits` enforces that).
