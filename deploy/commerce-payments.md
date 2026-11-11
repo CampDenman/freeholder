@@ -241,7 +241,10 @@ The repaired `tests/core/catalog-fulfillment.test.ts` and existing manual
 created/processing/succeeded refund reservations, concurrent requests for
 the same quantities, human/key/plugin boundaries, full installment allocation
 and replay. Live SDK generation passed all eight checks. The production
-build and standalone artifact scrub passed (18,586 files, 224,726,330 bytes).
+build and standalone artifact scrub passed. After rebasing onto merged
+`98f4713d`, all 16 financial/private-service cases and all eight live SDK
+checks passed; the combined production artifact scrub checked 18,777 files
+and 226,587,149 bytes.
 `tests/browser/return-refund.spec.ts` passed four actual Chromium journeys
 at 320px in English/Spanish/French/Arabic RTL, checking required confirmation,
 keyboard submission, both-theme Axe scans and both original installments

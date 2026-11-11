@@ -115,7 +115,7 @@ Spanish, French and Arabic RTL, with keyboard submission, both-theme Axe scans, 
 card selection and other-person refusal. Provider setup in those journeys is
 seeded; these are not real Stripe acceptance. A subsequent focused renewal
 run also qualifies changing from a monthly to an annual plan at renewal,
-including rollback of a paid event with the old interval. All 35 financial
+including rollback of a paid event with the old interval. All 38 financial
 renewal/billing cases passed; a duplicate private-service inventory entry from
 the rebase was repaired and all 41 provider/private-service checks then passed.
 Required fast gates passed 368 contract checks with one deliberate skip,
