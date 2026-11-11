@@ -328,7 +328,9 @@ loader, permission contract, update/rollback.
   and plugin execution ALS boundaries in `service.ts` and `context.ts`.
   Cross-module calls replace supplied system/owner identities; permitted core
   operations retain core composition authority and plugin audit cause. Inspect
-  the narrow own-scope privacy erasure bridge, denial of human-review actions,
+  the narrow own-scope privacy erasure bridge and imported-order refund bridge
+  (`invoicing.reconcilePluginRefund`: own source prefix, currency, idempotency,
+  remaining credit bounds), denial of generic human-review actions,
   own-namespace event/timeline/job context operations and core callback isolation.
 - Inspect `runtime.ts`, CMS rendering/JSON-LD and boot isolation: unexpected
   contribution errors force the current shared transaction to roll back, with

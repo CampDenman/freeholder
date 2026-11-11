@@ -184,7 +184,7 @@ through a direct nested service call, perform provider I/O inside that transacti
 borrow another plugin's network grant, impersonate system/owner authority at a
 cross-module call, or perform a human security-review operation.
 
-Plugin service contexts can emit events, write timeline event types and enqueue jobs only in their own namespace; trusted core operations compose their own work. Shared-service writes and timeline entries name `plugin:<name>`. An unexpected
+The internal invoicing refund contract permits a plugin with invoicing manage access to reconcile only its own imported order invoices, in the original currency and within the remaining credit total. It composes the normal idempotent credit-note services with plugin audit attribution; generic owner credit-note review actions remain unavailable to plugins. Plugin service contexts can emit events, write timeline event types and enqueue jobs only in their own namespace; trusted core operations compose their own work. Shared-service writes and timeline entries name `plugin:<name>`. An unexpected
 server contribution failure rolls back the current shared mutation, even if a
 parent catches the exception. The platform records a generic disable only after
 rollback; private exception details are not retained in that record. Earlier

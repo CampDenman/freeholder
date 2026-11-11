@@ -541,13 +541,13 @@ export const reconcileRefund = defineService({
     }
     const reason = `Shopify refund ${refund.externalRef.split("/").pop() ?? refund.externalRef}`;
     try {
-      const note = (await ctx.callAsSystem(getService("invoicing.createCreditNote"), {
+      const issued = (await ctx.callAsSystem(getService("invoicing.reconcilePluginRefund"), {
         invoiceId: invoice.id,
-        idempotencyKey: identity,
+        refundRef: identity,
+        amountMinor: refund.amountMinor,
+        currency: refund.currency,
         reason,
-        lines: [{ description: reason, quantityMicros: 1_000_000, subtotalMinor: refund.amountMinor, taxMinor: 0 }],
       })) as { id: string };
-      const issued = (await ctx.callAsSystem(getService("invoicing.issueCreditNote"), { id: note.id })) as { id: string };
       await ctx.tx.update(marketplaceRefunds).set({ status: "reconciled", invoiceId: invoice.id, creditNoteId: issued.id, lastError: null }).where(eq(marketplaceRefunds.id, record.id));
       ctx.queueEvent("marketplace.refundReconciled", { id: record.id, channelId, invoiceId: invoice.id, creditNoteId: issued.id });
       ctx.setSubject("marketplace_refund", record.id);

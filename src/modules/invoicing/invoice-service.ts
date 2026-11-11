@@ -1435,6 +1435,29 @@ export const issueCreditNote = defineService({
   },
 });
 
+/** Automatic provider reconciliation is narrower than an owner's credit UI. */
+export const reconcilePluginRefund = defineService({
+  name: "invoicing.reconcilePluginRefund",
+  summary: "Record a provider refund credit only on that plugin's imported invoice.",
+  kind: "mutation", permission: "system", external: false, pluginAccess: "manage",
+  input: z.object({ invoiceId: z.string().uuid(), refundRef: z.string().min(1).max(500), amountMinor: positiveMinor, currency: z.string().regex(/^[A-Z]{3}$/), reason: z.string().trim().min(3).max(1_000) }),
+  output: creditNoteRow,
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind !== "plugin") throw new ServiceError("permission", "Only an importing plugin can reconcile its own provider refund.");
+    const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
+    if (!invoice || invoice.sourceType !== "order" || !invoice.sourceId?.startsWith(`${ctx.actor.name}:`)) {
+      throw new ServiceError("permission", "A plugin can credit only its own imported order invoice.");
+    }
+    if (input.currency !== invoice.currency) throw new ServiceError("validation", "The provider refund currency must match its imported invoice.");
+    const identity = createHash("sha256").update(JSON.stringify([ctx.actor.name, invoice.id, input.refundRef])).digest("hex");
+    const note = await ctx.callAsSystem(createCreditNote, {
+      invoiceId: invoice.id, idempotencyKey: `plugin-refund:${identity}`, reason: input.reason,
+      lines: [{ description: input.reason, quantityMicros: 1_000_000, subtotalMinor: input.amountMinor, taxMinor: 0 }],
+    });
+    return ctx.callAsSystem(issueCreditNote, { id: note.id });
+  },
+});
+
 export const voidCreditNote = defineService({
   name: "invoicing.voidCreditNote",
   writeClass: "destructive",
@@ -1480,5 +1503,6 @@ export default [
   settleRefund,
   createCreditNote,
   issueCreditNote,
+  reconcilePluginRefund,
   voidCreditNote,
 ];

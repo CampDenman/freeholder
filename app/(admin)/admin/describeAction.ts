@@ -175,6 +175,7 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "catalog.removePriceRule": "admin.activity.paymentOptionsChanged",
   "invoicing.createCreditNote": "admin.activity.creditNoteDrafted",
   "invoicing.issueCreditNote": "admin.activity.creditNoteIssued",
+  "invoicing.reconcilePluginRefund": "admin.activity.creditNoteIssued",
   "invoicing.voidCreditNote": "admin.activity.creditNoteVoided",
   "marketplace.reconcileRefund": "admin.activity.creditNoteIssued",
   "invoicing.createDepositAndBalance": "admin.activity.invoiceDrafted",

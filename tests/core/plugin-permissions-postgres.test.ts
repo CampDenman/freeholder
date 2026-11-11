@@ -11,6 +11,8 @@ import { db } from "@/core/db";
 import { checkPlugins } from "@/core/doctor";
 import { contacts } from "@/core/contacts/schema";
 import { resolveContact } from "@/core/contacts/service";
+import { createDraftInvoice, issueInvoice, reconcilePluginRefund } from "@/modules/invoicing/invoice-service";
+import { creditNotes } from "@/modules/invoicing/schema";
 import { auditLog, outboxEventDeliveries, outboxEvents } from "@/core/events/schema";
 import { subscribe } from "@/core/events";
 import { enqueue, redeliverOutboxEvent, replayOutboxEvent } from "@/core/events/outbox";
@@ -34,6 +36,7 @@ const keyId = publisherPublicKey(publicKey).keyId;
 const reviewer = { ...OWNER, security: { twoFactorRequired: true, twoFactorEnrolled: true, twoFactorVerified: true, stepUpValid: true } };
 const reader = registerPluginExecution({ name: "runtime-fixture", version: "0.1.0", permissions: ["contacts:read"] });
 const writer = registerPluginExecution({ name: "write-fixture", version: "0.1.0", permissions: ["contacts:write"] });
+const accountant = registerPluginExecution({ name: "invoice-fixture", version: "0.1.0", permissions: ["invoicing:write"] });
 const directories: string[] = [];
 
 const identity = defineService({
@@ -78,6 +81,11 @@ const catchesBroken = defineService({
 });
 for (const service of [read, escape, forgeCoreWork]) bindPluginService(service.def, reader);
 for (const service of [broken, healthy]) bindPluginService(service.def, writer);
+const importedCredit = defineService({
+  name: "invoiceFixture.credit", summary: "Reconcile a fixture provider refund.", kind: "mutation", permission: "scoped", input: reconcilePluginRefund.def.input, output: reconcilePluginRefund.def.output,
+  handler: async (input, ctx) => ctx.callAsSystem(reconcilePluginRefund, input),
+});
+bindPluginService(importedCredit.def, accountant);
 
 async function artifact(name = reader.name, permissions = [...reader.permissions], version = "0.1.0") {
   const path = await mkdtemp(join(tmpdir(), "freeholder-permission-fixture-")); directories.push(path);
@@ -121,6 +129,29 @@ describe.runIf(hasDatabase)("owner-reviewed plugin execution (C3.40)", { timeout
     expect(await read.call({}, agent)).toEqual({ actor: "plugin:runtime-fixture", sameTransaction: true });
     expect(await failure(escape.call({}, OWNER))).toMatchObject({ code: "permission" });
     expect(await db().select().from(contacts).where(eq(contacts.email, "unapproved@example.test"))).toHaveLength(0);
+  });
+
+  it("limits automatic refund credits to the plugin's own imported invoices, currency and remaining total", async () => {
+    await installApproved(accountant);
+    const { contact } = await resolveContact.call({ email: "refund-boundary@example.test", source: "test" }, OWNER);
+    const make = async (sourceId: string) => {
+      const draft = await createDraftInvoice.call({ contactId: contact.id, currency: "CAD", sourceType: "order", sourceId, idempotencyKey: sourceId,
+        lines: [{ description: "Imported fixture", quantityMicros: 1_000_000, unitAmountMinor: 1_000 }], tax: { mode: "not_applicable", reason: "Recorded fixture tax total." } }, OWNER);
+      return (await issueInvoice.call({ id: draft.invoice.id }, OWNER)).invoice;
+    };
+    const foreign = await make("another-plugin:order");
+    const own = await make("invoice-fixture:order");
+    const request = { invoiceId: own.id, refundRef: "refund-one", amountMinor: 500, currency: "CAD", reason: "Recorded provider refund" };
+    expect(await failure(importedCredit.call({ ...request, invoiceId: foreign.id }, OWNER))).toMatchObject({ code: "permission" });
+    expect(await failure(importedCredit.call({ ...request, currency: "USD" }, OWNER))).toMatchObject({ code: "validation" });
+    expect(await failure(reconcilePluginRefund.call(request, { kind: "system" }))).toMatchObject({ code: "permission" });
+    const note = await importedCredit.call(request, OWNER);
+    expect(note.status).toBe("issued");
+    expect((await importedCredit.call(request, OWNER)).id).toBe(note.id);
+    expect(await failure(importedCredit.call({ ...request, refundRef: "refund-two", amountMinor: 501 }, OWNER))).toMatchObject({ code: "validation" });
+    expect(await db().select().from(creditNotes)).toHaveLength(1);
+    const [audit] = await db().select().from(auditLog).where(eq(auditLog.action, "invoicing.issueCreditNote"));
+    expect(audit!.actor).toBe("plugin:invoice-fixture");
   });
 
   it("cannot forge core event/timeline identities or enqueue a core job through its context", async () => {

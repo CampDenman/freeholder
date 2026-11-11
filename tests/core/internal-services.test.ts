@@ -16,6 +16,7 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "invoicing.reconcilePluginRefund",
   // C11.10: records a carrier's answer for a text staged by messaging.sendSms,
   // from the post-commit delivery job.
   "messaging.applySmsSendResult",
@@ -196,6 +197,7 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "invoicing.reconcilePluginRefund",
   // C1.38/C10.31: browser-only entry and owner host controls. These do not
   // belong in API-key, SDK, OpenAPI or MCP projections.
   "playground.enter",
