@@ -83,7 +83,10 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
   const creative = options.thirdPartyCreativeConsent
     ? [...new Set(options.creativeOrigins ?? [])].sort()
     : [];
-  const call = options.path.startsWith("/call/group/") ? [...new Set(options.callOrigins ?? [])].sort() : [];
+  // The policy sees the original path before proxy strips a locale prefix.
+  // Match the same locale shape as proxy; keep signalling out of other pages.
+  const groupCall = /^\/(?:[a-z]{2}(?:-[A-Za-z]{2,4})?\/)?call\/group\//.test(options.path);
+  const call = groupCall ? [...new Set(options.callOrigins ?? [])].sort() : [];
   const assistant = isPreviewAssistantContactPath(options.path) ? [...new Set(options.assistantOrigins ?? [])].sort() : [];
   const assistantWasm = isPreviewAssistantContactPath(options.path) || options.path.startsWith("/managed-assistant/");
   const measurement = options.path.startsWith("/admin")

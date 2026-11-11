@@ -59,9 +59,11 @@ describe("the Content Security Policy contract", () => {
 
   it("lets only group call pages reach the site's SFU (C12.24)", () => {
     const sfu = ["wss://sfu.example.test", "https://sfu.example.test"];
-    const call = contentSecurityPolicy({ nonce: "n", path: "/call/group/0b54", production: true, callOrigins: sfu });
-    expect(directive(call, "connect-src")).toBe("connect-src 'self' https://sfu.example.test wss://sfu.example.test");
-    for (const path of ["/messages/0b54", "/call/0b54", "/admin"]) {
+    for (const path of ["/call/group/0b54", "/es/call/group/0b54", "/fr-CA/call/group/0b54", "/ar/call/group/0b54"]) {
+      const call = contentSecurityPolicy({ nonce: "n", path, production: true, callOrigins: sfu });
+      expect(directive(call, "connect-src")).toBe("connect-src 'self' https://sfu.example.test wss://sfu.example.test");
+    }
+    for (const path of ["/messages/0b54", "/call/0b54", "/admin", "/es/messages/0b54", "/fr/call/0b54", "/ar/call/groupish/0b54", "/fr/admin"]) {
       expect(directive(contentSecurityPolicy({ nonce: "n", path, production: true, callOrigins: sfu }), "connect-src")).toBe("connect-src 'self'");
     }
   });
@@ -138,6 +140,7 @@ describe("CSP at the edge", () => {
     FREEHOLDER_STORAGE: process.env.FREEHOLDER_STORAGE,
     S3_ENDPOINT: process.env.S3_ENDPOINT,
     S3_PUBLIC_BASE_URL: process.env.S3_PUBLIC_BASE_URL,
+    LIVEKIT_URL: process.env.LIVEKIT_URL,
   };
 
   afterEach(() => {
@@ -146,6 +149,19 @@ describe("CSP at the edge", () => {
       else process.env[key] = value;
     }
     resetEnvForTests();
+  });
+
+  it("preserves SFU signalling permission across the original localized group-call rewrite", () => {
+    process.env.LIVEKIT_URL = "wss://sfu.example.test";
+    resetEnvForTests();
+    const response = proxy(new NextRequest("https://example.test/fr-CA/call/group/test-only"));
+    expect(response.headers.get("x-middleware-rewrite")).toBe("https://example.test/call/group/test-only");
+    const policy = response.headers.get("content-security-policy")!;
+    expect(directive(policy, "connect-src")).toContain("wss://sfu.example.test");
+    expect(directive(policy, "connect-src")).toContain("https://sfu.example.test");
+    expect(forwarded(response, "content-security-policy")).toBe(policy);
+    const elsewhere = proxy(new NextRequest("https://example.test/fr-CA/messages/test-only"));
+    expect(elsewhere.headers.get("content-security-policy")).not.toContain("sfu.example.test");
   });
 
   it("forwards and enforces one identical per-request policy", () => {

@@ -81,6 +81,16 @@ test.describe("group calls (C12.24)", () => {
     await expect.poll(() => decodedWidth(sam.page, RAE), { timeout: 30_000 }).toBeGreaterThan(0);
     await expect.poll(() => decodedWidth(rae.page, SAM), { timeout: 30_000 }).toBeGreaterThan(0);
 
+    // The edge builds CSP before stripping a public language prefix. A
+    // localized participant must still reach the actual SFU and decode video.
+    const localized = await sam.page.goto(`/fr/call/group/${call!.id}`);
+    const policy = localized?.headers()["content-security-policy"] ?? "";
+    const sfu = new URL(process.env.LIVEKIT_URL!);
+    expect(policy.split("; ").find(part => part.startsWith("connect-src "))).toContain(sfu.origin);
+    await expect.poll(() => decodedWidth(sam.page, RAE), { timeout: 30_000 }).toBeGreaterThan(0);
+    await sam.page.goto(`/call/group/${call!.id}`);
+    await expect.poll(() => decodedWidth(sam.page, RAE), { timeout: 30_000 }).toBeGreaterThan(0);
+
     // Kim's device is given a wrong key: the SFU forwards the same frames, and none decode.
     await kim.page.goto("/messages");
     await kim.page.getByRole("link", { name: "Crag crew" }).click();

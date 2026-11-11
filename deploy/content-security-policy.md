@@ -28,6 +28,10 @@ upgrades insecure subrequests. Its deliberate exceptions are narrow:
   where multipart uploads run.
 - Same-origin frames and workers remain available to the application. Objects
   are denied and forms may submit only to the instance.
+- The configured group-call SFU's exact HTTP and WebSocket origins are admitted
+  only on `/call/group/…` and its public locale-prefixed equivalents. The edge
+  applies this rule before rewriting a localized request. Message pages,
+  one-to-one call pages and owner pages receive no SFU permission.
 
 ## Third-party creatives
 
