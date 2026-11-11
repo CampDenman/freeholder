@@ -4211,8 +4211,8 @@
   "privacy.due": "متابعة بحلول",
   "privacy.empty": "لا طلبات خصوصية تطابق هذا العرض.",
   "privacy.fulfill.confirmation": "تأكيد الإتلاف",
-  "privacy.fulfill.confirmationHint": "اكتب ERASE بالضبط. يجهّل هذا الحقول الشخصية ويلغي دخول العميل؛ تبقى نطاقات الاحتفاظ القانونية الموثقة.",
-  "privacy.fulfill.erasureHint": "المحو لا رجعة فيه للحقول الشخصية. تُمحى بيانات الوحدات المسجلة أو تُجهَّل، وتُلغى بيانات اعتماد العميل، ولا تنجو سوى النطاقات القانونية الموثقة صراحة.",
+  "privacy.fulfill.confirmationHint": "اكتب ERASE بالضبط. تُزال البيانات الشخصية وإمكانية دخول العميل. يؤدي حذف العميل لدى مزوّد الدفع إلى إزالة البطاقات المحفوظة وإلغاء اشتراكات Stripe النشطة. تبقى نطاقات الاحتفاظ الموثّقة.",
+  "privacy.fulfill.erasureHint": "محو البيانات الشخصية لا رجعة فيه. تُمحى البيانات وبيانات الدخول أو تُجهّل؛ ويؤدي حذف العميل لدى مزوّد الدفع إلى إلغاء اشتراكات Stripe النشطة. ينتظر إتمام الطلب انتهاء أعمال المزوّد المطلوبة.",
   "privacy.fulfill.hint": "ينشئ Freeholder إيصال JSON مدعوم ببصمة checksum ويحفظه خلف تسليم مُصادق عليه لمدة 30 يومًا.",
   "privacy.fulfill.submit": "تنفيذ الطلب",
   "privacy.fulfill.title": "إتمام الطلب",
@@ -5625,7 +5625,7 @@
   "subscriptions.detail.billing": "الفوترة",
   "subscriptions.detail.manage": "إدارة العضويات",
   "privacy.erasure.pending.title": "محو المزود معلق",
-  "privacy.erasure.pending.hint": "بدأ المحو المحلي. يجب إزالة تسجيلات ونصوص المزود قبل إتمام هذا الطلب. يبقى العمل الفاشل متاحًا لإعادة المحاولة.",
+  "privacy.erasure.pending.hint": "بدأ المحو المحلي. يجب إتمام حذف بيانات عملاء الدفع والتسجيلات والنصوص المطلوبة قبل إتمام الطلب. تبقى الأعمال الفاشلة متاحة لإعادة المحاولة.",
   "privacy.erasure.pending.jobs": "فحص المهام الخلفية",
   "search.kind.marketplaceOrder": "طلب سوق",
   "search.kind.privacyRequest": "طلب خصوصية",
@@ -8621,5 +8621,9 @@
   "catalog.notifications.return.rejected.body": "تم رفض طلب الإرجاع هذا.",
   "catalog.returns.labelUrl": "رابط ملصق الإرجاع (اختياري)",
   "catalog.returns.chooseRestock": "إعادة المنتجات المشحونة الصالحة للاستخدام إلى المخزون",
-  "admin.activity.returnRefundPrepared": "تم إعداد مبالغ استرداد الإرجاع"
+  "admin.activity.returnRefundPrepared": "تم إعداد مبالغ استرداد الإرجاع",
+  "privacy.system.identityBeforeErasure": "تم التحقق من الهوية قبل المحو",
+  "privacy.system.providerPending": "بانتظار إتمام الحذف المطلوب لدى المزوّد.",
+  "privacy.system.completed": "اكتمل الطلب.",
+  "privacy.system.retained": "اكتمل الطلب مع استثناءات الاحتفاظ الموثّقة."
 }

@@ -423,6 +423,17 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       if (!providerRef) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return a refund reference.");
       return { providerRef, ...(request.providerAccountId ? { providerAccountId: request.providerAccountId } : {}), status: value.status === "succeeded" ? "succeeded" : value.status === "failed" || value.status === "canceled" ? "failed" : "pending" };
     },
+    async eraseCustomer(request) {
+      const reference=request.providerCustomerRef;
+      if(!/^cus_[A-Za-z0-9]+$/.test(reference) || reference.length>200)throw new AdapterError("payments","stripe","invalid_request","The original provider customer reference is invalid.");
+      // Deleted Stripe customers remain retrievable. A retry confirms the
+      // actual tombstone instead of treating arbitrary HTTP errors as erasure.
+      const existing=await api(`/v1/customers/${encodeURIComponent(reference)}`,{method:"GET"},request.providerAccountId);
+      if(existing.id!==reference)throw new AdapterError("payments","stripe","provider_failure","Stripe did not identify the original erasure customer.",true);
+      if(existing.deleted===true)return;
+      const deleted=await api(`/v1/customers/${encodeURIComponent(reference)}`,{method:"DELETE",headers:{"idempotency-key":request.idempotencyKey}},request.providerAccountId);
+      if(deleted.id!==reference || deleted.deleted!==true)throw new AdapterError("payments","stripe","provider_failure","Stripe did not acknowledge customer erasure.",true);
+    },
     async revokeSavedMethod(request) {
       await api(`/v1/payment_methods/${encodeURIComponent(request.providerRef)}/detach`, { method: "POST", headers: { "idempotency-key": request.idempotencyKey } }, request.providerAccountId);
     },

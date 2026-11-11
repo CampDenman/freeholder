@@ -5040,8 +5040,8 @@
   "privacy.due": "Follow up by",
   "privacy.empty": "No privacy requests match this view.",
   "privacy.fulfill.confirmation": "Destructive confirmation",
-  "privacy.fulfill.confirmationHint": "Type ERASE exactly. This anonymizes personal fields and revokes the customer login; documented legal-retention scopes remain.",
-  "privacy.fulfill.erasureHint": "Erasure is irreversible for personal fields. Registered module data is erased or anonymized, customer credentials are revoked, and only explicitly documented legal scopes survive.",
+  "privacy.fulfill.confirmationHint": "Type ERASE exactly. Personal fields and customer access are removed. Provider customer deletion removes saved cards and cancels active Stripe subscriptions. Documented retention scopes remain.",
+  "privacy.fulfill.erasureHint": "Erasure is irreversible for personal fields. Registered data and credentials are erased or anonymized; provider customer cleanup cancels active Stripe subscriptions. Completion waits for required provider work.",
   "privacy.fulfill.hint": "Freeholder creates a checksum-backed JSON receipt and keeps it behind authenticated delivery for 30 days.",
   "privacy.fulfill.submit": "Fulfil request",
   "privacy.fulfill.title": "Complete the request",
@@ -7057,7 +7057,7 @@
   "subscriptions.detail.billing": "Billing",
   "subscriptions.detail.manage": "Manage memberships",
   "privacy.erasure.pending.title": "Provider erasure pending",
-  "privacy.erasure.pending.hint": "Local erasure has started. Provider recordings and transcripts must be removed before this request can be completed. Failed work remains available for retry.",
+  "privacy.erasure.pending.hint": "Local erasure has started. Required payment-customer, recording and transcript cleanup must finish before completion. Failed work remains available for retry.",
   "privacy.erasure.pending.jobs": "Inspect background jobs",
   "admin.search.kind.supplier": "Suppliers",
   "admin.search.kind.agreement": "Agreements",
@@ -8621,5 +8621,9 @@
   "catalog.notifications.return.rejected.body": "This return request was rejected.",
   "catalog.returns.labelUrl": "Return label URL (optional)",
   "catalog.returns.chooseRestock": "Return usable shipped items to stock",
-  "admin.activity.returnRefundPrepared": "Return refund amounts were prepared"
+  "admin.activity.returnRefundPrepared": "Return refund amounts were prepared",
+  "privacy.system.identityBeforeErasure": "Identity verified before erasure",
+  "privacy.system.providerPending": "Waiting for required provider cleanup.",
+  "privacy.system.completed": "Request completed.",
+  "privacy.system.retained": "Completed with documented retention exceptions."
 }

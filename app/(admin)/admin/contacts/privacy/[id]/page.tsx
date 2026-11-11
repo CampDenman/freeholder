@@ -40,6 +40,15 @@ export default async function PrivacyRequestPage({
   }
   const [t, business] = await Promise.all([getT(), currentBusiness()]);
   const { request, exceptions, artifact } = detail;
+  // Translate known system receipts for display; preserve stored evidence and owner text.
+  const verification = request.verificationMethod === "identity verified before erasure"
+    ? t("privacy.system.identityBeforeErasure") : request.verificationMethod;
+  const resolution = request.status === "in_progress" && request.resolution === "Waiting for registered provider erasure jobs."
+    ? t("privacy.system.providerPending")
+    : request.status === "partially_completed" && request.resolution === "Completed with documented legal-retention exceptions."
+    ? t("privacy.system.retained")
+    : request.status === "completed" && request.resolution === "Request completed."
+    ? t("privacy.system.completed") : request.resolution;
   const canManage = hasModuleAccess(actor, "contacts", "manage");
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
@@ -76,7 +85,7 @@ export default async function PrivacyRequestPage({
             <div><dt className="text-xs text-ink-muted">{t("privacy.contactId")}</dt><dd><a className="underline" href={`/admin/contacts/${request.contactId}`}>{request.contactId}</a></dd></div>
             <div><dt className="text-xs text-ink-muted">{t("privacy.due")}</dt><dd>{formatDateTime(request.responseDueAt, timezone, locale)}</dd></div>
             <div><dt className="text-xs text-ink-muted">{t("privacy.jurisdiction")}</dt><dd>{request.jurisdiction ?? t("common.emptyValue")}</dd></div>
-            <div><dt className="text-xs text-ink-muted">{t("privacy.verification")}</dt><dd>{request.verificationMethod ?? t("privacy.unverified")}</dd></div>
+            <div><dt className="text-xs text-ink-muted">{t("privacy.verification")}</dt><dd>{verification ?? t("privacy.unverified")}</dd></div>
             {typeof details.note === "string" ? <div className="sm:col-span-2"><dt className="text-xs text-ink-muted">{t("privacy.note")}</dt><dd>{details.note}</dd></div> : null}
             {details.changes && typeof details.changes === "object" ? (
               <div className="sm:col-span-2">
@@ -94,7 +103,7 @@ export default async function PrivacyRequestPage({
                 </dd>
               </div>
             ) : null}
-            {request.resolution ? <div className="sm:col-span-2"><dt className="text-xs text-ink-muted">{t("privacy.resolution")}</dt><dd>{request.resolution}</dd></div> : null}
+            {request.resolution ? <div className="sm:col-span-2"><dt className="text-xs text-ink-muted">{t("privacy.resolution")}</dt><dd>{resolution}</dd></div> : null}
           </dl>
           {artifact && artifact.expiresAt > new Date() ? (
             <a href={`/privacy/artifacts/${artifact.id}`} className="font-semibold text-accent underline">

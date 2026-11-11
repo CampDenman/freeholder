@@ -3,7 +3,8 @@
 // Durable first-win progress: real outcomes, per-user isolation, skip/resume,
 // reset and capability-change reactivation.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import {z} from "zod";
+import { and, eq,sql } from "drizzle-orm";
 import { roleGrants, roles, users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { db } from "@/core/db";
@@ -17,7 +18,7 @@ import {
 } from "@/core/guidance/service";
 import { setMyMarketingPreference } from "@/core/privacy/service";
 import { DEFAULT_ROLES } from "@/core/roles/defaults";
-import type { Actor } from "@/core/service";
+import {defineService,type Actor} from "@/core/service";
 import {
   updateNotificationPreference,
   updateNotificationSettings,
@@ -70,6 +71,23 @@ function flow(
   if (!found) throw new Error(`missing guidance flow ${key}`);
   return found;
 }
+
+const chronologyFixture=defineService({
+ name:"guidance.chronologyFixture",summary:"Exercise real work and guide boundaries in one transaction.",kind:"mutation",permission:"authenticated",external:false,
+ input:z.object({order:z.enum(["old-before-start","start-before-new","old-before-reset","start-before-submission"])}),output:z.object({key:z.string()}),
+ handler:async(input,ctx)=>{
+  const key=input.order==="start-before-submission"?"core.owner-first-win":"core.bookkeeper-first-win";
+  const preference={topic:"forms.submission",channel:"in_app" as const,mode:"immediate" as const};
+  if(input.order==="old-before-start" || input.order==="old-before-reset")await ctx.call(updateNotificationPreference,preference);
+  await ctx.call(input.order==="old-before-reset"?resetGuidance:startGuidance,{flowKey:key});
+  if(input.order==="start-before-new")await ctx.call(updateNotificationPreference,preference);
+  if(input.order==="start-before-submission"){
+   const form=await ctx.call(createForm,{slug:"composed-guidance-enquiry",name:"Composed enquiry",fields:[{key:"name",label:"Name",kind:"text",required:true},{key:"email",label:"Email",kind:"email",required:true}]});
+   await ctx.call(submitForm,{slug:form.slug,values:{name:"Synthetic composed enquiry",email:"composed-guidance@example.test",[STAMP_FIELD]:issueStamp(new Date(Date.now()-20000))}});
+  }
+  return {key};
+ },
+});
 
 describe.runIf(hasDatabase)("guidance progress", () => {
   beforeEach(async () => {
@@ -167,6 +185,28 @@ describe.runIf(hasDatabase)("guidance progress", () => {
     await resetGuidance.call({ flowKey: current.key }, BOOKKEEPER);
     current = flow(await listGuidance.call({}, BOOKKEEPER), current.key);
     expect(current).toMatchObject({ state: "active", completedCount: 0 });
+  });
+
+  it("keeps the precise stored start boundary when old and new work share a millisecond",async()=>{
+    await seedUser(BOOKKEEPER,"precise-guide@example.test");
+    await updateNotificationPreference.call({topic:"forms.submission",channel:"in_app",mode:"immediate"},BOOKKEEPER);
+    await startGuidance.call({flowKey:"core.bookkeeper-first-win"},BOOKKEEPER);
+    await db().update(guidanceProgress).set({startedAt:sql`'2026-11-11 00:00:00.000700+00'::timestamptz`}).where(eq(guidanceProgress.userId,BOOKKEEPER.userId));
+    await db().update(auditLog).set({at:sql`'2026-11-11 00:00:00.000300+00'::timestamptz`}).where(and(eq(auditLog.actor,`user:${BOOKKEEPER.userId}`),eq(auditLog.action,"notifications.updatePreference")));
+    expect(flow(await listGuidance.call({},BOOKKEEPER),"core.bookkeeper-first-win").completedCount).toBe(0);
+    await db().update(auditLog).set({at:sql`'2026-11-11 00:00:00.000900+00'::timestamptz`}).where(and(eq(auditLog.actor,`user:${BOOKKEEPER.userId}`),eq(auditLog.action,"notifications.updatePreference")));
+    expect(flow(await listGuidance.call({},BOOKKEEPER),"core.bookkeeper-first-win").completedCount).toBe(1);
+  });
+  it.each(["old-before-start","start-before-new","old-before-reset"] as const)("preserves composed chronology: %s",async order=>{
+    await seedUser(BOOKKEEPER,"composed-guide@example.test");
+    const {key}=await chronologyFixture.call({order},BOOKKEEPER);
+    expect(flow(await listGuidance.call({},BOOKKEEPER),key).completedCount).toBe(order==="start-before-new"?1:0);
+  });
+  it("counts a real submission after a composed guide start",async()=>{
+    await seedUser(OWNER,"composed-owner@example.test");
+    const {key}=await chronologyFixture.call({order:"start-before-submission"},OWNER);
+    const current=flow(await listGuidance.call({},OWNER),key);
+    expect(current.steps.find(step=>step.key==="capture-enquiry")?.completed).toBe(true);
   });
 
   it("reactivates a completed flow when a new capability exposes a task", async () => {

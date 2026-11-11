@@ -10,6 +10,7 @@ import {
   getTableColumns,
   inArray,
   lt,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -1531,12 +1532,24 @@ function pendingErasureReceipt(body: unknown): boolean {
   return receipt.success && receipt.data.outcomes.some(item => item.outcome === "pending");
 }
 
+async function erasureWasApplied(tx: Tx, requestId: string): Promise<boolean> {
+  const [row] = await tx.select({ id: auditLog.id }).from(auditLog).where(and(
+    eq(auditLog.action, "contacts.fulfillDataRequest"), eq(auditLog.subjectType, "dataRequest"), eq(auditLog.subjectId, requestId),
+  )).limit(1);
+  return Boolean(row);
+}
+
 async function refusePendingErasure(tx: Tx, requestId: string): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${requestId}`}))`);
   const [artifact] = await tx.select({ body: dataRequestArtifacts.body }).from(dataRequestArtifacts)
     .where(eq(dataRequestArtifacts.dataRequestId, requestId)).limit(1);
   if (artifact && pendingErasureReceipt(artifact.body)) {
     throw new ServiceError("conflict", "Erasure has started and its provider jobs must finish or be repaired.");
+  }
+  const [request] = await tx.select().from(dataRequests).where(eq(dataRequests.id, requestId)).limit(1);
+  if (request?.kind === "erasure" && request.status === "in_progress" &&
+      (request.verificationMethod === "identity verified before erasure" || await erasureWasApplied(tx, requestId))) {
+    throw new ServiceError("conflict", "The applied erasure receipt needs recovery. Reconcile its original provider jobs before changing this request.");
   }
 }
 
@@ -1647,6 +1660,15 @@ export const fulfillDataRequest = defineService({
       if (existingArtifact && pendingErasureReceipt(existingArtifact.body)) {
         return { request, artifact: existingArtifact };
       }
+      if (request.status === "in_progress" &&
+          (request.verificationMethod === "identity verified before erasure" || await erasureWasApplied(ctx.tx, request.id))) {
+        throw new ServiceError("conflict", "The applied erasure receipt needs recovery. Reconcile its original provider jobs before completing this request.");
+      }
+      const [other] = await ctx.tx.select({ id: dataRequests.id }).from(dataRequests).where(and(
+        eq(dataRequests.contactId, request.contactId), eq(dataRequests.kind, "erasure"),
+        eq(dataRequests.status, "in_progress"), ne(dataRequests.id, request.id),
+      )).limit(1);
+      if (other) throw new ServiceError("conflict", "Another erasure for this contact is still being handled. Finish its original work before fulfilling another request.");
       const result = await eraseContact(ctx, request);
       status = result.pending ? "in_progress" : result.partiallyCompleted ? "partially_completed" : "completed";
       artifactBody = {

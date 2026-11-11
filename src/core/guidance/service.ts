@@ -9,6 +9,9 @@ import {
   desc,
   eq,
   gte,
+  getTableColumns,
+  sql,
+  type SQL,
   inArray,
 } from "drizzle-orm";
 import { z } from "zod";
@@ -158,7 +161,7 @@ async function outcomeReached(
   tx: Tx,
   actor: Extract<Actor, { kind: "user" }>,
   outcome: GuidanceOutcome,
-  since: Date,
+  since: SQL,
 ): Promise<boolean> {
   if (outcome.type === "audit") {
     const [row] = await tx
@@ -204,7 +207,8 @@ async function guidanceViews(
   const flows = await eligibleFlows(tx, actor, flowKey);
   if (flows.length === 0) return [];
   const rows = await tx
-    .select()
+    // Keep SQL precision for outcome boundaries; Date is display-only.
+    .select({...getTableColumns(guidanceProgress),startedAtExact:sql<string>`${guidanceProgress.startedAt}::text`})
     .from(guidanceProgress)
     .where(eq(guidanceProgress.userId, actor.userId));
   const progressByFlow = new Map(
@@ -238,7 +242,7 @@ async function guidanceViews(
       progress.completedSteps.filter((key) => visibleKeys.includes(key)),
     );
     const checks = await Promise.all(
-      steps.map((step) => outcomeReached(tx, actor, step.outcome, progress.startedAt)),
+      steps.map((step) => outcomeReached(tx, actor, step.outcome, sql`${progress.startedAtExact}::timestamptz`)),
     );
     checks.forEach((reached, index) => {
       if (reached) completed.add(steps[index]!.key);
@@ -437,6 +441,7 @@ export const startGuidance = defineService({
         flowKey: flow.definition.key,
         flowVersion: flow.definition.version,
         seenSteps: visibleKeys,
+        startedAt: sql`clock_timestamp()`,
       })
       .onConflictDoUpdate({
         target: [
@@ -516,7 +521,7 @@ export const resetGuidance = defineService({
         flowKey: flow.definition.key,
         flowVersion: flow.definition.version,
         seenSteps,
-        startedAt: now,
+        startedAt: sql`clock_timestamp()`,
       })
       .onConflictDoUpdate({
         target: [
@@ -528,7 +533,7 @@ export const resetGuidance = defineService({
           completedSteps: [],
           seenSteps,
           state: "active",
-          startedAt: now,
+          startedAt: sql`clock_timestamp()`,
           completedAt: null,
           dismissedAt: null,
           updatedAt: now,

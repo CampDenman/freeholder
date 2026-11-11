@@ -103,6 +103,80 @@ merges, borrowed addresses, other-party recovery data, named holds, exact audit
 scrubbing, timeline payloads, composed transactions and competing identity work.
 These source repairs do not supply the independent C11.10 review.
 
+## Payment-provider customer cleanup
+
+The existing `commerce.money` scope includes both local payment data and its
+merchant-owned provider customer copies. Before deleting local customer/card
+rows, fulfilment queues one durable task per original provider/account/customer,
+including a customer known only from a saved method. The receipt stays
+`in_progress` until every task acknowledges actual cleanup. A documented hold
+on `commerce.money` retains both the provider work and its local references.
+
+`invoicing.eraseProviderCustomer` retries the original account and logical job
+identity outside a service transaction. Stripe must first identify that exact
+customer, then return its deletion acknowledgement; an actual already-deleted
+customer is a successful replay. An outage, wrong identity, denied original
+account or unsupported provider leaves the task pending for repair/retry. No
+request falls back to the platform account. Jobs retain only the minimum
+provider references and request/job IDs, not the erased name or email.
+
+Deleting a Stripe customer removes saved payment details and immediately
+cancels its active Stripe subscriptions. The owner sees this consequence before
+confirming `ERASE`, in English, Spanish, French and Arabic. See Stripe's
+[customer deletion contract](https://docs.stripe.com/api/customers/delete).
+This targets merchant customer profiles and saved methods; retained financial
+records and documented exceptions remain subject to the owner's existing policy.
+
+Provider feedback uses the same nonwaiting identity guard as erasure. A racing
+settlement rolls back for retry, then records real money after cutover without
+recreating the erased customer/card data. Late method-only feedback is ignored.
+The shared contact update service preserves the erased-source marker, including
+a field edit prepared before erasure: the final write checks the current marker
+atomically and refuses an overwrite. A new relationship uses a new Contact.
+Inspect failed/dead-letter work in `/admin/jobs`; repairing credentials or
+original account access and retrying preserves the original privacy task.
+Provider HTTP fixtures and disposable database checks are source evidence;
+actual account acceptance and independent security review remain open.
+
+## Recovering a missing pending receipt
+
+Only one erasure for a Contact can be handled at a time. Another request cannot
+remove its pending artifact. An already-applied request with no usable pending
+receipt refuses fulfilment and denial; it needs recovery of its original work.
+The canonical verification marker and the immutable fulfilment audit identity
+provide this fail-closed check without recovering erased personal information.
+
+Before upgrading an existing site, the owner can run this read-only query
+against their database to identify missing artifacts needing investigation:
+
+```sql
+SELECT r.id, r.status
+FROM data_requests r
+WHERE r.kind = 'erasure' AND r.status = 'in_progress'
+  AND NOT EXISTS (
+    SELECT 1 FROM data_request_artifacts a WHERE a.data_request_id = r.id
+  )
+  AND (
+    r.verification_method = 'identity verified before erasure'
+    OR EXISTS (
+      SELECT 1 FROM audit_log l
+      WHERE l.action = 'contacts.fulfillDataRequest'
+        AND l.subject_type = 'dataRequest' AND l.subject_id = r.id::text
+    )
+  );
+```
+
+Restore only the exact original receipt from a trusted backup after verifying
+its SHA-256, request identity and original task identities. Preserve its receipt
+ID and contents, then repair/redrive the original durable provider tasks through
+the existing job controls. The normal worker acknowledgement must establish the
+actual cleanup outcome before completion. A missing backup or unavailable
+provider proof remains unresolved; do not invent a replacement receipt, infer
+success from elapsed time or a missing lookup, or directly mark the request
+complete. The database regression restores a checksum-verified original receipt
+and then exercises the original task against a synthetic Stripe deletion
+acknowledgement; it does not supply production recovery or provider acceptance.
+
 ## Legal-retention exceptions
 
 An exception belongs to one open erasure request and one registered scope. It

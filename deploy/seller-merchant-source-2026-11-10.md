@@ -172,3 +172,29 @@ files and 226,776,069 bytes without source or environment leakage. Final fast
 gates passed typechecking, lint, licensing, release notes, plan consistency
 and 368 contract checks with one deliberate skip. The evidence matrix retains
 369 rows × 12 criteria. These checks do not close C12.38 or C11.10.
+
+## Account-scoped provider customer erasure
+
+The local `commerce.money` erasure operation now captures every original
+provider/account/customer before removing saved methods/customer bindings and
+queues durable cleanup in the same transaction. A saved-method-only customer is
+included; duplicate references on the same account are one task, while distinct
+accounts remain separate. The existing money hold owns both the provider work
+and its local references. No new retention scope bypasses that dependency.
+
+Stripe cleanup requires an exact customer read and actual deletion acknowledgement
+or its already-deleted tombstone on that original account. Failed/unsupported
+work remains pending, including redrive with a new execution ID. The public
+receipt contains task IDs rather than provider routing. The owner is told in
+all four locales that Stripe customer deletion cancels active Stripe subscriptions.
+Late authenticated feedback cannot restore erased saved cards or customer
+bindings; real financial settlement still records. A real transaction-race
+control verifies rollback and safe retry across erasure cutover. Another
+request cannot discard the first pending receipt. A missing applied receipt
+requires the exact original backup and original job reconciliation; it cannot
+be replaced by a fabricated completion. See `deploy/privacy-rights.md`.
+
+`tests/core/payment-provider-erasure.test.ts` and
+`tests/core/stripe-customer-erasure.test.ts` are the source controls. Actual
+provider erasure/account acceptance and the independent review remain required;
+this increment does not close C12.38 or enable seller-merchant activation.

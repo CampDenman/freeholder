@@ -283,6 +283,8 @@ export interface PaymentAdapter {
   createMethodSetup?(request: MethodSetupRequest): Promise<MethodSetupSession>;
   captureCheckout(request: CheckoutCaptureRequest): Promise<CheckoutCaptureResult>;
   refund(request: RefundRequest): Promise<RefundResult>;
+  /** Erase the merchant-owned customer and its saved methods on the original account. */
+  eraseCustomer?(request: PaymentAccountScope & {providerCustomerRef:string;idempotencyKey:string}):Promise<void>;
   revokeSavedMethod(request: SavedMethodRevocationRequest): Promise<void>;
   chargeSavedMethod(request: OffSessionChargeRequest): Promise<OffSessionChargeResult>;
   createRecurringSchedule(request: RecurringScheduleRequest): Promise<RecurringScheduleResult>;

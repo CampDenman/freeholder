@@ -940,6 +940,8 @@ export const submitForm = defineService({
     const [submission] = await ctx.tx
       .insert(formSubmissions)
       .values({
+        // Preserve the actual capture order inside composed transactions.
+        createdAt: sql`clock_timestamp()`,
         formId: form.id,
         contactId,
         data,
