@@ -5438,8 +5438,9 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   controls passed. The final privacy-integrated run passes 68 controls across
   seven files, eight owner/public Chromium journeys pass in all four locales,
   and the complete fast gates pass (368 contracts plus one deliberate skip).
-  A valid long hostname reproduced mobile heading overflow; its narrow wrap
-  repair is under final browser verification. Protected CI remains pending. Limits and
+  A valid long hostname reproduced mobile heading overflow; all four archive
+  journeys pass again after its narrow wrap repair, including actual text
+  bounds. Protected CI remains pending. Limits and
   evidence: `deploy/static-archive-import.md`. This does not close C3.22,
   large-source resumption or source-specific cutover.)*
 - [x] **C3.23** Build the owner import studio and resumable run ledger:

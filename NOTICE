@@ -11,6 +11,9 @@ This product bundles third-party material that remains under its own license:
   public/_freeholder/openmls/0.1.0/. NOTICE.txt there reproduces dependency
   licenses, dependencies.json identifies exact sources, and the unmodified
   MPL-2.0 HPKE source archives are distributed beside the binary.
+- Static ZIP import runtime code uses yauzl 3.4.0 and pend 1.2.0 under MIT.
+  Their original copyright and license texts are reproduced in
+  public/_freeholder/imports/NOTICE.txt and distributed with public assets.
 
 Third-party dependencies installed from package registries are not bundled in
 this repository and carry their own licenses.

@@ -72,11 +72,15 @@ The 2026-11-11 privacy-integrated run passed 68 checks across seven files in
 unknown source writes and language-correct redirects. Eight SDK controls and
 the complete fast gates passed (368 contracts, one deliberate skip). Eight
 owner/public Chromium journeys passed before the final heading-wrap repair;
-a valid longer unbroken hostname then reproduced overflow at 320px. Its wrap
-repair is receiving final browser verification. The integrated production
-scrub before that one-class repair passed at 19,438 files / 238,159,219 bytes.
+a valid longer unbroken hostname then reproduced overflow at 320px. All four
+archive journeys passed again after repair, including actual text bounds,
+RTL, both themes, decoded images, 301 redirects and rollback. The final
+production scrub passed at 19,438 files / 238,159,373 bytes.
 Earlier adjacent qualification passed 109 checks before the privacy rebase;
 those overlapping checks are not a second current exact-tree run.
+
+The pinned MIT runtime dependencies retain their upstream copyright/license
+texts in `public/_freeholder/imports/NOTICE.txt`, distributed with public assets.
 
 C3.22 remains unchecked. Durable cross-batch imports beyond these finite limits,
 arbitrary hosted-builder exports, template/theme conversion and full generic
