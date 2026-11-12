@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { readArchiveDirectory, readArchiveOriginalFile, readArchiveOriginalFiles } from "@/core/import/archive-directory";
+import { archiveGraphEntry, archiveGraphEntrySchema } from "@/core/import/archive-graph-contract";
 import { indexArchivePhase } from "@/core/import/archive-index";
 import type { ArchiveSource } from "@/core/import/archive";
 
@@ -163,6 +164,24 @@ describe("bounded original ZIP indexing phases (C3.47)", () => {
     expect(media.entries[0]).toMatchObject({ file: { path: "site/film.mp4", kind: "asset", bytes: body.length }, contentDigest: createHash("sha256").update(body).digest("hex") });
     expect(media.cursor.bodyBytes).toBe(first.cursor.bodyBytes);
     expect(JSON.stringify(media.entries)).not.toContain(body.slice(0, 100));
+  });
+
+  it("maps actual static files to normalized graph rows and refuses fake identities or body copies", async () => {
+    const source = bytesSource(storedZip([
+      { path: "site/index.html", body: "<html><head><title>Fictional source title</title></head><body><h1>Fictional article</h1></body></html>" },
+      { path: "site/image.png", body: "fictional original media bytes" },
+      { path: "notes.txt", body: "fictional packaging" },
+    ]));
+    const directory = await readArchiveDirectory(source, "https://fictional-zip.example/");
+    const phase = await indexArchivePhase(source, directory);
+    const rows = phase.entries.map(archiveGraphEntry);
+    expect(rows.map(row => row.kind)).toEqual(["page", "attachment", "skipped"]);
+    expect(rows[0]?.metadata).toMatchObject({ format: "archive-zip", title: "Fictional source title", sourcePath: "/index.html" });
+    expect(rows[1]?.metadata.contentDigest).toBe(createHash("sha256").update("fictional original media bytes").digest("hex"));
+    expect(rows[2]?.metadata).not.toHaveProperty("contentDigest");
+    expect(archiveGraphEntrySchema.safeParse({ ...rows[0], metadata: { ...rows[0]!.metadata, wpId: "1001" } }).success).toBe(false);
+    expect(archiveGraphEntrySchema.safeParse({ ...rows[0], metadata: { ...rows[0]!.metadata, body: "shadow source body" } }).success).toBe(false);
+    expect(archiveGraphEntrySchema.safeParse({ ...rows[0], start: rows[0]!.start + 1 }).success).toBe(false);
   });
 
 });

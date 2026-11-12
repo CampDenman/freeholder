@@ -387,3 +387,12 @@ The ZIP cursor now names its actual original-file ordinal explicitly, matching
 migration 73's monotonic cursor guard. Entry metadata is capped at the existing
 16KB per-row SQL limit. The same 55 pure controls pass in 3.40 seconds; targeted
 types and lint pass. No existing migration or runtime source route is changed.
+
+A strict format-discriminated ZIP graph-row contract now retains the actual file
+frame, normalized facts digest and separate real-content digest. Static assets
+use the existing attachment row kind without WordPress IDs; ignored files retain
+facts without invented content hashes or public URLs. Runtime validation refuses
+shadow bodies, fabricated WordPress fields, inconsistent original frame/row
+bindings and mismatched file-fact digests. The real-file mapping and ordinary
+archive/content batch passes 56 pure controls in 3.35 seconds; targeted types and
+lint pass. This contract is not yet wired into the shared service graph.
