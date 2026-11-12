@@ -93,6 +93,11 @@ export async function purgeAgedContactRows(
  * asserted in `tests/core/c11-14-retention.test.ts`.
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+  booking_market_policies: "Original accepted member commercial policy and private contact owner; controlled by shared booking/money and privacy services.",
+  booking_merchant_scopes: "Private original booking account and tax destination witness; personal copies minimized by original buyer and merchant rights, never content-search data.",
+  booking_commercial_sources: "Immutable original booking offering/product/seller provenance, private operational history rather than content search or age-sweep data.",
+  invoice_merchant_scopes: "Immutable original single-source merchant namespace and opaque tax receipt, private financial provenance retained with the invoice.",
+  merchant_invoice_payment_routes: "Immutable original single-source charge/commission binding, retained with actual money and excluded from content search.",
   merchant_collection_configuration: "Current verified payment configuration has no natural-person identity; explicit owner configuration replaces it.",
   invoice_merchant_collections: "Original invoice routes and tax receipts are retained money facts; personal commercial copies minimize through members.merchantIdentity and inherit named holds.",
   merchant_payment_routes: "Immutable original merchant money binding, retained with its payment rather than age-purged.",

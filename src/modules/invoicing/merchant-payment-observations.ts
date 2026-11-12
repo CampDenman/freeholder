@@ -7,11 +7,13 @@ import { z } from "zod";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { invoiceMerchantCollections, merchantPaymentObservations, merchantPaymentRoutes } from "./merchant-collection-schema";
 import { payments } from "./schema";
+import { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 
 const account = z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200);
 const reference = z.string().min(1).max(500);
 export const merchantPaymentEvidence = z.object({
+  providerApiVersion: z.enum(["2026-02-25.clover", "2026-10-28.endive"]).optional(),
   providerAccountId: account.optional(), providerPlatformAccountId: account.optional(),
   destinationAccountId: account.optional(), settlementMerchantAccountId: account.optional(),
   providerRef: reference, status: z.enum(["pending", "succeeded", "failed"]),
@@ -45,7 +47,10 @@ export const recordMerchantPaymentObservation = defineService({
       .innerJoin(payments, eq(payments.id, merchantPaymentRoutes.paymentId)).where(eq(merchantPaymentRoutes.paymentId, paymentId));
     const [agreementSource] = orderSource ? [] : await ctx.tx.select({ route: merchantAgreementPaymentRoutes, payment: payments })
       .from(merchantAgreementPaymentRoutes).innerJoin(payments, eq(payments.id, merchantAgreementPaymentRoutes.paymentId)).where(eq(merchantAgreementPaymentRoutes.paymentId, paymentId));
-    const source = orderSource ?? (agreementSource ? { ...agreementSource, collection: agreementSource.route } : undefined);
+    const [singleSource] = orderSource || agreementSource ? [] : await ctx.tx.select({ route: merchantInvoicePaymentRoutes, collection: invoiceMerchantScopes, payment: payments })
+      .from(merchantInvoicePaymentRoutes).innerJoin(invoiceMerchantScopes, eq(invoiceMerchantScopes.invoiceId, merchantInvoicePaymentRoutes.invoiceId))
+      .innerJoin(payments, eq(payments.id, merchantInvoicePaymentRoutes.paymentId)).where(eq(merchantInvoicePaymentRoutes.paymentId, paymentId));
+    const source = orderSource ?? singleSource ?? (agreementSource ? { ...agreementSource, collection: agreementSource.route } : undefined);
     if (!source) return { recorded: false, routeVerified: false }; // A historical payment is never silently adopted.
     if (source.payment.provider !== "stripe" || !evidence.providerPlatformAccountId || evidence.amountMinor === undefined || !evidence.currency) throw new ServiceError("conflict", "Retain complete original provider evidence before reconciling this merchant payment.");
     const recipientAccountId = evidence.destinationAccountId ?? evidence.providerAccountId ?? null;
@@ -56,7 +61,7 @@ export const recordMerchantPaymentObservation = defineService({
       && recipientAccountId === source.collection.recipientAccountId
       && settlementMerchantAccountId === source.collection.settlementMerchantAccountId;
     const values = {
-      paymentId, providerEventRef, providerRef: evidence.providerRef, status: evidence.status, amountMinor: evidence.amountMinor, currency: evidence.currency,
+      paymentId, providerEventRef, providerApiVersion: evidence.providerApiVersion ?? null, providerRef: evidence.providerRef, status: evidence.status, amountMinor: evidence.amountMinor, currency: evidence.currency,
       providerPlatformAccountId: evidence.providerPlatformAccountId, chargeAccountId: evidence.providerAccountId ?? null,
       recipientAccountId, settlementMerchantAccountId, applicationFeeMinor: evidence.applicationFeeMinor ?? null,
       providerChargeRef: evidence.providerChargeRef ?? null, applicationFeeRef: evidence.applicationFeeRef ?? null, transferRef: evidence.transferRef ?? null, routeVerified,

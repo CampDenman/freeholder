@@ -20,6 +20,7 @@
 //
 // **Everything emits a timeline event**, so the CRM shows a client's whole
 // history without booking knowing the CRM exists.
+import { bookingTaxDestination, captureBookingCommercialPolicy } from "./commercial-policy";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
@@ -305,6 +306,8 @@ export const createBooking = defineService({
       phone: z.string().trim().max(100).optional(),
     }),
     serviceOfferingId: z.uuid().nullish(),
+    taxDestination: bookingTaxDestination.optional(),
+    commercialQuoteDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     secondaryCalendarIds: z.array(z.uuid()).max(10).default([]),
     startsAt: z.iso.datetime(),
     endsAt: z.iso.datetime(),
@@ -396,6 +399,7 @@ export const createBooking = defineService({
         throw error;
       });
 
+    await captureBookingCommercialPolicy(ctx, { bookingId: created!.id, taxDestination: input.taxDestination, commercialQuoteDigest: input.commercialQuoteDigest });
     await recordOnTimeline(ctx, {
       contactId: resolved.contact.id,
       bookingId: created!.id,
@@ -630,6 +634,7 @@ export const rescheduleBooking = defineService({
         exclusive: calendar.capacityDefault <= 1,
         invoiceId: previous.invoiceId,
         rescheduledFromId: previous.id,
+        marketPolicyVersion: previous.marketPolicyVersion,
         // Carried, not recounted. The terms are the ones the customer agreed
         // to, and the count is what a reschedule limit is a limit on — walking
         // `rescheduledFromId` instead would stop enforcing the moment somebody
@@ -653,6 +658,7 @@ export const rescheduleBooking = defineService({
         throw error;
       });
 
+    await captureBookingCommercialPolicy(ctx, { bookingId: moved!.id, rescheduledFromId: previous.id });
     // The reminders belong to the appointment, not to the row. The old row is
     // cancelled above, which drops its scheduled reminders; the new one gets
     // its own, computed from where it actually is now.

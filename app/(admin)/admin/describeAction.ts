@@ -197,6 +197,9 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "invoicing.recordMerchantFeeObservation": "admin.activity.refundUpdated",
   "invoicing.applyMerchantFeeResult": "admin.activity.refundUpdated",
   "invoicing.reconcileMerchantApplicationFee": "admin.activity.refundUpdated",
+  "members.completeBookingTaxQuote": "admin.activity.bookingUpdated",
+  "subscriptions.retainProviderCharge": "admin.activity.paymentUpdated",
+  "subscriptions.completeProviderChargeFee": "admin.activity.paymentUpdated",
   "invoicing.recordCustomerPaymentObservation": "admin.activity.paymentUpdated",
   "invoicing.voidCreditNote": "admin.activity.creditNoteVoided",
   "marketplace.reconcileRefund": "admin.activity.creditNoteIssued",
@@ -345,6 +348,8 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
  */
 export const OWNER_HIDDEN_ACTIONS: ReadonlySet<string> = new Set([
   "invoicing.captureMerchantCollections",
+  "invoicing.captureMerchantScope",
+  "members.captureBookingMarketPolicy",
   "contacts.resolve",
   "analytics.track",
   "analytics.identify",

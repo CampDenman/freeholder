@@ -107,7 +107,7 @@ registerSubscriptionInvoiceRouting(async (ctx, input) => {
   const [receipt] = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.id, input.subscriptionChargeReceiptId));
   if (!receipt || receipt.subscriptionId !== subscriptionId || receipt.currency !== invoice.currency || receipt.providerSubscriptionRef !== original.subscription.providerRef
     || receipt.providerPlatformAccountId !== original.scope.providerPlatformAccountId || receipt.chargeAccountId !== original.scope.chargeAccountId) throw new ServiceError("conflict", "This renewal receipt belongs to another original agreement or account.");
-  return { ...routing, providerOrigin: { receiptId: receipt.id, providerApiVersion: original.scope.providerScheduleApiVersion, providerSubscriptionRef: receipt.providerSubscriptionRef, providerInvoiceRef: receipt.providerInvoiceRef, providerPaymentIntentRef: receipt.providerPaymentIntentRef, providerChargeRef: receipt.providerChargeRef } };
+  return { ...routing, providerOrigin: { receiptId: receipt.id, providerApiVersion: subscriptionMerchantScope.parse(original.scope).providerScheduleApiVersion, providerSubscriptionRef: receipt.providerSubscriptionRef, providerInvoiceRef: receipt.providerInvoiceRef, providerPaymentIntentRef: receipt.providerPaymentIntentRef, providerChargeRef: receipt.providerChargeRef } };
 });
 
 export default [retainProviderCharge, completeProviderChargeFee];

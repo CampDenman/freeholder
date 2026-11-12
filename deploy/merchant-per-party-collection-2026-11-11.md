@@ -154,3 +154,22 @@ contracts. It does not claim native financial journeys, database migration80,
 real provider accounts, all four locale flows or completed privacy/merge/hold
 qualification. `merchant-invoice-source-inventory-2026-11-11.md` records the
 additional inherited-source paths that must be complete before activation.
+
+## Disabled booking and protocol composition checkpoint
+
+New booking acceptance now has an original catalog ownership witness, an
+immutable member policy and a separate original charge/tax scope. Rescheduling
+copies that scope rather than consulting the offering's later owner. Invoice
+and payment routes can retain this single-source scope independently of order
+allocations and subscription agreements. Buyer tax destination and seller
+public identity have separate erasure roles; parent-contact merge receipts
+include bounded child money witnesses. These are source foundations: original
+booking price capture, public quote/consent, inherited financial sources and
+native qualification still need completion before this model can be enabled.
+
+New scheduled charges preserve the explicitly frozen Stripe API version on
+original inspection, refund and commission operations; historical and hosted
+charge defaults retain their original protocol. Seven adapter/protocol files
+passed 129 controls and four source/privacy/audit contract files passed 30.
+Full TypeScript and focused lint passed. Migration80 remains unapplied and
+unjournalled; this is not a native migration, provider-account or release claim.

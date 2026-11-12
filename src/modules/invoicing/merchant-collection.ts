@@ -12,13 +12,11 @@ import { invoiceMarketPolicies, invoiceMerchantAllocations, invoices, payments }
 import { invoiceMerchantCollections, merchantCollectionConfiguration, merchantPaymentRoutes } from "./merchant-collection-schema";
 import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations";
 import { invoicePaymentDueAmount } from "./invoice-payment-due";
+import { merchantTaxPolicyReceipt } from "./merchant-tax-contract";
 import { nextMerchantCollectionAmount } from "./merchant-collection-amounts";
 
 const account = z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200);
-export const merchantTaxPolicyReceipt = z.object({
-  liability: z.enum(["platform", "seller"]), profileId: z.uuid(), profileVersion: z.number().int().positive(),
-  evidenceDigest: z.string().regex(/^[0-9a-f]{64}$/),
-}).strict();
+export { merchantTaxPolicyReceipt } from "./merchant-tax-contract";
 export const merchantCollectionReceipt = z.object({
   allocationId: z.uuid(), collectionKind: z.enum(["platform", "direct", "destination"]),
   providerPlatformAccountId: account, chargeAccountId: account.nullable(), recipientAccountId: account.nullable(), settlementMerchantAccountId: account.nullable(),
@@ -53,7 +51,7 @@ export const getMerchantCollectionConfiguration = defineService({
   kind: "query", permission: "scoped", input: z.object({}),
   output: z.object({ collectionKind: z.enum(["direct", "destination"]), providerPlatformAccountId: account, verifiedAt: z.date() }).nullable(),
   handler: async (_input, ctx) => {
-    const [configuration] = await ctx.tx.select().from(merchantCollectionConfiguration).where(eq(merchantCollectionConfiguration.id, 1));
+    const [configuration] = await ctx.tx.select().from(merchantCollectionConfiguration).where(eq(merchantCollectionConfiguration.id, 1)).for("share");
     return configuration ?? null;
   },
 });

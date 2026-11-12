@@ -36,6 +36,12 @@ describe("exact original application-fee refunds (C12.26/C12.38)", () => {
     expect(new Headers(init?.headers).get("idempotency-key")).toBe(request.idempotencyKey);
   });
 
+  it("keeps the frozen scheduled API protocol on both platform verification and final fee refund", async () => {
+    const p = provider([identity, fee, identity, refund]);
+    await p.issue({ ...request, providerApiVersion: "2026-10-28.endive" });
+    for (const [, init] of p.fetcher.mock.calls) expect(new Headers(init?.headers).get("stripe-version")).toBe("2026-10-28.endive");
+  });
+
   it("uses the platform fee namespace for direct charges too, without changing their original charge account", async () => {
     const p = provider([identity, { ...fee, charge: "ch_original", originating_transaction: null }, identity, refund]);
     await p.issue({ ...request, providerAccountId: "acct_seller", destinationAccountId: undefined, settlementMerchantAccountId: undefined });

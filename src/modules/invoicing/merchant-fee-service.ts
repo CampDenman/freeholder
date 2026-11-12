@@ -113,7 +113,7 @@ export const reconcileMerchantApplicationFee = defineOrchestratedService({
     const adapter = paymentAdapter(source.payment.provider);
     if (!adapter.inspectMerchantPayment || !adapter.refundMerchantFee || !adapter.recoverMerchantFeeRefund || !source.payment.providerRef) throw new ServiceError("conflict", "The original provider cannot yet reconcile this fee.");
     const { routing } = source;
-    const subscriptionOrigin = routing.originalChargeReceiptId ? { providerSubscriptionRef: routing.providerSubscriptionRef!, providerInvoiceRef: routing.providerInvoiceRef!, providerPaymentIntentRef: routing.providerPaymentIntentRef! } : undefined;
+    const subscriptionOrigin = routing.originalChargeReceiptId ? { providerApiVersion: routing.providerApiVersion as "2026-10-28.endive", providerSubscriptionRef: routing.providerSubscriptionRef!, providerInvoiceRef: routing.providerInvoiceRef!, providerPaymentIntentRef: routing.providerPaymentIntentRef! } : undefined;
     await adapter.inspectMerchantPayment({ ...routing, providerPlatformAccountId: routing.providerPlatformAccountId!, providerRef: source.payment.providerRef,
       ...(subscriptionOrigin ? { subscriptionOrigin } : { paymentAttemptId: paymentId }),
       onPaymentObserved: async evidence => { await recordMerchantPaymentObservation.call({ paymentId, providerEventRef: merchantObservationRef(evidence), evidence }, system); } });

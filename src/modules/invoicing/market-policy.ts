@@ -7,6 +7,7 @@ import { publicMerchantSupport } from "@/core/commerce/merchant-identity";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { invoiceMarketPolicies, invoices } from "./schema";
+import { captureInvoiceMerchantScope } from "./merchant-invoice-scope";
 import { captureInvoiceMerchantAllocations } from "./merchant-allocations";
 import { captureMerchantCollections, verifyNextMerchantCollection } from "./merchant-collection";
 
@@ -65,6 +66,7 @@ export const captureInvoiceMarketPolicy = defineService({
     await ctx.tx.insert(invoiceMarketPolicies).values({ invoiceId, ...policy });
     await ctx.callAsSystem(captureInvoiceMerchantAllocations, { invoiceId });
     if (policy.collectionVersion === 1) await ctx.callAsSystem(captureMerchantCollections, { invoiceId });
+    else await ctx.callAsSystem(captureInvoiceMerchantScope, { invoiceId });
     ctx.setSubject("invoice", invoiceId);
     return { captured: true };
   },

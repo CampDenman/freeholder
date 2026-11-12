@@ -6,6 +6,7 @@ import { z } from "zod";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { allocateMerchantAmounts } from "./merchant-allocation-amounts";
+import { getInvoiceMerchantFreightReceipts } from "./merchant-tax";
 import { marketFeeMinor } from "./market-policy";
 import { invoiceLines, invoiceMarketPolicies, invoiceMerchantAllocations, invoiceMerchantAllocationLines, invoices } from "./schema";
 
@@ -35,7 +36,9 @@ export const captureInvoiceMerchantAllocations = defineService({
     const byLine = new Map(owners.map(owner => [owner.invoiceLineId, owner]));
     const lines = await ctx.tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, invoiceId));
     if (byLine.size !== owners.length || owners.length !== lines.length || lines.some(line => !byLine.has(line.id))) throw new ServiceError("conflict", "Each original invoice line needs exactly one merchant owner.");
-    const parts = allocateMerchantAmounts(invoice, lines.map(line => ({ ...line, ...byLine.get(line.id)! })), policy.siteFeeBps);
+    const freight = policy.collectionVersion === 1 ? await ctx.callAsSystem(getInvoiceMerchantFreightReceipts, { invoiceId }) : null;
+    if (policy.collectionVersion === 1 && !freight) throw new ServiceError("conflict", "Each new merchant portion needs its actual original freight and shipping-tax receipt.");
+    const parts = allocateMerchantAmounts(invoice, lines.map(line => ({ ...line, ...byLine.get(line.id)! })), policy.siteFeeBps, freight ?? undefined);
     if (parts.reduce((sum, part) => sum + BigInt(part.feeMinor), 0n) !== BigInt(policy.feeMinor)) throw new ServiceError("conflict", "The original invoice application fee and seller portions differ.");
     if (policy.model === "seller_merchant" && policy.collectionVersion === 0 && (parts.length !== 1 || parts[0]!.sellerUserId !== policy.sellerUserId)) throw new ServiceError("conflict", "The original direct merchant does not own this invoice's portions.");
     for (const { lineIds, ...part } of parts) {

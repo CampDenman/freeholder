@@ -3,6 +3,7 @@
 // Transactional product lifecycle shared by admin, HTTP and MCP (C5.09).
 
 import { hiddenListings } from "./listing-gate";
+import bookingCommercialSourceServices from "./booking-commercial-source";
 import marketServices from "./market";
 import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -1049,6 +1050,7 @@ import customerReturnServices from "./customer-returns";
 export {myOrderReturns,requestMyReturn} from "./customer-returns";
 
 export default [
+  ...bookingCommercialSourceServices,
   ...marketServices,
   ...publicBookingServices,
   ...customerReturnServices,

@@ -41,6 +41,7 @@ export {
   availabilityRules,
   availabilityExceptions,
   bookings,
+  bookingCommercialSources,
   bookingParticipants,
   bookingWaitlist,
   bookingReminders,

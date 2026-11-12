@@ -11,7 +11,11 @@ import { lockContactIdentity, lockContactIdentityForRead } from "@/core/contacts
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {ServiceError,type Tx} from "@/core/service";
 import { invoiceMarketPolicies, invoiceMerchantAllocations } from "@/modules/invoicing/schema";
-import { invoiceMerchantCollections } from "@/modules/invoicing/merchant-collection-schema";
+import { invoiceMerchantCollections, merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations } from "@/modules/invoicing/merchant-collection-schema";
+import { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "@/modules/invoicing/merchant-invoice-scope-schema";
+import { payments } from "@/modules/invoicing/schema";
+import { bookingCommercialSources, bookings } from "@/core/scheduling/schema";
+import { bookingMarketPolicies, bookingMerchantScopes } from "./booking-merchant-schema";
 import { subscriptionMarketPolicies } from "@/modules/subscriptions/schema";
 
 export async function merchantIdentityErased(tx:Tx,userId:string,contactId?:string|null):Promise<boolean>{
@@ -25,7 +29,7 @@ async function merchantForContact(tx:Tx,contactId:string):Promise<string|null>{
 }
 
 registerContactPrivacySource({
-  scope:"members.merchantIdentity",tables:["invoice_market_policies","subscription_market_policies","invoice_merchant_allocations","invoice_merchant_collections"],
+  scope:"members.merchantIdentity",tables:["invoice_market_policies","subscription_market_policies","invoice_merchant_allocations","invoice_merchant_collections","booking_market_policies","booking_merchant_scopes"],
   retentionScopes:["members","commerce.money"],eraseOrder:5,
   exportData:async(tx,contactId)=>{
     const userId=await merchantForContact(tx,contactId);
@@ -37,6 +41,10 @@ registerContactPrivacySource({
       merchantCollections:await tx.select({invoiceId:invoiceMerchantCollections.invoiceId,merchantName:invoiceMerchantCollections.merchantName,merchantSupport:invoiceMerchantCollections.merchantSupport,taxPolicy:invoiceMerchantCollections.taxPolicy})
         .from(invoiceMerchantCollections).innerJoin(invoiceMerchantAllocations,eq(invoiceMerchantAllocations.id,invoiceMerchantCollections.allocationId))
         .where(or(eq(invoiceMerchantAllocations.merchantContactId,contactId),userId?and(isNull(invoiceMerchantAllocations.merchantContactId),eq(invoiceMerchantAllocations.sellerUserId,userId)):undefined)),
+      bookingPolicies:await tx.select({bookingId:bookingMarketPolicies.bookingId,merchantName:bookingMarketPolicies.merchantName,merchantSupport:bookingMarketPolicies.merchantSupport})
+        .from(bookingMarketPolicies).where(eq(bookingMarketPolicies.merchantContactId,contactId)),
+      bookingMerchantIdentity:await tx.select({bookingId:bookingMerchantScopes.bookingId,merchantName:bookingMerchantScopes.merchantName,merchantSupport:bookingMerchantScopes.merchantSupport})
+        .from(bookingMerchantScopes).where(eq(bookingMerchantScopes.merchantContactId,contactId)),
       agreements:await tx.select({subscriptionId:subscriptionMarketPolicies.subscriptionId,merchantName:subscriptionMarketPolicies.merchantName,merchantSupport:subscriptionMarketPolicies.merchantSupport}).from(subscriptionMarketPolicies).where(or(eq(subscriptionMarketPolicies.merchantContactId,contactId),userId?and(isNull(subscriptionMarketPolicies.merchantContactId),eq(subscriptionMarketPolicies.sellerUserId,userId)):undefined)),
     };
   },
@@ -49,16 +57,18 @@ registerContactPrivacySource({
     const agreements=await tx.update(subscriptionMarketPolicies).set({merchantName:ERASED_MERCHANT_NAME,merchantSupport:null}).where(or(eq(subscriptionMarketPolicies.merchantContactId,contactId),userId?and(isNull(subscriptionMarketPolicies.merchantContactId),eq(subscriptionMarketPolicies.sellerUserId,userId)):undefined)).returning({id:subscriptionMarketPolicies.subscriptionId});
     const collectionRows=await tx.update(invoiceMerchantCollections).set({merchantName:ERASED_MERCHANT_NAME,merchantSupport:null}).where(inArray(invoiceMerchantCollections.allocationId,
       tx.select({id:invoiceMerchantAllocations.id}).from(invoiceMerchantAllocations).where(or(eq(invoiceMerchantAllocations.merchantContactId,contactId),userId?and(isNull(invoiceMerchantAllocations.merchantContactId),eq(invoiceMerchantAllocations.sellerUserId,userId)):undefined)))).returning({id:invoiceMerchantCollections.allocationId});
-    return{affected:invoices.length+agreements.length+collectionRows.length};
+    const bookingPolicies=await tx.update(bookingMarketPolicies).set({merchantName:ERASED_MERCHANT_NAME,merchantSupport:null}).where(eq(bookingMarketPolicies.merchantContactId,contactId)).returning({id:bookingMarketPolicies.bookingId});
+    const bookingScopes=await tx.update(bookingMerchantScopes).set({merchantName:ERASED_MERCHANT_NAME,merchantSupport:null,merchantIdentityErasedAt:sql`coalesce(${bookingMerchantScopes.merchantIdentityErasedAt},now())`}).where(eq(bookingMerchantScopes.merchantContactId,contactId)).returning({id:bookingMerchantScopes.bookingId});
+    return{affected:invoices.length+agreements.length+collectionRows.length+bookingPolicies.length+bookingScopes.length};
   },
 });
 
 const pointer=z.object({id:z.uuid(),contactId:z.uuid().nullable(),fingerprint:z.string().regex(/^[0-9a-f]{64}$/)});
 type Pointer=z.infer<typeof pointer>;
 type RawPointer={id:string;contactId:string|null;material:string};
-function registerIdentityReference(table:string,read:(tx:Tx,ids:string[])=>Promise<RawPointer[]>,repoint:(tx:Tx,from:string,to:string)=>Promise<unknown>,restore:(tx:Tx,ids:string[],contactId:string)=>Promise<unknown>){
+function registerIdentityReference(table:string,read:(tx:Tx,ids:string[])=>Promise<RawPointer[]|null>,repoint:(tx:Tx,from:string,to:string)=>Promise<unknown>,restore:(tx:Tx,ids:string[],contactId:string)=>Promise<unknown>){
  const snapshot=async(tx:Tx,ids:string[])=>{
-  const rows=await read(tx,ids);return rows.length>5000?null:rows.map(({id,contactId,material}):Pointer=>({id,contactId,fingerprint:createHash("sha256").update(material).digest("hex")}));
+  const rows=await read(tx,ids);return rows===null||rows.length>5000?null:rows.map(({id,contactId,material}):Pointer=>({id,contactId,fingerprint:createHash("sha256").update(material).digest("hex")}));
  };
  registerContactReference({
   table,columns:["merchant_contact_id"],repoint,
@@ -104,3 +114,38 @@ registerContactReference({
   if(current===null||JSON.stringify(current)!==JSON.stringify(expected))throw new ServiceError("conflict","Original merchant collection evidence changed after the contact merge.");
  },
 });
+
+registerIdentityReference("booking_market_policies",
+ (tx,ids)=>tx.select({id:bookingMarketPolicies.bookingId,contactId:bookingMarketPolicies.merchantContactId,material:sql<string>`to_jsonb(${bookingMarketPolicies})::text`}).from(bookingMarketPolicies).innerJoin(bookings,eq(bookings.id,bookingMarketPolicies.bookingId)).where(or(inArray(bookingMarketPolicies.merchantContactId,ids),inArray(bookings.contactId,ids))).orderBy(bookingMarketPolicies.bookingId).limit(5001),
+ (tx,from,to)=>tx.update(bookingMarketPolicies).set({merchantContactId:to}).where(eq(bookingMarketPolicies.merchantContactId,from)),
+ (tx,ids,contactId)=>tx.update(bookingMarketPolicies).set({merchantContactId:contactId}).where(inArray(bookingMarketPolicies.bookingId,ids)),
+);
+async function bookingScopePointers(tx:Tx,ids:string[]):Promise<RawPointer[]|null>{
+ const rows=await tx.select({scope:bookingMerchantScopes,source:bookingCommercialSources}).from(bookingMerchantScopes)
+  .innerJoin(bookings,eq(bookings.id,bookingMerchantScopes.bookingId)).leftJoin(bookingCommercialSources,eq(bookingCommercialSources.bookingId,bookingMerchantScopes.bookingId))
+  .where(or(inArray(bookingMerchantScopes.merchantContactId,ids),inArray(bookings.contactId,ids))).orderBy(bookingMerchantScopes.bookingId).limit(5001);
+ if(rows.length>5000)return null;
+ if(!rows.length)return[];
+ const invoiceScopes=await tx.select().from(invoiceMerchantScopes).where(inArray(invoiceMerchantScopes.bookingId,rows.map(row=>row.scope.bookingId))).orderBy(invoiceMerchantScopes.invoiceId).limit(5001);
+ if(rows.length+invoiceScopes.length>5000)return null;
+ const invoiceIds=invoiceScopes.map(row=>row.invoiceId);
+ const routes=invoiceIds.length?await tx.select({route:merchantInvoicePaymentRoutes,payment:payments}).from(merchantInvoicePaymentRoutes).innerJoin(payments,eq(payments.id,merchantInvoicePaymentRoutes.paymentId)).where(inArray(merchantInvoicePaymentRoutes.invoiceId,invoiceIds)).orderBy(merchantInvoicePaymentRoutes.paymentId).limit(5001):[];
+ if(rows.length+invoiceScopes.length+routes.length>5000)return null;
+ const paymentIds=routes.map(row=>row.payment.id);
+ const observations=paymentIds.length?await tx.select().from(merchantPaymentObservations).where(inArray(merchantPaymentObservations.paymentId,paymentIds)).orderBy(merchantPaymentObservations.id).limit(5001):[];
+ const feeOperations=paymentIds.length?await tx.select().from(merchantFeeRefunds).where(inArray(merchantFeeRefunds.paymentId,paymentIds)).orderBy(merchantFeeRefunds.id).limit(5001):[];
+ if(rows.length+invoiceScopes.length+routes.length+observations.length+feeOperations.length>5000)return null;
+ const feeObservations=feeOperations.length?await tx.select().from(merchantFeeObservations).where(inArray(merchantFeeObservations.operationId,feeOperations.map(row=>row.id))).orderBy(merchantFeeObservations.id).limit(5001):[];
+ if(rows.length+invoiceScopes.length+routes.length+observations.length+feeOperations.length+feeObservations.length>5000)return null;
+ return rows.map(({scope,source})=>{
+  const ownedInvoices=invoiceScopes.filter(row=>row.bookingId===scope.bookingId),ownedIds=new Set(ownedInvoices.map(row=>row.invoiceId));
+  const ownedRoutes=routes.filter(row=>ownedIds.has(row.route.invoiceId)),ownedPayments=new Set(ownedRoutes.map(row=>row.payment.id));
+  const ownedFees=feeOperations.filter(row=>ownedPayments.has(row.paymentId)),feeIds=new Set(ownedFees.map(row=>row.id));
+  return{id:scope.bookingId,contactId:scope.merchantContactId,material:JSON.stringify({scope,source,invoices:ownedInvoices,routes:ownedRoutes,observations:observations.filter(row=>ownedPayments.has(row.paymentId)),feeOperations:ownedFees,feeObservations:feeObservations.filter(row=>feeIds.has(row.operationId))})};
+ });
+}
+registerIdentityReference("booking_merchant_scopes",
+ bookingScopePointers,
+ (tx,from,to)=>tx.update(bookingMerchantScopes).set({merchantContactId:to}).where(eq(bookingMerchantScopes.merchantContactId,from)),
+ (tx,ids,contactId)=>tx.update(bookingMerchantScopes).set({merchantContactId:contactId}).where(inArray(bookingMerchantScopes.bookingId,ids)),
+);

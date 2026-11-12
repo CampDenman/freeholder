@@ -7,6 +7,8 @@ import marketPolicyServices from "./market-policy";
 import merchantAllocationServices from "./merchant-allocations";
 import merchantCollectionServices from "./merchant-collection";
 import merchantPaymentObservationServices from "./merchant-payment-observations";
+import merchantTaxServices from "./merchant-tax";
+import merchantInvoiceScopeServices from "./merchant-invoice-scope";
 import merchantPaymentReviewServices from "./merchant-payment-review";
 import merchantFeeServices from "./merchant-fee-service";
 import merchantSettlementServices from "./merchant-settlement";
@@ -15,7 +17,6 @@ import paymentProviderServices from "./payment-provider-service";
 import posServices from "./pos-service";
 import taxServices from "./tax-service";
 import customerServices from "./customer-service";
-import { assertMerchantTaxRevisionSafe } from "@/modules/subscriptions/merchant-tax-revision";
 
 export { quoteTax } from "./tax-service";
 
@@ -33,14 +34,14 @@ import "./reporting";
 import "./funnel";
 
 export default [
-  // External schedules remain dependencies even when subscriptions is disabled.
-  assertMerchantTaxRevisionSafe,
   ...marketPolicyServices,
   ...merchantAllocationServices,
   ...merchantCollectionServices,
   ...merchantPaymentObservationServices,
   ...merchantFeeServices,
   ...merchantPaymentReviewServices,
+  ...merchantInvoiceScopeServices,
+  ...merchantTaxServices,
   ...merchantSettlementServices,
   ...demoServices,
   ...recurringServices,

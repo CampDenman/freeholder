@@ -44,3 +44,5 @@ export {
   memberRemotePosts,
   memberPayoutTransfers,
 } from "./schema";
+
+export { bookingMarketPolicies, bookingMerchantScopes } from "./booking-merchant-schema";

@@ -74,6 +74,7 @@ export const merchantPaymentObservations = pgTable("merchant_payment_observation
   id: uuid("id").primaryKey().defaultRandom(),
   paymentId: uuid("payment_id").notNull().references(() => payments.id, { onDelete: "restrict" }),
   providerEventRef: text("provider_event_ref").notNull(),
+  providerApiVersion: text("provider_api_version"),
   providerRef: text("provider_ref").notNull(),
   status: text("status", { enum: ["pending", "succeeded", "failed"] }).notNull(),
   amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),

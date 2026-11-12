@@ -16,7 +16,7 @@ export function merchantPaymentWitness(payment: z.infer<typeof paymentRow>, rout
     providerRef: payment.providerRef, providerCheckoutRef: payment.providerCheckoutRef, createdAt: payment.createdAt.toISOString(), routing: paymentRouting.parse(routing) })).digest("hex");
 }
 const amount = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
-const observed = z.object({ id: z.uuid(), providerRef: z.string(), status: z.enum(["pending", "succeeded", "failed"]), amountMinor: amount, currency: z.string(),
+const observed = z.object({ id: z.uuid(), providerApiVersion: z.string().nullable(), providerRef: z.string(), status: z.enum(["pending", "succeeded", "failed"]), amountMinor: amount, currency: z.string(),
   providerPlatformAccountId: z.string(), chargeAccountId: z.string().nullable(), recipientAccountId: z.string().nullable(), settlementMerchantAccountId: z.string().nullable(),
   applicationFeeMinor: amount.nullable(), providerChargeRef: z.string().nullable(), applicationFeeRef: z.string().nullable(), transferRef: z.string().nullable(),
   applicationFeeCurrency: z.string().nullable(), observedApplicationFeeMinor: amount.nullable(), observedFeeRefundedMinor: amount.nullable(),

@@ -13,6 +13,7 @@ export function validateMerchantChargeScope(scope: MerchantChargeScope): void {
   for (const account of [scope.providerAccountId, scope.providerPlatformAccountId, scope.destinationAccountId, scope.settlementMerchantAccountId]) {
     if (account !== undefined && (account.length > 200 || !/^acct_[A-Za-z0-9]+$/.test(account))) invalid();
   }
+  if (scope.providerApiVersion !== undefined && !["2026-02-25.clover", "2026-10-28.endive"].includes(scope.providerApiVersion)) invalid();
   if (scope.destinationAccountId) {
     // Destination objects belong to the platform. on_behalf_of changes the
     // settlement merchant, never the account used for reads/refunds/disputes.
@@ -40,6 +41,7 @@ export function assertMerchantAttempt(scope: MerchantChargeScope, paymentAttempt
 
 export function merchantChargeScope(scope: MerchantChargeScope): MerchantChargeScope {
   return {
+    ...(scope.providerApiVersion ? { providerApiVersion: scope.providerApiVersion } : {}),
     ...(scope.providerAccountId ? { providerAccountId: scope.providerAccountId } : {}),
     ...(scope.providerPlatformAccountId ? { providerPlatformAccountId: scope.providerPlatformAccountId } : {}),
     ...(scope.destinationAccountId ? { destinationAccountId: scope.destinationAccountId } : {}),
@@ -80,6 +82,7 @@ export function merchantIntentEvidence(scope: MerchantChargeScope, intent: Recor
   let merchantRouteVerified = true;
   try { assertMerchantIntent(scope, intent); } catch { merchantRouteVerified = false; }
   return {
+    ...(scope.providerApiVersion ? { providerApiVersion: scope.providerApiVersion } : {}),
     ...(scope.providerAccountId ? { providerAccountId: scope.providerAccountId } : {}),
     ...(scope.providerPlatformAccountId ? { providerPlatformAccountId: scope.providerPlatformAccountId } : {}),
     ...(destinationAccountId ? { destinationAccountId } : {}),

@@ -13,13 +13,13 @@ import { type invoices, payments } from "./schema";
 
 export type SubscriptionInvoiceRouting = {
   subscriptionId: string; agreementRoutingVersion: 1; scope: MerchantChargeScope; siteFeeBps: number;
-  providerOrigin?: { receiptId: string; providerSubscriptionRef: string; providerInvoiceRef: string; providerPaymentIntentRef: string; providerChargeRef: string };
+  providerOrigin?: { providerApiVersion?: "2026-10-28.endive"; receiptId: string; providerSubscriptionRef: string; providerInvoiceRef: string; providerPaymentIntentRef: string; providerChargeRef: string };
 };
 let resolver: ((ctx: ServiceContext, input: { invoiceId: string; method: string; subscriptionChargeReceiptId?: string }) => Promise<SubscriptionInvoiceRouting | null>) | undefined;
 /** Startup-only; source reads immutable agreement/receipt facts in this TX. */
 export function registerSubscriptionInvoiceRouting(next: NonNullable<typeof resolver>): void { resolver = next; }
 const account = z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200);
-const scopeSchema = z.object({ providerPlatformAccountId: account, providerAccountId: account.optional(), destinationAccountId: account.optional(), settlementMerchantAccountId: account.optional() });
+const scopeSchema = z.object({ providerApiVersion: z.enum(["2026-02-25.clover", "2026-10-28.endive"]).optional(), providerPlatformAccountId: account, providerAccountId: account.optional(), destinationAccountId: account.optional(), settlementMerchantAccountId: account.optional() });
 export type ReservedAgreementCharge = z.infer<typeof scopeSchema> & {
   providerAccountId: string; applicationFeeMinor: number; agreementSubscriptionId: string;
   providerSubscriptionRef?: string; providerInvoiceRef?: string; providerPaymentIntentRef?: string; providerChargeRef?: string; originalChargeReceiptId?: string;
@@ -37,7 +37,7 @@ export async function reserveAgreementCharge(ctx: ServiceContext, invoice: typeo
   const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: invoice.id });
   if (!policy || policy.model !== "seller_merchant" || policy.siteFeeBps !== original.siteFeeBps) throw new ServiceError("conflict", "The original agreement and invoice fee terms need reconciliation.");
   if (request.method === "provider_schedule") {
-    if (ctx.actor.kind !== "system" || !original.providerOrigin) throw new ServiceError("permission", "A scheduled renewal requires its durable original provider charge receipt.");
+    if (ctx.actor.kind !== "system" || !original.providerOrigin || original.providerOrigin.providerApiVersion !== "2026-10-28.endive") throw new ServiceError("permission", "A scheduled renewal requires its durable original provider charge receipt.");
   } else {
     const due = await invoicePaymentDueAmount(invoice, ctx);
     if (due === null || request.amountMinor > due) throw new ServiceError("conflict", "This agreement payment exceeds the amount currently released for collection.");
@@ -58,7 +58,7 @@ export async function reserveAgreementCharge(ctx: ServiceContext, invoice: typeo
 export async function agreementRoutingForPayment(ctx: ServiceContext, paymentId: string) {
   const [agreement] = await ctx.tx.select().from(merchantAgreementPaymentRoutes).where(eq(merchantAgreementPaymentRoutes.paymentId, paymentId));
   if (!agreement) return null;
-  return { providerPlatformAccountId: agreement.providerPlatformAccountId, providerAccountId: agreement.chargeAccountId ?? undefined,
+  return { providerApiVersion: agreement.providerApiVersion ?? undefined, providerPlatformAccountId: agreement.providerPlatformAccountId, providerAccountId: agreement.chargeAccountId ?? undefined,
     ...(agreement.collectionKind === "destination" ? { destinationAccountId: agreement.recipientAccountId, settlementMerchantAccountId: agreement.settlementMerchantAccountId } : {}),
     applicationFeeMinor: agreement.applicationFeeMinor, agreementSubscriptionId: agreement.subscriptionId,
     providerSubscriptionRef: agreement.providerSubscriptionRef ?? undefined, providerInvoiceRef: agreement.providerInvoiceRef ?? undefined, providerPaymentIntentRef: agreement.providerPaymentIntentRef ?? undefined, providerChargeRef: agreement.providerChargeRef ?? undefined, originalChargeReceiptId: agreement.originalChargeReceiptId ?? undefined };

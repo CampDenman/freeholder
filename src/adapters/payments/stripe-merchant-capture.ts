@@ -18,7 +18,7 @@ export function stripeCheckoutEvidence(request: CheckoutCaptureRequest, value: R
   }
   assertMerchantAttempt(request, request.paymentAttemptId, value.metadata);
   if (value.id !== request.checkoutRef) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not identify the original checkout.", true);
-  const chargeOrigin = { providerPlatformAccountId: request.providerPlatformAccountId, ...(request.providerAccountId ? { providerAccountId: request.providerAccountId } : {}) };
+  const chargeOrigin = { ...(request.providerApiVersion ? { providerApiVersion: request.providerApiVersion } : {}), providerPlatformAccountId: request.providerPlatformAccountId, ...(request.providerAccountId ? { providerAccountId: request.providerAccountId } : {}) };
   if (intent?.status === "succeeded") {
     let customerChargeVerified = /^pi_[A-Za-z0-9]+$/.test(providerRef) && intent.id === providerRef;
     try { assertMerchantAttempt(request, request.paymentAttemptId, intent.metadata); } catch { customerChargeVerified = false; }

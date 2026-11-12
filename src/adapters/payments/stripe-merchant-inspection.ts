@@ -10,7 +10,9 @@ import type { CheckoutCaptureResult, MerchantPaymentInspectionRequest, PaymentAc
 type Read = (path: string, scope: PaymentAccountScope) => Promise<Record<string, unknown>>;
 const ref = (value: unknown) => typeof value === "string" ? value : text(object(value)?.id);
 
-export async function inspectStripeMerchantPayment(request: MerchantPaymentInspectionRequest, read: Read): Promise<CheckoutCaptureResult> {
+export async function inspectStripeMerchantPayment(input: MerchantPaymentInspectionRequest, read: Read): Promise<CheckoutCaptureResult> {
+  if (input.providerApiVersion && input.subscriptionOrigin?.providerApiVersion && input.providerApiVersion !== input.subscriptionOrigin.providerApiVersion) throw new AdapterError("payments", "stripe", "invalid_request", "The scheduled inspection protocol does not match its original scope.");
+  const request = { ...input, ...(input.subscriptionOrigin?.providerApiVersion ? { providerApiVersion: input.subscriptionOrigin.providerApiVersion } : {}) };
   validateMerchantChargeScope(request);
   if (!/^pi_[A-Za-z0-9]+$/.test(request.providerRef)) throw new AdapterError("payments", "stripe", "invalid_request", "Inspect the original PaymentIntent reference.");
   if (request.subscriptionOrigin && (request.paymentAttemptId || request.subscriptionOrigin.providerPaymentIntentRef !== request.providerRef)) throw new AdapterError("payments", "stripe", "invalid_request", "Use one exact original charge origin for inspection.");
@@ -44,7 +46,7 @@ export async function inspectStripeMerchantPayment(request: MerchantPaymentInspe
   let feeVerified = fee === 0 && charge.application_fee === null;
   if (applicationFeeRef) {
     // Application fees belong to the original platform even for direct charges.
-    const actualFee = await read(`/v1/application_fees/${encodeURIComponent(applicationFeeRef)}`, { providerPlatformAccountId: request.providerPlatformAccountId });
+    const actualFee = await read(`/v1/application_fees/${encodeURIComponent(applicationFeeRef)}`, { providerPlatformAccountId: request.providerPlatformAccountId, ...(request.providerApiVersion ? { providerApiVersion: request.providerApiVersion } : {}) });
     const originalCharge = request.destinationAccountId ? ref(actualFee.originating_transaction) : ref(actualFee.charge);
     const actualFeeAmount = number(actualFee.amount), actualFeeCurrency = text(actualFee.currency)?.toUpperCase();
     const recipient = request.destinationAccountId ?? request.providerAccountId;
@@ -59,7 +61,7 @@ export async function inspectStripeMerchantPayment(request: MerchantPaymentInspe
   }
   let transferVerified = !request.destinationAccountId;
   if (request.destinationAccountId && transferRef) {
-    const transfer = await read(`/v1/transfers/${encodeURIComponent(transferRef)}`, { providerPlatformAccountId: request.providerPlatformAccountId });
+    const transfer = await read(`/v1/transfers/${encodeURIComponent(transferRef)}`, { providerPlatformAccountId: request.providerPlatformAccountId, ...(request.providerApiVersion ? { providerApiVersion: request.providerApiVersion } : {}) });
     transferVerified = transfer.id === transferRef && ref(transfer.destination) === request.destinationAccountId
       && ref(transfer.source_transaction) === evidence.providerChargeRef && transfer.amount === amountMinor
       && text(transfer.currency)?.toUpperCase() === currency && transfer.amount_reversed === 0 && transfer.reversed === false;

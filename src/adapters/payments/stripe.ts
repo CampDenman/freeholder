@@ -333,20 +333,24 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     if (!secretKey) throw new AdapterError("payments", "stripe", "unavailable", "Stripe is not configured.");
     const scope = typeof original === "string" ? { providerAccountId: original } : original ?? {};
     const scopedHeaders = accountHeaders(scope.providerAccountId);
+    const suppliedHeaders = new Headers(init.headers), headerVersion = suppliedHeaders.get("stripe-version");
+    const version = scope.providerApiVersion ?? headerVersion ?? "2026-02-25.clover";
+    if (version !== "2026-02-25.clover" && version !== "2026-10-28.endive" || scope.providerApiVersion && headerVersion && scope.providerApiVersion !== headerVersion) throw new AdapterError("payments", "stripe", "invalid_request", "The original provider API protocol is inconsistent.");
+    suppliedHeaders.delete("stripe-account");
     if (scope.providerPlatformAccountId) {
       accountHeaders(scope.providerPlatformAccountId);
-      const actual = await platformAccountIdentity();
+      const actual = await platformAccountIdentity(version);
       if (actual.providerPlatformAccountId !== scope.providerPlatformAccountId) throw new AdapterError("payments", "stripe", "authentication", "Reconnect the original platform account before servicing this provider resource.");
     }
     const response = await paymentFetch(fetcher, `${apiBase}${path}`, {
       ...init,
-      headers: { authorization: `Bearer ${secretKey}`, "stripe-version": "2026-02-25.clover", ...init.headers, ...scopedHeaders },
+      headers: { ...Object.fromEntries(suppliedHeaders.entries()), authorization: `Bearer ${secretKey}`, "stripe-version": version, ...scopedHeaders },
     });
     return providerJson("stripe", response);
   }
 
-  async function platformAccountIdentity(): Promise<{ providerPlatformAccountId: string }> {
-    const account = await api("/v1/account", { method: "GET" });
+  async function platformAccountIdentity(providerApiVersion?: PaymentAccountScope["providerApiVersion"]): Promise<{ providerPlatformAccountId: string }> {
+    const account = await api("/v1/account", { method: "GET" }, providerApiVersion ? { providerApiVersion } : undefined);
     const id = text(account.id);
     if (!id || id.length > 200 || !/^acct_[A-Za-z0-9]+$/.test(id)) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not identify the authenticated platform account.", true);
     return { providerPlatformAccountId: id };
@@ -575,7 +579,9 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       return {state:"complete",providerRef,event,...base};
     },
     captureCheckout,
-    async refund(request) {
+    async refund(input) {
+      if (input.providerApiVersion && input.subscriptionOrigin?.providerApiVersion && input.providerApiVersion !== input.subscriptionOrigin.providerApiVersion) throw new AdapterError("payments", "stripe", "invalid_request", "The scheduled refund protocol does not match its original scope.");
+      const request = { ...input, ...(input.subscriptionOrigin?.providerApiVersion ? { providerApiVersion: input.subscriptionOrigin.providerApiVersion } : {}) };
       validateMerchantChargeScope(request);
       if (request.subscriptionOrigin && (!request.providerPlatformAccountId || request.subscriptionOrigin.providerPaymentIntentRef !== request.providerRef)) throw new AdapterError("payments", "stripe", "invalid_request", "The refund requires its exact original subscription charge origin.");
       if (!request.subscriptionOrigin) merchantAttemptMetadata(request, request.paymentId);

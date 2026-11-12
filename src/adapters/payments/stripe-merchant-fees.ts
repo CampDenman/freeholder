@@ -46,7 +46,7 @@ export function stripeMerchantFees(api: Api) {
     }
     // Application fees belong to the original platform even for direct charges.
     // Retain the seller account above for evidence, but never send its header.
-    const scope = { providerPlatformAccountId: request.providerPlatformAccountId };
+    const scope = { providerPlatformAccountId: request.providerPlatformAccountId, ...(request.providerApiVersion ? { providerApiVersion: request.providerApiVersion } : {}) };
     const path = `/v1/application_fees/${encodeURIComponent(request.applicationFeeRef)}`;
     originalFee(request, await api(path, { method: "GET" }, scope));
     return { scope, path };

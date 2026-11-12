@@ -34,6 +34,66 @@ ALTER TABLE invoice_market_policies ADD CONSTRAINT invoice_market_policies_merch
  OR (collection_version=1 AND seller_user_id IS NULL AND merchant_name IS NULL AND merchant_support IS NULL AND merchant_contact_id IS NULL AND provider_account_id IS NULL)
 )));
 --> statement-breakpoint
+ALTER TABLE bookings ADD COLUMN market_policy_version integer NOT NULL DEFAULT 0;
+--> statement-breakpoint
+ALTER TABLE bookings ALTER COLUMN market_policy_version SET DEFAULT 1;
+--> statement-breakpoint
+ALTER TABLE bookings ADD CONSTRAINT bookings_market_policy_version CHECK(market_policy_version IN(0,1));
+--> statement-breakpoint
+CREATE TABLE booking_commercial_sources (
+ booking_id uuid PRIMARY KEY REFERENCES bookings(id) ON DELETE RESTRICT, service_offering_id uuid NOT NULL,
+ product_id uuid NOT NULL, seller_user_id uuid, created_at timestamptz NOT NULL DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE booking_market_policies (
+ booking_id uuid PRIMARY KEY REFERENCES bookings(id) ON DELETE RESTRICT, model text NOT NULL, adapter text NOT NULL,
+ site_fee_bps integer NOT NULL, hold_days integer NOT NULL, seller_user_id uuid NOT NULL,
+ merchant_contact_id uuid REFERENCES contacts(id) ON DELETE RESTRICT, merchant_name text, merchant_support jsonb,
+ provider_account_id text, created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT booking_market_policies_fee CHECK(site_fee_bps BETWEEN 0 AND 10000 AND hold_days BETWEEN 0 AND 365),
+ CONSTRAINT booking_market_policies_model CHECK(model IN('hold','instant','seller_merchant'))
+);
+--> statement-breakpoint
+CREATE INDEX booking_market_policies_contact_idx ON booking_market_policies(merchant_contact_id);
+--> statement-breakpoint
+CREATE TABLE booking_merchant_scopes (
+ booking_id uuid PRIMARY KEY REFERENCES booking_market_policies(booking_id) ON DELETE RESTRICT,
+ merchant_scope_version integer NOT NULL DEFAULT 1, seller_user_id uuid NOT NULL,
+ merchant_contact_id uuid REFERENCES contacts(id) ON DELETE RESTRICT, collection_kind text NOT NULL,
+ provider_platform_account_id text NOT NULL, charge_account_id text, recipient_account_id text NOT NULL, settlement_merchant_account_id text NOT NULL,
+ merchant_name text NOT NULL, merchant_support jsonb, tax_profile_id uuid NOT NULL, tax_profile_version integer NOT NULL,
+ tax_liability text NOT NULL, tax_destination jsonb, quote_digest text, destination_erased_at timestamptz, merchant_identity_erased_at timestamptz,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT booking_merchant_scopes_version CHECK(merchant_scope_version=1 AND tax_profile_version>0),
+ CONSTRAINT booking_merchant_scopes_route CHECK(provider_platform_account_id ~ '^acct_[A-Za-z0-9]+$' AND recipient_account_id ~ '^acct_[A-Za-z0-9]+$'
+  AND recipient_account_id<>provider_platform_account_id AND settlement_merchant_account_id=recipient_account_id
+  AND((collection_kind='direct' AND charge_account_id IS NOT NULL AND charge_account_id=recipient_account_id)OR(collection_kind='destination' AND charge_account_id IS NULL))),
+ CONSTRAINT booking_merchant_scopes_tax CHECK(tax_liability='seller' AND((tax_destination IS NULL AND quote_digest IS NULL AND destination_erased_at IS NULL)
+  OR destination_erased_at IS NOT NULL OR(coalesce(tax_destination->>'country' ~ '^[A-Z]{2}$',false) AND quote_digest IS NOT NULL))),
+ CONSTRAINT booking_merchant_scopes_digest CHECK(quote_digest IS NULL OR quote_digest ~ '^[a-f0-9]{64}$'),
+ CONSTRAINT booking_merchant_scopes_profile_fk FOREIGN KEY(tax_profile_id,tax_profile_version) REFERENCES merchant_tax_profile_versions(profile_id,version) ON DELETE RESTRICT
+);
+--> statement-breakpoint
+CREATE INDEX booking_merchant_scopes_contact_idx ON booking_merchant_scopes(merchant_contact_id);
+--> statement-breakpoint
+CREATE TABLE invoice_merchant_scopes (
+ invoice_id uuid PRIMARY KEY REFERENCES invoices(id) ON DELETE RESTRICT, booking_id uuid NOT NULL REFERENCES bookings(id) ON DELETE RESTRICT,
+ collection_kind text NOT NULL, provider_platform_account_id text NOT NULL, charge_account_id text, recipient_account_id text NOT NULL,
+ settlement_merchant_account_id text NOT NULL, tax_policy jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT invoice_merchant_scopes_route CHECK(provider_platform_account_id ~ '^acct_[A-Za-z0-9]+$' AND recipient_account_id ~ '^acct_[A-Za-z0-9]+$'
+  AND recipient_account_id<>provider_platform_account_id AND settlement_merchant_account_id=recipient_account_id
+  AND((collection_kind='direct' AND charge_account_id IS NOT NULL AND charge_account_id=recipient_account_id)OR(collection_kind='destination' AND charge_account_id IS NULL)))
+);
+--> statement-breakpoint
+CREATE INDEX invoice_merchant_scopes_booking_idx ON invoice_merchant_scopes(booking_id);
+--> statement-breakpoint
+CREATE TABLE merchant_invoice_payment_routes (
+ payment_id uuid PRIMARY KEY REFERENCES payments(id) ON DELETE RESTRICT, invoice_id uuid NOT NULL REFERENCES invoice_merchant_scopes(invoice_id) ON DELETE RESTRICT,
+ application_fee_minor bigint NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), CONSTRAINT merchant_invoice_payment_routes_fee CHECK(application_fee_minor>=0)
+);
+--> statement-breakpoint
+CREATE INDEX merchant_invoice_payment_routes_invoice_idx ON merchant_invoice_payment_routes(invoice_id);
+--> statement-breakpoint
 CREATE TABLE merchant_collection_configuration (
  id integer PRIMARY KEY DEFAULT 1,
  collection_kind text NOT NULL, provider_platform_account_id text NOT NULL,
@@ -81,7 +141,7 @@ CREATE TABLE merchant_agreement_payment_routes (
  subscription_id uuid NOT NULL REFERENCES subscriptions(id) ON DELETE RESTRICT,
  agreement_routing_version integer NOT NULL DEFAULT 1, collection_kind text NOT NULL,
  provider_platform_account_id text NOT NULL, charge_account_id text, recipient_account_id text NOT NULL, settlement_merchant_account_id text NOT NULL,
- application_fee_minor bigint NOT NULL, origin_kind text NOT NULL,
+ application_fee_minor bigint NOT NULL, provider_api_version text, origin_kind text NOT NULL,
  provider_subscription_ref text, provider_invoice_ref text, provider_payment_intent_ref text, provider_charge_ref text, original_charge_receipt_id uuid,
  created_at timestamptz NOT NULL DEFAULT now(),
  CONSTRAINT merchant_agreement_payment_routes_version CHECK(agreement_routing_version=1),
@@ -89,15 +149,15 @@ CREATE TABLE merchant_agreement_payment_routes (
  CONSTRAINT merchant_agreement_payment_routes_scope CHECK(provider_platform_account_id ~ '^acct_[A-Za-z0-9]+$' AND recipient_account_id ~ '^acct_[A-Za-z0-9]+$'
   AND recipient_account_id<>provider_platform_account_id AND settlement_merchant_account_id=recipient_account_id
   AND((collection_kind='direct' AND charge_account_id IS NOT NULL AND charge_account_id=recipient_account_id)OR(collection_kind='destination' AND charge_account_id IS NULL))),
- CONSTRAINT merchant_agreement_payment_routes_origin CHECK((origin_kind='attempt' AND provider_subscription_ref IS NULL AND provider_invoice_ref IS NULL AND provider_payment_intent_ref IS NULL AND provider_charge_ref IS NULL AND original_charge_receipt_id IS NULL)
-  OR(origin_kind='provider_schedule' AND provider_subscription_ref IS NOT NULL AND provider_invoice_ref IS NOT NULL AND provider_payment_intent_ref IS NOT NULL AND provider_charge_ref IS NOT NULL AND original_charge_receipt_id IS NOT NULL))
+ CONSTRAINT merchant_agreement_payment_routes_origin CHECK((origin_kind='attempt' AND provider_api_version IS NULL AND provider_subscription_ref IS NULL AND provider_invoice_ref IS NULL AND provider_payment_intent_ref IS NULL AND provider_charge_ref IS NULL AND original_charge_receipt_id IS NULL)
+  OR(origin_kind='provider_schedule' AND provider_api_version='2026-10-28.endive' AND provider_subscription_ref IS NOT NULL AND provider_invoice_ref IS NOT NULL AND provider_payment_intent_ref IS NOT NULL AND provider_charge_ref IS NOT NULL AND original_charge_receipt_id IS NOT NULL))
 );
 --> statement-breakpoint
 CREATE INDEX merchant_agreement_payment_routes_subscription_idx ON merchant_agreement_payment_routes(subscription_id);
 --> statement-breakpoint
 CREATE TABLE merchant_payment_observations (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), payment_id uuid NOT NULL REFERENCES payments(id) ON DELETE RESTRICT,
- provider_event_ref text NOT NULL, provider_ref text NOT NULL, status text NOT NULL, amount_minor bigint NOT NULL,
+ provider_event_ref text NOT NULL, provider_api_version text, provider_ref text NOT NULL, status text NOT NULL, amount_minor bigint NOT NULL,
  currency text NOT NULL, provider_platform_account_id text NOT NULL, charge_account_id text, recipient_account_id text, settlement_merchant_account_id text,
  application_fee_minor bigint, provider_charge_ref text, application_fee_ref text, transfer_ref text, route_verified boolean NOT NULL DEFAULT false, customer_charge_verified boolean NOT NULL DEFAULT false, application_fee_currency text, observed_application_fee_minor bigint, observed_fee_refunded_minor bigint, settlement_verified boolean NOT NULL DEFAULT false,
  observed_at timestamptz NOT NULL DEFAULT now(),
@@ -163,6 +223,186 @@ CREATE UNIQUE INDEX merchant_fee_observations_fact_idx ON merchant_fee_observati
 --> statement-breakpoint
 CREATE TRIGGER merchant_fee_observation_guard BEFORE UPDATE OR DELETE ON merchant_fee_observations FOR EACH ROW EXECUTE FUNCTION guard_merchant_payment_event_receipt();
 --> statement-breakpoint
+CREATE FUNCTION guard_booking_commercial_epoch() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE original bookings%ROWTYPE;
+BEGIN
+ IF TG_OP='UPDATE' AND NEW.market_policy_version IS DISTINCT FROM OLD.market_policy_version THEN
+  RAISE EXCEPTION 'A booking commercial epoch is immutable; no original ownership is backfilled.' USING ERRCODE='23514';
+ END IF;
+ IF TG_OP='INSERT' AND NEW.market_policy_version=0 THEN
+  SELECT * INTO original FROM bookings WHERE id=NEW.rescheduled_from_id;
+  IF original.id IS NULL OR original.market_policy_version<>0 OR NEW.contact_id IS DISTINCT FROM original.contact_id OR NEW.service_offering_id IS DISTINCT FROM original.service_offering_id THEN
+   RAISE EXCEPTION 'Only an actual legacy reschedule retains the original booking epoch.' USING ERRCODE='23514';
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER booking_commercial_epoch_guard BEFORE INSERT OR UPDATE ON bookings FOR EACH ROW EXECUTE FUNCTION guard_booking_commercial_epoch();
+--> statement-breakpoint
+CREATE FUNCTION guard_booking_commercial_source() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE parent bookings%ROWTYPE; original booking_commercial_sources%ROWTYPE; product record;
+BEGIN
+ IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Original booking source ownership is immutable.' USING ERRCODE='23514'; END IF;
+ SELECT * INTO parent FROM bookings WHERE id=NEW.booking_id;
+ IF parent.id IS NULL OR parent.market_policy_version<>1 OR parent.service_offering_id IS DISTINCT FROM NEW.service_offering_id THEN
+  RAISE EXCEPTION 'Bind an original commercial source to its actual new booking.' USING ERRCODE='23514';
+ END IF;
+ IF parent.rescheduled_from_id IS NOT NULL THEN
+  SELECT * INTO original FROM booking_commercial_sources WHERE booking_id=parent.rescheduled_from_id;
+  IF original.booking_id IS NULL OR(to_jsonb(NEW)-ARRAY['booking_id','created_at']) IS DISTINCT FROM(to_jsonb(original)-ARRAY['booking_id','created_at']) THEN
+   RAISE EXCEPTION 'A moved booking keeps its actual original offering owner.' USING ERRCODE='23514';
+  END IF;
+ ELSE
+  SELECT p.id,p.seller_user_id INTO product FROM service_offerings o JOIN products p ON p.id=o.product_id WHERE o.id=NEW.service_offering_id FOR SHARE OF o,p;
+  IF product.id IS NULL OR product.id IS DISTINCT FROM NEW.product_id OR product.seller_user_id IS DISTINCT FROM NEW.seller_user_id THEN
+   RAISE EXCEPTION 'Capture the actual offering owner before accepting a new booking.' USING ERRCODE='23514';
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER booking_commercial_source_guard BEFORE INSERT OR UPDATE OR DELETE ON booking_commercial_sources FOR EACH ROW EXECUTE FUNCTION guard_booking_commercial_source();
+--> statement-breakpoint
+CREATE FUNCTION guard_booking_market_policy() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE parent bookings%ROWTYPE; source booking_commercial_sources%ROWTYPE; original booking_market_policies%ROWTYPE;
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Retain the original booking commercial policy.' USING ERRCODE='23514'; END IF;
+ IF TG_OP='UPDATE' THEN
+  IF(to_jsonb(NEW)-ARRAY['merchant_contact_id','merchant_name','merchant_support']) IS DISTINCT FROM(to_jsonb(OLD)-ARRAY['merchant_contact_id','merchant_name','merchant_support'])
+   OR((NEW.merchant_name IS DISTINCT FROM OLD.merchant_name OR NEW.merchant_support IS DISTINCT FROM OLD.merchant_support) AND(NEW.merchant_name IS DISTINCT FROM '[privacy-erased-merchant]' OR NEW.merchant_support IS NOT NULL)) THEN
+   RAISE EXCEPTION 'Original booking terms only permit verified contact moves and personal-copy minimization.' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+ END IF;
+ SELECT * INTO parent FROM bookings WHERE id=NEW.booking_id;
+ SELECT * INTO source FROM booking_commercial_sources WHERE booking_id=NEW.booking_id;
+ IF parent.id IS NULL OR parent.market_policy_version<>1 OR source.seller_user_id IS NULL OR NEW.seller_user_id IS DISTINCT FROM source.seller_user_id THEN
+  RAISE EXCEPTION 'The booking policy requires its actual original member source.' USING ERRCODE='23514';
+ END IF;
+ IF parent.rescheduled_from_id IS NOT NULL THEN
+  SELECT * INTO original FROM booking_market_policies WHERE booking_id=parent.rescheduled_from_id;
+  IF original.booking_id IS NULL OR(to_jsonb(NEW)-ARRAY['booking_id','created_at']) IS DISTINCT FROM(to_jsonb(original)-ARRAY['booking_id','created_at']) THEN
+   RAISE EXCEPTION 'A moved appointment cannot acquire changed merchant policy.' USING ERRCODE='23514';
+  END IF;
+ ELSIF NEW.merchant_contact_id IS NULL OR NOT EXISTS(SELECT 1 FROM contacts WHERE contacts.id=NEW.merchant_contact_id AND contacts.user_id=NEW.seller_user_id AND contacts.source<>'privacy-erasure') THEN
+  RAISE EXCEPTION 'Capture the original member contact before accepting commercial booking terms.' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER booking_market_policy_guard BEFORE INSERT OR UPDATE OR DELETE ON booking_market_policies FOR EACH ROW EXECUTE FUNCTION guard_booking_market_policy();
+--> statement-breakpoint
+CREATE FUNCTION guard_booking_merchant_scope() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE parent bookings%ROWTYPE; policy booking_market_policies%ROWTYPE; original booking_merchant_scopes%ROWTYPE;
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Retain original booking merchant namespace and tax evidence.' USING ERRCODE='23514'; END IF;
+ SELECT * INTO parent FROM bookings WHERE id=NEW.booking_id;
+ SELECT * INTO policy FROM booking_market_policies WHERE booking_id=NEW.booking_id;
+ IF TG_OP='UPDATE' THEN
+  IF(to_jsonb(NEW)-ARRAY['merchant_contact_id','merchant_name','merchant_support','merchant_identity_erased_at','tax_destination','quote_digest','destination_erased_at']) IS DISTINCT FROM(to_jsonb(OLD)-ARRAY['merchant_contact_id','merchant_name','merchant_support','merchant_identity_erased_at','tax_destination','quote_digest','destination_erased_at'])
+   OR(OLD.merchant_identity_erased_at IS NOT NULL AND NEW.merchant_identity_erased_at IS DISTINCT FROM OLD.merchant_identity_erased_at)
+   OR(OLD.destination_erased_at IS NOT NULL AND NEW.destination_erased_at IS DISTINCT FROM OLD.destination_erased_at)
+   OR((NEW.merchant_name IS DISTINCT FROM OLD.merchant_name OR NEW.merchant_support IS DISTINCT FROM OLD.merchant_support) AND(NEW.merchant_name IS DISTINCT FROM '[privacy-erased-merchant]' OR NEW.merchant_support IS NOT NULL OR NEW.merchant_identity_erased_at IS NULL)) THEN
+   RAISE EXCEPTION 'Original booking identity and namespace cannot be rebound.' USING ERRCODE='23514';
+  END IF;
+  IF NEW.quote_digest IS DISTINCT FROM OLD.quote_digest OR NEW.tax_destination IS DISTINCT FROM OLD.tax_destination THEN
+   IF NEW.destination_erased_at IS NOT NULL AND NEW.tax_destination='{}'::jsonb AND NEW.quote_digest IS NOT DISTINCT FROM OLD.quote_digest THEN NULL;
+   ELSIF OLD.tax_destination IS NULL AND OLD.quote_digest IS NULL AND OLD.destination_erased_at IS NULL AND parent.invoice_id IS NULL
+    AND NEW.tax_destination IS NOT NULL AND NEW.quote_digest IS NOT NULL AND NEW.destination_erased_at IS NULL
+    AND NOT EXISTS(SELECT 1 FROM contacts WHERE id=parent.contact_id AND source='privacy-erasure') THEN NULL;
+   ELSE RAISE EXCEPTION 'Only the first explicit quote or irreversible destination minimization may change booking tax evidence.' USING ERRCODE='23514'; END IF;
+  END IF;
+  RETURN NEW;
+ END IF;
+ IF parent.id IS NULL OR parent.market_policy_version<>1 OR policy.model IS DISTINCT FROM 'seller_merchant' OR NEW.seller_user_id IS DISTINCT FROM policy.seller_user_id
+  OR NEW.merchant_contact_id IS DISTINCT FROM policy.merchant_contact_id OR NEW.recipient_account_id IS DISTINCT FROM policy.provider_account_id
+  OR NEW.merchant_name IS DISTINCT FROM policy.merchant_name OR NEW.merchant_support IS DISTINCT FROM policy.merchant_support THEN
+  RAISE EXCEPTION 'Bind the original booking scope to its accepted business identity.' USING ERRCODE='23514';
+ END IF;
+ IF parent.rescheduled_from_id IS NOT NULL THEN
+  SELECT * INTO original FROM booking_merchant_scopes WHERE booking_id=parent.rescheduled_from_id;
+  IF original.booking_id IS NULL OR(to_jsonb(NEW)-ARRAY['booking_id','created_at']) IS DISTINCT FROM(to_jsonb(original)-ARRAY['booking_id','created_at']) THEN
+   RAISE EXCEPTION 'A moved appointment retains its actual original merchant and tax quote.' USING ERRCODE='23514';
+  END IF;
+ ELSIF NOT EXISTS(SELECT 1 FROM merchant_tax_profiles p WHERE p.id=NEW.tax_profile_id AND p.seller_user_id=NEW.seller_user_id AND p.contact_id=NEW.merchant_contact_id AND p.state='active') THEN
+  RAISE EXCEPTION 'The declared tax profile belongs to the original booking business.' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER booking_merchant_scope_guard BEFORE INSERT OR UPDATE OR DELETE ON booking_merchant_scopes FOR EACH ROW EXECUTE FUNCTION guard_booking_merchant_scope();
+--> statement-breakpoint
+CREATE FUNCTION guard_booking_commercial_binding() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE current_booking bookings%ROWTYPE; source booking_commercial_sources%ROWTYPE; policy booking_market_policies%ROWTYPE;
+BEGIN
+ SELECT * INTO current_booking FROM bookings WHERE id=NEW.id;
+ IF current_booking.market_policy_version<>1 THEN RETURN NEW; END IF;
+ SELECT * INTO source FROM booking_commercial_sources WHERE booking_id=current_booking.id;
+ IF source.seller_user_id IS NULL THEN RETURN NEW; END IF;
+ SELECT * INTO policy FROM booking_market_policies WHERE booking_id=current_booking.id;
+ IF policy.booking_id IS NULL OR(policy.model='seller_merchant' AND NOT EXISTS(SELECT 1 FROM booking_merchant_scopes WHERE booking_id=current_booking.id)) THEN
+  RAISE EXCEPTION 'Capture the complete original member booking policy before commit.' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER booking_commercial_binding_guard AFTER INSERT OR UPDATE ON bookings DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION guard_booking_commercial_binding();
+--> statement-breakpoint
+CREATE FUNCTION guard_invoice_merchant_scope() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE parent invoices%ROWTYPE; original booking_merchant_scopes%ROWTYPE; policy invoice_market_policies%ROWTYPE;
+BEGIN
+ IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Original invoice account and tax scope is immutable.' USING ERRCODE='23514'; END IF;
+ SELECT * INTO parent FROM invoices WHERE id=NEW.invoice_id;
+ SELECT * INTO policy FROM invoice_market_policies WHERE invoice_id=NEW.invoice_id;
+ SELECT * INTO original FROM booking_merchant_scopes WHERE booking_id=NEW.booking_id;
+ IF parent.id IS NULL OR parent.status<>'draft' OR original.booking_id IS NULL OR policy.model IS DISTINCT FROM 'seller_merchant' OR policy.collection_version<>0
+  OR(parent.source_type='booking' AND parent.source_id IS DISTINCT FROM NEW.booking_id::text)
+  OR policy.seller_user_id IS DISTINCT FROM original.seller_user_id OR policy.provider_account_id IS DISTINCT FROM original.recipient_account_id
+  OR original.destination_erased_at IS NOT NULL OR original.merchant_identity_erased_at IS NOT NULL OR original.tax_destination IS NULL OR original.quote_digest IS NULL
+  OR NEW.collection_kind IS DISTINCT FROM original.collection_kind OR NEW.provider_platform_account_id IS DISTINCT FROM original.provider_platform_account_id
+  OR NEW.charge_account_id IS DISTINCT FROM original.charge_account_id OR NEW.recipient_account_id IS DISTINCT FROM original.recipient_account_id
+  OR NEW.settlement_merchant_account_id IS DISTINCT FROM original.settlement_merchant_account_id
+  OR NOT EXISTS(SELECT 1 FROM bookings WHERE id=original.booking_id AND contact_id=parent.contact_id)
+  OR NOT EXISTS(SELECT 1 FROM invoice_merchant_tax_quotes q WHERE q.invoice_id=NEW.invoice_id AND q.seller_user_id=original.seller_user_id
+   AND q.profile_id=original.tax_profile_id AND q.profile_version=original.tax_profile_version
+   AND NEW.tax_policy=jsonb_build_object('liability',q.liability,'profileId',q.profile_id,'profileVersion',q.profile_version,'evidenceDigest',q.evidence_digest)) THEN
+  RAISE EXCEPTION 'Freeze the actual original booking business and invoice tax receipt before issue.' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER invoice_merchant_scope_guard BEFORE INSERT OR UPDATE OR DELETE ON invoice_merchant_scopes FOR EACH ROW EXECUTE FUNCTION guard_invoice_merchant_scope();
+--> statement-breakpoint
+CREATE FUNCTION guard_merchant_invoice_payment_route() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE parent payments%ROWTYPE; invoice invoices%ROWTYPE; policy invoice_market_policies%ROWTYPE; paid numeric; prior_fee numeric;
+BEGIN
+ IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Original single-source payment routes are immutable.' USING ERRCODE='23514'; END IF;
+ SELECT * INTO parent FROM payments WHERE id=NEW.payment_id;
+ SELECT * INTO invoice FROM invoices WHERE id=parent.invoice_id FOR UPDATE;
+ SELECT * INTO policy FROM invoice_market_policies WHERE invoice_id=parent.invoice_id;
+ IF parent.id IS NULL OR parent.invoice_id IS DISTINCT FROM NEW.invoice_id OR policy.model IS DISTINCT FROM 'seller_merchant' OR policy.collection_version<>0
+  OR parent.provider<>'stripe' OR parent.method NOT IN('hosted_checkout','saved_method') OR parent.status<>'created' OR NEW.application_fee_minor>parent.amount_minor
+  OR EXISTS(SELECT 1 FROM payment_merchant_routes WHERE payment_id=parent.id)
+  OR EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=parent.id)
+  OR EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=parent.id)
+  OR EXISTS(SELECT 1 FROM payments p WHERE p.invoice_id=parent.invoice_id AND p.id<>parent.id AND p.status IN('created','processing'))
+  OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments p ON p.id=o.payment_id WHERE p.invoice_id=parent.invoice_id AND o.status='succeeded'
+   AND(p.status<>'succeeded' OR o.amount_minor<>p.amount_minor OR o.currency<>p.currency OR(o.provider_ref IS DISTINCT FROM p.provider_ref AND o.provider_ref IS DISTINCT FROM p.provider_checkout_ref))) THEN
+  RAISE EXCEPTION 'Reserve one original single-source merchant charge before dispatch.' USING ERRCODE='23514';
+ END IF;
+ SELECT COALESCE(sum(p.amount_minor),0),COALESCE(sum(r.application_fee_minor),0) INTO paid,prior_fee
+  FROM payments p JOIN merchant_invoice_payment_routes r ON r.payment_id=p.id WHERE p.invoice_id=parent.invoice_id AND p.status='succeeded';
+ IF invoice.total_minor=0 OR paid<>invoice.paid_minor OR paid+parent.amount_minor>invoice.total_minor
+  OR prior_fee<>floor(policy.fee_minor::numeric*paid/invoice.total_minor)
+  OR NEW.application_fee_minor<>floor(policy.fee_minor::numeric*(paid+parent.amount_minor)/invoice.total_minor)-prior_fee THEN
+  RAISE EXCEPTION 'The original single-source invoice and fee must conserve every cent.' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER merchant_invoice_payment_route_guard BEFORE INSERT OR UPDATE OR DELETE ON merchant_invoice_payment_routes FOR EACH ROW EXECUTE FUNCTION guard_merchant_invoice_payment_route();
+--> statement-breakpoint
 CREATE FUNCTION guard_invoice_merchant_collection() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE original invoice_merchant_allocations%ROWTYPE; parent invoices%ROWTYPE; policy invoice_market_policies%ROWTYPE;
 BEGIN
@@ -199,6 +439,12 @@ CREATE FUNCTION guard_invoice_merchant_collection_issue() RETURNS trigger LANGUA
 DECLARE policy invoice_market_policies%ROWTYPE;
 BEGIN
  SELECT * INTO policy FROM invoice_market_policies WHERE invoice_id=NEW.id;
+ IF policy.model='seller_merchant' AND NEW.source_type='booking'
+  AND EXISTS(SELECT 1 FROM bookings WHERE id::text=NEW.source_id AND market_policy_version=1)
+  AND NOT EXISTS(SELECT 1 FROM invoice_merchant_scopes WHERE invoice_id=NEW.id) THEN
+  RAISE EXCEPTION 'New member booking invoices require their original versioned merchant scope before issue.' USING ERRCODE='23514';
+ END IF;
+
  IF NEW.status='draft' OR NEW.source_type<>'order' OR policy.invoice_id IS NULL THEN RETURN NEW; END IF;
  IF OLD.status='draft' AND policy.model='seller_merchant' AND policy.collection_version<>1 THEN
   RAISE EXCEPTION 'New seller order invoices require per-party merchant collection receipts.' USING ERRCODE='23514';
@@ -258,6 +504,7 @@ BEGIN
   OR NEW.charge_account_id IS DISTINCT FROM original.charge_account_id OR NEW.recipient_account_id IS DISTINCT FROM original.recipient_account_id
   OR NEW.settlement_merchant_account_id IS DISTINCT FROM original.settlement_merchant_account_id
   OR(NEW.origin_kind='provider_schedule') IS DISTINCT FROM(payment.method='provider_schedule')
+  OR(NEW.origin_kind='provider_schedule' AND NEW.provider_api_version IS DISTINCT FROM original.provider_schedule_api_version)
   OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments p ON p.id=o.payment_id WHERE p.invoice_id=payment.invoice_id AND o.status='succeeded' AND(p.status<>'succeeded' OR o.amount_minor<>p.amount_minor OR o.currency<>p.currency OR(o.provider_ref IS DISTINCT FROM p.provider_ref AND o.provider_ref IS DISTINCT FROM p.provider_checkout_ref)))
   OR NEW.application_fee_minor>payment.amount_minor
   OR EXISTS(SELECT 1 FROM payment_merchant_routes WHERE payment_id=NEW.payment_id)
@@ -283,7 +530,8 @@ BEGIN
  IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Original physical payment observations are append-only.' USING ERRCODE='23514'; END IF;
  PERFORM 1 FROM invoices i JOIN payments p ON p.invoice_id=i.id WHERE p.id=NEW.payment_id FOR UPDATE OF i;
  IF NOT EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=NEW.payment_id)
-  AND NOT EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=NEW.payment_id) THEN
+  AND NOT EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=NEW.payment_id)
+  AND NOT EXISTS(SELECT 1 FROM merchant_invoice_payment_routes WHERE payment_id=NEW.payment_id) THEN
   RAISE EXCEPTION 'Bind this original provider observation to its frozen merchant payment route.' USING ERRCODE='23514';
  END IF;
  RETURN NEW;
@@ -293,15 +541,20 @@ $$;
 CREATE TRIGGER merchant_payment_observation_guard BEFORE INSERT OR UPDATE OR DELETE ON merchant_payment_observations FOR EACH ROW EXECUTE FUNCTION guard_merchant_payment_observation();
 --> statement-breakpoint
 CREATE FUNCTION guard_merchant_payment_binding() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE current_payment payments%ROWTYPE; policy invoice_market_policies%ROWTYPE; new_agreement boolean;
+DECLARE current_payment payments%ROWTYPE; policy invoice_market_policies%ROWTYPE; new_agreement boolean; new_single boolean; route_count integer;
 BEGIN
  SELECT * INTO current_payment FROM payments WHERE id=NEW.id;
  SELECT * INTO policy FROM invoice_market_policies WHERE invoice_id=current_payment.invoice_id;
  SELECT EXISTS(SELECT 1 FROM invoices i JOIN subscriptions s ON s.id::text=split_part(i.source_id,':',1)
   WHERE i.id=current_payment.invoice_id AND i.source_type='subscription' AND s.merchant_scope_version=1 AND policy.model='seller_merchant') INTO new_agreement;
- IF policy.collection_version IS DISTINCT FROM 1 AND NOT new_agreement THEN RETURN NEW; END IF;
- IF(policy.collection_version=1 AND(NOT EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=current_payment.id) OR EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=current_payment.id)))
-  OR(new_agreement AND(NOT EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=current_payment.id) OR EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=current_payment.id)))
+ SELECT EXISTS(SELECT 1 FROM invoice_merchant_scopes WHERE invoice_id=current_payment.invoice_id) INTO new_single;
+ IF policy.collection_version IS DISTINCT FROM 1 AND NOT new_agreement AND NOT new_single THEN RETURN NEW; END IF;
+ SELECT(EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=current_payment.id))::integer
+  +(EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=current_payment.id))::integer
+  +(EXISTS(SELECT 1 FROM merchant_invoice_payment_routes WHERE payment_id=current_payment.id))::integer INTO route_count;
+ IF route_count<>1 OR(policy.collection_version=1 AND NOT EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=current_payment.id))
+  OR(new_agreement AND NOT EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=current_payment.id))
+  OR(new_single AND NOT EXISTS(SELECT 1 FROM merchant_invoice_payment_routes WHERE payment_id=current_payment.id))
   OR EXISTS(SELECT 1 FROM payment_merchant_routes WHERE payment_id=current_payment.id) THEN
   RAISE EXCEPTION 'This payment requires its original per-party route before commit.' USING ERRCODE='23514';
  END IF;
@@ -386,7 +639,8 @@ BEGIN
  SELECT * INTO parent FROM payments WHERE id=NEW.payment_id FOR UPDATE;
  SELECT application_fee_minor,platform_id,receipt_id INTO original_fee,original_platform,original_receipt FROM(
   SELECT r.application_fee_minor,c.provider_platform_account_id platform_id,NULL::uuid receipt_id FROM merchant_payment_routes r JOIN invoice_merchant_collections c ON c.allocation_id=r.allocation_id WHERE r.payment_id=NEW.payment_id
-  UNION ALL SELECT application_fee_minor,provider_platform_account_id,original_charge_receipt_id FROM merchant_agreement_payment_routes WHERE payment_id=NEW.payment_id) original_route LIMIT 1;
+  UNION ALL SELECT application_fee_minor,provider_platform_account_id,original_charge_receipt_id FROM merchant_agreement_payment_routes WHERE payment_id=NEW.payment_id
+  UNION ALL SELECT r.application_fee_minor,c.provider_platform_account_id,NULL::uuid FROM merchant_invoice_payment_routes r JOIN invoice_merchant_scopes c ON c.invoice_id=r.invoice_id WHERE r.payment_id=NEW.payment_id) original_route LIMIT 1;
  IF parent.amount_minor>0 THEN target_fee:=floor(original_fee::numeric*(parent.amount_minor-parent.refunded_minor)/parent.amount_minor)::bigint; END IF;
  IF NEW.refund_id IS NOT NULL THEN SELECT * INTO original FROM refunds WHERE id=NEW.refund_id; END IF;
  SELECT * INTO prior FROM merchant_fee_refunds WHERE source_key=NEW.source_key ORDER BY attempt_number DESC LIMIT 1;
@@ -430,3 +684,51 @@ $$;
 CREATE TRIGGER payment_provider_customer_scope_guard BEFORE UPDATE ON payment_provider_customers FOR EACH ROW EXECUTE FUNCTION guard_original_provider_resource_scope();
 --> statement-breakpoint
 CREATE TRIGGER payment_method_scope_guard BEFORE UPDATE ON payment_methods FOR EACH ROW EXECUTE FUNCTION guard_original_provider_resource_scope();
+
+--> statement-breakpoint
+CREATE FUNCTION guard_booking_merchant_merge() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF EXISTS(SELECT 1 FROM booking_market_policies p JOIN bookings b ON b.id=p.booking_id WHERE p.merchant_contact_id IN(NEW.duplicate_contact_id,NEW.surviving_contact_id) OR b.contact_id IN(NEW.duplicate_contact_id,NEW.surviving_contact_id))
+  AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(NEW.reference_state) e WHERE e->>'table'='booking_market_policies') THEN
+  RAISE EXCEPTION 'This merge requires the original booking business policy witness.' USING ERRCODE='23514';
+ END IF;
+ IF EXISTS(SELECT 1 FROM booking_merchant_scopes p JOIN bookings b ON b.id=p.booking_id WHERE p.merchant_contact_id IN(NEW.duplicate_contact_id,NEW.surviving_contact_id) OR b.contact_id IN(NEW.duplicate_contact_id,NEW.surviving_contact_id))
+  AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(NEW.reference_state) e WHERE e->>'table'='booking_merchant_scopes') THEN
+  RAISE EXCEPTION 'This merge requires the original booking source and child-money witness.' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER booking_merchant_merge_guard BEFORE INSERT ON contact_merge_operations FOR EACH ROW EXECUTE FUNCTION guard_booking_merchant_merge();
+--> statement-breakpoint
+CREATE FUNCTION guard_booking_merchant_undo() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF OLD.undone_at IS NULL AND NEW.undone_at IS NOT NULL AND(
+  (EXISTS(SELECT 1 FROM booking_market_policies p JOIN bookings b ON b.id=p.booking_id WHERE p.merchant_contact_id IN(OLD.duplicate_contact_id,OLD.surviving_contact_id) OR b.contact_id IN(OLD.duplicate_contact_id,OLD.surviving_contact_id))
+   AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(OLD.reference_state) e WHERE e->>'table'='booking_market_policies'))
+  OR(EXISTS(SELECT 1 FROM booking_merchant_scopes p JOIN bookings b ON b.id=p.booking_id WHERE p.merchant_contact_id IN(OLD.duplicate_contact_id,OLD.surviving_contact_id) OR b.contact_id IN(OLD.duplicate_contact_id,OLD.surviving_contact_id))
+   AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(OLD.reference_state) e WHERE e->>'table'='booking_merchant_scopes'))
+ ) THEN RAISE EXCEPTION 'This historical merge has no original booking source/merchant witness.' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER booking_merchant_undo_guard BEFORE UPDATE OF undone_at ON contact_merge_operations FOR EACH ROW EXECUTE FUNCTION guard_booking_merchant_undo();
+--> statement-breakpoint
+CREATE FUNCTION guard_booking_merchant_privacy_completion() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.kind<>'erasure' OR NEW.status NOT IN('completed','partially_completed') THEN RETURN NEW; END IF;
+ IF NOT EXISTS(SELECT 1 FROM privacy_retention_exceptions h JOIN data_requests r ON r.id=h.data_request_id WHERE r.contact_id=NEW.contact_id
+  AND h.scope IN('members.merchantIdentity','members','commerce.money') AND length(trim(h.legal_basis))>0 AND(h.expires_at IS NULL OR h.expires_at>clock_timestamp()))
+  AND(EXISTS(SELECT 1 FROM booking_market_policies p WHERE p.merchant_contact_id=NEW.contact_id AND(p.merchant_support IS NOT NULL OR(p.merchant_name IS NOT NULL AND p.merchant_name<>'[privacy-erased-merchant]')))
+   OR EXISTS(SELECT 1 FROM booking_merchant_scopes p WHERE p.merchant_contact_id=NEW.contact_id AND(p.merchant_support IS NOT NULL OR p.merchant_name<>'[privacy-erased-merchant]' OR p.merchant_identity_erased_at IS NULL))) THEN
+  RAISE EXCEPTION 'Original booking commercial identity erasure is incomplete.' USING ERRCODE='23514';
+ END IF;
+ IF NOT EXISTS(SELECT 1 FROM privacy_retention_exceptions h JOIN data_requests r ON r.id=h.data_request_id WHERE r.contact_id=NEW.contact_id
+  AND h.scope IN('contact.bookingMerchantTax','contact.bookings','commerce.money') AND length(trim(h.legal_basis))>0 AND(h.expires_at IS NULL OR h.expires_at>clock_timestamp()))
+  AND EXISTS(SELECT 1 FROM booking_merchant_scopes p JOIN bookings b ON b.id=p.booking_id WHERE b.contact_id=NEW.contact_id AND(p.destination_erased_at IS NULL OR p.tax_destination IS DISTINCT FROM '{}'::jsonb)) THEN
+  RAISE EXCEPTION 'The original buyer booking tax destination erasure is incomplete.' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER booking_merchant_privacy_completion BEFORE UPDATE ON data_requests FOR EACH ROW EXECUTE FUNCTION guard_booking_merchant_privacy_completion();

@@ -11,15 +11,18 @@ import { checkoutSession } from "./contract";
 import type { MerchantChargeScope } from "@/adapters/payments";
 import { invoiceMerchantCollections, merchantPaymentRoutes } from "./merchant-collection-schema";
 import { chargeScopeForCollection, reserveCollectionCharge } from "./merchant-collection";
+import { invoiceScopedRoutingForPayment, reserveInvoiceScopedCharge } from "./merchant-invoice-scope";
 import { agreementRoutingForPayment, reserveAgreementCharge } from "./merchant-agreement-charge";
 export { registerSubscriptionInvoiceRouting, type SubscriptionInvoiceRouting } from "./merchant-agreement-charge";
 
 export const paymentRouting = z.object({
+  providerApiVersion: z.enum(["2026-02-25.clover", "2026-10-28.endive"]).optional(),
   providerAccountId: z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200).optional(),
   providerPlatformAccountId: z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200).optional(),
   destinationAccountId: z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200).optional(),
   settlementMerchantAccountId: z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200).optional(),
   merchantAllocationId: z.uuid().optional(),
+  invoiceScopeId: z.uuid().optional(),
   agreementSubscriptionId: z.uuid().optional(),
   providerSubscriptionRef: z.string().min(1).max(500).optional(),
   providerInvoiceRef: z.string().min(1).max(500).optional(),
@@ -66,6 +69,8 @@ export async function reserveMerchantCharge(
     const routing = await reserveCollectionCharge(ctx, invoice, request);
     return { ...routing, providerAccountId: routing.providerAccountId ?? "", merchantAllocationId: routing.allocationId };
   }
+  const single = await reserveInvoiceScopedCharge(ctx, invoice, request);
+  if (single) return { ...single, providerAccountId: single.providerAccountId ?? "" };
   const agreement = await reserveAgreementCharge(ctx, invoice, request);
   if (agreement) return agreement;
   if (request.provider !== "stripe" || !paymentAdapter(request.provider).capabilities().sellerMerchantCharges || !policy.providerAccountId) throw new ServiceError("conflict", "This seller invoice requires Stripe direct checkout.");
@@ -96,6 +101,8 @@ export async function routingForPayment(ctx: ServiceContext, paymentId: string):
     if (!current.route || !current.collection) throw new ServiceError("conflict", "The original per-party payment route needs reconciliation.");
     return paymentRouting.parse({ ...chargeScopeForCollection(current.collection), merchantAllocationId: current.route.allocationId, applicationFeeMinor: current.route.applicationFeeMinor });
   }
+  const single = await invoiceScopedRoutingForPayment(ctx, paymentId);
+  if (single) return paymentRouting.parse(single);
   const agreement = await agreementRoutingForPayment(ctx, paymentId);
   if (agreement) return paymentRouting.parse(agreement);
   const [payment] = await ctx.tx.select({ providerAccountId: paymentMerchantRoutes.providerAccountId, applicationFeeMinor: paymentMerchantRoutes.applicationFeeMinor, model: invoiceMarketPolicies.model, expectedAccount: invoiceMarketPolicies.providerAccountId })

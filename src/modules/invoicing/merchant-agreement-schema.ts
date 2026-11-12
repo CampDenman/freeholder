@@ -17,6 +17,7 @@ export const merchantAgreementPaymentRoutes = pgTable("merchant_agreement_paymen
   recipientAccountId: text("recipient_account_id").notNull(),
   settlementMerchantAccountId: text("settlement_merchant_account_id").notNull(),
   applicationFeeMinor: bigint("application_fee_minor", { mode: "number" }).notNull(),
+  providerApiVersion: text("provider_api_version", { enum: ["2026-10-28.endive"] }),
   originKind: text("origin_kind", { enum: ["attempt", "provider_schedule"] }).notNull(),
   providerSubscriptionRef: text("provider_subscription_ref"),
   providerInvoiceRef: text("provider_invoice_ref"),
@@ -31,6 +32,6 @@ export const merchantAgreementPaymentRoutes = pgTable("merchant_agreement_paymen
   check("merchant_agreement_payment_routes_scope", sql`${t.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$' and ${t.recipientAccountId} ~ '^acct_[A-Za-z0-9]+$'
     and ${t.recipientAccountId} <> ${t.providerPlatformAccountId} and ${t.settlementMerchantAccountId} = ${t.recipientAccountId}
     and ((${t.collectionKind} = 'direct' and ${t.chargeAccountId} is not null and ${t.chargeAccountId} = ${t.recipientAccountId}) or (${t.collectionKind} = 'destination' and ${t.chargeAccountId} is null))`),
-  check("merchant_agreement_payment_routes_origin", sql`(${t.originKind} = 'attempt' and ${t.providerSubscriptionRef} is null and ${t.providerInvoiceRef} is null and ${t.providerPaymentIntentRef} is null and ${t.providerChargeRef} is null and ${t.originalChargeReceiptId} is null)
-    or (${t.originKind} = 'provider_schedule' and ${t.providerSubscriptionRef} is not null and ${t.providerInvoiceRef} is not null and ${t.providerPaymentIntentRef} is not null and ${t.providerChargeRef} is not null and ${t.originalChargeReceiptId} is not null)`),
+  check("merchant_agreement_payment_routes_origin", sql`(${t.originKind} = 'attempt' and ${t.providerApiVersion} is null and ${t.providerSubscriptionRef} is null and ${t.providerInvoiceRef} is null and ${t.providerPaymentIntentRef} is null and ${t.providerChargeRef} is null and ${t.originalChargeReceiptId} is null)
+    or (${t.originKind} = 'provider_schedule' and ${t.providerApiVersion} = '2026-10-28.endive' and ${t.providerSubscriptionRef} is not null and ${t.providerInvoiceRef} is not null and ${t.providerPaymentIntentRef} is not null and ${t.providerChargeRef} is not null and ${t.originalChargeReceiptId} is not null)`),
 ]);

@@ -27,6 +27,8 @@ export interface PaymentAccountScope {
   providerAccountId?: string;
   /** Authenticated platform that originally created this provider resource. */
   providerPlatformAccountId?: string;
+  /** Frozen request protocol for a versioned external schedule, never a namespace. */
+  providerApiVersion?: "2026-02-25.clover" | "2026-10-28.endive";
 }
 
 /** Frozen ledger facts. A destination is never the charge object's account. */
@@ -384,6 +386,9 @@ export type PaymentProviderEvent = MerchantChargeScope & (
       paymentProviderRef?: string;
       applicationFeeMinor?: number;
       subscriptionChargeReceiptId?: string;
+      subscriptionChargeObservationId?: string;
+      customerChargeVerified?: boolean;
+      merchantRouteVerified?: boolean;
       providerChargeRef?: string;
       observedApplicationFeeMinor?: number;
       applicationFeeCurrency?: string;

@@ -946,13 +946,16 @@ export const createPayment = defineService({
     if (routing.merchantAllocationId) {
       const { merchantPaymentRoutes } = await import("./merchant-collection-schema");
       await ctx.tx.insert(merchantPaymentRoutes).values({ paymentId: created!.id, allocationId: routing.merchantAllocationId, applicationFeeMinor: routing.applicationFeeMinor });
+    } else if (routing.invoiceScopeId) {
+      const { merchantInvoicePaymentRoutes } = await import("./merchant-invoice-scope-schema");
+      await ctx.tx.insert(merchantInvoicePaymentRoutes).values({ paymentId: created!.id, invoiceId: routing.invoiceScopeId, applicationFeeMinor: routing.applicationFeeMinor });
     } else if ("agreementSubscriptionId" in routing && routing.agreementSubscriptionId) {
       const { merchantAgreementPaymentRoutes } = await import("./merchant-agreement-schema");
       await ctx.tx.insert(merchantAgreementPaymentRoutes).values({ paymentId: created!.id, subscriptionId: routing.agreementSubscriptionId, agreementRoutingVersion: 1,
         collectionKind: routing.destinationAccountId ? "destination" : "direct", providerPlatformAccountId: routing.providerPlatformAccountId!,
         chargeAccountId: routing.providerAccountId || null, recipientAccountId: routing.destinationAccountId ?? routing.providerAccountId,
         settlementMerchantAccountId: routing.settlementMerchantAccountId ?? routing.providerAccountId,
-        applicationFeeMinor: routing.applicationFeeMinor, originKind: input.method === "provider_schedule" ? "provider_schedule" : "attempt",
+        applicationFeeMinor: routing.applicationFeeMinor, providerApiVersion: input.method === "provider_schedule" ? routing.providerApiVersion as "2026-10-28.endive" : null, originKind: input.method === "provider_schedule" ? "provider_schedule" : "attempt",
         providerSubscriptionRef: routing.providerSubscriptionRef, providerInvoiceRef: routing.providerInvoiceRef, providerPaymentIntentRef: routing.providerPaymentIntentRef, providerChargeRef: routing.providerChargeRef, originalChargeReceiptId: routing.originalChargeReceiptId });
     } else if (routing.providerAccountId) await ctx.tx.insert(paymentMerchantRoutes).values({ paymentId: created!.id, providerAccountId: routing.providerAccountId, applicationFeeMinor: routing.applicationFeeMinor });
     await stateEvent(ctx, "payment", created!.id, null, "created");

@@ -9,7 +9,11 @@ import { merchantIdentityErased } from "./merchant-identity-privacy";
 import { ERASED_MERCHANT_NAME } from "@/core/commerce/merchant-identity";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { okResult } from "@/core/contract";
-import { invoices } from "@/modules/invoicing/schema";
+import { bookingCommercialSources, bookings } from "@/core/scheduling/schema";
+import { bookingMarketPolicies } from "./booking-merchant-schema";
+import { invoiceMerchantCollections } from "@/modules/invoicing/merchant-collection-schema";
+import { getInvoiceMerchantTaxReceipt, getInvoiceSiteMerchantIdentity } from "@/modules/invoicing/merchant-tax";
+import { invoices, invoiceMarketPolicies, invoiceMerchantAllocations } from "@/modules/invoicing/schema";
 import { getInvoiceMarketPolicy, invoiceMarketPolicy, marketFeeMinor, registerInvoiceMarketResolver, registerInvoiceMerchantVerifier } from "@/modules/invoicing/market-policy";
 import { orderInvoiceRevenue,orderSellers,orderInvoiceLineOwners } from "@/modules/catalog/market";
 import { invoiceMerchantLineOwner, registerInvoiceMerchantLineResolver } from "@/modules/invoicing/merchant-allocations";
@@ -18,7 +22,7 @@ import { plans, subscriptions } from "@/modules/subscriptions/schema";
 import { getSubscriptionMarketPolicy, registerSubscriptionMarketResolver, registerSubscriptionPlanMarketResolver, registerSubscriptionMerchantVerifier, subscriptionMarketPolicy, type SubscriptionMarketPolicy } from "@/modules/subscriptions/market-policy";
 import { sellerForInvoice } from "./member-subscriptions";
 import { marketRules } from "./payouts";
-import { registerMerchantCheckoutRequirement } from "@/modules/invoicing/merchant-collection";
+import { getMerchantCollectionConfiguration, merchantCollectionReceipt, registerMerchantCollectionResolver, registerMerchantCollectionVerifier, registerMerchantCheckoutRequirement } from "@/modules/invoicing/merchant-collection";
 import { memberPayoutAccounts, memberProfiles, memberSettings } from "./schema";
 
 registerMerchantCheckoutRequirement(async ctx => {
@@ -26,7 +30,7 @@ registerMerchantCheckoutRequirement(async ctx => {
   return rules.enabled && rules.model === "seller_merchant";
 });
 
-async function policyForSellers(sellerIds: string[], containsSiteItems: boolean, ctx: ServiceContext): Promise<SubscriptionMarketPolicy> {
+export async function policyForSellers(sellerIds: string[], containsSiteItems: boolean, ctx: ServiceContext): Promise<SubscriptionMarketPolicy> {
   await lockContactIdentityForRead(ctx.tx);
   // A signup/issue transaction keeps its displayed terms stable through
   // capture. Owner updates wait until this transaction commits.
@@ -84,6 +88,41 @@ export const resolveInvoiceMarketPolicy = defineService({
       const erased=policy.sellerUserId&&await merchantIdentityErased(ctx.tx,policy.sellerUserId,policy.merchantContactId);
       return { ...policy,collectionVersion:0,...(erased?{merchantName:ERASED_MERCHANT_NAME,merchantSupport:null}:{}), feeMinor: marketFeeMinor(invoice.totalMinor - invoice.taxMinor, policy.siteFeeBps) };
     }
+    if (invoice.sourceType === "booking" && z.uuid().safeParse(invoice.sourceId).success) {
+      const [booking] = await ctx.tx.select().from(bookings).where(eq(bookings.id, invoice.sourceId));
+      if (!booking) throw new ServiceError("conflict", "The original appointment is unavailable.");
+      let frozen: SubscriptionMarketPolicy | null = null;
+      if (booking.marketPolicyVersion === 1) {
+        const [source] = await ctx.tx.select().from(bookingCommercialSources).where(eq(bookingCommercialSources.bookingId, booking.id));
+        if (!booking.serviceOfferingId) return null;
+        if (!source) throw new ServiceError("conflict", "Restore the appointment's actual original commercial source before billing.");
+        if (!source.sellerUserId) return null;
+        const [original] = await ctx.tx.select().from(bookingMarketPolicies).where(eq(bookingMarketPolicies.bookingId, booking.id));
+        if (!original || original.sellerUserId !== source.sellerUserId) throw new ServiceError("conflict", "The appointment's original member terms are missing.");
+        frozen = subscriptionMarketPolicy.parse(original);
+      } else {
+        // A real pre80 issued invoice is evidence of an original agreement.
+        // Today's offering owner never supplies missing historical ownership.
+        const [originalInvoice] = booking.invoiceId ? await ctx.tx.select().from(invoices).where(eq(invoices.id, booking.invoiceId)) : [];
+        let cursor: typeof booking | undefined = booking, originalSource = false;
+        if (originalInvoice?.sourceType === "booking" && originalInvoice.contactId === booking.contactId) {
+          const seen = new Set<string>();
+          for (let depth = 0; cursor && depth < 100 && !seen.has(cursor.id); depth++) {
+            seen.add(cursor.id);
+            if (cursor.id === originalInvoice.sourceId) { originalSource = true; break; }
+            const parentId: string | null = cursor.rescheduledFromId;
+            cursor = parentId ? (await ctx.tx.select().from(bookings).where(eq(bookings.id, parentId)))[0] : undefined;
+          }
+        }
+        const [original] = originalSource && originalInvoice ? await ctx.tx.select().from(invoiceMarketPolicies).where(eq(invoiceMarketPolicies.invoiceId, originalInvoice.id)) : [];
+        if (original) frozen = subscriptionMarketPolicy.parse(original);
+        else if (booking.serviceOfferingId) throw new ServiceError("conflict", "This older appointment has no proved original member or site billing policy. Review its actual history before issuing new money.");
+      }
+      if (!frozen) return null;
+      const erased = frozen.sellerUserId && await merchantIdentityErased(ctx.tx, frozen.sellerUserId, frozen.merchantContactId);
+      return { ...frozen, collectionVersion: 0, ...(erased ? { merchantName: ERASED_MERCHANT_NAME, merchantSupport: null } : {}), feeMinor: marketFeeMinor(invoice.totalMinor - invoice.taxMinor, frozen.siteFeeBps) };
+    }
+    await ctx.tx.select({ id: memberSettings.id }).from(memberSettings).where(eq(memberSettings.id, 1)).for("share");
     const rules = await marketRules(ctx);
     let sellerIds: string[];
     let feeMinor: number;
@@ -106,6 +145,13 @@ export const resolveInvoiceMarketPolicy = defineService({
       feeMinor = marketFeeMinor(invoice.totalMinor - invoice.taxMinor, rules.siteFeeBps);
     }
     if (sellerIds.length === 0) return null;
+    if (invoice.sourceType === "order" && rules.model === "seller_merchant") {
+      const configuration = await ctx.callAsSystem(getMerchantCollectionConfiguration, {});
+      if (!configuration || rules.adapter !== "stripe_connect" || !rules.enabled) throw new ServiceError("conflict", "Verify the original merchant platform and complete seller collection before issuing this order.");
+      for (const sellerUserId of sellerIds) await policyForSellers([sellerUserId], false, ctx);
+      return { model: rules.model, adapter: rules.adapter, siteFeeBps: rules.siteFeeBps, holdDays: rules.holdDays, collectionVersion: 1, feeMinor,
+        sellerUserId: null, merchantName: null, merchantSupport: null, merchantContactId: null, providerAccountId: null };
+    }
     return { ...await policyForSellers(sellerIds, containsSiteItems, ctx), collectionVersion:0, feeMinor };
   },
 });
@@ -127,6 +173,54 @@ export const resolveInvoiceMerchantLineOwners = defineService({
   },
 });
 registerInvoiceMerchantLineResolver((invoiceId, ctx) => ctx.callAsSystem(resolveInvoiceMerchantLineOwners, { invoiceId }));
+
+export const resolveInvoiceMerchantCollections = defineService({
+  name: "members.resolveInvoiceMerchantCollections", summary: "Resolve every original order seller/site business and its exact invoice tax receipt before issue.",
+  kind: "query", permission: "system", external: false, input: z.object({ invoiceId: z.uuid() }), output: merchantCollectionReceipt.array(),
+  handler: async ({ invoiceId }, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
+    const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId });
+    const configuration = await ctx.callAsSystem(getMerchantCollectionConfiguration, {});
+    if (policy?.collectionVersion !== 1 || policy.model !== "seller_merchant" || !configuration) throw new ServiceError("conflict", "The new original merchant collection policy is unavailable.");
+    const parts = await ctx.tx.select().from(invoiceMerchantAllocations).where(eq(invoiceMerchantAllocations.invoiceId, invoiceId));
+    const receipts: z.infer<typeof merchantCollectionReceipt>[] = [];
+    for (const part of parts) {
+      const taxPolicy = await ctx.callAsSystem(getInvoiceMerchantTaxReceipt, { invoiceId, sellerUserId: part.sellerUserId });
+      if (part.sellerUserId === null) {
+        const identity = await ctx.callAsSystem(getInvoiceSiteMerchantIdentity, { invoiceId });
+        receipts.push({ allocationId: part.id, collectionKind: "platform", providerPlatformAccountId: configuration.providerPlatformAccountId,
+          chargeAccountId: null, recipientAccountId: null, settlementMerchantAccountId: null, ...identity, taxPolicy });
+      } else {
+        const original = await policyForSellers([part.sellerUserId], false, ctx);
+        if (!original.providerAccountId || !original.merchantName || !original.merchantSupport || original.merchantContactId !== part.merchantContactId) throw new ServiceError("conflict", "This original seller portion has no complete public business/account/contact binding.");
+        receipts.push({ allocationId: part.id, collectionKind: configuration.collectionKind, providerPlatformAccountId: configuration.providerPlatformAccountId,
+          chargeAccountId: configuration.collectionKind === "direct" ? original.providerAccountId : null, recipientAccountId: original.providerAccountId, settlementMerchantAccountId: original.providerAccountId,
+          merchantName: original.merchantName, merchantSupport: original.merchantSupport, taxPolicy });
+      }
+    }
+    return receipts;
+  },
+});
+registerMerchantCollectionResolver((invoiceId, ctx) => ctx.callAsSystem(resolveInvoiceMerchantCollections, { invoiceId }));
+
+export const verifyInvoiceMerchantCollection = defineService({
+  name: "members.verifyInvoiceMerchantCollection", summary: "Verify only the original business of the merchant portion being collected.",
+  kind: "query", permission: "system", external: false, input: z.object({ allocationId: z.uuid() }), output: okResult,
+  handler: async ({ allocationId }, ctx) => {
+    const [original] = await ctx.tx.select({ part: invoiceMerchantAllocations, collection: invoiceMerchantCollections }).from(invoiceMerchantAllocations)
+      .innerJoin(invoiceMerchantCollections, eq(invoiceMerchantCollections.allocationId, invoiceMerchantAllocations.id)).where(eq(invoiceMerchantAllocations.id, allocationId));
+    if (!original) throw new ServiceError("conflict", "The original merchant portion needs reconciliation.");
+    const { part, collection } = original;
+    const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: part.invoiceId });
+    if (!policy || policy.collectionVersion !== 1 || policy.model !== "seller_merchant") throw new ServiceError("conflict", "This portion has no original versioned merchant policy.");
+    if (part.sellerUserId === null) {
+      const identity = await ctx.callAsSystem(getInvoiceSiteMerchantIdentity, { invoiceId: part.invoiceId });
+      if (collection.collectionKind !== "platform" || identity.merchantName !== collection.merchantName || JSON.stringify(identity.merchantSupport) !== JSON.stringify(collection.merchantSupport)) throw new ServiceError("conflict", "Restore this invoice's exact original site business identity before collection.");
+    } else await verifyMerchantPolicy({ ...policy, sellerUserId: part.sellerUserId, merchantContactId: part.merchantContactId, merchantName: collection.merchantName, merchantSupport: collection.merchantSupport, providerAccountId: collection.recipientAccountId }, ctx);
+    return { ok: true as const };
+  },
+});
+registerMerchantCollectionVerifier(async (allocationId, ctx) => { await ctx.callAsSystem(verifyInvoiceMerchantCollection, { allocationId }); });
 
 export const verifyInvoiceMerchantAccount = defineService({
   name: "members.verifyInvoiceMerchantAccount", summary: "Verify that an issued invoice's original seller account remains authorized.",
@@ -162,4 +256,4 @@ export const verifySubscriptionMerchantAccount = defineService({
   },
 });
 registerSubscriptionMerchantVerifier(async (subscriptionId, ctx) => { await ctx.callAsSystem(verifySubscriptionMerchantAccount, { subscriptionId }); });
-export default [resolveInvoiceMarketPolicy, resolveInvoiceMerchantLineOwners, resolveSubscriptionMarketPolicy, resolveSubscriptionPlanMarketPolicy, verifyInvoiceMerchantAccount, verifySubscriptionMerchantAccount];
+export default [resolveInvoiceMerchantCollections, verifyInvoiceMerchantCollection, resolveInvoiceMarketPolicy, resolveInvoiceMerchantLineOwners, resolveSubscriptionMarketPolicy, resolveSubscriptionPlanMarketPolicy, verifyInvoiceMerchantAccount, verifySubscriptionMerchantAccount];

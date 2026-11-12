@@ -67,7 +67,8 @@ describe("original charge and actual settlement inspection", () => {
   it("proves an actual scheduled invoice relation without invented payment-attempt metadata", async () => {
     const provider = reads([{ id: "in_original", subscription: "sub_original", payment_intent: "pi_original" }, { ...intent, metadata: {} }, charge, fee, transfer]);
     const { paymentAttemptId: _attempt, ...scheduled } = request;
-    expect(await inspectStripeMerchantPayment({ ...scheduled, subscriptionOrigin: { providerSubscriptionRef: "sub_original", providerInvoiceRef: "in_original", providerPaymentIntentRef: "pi_original" } }, provider.read)).toMatchObject({ status: "succeeded", customerChargeVerified: true, merchantSettlementVerified: true });
+    expect(await inspectStripeMerchantPayment({ ...scheduled, subscriptionOrigin: { providerApiVersion: "2026-10-28.endive", providerSubscriptionRef: "sub_original", providerInvoiceRef: "in_original", providerPaymentIntentRef: "pi_original" } }, provider.read)).toMatchObject({ status: "succeeded", customerChargeVerified: true, merchantSettlementVerified: true });
+    expect(provider.calls.every(call => call.scope.providerApiVersion === "2026-10-28.endive")).toBe(true);
     expect(provider.calls[0]?.path).toBe("/v1/invoices/in_original");
   });
   it("refuses contradictory scheduled and payment-attempt origins before provider I/O", async () => {
