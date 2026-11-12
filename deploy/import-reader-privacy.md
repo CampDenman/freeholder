@@ -409,3 +409,41 @@ remain required. REST/ZIP/crawl durable continuation and actual cutover, wider
 WordPress acceptance, live provider acceptance and independent human security
 review remain outside this qualified reader increment. C2.29/C3.46/C3.47 and
 stable readiness stay open until their complete acceptance requirements pass.
+
+
+## Protected migration-77 ancestry and reader-78 review
+
+On 2026-11-12 this increment was rebased onto the actual protected migration-77
+main merge `1a783186dde4df89c9e6a8eb6a5569449faab388` (PR #686), rather than
+publishing the earlier composed dependency stack. The rebased source at
+`eee9690e` has identical product files and migration bytes to qualified reader
+checkpoint `05337220`; every predecessor SQL file through 77 is also identical.
+The already qualified `b2885475` standalone remains preserved, unchanged. Its
+browser proof and the earlier native/upgrade/hold evidence above are reused
+with that explicit equivalence; they are not newly executed exact-head runs.
+Full types, lint, license, release-note, plan, playground and contract gates
+were rerun after this ancestry change: 384 passed and 26 expected exclusions.
+MASTER §43.1 is byte-for-byte unchanged from protected main.
+
+For this partial C2.29/C3.46/C3.47 repair, applicable F01–F12 evidence is:
+
+- F01–F03: normalized migration 78 constraints and ownership/merge witnesses;
+  shared transactional owner resolution, original-source authorization,
+  personal audit and contact merge/undo, including the real 1,001-reader case.
+- F04–F06: bounded original-by-original owner forms, explicit empty choices,
+  refusals/recovery and all four translated locale journeys. HTTP/MCP/SDK
+  expose the same registry and deliberately refuse nonhuman ownership
+  decisions, including otherwise scoped agents; live SDK checks passed.
+- F07–F09: current-mailbox and unchanged-prior-runtime disclosure repros,
+  canonical pending holds, sealed-key recovery, erasure/retention/export,
+  explicit contact-FK inventories and actual normal populated upgrade proofs.
+  Backups retain the normalized private ledger with the ordinary database;
+  this is not a new cross-provider restore or independent security sign-off.
+- F10–F12: owner instructions explain why historical addresses need explicit
+  review; no implicit contact creation or seeded identity guesses. Release
+  notes and this evidence record accompany the real upload/review/commit,
+  account export, merge/undo and owner-browser composition proofs.
+
+Protected exact-head CI and normal queue integration are still required.
+These criteria describe the qualified increment, not closure of the broader
+unchecked C-items or permission to announce stable readiness.
