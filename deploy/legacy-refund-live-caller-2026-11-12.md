@@ -186,10 +186,29 @@ resource's signed terminal-failure fact before a new request returned 1000;
 the payment's refunded amount was exactly 1000. Skipped controls in one group
 are supplied by the other groups, not counted as additional passes.
 
-Existing hosted, Terminal and catalog-return assertions that expected a
-second POST after a lost answer are being aligned to the retained processing
-debt contract. Their exact adjacent native runs and the full pre-push gates
-remain required before the normal protected PR.
+On test/documentation checkpoint `b2b43feb`, the product remained exactly
+`878a6e4b`. Sixteen existing adjacent native controls passed in disjoint groups
+of 5/7/4: signed expanded-checkout and original-account refund feedback,
+provider cancellation, offline money, cash/Terminal refunds, pending recovery,
+prepared mixed returns, unknown returned-item response and scheduled original
+seller refunds. All runners exited zero and final active-backend checks were
+`[]`. Evidence is `/tmp/freeholder-legacy-refund-c0-adjacent-provider5.json`,
+`-adjacent7.json` and `-adjacent-unknown4.json`, with matching logs and ledger
+snapshots. Unknown responses retain the original reservation and never cause
+a second POST; actual signed terminal evidence can release a finished pending
+resource.
+
+For qualification beyond the isolated probe, the verified dependency symlink
+was replaced with an own frozen offline installation, scripts disabled.
+Package/lock/workspace hashes remained unchanged. Full Node 22 types and whole
+lint passed. License, release-note and plan gates passed, as did the playground
+policy and all 384 required static assertions (26 declared skips). The first
+sandboxed run retained ten subprocess/loopback failures and a missing generated
+changelog entry. After generating that entry, only the eight affected files
+were retried under escalation: all 63 passed. Successful checks were not
+miscounted twice. Logs: `/tmp/freeholder-legacy-refund-c0-full-source-gates.log`,
+`-metadata-escalated.log` and `-contract8-escalated.{json,log}`. Normal protected
+PR checks remain required; local proofs do not replace that pipeline.
 
 Historical failed/cancelled rows may hide older accepted money; this repair
 does not invent negative evidence or reconcile that history automatically.

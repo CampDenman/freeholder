@@ -7026,8 +7026,8 @@ owner operations, never substitute for them.
   provider refund's delayed acknowledgement, sent a replacement request, and
   left refunded money unapplied. The isolated journal repair passes the
   original caller control and 17 bounded prepared, pending, unknown, binding,
-  corruption and rotation controls. Adjacent regression qualification,
-  protected checks, historical terminal recovery and real-provider acceptance
+  corruption and rotation controls, plus 16 existing adjacent regressions.
+  Protected checks, historical terminal recovery and real-provider acceptance
   remain open; see `deploy/legacy-refund-live-caller-2026-11-12.md`.) *(Evidence:
   one capability-discovered adapter contract for owner-attested offline money,
   Stripe Checkout and PayPal Orders v2; exact-minor-unit conversion across
