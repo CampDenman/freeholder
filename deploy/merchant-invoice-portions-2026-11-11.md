@@ -76,8 +76,17 @@ item tax, shipping-tax cent rounding and fees across two sellers plus the
 site: the one CAD 45.90 invoice has original portions CAD 24.12, 6.03 and 15.75,
 and total site fees CAD 2.50. Those two new controls passed together in 14.68s. These are declared
 synthetic tax settings for the site's collection model, not live tax or
-seller-as-merchant acceptance. Final populated-chain qualification must use
-the updated historical-undo fence.
+seller-as-merchant acceptance.
+
+A second populated upgrade rehearsal uses the exact updated historical-undo
+fence. The unchanged committed prior runtime `bed937ac` creates and settles an
+order on fresh official74 using its existing frozen-fee control (1 passed,
+22.23s). Its drained database is cloned before applying the current explicit77
+SQL. All nine financial table counts and canonical row hashes remain identical;
+the prior policy stays version0 and no historical portions are invented. Local
+report: `/tmp/freeholder-allocation77-final-populated-upgrade.json`. This closes
+the exact-SQL preservation gap, while leaving the complete contiguous75/76/77
+upgrade requirement open.
 
 Remaining work includes the complete contiguous populated upgrade,
 seller-as-merchant tax integration,
