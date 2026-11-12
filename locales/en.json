@@ -8789,5 +8789,6 @@
   "media.recovery.providerUploadId": "Original provider upload ID (if known)",
   "media.recovery.verifyOriginal": "Verify original resource",
   "privacy.retention.mediaMultipartOperations": "Original upload reservations and multipart operations",
-  "privacy.retention.mediaStorageOperations": "Original storage operations"
+  "privacy.retention.mediaStorageOperations": "Original storage operations",
+  "audit.privacy.reopenErasureJob": "Reopened an erasure after new source evidence"
 }

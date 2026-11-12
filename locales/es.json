@@ -8789,5 +8789,6 @@
   "media.recovery.providerUploadId": "ID de carga del proveedor original (si se conoce)",
   "media.recovery.verifyOriginal": "Verificar el recurso original",
   "privacy.retention.mediaMultipartOperations": "Reservas de carga y operaciones multiparte originales",
-  "privacy.retention.mediaStorageOperations": "Operaciones de almacenamiento originales"
+  "privacy.retention.mediaStorageOperations": "Operaciones de almacenamiento originales",
+  "audit.privacy.reopenErasureJob": "Reabrió un borrado tras nuevas pruebas del origen"
 }

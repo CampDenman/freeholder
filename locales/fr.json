@@ -8789,5 +8789,6 @@
   "media.recovery.providerUploadId": "Identifiant du téléversement chez le fournisseur initial (si connu)",
   "media.recovery.verifyOriginal": "Vérifier la ressource initiale",
   "privacy.retention.mediaMultipartOperations": "Réservations de téléversement et opérations multipart initiales",
-  "privacy.retention.mediaStorageOperations": "Opérations de stockage initiales"
+  "privacy.retention.mediaStorageOperations": "Opérations de stockage initiales",
+  "audit.privacy.reopenErasureJob": "A rouvert un effacement après de nouvelles preuves de la source"
 }

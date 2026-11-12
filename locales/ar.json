@@ -8789,5 +8789,6 @@
   "media.recovery.providerUploadId": "معرّف التحميل لدى المزوّد الأصلي (إن كان معروفًا)",
   "media.recovery.verifyOriginal": "التحقق من المورد الأصلي",
   "privacy.retention.mediaMultipartOperations": "حجوزات التحميل الأصلية والعمليات متعددة الأجزاء",
-  "privacy.retention.mediaStorageOperations": "عمليات التخزين الأصلية"
+  "privacy.retention.mediaStorageOperations": "عمليات التخزين الأصلية",
+  "audit.privacy.reopenErasureJob": "أعاد فتح طلب حذف بعد ظهور دليل جديد من المصدر"
 }

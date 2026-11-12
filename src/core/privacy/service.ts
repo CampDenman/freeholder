@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Consent, preference, and privacy-rights services (MASTER.md C1.08, §30).
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   and,
   asc,
@@ -34,6 +34,8 @@ import { db } from "@/core/db";
 import {lockContactIdentity} from "@/core/contacts/identity-lock";
 import {contactPrivacyIdentity,contactPrivacyHistory,contactHistoryOwnership} from "./contact-identity";
 import { auditLog } from "@/core/events/schema";
+import { enqueueJob } from "@/core/jobs";
+import { jobIdempotencyKeys } from "@/core/jobs/schema";
 import {
   consentRecords,
   dataRequestArtifacts,
@@ -1622,6 +1624,46 @@ export const completeErasureJob = defineService({
   },
 });
 
+/** A new positive source fact reopens its original receipt; it never invents missing history. */
+export const reopenErasureJob = defineService({
+  name: "privacy.reopenErasureJob", summary: "Reopen an original erasure scope after new source evidence, or require recovery of its original receipt.",
+  kind: "mutation", permission: "system", external: false,
+  input: z.object({ requestId: z.uuid(), scope: z.string().min(1).max(200), jobName: z.string().min(1).max(200), jobData: z.record(z.string(), z.unknown()), idempotencyKey: z.string().min(1).max(500) }),
+  output: z.object({ jobId: z.uuid().nullable(), recoveryRequired: z.boolean(), changed: z.boolean() }),
+  auditInputFields: ["requestId", "scope"], auditWhen: (output: { jobId: string | null; recoveryRequired: boolean; changed: boolean }) => output.changed,
+  handler: async (input, ctx) => {
+    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
+    const [request] = await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id, input.requestId)).for("update");
+    if (!request || request.kind !== "erasure") throw new ServiceError("not_found", "Restore the original erasure request before reconciling its late provider evidence.");
+    if (!privacySourceRegistry.some(source => source.scope === input.scope)) throw new ServiceError("conflict", "The original erasure source is not registered.");
+    const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id)).for("update");
+    const parsed = erasureReceipt.safeParse(artifact?.body);
+    const receipt = parsed.success ? parsed.data : null;
+    const outcome = receipt?.outcomes.find(item => item.scope === input.scope);
+    ctx.setSubject("dataRequest", request.id);
+    if (!artifact || !receipt || !outcome || artifact.sha256 !== artifactChecksum(artifact.body)) {
+      const resolution = "New source evidence requires recovery of the exact original erasure receipt before completion.";
+      const changed = request.status !== "in_progress" || request.fulfilledAt !== null || request.resolution !== resolution;
+      if (changed) await ctx.tx.update(dataRequests).set({ status: "in_progress", fulfilledAt: null, resolution }).where(eq(dataRequests.id, request.id));
+      // No fabricated replacement artifact, scope, absence proof or completion.
+      return { jobId: null, recoveryRequired: true, changed };
+    }
+    if (outcome.outcome === "retained") return { jobId: null, recoveryRequired: false, changed: false };
+    if (outcome.outcome === "pending" && outcome.pendingJobs?.length) return { jobId: outcome.pendingJobs[0]!, recoveryRequired: false, changed: false };
+    if (outcome.outcome !== "erased") throw new ServiceError("conflict", "The original erasure outcome needs recovery before it can be reopened.");
+    const idempotencyKey = `reopen-erasure:${request.id}:${input.scope}:${input.idempotencyKey}`;
+    const [claim] = await ctx.tx.select({ jobId: jobIdempotencyKeys.jobId }).from(jobIdempotencyKeys).where(and(eq(jobIdempotencyKeys.jobName, input.jobName), eq(jobIdempotencyKeys.idempotencyKey, idempotencyKey))).limit(1);
+    const originalJobId = claim?.jobId ?? randomUUID();
+    const job = await enqueueJob(ctx.tx, input.jobName, { ...input.jobData, requestId: request.id, originalJobId }, { id: originalJobId, idempotencyKey });
+    outcome.outcome = "pending"; outcome.pendingJobs = [job.id];
+    await saveArtifact(ctx.tx, request, { ...receipt, status: "in_progress", generatedAt: new Date().toISOString(), note: "New original-source evidence reopened its erasure work; documented retention exceptions remain unchanged." });
+    await ctx.tx.update(dataRequests).set({ status: "in_progress", fulfilledAt: null, resolution: "Waiting for registered source erasure jobs after new original evidence." }).where(eq(dataRequests.id, request.id));
+    await ctx.emitTimeline({ contactId: request.contactId, eventType: "contact.dataRequestErasurePending", subjectType: "dataRequest", subjectId: request.id, payload: { kind: "erasure", status: "in_progress", scope: input.scope } });
+    ctx.queueEvent("contact.dataRequestErasurePending", { contactId: request.contactId, dataRequestId: request.id, kind: "erasure", status: "in_progress" });
+    return { jobId: job.id, recoveryRequired: false, changed: true };
+  },
+});
+
 export const fulfillDataRequest = defineService({
   name: "contacts.fulfillDataRequest",
   summary: "Fulfill a verified access, export, correction, or erasure request.",
@@ -2002,6 +2044,7 @@ export default [
   cancelMyDataRequest,
   fulfillDataRequest,
   completeErasureJob,
+  reopenErasureJob,
   denyDataRequest,
   downloadDataRequestArtifact,
   downloadMyDataRequestArtifact,
