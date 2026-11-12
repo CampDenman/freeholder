@@ -105,6 +105,8 @@
   "admin.activity.taxRegistrationChanged": "حُدّث تسجيل ضريبي",
   "admin.activity.taxExemptionRecorded": "سُجّل إعفاء ضريبي لعميل",
   "admin.activity.taxProfileUpdated": "حُدّثت الأوراق الضريبية لأحد الشركاء",
+  "admin.activity.merchantTaxProfileSaved": "حُفظ إقرار ضريبي للنشاط التجاري",
+  "admin.activity.merchantTaxProfileErased": "مُحي إقرار ضريبي للنشاط التجاري",
   "admin.activity.shareLinkRevoked": "أُزيل رابط مشترك",
   "admin.activity.partnerLinkRevoked": "سُحب رابط شريك",
   "admin.activity.guestAccessRevoked": "سُحب وصول ضيف إلى معرض",

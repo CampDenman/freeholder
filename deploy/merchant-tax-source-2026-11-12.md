@@ -1,0 +1,53 @@
+<!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
+# Original merchant tax source qualification
+
+C12.38 remains open. This is source work toward the full specification. It does
+not enable collection, change the beta version, provide independent review or
+qualify an actual provider account.
+
+Each deliberately configured business has stable ownership and immutable tax
+versions. Seller versions use only that seller's explicit registrations, rate
+authorizations and origin. Historical NULL registrations and customer exemptions
+remain site-only. An invoice retains an opaque original profile/version receipt,
+its actual tax lines and exact per-business freight amounts. Current branding,
+catalog ownership and replacement provider accounts cannot supply those facts.
+
+`catalog.quoteMerchantCheckout` checks the real cart token or caller authority
+before composing private source services. Anonymous email claims cannot read a
+customer's exemption. The public result exposes business identities and amounts;
+private origins, registration declarations and provider account references stay
+inside the services. Tax and commercial consent have distinct canonical digests.
+The latter also binds the actual collection method and displayed merchant
+identity. A new member order captures these terms before draft creation, and
+draft preparation proves each original item, quantity, discount, category,
+business and buyer before storing its receipt. Historical epoch0 orders are not
+backfilled from current settings.
+
+Source controls also register original tax and order contact pointers for merge
+and bounded exact undo. New declarations or source changes invalidate old undo
+witnesses. The tax privacy source retains its declaration until real external
+schedule recovery reports no pending jobs. Completion checks the applied
+original erasure request and active retention exceptions. New source capture and
+invoice audit projections omit private buyer/tax payloads.
+
+Focused source checks: 30 tests pass across invoice amounts, merchant tax
+calculation, merchant allocation amounts, gross freight and the private service
+boundary. These are arithmetic and boundary controls, not native commercial
+journeys. Current application gates are being run separately.
+
+The initial SQL diagnostic uses the normal journal0–77 (78 entries), then two
+explicit unpublished80 fragments. The first attempts exposed a CASE-expression
+syntax error in the unapplied tax trigger. Parenthesizing that expression fixed
+the error. The third fresh rehearsal created all seven tax/order tables. Its
+report explicitly says `fullSchema80Qualified:false`:
+`/tmp/freeholder-tax-order-schema80-diagnostic-v3.log`. The fourth fresh rehearsal also
+includes the commercial-consent column and passes; its current report is
+`/tmp/freeholder-tax-order-schema80-diagnostic-v4.log`. No contiguous0–80 upgrade,
+populated80 preservation or native service acceptance is claimed by that proof.
+
+Required work still includes the complete assembled80 migration and predecessor
+chain, populated upgrades, original older-runtime refusal and warm drain,
+native order/booking/agreement and privacy/hold/merge controls, owner/member and
+buyer flows in all four locales, SDK and production browser qualification,
+original provider schedule quiescence/amendment and actual enabled-account
+payment acceptance. Existing source repair evidence remains preserved.

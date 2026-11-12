@@ -37,6 +37,7 @@ import orderCommercialServices from "./order-commercial";
 import bookingMerchantServices from "./booking-merchant";
 import bookingMerchantQuoteServices from "./booking-merchant-quote";
 import merchantServices from "./market-merchant";
+import {memberMerchantTaxServices} from "@/modules/invoicing/merchant-tax-profiles";
 import protectionServices from "./protection";
 import reputationServices from "./reputation";
 import reportServices from "./reports";
@@ -467,6 +468,7 @@ export default [
   ...bookingMerchantServices,
   ...bookingMerchantQuoteServices,
   ...orderCommercialServices,
+  ...memberMerchantTaxServices,
   ...graphServices,
   ...postServices,
   ...messageServices,

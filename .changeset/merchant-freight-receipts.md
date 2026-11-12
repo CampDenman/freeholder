@@ -1,4 +1,5 @@
 ---
+"freeholder": patch
 ---
 
 C12.38: preserve explicitly quoted freight and shipping-tax amounts for each

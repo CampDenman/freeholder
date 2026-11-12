@@ -107,6 +107,8 @@
   "admin.activity.taxRegistrationChanged": "Une inscription fiscale a été mise à jour",
   "admin.activity.taxExemptionRecorded": "L'exonération de taxes d'un client a été enregistrée",
   "admin.activity.taxProfileUpdated": "Les documents fiscaux d'un affilié ont été mis à jour",
+  "admin.activity.merchantTaxProfileSaved": "Une déclaration fiscale d’entreprise a été enregistrée",
+  "admin.activity.merchantTaxProfileErased": "Une déclaration fiscale d’entreprise a été effacée",
   "admin.activity.shareLinkRevoked": "Un lien partagé a été retiré",
   "admin.activity.partnerLinkRevoked": "Un lien partenaire a été retiré",
   "admin.activity.guestAccessRevoked": "L'accès d'un invité à une galerie a été retiré",

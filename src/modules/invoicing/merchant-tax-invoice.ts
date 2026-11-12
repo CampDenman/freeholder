@@ -11,10 +11,11 @@ import type {merchantTaxPreviewOutput} from "./merchant-tax-preview";
 import {merchantTaxQuoteItem,previewMerchantTax} from "./merchant-tax-preview";
 import {allowMerchantTaxWrites,merchantTaxDigest} from "./merchant-tax-store";
 import {sumMinor} from "./money";
+import {merchantTaxConsentDigest} from "./merchant-tax-consent";
 
 const minor=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const merchantTaxSourceRequest=z.object({sourceType:z.string().min(1),sourceId:z.string().optional(),contactId:z.uuid(),currency:z.string().regex(/^[A-Z]{3}$/),
- lines:z.array(z.object({sourceType:z.string().optional(),sourceId:z.string().optional(),quantityMicros:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),unitAmountMinor:minor,discountMinor:minor,taxCategoryCode:z.string(),requiresShipping:z.boolean(),snapshot:z.record(z.string(),z.unknown())})).min(1).max(1000),shippingMinor:minor,destination:merchantTaxAddress});
+ lines:z.array(z.object({sourceType:z.string().optional(),sourceId:z.string().optional(),quantityMicros:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),unitAmountMinor:minor,discountMinor:minor,taxCategoryCode:z.string(),requiresShipping:z.boolean(),snapshot:z.record(z.string(),z.unknown())})).min(1).max(1000),shippingMinor:minor,destination:merchantTaxAddress,expectedQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/).optional()});
 export const merchantTaxSourceParty=z.object({sellerUserId:z.uuid().nullable(),profileId:z.uuid(),profileVersion:z.number().int().positive(),linePositions:z.array(z.number().int().nonnegative()).min(1).max(1000),shippingMinor:minor,expectedQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/).optional()});
 type SourceRequest=z.infer<typeof merchantTaxSourceRequest>;
 type Party=z.infer<typeof merchantTaxSourceParty>;
@@ -50,7 +51,9 @@ export async function prepareMerchantInvoiceTax(input:SourceRequest,ctx:ServiceC
   let offset=0;for(const value of values){for(const row of value.registrationNumbers)registrationNumbers.push({lineIndex:row.lineIndex+offset,number:row.number});if(value.exemption)for(let index=0;index<value.lines.length;index++)lineExemptions.push({lineIndex:offset+index,kind:value.exemption.kind});offset+=value.lines.length;}
   return{...taxQuote.parse({provider:"merchant_declared",currency:request.currency,lines,totalTaxMinor:sumMinor(values.map(value=>value.totalTaxMinor),"Merchant tax"),includedTaxMinor:sumMinor(values.map(value=>value.includedTaxMinor),"Included merchant tax"),explanation:values.flatMap(value=>value.explanation),zone:values.length===1?values[0]!.zone:null,registration:null,exemption:values.length===1?values[0]!.exemption:null}),registrationNumbers,lineExemptions};
  };
- return{request,prepared,quote:combine(false),preDiscountQuote:combine(true),quoteDigest:prepared.length===1?prepared[0]!.result.quoteDigest:merchantTaxDigest(prepared.map(row=>({sellerUserId:row.party.sellerUserId,quoteDigest:row.result.quoteDigest})))};
+ const quoteDigest=merchantTaxConsentDigest(prepared.map(row=>({sellerUserId:row.party.sellerUserId,quoteDigest:row.result.quoteDigest})));
+ if(request.expectedQuoteDigest&&request.expectedQuoteDigest!==quoteDigest)throw new ServiceError("conflict","The original accepted tax quote changed. Review and accept the complete quote again.");
+ return{request,prepared,quote:combine(false),preDiscountQuote:combine(true),quoteDigest};
 }
 
 export async function freezeMerchantInvoiceTax(plan:Awaited<ReturnType<typeof prepareMerchantInvoiceTax>>,invoice:typeof invoices.$inferSelect,lines:readonly typeof invoiceLines.$inferSelect[],ctx:ServiceContext){

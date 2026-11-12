@@ -102,7 +102,7 @@ const lineInput = z.object({
   snapshot: boundedObject.default({}),
 });
 const taxChoice = z.discriminatedUnion("mode", [
-  z.object({mode:z.literal("merchant"),destination:taxAddress}),
+  z.object({mode:z.literal("merchant"),destination:taxAddress,quoteDigest:z.string().regex(/^[a-f0-9]{64}$/).optional()}),
   z.object({
     mode: z.literal("calculate"),
     origin: taxAddress,
@@ -575,6 +575,7 @@ export const createDraftInvoice = defineService({
   summary: "Create one idempotent draft with fixed-point lines and explicit tax treatment.",
   kind: "mutation",
   permission: "scoped",
+  auditInputFields:["contactId","currency","sourceType","sourceId","shippingMinor","depositOfInvoiceId","dueAt"],
   input: createDraftInput,
   output: invoiceBundleOutput,
   handler: async (input, ctx) => {
@@ -624,7 +625,7 @@ export const createDraftInvoice = defineService({
       })),
       shippingMinor: input.shippingMinor,
     };
-    const merchantTax = input.tax.mode === "merchant" ? await prepareMerchantInvoiceTax({...input,destination:input.tax.destination},ctx) : null;
+    const merchantTax = input.tax.mode === "merchant" ? await prepareMerchantInvoiceTax({...input,destination:input.tax.destination,expectedQuoteDigest:input.tax.quoteDigest},ctx) : null;
     const quote = merchantTax?.quote ?? (
       input.tax.mode === "calculate"
         ? await ctx.call(quoteTax, {

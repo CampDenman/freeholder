@@ -107,6 +107,8 @@
   "admin.activity.taxRegistrationChanged": "A tax registration was updated",
   "admin.activity.taxExemptionRecorded": "A customer's tax exemption was recorded",
   "admin.activity.taxProfileUpdated": "An affiliate's tax paperwork was updated",
+  "admin.activity.merchantTaxProfileSaved": "A business tax declaration was saved",
+  "admin.activity.merchantTaxProfileErased": "A business tax declaration was erased",
   "admin.activity.shareLinkRevoked": "A shared link was taken down",
   "admin.activity.partnerLinkRevoked": "A partner link was taken back",
   "admin.activity.guestAccessRevoked": "A guest's gallery access was taken away",

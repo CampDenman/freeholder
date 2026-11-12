@@ -72,5 +72,14 @@ export const getInvoiceSiteMerchantIdentity=defineService({
  },
 });
 
-// Register the external-schedule guard with invoicing even if subscriptions is off.
-export default [currentMerchantTaxProfile,getInvoiceMerchantTaxReceipt,getInvoiceMerchantFreightReceipts,getInvoiceSiteMerchantIdentity,previewMerchantTax,completeMerchantTaxErasure,assertMerchantTaxRevisionSafe];
+export const merchantTaxBusinessIdentity=defineService({
+ name:"invoicing.merchantTaxBusinessIdentity",summary:"Read the deliberately declared site business identity for an exact original tax profile version.",kind:"query",permission:"system",external:false,
+ input:z.object({profileId:z.uuid(),profileVersion:z.number().int().positive()}),output:z.object({merchantName:z.string().min(1).max(200),merchantSupport:publicMerchantSupport}),
+ handler:async(input,ctx)=>{
+  const[found]=await ctx.tx.select({profile:merchantTaxProfiles,version:merchantTaxProfileVersions}).from(merchantTaxProfiles).innerJoin(merchantTaxProfileVersions,and(eq(merchantTaxProfileVersions.profileId,merchantTaxProfiles.id),eq(merchantTaxProfileVersions.version,input.profileVersion))).where(eq(merchantTaxProfiles.id,input.profileId)).limit(1).for("share");
+  if(!found||found.profile.sellerUserId!==null||found.profile.state!=="active"||found.profile.currentVersion!==input.profileVersion||found.version.erasedAt||found.version.liability!=="platform"||!found.version.merchantName||!found.version.merchantSupport)throw new ServiceError("conflict","This site business needs its explicit current tax identity before a new quote.");
+  return{merchantName:found.version.merchantName,merchantSupport:found.version.merchantSupport};
+ },
+});
+
+export default [currentMerchantTaxProfile,getInvoiceMerchantTaxReceipt,getInvoiceMerchantFreightReceipts,getInvoiceSiteMerchantIdentity,merchantTaxBusinessIdentity,previewMerchantTax,completeMerchantTaxErasure,assertMerchantTaxRevisionSafe];

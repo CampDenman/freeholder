@@ -13594,6 +13594,16 @@ whatever is best for the people using the site.
   missing or ambiguous ownership refuses new collection. Profile ownership,
   merge/undo, privacy/holds and all human/API surfaces remain required. This
   source work is under implementation and supplies no tax or live acceptance.
+  The current tax source checkpoint adds one authorized cart preview, separate
+  tax/business consent digests and pre-draft original member-order terms.
+  Epoch0 orders are not relabelled from current settings. Private invoice
+  preparation proves original amounts and per-business tax authority, with
+  shared contact merge/undo and privacy recovery hooks. Thirty focused amount
+  and private-boundary controls pass, and a fresh normal0–77 database accepts
+  the two explicit unpublished80 tax/order fragments. This is not assembled80
+  upgrade or native commercial acceptance. All human flows, complete billing
+  integration, populated upgrade and actual account qualification remain
+  required; see `deploy/merchant-tax-source-2026-11-12.md`.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query

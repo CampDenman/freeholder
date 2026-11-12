@@ -97,7 +97,7 @@ BEGIN
   ELSE
    SELECT * INTO owner FROM merchant_tax_profiles WHERE id=NEW.profile_id;
    IF NOT FOUND OR owner.state<>'active' OR NEW.version<>owner.current_version+1
-    OR NEW.liability<>CASE WHEN owner.seller_user_id IS NULL THEN 'platform' ELSE 'seller' END
+    OR NEW.liability<>(CASE WHEN owner.seller_user_id IS NULL THEN 'platform' ELSE 'seller' END)
     OR(owner.seller_user_id IS NULL AND(NEW.merchant_name IS NULL OR NEW.merchant_support IS NULL))
     OR(owner.seller_user_id IS NOT NULL AND(NEW.merchant_name IS NOT NULL OR NEW.merchant_support IS NOT NULL)) THEN
     RAISE EXCEPTION 'Tax declarations require their exact original business and liability' USING ERRCODE='23514';
