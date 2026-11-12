@@ -12,11 +12,16 @@ import { merchantFeeRefunds } from "@/modules/invoicing/merchant-collection-sche
 import { closeDb, hasDatabase, OWNER } from "../helpers/spine";
 const system = { kind: "system" } as const;
 const tables = ["payments", "refunds", "merchant_fee_refunds", "merchant_fee_observations", "credit_notes", "credit_note_lines", "invoice_merchant_allocations", "invoice_merchant_allocation_lines"];
-async function originalMoney() {
-  const proof = [];
-  for (const table of tables) proof.push(await db().execute(sql.raw(`select count(*)::int as count,encode(sha256(convert_to(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),'[]'::jsonb)::text,'UTF8')),'hex') as sha256 from "${table}" t`)));
-  return JSON.parse(JSON.stringify(proof));
+async function originalMoney(): Promise<Array<{ table: string; count: number; sha256: string }>> {
+  const proof: Array<{ table: string; count: number; sha256: string }> = [];
+  for (const table of tables) {
+    const [row] = await db().execute<{ count: number; sha256: string }>(sql.raw(`select count(*)::int as count,encode(sha256(convert_to(coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),'[]'::jsonb)::text,'UTF8')),'hex') as sha256 from "${table}" t`));
+    if (!row) throw Error("The actual original money proof is missing.");
+    proof.push({ table, count: row.count, sha256: row.sha256 });
+  }
+  return proof;
 }
+
 describe.runIf(hasDatabase && process.env.TEST_ORIGINAL_FEE_HISTORY === "1")("actual original over-refunded line commission80", () => {
   beforeAll(ready, 60000); afterEach(() => vi.restoreAllMocks()); afterAll(closeDb);
   it("keeps the genuine confirmed112 history unchanged and reports review instead of rewriting it to100", async () => {
