@@ -666,7 +666,7 @@ END $$;
 CREATE TRIGGER order_commercial_item_guard BEFORE INSERT OR UPDATE OR DELETE ON order_items FOR EACH ROW EXECUTE FUNCTION freeholder_order_commercial_item_guard();
 --> statement-breakpoint
 -- Source: deploy/merchant-payment-schema80.fragment.sql
--- SHA256: 83099afa10407ad1adae701c07228ecedd15c2fe3f01e9dfdc4f584ee8224d11
+-- SHA256: 4fa4f18fc7b15ec7238fb3ff7def6ebf59b189be81e6724c7a1ec3b04fa27e0b
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
 -- freeholder:schema-breaking Per-party collection requires original merchant receipts and guarded payment writers. Stop and drain old payment writers before upgrade; rollback restores the exact pre-upgrade database and provider reconciliation state.
@@ -963,7 +963,9 @@ BEGIN
    RAISE EXCEPTION 'A resource binding needs its actual original acknowledgement or stopped-caller request review' USING ERRCODE='23514'; END IF;
  ELSE
   IF NEW.caller_instance_id::text IS DISTINCT FROM original.caller->>'id' THEN RAISE EXCEPTION 'The actual original physical caller cannot be replaced' USING ERRCODE='23514'; END IF;
-  IF TG_TABLE_NAME='merchant_payment_dispatch_stops' AND NEW.request_digest IS DISTINCT FROM original.request_digest THEN RAISE EXCEPTION 'The stopped caller proof belongs to another request' USING ERRCODE='23514'; END IF;
+  IF TG_TABLE_NAME='merchant_payment_dispatch_stops' THEN
+   IF NEW.request_digest IS DISTINCT FROM original.request_digest THEN RAISE EXCEPTION 'The stopped caller proof belongs to another request' USING ERRCODE='23514'; END IF;
+  END IF;
  END IF;
  RETURN NEW;
 END $$;

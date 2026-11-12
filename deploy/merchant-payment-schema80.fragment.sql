@@ -294,7 +294,9 @@ BEGIN
    RAISE EXCEPTION 'A resource binding needs its actual original acknowledgement or stopped-caller request review' USING ERRCODE='23514'; END IF;
  ELSE
   IF NEW.caller_instance_id::text IS DISTINCT FROM original.caller->>'id' THEN RAISE EXCEPTION 'The actual original physical caller cannot be replaced' USING ERRCODE='23514'; END IF;
-  IF TG_TABLE_NAME='merchant_payment_dispatch_stops' AND NEW.request_digest IS DISTINCT FROM original.request_digest THEN RAISE EXCEPTION 'The stopped caller proof belongs to another request' USING ERRCODE='23514'; END IF;
+  IF TG_TABLE_NAME='merchant_payment_dispatch_stops' THEN
+   IF NEW.request_digest IS DISTINCT FROM original.request_digest THEN RAISE EXCEPTION 'The stopped caller proof belongs to another request' USING ERRCODE='23514'; END IF;
+  END IF;
  END IF;
  RETURN NEW;
 END $$;
