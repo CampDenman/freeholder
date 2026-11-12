@@ -209,7 +209,10 @@ const sourceHold = z.object({ exceptionId: z.uuid(), requestId: z.uuid(), upload
 registerContactPrivacySource({
   scope: "imports.readerSources", tables: ["import_runs"], retentionScopes: ["cms.readerComments"], eraseOrder: 10,
   captureRetention: async (tx, _contactId, context) => {
-    if (!context.isNew) return;
+    if (!context.isNew) {
+      if (!await retentionSourceSnapshotIsComplete(tx, context.exceptionId, "imports.readerSources")) throw new ServiceError("conflict", "Review this older hold's original uploads before changing it.");
+      return;
+    }
     // The identity lock fences future admission, but cannot undo a provider
     // DELETE that already left the process. Resolve its original receipt first.
     const [deleting] = await tx.select({ id: mediaObjectWrites.id }).from(mediaObjectWrites).where(and(
