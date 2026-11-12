@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Product-wide search over live user-owned rows (C11.14). C11.14 is now
-// checked; these tests keep the search and participation guarantees honest.
+// Product-wide search over live user-owned rows (C11.14). The lifecycle
+// re-audit is open; these tests retain the existing participation guarantees.
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -36,9 +36,10 @@ import { closeDb, failure, hasDatabase, OWNER, STAFF, truncateSpine } from "../h
 const TOKEN = "zxqvsearchmix";
 
 describe("C11.14 search leftovers", () => {
-  it("keeps C11.14 checked and names the worklist it closed", () => {
+  it("keeps the demonstrated lifecycle re-audit open while retaining search evidence", () => {
     const master = readFileSync("MASTER.md", "utf8");
-    expect(master).toMatch(/- \[x\] \*\*C11\.14\*\*/);
+    expect(master.match(/^- \[[ x]\] \*\*C11\.14\*\*/m)?.[0]).toBe("- [ ] **C11.14**");
+    expect(master).toContain("tests/core/forms-delete-recovery.test.ts");
     expect(readFileSync("src/core/search/service.ts", "utf8")).toContain(
       'name: "search.query"',
     );

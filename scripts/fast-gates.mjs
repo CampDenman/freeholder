@@ -75,6 +75,9 @@ const steps = [
       "tests/core/changelog-output.test.ts",
       "tests/core/demo-paths.test.ts",
       "tests/core/record-participation.test.ts",
+      // Pure completion guards in these files must not hide until a DB shard.
+      "tests/core/c11-14-search.test.ts",
+      "tests/core/c11-14-retention.test.ts",
       "tests/core/spec-reconciliation.test.ts",
       "tests/core/f-matrix.test.ts",
       "tests/core/doc-claim-mapping.test.ts",

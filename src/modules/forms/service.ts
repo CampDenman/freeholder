@@ -467,20 +467,22 @@ export const updateForm = defineService({
 
 export const deleteForm = defineService({
   name: "forms.delete",
-  summary: "Permanently remove a form and its submissions.",
+  summary: "Move a form to recoverable trash. Permanent removal uses forms.purge with its confirmation and retention guards.",
   kind: "mutation",
   permission: "scoped",
+  writeClass: "destructive",
   input: z.object({ id: z.string().uuid() }),
   output: row({ id: uuid, slug: z.string() }),
   handler: async (input, ctx) => {
-    const [form] = await ctx.tx
-      .delete(forms)
-      .where(eq(forms.id, input.id))
-      .returning({ id: forms.id, slug: forms.slug });
+    const [form] = await ctx.tx.select({ id: forms.id, slug: forms.slug, trashedAt: forms.trashedAt }).from(forms).where(eq(forms.id, input.id)).for("update");
     if (!form) throw new ServiceError("not_found", "That form is gone.");
+    // The outer legacy service authorizes this exact operation, including an
+    // existing forms.delete-only key. Compose only the fixed reversible
+    // primitive; its event and audit share this transaction. The outer audit
+    // retains the original caller. Repeated deletion never renews trash age.
+    if (!form.trashedAt) await ctx.callAsSystem(removeForm, { id: form.id });
     ctx.setSubject("form", form.id);
-    ctx.queueEvent("forms.deleted", { formId: form.id, slug: form.slug });
-    return form;
+    return { id: form.id, slug: form.slug };
   },
 });
 
@@ -557,9 +559,11 @@ export const loadDemoForms = defineService({
 
 export const purgeDemoForms = defineService({
   name: "forms.purgeDemoFixture",
-  summary: "Purge only forms proven to belong to a tracked demo run.",
+  summary: "Purge only tracked demo forms through shared retention-aware cleanup.",
   kind: "mutation",
-  permission: "scoped",
+  permission: "system",
+  external: false,
+  writeClass: "destructive",
   input: demoHandlerInputSchema,
   output: demoPurgeResultSchema,
   handler: async (input, ctx) => {
@@ -570,11 +574,16 @@ export const purgeDemoForms = defineService({
         throw new ServiceError("validation", "Unexpected forms demo provenance.");
       }
       const [existing] = await ctx.tx
-        .select({ id: forms.id })
+        .select({ id: forms.id, trashedAt: forms.trashedAt })
         .from(forms)
         .where(eq(forms.id, record.subjectId))
         .limit(1);
-      if (existing) await ctx.callAsSystem(deleteForm, { id: existing.id });
+      if (existing) {
+        // Provenance was verified above by the approved demo workflow. The
+        // same shared purge guard still protects customer evidence on a demo.
+        if (!existing.trashedAt) await ctx.callAsSystem(removeForm, { id: existing.id });
+        await ctx.callAsSystem(purgeForm, { id: existing.id, confirmation: "PURGE" });
+      }
       purged.push({ subjectType: record.subjectType, subjectId: record.subjectId });
     }
     return demoPurgeResultSchema.parse({ purged });

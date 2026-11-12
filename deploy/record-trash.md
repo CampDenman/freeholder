@@ -36,6 +36,16 @@ The same guarantees now cover the rest of the recoverable families:
   is the pre-existing hard delete (the definition and, by its cascade, its
   submissions) behind typed confirmation, recent verification and the hold
   below — deleting submissions was not changed in any other way.
+  The legacy `forms.delete` API/MCP service also moves the definition to trash
+  and preserves its existing `{id, slug}` response and exact key scope. Calling
+  it again leaves the original trash date unchanged. It emits `forms.trashed`;
+  it never advertises permanent deletion through `forms.deleted`. Permanent
+  removal remains `forms.purge`, with typed confirmation and fresh verification.
+  Approved tracked-demo cleanup composes that same shared purge, so a hold on
+  real submissions still blocks deleting a customized demo form. The fixture
+  purge is internal and cannot be called through API/MCP or by a person or key;
+  the approved demo workflow validates its exact stored provenance before
+  composing shared cleanup.
 - **Popups.** A trashed popup stops deciding immediately: it is not a
   candidate, and recording events or captures against it fails. Its event
   history stays until purge.

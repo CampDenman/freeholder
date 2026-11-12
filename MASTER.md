@@ -3568,7 +3568,7 @@ what is true now and what remains.
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | _not selected — record the final candidate merge SHA when signing_ |
-| Remaining open | Every unchecked live row below still governs completion; the only exclusions are the existing explicit §43.18 deferrals. Source completion remains for durable large-import resumption and historical reader identity provenance (C3.22/C3.46/C2.29), original mail dispatch and unknown-outcome recovery (C3.31), and complete seller-as-merchant commercial identity, mixed-cart, tax/fee and provider-feedback integration (C12.38). Merged source repairs do not close returned-item acceptance (C5.19), independent OpenMLS acceptance (C12.39), or abuse-provider/reporting acceptance (C12.30). Qualification remains for blog metadata/comments and source-specific cutover (C2.27–C2.29/C3.46), actual Replit/Lovable launches (C3.28), scoped gallery publication (C3.29), actual provider/preview/intake/file journeys (C3.31–C3.39), fresh native installation (C3.44), managed-assistant deployed text and approved-call acceptance (C3.45), phone link-in-bio acceptance (C9.39), hosted quota/cutover operation (C10.32/C10.33), enabled-provider settlement and cross-target recovery (C11.05/C11.08), marketplace payout acceptance (C12.26/C12.27), independent review and final reconciliation/clean-room suite/signature (C11.10/C11.16/C11.17). Historical evidence is preserved; no row is closed by this status refresh. |
+| Remaining open | Every unchecked live row below still governs completion; the only exclusions are the existing explicit §43.18 deferrals. Source completion remains for durable large-import resumption and historical reader identity provenance (C3.22/C3.46/C2.29), original mail dispatch and unknown-outcome recovery (C3.31), and complete seller-as-merchant commercial identity, mixed-cart, tax/fee and provider-feedback integration (C12.38). Merged source repairs do not close returned-item acceptance (C5.19), independent OpenMLS acceptance (C12.39), or abuse-provider/reporting acceptance (C12.30). Qualification remains for blog metadata/comments and source-specific cutover (C2.27–C2.29/C3.46), actual Replit/Lovable launches (C3.28), scoped gallery publication (C3.29), actual provider/preview/intake/file journeys (C3.31–C3.39), fresh native installation (C3.44), managed-assistant deployed text and approved-call acceptance (C3.45), phone link-in-bio acceptance (C9.39), hosted quota/cutover operation (C10.32/C10.33), enabled-provider settlement and cross-target recovery (C11.05/C11.08), record lifecycle re-audit (C11.14), marketplace payout acceptance (C12.26/C12.27), independent review and final reconciliation/clean-room suite/signature (C11.10/C11.16/C11.17). Historical evidence is preserved; no row is closed by this status refresh. |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -11817,9 +11817,20 @@ schema they inherit reads as a designed thing rather than an excavation.
   *(Cheap audit-label follow-up: CI on the card-setup increment caught missing
   owner activity labels. The existing seven-control mutation/locale inventory
   now also runs in local fast gates so this omission is caught before pushing.)*
-- [x] **C11.14** Verify every user-owned record participates correctly in
+- [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
+  *(Reopened 2026-11-11 by actual unchanged-main controls: an exact
+  `forms.delete` API key permanently removed held submissions, the same route
+  removed already-trashed held evidence, and tracked-demo cleanup cascaded over
+  a held real enquiry. The unheld demo positive still passed. The narrow repair
+  composes recoverable shared removal for the legacy endpoint and retention-
+  guarded shared purge for approved demo cleanup. Five focused after controls,
+  four existing form/demo recovery controls and all eight live SDK-generation
+  controls pass locally. The direct fixture is internal and unavailable through
+  HTTP/MCP; approved demo cleanup still works. The wider record-completion
+  claim remains open; these controls do not supply a broader lifecycle sign-off.
+  Evidence: `tests/core/forms-delete-recovery.test.ts`.)*
   *(Partial 2026-09-13: `tests/core/record-participation.test.ts` plus
   `tests/core/c11-14-search.test.ts`, `tests/core/c11-14-retention.test.ts`,
   `merge-completeness`, `ownership-export`, `ownership-drill` and
