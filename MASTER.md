@@ -11817,9 +11817,20 @@ schema they inherit reads as a designed thing rather than an excavation.
   *(Cheap audit-label follow-up: CI on the card-setup increment caught missing
   owner activity labels. The existing seven-control mutation/locale inventory
   now also runs in local fast gates so this omission is caught before pushing.)*
-- [x] **C11.14** Verify every user-owned record participates correctly in
+- [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
+  *(Reopened 2026-11-11 by actual unchanged-main controls: an exact
+  `forms.delete` API key permanently removed held submissions, the same route
+  removed already-trashed held evidence, and tracked-demo cleanup cascaded over
+  a held real enquiry. The unheld demo positive still passed. The narrow repair
+  composes recoverable shared removal for the legacy endpoint and retention-
+  guarded shared purge for approved demo cleanup. Five focused after controls,
+  four existing form/demo recovery controls and all eight live SDK-generation
+  controls pass locally. The direct fixture is internal and unavailable through
+  HTTP/MCP; approved demo cleanup still works. Protected CI and the wider
+  record-completion claim remain open at this source checkpoint.
+  Evidence: `tests/core/forms-delete-recovery.test.ts`.)*
   *(Partial 2026-09-13: `tests/core/record-participation.test.ts` plus
   `tests/core/c11-14-search.test.ts`, `tests/core/c11-14-retention.test.ts`,
   `merge-completeness`, `ownership-export`, `ownership-drill` and

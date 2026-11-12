@@ -762,7 +762,6 @@ export const SERVICE_NAMES = [
   "forms.loadDemoFixture",
   "forms.openSubmissionFile",
   "forms.purge",
-  "forms.purgeDemoFixture",
   "forms.remove",
   "forms.restore",
   "forms.reviewSubmission",
@@ -4653,10 +4652,6 @@ export interface ServiceCatalog {
   "forms.purge": {
     input: { id: string; confirmation: "PURGE" };
     output: { id: string; [key: string]: unknown };
-  };
-  "forms.purgeDemoFixture": {
-    input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
-    output: { purged: { subjectType: string; subjectId: string }[] };
   };
   "forms.remove": {
     input: { id: string };
@@ -8916,7 +8911,6 @@ export interface FreeholderApi {
     loadDemoFixture: (input: ServiceCatalog["forms.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["forms.loadDemoFixture"]["output"]>;
     openSubmissionFile: (input: ServiceCatalog["forms.openSubmissionFile"]["input"]) => Promise<ServiceCatalog["forms.openSubmissionFile"]["output"]>;
     purge: (input: ServiceCatalog["forms.purge"]["input"]) => Promise<ServiceCatalog["forms.purge"]["output"]>;
-    purgeDemoFixture: (input: ServiceCatalog["forms.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["forms.purgeDemoFixture"]["output"]>;
     remove: (input: ServiceCatalog["forms.remove"]["input"]) => Promise<ServiceCatalog["forms.remove"]["output"]>;
     restore: (input: ServiceCatalog["forms.restore"]["input"]) => Promise<ServiceCatalog["forms.restore"]["output"]>;
     reviewSubmission: (input: ServiceCatalog["forms.reviewSubmission"]["input"]) => Promise<ServiceCatalog["forms.reviewSubmission"]["output"]>;

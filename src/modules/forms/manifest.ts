@@ -32,7 +32,6 @@ export default defineModule({
     emits: [
       "forms.created",
       "forms.updated",
-      "forms.deleted",
       "forms.submitted",
       "forms.trashed",
       "forms.restored",
