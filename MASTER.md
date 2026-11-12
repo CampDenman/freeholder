@@ -11444,6 +11444,15 @@ schema they inherit reads as a designed thing rather than an excavation.
   pass (4.25s), with full types/lint. No new domain is registered by this
   infrastructure increment. See
   `deploy/storage-observation-hook-source-2026-11-12.md`.
+  Versioned transfer transport foundation 2026-11-12: the existing provider
+  factories now offer captured resource/key/revision reads and conditional
+  deletion. S3 sends the actual strong ETag in If-Match; Replit pins body
+  reads and deletion to the actual generation string. Wrong keys/resources,
+  missing revisions, conflicts and unsupported conditions refuse without an
+  unconditional fallback.21 actual-factory/adjacent controls and full source
+  types/lint pass. The copy CLI still uses only GET/create-only PUT; no
+  cleanup command, adoption service or provider acceptance is supplied.
+  See `deploy/storage-transfer-transport-source-2026-11-12.md`.
   Physical read-key preparation 2026-11-12: the original-storage resolver
   now returns its actual read key; retained sources, recording assembly and
   staged-file validation use that key for provider reads while preserving
