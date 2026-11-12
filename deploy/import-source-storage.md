@@ -151,3 +151,15 @@ deleted. It cannot infer the original resource from current configuration.
 Unresolved logical `checkpoint.sourceWrites` continue to block source erasure;
 this receipt integration does not independently settle a lost logical metadata
 acknowledgement or prove a writer stopped.
+
+Local qualification on the migration-75 source repair covered 20 finite real
+service/database controls: the full source-object cleanup file, multi-megabyte
+chunk deletion, a pre-erasure opaque upload refusal, a named held graph's release,
+unknown DELETE recovery with stale-step-up refusal, no-op DELETE refusal,
+never-sent reservation erasure, and resource replacement before and after the
+original erasure finished. The replacement-store controls preserve its unrelated
+bytes and record zero replacement PUT/DELETE calls on replay. Separate archive
+cleanup and actual-window hold controls also passed. Type checking, lint and the
+380 static contract checks passed, with the existing one documented skip. These
+are local synthetic provider proofs; actual provider recovery, the unresolved
+logical-write recovery workflow and independent security review remain open.
