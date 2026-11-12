@@ -183,3 +183,37 @@ No refund native after-control, normal SQL80 addition, table/registry metadata,
 provider acceptance or enabled-model claim is supplied by this checkpoint.
 Requires_action/bank-return state transitions, fees/reversals, privacy repair,
 all ordinary and prepared-refund flows and human surfaces remain completion work.
+
+
+Unpublished assembled refund candidate, 2026-11-12
+
+The isolated repair branch now registers its twelve private refund/return phases,
+exports the fifteen normalized evidence tables, preserves owner activity labels in
+four locales, and folds bounded refund-child receipts into the existing invoice
+and seller-tax merge fingerprints. Seller-tax witness source and its unexecuted
+mixed-invoice fixture are composed; subscription accepted terms remain separate.
+The independently reviewed nullable setup-fee snapshot/issued-invoice marker and
+original subscription tax-profile lookup index are included in this candidate.
+
+Exact assembled migration80 SHA256:
+`d060f9a8c0bebe5fc5eb24ff222f5a18a8e9f083d26dd0332e614d0810efd14b`.
+Refund model fragment SHA256:
+`a7589afe81c8703be672ea9f2650a990caf1e9a0bdd2422b19c41713b5270f86`;
+refund guard fragment SHA256:
+`0343b34c6f68379a4f31527ad7de25a767353d137b73834fe1e797827dbdbad2`.
+The pure Drizzle generator emitted only fifteen new tables and their additive
+constraints/indexes. SQL provenance, one-caller admission, append-only evidence,
+logical state, original cash application and prepared-reservation capture guards
+are authored separately. Their ABI marker is a trusted-runtime compatibility
+signal; it does not replace actually stopping/draining older runtimes.
+
+Node22 full TypeScript and changed-file lint passed. The finite nine-file source
+contract batch passed 127 controls with one declared live-registry skip; it does
+not prove the live registry or database behavior. Logs:
+`/tmp/freeholder-refund-v7-{types,lint,contracts}-v1.log`.
+At this checkpoint the new SQL has not been applied and no refund AFTER native
+control has run. The prior genuine BEFORE source and normal-v6 database remain
+unchanged. Fresh normal-v7 migration, the unchanged physical-caller AFTER case,
+merge/privacy/runtime upgrade controls, bank-return state, exact fee/reversal
+recovery, owner/buyer flows and actual provider acceptance remain required.
+The new merchant model remains disabled.
