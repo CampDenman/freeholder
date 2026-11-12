@@ -133,7 +133,8 @@ describe.runIf(hasDatabase)("original fee stale-admission race80", { timeout: 60
     const originalApply = applyMerchantFeeResult.call.bind(applyMerchantFeeResult);
     let admissionCalls = 0;
     vi.spyOn(applyMerchantFeeResult, "call").mockImplementation(async (...args) => {
-      if (args[0].outcome === "dispatching" && ++admissionCalls === 1) {
+      if (typeof args[0] === "object" && args[0] !== null && "outcome" in args[0]
+        && args[0].outcome === "dispatching" && ++admissionCalls === 1) {
         reachedFirstAdmission(); await allowFirstAdmission;
       }
       return originalApply(...args);
