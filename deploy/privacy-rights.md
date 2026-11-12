@@ -352,3 +352,27 @@ logins retain the existing refusal and require deliberate reassignment first.
 for retained seller products/accounts, revoked login routes, released-hold
 redrive and preserved call history with removed call/MLS entitlement. These
 coding-agent checks do not supply the independent review or live SFU acceptance.
+
+## Selective cleanup inside a retained source (C1.08/C3.47)
+
+A registered source may opt into `eraseUnheld`. The shared erasure service first
+validates every original active hold through existing `retain` callbacks, then
+invokes this cleanup once with the real current request ID and parent service
+context. `retain` continues to receive each hold's original request ID; those
+identities must never be substituted for the current erasure request.
+
+The source must exclude every currently held original generation, queue actual
+post-commit work in that same parent transaction, and return its real job IDs.
+A retained outcome with pending jobs keeps the request in progress. The source
+worker acknowledges only its own completed task; the receipt preserves its
+retention outcome and exceptions when the final job finishes. Actual selective
+acknowledgements remain in the receipt so a completed evidence replay is a no-op.
+Missing acknowledgement history requires recovery rather than inferred success.
+
+Only sources opting into selective cleanup may reopen a retained outcome for
+new domain-validated unheld evidence. The receipt retains the legal exceptions
+and becomes pending again. Other retained sources retain their existing behavior.
+This code-only draft has not yet passed source/native/domain qualification.
+The original known-empty upload control failed on unchanged current270 in10.12s;
+its source2128, observations and log are preserved. The disposable before database
+was subsequently reused; no populated-before database restoration is claimed.

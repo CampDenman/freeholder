@@ -3884,12 +3884,24 @@ reading chat logs.
   (`0023_contact-duplicate-review.sql`;
   `tests/core/contact-duplicate-review.test.ts`; changeset
   `contact-duplicate-review.md` **F04** `/admin/contacts/duplicates` dismiss/merge/undo. **F05** `contacts.scanDuplicates`/`listDuplicateCandidates`/`dismissDuplicateCandidate`/`mergeDuplicateCandidate`/`merge`/`undoMerge` at `/api/v1/contacts.*`, MCP `contacts_*`. **F07** `tests/core/contact-duplicate-review.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contact-duplicate-review.test.ts` is the composition proof.)
-- [x] **C1.08** Build consent records, preference centre, data-access/export/
+- [ ] **C1.08** Build consent records, preference centre, data-access/export/
   correction/erasure workflows, legal-retention exceptions, and audit artifacts.
   (`0024_contact-privacy-rights.sql`;
   `tests/core/contact-privacy-rights.test.ts`; privacy-source completeness in
   `tests/core/merge-completeness.test.ts`; changeset
   `contact-privacy-rights.md`; operator guide `deploy/privacy-rights.md` **F04** `/admin/contacts/privacy` access/export/erasure. **F05** `contacts.createDataRequest`/`fulfillDataRequest`/`recordConsent` and `privacy.getMyProfile`/`createMyDataRequest`/`downloadMyDataRequestArtifact` at `/api/v1/contacts.*` and `/api/v1/privacy.*`; MCP `privacy_*`/`contacts_*`. **F07** `tests/core/contact-privacy-rights.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/privacy-rights.md`. **F12** `tests/core/contact-privacy-rights.test.ts` is the composition proof.)
+
+  Reopened 2026-11-12 (C1.08/C3.47): an actual current270 control
+  documented an empty original hold, uploaded a later unheld WXR generation,
+  verified and fulfilled the real erasure. The request falsely reached
+  partially_completed with that private source still present and zero cleanup
+  jobs (10.12s). Optional eraseUnheld source composition now runs once after
+  original hold validation, using the actual current erasure context. Retained
+  outcomes can carry real pending jobs; acknowledgements preserve the hold,
+  and opted-in late unheld evidence reopens only its original receipt. Actual
+  acknowledged job IDs distinguish completed replays from missing history.
+  Source/native/domain qualification remains pending; no independent or stable
+  sign-off follows. The original control is preserved separately at2128e673.
 
   Privacy lineage repair 2026-11-11 (C1.08/C11.10): actual merge/undo controls
   reproduced other-party snapshot disclosure, transitive retained copies and
