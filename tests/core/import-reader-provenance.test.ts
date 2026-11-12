@@ -80,6 +80,17 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
   afterEach(() => { vi.unstubAllEnvs(); resetEnvForTests(); });
   afterAll(closeDb);
 
+  it("does not guess the original reader from a current email holder on the first historical source", async () => {
+    const candidate = (await resolveContact.call({ name: "Current address holder, original reader unknown", email: EMAIL }, OWNER)).contact;
+    const id = await stage();
+    const [receipt] = await db().select().from(readerOwnershipReceipts);
+    expect({ bound: await boundReader(id), owner: receipt?.contactId, state: receipt?.state }).toEqual({ bound: undefined, owner: null, state: "review" });
+    const source = contactPrivacySources().find(item => item.scope === "imports.readerSources")!;
+    const exported = await db().transaction(tx => source.exportData(tx, candidate.id));
+    expect(JSON.stringify(exported)).not.toContain("Original reader's unchanged comment.");
+    await expect(commitImport.call({ id }, OWNER)).rejects.toThrow(/review/);
+  });
+
   it("keeps the already-recorded original reader when identical source is staged after an address change", async () => {
     const reader = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
     const first = await stage();
