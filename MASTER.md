@@ -13835,7 +13835,11 @@ whatever is best for the people using the site.
   original AFTER passed in6.609s on exact72ac85e8/SQL958: one original key,
   accepted100 resource and bound observation, customer refund/credit1200 intact,
   all caller/database work drained. The populated BEFORE clone remains unchanged;
-  its dedicated review and whole current-source integration are still open.
+  its dedicated non-resetting review passed in0.399s on exact4c4de105:
+  real factory inspection reported returned200, review/commission debt remained,
+  zero POSTs occurred and all eight original money-table golden hashes/counts,
+  both physical observations and SQL958/journal81 stayed unchanged. Database
+  clients drained. Whole current-source integration remains open.
   No SQL or old money changes. C12.38 stays open. See
   `deploy/merchant-fee-stale-dispatch-2026-11-12.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts

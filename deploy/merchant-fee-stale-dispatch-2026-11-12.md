@@ -50,6 +50,15 @@ All caller work and database clients drained. Logs and ledger are preserved as
 remains unchanged and has not been migrated or used for this resettable AFTER.
 
 Historical excess money requires review; this source correction does not
-rewrite or automatically recover it. A dedicated review of the old two-resource
-snapshot and whole current-source integration remain outstanding. Full C12.38,
-provider acceptance, independent review and stable sign-off remain open.
+rewrite or automatically recover it. A dedicated non-resetting review at
+`4c4de105` passed in0.399s on that exact old clone: actual factory inspection
+reported200 returned, reconciliation required review and commission debt, and
+no POST occurred. Both original observations, the one original accepted row,
+and all eight original money-table golden hashes/counts remained unchanged
+against clone creation, before and after the test; the81-entry SQL958 journal
+and empty client set were independently verified. The test's explicit history
+flag and clone-name guard prevent it from running on a resettable fixture.
+Logs and golden proofs are `/tmp/freeholder-stale-fee-history-*`.
+
+Whole current-source integration remains outstanding. Full C12.38, provider
+acceptance, independent review and stable sign-off remain open.
