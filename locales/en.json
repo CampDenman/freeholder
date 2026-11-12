@@ -8825,6 +8825,7 @@
   "mail.carrier.state.unknown": "Provider outcome unknown",
   "mail.carrier.erasedAddress": "Erased address — review the original provider operation",
   "audit.mail.settleCarrierErasure": "Reconciled original carrier erasure evidence",
+  "audit.privacy.settleFormLeadErasure": "Checked original lead erasure evidence",
   "forms.leads.pending": "Original provider evidence needs review; the enquiry remains here.",
   "forms.leads.operation": "Physical request",
   "forms.leads.legacy": "Original destination unproven. Restore its original evidence; a replacement account cannot be used.",

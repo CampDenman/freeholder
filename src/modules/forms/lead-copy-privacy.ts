@@ -7,10 +7,10 @@ import { z } from "zod";
 import { db } from "@/core/db";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { enqueueJob } from "@/core/jobs";
-import { completeErasureJob, reopenErasureJob, registerContactPrivacySource } from "@/core/privacy/service";
+import { completeErasureJob, erasureArtifactIsIntact, reopenErasureJob, registerContactPrivacySource } from "@/core/privacy/service";
 import { dataRequestArtifacts, dataRequests, privacyRetentionExceptions } from "@/core/privacy/schema";
 import { registerRetentionSource } from "@/core/retention/registry";
-import { ServiceError, type Tx } from "@/core/service";
+import { defineService, ServiceError, type Tx } from "@/core/service";
 import { formLeadCopies, formSubmissions } from "./schema";
 import { leadCopyCopied, leadCopyEvidenceDigest, leadCopyErasureConfirmed, leadCopyUnknown, leadCopyReceipts, retireLeadCopies } from "./lead-copy-state";
 export const LEAD_ERASURE_JOB = "core.eraseFormLeadCopies";
@@ -66,29 +66,46 @@ registerRetentionSource({
     return rows.length - pending.length;
   }),
 });
-export async function eraseFormLeadCopies(data: Record<string, unknown>) {
-  const input = z.object({ requestId: z.uuid(), originalJobId: z.uuid(), ids: z.array(z.uuid()).min(1).max(100) }).parse(data);
-  const result = await db().transaction(async tx => {
-    const [artifact] = await tx.select({ body: dataRequestArtifacts.body }).from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, input.requestId)).limit(1);
-    const receipt = z.object({ outcomes: z.array(z.object({ scope: z.string(), outcome: z.string(), pendingJobs: z.array(z.uuid()).optional() }).passthrough()) }).passthrough().safeParse(artifact?.body);
-    if (!receipt.success) throw new ServiceError("conflict", "Restore the exact original lead erasure receipt before retrying.");
-    const outcome = receipt.data.outcomes.find(row => row.scope === LEAD_PRIVACY_SCOPE);
-    if (!outcome) throw new ServiceError("conflict", "The original lead erasure scope is missing.");
-    if (outcome.outcome !== "pending" || !outcome.pendingJobs?.includes(input.originalJobId)) return { pending: [], alreadyHandled: true };
+const erasureJobInput = z.object({ requestId: z.uuid(), originalJobId: z.uuid(), ids: z.array(z.uuid()).min(1).max(100) });
+export const settleFormLeadErasure = defineService({
+  name: "privacy.settleFormLeadErasure", summary: "Acknowledge original lead erasure only under current receipt, witness and hold locks.",
+  kind: "mutation", permission: "system", external: false, auditInputFields: ["requestId"],
+  input: erasureJobInput, output: z.object({ minimized: z.number().int().min(0), pending: z.boolean(), recoveryRequired: z.boolean() }),
+  handler: async (input, ctx) => {
+    const tx = ctx.tx;
+    await lockContactIdentityForRead(tx);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
     const [request] = await tx.select({ contactId: dataRequests.contactId }).from(dataRequests).where(eq(dataRequests.id, input.requestId));
     if (!request) throw new ServiceError("conflict", "The original erasure requester is missing.");
-    const rows = await tx.select().from(formLeadCopies).where(inArray(formLeadCopies.id, input.ids));
+    const rows = await tx.select().from(formLeadCopies).where(inArray(formLeadCopies.id, input.ids)).orderBy(formLeadCopies.id).for("update");
     if (rows.length !== input.ids.length || rows.some(row => (!row.erasureRequests.includes(input.requestId) && row.erasureRequestId !== input.requestId) || !row.retiredAt)) throw new ServiceError("conflict", "The original lead erasure ownership is unavailable.");
     for (const row of rows) {
       const [original] = await tx.select({ contactId: dataRequests.contactId }).from(dataRequests).where(eq(dataRequests.id, row.erasureRequestId!));
       if (!original || original.contactId !== request.contactId) throw new ServiceError("conflict", "The original lead erasure belongs to another recorded requester.");
     }
-    return { pending: await minimizeLeadCopies(tx, input.ids, true), alreadyHandled: false };
-  });
-  if (result.alreadyHandled) return { minimized: 0 };
-  if (result.pending.length) throw new ServiceError("conflict", "Original provider outcome, provider erasure or a current named hold keeps this receipt pending.");
-  await completeErasureJob.call({ requestId: input.requestId, scope: LEAD_PRIVACY_SCOPE, jobId: input.originalJobId }, { kind: "system" });
-  return { minimized: input.ids.length };
+    const [artifact] = await tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, input.requestId)).for("update");
+    const receipt = z.object({ outcomes: z.array(z.object({ scope: z.string(), outcome: z.string(), pendingJobs: z.array(z.uuid()).optional() }).passthrough()) }).passthrough().safeParse(artifact?.body);
+    const outcome = receipt.success ? receipt.data.outcomes.find(row => row.scope === LEAD_PRIVACY_SCOPE) : undefined;
+    if (!erasureArtifactIsIntact(artifact) || !receipt.success || !outcome) {
+      // Commit recovery state without repairing or replacing the original body.
+      await ctx.callAsSystem(reopenErasureJob, { requestId: input.requestId, scope: LEAD_PRIVACY_SCOPE, jobName: LEAD_ERASURE_JOB,
+        jobData: { ids: input.ids }, idempotencyKey: `lead-artifact-recovery:${input.originalJobId}` });
+      return { minimized: 0, pending: true, recoveryRequired: true };
+    }
+    if (outcome.outcome !== "pending" || !outcome.pendingJobs?.includes(input.originalJobId)) return { minimized: 0, pending: false, recoveryRequired: false };
+    const pending = await minimizeLeadCopies(tx, input.ids, true);
+    if (pending.length) return { minimized: 0, pending: true, recoveryRequired: false };
+    await ctx.callAsSystem(completeErasureJob, { requestId: input.requestId, scope: LEAD_PRIVACY_SCOPE, jobId: input.originalJobId });
+    ctx.setSubject("dataRequest", input.requestId);
+    return { minimized: input.ids.length, pending: false, recoveryRequired: false };
+  },
+});
+
+export async function eraseFormLeadCopies(data: Record<string, unknown>) {
+  const result = await settleFormLeadErasure.call(data, { kind: "system" });
+  if (result.recoveryRequired) throw new ServiceError("conflict", "Restore the exact original lead erasure receipt before retrying recovery.");
+  if (result.pending) throw new ServiceError("conflict", "Original provider outcome, provider erasure or a current named hold keeps this receipt pending.");
+  return { minimized: result.minimized };
 }
 
 /** Reconcile only the captured original erasure cohorts, independent of today's address. */

@@ -6046,9 +6046,29 @@ deployments are portable, testable and incapable of silently forking the truth.
   The initial populated fixture failed JSON parameter serialization before
   inserting its enquiry; its corrected fixture passed in a separate database.
   The schema-risk contract requires the exact acknowledged rename and restore
-  reason. Actual prior-runtime-78 HTTP refusal, the remaining composed native
-  controls, live SDK, production/browser and protected qualification remain
+  reason. The unchanged qualified Node22 runtime-78 artifact subsequently
+  submitted a real enquiry to an intercepted loopback provider and read its
+  original answer through HTTP. After a full process stop/drain and normal
+  migration79, the same cold artifact refused both the old answer read and
+  valid submission with specific missing-old-column evidence, made no further
+  provider call, and preserved the exact original rows, bootstrap hash and build
+  identifier. The preserved artifact ran in place without copying or patching it.
+  The remaining composed native controls, live SDK, production/browser and protected qualification remain
   open, along with actual provider acceptance. C3.34 remains unchecked.)*
+  *(Receipt-integrity follow-up, 2026-11-12: one actual native before control
+  showed that a parseable original artifact with a mismatched checksum could
+  be rewritten as completed by the lead erasure worker. The source repair uses
+  the shared canonical checksum verifier and one private SYSTEM transaction
+  for original ownership, receipt, current hold/witness checks, minimization
+  and acknowledgment. Missing or corrupted receipts retain their original
+  body and durable recovery debt. Focused lint and 17 private/schema contracts
+  pass; the targeted intact/corrupt native after pair passed in 10.53 seconds,
+  preserving the corrupted original body/hash and pending source debt while
+  the intact receipt completed. The first previous
+  runtime fixture stopped before its form assertions because its transport
+  readiness poll incorrectly required healthy jobs while jobs were disabled;
+  the corrected fixture records raw health responses and requires a real local
+  form/provider positive control. This is not deployment health acceptance.)*
   *(Progress 2026-10-23, C3.33 and C3.34: the categories are
   `src/adapters/form-screening/` and `src/adapters/lead-sink/` (contracts in
   `types.ts`, Paradise Modern in `paradise.ts`), chosen by
