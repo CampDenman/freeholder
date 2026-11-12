@@ -1,13 +1,17 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C1.08: lifecycle jobs read durable debt; no provider I/O or attestation.
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { defineService, ServiceError } from "@/core/service";
 import { routingForPayment } from "./merchant-charge";
-import { merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations } from "./merchant-collection-schema";
+import { invoiceMerchantCollections, merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations, merchantPaymentRoutes } from "./merchant-collection-schema";
 import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations";
 import { assertMerchantCreatorsQuiesced, assertMerchantPaymentTerminal } from "./merchant-payment-request";
+import { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
+import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
+import { invoiceMerchantTaxQuotes } from "./merchant-tax-schema";
+import { subscriptionMerchantScopes } from "@/modules/subscriptions/schema";
 import { paymentDisputes, payments, refunds } from "./schema";
 
 const reason = z.enum(["original_scope", "unknown_payment", "unapplied_money", "provider_settlement", "commission", "refund", "dispute"]);
@@ -63,4 +67,56 @@ export const merchantPaymentRecoveryDebt = defineService({
     return { pending: reasons.size > 0, reasons: [...reasons] };
   },
 });
-export default [merchantPaymentRecoveryDebt];
+/** Original quote/collection witnesses survive contact merges and profile minimization. */
+export const merchantTaxPaymentDebt = defineService({
+  name: "invoicing.merchantTaxPaymentDebt", summary: "Read actual original profile payment debt before minimizing an order, booking or subscription merchant.",
+  kind: "query", permission: "system", external: false, input: z.object({ profileId: z.uuid() }),
+  output: z.object({ pending: z.boolean(), hasHistory: z.boolean(), paymentIds: z.array(z.uuid()), incomplete: z.boolean() }),
+  handler: async ({ profileId }, ctx) => {
+    const quotes = await ctx.tx.select({ invoiceId: invoiceMerchantTaxQuotes.invoiceId }).from(invoiceMerchantTaxQuotes)
+      .where(eq(invoiceMerchantTaxQuotes.profileId, profileId)).limit(5001);
+    if (quotes.length > 5000) return { pending: true, hasHistory: true, paymentIds: [], incomplete: true };
+    const invoices = [...new Set(quotes.map(quote => quote.invoiceId))];
+    const rows = await ctx.tx.select({ paymentId: payments.id, invoiceId: payments.invoiceId,
+      orderId: merchantPaymentRoutes.paymentId, orderProfile: invoiceMerchantCollections.taxPolicy,
+      bookingId: merchantInvoicePaymentRoutes.paymentId, bookingProfile: invoiceMerchantScopes.taxPolicy,
+      agreementId: merchantAgreementPaymentRoutes.paymentId, agreementProfile: subscriptionMerchantScopes.taxProfileId }).from(payments)
+      .leftJoin(merchantPaymentRoutes, eq(merchantPaymentRoutes.paymentId, payments.id))
+      .leftJoin(invoiceMerchantCollections, eq(invoiceMerchantCollections.allocationId, merchantPaymentRoutes.allocationId))
+      .leftJoin(merchantInvoicePaymentRoutes, eq(merchantInvoicePaymentRoutes.paymentId, payments.id))
+      .leftJoin(invoiceMerchantScopes, eq(invoiceMerchantScopes.invoiceId, merchantInvoicePaymentRoutes.invoiceId))
+      .leftJoin(merchantAgreementPaymentRoutes, eq(merchantAgreementPaymentRoutes.paymentId, payments.id))
+      .leftJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, merchantAgreementPaymentRoutes.subscriptionId))
+      .where(or(sql`${invoiceMerchantCollections.taxPolicy}->>'profileId' = ${profileId}`,
+        sql`${invoiceMerchantScopes.taxPolicy}->>'profileId' = ${profileId}`, eq(subscriptionMerchantScopes.taxProfileId, profileId),
+        ...(invoices.length ? [inArray(payments.invoiceId, invoices)] : []))).limit(5001);
+    if (rows.length > 5000) return { pending: true, hasHistory: true, paymentIds: [], incomplete: true };
+    const anchored = new Set(invoices), ids = new Set<string>();
+    let incomplete = false;
+    for (const row of rows) {
+      const profiles = [row.orderProfile?.profileId, row.bookingProfile?.profileId, row.agreementProfile].filter((id): id is string => Boolean(id));
+      const scopes = [row.orderId, row.bookingId, row.agreementId].filter(Boolean).length;
+      // A missing original owner is debt, not proof that a partial restore
+      // erased its payment. A known other seller's portion stays independent.
+      if (scopes > 1 || profiles.some(id => !z.uuid().safeParse(id).success) || anchored.has(row.invoiceId) && (scopes !== 1 || profiles.length !== 1)) incomplete = true;
+      if (profiles.includes(profileId)) {
+        ids.add(row.paymentId);
+        if (!anchored.has(row.invoiceId)) incomplete = true;
+      }
+    }
+    const paymentIds = [...ids];
+    let pending = incomplete;
+    for (const paymentId of paymentIds) {
+      try {
+        const debt = await ctx.callAsSystem(merchantPaymentRecoveryDebt, { paymentId });
+        pending ||= debt.pending;
+      } catch (error) {
+        if (!(error instanceof ServiceError) || !["conflict", "not_found", "validation"].includes(error.code)) throw error;
+        pending = true; incomplete = true;
+      }
+    }
+    return { pending, hasHistory: paymentIds.length > 0 || incomplete, paymentIds, incomplete };
+  },
+});
+
+export default [merchantPaymentRecoveryDebt, merchantTaxPaymentDebt];
