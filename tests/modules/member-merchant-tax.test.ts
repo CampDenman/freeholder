@@ -7,7 +7,9 @@ import {eq} from "drizzle-orm";
 import {db} from "@/core/db";
 import {users} from "@/core/auth/schema";
 import {contacts} from "@/core/contacts/schema";
-import {resolveContact} from "@/core/contacts/service";
+import {mergeContacts,resolveContact,undoContactMerge} from "@/core/contacts/service";
+import {addRetentionException,createDataRequest,fulfillDataRequest,removeRetentionException,verifyDataRequest} from "@/core/privacy/service";
+import {dataRequestArtifacts} from "@/core/privacy/schema";
 import {ready} from "@/core/runtime";
 import {updateBusiness} from "@/core/settings/service";
 import {joinSite} from "@/modules/members/service";
@@ -18,7 +20,7 @@ import {registerMerchantTaxSourceResolver,type merchantTaxSourceParty} from "@/m
 import {createDraftInvoice,issueInvoice} from "@/modules/invoicing/invoice-service";
 import {addTaxRate,createTaxZone,setTaxRegistration} from "@/modules/invoicing/tax-service";
 import {invoiceLines,taxLines} from "@/modules/invoicing/schema";
-import {invoiceMerchantTaxQuotes} from "@/modules/invoicing/merchant-tax-schema";
+import {invoiceMerchantTaxQuotes,merchantTaxProfiles,merchantTaxProfileVersions} from "@/modules/invoicing/merchant-tax-schema";
 import {ANONYMOUS,closeDb,CUSTOMER,failure,hasDatabase,OWNER,truncateSpine} from "../helpers/spine";
 import type {z} from "zod";
 
@@ -28,7 +30,7 @@ const occurredAt=new Date("2026-11-12T12:00:00.000Z");
 const items=[{id:"line:0",quantityMicros:1000000,unitAmountMinor:1000,discountMinor:0,category:"standard",requiresShipping:true}];
 
 describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
- let zoneId:string,gstId:string,pstId:string,buyerId:string;
+ let zoneId:string,gstId:string,pstId:string,buyerId:string,sellerContact:string;
  let sourceParties:z.infer<typeof merchantTaxSourceParty>[]=[];
  const sourceId=randomUUID();
  beforeAll(async()=>{
@@ -49,6 +51,7 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
   await db().insert(users).values([{id:OWNER.userId,email:"tax-owner@example.test",role:"owner"},{id:SELLER.userId,email:"tax-first@example.test",role:"customer"},{id:OTHER.userId,email:"tax-second@example.test",role:"customer"}]);
   await updateBusiness.call({name:"Synthetic tax service proof",country:"CA",baseCurrency:"CAD",timezone:"UTC"},OWNER);
   for(const [actor,handle] of [[SELLER,"tax_first"],[OTHER,"tax_second"]] as const)await joinSite.call({handle,displayName:handle,meetsMinimumAge:true,isAdult:true},actor);
+  sellerContact=(await db().select().from(contacts).where(eq(contacts.userId,SELLER.userId)))[0]!.id;
   buyerId=(await resolveContact.call({email:"tax-buyer@example.test",name:"Tax buyer"},OWNER)).contact.id;
   const zone=await createTaxZone.call({name:"Explicit fixture jurisdiction",country:"CA",regions:["BC"],basis:"destination",pricesIncludeTax:false,roundingScope:"line",roundingMode:"half_up"},OWNER);
   zoneId=zone.id;
@@ -71,6 +74,11 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
   return createDraftInvoice.call({contactId:buyerId,currency:"CAD",sourceType:"merchant_tax_native",sourceId,idempotencyKey:randomUUID(),shippingMinor:101,
    lines:[{description:"Original taxable item",quantityMicros:1000000,unitAmountMinor:1000,taxCategoryCode:"standard",requiresShipping:true}],tax:{mode:"merchant",destination}},OWNER);
  }
+ async function request(kind:"export"|"erasure"){
+  const created=await createDataRequest.call({contactId:sellerContact,request:{kind}},OWNER);
+  await verifyDataRequest.call({id:created.id,method:"Verified original merchant request"},OWNER);
+  return created.id;
+ }
  it("keeps own declarations private and refuses human/connector access to the original-source preview",async()=>{
   const first=await declare();
   expect(await myMerchantTaxProfile.call({},SELLER)).toMatchObject({profileId:first.profileId,profileVersion:1,state:"active"});
@@ -85,8 +93,10 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
   const a=await quote(first),anonymous=await quote(first,null),b=await quote(second);
   expect(a.amounts).toMatchObject({subtotalMinor:1000,shippingMinor:101,taxMinor:55,totalMinor:1156,shippingTaxMinor:5});
   expect(b.amounts).toMatchObject({subtotalMinor:1000,shippingMinor:101,taxMinor:77,totalMinor:1178,shippingTaxMinor:7});
-  expect(a.quote.registrationNumbers.map(row=>row.number)).toEqual(["FIRST-GST","FIRST-GST"]);
-  expect(b.quote.registrationNumbers.map(row=>row.number)).toEqual(["SECOND-PST","SECOND-PST"]);
+  expect(a.quote.registrationNumbers.map(row=>row.number)).toEqual(["FIRST-GST","FIRST-GST",null,null]);
+  expect(b.quote.registrationNumbers.map(row=>row.number)).toEqual([null,null,"SECOND-PST","SECOND-PST"]);
+  expect(a.quote.lines.filter(line=>line.taxMinor>0).every(line=>line.name==="Fixture GST")).toBe(true);
+  expect(b.quote.lines.filter(line=>line.taxMinor>0).every(line=>line.name==="Fixture PST")).toBe(true);
   expect(a.quoteDigest).toBe(anonymous.quoteDigest);
   expect(a.quoteDigest).not.toBe(b.quoteDigest);
  });
@@ -116,10 +126,49 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
  it("refuses stale declarations after the original member contact has entered erasure",async()=>{
   const first=await declare();
   const [person]=await db().select().from(contacts).where(eq(contacts.userId,SELLER.userId));
-  const {createDataRequest,verifyDataRequest}=await import("@/core/privacy/service");
   const request=await createDataRequest.call({contactId:person!.id,request:{kind:"erasure"}},OWNER);
   await verifyDataRequest.call({id:request.id,method:"Verified original merchant request"},OWNER);
   expect(await failure(quote(first))).toMatchObject({code:"conflict"});
   expect(await failure(myMerchantTaxProfile.call({},SELLER))).toMatchObject({code:"conflict"});
+ });
+ it("exports only the original business declaration and preserves exact ownership through contact merge and undo",async()=>{
+  const first=await declare(),second=await declare(OTHER,false);
+  const {artifact}=await fulfillDataRequest.call({id:await request("export")},OWNER);
+  const [stored]=await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.id,artifact.id));
+  const body=stored!.body as {sources:Record<string,unknown>};
+  const exported=JSON.stringify(body.sources["commerce.merchantTax"]);
+  expect(exported).toContain(first.profileId);expect(exported).toContain("FIRST-GST");
+  expect(exported).not.toContain(second.profileId);expect(exported).not.toContain("SECOND-PST");
+  const duplicate=(await resolveContact.call({email:"tax-seller-merge@example.test",name:"Original seller duplicate"},OWNER)).contact;
+  const merged=await mergeContacts.call({duplicateId:sellerContact,survivingId:duplicate.id},OWNER);
+  expect((await db().select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id,first.profileId)))[0]).toMatchObject({contactId:duplicate.id,currentVersion:1});
+  await undoContactMerge.call({operationId:merged.mergeOperationId},OWNER);
+  expect((await db().select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id,first.profileId)))[0]).toMatchObject({contactId:sellerContact,currentVersion:1});
+  expect((await quote(first)).amounts.taxMinor).toBe(55);
+ });
+ it("minimizes unheld business configuration while retaining issued TaxLine facts and the original opaque receipt",async()=>{
+  const first=await declare();
+  sourceParties=[{sellerUserId:SELLER.userId,profileId:first.profileId,profileVersion:1,linePositions:[0],shippingMinor:101,occurredAt}];
+  const created=await draft();await issueInvoice.call({id:created.invoice.id},OWNER);
+  const originalTax=await db().select().from(taxLines).where(eq(taxLines.invoiceId,created.invoice.id));
+  const originalReceipt=await getInvoiceMerchantTaxReceipt.call({invoiceId:created.invoice.id,sellerUserId:SELLER.userId},SYSTEM);
+  await fulfillDataRequest.call({id:await request("erasure"),confirmation:"ERASE"},OWNER);
+  expect((await db().select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id,first.profileId)))[0]).toMatchObject({state:"erased",contactId:null});
+  const [erasedVersion]=await db().select().from(merchantTaxProfileVersions).where(eq(merchantTaxProfileVersions.profileId,first.profileId));
+  expect(erasedVersion).toMatchObject({origin:{},rulesSnapshot:[]});expect(erasedVersion!.erasedAt).toBeInstanceOf(Date);
+  expect(await db().select().from(taxLines).where(eq(taxLines.invoiceId,created.invoice.id))).toEqual(originalTax);
+  expect(await getInvoiceMerchantTaxReceipt.call({invoiceId:created.invoice.id,sellerUserId:SELLER.userId},SYSTEM)).toEqual(originalReceipt);
+  expect(await failure(quote(first))).toMatchObject({code:"conflict"});
+ });
+ it("retains a held tax declaration until actual hold release, then erases it even after login deletion",async()=>{
+  const first=await declare(),id=await request("erasure");
+  const hold=await addRetentionException.call({dataRequestId:id,scope:"commerce.merchantTax",reason:"accounting_tax",legalBasis:"Retain this original declaration during the specific accounting dispute."},OWNER);
+  const held=await fulfillDataRequest.call({id,confirmation:"ERASE"},OWNER);
+  expect(held.request.status).toBe("partially_completed");
+  expect((await db().select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id,first.profileId)))[0]).toMatchObject({state:"active",contactId:sellerContact});
+  expect((await db().select().from(merchantTaxProfileVersions).where(eq(merchantTaxProfileVersions.profileId,first.profileId)))[0]).toMatchObject({origin:destination,erasedAt:null});
+  await removeRetentionException.call({id:hold.id},OWNER);
+  await fulfillDataRequest.call({id:await request("erasure"),confirmation:"ERASE"},OWNER);
+  expect((await db().select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id,first.profileId)))[0]).toMatchObject({state:"erased",contactId:null});
  });
 });
