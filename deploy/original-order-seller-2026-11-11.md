@@ -27,8 +27,21 @@ The same test continues through actual shared-service payment settlement and
 seller earnings, asserting the original seller and original 40.00/4.00/36.00
 amounts. Manual bank references are synthetic fixtures, not live acceptance.
 
+Protected CI on `ae71cb7d` caught a new erasure regression in the receipt:
+`tests/modules/member-data-rights.test.ts` could no longer read an erased
+seller's retained anonymous sale thread. The privacy transaction now composes
+`catalog.anonymizeSellerOrderReceipts` after confirming no money/dispute blocks
+erasure, projecting original receipt ownership to the existing anonymous
+bookkeeping identity. It never substitutes a later live product owner. The
+unchanged two data-rights controls and four payout controls all pass (36.52s),
+as do five internal-service boundary controls, live SDK8/8 and full types/lint.
+The internal projection refuses direct owner/key/API invocation; an erasure
+source without its real shared service context refuses instead of fabricating
+authority.
+
 The existing checkout remains the human/API/MCP surface; snapshots add no new
 public operation or UI text. No contact pointer or provider secret is added.
-The seller UUID is retained original financial ownership, not a copied profile.
+The receipt stores original financial ownership, follows its settled member's
+privacy projection and never copies a personal profile.
 C12.38, provider acceptance, the larger mixed-seller payment integration and
 the stable-release sign-offs remain open.

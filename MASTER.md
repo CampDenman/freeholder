@@ -13332,7 +13332,10 @@ whatever is best for the people using the site.
   settlement reads that receipt instead of a later catalog edit. The actual
   prior-image failure and bounded qualification are recorded in
   `deploy/original-order-seller-2026-11-11.md` and
-  `tests/modules/member-payouts.test.ts`. Historical lines without this receipt
+  `tests/modules/member-payouts.test.ts`. The existing settled-member erasure
+  transaction projects these receipts to its anonymous bookkeeping identity;
+  `tests/modules/member-data-rights.test.ts` retains its original assertions.
+  Historical lines without this receipt
   are not backfilled from current owners. Full merchant integration and live
   acceptance remain required; this repair does not close C12.38.
   Discounted-order earnings repair in qualification 2026-11-11: a real service

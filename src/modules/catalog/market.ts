@@ -191,6 +191,17 @@ export const orderInvoiceRevenue = defineService({
   },
 });
 
+export const anonymizeSellerOrderReceipts = defineService({
+  name: "catalog.anonymizeSellerOrderReceipts", summary: "Project settled original order ownership to the member erasure identity in the privacy transaction.",
+  kind: "mutation", permission: "system", external: false,
+  input: z.object({ sellerUserId: uuid, anonymousSellerUserId: uuid }), output: z.object({ affected: z.number().int().nonnegative() }),
+  handler: async ({ sellerUserId, anonymousSellerUserId }, ctx) => {
+    const changed = await ctx.tx.update(orderItems).set({ snapshot: sql`jsonb_set(${orderItems.snapshot}, '{sellerUserId}', to_jsonb(${anonymousSellerUserId}::text), false)` })
+      .where(sql`${orderItems.snapshot}->>'sellerUserId' = ${sellerUserId}`).returning({ id: orderItems.id });
+    return { affected: changed.length };
+  },
+});
+
 export const orderForInvoice = defineService({
   name: "catalog.orderForInvoice",
   summary: "The order an invoice belongs to, if any.",
@@ -225,4 +236,4 @@ export const memberOrdersForContact = defineService({
   },
 });
 
-export default [marketListings, orderSellers, orderInvoiceRevenue, orderForInvoice, memberOrdersForContact];
+export default [marketListings, orderSellers, orderInvoiceRevenue, anonymizeSellerOrderReceipts, orderForInvoice, memberOrdersForContact];
