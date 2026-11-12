@@ -109,3 +109,14 @@ original-account direct/destination portions, payment/refund/dispute recovery,
 human flows and actual provider acceptance. Original recorded provider money
 must survive disagreement about a later allocation. Do not enable direct
 seller collection or close C12.38 from this source checkpoint.
+
+Protected PR686 CI found one adjacent refund-control fixture that attached a
+new seller policy to an already-paid site-only order. The allocation guard
+correctly refused its missing original portions. The fixture now seeds the
+explicitly disabled direct mode with a test-only payout adapter, creates the
+seller before actual checkout, and checks the resulting original portions and
+merchandise-only fee before authenticated refund feedback. The adapter is
+restored after the case. The same wrong-account refusal and original-account
+refund assertions pass against normal0–77 (one case, 17.02s). No allocation
+guard, assertion or timeout was relaxed; this is synthetic provider evidence,
+not activation or actual-account acceptance.
