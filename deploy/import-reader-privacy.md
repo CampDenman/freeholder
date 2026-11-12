@@ -379,3 +379,33 @@ account cannot download that artifact. Normal migration preserved original
 row hashes in both proofs. These cases use the real canonical hold scopes,
 not erasure status as a substitute for hold ownership. Current production build,
 four-locale browser and protected checks remain required.
+
+
+Final source checkpoint `b2885475` passed every local source gate: full types,
+lint, license, release-note, plan, playground and all 384 contract cases with
+26 expected database-only exclusions. Node 22.23.2 built its production artifact
+and scrubbed it successfully: 21,326 files, 263,692,451 bytes, with no source or
+environment leakage. The historical prechain standalone was preserved unchanged
+by a same-filesystem rename to a private local artifact directory before the
+build; that historical artifact is not presented as a qualified 0–77 image.
+
+All four current production owner browser journeys passed in 1.1 minutes:
+English, Spanish, French and Arabic at 320px, both themes, keyboard choices,
+Axe and viewport bounds. Each journey assigns two separately selected originals
+through the real owner action, proves their bound receipts and comments belong
+to the chosen original rather than the current email holder, and verifies actual
+per-reader contact/source audits plus the ID-only batch summary. The English
+case retains its declared legacy source executor. The fresh browser database
+applied all 79 normal journal entries (0–78). Playwright and its standalone
+server drained with exit zero. Logs and fictional screenshots remain in the
+local qualification outputs; no actual-provider or owner acceptance is claimed.
+
+The full 28-case reader/mailbox native result belongs to `92c70bc8`; subsequent
+minimal-audit and canonical pending-hold changes received their separate exact
+native controls, actual unchanged-prior-runtime held/unheld proofs, final full
+source gates and current artifact/browser qualification above. Migration78 SQL
+remained unchanged. Protected exact-head checks and normal queue integration
+remain required. REST/ZIP/crawl durable continuation and actual cutover, wider
+WordPress acceptance, live provider acceptance and independent human security
+review remain outside this qualified reader increment. C2.29/C3.46/C3.47 and
+stable readiness stay open until their complete acceptance requirements pass.
