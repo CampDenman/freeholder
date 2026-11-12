@@ -31,7 +31,20 @@ retained immutable model/route rather than the new-charge authorizer.
 Full Node22 TypeScript, changed-file lint and the eight affected private/changelog
 controls pass on the composed return repair plus root original-merchant merge
 scope repair. Logs: `/tmp/freeholder-return-allocation80-repair-{types,lint,contracts}-v1.log`.
-At this checkpoint AFTER is unrun. No SQL or schema changes are made. Exact
+The unchanged AFTER case passed6.109 seconds on frozen0bd84a0f and normal-v7
+SQLd060. The randomized original allocation IDs made seller003's4200 payment
+second in this run; the same deterministic control returned its4000 line plus
+200tax. Read-only inspection proves one4200 reservation on that exact original
+payment and seller, with c2's earlier1050 payment untouched. There were zero
+refund dispatches. The runner/inspection exited and database nonidle[] was
+verified. The genuine BEFORE used the opposite original ordering and failed;
+no source or assertion changed between the two controls.
+Logs: `/tmp/freeholder-return-allocation80-after-v7.{json,log}` and
+`/tmp/freeholder-return-allocation80-after-v7-{ledger,drain}.json`.
+
+No SQL or schema changes are made. Existing ordinary split-tender, multiple-
+seller return and populated inconsistent-plan controls remain separately due.
+This result proves preparation ownership, not an actual provider refund. Exact
 commission-by-credited-line and transfer/fee recovery remain separate required
 work; a routing repair does not qualify gross-ratio commission math. Full
 provider/browser/owner acceptance and C12.38 completion remain open.

@@ -13601,7 +13601,13 @@ whatever is best for the people using the site.
   and normal-v7 SQLd060. No refund POST occurred. Isolated source now selects
   immutable original allocation-line/payment budgets and refuses inconsistent
   frozen plans; full Node22 types/changed-file lint and eight affected private/
-  changelog controls pass. AFTER is unrun. Legacy C0 remains on its original path. Exact
+  changelog controls pass. Exact unchanged AFTER passed6.109s on0bd/v7d060;
+  read-only ledger proves seller003's4200 return reserved only against its
+  own later original payment, with the other seller's1050 payment untouched
+  and zero refund dispatches. The fixture deliberately chooses the actual
+  later payment, so UUID ordering does not weaken this comparison. Ordinary
+  split-tender/populated-plan and full refund acceptance remain due.
+  Legacy C0 remains on its original path. Exact
   credited-line fee/reversal and complete acceptance remain required; see
   `deploy/merchant-return-allocation-source-2026-11-12.md`.
   Original fee-job runtime repair 2026-11-12: the first actual mixed-order
