@@ -55,6 +55,7 @@
   "admin.role.playground": "Visiteur de démo",
   "admin.overview.activity": "Ce qui a changé",
   "admin.overview.activityAll": "Inclure le travail en arrière-plan",
+  "admin.activity.subscriptionRecoveryUpdated": "Le suivi de récupération d’un abonnement a été mis à jour",
   "admin.activity.formSubmitted": "Un visiteur a envoyé un formulaire",
   "admin.activity.cartStarted": "Un client a commencé un panier",
   "admin.activity.cartItemAdded": "Un client a ajouté un article au panier",
