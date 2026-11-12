@@ -159,3 +159,17 @@ Reports: /tmp/freeholder-tax80-native-v4-schema-five.json,
 /tmp/freeholder-merchant80-v4-live-sdk.log. All remaining source, provider,
 SDK/browser, upgrade, recovery and human acceptance requirements remain open
 where not explicitly covered above.
+
+A separate actual privacy before-control on combined source056ff05f and
+normal80 v4 reproduced another-subject destruction in5.39s: erasing the
+merchant profile cleared a buyer-owned certificate despite that buyer's real
+commerce.money retention hold. The direct insertion is an explicitly declared
+source fixture, not customer-request UI acceptance. Profile minimization now
+leaves customer certificates to their own commerce.money privacy source; the
+erased profile already refuses future tax quotes. The original certificate
+assertion remains and the after-control also checks the complete held row and
+that the buyer's own actual erasure minimizes it after hold release. Types
+and focused lint pass; the after-control is pending. Before report:
+/tmp/freeholder-tax80-held-buyer-certificate-before.json. This is unreleased80
+source qualification, not an unchanged-main/production incident or independent
+security sign-off.

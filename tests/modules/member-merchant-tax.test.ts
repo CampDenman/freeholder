@@ -222,9 +222,13 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
   });
   const buyerRequest=await createDataRequest.call({contactId:buyerId,request:{kind:"erasure"}},OWNER);
   await verifyDataRequest.call({id:buyerRequest.id,method:"Verified buyer request with a specific financial hold"},OWNER);
-  await addRetentionException.call({dataRequestId:buyerRequest.id,scope:"commerce.money",reason:"accounting_tax",legalBasis:"Retain this buyer's original certificate for the active accounting dispute."},OWNER);
+  const hold=await addRetentionException.call({dataRequestId:buyerRequest.id,scope:"commerce.money",reason:"accounting_tax",legalBasis:"Retain this buyer's original certificate for the active accounting dispute."},OWNER);
   await fulfillDataRequest.call({id:await request("erasure"),confirmation:"ERASE"},OWNER);
   expect((await db().select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id,first.profileId)))[0]).toMatchObject({state:"erased",contactId:null});
   expect((await db().select().from(taxExemptions).where(eq(taxExemptions.id,certificate.id)))[0]!.certificateRef).toBe("BUYER-OWN-HELD-CERTIFICATE");
+  expect((await db().select().from(taxExemptions).where(eq(taxExemptions.id,certificate.id)))[0]).toEqual(certificate);
+  await removeRetentionException.call({id:hold.id},OWNER);
+  await fulfillDataRequest.call({id:buyerRequest.id,confirmation:"ERASE"},OWNER);
+  expect((await db().select().from(taxExemptions).where(eq(taxExemptions.id,certificate.id)))[0]).toMatchObject({certificateRef:null,status:"revoked"});
  });
 });

@@ -9,7 +9,7 @@ import {dataRequestArtifacts,dataRequests,privacyRetentionExceptions} from "@/co
 import {lockContactIdentity} from "@/core/contacts/identity-lock";
 import {defineService,getService,ServiceError,type ServiceContext,type Tx} from "@/core/service";
 import {merchantTaxProfiles,merchantTaxProfileVersions} from "./merchant-tax-schema";
-import {taxExemptions,taxRegistrations} from "./schema";
+import {taxRegistrations} from "./schema";
 import {allowMerchantTaxWrites,merchantTaxDigest} from "./merchant-tax-store";
 
 const scope="commerce.merchantTax";
@@ -46,7 +46,9 @@ async function minimize(tx:Tx,profileId:string){
  const now=new Date();
  const versions=await tx.update(merchantTaxProfileVersions).set({origin:{},rulesSnapshot:[],nonCollectionReason:null,merchantName:null,merchantSupport:null,erasedAt:now}).where(and(eq(merchantTaxProfileVersions.profileId,profileId),sql`${merchantTaxProfileVersions.erasedAt} is null`)).returning({id:merchantTaxProfileVersions.id});
  await tx.delete(taxRegistrations).where(eq(taxRegistrations.merchantProfileId,profileId));
- await tx.update(taxExemptions).set({certificateRef:null,status:"revoked"}).where(eq(taxExemptions.merchantProfileId,profileId));
+ // Customer certificates belong to their own commerce.money privacy scope.
+ // Erasing this business never authorizes erasing another subject's evidence;
+ // the erased profile itself already prevents any future tax collection.
  await tx.update(merchantTaxProfiles).set({state:"erased",contactId:null,erasedAt:now}).where(eq(merchantTaxProfiles.id,profileId));
  return versions.length+1;
 }
