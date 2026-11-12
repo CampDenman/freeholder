@@ -18,6 +18,8 @@ export interface MediaTransferManifest {
   integrity?: { missingInventoryKeys?: string[] };
 }
 
+export function createReplitStore(environment: Record<string, string | undefined>, prefix: string): Promise<TransferStore>;
+
 export function copyManifestObjects(options: {
   manifest: MediaTransferManifest;
   source: TransferStore;

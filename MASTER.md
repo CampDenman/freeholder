@@ -11199,6 +11199,14 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  Transfer read-refusal repair 2026-11-11: two adapter-boundary controls
+  reproduced an occupied Replit target being overwritten and reported
+  restored after its first read returned 403 or 503. The transfer now stops
+  on every non-404 read failure; a positive 404 still permits a normal copy
+  and full target-byte verification. `tests/core/media-transfer-replit.test.ts`;
+  changeset `media-transfer-read-refusal.md`. These use a synthetic provider,
+  not a live Replit account, and do not close the final-candidate cross-target
+  journey or prove concurrent-writer admission.
   *(Partial 2026-09-12: `tests/browser/demo-scenarios.spec.ts` already proves
   role-guided demo load/reload/reset/purge. `tests/core/c11-08-install-update-journey.test.ts`
   loads that demo, runs WordPress REST parse → preview → commit (CMS draft

@@ -1,5 +1,16 @@
 # Ownership, recovery and erasure drills
 
+Copyright (C) 2026 Tony Aly
+SPDX-License-Identifier: Apache-2.0
+
+For Replit media transfer, a provider read failure stops the transfer. Only
+an explicit 404 establishes that a key is missing; a 403, 5xx or unclassified
+failure never authorizes a write over that key. Re-run after correcting
+access to the same original bucket. Do not redirect recovery to a replacement
+bucket to clear a failed read. The transfer checks existing target bytes and
+verifies every copied object; source/target writer quiescence and the complete
+cross-target final-candidate journey remain part of C11.08 acceptance.
+
 Freeholder has two different ownership artifacts, because pretending one file
 can be both a recoverable system image and a safe data-portability export makes
 both less trustworthy:
