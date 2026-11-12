@@ -417,13 +417,6 @@ export const invoiceMerchantAllocationLines = pgTable("invoice_merchant_allocati
   check("invoice_merchant_allocation_lines_amounts", sql`${t.revenueMinor} >= 0 and ${t.feeMinor} between 0 and ${t.revenueMinor}`),
 ]);
 
-/** C12.38: original portions of ONE invoice, including its site's own lines.
- * Account/business identity remains on the original parent market policy;
- * these private financial facts never copy a member's personal profile. */
-
-
-
-
 export const payments = pgTable(
   "payments",
   {
