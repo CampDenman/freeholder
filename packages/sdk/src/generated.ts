@@ -833,7 +833,9 @@ export const SERVICE_NAMES = [
   "imports.previewFromUpload",
   "imports.previewFromUrl",
   "imports.publish",
+  "imports.readerOwnershipReview",
   "imports.reconcile",
+  "imports.resolveReaderOwnership",
   "imports.reviewConflicts",
   "imports.rollback",
   "imports.sourceGraph",
@@ -4943,9 +4945,17 @@ export interface ServiceCatalog {
     input: { id: string; graph?: { generation: string; sourceRevision: string; planRevision: number } };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "imports.readerOwnershipReview": {
+    input: { id: string; after?: string };
+    output: { rows: { receiptId: string; postId: string; commentId: string; name: string; email: string | null; excerpt: string }[]; next: string | null };
+  };
   "imports.reconcile": {
     input: { id: string; counts?: { pages: number; media: number; redirects: number }; graph?: { generation: string; sourceRevision: string; planRevision: number } };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "imports.resolveReaderOwnership": {
+    input: { id: string; receiptId: string; postId: string; commentId: string; contactId: string; confirmation: "ASSIGN ORIGINAL READER" };
+    output: { receiptId: string; state: "bound" };
   };
   "imports.reviewConflicts": {
     input: { id: string; graph?: { generation: string; sourceRevision: string; planRevision: number }; conflicts: { slug: string; resolution: "keep-existing" | "replace" | "rename"; renamedSlug?: string }[] };
@@ -9022,7 +9032,9 @@ export interface FreeholderApi {
     previewFromUpload: (input: ServiceCatalog["imports.previewFromUpload"]["input"]) => Promise<ServiceCatalog["imports.previewFromUpload"]["output"]>;
     previewFromUrl: (input: ServiceCatalog["imports.previewFromUrl"]["input"]) => Promise<ServiceCatalog["imports.previewFromUrl"]["output"]>;
     publish: (input: ServiceCatalog["imports.publish"]["input"]) => Promise<ServiceCatalog["imports.publish"]["output"]>;
+    readerOwnershipReview: (input: ServiceCatalog["imports.readerOwnershipReview"]["input"]) => Promise<ServiceCatalog["imports.readerOwnershipReview"]["output"]>;
     reconcile: (input: ServiceCatalog["imports.reconcile"]["input"]) => Promise<ServiceCatalog["imports.reconcile"]["output"]>;
+    resolveReaderOwnership: (input: ServiceCatalog["imports.resolveReaderOwnership"]["input"]) => Promise<ServiceCatalog["imports.resolveReaderOwnership"]["output"]>;
     reviewConflicts: (input: ServiceCatalog["imports.reviewConflicts"]["input"]) => Promise<ServiceCatalog["imports.reviewConflicts"]["output"]>;
     rollback: (input: ServiceCatalog["imports.rollback"]["input"]) => Promise<ServiceCatalog["imports.rollback"]["output"]>;
     sourceGraph: (input: ServiceCatalog["imports.sourceGraph"]["input"]) => Promise<ServiceCatalog["imports.sourceGraph"]["output"]>;

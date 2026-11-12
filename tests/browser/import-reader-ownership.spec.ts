@@ -56,7 +56,13 @@ test.describe("original reader ownership review (C2.29/C3.46)", () => {
       await expect(person).toHaveValue(""); await person.selectOption(original.id);
       const confirmation = page.getByLabel(t("imports.readers.confirm"), { exact: true });
       await confirmation.focus(); await page.keyboard.press("Space"); await page.keyboard.press("Tab");
-      await expect(page.getByRole("button", { name: t("imports.readers.submit"), exact: true })).toBeFocused(); await page.keyboard.press("Enter");
+      await expect(page.getByRole("button", { name: t("imports.readers.submit"), exact: true })).toBeFocused();
+      const reviewed = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === `/admin/imports/${run.id}`, { timeout: 120_000 });
+      await page.keyboard.press("Enter");
+      // The successful action redirects immediately; Chromium can discard
+      // its body after navigation. Its status and durable receipt prove the
+      // outcome without racing that intentionally disposable response body.
+      const saved = await reviewed; expect(saved.status()).toBe(200);
       await expect(page.getByRole("heading", { name: t("imports.readers.title"), exact: true })).toHaveCount(0);
       const [receipt] = await db().select().from(readerOwnershipReceipts);
       expect(receipt).toMatchObject({ state: "bound", contactId: original.id }); expect(receipt?.contactId).not.toBe(later.id);
