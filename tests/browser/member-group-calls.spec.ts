@@ -13,6 +13,7 @@ import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { CSRF_COOKIE, CSRF_HEADER, issueCsrfToken } from "@/core/http/csrf";
 import { memberDevices, memberFollows, memberGroupCalls, memberProfiles } from "@/modules/members/schema";
 import { seedC11Owner, C11_BASE_URL } from "./owner-session";
+import { observeGroupMessage } from "./group-message-diagnostic";
 
 test.use({ launchOptions: { args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] } });
 
@@ -62,11 +63,19 @@ test.describe("group calls (C12.24)", () => {
     const [rae, sam, kim] = await Promise.all([signedIn(browser, RAE), signedIn(browser, SAM), signedIn(browser, KIM)]);
     for (const side of [sam, kim]) await side.page.goto("/messages");
     await expect.poll(async () => (await db().select().from(memberDevices)).length).toBe(2);
-    await rae.page.goto("/messages?to=sam,kim");
-    await rae.page.getByLabel("Group name").fill("Crag crew");
-    await rae.page.getByLabel("Message", { exact: true }).fill("Video call tonight?");
-    await rae.page.getByRole("button", { name: "Send" }).click();
-    await expect(rae.page.getByText("Video call tonight?")).toBeVisible();
+    const messageDiagnostic = observeGroupMessage(rae.page);
+    try {
+      await rae.page.goto("/messages?to=sam,kim");
+      await rae.page.getByLabel("Group name").fill("Crag crew");
+      await rae.page.getByLabel("Message", { exact: true }).fill("Video call tonight?");
+      messageDiagnostic.submitted();
+      await rae.page.getByRole("button", { name: "Send" }).click();
+      await expect(rae.page.getByText("Video call tonight?")).toBeVisible();
+    } catch (error) {
+      // Keep the original assertion and deadline; retain only the allowlisted report.
+      await messageDiagnostic.attachFailure(test.info()).catch(() => undefined);
+      throw error;
+    } finally { messageDiagnostic.dispose(); }
 
     await rae.page.getByRole("button", { name: "Start video call" }).click();
     await expect(rae.page).toHaveURL(/\/call\/group\//);

@@ -128,8 +128,9 @@ human refusal, current prepared/historical unmarked reservations, unknown
 throws, projection/persistence failure, altered bindings/journal/restored rows,
 key rotation and authenticated terminal failure after a pending caller finished.
 See `deploy/legacy-refund-live-caller-2026-11-12.md` for exact logs and source
-provenance. Adjacent regression qualification and protected checks are still
-pending. Older failed/cancelled ambiguity, process-loss recovery, later bank
+provenance. Sixteen existing adjacent native regressions and the local source
+gates also passed; protected checks remain required. Older failed/cancelled
+ambiguity, process-loss recovery, later bank
 returns and recipient/fee reconciliation remain explicit unfinished scope.
 These are agent-authored proofs; Tony's review and real-provider acceptance
 remain open, and no sign-off is inferred.

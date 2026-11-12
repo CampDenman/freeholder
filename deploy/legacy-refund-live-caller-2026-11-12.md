@@ -186,10 +186,29 @@ resource's signed terminal-failure fact before a new request returned 1000;
 the payment's refunded amount was exactly 1000. Skipped controls in one group
 are supplied by the other groups, not counted as additional passes.
 
-Existing hosted, Terminal and catalog-return assertions that expected a
-second POST after a lost answer are being aligned to the retained processing
-debt contract. Their exact adjacent native runs and the full pre-push gates
-remain required before the normal protected PR.
+On test/documentation checkpoint `b2b43feb`, the product remained exactly
+`878a6e4b`. Sixteen existing adjacent native controls passed in disjoint groups
+of 5/7/4: signed expanded-checkout and original-account refund feedback,
+provider cancellation, offline money, cash/Terminal refunds, pending recovery,
+prepared mixed returns, unknown returned-item response and scheduled original
+seller refunds. All runners exited zero and final active-backend checks were
+`[]`. Evidence is `/tmp/freeholder-legacy-refund-c0-adjacent-provider5.json`,
+`-adjacent7.json` and `-adjacent-unknown4.json`, with matching logs and ledger
+snapshots. Unknown responses retain the original reservation and never cause
+a second POST; actual signed terminal evidence can release a finished pending
+resource.
+
+For qualification beyond the isolated probe, the verified dependency symlink
+was replaced with an own frozen offline installation, scripts disabled.
+Package/lock/workspace hashes remained unchanged. Full Node 22 types and whole
+lint passed. License, release-note and plan gates passed, as did the playground
+policy and all 384 required static assertions (26 declared skips). The first
+sandboxed run retained ten subprocess/loopback failures and a missing generated
+changelog entry. After generating that entry, only the eight affected files
+were retried under escalation: all 63 passed. Successful checks were not
+miscounted twice. Logs: `/tmp/freeholder-legacy-refund-c0-full-source-gates.log`,
+`-metadata-escalated.log` and `-contract8-escalated.{json,log}`. Normal protected
+PR checks remain required; local proofs do not replace that pipeline.
 
 Historical failed/cancelled rows may hide older accepted money; this repair
 does not invent negative evidence or reconcile that history automatically.
@@ -233,3 +252,77 @@ This qualifies that frozen composition only. Its common ancestor with protected
 main is `eea40ee2`; the current protected REST/ZIP/reader/storage increments
 still require full composition before a final candidate claim. The immutable
 migration and all earlier candidate artifacts remain preserved.
+
+## Browser qualification diagnosis
+
+At protected PR #694 head `5dff3f92`, all 32 native shards passed. Browser
+shard 3 failed the unchanged five-second first group-message assertion twice,
+then reached the unchanged thirty-minute job limit with 26 of 62 cases
+started. Its duplicated production build consumed fourteen minutes; the
+Application gates job had already built and checked the same source in its
+own successful ten-minute-fifty-two-second job. The failed runner retained no
+downloadable browser diagnostic artifact. The cause of that message failure
+remains unknown.
+
+A separate exact-`5dff3f92` production build passed its artifact scrub, then
+the original message setup and five-second assertion passed locally: message
+visibility/navigation took 873 ms. The probe stopped before any SFU step,
+retained only sanitized status/timing/error fields, and drained its browser,
+server and all database backends. This local pass does not classify the CI
+failure as flaky or close browser qualification. Evidence remains in
+`/tmp/freeholder-ci694-group-message-{build.log,probe.json,allowlisted.json,probe-drain.json}`.
+
+The follow-up test/workflow change preserves the original setup, assertion,
+case deadline, three complete shards and job deadline. It adds a failure-only
+allowlisted JSON report and reuses the same-run Application gates build,
+transporting only checked standalone/static/BUILD_ID paths in a checksummed
+archive with pinned actions and a second standalone gate after extraction.
+Public assets (including checked OpenMLS WASM) and migrations still come from
+the same checkout through the existing browser launcher. No `NEXT_PUBLIC`
+configuration or `next.config.ts` environment substitution exists in this
+source; browser database/LiveKit settings are runtime settings.
+
+Node 22 full types and the focused changed-file lint passed after correcting
+an unsafe untyped YAML parse in the new test stanza; its original 38 lint
+diagnostics are preserved. The initial two-file run passed all 12 assertions;
+the corrected stanza then passed incremental types, its targeted lint and
+exactly the five new sanitizer/workflow assertions (seven unchanged assertions
+were excluded from that retry). The existing workflow integrity gate passed.
+A bounded synthetic archive roundtrip preserved dependency symlinks/native
+bytes, excluded environment/source/cache paths and refused a changed checksum.
+A read-only audit of the preserved exact-`5dff3f92` standalone found 60 links,
+all contained and non-dangling, plus four native runtime files. This does not
+claim that the new remote artifact transport or the complete browser shard has
+passed. Evidence is `/tmp/freeholder-ci694-followup-{source-test-report.json,source5-retry.json,artifact-transport.json}`
+and the corresponding types/lint/workflow logs. The protected pipeline remains
+pending; no CI failure has been classified as resolved by the local pass.
+
+The new protected run `43311908611` at PR head `47599dcb` completed all
+three archive handoffs and browser shards within their existing budgets.
+Browser shards 1 and 2 passed; shard 3 ran all 62 cases in 6.3 minutes,
+including a passing original encrypted group/SFU case. Its sole four failing
+cases are the four locales of the historical provider-return fixture. That
+fixture directly seeds processing refunds and synthetic provider references
+without signed caller receipts, then expects a successful submit while they
+remain processing. The containment guard instead returns its explicit
+already-admitted/reconcile error. All 32 native shards passed again.
+
+The narrow fixture correction requires that exact review error and an open
+return/draft credit while any historical installment remains processing.
+Only after both original synthetic confirmations may the original final
+1000/issued-credit reconciliation assertion pass. It changes no guard, money
+expectation or deadline and fabricates no historical caller authority. That
+fixture correction passed focused lint and all four production-browser
+locales on normal79: EN 7.396s, ES 6.084s, FR 6.756s and AR 6.731s, with zero
+skips, retries or unexpected outcomes. Product/public/config/dependency inputs
+were verified identical between `5dff3f92` and `47599dcb` before reusing the
+preserved `5dff3f92` runtime. Only the corrected fixture was copied outside
+`.next`; BUILD_ID and standalone server SHA remained unchanged. The runner
+exited zero, port 3176 closed and an actual read-only PostgreSQL query found
+no remaining target backends. The missing `psql` command was not a test
+failure; the installed postgres-js client completed that same drain query.
+Evidence is `/tmp/freeholder-ci694-return-fixture-provenance.json` and
+`/tmp/freeholder-ci694-return4-{browser.json,drain.json}`. A fresh normal
+protected run remains required; the earlier message failure's cause remains
+unknown. Synthetic original-state confirmations do not supply live-provider
+acceptance.

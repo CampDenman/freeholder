@@ -115,6 +115,23 @@ jobs:
       - name: Changelog coverage
         if: github.event_name == 'pull_request'
         run: node scripts/changelog-gate.mjs origin/${{ github.base_ref }}
+      # Reuse the already checked build in browser shards. Tar preserves the
+      # standalone dependency symlinks; neither the checkout nor .next/cache ships.
+      - name: Pack the checked browser runtime
+        run: |
+          tar -cf "$RUNNER_TEMP/browser-runtime.tar" .next/standalone .next/static .next/BUILD_ID
+          cd "$RUNNER_TEMP"
+          sha256sum browser-runtime.tar > browser-runtime.tar.sha256
+      - name: Share the checked browser runtime within this run
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-runtime
+          path: |
+            ${{ runner.temp }}/browser-runtime.tar
+            ${{ runner.temp }}/browser-runtime.tar.sha256
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
 
   security:
     name: Security and dependency evidence
@@ -296,9 +313,10 @@ jobs:
 
   browser:
     name: Browser accessibility and journeys (${{ matrix.shard }})
+    needs: application
     runs-on: ubuntu-latest
-    # One job crept from ~15 to 29 minutes against this limit and was
-    # cancelled. Split the files across three runners rather than raise it.
+    # Keep the three complete shards and their deadline. A duplicated build
+    # consumed fourteen minutes of this budget; use Application gates' build.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -325,6 +343,16 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-project
+      - name: Download this run's checked browser runtime
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: browser-runtime
+          path: ${{ runner.temp }}/browser-runtime
+      - name: Verify and unpack the checked runtime
+        run: |
+          (cd "$RUNNER_TEMP/browser-runtime" && sha256sum -c browser-runtime.tar.sha256)
+          tar -xf "$RUNNER_TEMP/browser-runtime/browser-runtime.tar"
+          node scripts/standalone-artifact-gate.mjs
       - name: Start the LiveKit SFU (release binary, checksum pinned)
         run: |
           curl -fsSL --retry 2 --retry-delay 1 --retry-max-time 45 --connect-timeout 10 --max-time 20 -o "$RUNNER_TEMP/livekit.tar.gz" https://github.com/livekit/livekit/releases/download/v1.13.7/livekit_1.13.7_linux_amd64.tar.gz
@@ -333,7 +361,6 @@ jobs:
           "$RUNNER_TEMP/livekit-server" --dev --bind 127.0.0.1 --node-ip 127.0.0.1 > "$RUNNER_TEMP/livekit.log" 2>&1 &
           for i in $(seq 1 30); do curl -fs http://127.0.0.1:7880/ > /dev/null && exit 0; sleep 1; done
           cat "$RUNNER_TEMP/livekit.log"; exit 1
-      - run: pnpm build
       # The apt half of --with-deps has stalled for 15-26 minutes on hosted
       # runners while trickling data, so neither apt's own timeouts nor a
       # retry loop rescued the job. Give apt a bounded try; the browsers then
@@ -352,6 +379,14 @@ jobs:
         timeout-minutes: 8
         run: pnpm exec playwright install chromium firefox
       - run: pnpm test:browser --shard=${{ matrix.shard }}
+      - name: Retain only the allowlisted first-message failure report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: group-message-diagnostic-${{ strategy.job-index }}
+          path: test-results/browser/**/group-message-allowlisted.json
+          if-no-files-found: ignore
+          retention-days: 3
 
   deployment:
     name: Image, recipes, public gates and upgrade
