@@ -13788,7 +13788,10 @@ whatever is best for the people using the site.
   with eight original money-table hashes and unchanged keys/SQL. A narrow
   source repair keeps dispatched exceptions unknown and recovers the original
   operation; full Node22 types/changed-source lint/three generated-changelog
-  controls pass and drained. Unchanged AFTER and populated review remain pending.
+  controls pass and drained. Byte-identical unchanged AFTER passed6.345s on
+  a146/v9SQL958: one original key1/resource100/bound observation, retained
+  target400 and customer refund1200 intact, with one physical POST and actual
+  database work drained. Preserved populated-history review remains pending.
   The response fault and provider edges are synthetic. See
   `deploy/merchant-fee-unreadable-success-2026-11-12.md`; C12.38 remains open.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts

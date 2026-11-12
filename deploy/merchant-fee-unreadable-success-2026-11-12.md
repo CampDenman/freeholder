@@ -46,7 +46,16 @@ historical money, accepted resource or old refused row is rewritten. This
 source repair now passes full Node22 typecheck, changed-source lint and three
 affected changelog controls after actual generation from613 changesets. All
 source processes exited0 and drained. The original test and SQL hashes stay
-unchanged; native AFTER remains pending its separate lease.
+unchanged. The byte-identical unchanged AFTER on a146926a passed6.345s with
+the original60-second deadline. Independent ledger readback verifies exactly
+one original operation/key1, accepted100/fr_feeRace1, and its bound100
+observation. The canonical retained target is400; the original5400 payment,
+1200 customer refund and issued1200 line credit remain intact. The factory
+oracle asserts one physical POST/resource after both promises drain. Runner
+and readback exited0; the actual database activity query returned no clients.
+No second run occurred after the app-server interruption. Logs are
+`/tmp/freeholder-fee-unknown80-after-native-v9.{json,log}` with independent
+`-ledger.json` and `-drain.json`.
 The later preserved-clone review must report actual returned200 as review/debt
 with no additional POST or financial-history rewrite; that check remains
 pending. Fee-caller, all bank/action states, human flows and actual provider
