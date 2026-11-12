@@ -13779,6 +13779,17 @@ whatever is best for the people using the site.
   SQL fragment is still unassembled/unapplied; freshnormalv9 on the reconciled
   current-main candidate and unchanged native AFTER remain required. No old
   v8 database, accepted112 resource, or original source proof is rewritten.
+  Unreadable fee success BEFORE 2026-11-12: unchanged7d784/current17d/v9SQL958
+  failed6.468s after actual factory/HTTP barriers. An accepted100 response was
+  unreadable; a concurrent earlier inspection completed afterward. The first
+  operation was falsely refused and a new key accepted another100, within the
+  original500 resource capacity although the canonical retained target is400.
+  Both calls and database work drained. Actual populated history is preserved
+  with eight original money-table hashes and unchanged keys/SQL. A narrow
+  source repair keeps dispatched exceptions unknown and recovers the original
+  operation; types/lint/unchanged AFTER and populated review remain pending.
+  The response fault and provider edges are synthetic. See
+  `deploy/merchant-fee-unreadable-success-2026-11-12.md`; C12.38 remains open.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

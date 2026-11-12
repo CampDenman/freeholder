@@ -4,7 +4,6 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter } from "@/adapters/payments";
-import { AdapterError } from "@/adapters/types";
 import { defineJob, enqueueJob } from "@/core/jobs";
 import { actorString, defineOrchestratedService, defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations } from "./merchant-collection-schema";
@@ -146,8 +145,10 @@ export const reconcileMerchantApplicationFee = defineOrchestratedService({
       const accepted = await applyMerchantFeeResult.call({ operationId: original.id, outcome: "accepted", providerRef: actual.providerRef }, system);
       return { ...reserved, state: "accepted" as const, operation: accepted };
     } catch (error) {
-      const refused = dispatch && error instanceof AdapterError && !error.retryable && !["unavailable"].includes(error.code);
-      await applyMerchantFeeResult.call({ operationId: original.id, outcome: refused ? "refused" : "unknown" }, system);
+      // Retryability describes the transport error, not whether the original
+      // physical refund exists. Preserve its capacity and key until recovery
+      // proves the original resource; an unreadable success is still unknown.
+      await applyMerchantFeeResult.call({ operationId: original.id, outcome: "unknown" }, system);
       throw error;
     }
   },
