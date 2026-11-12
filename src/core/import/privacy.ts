@@ -217,6 +217,7 @@ registerContactPrivacySource({
       inArray(mediaObjectWrites.state, ["unverified", "started", "unknown"]),
     )).limit(1);
     if (deleting) throw new ServiceError("conflict", "An original import deletion is unresolved. Review its original storage receipt before retaining these sources.");
+    const members: { sourceId: string; generation: string }[] = [];
     // Snapshot only actual original upload nonces present in this hold TX.
     // The normalized completion receipt also records an actually empty set.
     for await (const run of runs(tx, true)) {
@@ -225,10 +226,15 @@ registerContactPrivacySource({
       if (!uploadIds.length) continue;
       const checkpoint = object(run.checkpoint);
       const holds = sourceHold.array().parse(checkpoint.sourcePrivacyHolds ?? []);
-      for (const uploadId of uploadIds) if (!holds.some(hold => hold.exceptionId === context.exceptionId && hold.uploadId === uploadId)) holds.push({ requestId: context.requestId, exceptionId: context.exceptionId, uploadId });
+      for (const uploadId of uploadIds) {
+        members.push({ sourceId: run.id, generation: uploadId });
+        // This projection keeps older readers conservative. Current cleanup
+        // uses the immutable normalized members, never mutable checkpoint JSON.
+        if (!holds.some(hold => hold.exceptionId === context.exceptionId && hold.uploadId === uploadId)) holds.push({ requestId: context.requestId, exceptionId: context.exceptionId, uploadId });
+      }
       await tx.update(importRuns).set({ checkpoint: { ...checkpoint, sourcePrivacyHolds: holds.map(({ exceptionId, requestId, uploadId }) => ({ exceptionId, requestId, uploadId })) } }).where(eq(importRuns.id, run.id));
     }
-    await completeRetentionSourceSnapshot(context.service, { exceptionId: context.exceptionId, requestId: context.requestId, sourceScope: "imports.readerSources", isNew: context.isNew });
+    await completeRetentionSourceSnapshot(context.service, { exceptionId: context.exceptionId, requestId: context.requestId, sourceScope: "imports.readerSources", isNew: context.isNew, members });
   },
   retain: async (tx, _contactId, context) => {
     // Fulfillment must not widen an earlier exception to later uploads.

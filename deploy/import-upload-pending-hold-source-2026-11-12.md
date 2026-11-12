@@ -28,6 +28,12 @@ the receipt and never recaptures later uploads. A historical missing receipt
 remains review debt and stops cleanup; neither a timestamp nor a partial nonce
 list proves a completed capture.
 
+The current domain source also supplies canonical `(runId, uploadId)` members
+to the normalized receipt helper. Mutable checkpoint nonces remain an older
+reader compatibility projection. Current cleanup reads canonical members, so
+loss of that projection cannot remove a hold. Missing or incomplete canonical
+capture remains review debt.
+
 The imports pending-object callback uses the caller's actual transaction when
 provided. The shared storage infrastructure must recheck ownership under its
 real identity and object admission locks. A new hold also refuses an original
@@ -37,7 +43,7 @@ provider work that was admitted before it.
 This domain draft requires the separately owned shared helper, storage admission
 change, and normalized receipt table in the unpublished migration 80. The draft
 has not yet received compiler or native qualification. Its unchanged original
-oracle and the added empty/renewal, release, and unresolved DELETE controls are
+oracle and the added empty/renewal, release, checkpoint-loss, and unresolved DELETE controls are
 unrun against that integration. Existing before evidence and all earlier
 qualified ZIP and reader artifacts remain preserved.
 

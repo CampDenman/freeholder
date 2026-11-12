@@ -86,6 +86,23 @@ describe.runIf(hasDatabase)("original uploaded source pending retention (C3.47/C
     expect(await deleteCaptureObjects([key])).toEqual({ deleted: 1 });
     expect(await storage().get(key)).toBeUndefined();
   });
+  it("keeps canonical held membership after the legacy checkpoint projection is lost", async () => {
+    const owner = await actualOwner(), reader = (await resolveContact.call({ email: readerEmail }, owner)).contact;
+    const run = await startImport.call({ origin: "https://fictional-upload-source.example", kind: "wordpress-wxr" }, owner);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "canonical-reader.xml", bytes: bytes.byteLength }, owner);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, owner);
+    const key = `imports/${run.id}/${upload.uploadId}/00000.part`;
+    const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, owner);
+    await addRetentionException.call({ dataRequestId: request.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Synthetic canonical membership survives checkpoint loss" }, owner);
+    await rollbackImport.call({ id: run.id }, owner);
+    const [actualRun] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
+    const checkpoint = { ...actualRun!.checkpoint as Record<string, unknown> };
+    expect(checkpoint.sourcePrivacyHolds).toBeDefined();
+    delete checkpoint.sourcePrivacyHolds;
+    await db().update(importRuns).set({ checkpoint }).where(eq(importRuns.id, run.id));
+    expect(await deleteCaptureObjects([key])).toEqual({ deleted: 0 });
+    expect(await storage().get(key)).toEqual(bytes);
+  });
   it("refuses a new hold after an original DELETE was admitted but its provider result is unresolved", async () => {
     const owner = await actualOwner(), reader = (await resolveContact.call({ email: readerEmail }, owner)).contact;
     const run = await startImport.call({ origin: "https://fictional-upload-source.example", kind: "wordpress-wxr" }, owner);
