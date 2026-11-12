@@ -13595,6 +13595,14 @@ whatever is best for the people using the site.
   complete bank/action state, exact fee/reversal, return allocation, privacy,
   human/browser and runtime-upgrade qualification remain required. The new
   merchant model remains disabled, C12.38 open. See the same source report.
+  Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
+  carry a pointer in the existing transactional outbox; original owner/profile
+  resolution and erasure receipt repair run only after commit. Raw original
+  child/caller evidence also participates in financial debt. This draft has
+  not yet passed types/lint/native or completed-cohort/outbox failure controls;
+  frozen f6/v7 source remains separate. No new schema, negative provider proof,
+  model activation or completion claim. See
+  `deploy/merchant-refund-erasure-outbox-source-2026-11-12.md`.
   Original return allocation BEFORE 2026-11-12: actual two-seller checkout
   and RMA preparation reserved seller c2's1050CAD return against seller003's
   earlier4200 payment, genuine assertion failure5.943s on test e689/productf6

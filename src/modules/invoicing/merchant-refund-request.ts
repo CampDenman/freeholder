@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: immutable cash-owner arguments, including money with no local invoice.
+import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { stripeMerchantRefundBody } from "@/adapters/payments/stripe-merchant-refund-body";
 import { randomUUID } from "node:crypto";
@@ -79,6 +80,7 @@ export const claimMerchantRefundRequest = defineService({
       chargeAccountId: cash.chargeAccountId, providerApiVersion: cash.providerApiVersion, originalPaymentRef: cash.providerRef,
       originalCashAmountMinor: cash.amountMinor, amountMinor: value.amountMinor, currency: cash.currency, idempotencyKey: value.idempotencyKey, reasonDigest: merchantTaxDigest(value.reason),
       originalRequest: request, requestDigest: merchantTaxDigest(request) }).returning();
+    queueOriginalMerchantRefundRepair(ctx, { kind: "request", id: saved!.id });
     ctx.setSubject(cash.paymentId ? "payment" : "subscription_provider_charge", cash.paymentId ?? cash.subscriptionChargeReceiptId!);
     return merchantRefundRequestRow.parse(saved);
   },

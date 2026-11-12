@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: every new merchant refund reservation captures its original POST once.
+import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -38,6 +39,7 @@ export async function captureOriginalMerchantRefund(ctx: ServiceContext, payment
     providerPlatformAccountId: cash.providerPlatformAccountId, chargeAccountId: cash.chargeAccountId, providerApiVersion: cash.providerApiVersion,
     originalPaymentRef: cash.providerRef, originalCashAmountMinor: cash.amountMinor, amountMinor: refund.amountMinor, currency: cash.currency,
     idempotencyKey: refund.idempotencyKey, reasonDigest: merchantTaxDigest(refund.reason), originalRequest, requestDigest: merchantTaxDigest(originalRequest) });
+  queueOriginalMerchantRefundRepair(ctx, { kind: "request", id });
 }
 // The isolated shared-core hook is pending fresh-schema/native qualification;
 // no existing reservation is silently backfilled.

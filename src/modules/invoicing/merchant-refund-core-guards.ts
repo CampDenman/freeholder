@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: every shared refund mutation respects original physical admission.
+import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { and, eq } from "drizzle-orm";
 import { actorString, ServiceError, type ServiceContext } from "@/core/service";
@@ -27,6 +28,7 @@ export async function retireOriginalMerchantRefund(ctx: ServiceContext, refund: 
   await allowOriginalMerchantRefundWrites(ctx.tx);
   await ctx.tx.insert(merchantRefundReservationRetirements).values({ requestId: original.id, requestDigest: original.requestDigest,
     reason: "cancelled_before_dispatch", initiatedBy: actorString(ctx.actor) }).onConflictDoNothing();
+  queueOriginalMerchantRefundRepair(ctx, { kind: "refund_retirement", id: original.id });
 }
 export async function assertOriginalMerchantRefundStart(ctx: ServiceContext, refund: typeof refunds.$inferSelect, providerRef?: string): Promise<boolean> {
   const original = await originalRefund(ctx, refund);

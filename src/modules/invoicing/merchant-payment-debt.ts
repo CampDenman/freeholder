@@ -4,6 +4,7 @@
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { defineService, ServiceError } from "@/core/service";
+import { originalMerchantRefundDebt } from "./merchant-refund-debt";
 import { routingForPayment } from "./merchant-charge";
 import { invoiceMerchantCollections, merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations, merchantPaymentRoutes } from "./merchant-collection-schema";
 import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations";
@@ -37,7 +38,7 @@ export const merchantPaymentRecoveryDebt = defineService({
     const [refundState] = await ctx.tx.select({ returned: sql<string>`coalesce(sum(${refunds.amountMinor}) filter(where ${refunds.status}='succeeded'),0)::text`,
       pending: sql<boolean>`coalesce(bool_or(${refunds.status} in ('created','processing') or (${refunds.status}='failed' and ${refunds.failureCode}='provider_already_refunded')),false)` })
       .from(refunds).where(eq(refunds.paymentId, paymentId));
-    if (refundState?.pending || BigInt(refundState?.returned ?? "0") !== BigInt(payment.refundedMinor)) reasons.add("refund");
+    if (refundState?.pending || BigInt(refundState?.returned ?? "0") !== BigInt(payment.refundedMinor) || await originalMerchantRefundDebt(ctx, paymentId)) reasons.add("refund");
     const unresolvedDispute = await ctx.tx.select({ id: paymentDisputes.id }).from(paymentDisputes).where(and(eq(paymentDisputes.paymentId, paymentId), inArray(paymentDisputes.status, ["open", "lost"]))).limit(1);
     if (unresolvedDispute.length) reasons.add("dispute");
     const [feeState] = await ctx.tx.select({ returned: sql<string>`coalesce(sum(${merchantFeeRefunds.amountMinor}) filter(where ${merchantFeeRefunds.status}='accepted'),0)::text`,

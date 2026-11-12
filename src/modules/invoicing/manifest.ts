@@ -13,7 +13,9 @@ export default defineModule({
   onboarding: () => import("./onboarding"),
   briefing: { contributors: ["invoicing.briefingOverdue"] },
   events: {
+    listens: { "invoicing.originalRefundEvidenceRetained": "onOriginalMerchantRefundEvidence" },
     emits: [
+      "invoicing.originalRefundEvidenceRetained",
       "invoice.created",
       "invoice.sent",
       "invoice.viewed",

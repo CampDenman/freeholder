@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: actual refund facts commit before policy or invoice application.
+import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -28,22 +29,23 @@ export const recordMerchantRefundObservation = defineService({
   output: z.object({ observationId: z.uuid(), bindingVerified: z.boolean() }), auditInputFields: ["source", "requestId", "inspectionId"],
   handler: async ({ source, requestId, inspectionId, evidence }, ctx) => {
     const paymentId = source.kind === "payment" ? source.paymentId : null, subscriptionChargeReceiptId = source.kind === "subscription" ? source.receiptId : null;
+    const [original] = requestId ? await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, requestId)) : [];
+    const [inspection] = inspectionId ? await ctx.tx.select().from(merchantCashReturnInspections).where(eq(merchantCashReturnInspections.id, inspectionId)) : [];
+    const originalOwner = original && original.paymentId === paymentId && original.subscriptionChargeReceiptId === subscriptionChargeReceiptId;
+    const inspectionBound = inspection && inspection.paymentId === paymentId && inspection.subscriptionChargeReceiptId === subscriptionChargeReceiptId;
     if (paymentId) {
       const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, paymentId));
-      if (!payment || payment.provider !== "stripe" || !(await routingForPayment(ctx, paymentId)).providerPlatformAccountId) throw new ServiceError("conflict", "Restore the actual original merchant payment before associating refund evidence.");
+      if (!payment || payment.provider !== "stripe" || !originalOwner && !inspectionBound && !(await routingForPayment(ctx, paymentId)).providerPlatformAccountId) throw new ServiceError("conflict", "Restore the actual original merchant payment before associating refund evidence.");
     } else {
       const [receipt] = await ctx.tx.select({ id: subscriptionProviderChargeReceipts.id }).from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.id, subscriptionChargeReceiptId!));
       if (!receipt) throw new ServiceError("conflict", "Restore the original subscription cash receipt before associating refund evidence.");
     }
-    const [original] = requestId ? await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, requestId)) : [];
     // Missing intent, nullable linkage/status and contradictory routing never
     // roll back actual authenticated refund money. They remain recovery debt.
-    const bound = original && original.paymentId === paymentId && original.subscriptionChargeReceiptId === subscriptionChargeReceiptId ? original : undefined;
+    const bound = originalOwner ? original : undefined;
     const bindingVerified = Boolean(bound && evidence.bindingVerified && bound.providerPlatformAccountId === evidence.providerPlatformAccountId
       && bound.chargeAccountId === (evidence.providerAccountId ?? null) && bound.providerApiVersion === evidence.providerApiVersion
       && bound.originalPaymentRef === evidence.paymentProviderRef && bound.amountMinor === evidence.amountMinor && bound.currency === evidence.currency);
-    const [inspection] = inspectionId ? await ctx.tx.select().from(merchantCashReturnInspections).where(eq(merchantCashReturnInspections.id, inspectionId)) : [];
-    const inspectionBound = inspection && inspection.paymentId === paymentId && inspection.subscriptionChargeReceiptId === subscriptionChargeReceiptId;
     const values = { inspectionId: inspectionBound ? inspection.id : null, claimedInspectionId: inspectionId ?? null, paymentId, subscriptionChargeReceiptId, requestId: bound?.id ?? null, claimedRequestId: requestId ?? null,
       providerPlatformAccountId: evidence.providerPlatformAccountId, chargeAccountId: evidence.providerAccountId ?? null, providerApiVersion: evidence.providerApiVersion,
       providerRef: evidence.providerRef, paymentProviderRef: evidence.paymentProviderRef, providerChargeRef: evidence.providerChargeRef ?? null,
@@ -55,6 +57,7 @@ export const recordMerchantRefundObservation = defineService({
     await ctx.tx.insert(merchantRefundObservations).values(values).onConflictDoNothing();
     const [saved] = await ctx.tx.select().from(merchantRefundObservations).where(eq(merchantRefundObservations.evidenceDigest, values.evidenceDigest));
     if (!saved || Object.entries(values).some(([key, value]) => saved[key as keyof typeof saved] !== value)) throw new ServiceError("conflict", "The actual original refund evidence needs recovery; earlier observations were preserved.");
+    queueOriginalMerchantRefundRepair(ctx, { kind: "refund_observation", id: saved.id });
     ctx.setSubject(paymentId ? "payment" : "subscription_provider_charge", paymentId ?? subscriptionChargeReceiptId!);
     return { observationId: saved.id, bindingVerified: saved.bindingVerified };
   },

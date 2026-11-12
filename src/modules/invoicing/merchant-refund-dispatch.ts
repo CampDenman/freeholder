@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: one physical refund creation, separate actual completion evidence.
+import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -96,8 +97,12 @@ export const recordMerchantRefundResourceAcknowledgement = defineService({
     const [request] = await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, dispatch.requestId));
     if (!request || request.requestDigest !== dispatch.requestDigest || merchantTaxDigest(request.originalRequest) !== request.requestDigest) throw new ServiceError("conflict", "Restore the exact original refund arguments before recording this ACK.");
     await ctx.tx.execute(sql`select set_config('freeholder.merchant_refund_v1','1',true)`);
-    await ctx.tx.insert(merchantRefundResourceBindings).values({ requestId: request.id, dispatchId, providerRef, origin: "physical_ack",
-      evidenceDigest: merchantTaxDigest({ dispatchId, requestDigest: dispatch.requestDigest, callerId: caller.id, providerRef }) }).onConflictDoNothing();
+    const evidenceDigest = merchantTaxDigest({ dispatchId, requestDigest: dispatch.requestDigest, callerId: caller.id, providerRef });
+    await ctx.tx.insert(merchantRefundResourceBindings).values({ requestId: request.id, dispatchId, providerRef, origin: "physical_ack", evidenceDigest }).onConflictDoNothing();
+    const [binding] = await ctx.tx.select({ id: merchantRefundResourceBindings.id }).from(merchantRefundResourceBindings)
+      .where(and(eq(merchantRefundResourceBindings.requestId, request.id), eq(merchantRefundResourceBindings.evidenceDigest, evidenceDigest)));
+    if (!binding) throw new ServiceError("conflict", "Restore the actual original refund acknowledgement before repair delivery.");
+    queueOriginalMerchantRefundRepair(ctx, { kind: "refund_ack", id: binding.id });
     ctx.setSubject(request.paymentId ? "payment" : "subscription_provider_charge", request.paymentId ?? request.subscriptionChargeReceiptId!);
     return { retained: true as const };
   },
@@ -115,6 +120,7 @@ export const finishMerchantRefundDispatch = defineService({
     await ctx.tx.insert(merchantRefundDispatchFinishes).values({ dispatchId, callerInstanceId: caller.id, outcome: local.outcome, providerRef: local.providerRef }).onConflictDoNothing();
     if (local.providerRef) await ctx.tx.insert(merchantRefundResourceBindings).values({ requestId: dispatch.requestId, dispatchId, providerRef: local.providerRef,
       origin: "physical_ack", evidenceDigest: merchantTaxDigest({ dispatchId, requestDigest: dispatch.requestDigest, callerId: caller.id, providerRef: local.providerRef }) }).onConflictDoNothing();
+    queueOriginalMerchantRefundRepair(ctx, { kind: "refund_finish", id: dispatchId });
     const [request] = await ctx.tx.select({ paymentId: merchantRefundRequests.paymentId, subscriptionChargeReceiptId: merchantRefundRequests.subscriptionChargeReceiptId }).from(merchantRefundRequests).where(eq(merchantRefundRequests.id, dispatch.requestId));
     if (request) ctx.setSubject(request.paymentId ? "payment" : "subscription_provider_charge", request.paymentId ?? request.subscriptionChargeReceiptId!);
     return { finished: true as const };

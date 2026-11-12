@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: independent cash evidence, real read completion and atomic disposition.
+import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -82,6 +83,7 @@ export const recordCashReturnPrimaryObservation = defineService({
       .where(and(eq(merchantCashReturnPrimaryObservations.inspectionId, inspectionId), eq(merchantCashReturnPrimaryObservations.evidenceDigest, evidenceDigest)));
     if (!saved) throw new ServiceError("conflict", "The original cash evidence needs recovery.");
     ctx.setSubject(original.paymentId ? "payment" : "subscription_provider_charge", original.paymentId ?? original.subscriptionChargeReceiptId!);
+    queueOriginalMerchantRefundRepair(ctx, { kind: "cash_primary", id: saved.id });
     return { observationId: saved.id };
   },
 });
@@ -101,6 +103,7 @@ export const recordCashReturnObservation = defineService({
       .where(and(eq(merchantCashReturnObservations.inspectionId, inspectionId), eq(merchantCashReturnObservations.evidenceDigest, evidenceDigest)));
     if (!saved) throw new ServiceError("conflict", "The actual original return evidence needs recovery.");
     ctx.setSubject(original.paymentId ? "payment" : "subscription_provider_charge", original.paymentId ?? original.subscriptionChargeReceiptId!);
+    queueOriginalMerchantRefundRepair(ctx, { kind: "cash_state", id: saved.id });
     return { observationId: saved.id };
   },
 });
@@ -113,6 +116,7 @@ export const finishMerchantCashReturnInspection = defineService({
     await allowOriginalMerchantRefundWrites(ctx.tx);
     await ctx.tx.insert(merchantCashReturnInspectionFinishes).values({ inspectionId, callerInstanceId: original.caller.id, outcome: local.outcome }).onConflictDoNothing();
     ctx.setSubject(original.paymentId ? "payment" : "subscription_provider_charge", original.paymentId ?? original.subscriptionChargeReceiptId!);
+    queueOriginalMerchantRefundRepair(ctx, { kind: "cash_finish", id: inspectionId });
     return { finished: true as const };
   },
 });
@@ -168,6 +172,7 @@ export const finalizeUnappliedCashReturn = defineService({
     const [saved] = await ctx.tx.select().from(merchantUnappliedChargeResolutions).where(eq(merchantUnappliedChargeResolutions.evidenceDigest, evidenceDigest));
     if (!saved) throw new ServiceError("conflict", "Restore this actual original cash return receipt.");
     ctx.setSubject(cash.paymentId ? "payment" : "subscription_provider_charge", cash.paymentId ?? cash.subscriptionChargeReceiptId!);
+    queueOriginalMerchantRefundRepair(ctx, { kind: "cash_resolution", id: saved.id });
     return { returnReceiptId: saved.id, settled: true };
   },
 });
