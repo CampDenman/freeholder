@@ -6,13 +6,16 @@ import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { getMerchantCollectionConfiguration } from "@/modules/invoicing/merchant-collection";
-import { subscriptionMerchantScopes, subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
+import { subscriptionCommercialTerms, subscriptionMerchantScopes, subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
+import { invoices, payments } from "@/modules/invoicing/schema";
+import { invoiceMerchantDependencyFingerprints } from "@/modules/invoicing/merchant-payment-dependencies";
+import { merchantRefundDependencyFingerprints } from "@/modules/invoicing/merchant-refund-dependencies";
 import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { subscriptionMerchantScope, type subscriptionTaxDestination } from "./merchant-scope-contract";
 import type { SubscriptionMarketPolicy } from "./market-policy";
 
 const profileReceipt = z.object({ profileId: z.uuid(), profileVersion: z.number().int().positive(), liability: z.enum(["platform", "seller"]) });
-export const merchantSubscriptionUndo = z.object({ movedIds: z.array(z.uuid()).max(5000), originalEvidence: z.array(z.object({ kind: z.enum(["scope", "cash", "cash_observation", "schedule_resource", "schedule_operation", "setup_fee"]), id: z.uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) })).max(5000) });
+export const merchantSubscriptionUndo = z.object({ movedIds: z.array(z.uuid()).max(5000), originalEvidence: z.array(z.object({ kind: z.enum(["scope", "cash", "cash_observation", "schedule_resource", "schedule_operation", "setup_fee", "commercial_terms", "invoice_financial", "refund_financial"]), id: z.uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) })).max(5000) });
 
 /** Store bounded fingerprints rather than personal destinations in merge history. */
 export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[]) {
@@ -47,6 +50,25 @@ export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[])
     .orderBy(subscriptions.id).limit(5001 - evidence.length);
   if (setupFees.length + evidence.length > 5000) return { evidence: [], overflow: true };
   evidence.push(...setupFees.map(row => fingerprint(row, "setup_fee")));
+  const terms = await tx.select({ id: subscriptionCommercialTerms.id, material: sql<string>`to_jsonb(${subscriptionCommercialTerms})::text` })
+    .from(subscriptionCommercialTerms).innerJoin(subscriptions, eq(subscriptions.id, subscriptionCommercialTerms.subscriptionId))
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialTerms.id).limit(5001 - evidence.length);
+  if (terms.length + evidence.length > 5000) return { evidence: [], overflow: true };
+  evidence.push(...terms.map(row => fingerprint(row, "commercial_terms")));
+  const periodInvoices = await tx.select({ id: invoices.id }).from(invoices).innerJoin(subscriptions,
+    sql`${invoices.sourceType}='subscription' and split_part(${invoices.sourceId},':',1)=${subscriptions.id}::text`)
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(invoices.id).limit(5001);
+  if (periodInvoices.length > 5000) return { evidence: [], overflow: true };
+  const invoiceIds = periodInvoices.map(row => row.id), paymentIds = invoiceIds.length
+    ? await tx.select({ id: payments.id }).from(payments).where(inArray(payments.invoiceId, invoiceIds)).orderBy(payments.id).limit(5001) : [];
+  if (paymentIds.length > 5000) return { evidence: [], overflow: true };
+  const financial = await invoiceMerchantDependencyFingerprints(tx, invoiceIds);
+  if (!financial || financial.size + evidence.length > 5000) return { evidence: [], overflow: true };
+  for (const [id, value] of [...financial.entries()].sort(([left], [right]) => left.localeCompare(right))) evidence.push({ kind: "invoice_financial", id, fingerprint: value });
+  const returned = await merchantRefundDependencyFingerprints(tx, { paymentIds: paymentIds.map(row => row.id), subscriptionChargeReceiptIds: charges.map(row => row.id) });
+  if (returned.incomplete || returned.entries.length + evidence.length > 5000) return { evidence: [], overflow: true };
+  for (const entry of returned.entries) evidence.push({ kind: "refund_financial", id: entry.id,
+    fingerprint: createHash("sha256").update(JSON.stringify([entry.table, entry.fingerprint])).digest("hex") });
   return { evidence, overflow: false };
 }
 

@@ -130,6 +130,7 @@
   "admin.activity.planSaved": "Une formule d'abonnement a été enregistrée",
   "admin.activity.subscriptionRenewed": "Des abonnements ont été renouvelés",
   "admin.activity.subscriptionBillingUpdated": "Le calendrier de facturation d'un abonnement a été mis à jour",
+  "admin.activity.subscriptionTermsAccepted": "Les conditions originales de l'abonnement ont été acceptées",
   "admin.activity.subscriptionPlanChanged": "Un abonné a changé de formule",
   "admin.activity.subscriptionPaused": "Un abonnement a été mis en pause",
   "admin.activity.subscriptionResumed": "Un abonnement a repris",

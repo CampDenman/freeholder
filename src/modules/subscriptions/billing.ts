@@ -16,6 +16,7 @@ import { createPayment, failPayment, settlePayment, startPayment } from "@/modul
 import { assertChargeEvidence, assertProviderAccount, paymentRouting, routingForPayment } from "@/modules/invoicing/merchant-charge";
 import { getSubscriptionPaymentScope, subscriptionPaymentScope } from "./market-policy";
 import { subscriptionMethodScopeMatches } from "./merchant-scope-contract";
+import { originalMerchantPlan, originalMerchantTerms } from "./merchant-terms-read";
 import { merchantObservationRef, recordMerchantPaymentObservation } from "@/modules/invoicing/merchant-payment-observations";
 import { invoices, paymentMethods, payments } from "@/modules/invoicing/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
@@ -107,13 +108,14 @@ const claimCharge = defineService({
         contactId: current.contactId,
       };
     }
-    const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, current.planId));
-    if (!plan) throw new ServiceError("not_found", "There is no such plan.");
+    const [currentPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, current.planId));
+    if (!currentPlan) throw new ServiceError("not_found", "There is no such plan.");
     const start = current.currentPeriodEnd;
+    const plan = await originalMerchantPlan(ctx, current, currentPlan, start);
     const end = periodEnd(start, plan.interval, plan.intervalCount);
     let invoiceId = input.invoiceId ?? null;
     if (!invoiceId) {
-      const price = await priceFor(ctx, current);
+      const price = await priceFor(ctx, current, start);
       if ("refused" in price) {
         await record(ctx, current.id, "payment_failed", { detail: price.refused });
         await beginDunning(ctx, current, { detail: price.refused });
@@ -239,7 +241,8 @@ const applyCharge = defineService({
       await ctx.call(startPayment, { id: payment.id, providerRef: input.providerRef });
       return { advanced: false };
     }
-    const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
+    const [currentPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
+    const plan = currentPlan ? await originalMerchantPlan(ctx, subscription, currentPlan, subscription.currentPeriodEnd) : undefined;
     if (input.status === "succeeded") {
       await ctx.call(settlePayment, {
         id: input.paymentId,
@@ -638,6 +641,7 @@ const applyPlanChange = defineService({
     if (subscription.status !== "active" && subscription.status !== "trialing") {
       throw new ServiceError("conflict", "Only a running subscription can change plan.");
     }
+    if (await originalMerchantTerms(ctx, subscription)) throw new ServiceError("conflict", "Review an explicit original merchant agreement amendment and stop its remote schedule before changing these accepted terms.");
     const [fromPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
     const [toPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, input.planId));
     if (!fromPlan || !toPlan) throw new ServiceError("not_found", "There is no such plan.");
@@ -1038,7 +1042,7 @@ async function settlePeriodInvoice(
     invoice = open ?? null;
   }
   if (!invoice) {
-    const price = await priceFor(ctx, subscription);
+    const price = await priceFor(ctx, subscription, options.periodStart);
     if ("refused" in price) return null;
     const invoiceId = await raiseInvoice(ctx, subscription, {
       amountMinor: price.amountMinor,
@@ -1122,6 +1126,7 @@ export const reconcileProviderPeriod = defineService({
     assertProviderAccount({ providerAccountId: routing.providerAccountId, providerPlatformAccountId: routing.providerPlatformAccountId }, { providerAccountId: input.providerAccountId || undefined, providerPlatformAccountId: input.providerPlatformAccountId });
     let subscription = found;
     let [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
+    if (plan) plan = await originalMerchantPlan(ctx, subscription, plan, input.periodStart ? new Date(input.periodStart) : subscription.currentPeriodStart);
     if (input.kind === "subscription_cancelled") {
       if (subscription.status === "cancelled" || subscription.status === "expired") return { applied: false };
       const now = new Date();

@@ -41,6 +41,12 @@ import { listLocations } from "@/core/locations/service";
 import { getBusiness } from "@/core/settings/service";
 import { productVariants, products } from "@/modules/catalog/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
+import { originalMerchantPlan, originalMerchantTerms } from "./merchant-terms-read";
+import { originalMerchantInvoiceShape } from "./merchant-terms-invoice";
+import { periodEnd } from "./calendar";
+export { periodEnd } from "./calendar";
+import merchantTermsQuoteServices from "./merchant-terms-quote";
+import merchantTermsStoreServices, { freezeOriginalMerchantTerms } from "./merchant-terms-store";
 import { paymentAdapter } from "@/adapters/payments";
 import { createDraftInvoice, issueInvoice } from "@/modules/invoicing/invoice-service";
 import { paymentMethods } from "@/modules/invoicing/schema";
@@ -61,6 +67,7 @@ import {
   SUBSCRIPTION_STATUSES,
   dunningPolicies,
   plans,
+  subscriptionCommercialTerms,
   subscriptionEvents,
   subscriptionMerchantScopes,
   subscriptionProviderChargeReceipts,
@@ -70,36 +77,6 @@ import {
 /** Quantity is fixed-point in `invoicing`; one of something is this. */
 const QUANTITY_SCALE = 1_000_000;
 
-/**
- * The end of a period that starts here.
- *
- * Calendar arithmetic rather than a fixed number of days: a monthly
- * subscription taken out on the 31st renews on the 30th in April and the 28th
- * in February, which is what everybody means by "monthly" and what adding
- * 30 days does not do.
- */
-export function periodEnd(
-  from: Date,
-  interval: (typeof PLAN_INTERVALS)[number],
-  count: number,
-): Date {
-  const end = new Date(from.getTime());
-  if (interval === "day") end.setUTCDate(end.getUTCDate() + count);
-  else if (interval === "week") end.setUTCDate(end.getUTCDate() + 7 * count);
-  else if (interval === "year") end.setUTCFullYear(end.getUTCFullYear() + count);
-  else {
-    // Months, with the overflow Date would otherwise silently roll forward:
-    // 31 January plus one month is 28 or 29 February, never 2 or 3 March.
-    const day = end.getUTCDate();
-    end.setUTCDate(1);
-    end.setUTCMonth(end.getUTCMonth() + count);
-    const lastOfMonth = new Date(
-      Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 0),
-    ).getUTCDate();
-    end.setUTCDate(Math.min(day, lastOfMonth));
-  }
-  return end;
-}
 
 const planRow = row({
   id: uuidSchema,
@@ -598,7 +575,10 @@ export const listOfferedPlans = defineService({
 export async function priceFor(
   ctx: ServiceContext,
   subscription: typeof subscriptions.$inferSelect,
+  periodStart = subscription.currentPeriodStart,
 ): Promise<{ amountMinor: number } | { refused: string }> {
+  const accepted = await originalMerchantTerms(ctx, subscription, periodStart);
+  if (accepted) return { amountMinor: accepted.snapshot.periodAmountMinor };
   const priced = (await ctx.callAsSystem(resolvePrice, {
     variantId: subscription.productVariantId,
     currency: subscription.currency,
@@ -634,11 +614,16 @@ export async function raiseInvoice(
   // A durable invoice witness also preserves the same first-period payload
   // after later renewals, without inferring ordering from transaction dates.
   const sourceId = `${subscription.id}:${options.periodStart.toISOString()}`;
-  const [original] = await ctx.tx.select({
-    acceptedSetupFeeMinor: subscriptions.acceptedSetupFeeMinor,
-    setupFeeInvoiceId: subscriptions.setupFeeInvoiceId,
-  }).from(subscriptions).where(eq(subscriptions.id, subscription.id)).for("update");
+  const [original] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, subscription.id)).for("update");
   if (!original) throw new ServiceError("not_found", "That subscription is not here.");
+  const merchantShape = await originalMerchantInvoiceShape(ctx, original, options.periodStart, options.periodEnd);
+  if (merchantShape?.existingInvoiceId) {
+    await ctx.callAsSystem(issueInvoice, { id: merchantShape.existingInvoiceId });
+    return merchantShape.existingInvoiceId;
+  }
+  if (merchantShape && merchantShape.periodAmountMinor !== options.amountMinor) throw new ServiceError("conflict", "The period amount differs from the explicitly accepted original agreement.");
+  const accepted = merchantShape?.terms;
+  if (accepted && !accepted.taxDestination) throw new ServiceError("conflict", "The original destination was erased; a new agreement is required before billing.");
   let setupFeeMinor = options.setupFeeMinor ?? 0;
   if (original.acceptedSetupFeeMinor !== null) {
     const [feeInvoice] = original.setupFeeInvoiceId
@@ -671,11 +656,14 @@ export async function raiseInvoice(
     {
       sourceType: "subscription" as const,
       sourceId: subscription.id,
-      description: `${variant?.name ?? "Subscription"} — ${options.periodStart
+      description: `${accepted ? accepted.snapshot.name : variant?.name ?? "Subscription"} — ${options.periodStart
         .toISOString()
         .slice(0, 10)} to ${options.periodEnd.toISOString().slice(0, 10)}`,
       quantityMicros: QUANTITY_SCALE,
       unitAmountMinor: options.amountMinor,
+      ...(accepted ? { taxCategoryCode: accepted.snapshot.taxCategoryCode, requiresShipping: accepted.snapshot.requiresShipping,
+        snapshot: { subscriptionTermsId: accepted.id, subscriptionPeriodStart: options.periodStart.toISOString(),
+          subscriptionPeriodEnd: options.periodEnd.toISOString(), subscriptionComponent: "period" } } : {}),
     },
   ];
   // Charged once, on the first invoice only, because that is what a setup fee
@@ -684,9 +672,12 @@ export async function raiseInvoice(
     lines.push({
       sourceType: "subscription" as const,
       sourceId: subscription.id,
-      description: `${variant?.name ?? "Subscription"} — setup`,
+      description: `${accepted ? accepted.snapshot.name : variant?.name ?? "Subscription"} — setup`,
       quantityMicros: QUANTITY_SCALE,
       unitAmountMinor: setupFeeMinor,
+      ...(accepted ? { taxCategoryCode: accepted.snapshot.taxCategoryCode, requiresShipping: accepted.snapshot.requiresShipping,
+        snapshot: { subscriptionTermsId: accepted.id, subscriptionPeriodStart: options.periodStart.toISOString(),
+          subscriptionPeriodEnd: options.periodEnd.toISOString(), subscriptionComponent: "setup" } } : {}),
     });
   }
 
@@ -706,7 +697,9 @@ export async function raiseInvoice(
     idempotencyKey: `subscription:${subscription.id}:${options.periodStart.toISOString()}`,
     lines,
     tax:
-      origin && person?.country
+      accepted
+        ? { mode: "merchant" as const, destination: accepted.taxDestination! }
+        : origin && person?.country
         ? {
             mode: "calculate" as const,
             origin: {
@@ -747,6 +740,8 @@ export const subscribe = defineService({
     paymentMethodId: uuidSchema.optional(),
     deferFirstPayment: z.boolean().default(false),
     taxDestination: subscriptionTaxDestination.optional(),
+    commercialTerms: z.object({ quoteDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      locale: z.enum(["en", "es", "fr", "ar"]).default("en"), source: z.enum(["owner_subscription", "public_join"]).default("owner_subscription") }).optional(),
   }),
   output: row({
     subscription: subscriptionRow,
@@ -754,7 +749,10 @@ export const subscribe = defineService({
     invoiceId: uuidSchema.nullable(),
   }),
   handler: async (input, ctx) => {
-    const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, input.planId));
+    if (input.commercialTerms?.source === "public_join" && ctx.actor.kind !== "system") {
+      throw new ServiceError("permission", "Public agreement acceptance belongs to the signed-in buyer's actual signup service.");
+    }
+    const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, input.planId)).for("share");
     if (!plan) throw new ServiceError("not_found", "There is no such plan.");
     if (plan.status !== "active") {
       throw new ServiceError("conflict", "That plan is not on sale.");
@@ -855,6 +853,13 @@ export const subscribe = defineService({
 
     await ctx.callAsSystem(captureSubscriptionMarketPolicy, { subscriptionId: created!.id, taxDestination: input.taxDestination });
     const merchant = await ctx.callAsSystem(getSubscriptionMarketPolicy, { subscriptionId: created!.id });
+    if (merchant?.model === "seller_merchant") {
+      if (!input.commercialTerms) throw new ServiceError("conflict", "Review and explicitly accept the merchant's original commercial quote before starting this agreement.");
+      await ctx.callAsSystem(freezeOriginalMerchantTerms, { subscriptionId: created!.id, acceptedQuoteDigest: input.commercialTerms.quoteDigest,
+        acceptanceSource: input.commercialTerms.source, deferFirstPayment: input.deferFirstPayment, locale: input.commercialTerms.locale });
+    } else if (input.commercialTerms) {
+      throw new ServiceError("conflict", "This accepted merchant quote does not belong to the selected agreement.");
+    }
     if (merchant?.model === "seller_merchant" && plan.billingMode !== "manual" && created!.provider !== "stripe") {
       await ctx.tx.update(subscriptions).set({provider:"stripe"}).where(eq(subscriptions.id,created!.id));
       created!.provider = "stripe";
@@ -989,19 +994,20 @@ export const renewDue = defineService({
         continue;
       }
 
-      const [plan] = await ctx.tx
+      const [currentPlan] = await ctx.tx
         .select()
         .from(plans)
         .where(eq(plans.id, subscription.planId));
-      if (!plan) {
+      if (!currentPlan) {
         failed += 1;
         continue;
       }
 
       const start = subscription.currentPeriodEnd;
+      const plan = await originalMerchantPlan(ctx, subscription, currentPlan, start);
       const end = periodEnd(start, plan.interval, plan.intervalCount);
 
-      const price = await priceFor(ctx, subscription);
+      const price = await priceFor(ctx, subscription, start);
       if ("refused" in price) {
         // Not silently skipped: the reason lands on the history, where an
         // owner will look. A DunningPolicy (C9.16) then retries, keeps access
@@ -1165,10 +1171,11 @@ export const resumeSubscription = defineService({
       subscription.currentPeriodEnd.getTime() -
         (subscription.pausedAt ?? subscription.currentPeriodStart).getTime(),
     );
+    const accepted = await originalMerchantTerms(ctx, subscription, now);
     const end = remaining > 0 ? new Date(now.getTime() + remaining) : periodEnd(
       now,
-      plan?.interval ?? "month",
-      plan?.intervalCount ?? 1,
+      accepted?.snapshot.interval ?? plan?.interval ?? "month",
+      accepted?.snapshot.intervalCount ?? plan?.intervalCount ?? 1,
     );
 
     const [resumed] = await ctx.tx
@@ -1229,7 +1236,8 @@ export const cancelSubscription = defineService({
       .select({ cancelBehaviour: plans.cancelBehaviour })
       .from(plans)
       .where(eq(plans.id, subscription.planId));
-    const atOnce = subscription.signupPending || (input.immediately ?? plan?.cancelBehaviour === "immediate");
+    const accepted = await originalMerchantTerms(ctx, subscription);
+    const atOnce = subscription.signupPending || (input.immediately ?? (accepted?.snapshot.cancelBehaviour ?? plan?.cancelBehaviour) === "immediate");
     const now = new Date();
 
     const [cancelled] = await ctx.tx
@@ -1724,7 +1732,7 @@ registerContactReference({
 // invoice's problem rather than this table's.
 registerContactPrivacySource({
   scope: "subscriptions.agreements",
-  tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts"],
+  tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms"],
   retentionScopes: ["commerce.money"],
   exportData: async (tx: Tx, contactId: string) => {
     const rows = await tx
@@ -1752,7 +1760,11 @@ registerContactPrivacySource({
     for (const charge of charges) {
       const group = byAgreement.get(charge.subscriptionId) ?? []; group.push(charge); byAgreement.set(charge.subscriptionId, group);
     }
-    return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [] }));
+    const accepted = rows.length ? await tx.select({ subscriptionId: subscriptionCommercialTerms.subscriptionId, revision: subscriptionCommercialTerms.revision,
+      snapshot: subscriptionCommercialTerms.snapshot, taxDestination: subscriptionCommercialTerms.taxDestination, acceptedAt: subscriptionCommercialTerms.acceptedAt,
+      effectivePeriodStart: subscriptionCommercialTerms.effectivePeriodStart, noticeSnapshot: subscriptionCommercialTerms.noticeSnapshot })
+      .from(subscriptionCommercialTerms).where(inArray(subscriptionCommercialTerms.subscriptionId, rows.map(row => row.id))).orderBy(subscriptionCommercialTerms.revision) : [];
+    return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [], acceptedCommercialTerms: accepted.filter(value => value.subscriptionId === row.id) }));
   },
   erase: async (tx: Tx, contactId: string) => {
     // Local status cannot prove an external provider schedule has stopped.
@@ -1775,6 +1787,9 @@ registerContactPrivacySource({
       await tx.execute(sql`select set_config('freeholder.subscription_scope_v1','1',true)`);
       await tx.update(subscriptionMerchantScopes).set({ taxDestination: null, redactedAt: new Date() })
         .where(and(inArray(subscriptionMerchantScopes.subscriptionId, cleared.map(row => row.id)), sql`${subscriptionMerchantScopes.redactedAt} is null`));
+      await tx.execute(sql`select set_config('freeholder.subscription_terms_v1','1',true),set_config('freeholder.subscription_terms_privacy_v1','1',true)`);
+      await tx.update(subscriptionCommercialTerms).set({ taxDestination: null, redactedAt: new Date() })
+        .where(and(inArray(subscriptionCommercialTerms.subscriptionId, cleared.map(row => row.id)), sql`${subscriptionCommercialTerms.redactedAt} is null`));
     }
     return { affected: cleared.length };
   },
@@ -1817,6 +1832,8 @@ import providerChargeReceiptServices from "./provider-charge-receipts";
 
 export default [
   ...marketPolicyServices,
+  ...merchantTermsQuoteServices,
+  ...merchantTermsStoreServices,
   ...publicMembershipServices,
   ...setupErasureServices,
   ...setupDispatchServices,

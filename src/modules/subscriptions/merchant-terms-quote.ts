@@ -36,6 +36,8 @@ export const merchantTermsQuoteOutput = z.object({ planId: z.uuid(), contactId: 
   quoteOccurredAt: z.date(), quoteDigest: z.string().regex(/^[a-f0-9]{64}$/), noticeDigest: z.string().regex(/^[a-f0-9]{64}$/),
   noticeSnapshot: z.object({ locale: z.enum(["en", "es", "fr", "ar"]), text: z.string().min(1) }),
 }).nullable();
+export const publicMerchantTermsQuote = merchantTermsQuoteOutput.unwrap().pick({ planId: true, snapshot: true, issuer: true,
+  initialTaxQuote: true, firstPeriodTaxQuote: true, renewalTaxQuote: true, quoteDigest: true, noticeDigest: true, noticeSnapshot: true }).nullable();
 
 /** Internal quote contains private routing. Customer projections must select
  * only public supplier details, commercial amounts and opaque consent digests. */
@@ -76,7 +78,7 @@ export const quoteOriginalMerchantTerms = defineService({
     let hasSavedMethod = false;
     if (input.paymentMethodId && snapshot.billingMode !== "manual") {
       const [method] = await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, input.paymentMethodId)).limit(1);
-      if (!method || method.contactId !== input.contactId || method.status !== "active" || method.provider !== "stripe"
+      if (!method || method.contactId !== input.contactId || method.status !== "active" || method.provider !== "stripe" || method.consentSource !== "provider_checkout"
         || method.providerPlatformAccountId !== route.providerPlatformAccountId || method.providerAccountId !== (route.chargeAccountId ?? "")) throw new ServiceError("conflict", "The saved method does not belong to this buyer's original platform and charge account.");
       hasSavedMethod = true;
     }
@@ -104,4 +106,9 @@ export const quoteOriginalMerchantTerms = defineService({
       initialTaxQuote, firstPeriodTaxQuote, renewalTaxQuote, quoteOccurredAt: occurredAt, quoteDigest, noticeDigest, noticeSnapshot };
   },
 });
-export default [quoteOriginalMerchantTerms];
+export const quoteNewAgreement = defineService({
+  name: "subscriptions.quoteNewAgreement", summary: "Review a new agreement's actual commercial quote before accepting it for the selected contact.",
+  kind: "query", permission: "scoped", input: merchantTermsQuoteInput, output: publicMerchantTermsQuote,
+  handler: async (input, ctx) => publicMerchantTermsQuote.parse(await ctx.callAsSystem(quoteOriginalMerchantTerms, input)),
+});
+export default [quoteOriginalMerchantTerms, quoteNewAgreement];

@@ -38,6 +38,8 @@ export const freezeOriginalMerchantTerms = defineService({
       productVariantId: parent.productVariantId, currency: parent.currency, taxDestination: original.taxDestination,
       paymentMethodId: parent.paymentMethodId ?? undefined, deferFirstPayment: input.deferFirstPayment, locale: input.locale });
     if (!quote || quote.quoteDigest !== input.acceptedQuoteDigest) throw new ServiceError("conflict", "The original price, tax policy or billing notice changed. Review the exact quote again.");
+    if (quote.snapshot.productVariantId !== parent.productVariantId || quote.snapshot.billingMode !== parent.billingMode
+      || quote.snapshot.setupFeeMinor !== parent.acceptedSetupFeeMinor) throw new ServiceError("conflict", "The original variant, billing method or setup obligation differs from the reviewed agreement.");
     if (quote.profile.profileId !== original.taxProfileId || quote.profile.profileVersion !== original.taxProfileVersion || quote.profile.liability !== original.taxLiability
       || quote.route.collectionKind !== original.collectionKind || quote.route.providerPlatformAccountId !== original.providerPlatformAccountId
       || quote.route.chargeAccountId !== original.chargeAccountId || quote.route.recipientAccountId !== original.recipientAccountId
