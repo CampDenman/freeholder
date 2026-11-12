@@ -87,15 +87,19 @@ export function createS3Store(environment, prefix, { allowInsecureHttp = false, 
   };
 }
 
-async function createReplitStore(environment, prefix) {
+export async function createReplitStore(environment, prefix) {
   const bucketId = required(environment, `${prefix}_REPLIT_BUCKET_ID`);
   const { Client } = await import("@replit/object-storage");
   const client = new Client({ bucketId });
   return {
     async get(key) {
       const result = await client.downloadAsBytes(key);
-      if (!result.ok || !result.value?.length) return undefined;
-      return new Uint8Array(result.value[0]);
+      if (!result.ok) {
+        if (result.error?.statusCode === 404) return undefined;
+        throw new Error(`${prefix}: GET ${key} failed (${result.error?.statusCode ?? "unclassified"}).`);
+      }
+      if (!result.value) throw new Error(`${prefix}: GET ${key} omitted its successful result.`);
+      return new Uint8Array(Buffer.concat(result.value));
     },
     async put(key, bytes) {
       const result = await client.uploadFromBytes(key, Buffer.from(bytes));
