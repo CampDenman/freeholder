@@ -123,5 +123,22 @@ reader rollback deletes only unheld rows. Public comment reads veto active or
 acknowledged erasure without changing the privately held original moderation
 state. Rollback records and displays retained private pages, including graph
 child aggregation. The exact three after controls passed in 25.03 seconds;
-focused lint and full typecheck also passed. These are staged local proofs,
-not the still-required complete regression or contiguous migration rehearsal.
+focused lint and full typecheck also passed.
+
+The combined v2 source run now passes all 14 reader controls in 90.28 seconds.
+Live SDK generation passed all eight controls (3.24 seconds), and the exact
+search/retention contact-FK inventory checks both passed (36.91 seconds; 27
+unrelated cases deliberately filtered). Repository-wide types and lint,
+license headers and the plan gate passed. Production build and artifact scrub
+passed on local Node 24: 20,608 files and 248,233,314 bytes, with no source or
+environment leakage. Final protected Node 22 qualification remains required.
+
+Actual production owner journeys passed for Spanish, French and Arabic in the
+first browser run (55.3 seconds). English reached its successful HTTP 200 form
+redirect, but its fixture raced reading a response body discarded on navigation.
+The fixture now checks the actual status and durable receipt; the exact English
+repeat passed in 25.5 seconds. All four locales have real keyboard assignment,
+320px layout, light/dark Axe checks, actual comment commit, original owner audit
+and private-field omission evidence. These staged proofs do not claim the
+complete legacy-source regression, 73–78 upgrade rehearsal, provider acceptance
+or independent review.
