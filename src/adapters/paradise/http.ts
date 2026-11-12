@@ -15,7 +15,7 @@
 // wherever it pointed. A public playground never calls out at all.
 import { env } from "@/core/env";
 import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy";
-import { paradiseSite } from "./config";
+import { paradiseSite, type ParadiseSite } from "./config";
 
 const MAX_RESPONSE_BYTES = 256 * 1024;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -141,7 +141,7 @@ function machineCode(body: unknown): string | undefined {
  */
 export async function paradiseRequest<T>(
   path: string,
-  init: { method?: "GET" | "POST" | "PATCH"; body?: unknown; timeoutMs?: number; query?: Record<string, string> } = {},
+  init: { method?: "GET" | "POST" | "PATCH"; body?: unknown; timeoutMs?: number; query?: Record<string, string>; site?: ParadiseSite } = {},
 ): Promise<ParadiseResponse<T>> {
   if (playgroundBlocksExternalDelivery(env())) {
     // Matches mail, SMS and webhooks: a public playground fails closed.
@@ -152,7 +152,7 @@ export async function paradiseRequest<T>(
       "playground",
     );
   }
-  const site = paradiseSite();
+  const site = init.site ?? paradiseSite();
   if (!site.apiKey) {
     throw new ParadiseRequestError("PARADISEMODERN_API_KEY is not set.", 0, false, "not_configured");
   }

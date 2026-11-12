@@ -8792,5 +8792,20 @@
   "privacy.retention.mediaStorageOperations": "Original storage operations",
   "audit.privacy.reopenErasureJob": "Reopened an erasure after new source evidence",
   "media.recovery.originalKey": "Original object key from verified provider evidence",
-  "audit.media.retireOwnedAssetsForErasure": "Retired original subject-owned library assets for verified erasure"
+  "audit.media.retireOwnedAssetsForErasure": "Retired original subject-owned library assets for verified erasure",
+  "mail.carrier.title": "Review carrier consent and withdrawals",
+  "mail.carrier.intro": "Review each request at the original carrier. Confirm final withdrawal only with the provider’s exact final record and proof that its callers have stopped. A refusal or missing reply leaves the grant pending.",
+  "mail.carrier.empty": "No carrier grants await review.",
+  "mail.carrier.legacy": "The original carrier account was not retained. Today’s configured account does not prove where this grant was recorded.",
+  "mail.carrier.pending": "This original withdrawal needs review. It will not be repeated automatically.",
+  "mail.carrier.confirm": "I verified that the original carrier holds no active marketing grant for this address and every original caller has stopped.",
+  "mail.carrier.record": "Record verified withdrawal",
+  "mail.carrier.activityConfirmed": "An original carrier withdrawal was independently verified",
+  "mail.carrier.kind.send": "Send",
+  "mail.carrier.kind.consent": "Consent recording",
+  "mail.carrier.kind.withdraw": "Withdrawal",
+  "mail.carrier.state.running": "Caller not yet settled",
+  "mail.carrier.state.confirmed": "Positive provider reply observed",
+  "mail.carrier.state.refused": "Provider refusal observed",
+  "mail.carrier.state.unknown": "Provider outcome unknown"
 }

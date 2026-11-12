@@ -95,7 +95,7 @@ export const retryReconciledMail = defineService({
   },
 });
 
-const route = dispatchRouteSchema.omit({ authorizationDigest: true });
+const route = dispatchRouteSchema.omit({ authorizationDigest: true, carrierResourceDigest: true });
 export const listMailDispatchRecovery = defineService({
   name: "mail.listDispatchRecovery", summary: "Inspect original mail routes and incomplete physical outcomes for fresh human review.",
   kind: "query", permission: "scoped", agentCallable: false, stepUp: true,

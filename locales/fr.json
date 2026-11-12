@@ -8792,5 +8792,20 @@
   "privacy.retention.mediaStorageOperations": "Opérations de stockage initiales",
   "audit.privacy.reopenErasureJob": "A rouvert un effacement après de nouvelles preuves de la source",
   "media.recovery.originalKey": "Clé initiale de l’objet issue des preuves vérifiées du fournisseur",
-  "audit.media.retireOwnedAssetsForErasure": "Retrait des médias du sujet initial pour un effacement vérifié"
+  "audit.media.retireOwnedAssetsForErasure": "Retrait des médias du sujet initial pour un effacement vérifié",
+  "mail.carrier.title": "Vérifier les consentements et retraits du prestataire",
+  "mail.carrier.intro": "Vérifiez chaque demande auprès du prestataire d’origine. Confirmez le retrait définitif uniquement avec son enregistrement final exact et la preuve de l’arrêt des processus concernés. Un refus ou une réponse perdue laisse le consentement en attente.",
+  "mail.carrier.empty": "Aucun consentement du prestataire ne nécessite de vérification.",
+  "mail.carrier.legacy": "Le compte du prestataire d’origine n’a pas été conservé. Le compte configuré aujourd’hui ne prouve pas où ce consentement a été enregistré.",
+  "mail.carrier.pending": "Ce retrait d’origine nécessite une vérification. Il ne sera pas répété automatiquement.",
+  "mail.carrier.confirm": "J’ai vérifié que le prestataire d’origine ne conserve aucun consentement marketing actif pour cette adresse et que tous les processus d’origine sont arrêtés.",
+  "mail.carrier.record": "Enregistrer le retrait vérifié",
+  "mail.carrier.activityConfirmed": "Un retrait auprès du prestataire d’origine a été vérifié indépendamment",
+  "mail.carrier.kind.send": "Envoi",
+  "mail.carrier.kind.consent": "Enregistrement du consentement",
+  "mail.carrier.kind.withdraw": "Retrait",
+  "mail.carrier.state.running": "Processus pas encore résolu",
+  "mail.carrier.state.confirmed": "Réponse positive du prestataire observée",
+  "mail.carrier.state.refused": "Refus du prestataire observé",
+  "mail.carrier.state.unknown": "Résultat du prestataire inconnu"
 }

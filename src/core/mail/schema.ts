@@ -293,12 +293,20 @@ export const mailDispatchRequests = pgTable("mail_dispatch_requests", {
 ]);
 
 /** A reserved call remains unknown until its own positive outcome is proved. */
+export type CarrierOperation = {
+  id: string; kind: "send" | "consent" | "withdraw"; key: string;
+  resourceDigest: string; payloadDigest: string; coveredGrantIds?: string[];
+  state: "running" | "confirmed" | "refused" | "unknown";
+  httpStatus?: number; providerCode?: string; responseDigest?: string;
+};
+
 export const mailDispatches = pgTable("mail_dispatches", {
   id: uuid("id").primaryKey().defaultRandom(),
   deliveryId: uuid("delivery_id").notNull().references(() => mailDeliveries.id, { onDelete: "restrict" }),
   routeDigest: text("route_digest").notNull(),
   payloadDigest: text("payload_digest").notNull(),
   attempt: integer("attempt").notNull(),
+  carrierOperations: jsonb("carrier_operations").$type<CarrierOperation[]>().notNull().default([]),
   state: text("state", { enum: ["running", "unknown", "submitted", "not_submitted"] }).notNull(),
   providerRef: text("provider_ref"),
   replyProviderRef: text("reply_provider_ref"),
@@ -489,12 +497,15 @@ export const mailProviderGrants = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     provider: text("provider", { enum: ["paradise"] }).notNull(),
-    email: text("email").notNull(),
+    email: text("original_email").notNull(),
+    emailDigest: text("email_digest"),
+    redactedAt: timestamp("redacted_at", { withTimezone: true }),
     /**
      * Null once the contact is gone: erasure detaches it on purpose, and
      * deleting a contact sets it null through the consent record's cascade.
-     * A detached grant is withdrawn at the carrier and then deleted
-     * (`withdrawDetachedGrants`), never silently dropped.
+     * A detached grant is withdrawn at the carrier and then its address
+     * is minimized (`withdrawDetachedGrants`). Minimal original operation
+     * receipts remain, including late replies, without restoring erased PII.
      */
     consentRecordId: uuid("consent_record_id").references(() => consentRecords.id, {
       onDelete: "set null",
@@ -502,14 +513,22 @@ export const mailProviderGrants = pgTable(
     /** Set when an erasure detached this grant: the receipt waits on it. */
     erasureRequestId: uuid("erasure_request_id"),
     erasureJobId: uuid("erasure_job_id"),
+    /** Never backfilled for legacy grants: today's account cannot prove yesterday's resource. */
+    revision: integer("revision").notNull().default(0),
+    reviewDigest: text("review_digest"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    resourceDigest: text("resource_digest"),
+    resourceBaseUrl: text("resource_base_url"),
+    carrierOperations: jsonb("carrier_operations").$type<CarrierOperation[]>().notNull().default([]),
     withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
-    /** A permanent refusal of the withdrawal, recorded once rather than retried forever. */
+    /** Refusal or uncertainty is pending recovery, never successful withdrawal. */
     withdrawalError: text("withdrawal_error"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
-    uniqueIndex("mail_provider_grants_unique_idx").on(t.provider, t.email, t.consentRecordId),
+    uniqueIndex("mail_provider_grants_unique_idx").on(t.provider, t.email, t.consentRecordId, t.resourceDigest),
     index("mail_provider_grants_consent_idx").on(t.consentRecordId),
     index("mail_provider_grants_detached_idx").on(t.id).where(sql`${t.consentRecordId} is null`),
     check("mail_provider_grants_provider_allowed", sql`${t.provider} in ('paradise')`),

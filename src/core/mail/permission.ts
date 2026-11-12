@@ -22,13 +22,20 @@
 //   contact whose email has changed since is withdrawn where the carrier
 //   actually holds them.
 import { isIP } from "node:net";
+import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
-import { MailAdapterError, type MarketingConsentEvidence } from "@/adapters/mail/types";
+import { type MarketingConsentEvidence } from "@/adapters/mail/types";
 import { db } from "@/core/db";
-import type { Tx } from "@/core/service";
+import { ServiceError, type Tx } from "@/core/service";
+import { assertParadiseWithdrawalReply } from "@/adapters/mail/paradise";
+import { paradiseSite } from "@/adapters/paradise/config";
+import { paradiseRequest } from "@/adapters/paradise/http";
+import { carrierResource, carrierOperationOutcome, lockCarrierAddress } from "./carrier-operations";
+import { minimizeCarrierGrants } from "./carrier-retention";
+import { mailReceipts } from "./receipts";
 import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy";
 import { env } from "@/core/env";
-import { mailProviderGrants } from "@/core/mail/schema";
+import { mailProviderGrants, type CarrierOperation } from "@/core/mail/schema";
 import { consentRecords } from "@/core/privacy/schema";
 
 type ConsentRecord = typeof consentRecords.$inferSelect;
@@ -114,93 +121,83 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Remember a grant a carrier recorded while sending, from its evidence
- * reference. Called inside the transaction that records the send's outcome,
- * so the two are saved together or not at all.
+ * reference. An explicit original-resource binding may accompany a new
+ * observation; omitted historical provenance remains missing. Production
+ * Paradise sends reserve the grant before HTTP in carrier-operations.ts.
  */
 export async function rememberProviderGrant(
   executor: Pick<Tx, "insert">,
   provider: string,
-  grant: { email: string; evidenceRef: string },
+  grant: { email: string; evidenceRef: string; resourceDigest?: string; resourceBaseUrl?: string },
 ): Promise<void> {
   if (provider !== "paradise" || !grant.evidenceRef.startsWith(EVIDENCE_PREFIX)) return;
   const consentRecordId = grant.evidenceRef.slice(EVIDENCE_PREFIX.length);
   if (!UUID.test(consentRecordId)) return;
   await executor
     .insert(mailProviderGrants)
-    .values({ provider, email: grant.email.trim().toLowerCase(), consentRecordId })
+    .values({ provider, email: grant.email.trim().toLowerCase(), consentRecordId, resourceDigest: grant.resourceDigest, resourceBaseUrl: grant.resourceBaseUrl })
     .onConflictDoNothing();
 }
 
-type GrantRow = { id: string; email: string };
-
-type Withdrawer = { recordWithdrawal: (email: string) => Promise<void> };
-
-/**
- * Who can withdraw a grant held by Paradise Modern: its mail adapter,
- * whenever the site's Paradise credentials are configured — whichever adapter
- * is the campaign carrier today, since a grant recorded there stays there
- * after the owner switches carriers. "playground" when this instance may not
- * contact any provider; null when there are no credentials to do it with.
- */
-async function grantWithdrawer(): Promise<Withdrawer | "playground" | null> {
-  const current = env();
-  if (playgroundBlocksExternalDelivery(current)) return "playground";
-  if (!current.PARADISEMODERN_API_KEY) return null;
-  const { createParadiseMail } = await import("@/adapters/mail/paradise");
-  const adapter = createParadiseMail({ kind: "bulk", topic: current.PARADISEMODERN_MAIL_TOPIC ?? "newsletter" });
-  return { recordWithdrawal: (email) => adapter.recordWithdrawal!(email) };
-}
-
-/** Detached grants still waiting for the carrier to be told (doctor, C3.31). */
+/** Detached grants remain pending until a positive original-resource withdrawal. */
 export async function grantsAwaitingWithdrawal(): Promise<number> {
-  const [row] = await db()
-    .select({ count: sql<number>`count(*)::int` })
-    .from(mailProviderGrants)
-    .where(
-      and(
-        isNull(mailProviderGrants.consentRecordId),
-        isNull(mailProviderGrants.withdrawnAt),
-        isNull(mailProviderGrants.withdrawalError),
-      ),
-    );
+  const [row] = await db().select({ count: sql<number>`count(*)::int` }).from(mailProviderGrants).where(and(sql`(${mailProviderGrants.consentRecordId} is null or ${mailProviderGrants.withdrawalError} is not null)`, isNull(mailProviderGrants.withdrawnAt)));
   return row?.count ?? 0;
 }
 
-/**
- * Withdraw these grants at the carrier, one call per address. A transient
- * failure throws (the caller retries). A permanent refusal is logged once
- * and reported as `refused` so the caller can record it rather than retry it.
- */
-async function withdrawAddresses(
-  carrier: { recordWithdrawal: (email: string) => Promise<void> },
-  grants: readonly GrantRow[],
-): Promise<Map<string, { refused?: string }>> {
-  const outcome = new Map<string, { refused?: string }>();
-  for (const email of new Set(grants.map((grant) => grant.email))) {
-    try {
-      await carrier.recordWithdrawal(email);
-      outcome.set(email, {});
-    } catch (error) {
-      if (!(error instanceof MailAdapterError) || error.retryable) throw error;
-      console.warn(
-        `[mail] The campaign carrier refused to record a marketing withdrawal (${error.providerCode ?? error.httpStatus ?? "refused"}); Freeholder's own ledger still stops every campaign to this address.`,
-      );
-      outcome.set(email, { refused: error.message.slice(0, 500) });
-    }
-  }
-  return outcome;
+/** One physical withdrawal. Neither errors nor elapsed time authorize another. */
+async function withdrawGrant(grantId: string): Promise<boolean> {
+  const site = paradiseSite(), id = randomUUID();
+  let email = "", coveredIds: string[] = [];
+  const claimed = await db().transaction(async tx => {
+    const resource = await carrierResource(tx, site), receipts = await mailReceipts(tx);
+    const [original] = await tx.select().from(mailProviderGrants).where(eq(mailProviderGrants.id, grantId));
+    if (!original) return "missing";
+    await lockCarrierAddress(tx, resource.resourceDigest, original.email);
+    const [grant] = await tx.select().from(mailProviderGrants).where(eq(mailProviderGrants.id, grantId)).for("update");
+    if (!grant) return "missing";
+    if (grant.withdrawnAt) return "done";
+    if (!grant.resourceDigest || !grant.resourceBaseUrl || grant.resourceDigest !== resource.resourceDigest || grant.resourceBaseUrl !== site.baseUrl) throw new ServiceError("conflict", "The original carrier account is unavailable or unproven. Restore and review the original resource; a replacement account cannot withdraw its grants.");
+    // Reserve the complete currently known set, not grants created later.
+    // An uncertain physical request on one sibling blocks automatic repeats
+    // through another grant row for this same original provider resource.
+    const related = await tx.select().from(mailProviderGrants).where(and(eq(mailProviderGrants.provider, "paradise"), eq(mailProviderGrants.email, grant.email), eq(mailProviderGrants.resourceDigest, resource.resourceDigest), isNull(mailProviderGrants.withdrawnAt))).orderBy(mailProviderGrants.id).for("update");
+    if (related.some(row => row.carrierOperations.some(op => op.kind === "consent" && op.state === "running"))) throw new ServiceError("conflict", "The original carrier consent caller is still running. Its withdrawal waits for that exact outcome.");
+    if (related.some(row => row.carrierOperations.some(op => op.kind === "withdraw" || op.state === "running" || op.state === "unknown"))) return "pending";
+    email = grant.email; coveredIds = related.map(row => row.id);
+    const operation: CarrierOperation = { id, kind: "withdraw", key: "withdraw", resourceDigest: resource.resourceDigest, payloadDigest: receipts.digest("dispatch-payload", JSON.stringify({ email })), coveredGrantIds: coveredIds, state: "running" };
+    for (const row of related) await tx.update(mailProviderGrants).set({ carrierOperations: [...row.carrierOperations, operation], updatedAt: new Date() }).where(eq(mailProviderGrants.id, row.id));
+    return "claimed";
+  });
+  if (claimed === "done") return true;
+  if (claimed !== "claimed") return false;
+  let outcome: Pick<CarrierOperation, "state" | "httpStatus" | "providerCode">;
+  let reply: unknown;
+  try {
+    const response = await paradiseRequest("/api/site-self/email/consent/withdraw", { body: { email }, site });
+    assertParadiseWithdrawalReply(response);
+    reply = response;
+    outcome = { state: "confirmed", httpStatus: response.status };
+  } catch (error) { outcome = carrierOperationOutcome(error); }
+  await db().transaction(async tx => {
+    await carrierResource(tx, site);
+    const receipts = await mailReceipts(tx);
+    const grants = await tx.select().from(mailProviderGrants).where(inArray(mailProviderGrants.id, coveredIds)).orderBy(mailProviderGrants.id).for("update");
+    if (grants.length !== coveredIds.length) throw new ServiceError("conflict", "Restore the original carrier grant witnesses.");
+    const completed = outcome.state === "confirmed";
+    for (const grant of grants) await tx.update(mailProviderGrants).set({ carrierOperations: grant.carrierOperations.map(op => op.id === id ? { ...op, ...outcome, ...(reply !== undefined ? { responseDigest: receipts.digest("dispatch-resolution", JSON.stringify(reply)) } : {}) } : op), ...(!grant.withdrawnAt ? completed ? { withdrawnAt: new Date(), withdrawalError: null } : { withdrawalError: `Original carrier withdrawal ${outcome.state}; review this exact operation before any replacement.` } : {}), updatedAt: new Date() }).where(eq(mailProviderGrants.id, grant.id));
+  });
+  return outcome.state === "confirmed";
 }
 
 /**
  * Mirror a marketing-email withdrawal to the configured campaign carrier,
  * for every grant Freeholder recorded there for this contact.
  *
- * An outbox listener. A transient failure throws, and the outbox retries it
- * with backoff, so a provider outage delays the mirror without losing it. A
- * permanent refusal is recorded on the grant and logged once, never retried
- * into a dead letter; the public playground skips it silently. Freeholder's
- * own ledger already stops the next campaign either way — the delivery
- * worker rechecks consent immediately before every send.
+ * An outbox listener. Each HTTP call is claimed once. A refusal or lost
+ * reply stays pending for original-provider review, never an automatic
+ * repeat or a completed erasure. Freeholder's ledger stops campaigns and the
+ * delivery worker rechecks consent immediately before every send.
  */
 export async function mirrorMarketingWithdrawal(payload: unknown): Promise<void> {
   const event = (payload ?? {}) as {
@@ -213,44 +210,23 @@ export async function mirrorMarketingWithdrawal(payload: unknown): Promise<void>
   // A denial was never a grant, so the carrier holds nothing to withdraw.
   if (event.state !== "withdrawn") return;
   if (!event.contactId) return;
-  const carrier = await grantWithdrawer();
-  // Nothing to tell, or no way to tell it: the grant stays open, so a later
-  // withdrawal (or erasure) can still reach the carrier once it can.
-  if (!carrier || carrier === "playground") return;
-  const grants = await db()
-    .select({ id: mailProviderGrants.id, email: mailProviderGrants.email })
-    .from(mailProviderGrants)
-    .innerJoin(consentRecords, eq(consentRecords.id, mailProviderGrants.consentRecordId))
-    .where(
-      and(
-        eq(consentRecords.contactId, event.contactId),
-        eq(mailProviderGrants.provider, "paradise"),
-        isNull(mailProviderGrants.withdrawnAt),
-        isNull(mailProviderGrants.withdrawalError),
-      ),
-    );
-  const outcome = await withdrawAddresses(carrier, grants);
-  for (const grant of grants) {
-    const refused = outcome.get(grant.email)?.refused;
-    await db()
-      .update(mailProviderGrants)
-      .set(refused ? { withdrawalError: refused, updatedAt: new Date() } : { withdrawnAt: new Date(), updatedAt: new Date() })
-      .where(eq(mailProviderGrants.id, grant.id));
-  }
+  if (playgroundBlocksExternalDelivery(env()) || !env().PARADISEMODERN_API_KEY) return;
+  const grants = await db().select({ id: mailProviderGrants.id }).from(mailProviderGrants).innerJoin(consentRecords, eq(consentRecords.id, mailProviderGrants.consentRecordId)).where(and(eq(consentRecords.contactId, event.contactId), eq(mailProviderGrants.provider, "paradise"), isNull(mailProviderGrants.withdrawnAt)));
+  for (const grant of grants) await withdrawGrant(grant.id);
 }
 
 /**
  * Finish grants whose contact is gone — erased (detached on purpose) or
  * deleted (`consent_record_id` set null by the cascade): withdraw each at the
- * carrier, then delete the row, so the address is kept only as long as the
+ * carrier, then minimize the address, keeping only the original private
+ * operation receipts. The address is kept only as long as the
  * withdrawal needs it. An erasure waiting on these rows is acknowledged once
- * its last row is gone.
+ * its last address is minimized.
  *
  * Never deleted unwithdrawn: on the playground nothing is touched, and with
  * no Paradise credentials the rows stay (doctor reports them) until the
- * credentials are back and the next sweep finishes them. A transient carrier
- * failure throws for a retry; a permanent refusal is logged and the row is
- * finished.
+ * original credentials are back and the next sweep can attempt them.
+ * Refused, uncertain or unproven-resource grants remain pending for review.
  */
 export async function withdrawDetachedGrants(
   grantIds?: readonly string[],
@@ -269,31 +245,22 @@ export async function withdrawDetachedGrants(
     .where(
       and(
         isNull(mailProviderGrants.consentRecordId),
+        isNull(mailProviderGrants.redactedAt),
         ...(grantIds ? [inArray(mailProviderGrants.id, [...grantIds])] : []),
       ),
     );
   if (grants.length === 0) return { removed: 0, waiting: 0 };
-  const open = grants.filter((grant) => !grant.withdrawnAt && !grant.withdrawalError);
-  let finishable = grants.filter((grant) => grant.withdrawnAt || grant.withdrawalError);
+  const open = grants.filter((grant) => !grant.withdrawnAt);
   let waiting = 0;
-  if (open.length) {
-    const withdrawer = await grantWithdrawer();
-    if (withdrawer === "playground") return { removed: 0, waiting: open.length };
-    if (withdrawer === null) {
-      waiting = open.length;
-      console.warn(
-        `[mail] ${open.length} Paradise Modern marketing grant(s) of deleted or erased contacts await withdrawal; set PARADISEMODERN_API_KEY so Freeholder can tell Paradise Modern and finish.`,
-      );
-    } else {
-      await withdrawAddresses(withdrawer, open);
-      finishable = grants;
-    }
+  const finishable = grants.filter((grant) => grant.withdrawnAt);
+  for (const grant of open) {
+    if (playgroundBlocksExternalDelivery(env()) || !env().PARADISEMODERN_API_KEY) { waiting++; continue; }
+    if (await withdrawGrant(grant.id)) finishable.push(grant);
+    else waiting++;
   }
+  if (waiting && !env().PARADISEMODERN_API_KEY) console.warn(`[mail] ${waiting} original carrier grant(s) await withdrawal. Restore the original account credentials or review their final outcomes.`);
   if (finishable.length === 0) return { removed: 0, waiting };
-  const removed = await db()
-    .delete(mailProviderGrants)
-    .where(inArray(mailProviderGrants.id, finishable.map((grant) => grant.id)))
-    .returning({ id: mailProviderGrants.id });
+  const removed = await db().transaction(tx => minimizeCarrierGrants(tx, finishable.map(grant => grant.id)));
   const erasures = new Map<string, string>();
   for (const grant of finishable) {
     if (grant.erasureRequestId && grant.erasureJobId) erasures.set(grant.erasureRequestId, grant.erasureJobId);
@@ -302,7 +269,7 @@ export async function withdrawDetachedGrants(
     const [left] = await db()
       .select({ id: mailProviderGrants.id })
       .from(mailProviderGrants)
-      .where(eq(mailProviderGrants.erasureRequestId, requestId))
+      .where(and(eq(mailProviderGrants.erasureRequestId, requestId), isNull(mailProviderGrants.redactedAt)))
       .limit(1);
     if (left) continue;
     const { completeErasureJob } = await import("@/core/privacy/service");
@@ -311,5 +278,5 @@ export async function withdrawDetachedGrants(
       { kind: "system" },
     );
   }
-  return { removed: removed.length, waiting };
+  return { removed, waiting };
 }
