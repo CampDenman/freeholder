@@ -13507,6 +13507,12 @@ whatever is best for the people using the site.
   account. Split from C12.26 on 2026-10-15. This follows Stripe's current
   [charge types](https://docs.stripe.com/connect/charges) and
   [refund/dispute documentation](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes).
+  New subscription provider-origin source work verifies the authenticated
+  original subscription/invoice/PaymentIntent relation on its explicit charge
+  namespace, without inventing an order payment-attempt identifier. Sixteen
+  bounded read-only protocol controls pass; the helper is ready for shared
+  provider observation integration. The new agreement scope, exact tax/fee
+  lifecycle, complete source qualification and actual acceptance remain open.
   Original-order ownership repair 2026-11-11: checkout freezes each purchased
   line's seller and shipping requirement before invoice issue, and seller
   settlement reads that receipt instead of a later catalog edit. The actual
