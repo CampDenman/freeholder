@@ -1,4 +1,5 @@
 ---
+"freeholder": patch
 ---
 
 C1.12/C3.22/C11.08: retain each physical media PUT and DELETE intent when a
