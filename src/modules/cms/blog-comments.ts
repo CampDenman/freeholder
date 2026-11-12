@@ -16,6 +16,9 @@ import { pages } from "./schema";
 import { blogPosts } from "./blog-schema";
 import { blogReaderComments as comments } from "./blog-comments-schema";
 import { isPublicPage, loadBlogSettings } from "./blog-service";
+import { markReaderOwnershipWriter } from "@/core/import/reader-ownership-key";
+import { acceptReaderOwnership, assertOriginalReaderPayload } from "@/core/import/reader-ownership";
+import { importRuns } from "@/core/plugins/schema";
 
 const state = z.enum(["pending", "approved", "spam", "trash"]);
 const privateRow = row({ id: uuid, pageId: uuid, parentId: uuid.nullable(), contactId: uuid.nullable(), authorName: z.string(), body: z.string(), status: state, source: z.string(), externalId: z.string().nullable(), createdAt: timestamp, updatedAt: timestamp });
@@ -23,9 +26,10 @@ const publicRow = z.object({ id: uuid, parentId: uuid.nullable(), authorName: z.
 
 registerContactReference({
   table: "blog_reader_comments",
-  repoint: (tx, duplicateId, survivingId) => tx.update(comments).set({ contactId: survivingId }).where(eq(comments.contactId, duplicateId)),
+  repoint: async (tx, duplicateId, survivingId) => { await markReaderOwnershipWriter(tx); return tx.update(comments).set({ contactId: survivingId }).where(eq(comments.contactId, duplicateId)); },
   captureForUndo: async (tx, duplicateId, survivingId) => ({ state: await tx.select({ id: comments.id, contactId: comments.contactId }).from(comments).where(inArray(comments.contactId, [duplicateId, survivingId])).orderBy(asc(comments.id)), undoable: true }),
   restoreAfterUndo: async (tx, beforeState, afterState, duplicateId) => {
+    await markReaderOwnershipWriter(tx);
     const pointers = z.array(z.object({ id: uuid, contactId: uuid.nullable() }));
     const before = pointers.parse(beforeState), after = pointers.parse(afterState);
     const current = after.length ? await tx.select({ id: comments.id, contactId: comments.contactId }).from(comments).where(inArray(comments.id, after.map(one => one.id))).orderBy(asc(comments.id)) : [];
@@ -38,6 +42,7 @@ registerContactPrivacySource({
   scope: "cms.readerComments", tables: ["blog_reader_comments"], eraseOrder: 20,
   exportData: (tx, contactId) => tx.select().from(comments).where(eq(comments.contactId, contactId)),
   erase: async (tx, contactId) => {
+    await markReaderOwnershipWriter(tx);
     const identity = await contactPrivacyIdentity(tx, contactId);
     const owned = await tx.select({ id: comments.id }).from(comments).where(inArray(comments.contactId, identity.contactIds));
     await tx.update(auditLog).set({ diff: sql`${auditLog.diff} - 'name' - 'email' - 'body' - 'website' - 'sourceContactId'` }).where(and(
@@ -90,6 +95,7 @@ export const moderateReaderComment = defineService({
   name: "cms.moderateReaderComment", summary: "Approve, hold, mark spam or trash a reader comment, keeping the moderation record.",
   kind: "mutation", permission: "scoped", writeClass: "message", input: z.object({ id: uuid, status: state }), output: privateRow,
   handler: async (input, ctx) => {
+    await markReaderOwnershipWriter(ctx.tx);
     const [saved] = await ctx.tx.update(comments).set({ status: input.status, updatedAt: new Date() }).where(eq(comments.id, input.id)).returning();
     if (!saved) throw new ServiceError("not_found", "That comment is gone.");
     ctx.setSubject("blog_comment", saved.id); ctx.queueEvent("cms.readerCommentModerated", { commentId: saved.id, pageId: saved.pageId, status: saved.status }); return saved;
@@ -108,9 +114,14 @@ export const importReaderComment = defineService({
   input: z.object({ runId: uuid, externalId: z.string().min(1).max(200), pageId: uuid, parentId: uuid.nullable().optional(), name: z.string().min(1).max(200), email: z.string().email().nullable(), sourceContactId: uuid.optional(), body: z.string().min(1).max(10000), status: state, createdAt: z.iso.datetime({ offset: true }).optional() }), output: privateRow,
   handler: async (input, ctx) => {
     await lockContactIdentityForRead(ctx.tx);
+    await markReaderOwnershipWriter(ctx.tx);
     const source = `import:${input.runId}`;
     const [prior] = await ctx.tx.select().from(comments).where(and(eq(comments.source, source), eq(comments.externalId, input.externalId))).limit(1);
     if (prior) return prior;
+    const [original] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.runId)).limit(1);
+    const separator = input.externalId.lastIndexOf(":"), postKey = input.externalId.slice(0, separator), commentKey = input.externalId.slice(separator + 1);
+    if (!original || separator < 1 || !commentKey) throw new ServiceError("conflict", "Stage the original reader source before importing this comment.");
+    assertOriginalReaderPayload(original, postKey, commentKey, input);
     const bound = input.sourceContactId ? (await ctx.tx.select({ id: contacts.id, source: contacts.source }).from(contacts).where(eq(contacts.id, input.sourceContactId)).limit(1))[0] : undefined;
     if (bound?.source === "privacy-erasure") throw new ServiceError("conflict", "That reader was erased. Review the original source before importing comments.");
     if (input.sourceContactId && !bound) throw new ServiceError("conflict", "The imported reader's contact changed. Review the source before importing this comment.");
@@ -120,12 +131,13 @@ export const importReaderComment = defineService({
       if (!parent) throw new ServiceError("validation", "The imported parent comment belongs to another post.");
     }
     const [saved] = await ctx.tx.insert(comments).values({ source, externalId: input.externalId, pageId: input.pageId, parentId: input.parentId ?? null, authorName: input.name, body: input.body, status: input.status, contactId: bound?.id ?? resolved?.contact.id ?? null, ...(input.createdAt ? { createdAt: new Date(input.createdAt) } : {}) }).returning();
+    await acceptReaderOwnership(ctx.tx, original, postKey, commentKey, saved!.contactId);
     ctx.setSubject("blog_comment", saved!.id); return saved!;
   },
 });
 export const rollbackImportedReaderComments = defineService({
   name: "cms.rollbackImportedReaderComments", summary: "Remove only the reader comments created by one rolled-back import; unified contacts are retained.",
   kind: "mutation", permission: "scoped", writeClass: "destructive", input: z.object({ runId: uuid }), output: z.object({ removed: z.number().int() }),
-  handler: async (input, ctx) => ({ removed: (await ctx.tx.delete(comments).where(eq(comments.source, `import:${input.runId}`)).returning({ id: comments.id })).length }),
+  handler: async (input, ctx) => { await markReaderOwnershipWriter(ctx.tx); return { removed: (await ctx.tx.delete(comments).where(eq(comments.source, `import:${input.runId}`)).returning({ id: comments.id })).length }; },
 });
 export default [listReaderComments, submitReaderComment, moderateReaderComment, listReaderCommentsForOwner, importReaderComment, rollbackImportedReaderComments];

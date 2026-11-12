@@ -8,18 +8,19 @@ import { mediaObjects } from "@/core/media/schema";
 import { retainedSourceFromRun, retainedSourceChunkKey } from "./retained-source";
 import { IMPORT_SOURCE_ERASURE_JOB } from "./source-erasure";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
-import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { importRuns } from "@/core/plugins/schema";
 import { dataRequests } from "@/core/privacy/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { contactPrivacyIdentity } from "@/core/privacy/contact-identity";
-import { ServiceError, type Tx } from "@/core/service";
+import { ServiceError, type Actor, type Tx } from "@/core/service";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { z } from "zod";
 import { assertImportBatchAccess } from "./batch-context";
 import { invalidateImportGraph } from "./graph-state";
 import { markGraphRunWriter } from "./graph-writer";
+import { bindOwnedReaderSources, type ReaderSourceContext } from "./reader-ownership";
+import { markReaderOwnershipWriter } from "./reader-ownership-key";
 
 type Run = typeof importRuns.$inferSelect;
 type Json = Record<string, unknown>;
@@ -36,20 +37,11 @@ export function stripReaderCopies(preview: unknown): Json {
 }
 
 /** Bind existing readers without creating CRM contacts just to preview a file. */
-export async function bindReaderSources(tx: Tx, preview: unknown): Promise<Json> {
+export async function bindReaderSources(tx: Tx, preview: unknown, source: ReaderSourceContext, actor: Actor): Promise<Json> {
   await lockContactIdentityForRead(tx);
+  await markReaderOwnershipWriter(tx);
   const copy = structuredClone(object(preview));
-  const readers = items(copy.pages).flatMap(page => items(page.readerComments));
-  const addresses = [...new Set(readers.map(comment => email(comment.email)).filter(Boolean))];
-  const known = addresses.length ? await tx.select({ id: contacts.id, email: contacts.email }).from(contacts)
-    .where(inArray(contacts.email, addresses)).for("key share") : [];
-  const byEmail = new Map(known.map(contact => [email(contact.email), contact.id]));
-  for (const comment of readers) {
-    delete comment.contactId;
-    const id = byEmail.get(email(comment.email));
-    if (id) comment.contactId = id;
-  }
-  return copy;
+  return bindOwnedReaderSources(tx, copy, source, actor);
 }
 
 export class ReaderSourceErasureError extends ServiceError {

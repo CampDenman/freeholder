@@ -9,6 +9,7 @@ import { actorString, ServiceError, type Service, type ServiceContext } from "@/
 import { assertCurrentImportAuthority } from "./authority";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { markImportGraphWriter } from "./graph-writer";
+import { markReaderOwnershipWriter } from "./reader-ownership-key";
 import { IMPORT_GRAPH_MEDIA_TOTAL_BYTES } from "./graph-catalog";
 
 export type ImportBatchContext = { rootId: string; childId: string; graphId: string; generation: string; planDigest: string; leaseToken: string; startOrdinal: number; endOrdinal: number; kind: "content" | "media" | "navigation"; operation: "imports.commit" | "imports.reconcile" | "imports.publish" | "imports.rollback" };
@@ -34,6 +35,7 @@ export function assertImportBatchAccess(run: { id: string; checkpoint: unknown }
 
 /** Root before child before media/CMS; never reopen a transaction or actor. */
 export async function lockImportBatchParent(ctx: ServiceContext, childId: string): Promise<void> {
+  await markReaderOwnershipWriter(ctx.tx);
   const context = scope.getStore();
   if (!context || childId !== context.childId) return;
   await assertCurrentImportAuthority(ctx, context.operation);

@@ -196,3 +196,4 @@ export {
 } from "@/core/plugins/schema";
 export { retentionPolicies } from "@/core/retention/schema";
 export * from "./media/erasure-schema";
+export { readerOwnershipKeys, readerOwnershipReceipts, readerOwnershipMergeWitnesses, readerOwnershipMergeItems } from "@/core/import/reader-ownership-schema";
