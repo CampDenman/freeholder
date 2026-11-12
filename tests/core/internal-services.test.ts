@@ -16,6 +16,7 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "catalog.anonymizeSellerOrderReceipts",
   // C3.47: page events rebuild only their own public assistant document.
   "assistant.reindexPage",
   "subscriptions.recordTrialSetupDispatch",
@@ -219,6 +220,7 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "catalog.anonymizeSellerOrderReceipts",
   "catalog.orderInvoiceRevenue",
   "subscriptions.claimTrialCardSetup",
   "subscriptions.applyTrialCardSetup",

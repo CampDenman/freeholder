@@ -195,6 +195,14 @@ export const checkoutCart = defineService({
     if (basket.lines.length === 0) {
       throw new ServiceError("validation", "The cart is empty.");
     }
+    // Keep original ownership and shipping terms stable from admission until
+    // the one invoice and its seller portions commit. Later catalog edits
+    // cannot become the owner of an already purchased line.
+    const originalVariants = await ctx.tx.select({ variantId: productVariants.id, sellerUserId: products.sellerUserId, requiresShipping: productVariants.requiresShipping })
+      .from(productVariants).innerJoin(products, eq(products.id, productVariants.productId))
+      .where(inArray(productVariants.id, basket.lines.map(line => line.variantId)))
+      .orderBy(productVariants.id).for("share");
+    if (originalVariants.length !== new Set(basket.lines.map(line => line.variantId)).size || basket.lines.some(line => originalVariants.find(variant => variant.variantId === line.variantId)?.requiresShipping !== line.requiresShipping)) throw new ServiceError("conflict", "The original checkout items changed. Refresh the cart before purchasing.");
     // §44.8: member listings sell only when their sellers can be paid.
     await assertSellable(ctx, basket.lines.map((line) => line.variantId));
     if (!basket.allPriced) {
@@ -333,7 +341,7 @@ export const checkoutCart = defineService({
         quantity: line.quantity,
         unitAmountMinor: line.unitAmountMinor!,
         lineTotalMinor: line.lineTotalMinor!,
-        snapshot: { sku: line.sku, productName: line.productName, requiresShipping: line.requiresShipping },
+        snapshot: { sku: line.sku, productName: line.productName, requiresShipping: line.requiresShipping, sellerUserId: originalVariants.find(variant => variant.variantId === line.variantId)!.sellerUserId },
         // Provenance survives checkout, or it was never provenance: the
         // owner has to know which gallery and which frame an order line is
         // for long after the cart is gone.

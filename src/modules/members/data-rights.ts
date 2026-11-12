@@ -34,6 +34,7 @@ import { dropFromCalls } from "./call-seats";
 import { lockMemberProfiles, lockMemberConversations } from "./authority-locks";
 import { applyMemberStatus } from "./status";
 import { products } from "@/modules/catalog/schema";
+import { anonymizeSellerOrderReceipts } from "@/modules/catalog/market";
 import { assets } from "@/core/media/schema";
 import { openMessage, sealMessage } from "./message-crypto";
 import {
@@ -131,7 +132,7 @@ async function exportMember(tx: Tx, userId: string) {
   };
 }
 
-async function eraseMember(tx: Tx, userId: string, service?: ServiceContext): Promise<number> {
+async function eraseMember(tx: Tx, userId: string, service: ServiceContext): Promise<number> {
   if (service && service.tx !== tx) throw new ServiceError("internal", "The privacy transaction does not match its service context.");
   await lockMemberProfiles(tx, [userId], "update");
   const conversationIds = await lockMemberConversations(tx, userId);
@@ -179,6 +180,7 @@ async function eraseMember(tx: Tx, userId: string, service?: ServiceContext): Pr
 
   // Sales records are the site's books: keep them, anonymously.
   const placeholder = await erasedMember(tx);
+  affected += (await service.callAsSystem(anonymizeSellerOrderReceipts, { sellerUserId: userId, anonymousSellerUserId: placeholder })).affected;
   const theirWords = await tx.select({ id: memberSaleMessages.id }).from(memberSaleMessages).where(eq(memberSaleMessages.authorUserId, userId));
   for (const m of theirWords) {
     await tx.update(memberSaleMessages).set({ bodySealed: sealMessage("", m.id), authorUserId: null }).where(eq(memberSaleMessages.id, m.id));
@@ -279,6 +281,8 @@ registerContactPrivacySource({
   },
   erase: async (tx, contactId, context) => {
     const userId = await loginOf(tx, contactId);
-    return { affected: userId ? await eraseMember(tx, userId, context.service) : 0 };
+    if (!userId) return { affected: 0 };
+    if (!context.service) throw new ServiceError("internal", "Member erasure requires its shared privacy service context.");
+    return { affected: await eraseMember(tx, userId, context.service) };
   },
 });

@@ -138,11 +138,20 @@ export const orderSellers = defineService({
         name: products.name,
         quantity: orderItems.quantity,
         requiresShipping: productVariants.requiresShipping,
+        snapshot: orderItems.snapshot,
       })
       .from(orderItems)
       .innerJoin(productVariants, eq(productVariants.id, orderItems.variantId))
       .innerJoin(products, eq(products.id, productVariants.productId))
       .where(eq(orderItems.orderId, order.id));
+    const originalLines = lines.map(line => {
+      const original = z.object({ sellerUserId: uuid.nullable(), requiresShipping: z.boolean() }).safeParse(line.snapshot);
+      if (Object.hasOwn(line.snapshot, "sellerUserId") && !original.success) throw new ServiceError("conflict", "The purchased line's original seller and shipping terms need reconciliation.");
+      // Historical orders predate this receipt. Preserve their existing
+      // behavior; a new portion capture below never guesses their ownership.
+      const { snapshot: _snapshot, ...current } = line;
+      return original.success ? { ...current, sellerUserId: original.data.sellerUserId, requiresShipping: original.data.requiresShipping } : current;
+    });
     return {
       orderId: order.id,
       invoiceId: order.invoiceId,
@@ -150,8 +159,8 @@ export const orderSellers = defineService({
       currency: order.currency,
       status: order.status,
       createdAt: order.createdAt,
-      containsSiteItems: lines.some(line => line.sellerUserId === null),
-      lines: lines.filter(line => line.sellerUserId !== null).map((l) => ({ ...l, sellerUserId: l.sellerUserId! })),
+      containsSiteItems: originalLines.some(line => line.sellerUserId === null),
+      lines: originalLines.filter(line => line.sellerUserId !== null).map((l) => ({ ...l, sellerUserId: l.sellerUserId! })),
     };
   },
 });
@@ -179,6 +188,17 @@ export const orderInvoiceRevenue = defineService({
       used.add(original.id);
       return{orderItemId:item.id,invoiceLineId:original.id,originalMinor:item.lineTotalMinor,revenueMinor:original.subtotalMinor-original.discountMinor};
     });
+  },
+});
+
+export const anonymizeSellerOrderReceipts = defineService({
+  name: "catalog.anonymizeSellerOrderReceipts", summary: "Project settled original order ownership to the member erasure identity in the privacy transaction.",
+  kind: "mutation", permission: "system", external: false,
+  input: z.object({ sellerUserId: uuid, anonymousSellerUserId: uuid }), output: z.object({ affected: z.number().int().nonnegative() }),
+  handler: async ({ sellerUserId, anonymousSellerUserId }, ctx) => {
+    const changed = await ctx.tx.update(orderItems).set({ snapshot: sql`jsonb_set(${orderItems.snapshot}, '{sellerUserId}', to_jsonb(${anonymousSellerUserId}::text), false)` })
+      .where(sql`${orderItems.snapshot}->>'sellerUserId' = ${sellerUserId}`).returning({ id: orderItems.id });
+    return { affected: changed.length };
   },
 });
 
@@ -216,4 +236,4 @@ export const memberOrdersForContact = defineService({
   },
 });
 
-export default [marketListings, orderSellers, orderInvoiceRevenue, orderForInvoice, memberOrdersForContact];
+export default [marketListings, orderSellers, orderInvoiceRevenue, anonymizeSellerOrderReceipts, orderForInvoice, memberOrdersForContact];
