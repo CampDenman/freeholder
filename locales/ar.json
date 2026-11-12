@@ -8807,5 +8807,7 @@
   "mail.carrier.state.running": "العملية لم تُحسم بعد",
   "mail.carrier.state.confirmed": "تم رصد رد إيجابي من المزوّد",
   "mail.carrier.state.refused": "تم رصد رفض من المزوّد",
-  "mail.carrier.state.unknown": "نتيجة المزوّد غير معروفة"
+  "mail.carrier.state.unknown": "نتيجة المزوّد غير معروفة",
+  "mail.carrier.erasedAddress": "عنوان محذوف — راجع عملية المزوّد الأصلي",
+  "audit.mail.settleCarrierErasure": "تمت مطابقة أدلة محو المزوّد الأصلي"
 }

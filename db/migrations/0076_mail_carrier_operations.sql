@@ -16,6 +16,10 @@ ALTER TABLE mail_provider_grants ADD COLUMN redacted_at timestamptz;
 --> statement-breakpoint
 ALTER TABLE mail_provider_grants ADD COLUMN revision integer NOT NULL DEFAULT 0;
 --> statement-breakpoint
+ALTER TABLE mail_provider_grants ADD COLUMN recovery_pending boolean NOT NULL DEFAULT false;
+--> statement-breakpoint
+ALTER TABLE mail_provider_grants ADD COLUMN withdrawal_reviews jsonb NOT NULL DEFAULT '[]'::jsonb;
+--> statement-breakpoint
 ALTER TABLE mail_provider_grants ADD COLUMN review_digest text;
 --> statement-breakpoint
 ALTER TABLE mail_provider_grants ADD COLUMN reviewed_at timestamptz;
@@ -47,6 +51,10 @@ BEGIN
    IF current_setting('freeholder.mail_carrier_v1',true) IS DISTINCT FROM '1' OR OLD.redacted_at IS NOT NULL OR NEW.original_email<>'' OR NEW.email_digest IS NULL OR NEW.email_digest !~ '^[a-f0-9]{64}$' OR NEW.redacted_at IS NULL OR NEW.withdrawn_at IS NULL THEN
     RAISE EXCEPTION 'The original carrier address permits only guarded positive-withdrawal minimization' USING ERRCODE='23514';
    END IF;
+  END IF;
+  IF NEW.recovery_pending IS DISTINCT FROM OLD.recovery_pending OR NEW.withdrawal_reviews IS DISTINCT FROM OLD.withdrawal_reviews THEN
+   IF current_setting('freeholder.mail_carrier_v1',true) IS DISTINCT FROM '1' OR jsonb_typeof(NEW.withdrawal_reviews)<>'array' OR jsonb_array_length(NEW.withdrawal_reviews)<jsonb_array_length(OLD.withdrawal_reviews) OR NEW.withdrawal_reviews->0 IS DISTINCT FROM OLD.withdrawal_reviews->0 AND jsonb_array_length(OLD.withdrawal_reviews)>0 THEN RAISE EXCEPTION 'Carrier recovery requires the guarded writer and retained review history' USING ERRCODE='23514'; END IF;
+   IF EXISTS(SELECT 1 FROM jsonb_array_elements(OLD.withdrawal_reviews) WITH ORDINALITY previous_review(value,position) WHERE NEW.withdrawal_reviews->(position::int-1) IS DISTINCT FROM value) THEN RAISE EXCEPTION 'Original carrier reviews cannot be changed or removed' USING ERRCODE='23514'; END IF;
   END IF;
   IF OLD.review_digest IS NOT NULL AND ROW(NEW.review_digest,NEW.reviewed_at) IS DISTINCT FROM ROW(OLD.review_digest,OLD.reviewed_at) THEN RAISE EXCEPTION 'Original human carrier evidence is immutable' USING ERRCODE='23514'; END IF;
   IF NEW.withdrawn_at IS DISTINCT FROM OLD.withdrawn_at OR NEW.withdrawal_error IS DISTINCT FROM OLD.withdrawal_error OR NEW.review_digest IS DISTINCT FROM OLD.review_digest OR NEW.reviewed_at IS DISTINCT FROM OLD.reviewed_at THEN

@@ -23,7 +23,7 @@
 //   actually holds them.
 import { isIP } from "node:net";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { type MarketingConsentEvidence } from "@/adapters/mail/types";
 import { db } from "@/core/db";
 import { ServiceError, type Tx } from "@/core/service";
@@ -141,7 +141,7 @@ export async function rememberProviderGrant(
 
 /** Detached grants remain pending until a positive original-resource withdrawal. */
 export async function grantsAwaitingWithdrawal(): Promise<number> {
-  const [row] = await db().select({ count: sql<number>`count(*)::int` }).from(mailProviderGrants).where(and(sql`(${mailProviderGrants.consentRecordId} is null or ${mailProviderGrants.withdrawalError} is not null)`, isNull(mailProviderGrants.withdrawnAt)));
+  const [row] = await db().select({ count: sql<number>`count(*)::int` }).from(mailProviderGrants).where(and(sql`(${mailProviderGrants.consentRecordId} is null or ${mailProviderGrants.withdrawalError} is not null)`, or(isNull(mailProviderGrants.withdrawnAt), eq(mailProviderGrants.recoveryPending, true))));
   return row?.count ?? 0;
 }
 
@@ -156,6 +156,7 @@ async function withdrawGrant(grantId: string): Promise<boolean> {
     await lockCarrierAddress(tx, resource.resourceDigest, original.email);
     const [grant] = await tx.select().from(mailProviderGrants).where(eq(mailProviderGrants.id, grantId)).for("update");
     if (!grant) return "missing";
+    if (grant.recoveryPending) return "pending";
     if (grant.withdrawnAt) return "done";
     if (!grant.resourceDigest || !grant.resourceBaseUrl || grant.resourceDigest !== resource.resourceDigest || grant.resourceBaseUrl !== site.baseUrl) throw new ServiceError("conflict", "The original carrier account is unavailable or unproven. Restore and review the original resource; a replacement account cannot withdraw its grants.");
     // Reserve the complete currently known set, not grants created later.
@@ -211,7 +212,7 @@ export async function mirrorMarketingWithdrawal(payload: unknown): Promise<void>
   if (event.state !== "withdrawn") return;
   if (!event.contactId) return;
   if (playgroundBlocksExternalDelivery(env()) || !env().PARADISEMODERN_API_KEY) return;
-  const grants = await db().select({ id: mailProviderGrants.id }).from(mailProviderGrants).innerJoin(consentRecords, eq(consentRecords.id, mailProviderGrants.consentRecordId)).where(and(eq(consentRecords.contactId, event.contactId), eq(mailProviderGrants.provider, "paradise"), isNull(mailProviderGrants.withdrawnAt)));
+  const grants = await db().select({ id: mailProviderGrants.id }).from(mailProviderGrants).innerJoin(consentRecords, eq(consentRecords.id, mailProviderGrants.consentRecordId)).where(and(eq(consentRecords.contactId, event.contactId), eq(mailProviderGrants.provider, "paradise"), or(isNull(mailProviderGrants.withdrawnAt), eq(mailProviderGrants.recoveryPending, true))));
   for (const grant of grants) await withdrawGrant(grant.id);
 }
 
@@ -232,10 +233,16 @@ export async function withdrawDetachedGrants(
   grantIds?: readonly string[],
 ): Promise<{ removed: number; waiting: number }> {
   if (grantIds && grantIds.length === 0) return { removed: 0, waiting: 0 };
+  const { reopenCarrierErasures, carrierRecoveryCovered } = await import("./carrier-recovery");
+  await reopenCarrierErasures(grantIds);
   const grants = await db()
     .select({
       id: mailProviderGrants.id,
       email: mailProviderGrants.email,
+      redactedAt: mailProviderGrants.redactedAt,
+      recoveryPending: mailProviderGrants.recoveryPending,
+      carrierOperations: mailProviderGrants.carrierOperations,
+      withdrawalReviews: mailProviderGrants.withdrawalReviews,
       withdrawnAt: mailProviderGrants.withdrawnAt,
       withdrawalError: mailProviderGrants.withdrawalError,
       erasureRequestId: mailProviderGrants.erasureRequestId,
@@ -245,39 +252,29 @@ export async function withdrawDetachedGrants(
     .where(
       and(
         isNull(mailProviderGrants.consentRecordId),
-        isNull(mailProviderGrants.redactedAt),
+        or(isNull(mailProviderGrants.redactedAt), eq(mailProviderGrants.recoveryPending, true)),
         ...(grantIds ? [inArray(mailProviderGrants.id, [...grantIds])] : []),
       ),
     );
   if (grants.length === 0) return { removed: 0, waiting: 0 };
-  const open = grants.filter((grant) => !grant.withdrawnAt);
+  const receipts = await db().transaction(tx => mailReceipts(tx));
+  const covered = (grant: typeof grants[number]) => !grant.recoveryPending || carrierRecoveryCovered(grant, receipts);
+  const open = grants.filter((grant) => !grant.withdrawnAt || !covered(grant));
   let waiting = 0;
-  const finishable = grants.filter((grant) => grant.withdrawnAt);
+  const finishable = grants.filter((grant) => grant.withdrawnAt && covered(grant));
   for (const grant of open) {
-    if (playgroundBlocksExternalDelivery(env()) || !env().PARADISEMODERN_API_KEY) { waiting++; continue; }
+    if (grant.recoveryPending || grant.redactedAt || playgroundBlocksExternalDelivery(env()) || !env().PARADISEMODERN_API_KEY) { waiting++; continue; }
     if (await withdrawGrant(grant.id)) finishable.push(grant);
     else waiting++;
   }
   if (waiting && !env().PARADISEMODERN_API_KEY) console.warn(`[mail] ${waiting} original carrier grant(s) await withdrawal. Restore the original account credentials or review their final outcomes.`);
   if (finishable.length === 0) return { removed: 0, waiting };
   const removed = await db().transaction(tx => minimizeCarrierGrants(tx, finishable.map(grant => grant.id)));
-  waiting += finishable.length - removed;
-  const erasures = new Map<string, string>();
-  for (const grant of finishable) {
-    if (grant.erasureRequestId && grant.erasureJobId) erasures.set(grant.erasureRequestId, grant.erasureJobId);
-  }
-  for (const [requestId, jobId] of erasures) {
-    const [left] = await db()
-      .select({ id: mailProviderGrants.id })
-      .from(mailProviderGrants)
-      .where(and(eq(mailProviderGrants.erasureRequestId, requestId), isNull(mailProviderGrants.redactedAt)))
-      .limit(1);
-    if (left) continue;
-    const { completeErasureJob } = await import("@/core/privacy/service");
-    await completeErasureJob.call(
-      { requestId, scope: "mail.provider_grants", jobId },
-      { kind: "system" },
-    );
+  waiting += finishable.filter(grant => !grant.redactedAt).length - removed;
+  const { settleCarrierErasure } = await import("./carrier-recovery");
+  for (const requestId of new Set(finishable.flatMap(grant => grant.erasureRequestId ? [grant.erasureRequestId] : []))) {
+    const result = await settleCarrierErasure.call({ requestId }, { kind: "system" });
+    if (!result.settled) waiting += finishable.filter(grant => grant.erasureRequestId === requestId && grant.redactedAt).length;
   }
   return { removed, waiting };
 }

@@ -93,9 +93,15 @@ export function carrierMailJournal(dispatchId: string): MailCarrierJournal {
         if (grantId) {
           const [grant] = await tx.select().from(mailProviderGrants).where(eq(mailProviderGrants.id, grantId)).for("update");
           if (!grant) throw new ServiceError("conflict", "Restore the original carrier grant witness.");
-          await tx.update(mailProviderGrants).set({ carrierOperations: grant.carrierOperations.map(prior => prior.id === id ? { ...prior, ...patch } : prior), updatedAt: new Date() }).where(eq(mailProviderGrants.id, grantId));
+          await tx.update(mailProviderGrants).set({ carrierOperations: grant.carrierOperations.map(prior => prior.id === id ? { ...prior, ...patch } : prior), ...(grant.withdrawnAt && operation.kind === "consent" && outcome.state !== "refused" ? { recoveryPending: true, withdrawalError: "A later original consent outcome contradicts the prior withdrawal. Verify the original resource again; the erased address will not be restored." } : {}), updatedAt: new Date() }).where(eq(mailProviderGrants.id, grantId));
         }
       });
+      // The observed provider witness commits first. Recovery of an older
+      // privacy artifact must never roll that positive fact back.
+      if (grantId) {
+        const { reopenCarrierErasures } = await import("./carrier-recovery");
+        await reopenCarrierErasures([grantId]);
+      }
     }
   } };
 }

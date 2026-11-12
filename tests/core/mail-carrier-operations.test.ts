@@ -18,7 +18,7 @@ import { deliverQueuedMail, sendMail } from "@/core/mail/service";
 import { confirmCarrierWithdrawal } from "@/core/mail/carrier-services";
 import { reconcileMailDispatch } from "@/core/mail/dispatch-services";
 import { eraseMailRecords } from "@/core/mail/record-privacy";
-import { dataRequests } from "@/core/privacy/schema";
+import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
 import { consentRecords } from "@/core/privacy/schema";
 import { addRetentionException, createDataRequest, fulfillDataRequest, verifyDataRequest } from "@/core/privacy/service";
 import { ready } from "@/core/runtime";
@@ -208,7 +208,7 @@ describe.runIf(hasDatabase)("original carrier consent and withdrawal operations 
     expect(sends).toBe(1);
   });
 
-  it("reopens completed erasure when a deferred original consent is physically created afterwards", async () => {
+  it.each(["intact", "missing", "corrupt", "prewithdrawn"] as const)("reopens completed erasure when a deferred original consent is physically created afterwards (%s original artifact)", async artifactState => {
     const { contact } = await reader(); let remoteGranted = false, sends = 0;
     let entered!: () => void, release!: () => void;
     const waiting = new Promise<void>(resolve => { entered = resolve; }), held = new Promise<void>(resolve => { release = resolve; });
@@ -225,15 +225,20 @@ describe.runIf(hasDatabase)("original carrier consent and withdrawal operations 
     });
     const queued = await campaign(contact.id), caller = deliverQueuedMail(queued.id);
     let requestId: string | undefined;
+    let originalArtifact: typeof dataRequestArtifacts.$inferSelect | undefined;
     try {
       await waiting; expect(remoteGranted).toBe(false);
+      if (artifactState === "prewithdrawn") {
+        const [prior] = await db().select().from(mailProviderGrants);
+        await confirmCarrierWithdrawal.call({ id: prior!.id, expectedRevision: prior!.revision, expectedEmail: EMAIL, originalResourceEvidence: "Fictional original provider account and exact pending consent operation identified.", finalProviderEvidence: "Fictional provider final records currently confirm no grant exists for this original request.", stoppedCallerEvidence: "Fictional provider independently reports the original caller and pending remote operation stopped.", providerOperationRef: "fictional-pre-erasure-withdrawal-76", confirmation: "ORIGINAL CARRIER WITHDRAWAL VERIFIED" }, HUMAN);
+      }
       const request = await createDataRequest.call({ contactId: contact.id, request: { kind: "erasure" } }, HUMAN); requestId = request.id;
       await verifyDataRequest.call({ id: request.id, method: "Fictional independent original subject identity verification." }, HUMAN);
       const fulfilled = await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, HUMAN);
       expect(fulfilled.request.status).toBe("in_progress");
       const [grant] = await db().select().from(mailProviderGrants);
-      await confirmCarrierWithdrawal.call({ id: grant!.id, expectedRevision: grant!.revision, expectedEmail: EMAIL, originalResourceEvidence: "Fictional original provider account and exact pending consent operation identified.", finalProviderEvidence: "Fictional provider final records currently confirm no grant exists for this original request.", stoppedCallerEvidence: "Fictional provider independently reports the original caller and pending remote operation stopped.", providerOperationRef: "fictional-original-stopped-consent-76", confirmation: "ORIGINAL CARRIER WITHDRAWAL VERIFIED" }, HUMAN);
-      expect(await withdrawDetachedGrants([grant!.id])).toEqual({ removed: 1, waiting: 0 });
+      if (artifactState !== "prewithdrawn") await confirmCarrierWithdrawal.call({ id: grant!.id, expectedRevision: grant!.revision, expectedEmail: EMAIL, originalResourceEvidence: "Fictional original provider account and exact pending consent operation identified.", finalProviderEvidence: "Fictional provider final records currently confirm no grant exists for this original request.", stoppedCallerEvidence: "Fictional provider independently reports the original caller and pending remote operation stopped.", providerOperationRef: "fictional-original-stopped-consent-76", confirmation: "ORIGINAL CARRIER WITHDRAWAL VERIFIED" }, HUMAN);
+      expect(await withdrawDetachedGrants([grant!.id])).toEqual({ removed: artifactState === "prewithdrawn" ? 0 : 1, waiting: 0 });
       const [dispatch] = await db().select().from(mailDispatches).where(eq(mailDispatches.deliveryId, queued.id));
       await reconcileMailDispatch.call({ deliveryId: queued.id, dispatchId: dispatch!.id, expectedAttempts: 1, expectedRecipient: EMAIL, expectedProviderRef: null, outcome: "not_submitted", providerOperationRef: "fictional-original-no-send-76", originalRouteEvidence: "Fictional original carrier account matches the frozen exact route.", finalProviderEvidence: "Fictional provider final record currently confirms no message was submitted.", stoppedCallerEvidence: "Fictional provider independently reports this exact original message caller stopped.", confirmation: "ORIGINAL PROVIDER OUTCOME VERIFIED" }, HUMAN);
       const receipt = fulfilled.artifact.body as { outcomes: Array<{ scope: string; pendingJobs?: string[] }> };
@@ -242,12 +247,36 @@ describe.runIf(hasDatabase)("original carrier consent and withdrawal operations 
       await eraseMailRecords(recordJob!.data);
       expect((await db().select().from(dataRequests).where(eq(dataRequests.id, request.id)))[0]!.status).toBe("completed");
       expect(remoteGranted).toBe(false);
+      [originalArtifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id));
+      if (artifactState === "missing") await db().delete(dataRequestArtifacts).where(eq(dataRequestArtifacts.id, originalArtifact!.id));
+      if (artifactState === "corrupt") await db().update(dataRequestArtifacts).set({ sha256: "0".repeat(64) }).where(eq(dataRequestArtifacts.id, originalArtifact!.id));
     } finally { release(); await caller; }
     expect(remoteGranted).toBe(true); expect(sends).toBe(1);
     const [grant] = await db().select().from(mailProviderGrants);
     expect(grant).toMatchObject({ email: "", erasureRequestId: requestId });
     expect(grant!.carrierOperations[0]).toMatchObject({ kind: "consent", state: "confirmed" });
     expect((await db().select().from(dataRequests).where(eq(dataRequests.id, requestId)))[0]!.status).toBe("in_progress");
+    const originalWithdrawal = grant!.withdrawnAt, originalReview = grant!.reviewDigest;
+    expect(grant!.recoveryPending).toBe(true); expect(originalWithdrawal).toBeInstanceOf(Date);
+    expect(await withdrawDetachedGrants([grant!.id])).toEqual({ removed: 0, waiting: 1 });
+    expect(remoteGranted).toBe(true); expect(sends).toBe(1);
+    const [current] = await db().select().from(mailProviderGrants);
+    // Only independent new evidence can resolve the contradiction. The erased
+    // address is never reconstructed or sent to the configured provider.
+    remoteGranted = false;
+    await confirmCarrierWithdrawal.call({ id: current!.id, expectedRevision: current!.revision, expectedEmail: "", originalResourceEvidence: "Fictional independently verified original account and exact operation 76.", finalProviderEvidence: "Fictional new provider final record confirms operation 76 grant is now absent.", stoppedCallerEvidence: "Fictional new provider record verifies every original operation and caller finally stopped.", providerOperationRef: "fictional-new-final-withdrawal-76", confirmation: "ORIGINAL CARRIER WITHDRAWAL VERIFIED" }, HUMAN);
+    if (artifactState === "missing" || artifactState === "corrupt") {
+      expect(await withdrawDetachedGrants([grant!.id])).toEqual({ removed: 0, waiting: 1 });
+      expect((await db().select().from(dataRequests).where(eq(dataRequests.id, requestId)))[0]!.status).toBe("in_progress");
+      const artifacts = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, requestId));
+      if (artifactState === "missing") { expect(artifacts).toHaveLength(0); await db().insert(dataRequestArtifacts).values(originalArtifact!); }
+      else { expect(artifacts[0]!.sha256).toBe("0".repeat(64)); await db().update(dataRequestArtifacts).set({ body: originalArtifact!.body, sha256: originalArtifact!.sha256 }).where(eq(dataRequestArtifacts.id, originalArtifact!.id)); }
+    }
+    expect(await withdrawDetachedGrants([grant!.id])).toEqual({ removed: 0, waiting: 0 });
+    const [settled] = await db().select().from(mailProviderGrants);
+    expect(settled).toMatchObject({ email: "", withdrawnAt: originalWithdrawal, reviewDigest: originalReview, recoveryPending: false });
+    expect(settled!.withdrawalReviews).toHaveLength(2);
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, requestId)))[0]!.status).toBe("completed");
   });
 
   it("fences the previous image's carrier read and new physical send before HTTP", async () => {

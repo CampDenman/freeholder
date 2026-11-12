@@ -8807,5 +8807,7 @@
   "mail.carrier.state.running": "Processus pas encore résolu",
   "mail.carrier.state.confirmed": "Réponse positive du prestataire observée",
   "mail.carrier.state.refused": "Refus du prestataire observé",
-  "mail.carrier.state.unknown": "Résultat du prestataire inconnu"
+  "mail.carrier.state.unknown": "Résultat du prestataire inconnu",
+  "mail.carrier.erasedAddress": "Adresse effacée — vérifier l’opération du fournisseur d’origine",
+  "audit.mail.settleCarrierErasure": "Preuves d’effacement du fournisseur d’origine rapprochées"
 }

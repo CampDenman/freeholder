@@ -58,3 +58,31 @@ runner's earlier exemption snapshot cannot authorize forgetting a later hold.
 Native tests use a fake HTTP carrier and a disposable PostgreSQL database. They
 cannot satisfy C3.31's actual transactional and bulk sends, independent security
 review or any hosted-preview acceptance.
+
+A later consent outcome can contradict an earlier withdrawal confirmation, even
+when the address and original erasure were already completed. The new observed
+HTTP fact commits first. A separate durable recovery debt reopens the original
+request through its retained request link; the periodic worker repairs a crash
+between those commits. The original withdrawal timestamp, first human receipt,
+and observed operations remain intact. New human reviews append private keyed
+receipts covering the exact current operation facts. An erased address remains
+blank: recovery requires fresh original-provider evidence for that exact receipt,
+and never reconstructs an address or sends it to a replacement account. Missing
+or corrupt original erasure artifacts stay in progress until restored; newer
+provider proof cannot fabricate the original scope or clear that recovery debt.
+
+Local qualification on the media75 integration source: the complete journal
+0–76 applied to a fresh disposable database (77 entries). The true new physical
+consent-after-completed-erasure regression and the earlier late-ACK positive
+both passed. The new regression also proves fresh independent correction can
+complete the reopened request while retaining the exact first withdrawal and
+both private review receipts. Full composed qualification remains required.
+
+The adjacent ordering where a human withdrawal predates erasure also reproduced
+a missing original-request link. Fulfillment now captures that actual owning
+request before minimizing a finished grant. The bounded after control passed;
+the original failure remains recorded. A populated journal75-to76 upgrade also
+preserved six original contact/consent/mail tables' row values while adding only
+empty or unknown carrier metadata for history. The live SDK's eight controls and
+the five internal-service boundary controls passed. These are local source
+proofs, not a stable release or provider-account sign-off.

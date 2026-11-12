@@ -515,6 +515,8 @@ export const mailProviderGrants = pgTable(
     erasureJobId: uuid("erasure_job_id"),
     /** Never backfilled for legacy grants: today's account cannot prove yesterday's resource. */
     revision: integer("revision").notNull().default(0),
+    recoveryPending: boolean("recovery_pending").notNull().default(false),
+    withdrawalReviews: jsonb("withdrawal_reviews").$type<Array<{ digest: string; operationsDigest: string }>>().notNull().default([]),
     reviewDigest: text("review_digest"),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: "set null" }),

@@ -31,6 +31,7 @@ async function grantsOf(tx: Tx, contactId: string) {
       email: mailProviderGrants.email,
       consentRecordId: mailProviderGrants.consentRecordId,
       withdrawnAt: mailProviderGrants.withdrawnAt,
+      recoveryPending: mailProviderGrants.recoveryPending,
       withdrawalError: mailProviderGrants.withdrawalError,
       originalBaseUrl: mailProviderGrants.resourceBaseUrl,
       operations: mailProviderGrants.carrierOperations,
@@ -53,9 +54,13 @@ registerContactPrivacySource({
   erase: async (tx, contactId, context) => {
     const grants = await grantsOf(tx, contactId);
     if (grants.length === 0) return { affected: 0 };
-    const finished = grants.filter((grant) => grant.withdrawnAt);
-    const open = grants.filter((grant) => !grant.withdrawnAt);
+    const finished = grants.filter((grant) => grant.withdrawnAt && !grant.recoveryPending);
+    const open = grants.filter((grant) => !grant.withdrawnAt || grant.recoveryPending);
     if (finished.length) {
+      // Even a prior human withdrawal can be contradicted by a later physical
+      // consent outcome. Capture this actual owning request before forgetting
+      // the consent link and address; never reconstruct it afterwards.
+      await tx.update(mailProviderGrants).set({ erasureRequestId: context.requestId }).where(inArray(mailProviderGrants.id, finished.map(grant => grant.id)));
       await minimizeCarrierGrants(tx, finished.map(grant => grant.id));
     }
     if (open.length === 0) return { affected: grants.length };
@@ -96,6 +101,7 @@ registerRetentionSource({
     for (;;) {
       const finishedBefore = and(
         isNotNull(mailProviderGrants.withdrawnAt),
+        eq(mailProviderGrants.recoveryPending, false),
         isNull(mailProviderGrants.redactedAt),
         sql`${mailProviderGrants.updatedAt} < ${args.cutoff.toISOString()}::timestamptz`,
         args.exceptContactIds.length
