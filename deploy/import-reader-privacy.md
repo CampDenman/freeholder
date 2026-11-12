@@ -275,3 +275,23 @@ original comments bind to one newly human-created person through explicit
 owner choices, without copying the historical address into that profile. These
 proofs do not weaken privacy export. Large explicit owner choice, refreshed
 whole-source regressions and current browser qualification remain pending.
+
+
+The owner can now select up to fifty displayed original readers for one atomic
+review action. Each row has its own empty person selector and explicit checked
+confirmation. The shared service accepts at most 500 individually specified
+original coordinates; it calls the same authorized, audited single-reader
+operation for every choice. It buffers only cache projection within that same
+transaction and writes each matching cached source once. No buffer survives a
+transaction or supplies identity to a later request.
+
+The two finite native controls passed in 11.68 seconds: a later stale original
+rolls back every earlier receipt and cache change, duplicate coordinates refuse,
+and agent, personal-key, stale-session and oversized requests refuse. The real
+1001-reader control then passed separately in 16.59 seconds: the fresh owner
+explicitly selected all originals in 500/500/1 bounded calls, the source committed
+all comments, and normalized contact merge followed by exact undo restored all
+1001 original owners. The ordinary test timeout remains unchanged. Static types
+and lint pass; current production browser qualification remains pending. An
+already-committed pre78 private-comment export boundary is being investigated
+separately and is not covered by the cached-source upgrade evidence above.

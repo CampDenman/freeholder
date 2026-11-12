@@ -18,7 +18,8 @@ import { CSRF_COOKIE, CSRF_HEADER, issueCsrfToken } from "@/core/http/csrf";
 import { C11_BASE_URL, seedC11Owner, useOwnerSession } from "./owner-session";
 
 const EMAIL = `${"historical".repeat(7)}@example.test`;
-const SOURCE = `<rss xmlns:wp="urn:wordpress" xmlns:content="urn:content"><channel><link>https://fictional-reader.example/site-a/</link><item><title>Original fictional article</title><link>https://fictional-reader.example/site-a/original-article</link><wp:post_id>10</wp:post_id><wp:post_type>post</wp:post_type><wp:status>publish</wp:status><content:encoded><![CDATA[<p>Fictional article text.</p>]]></content:encoded><wp:comment><wp:comment_id>20</wp:comment_id><wp:comment_author>Original fictional reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Original fictional reader evidence.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment></item></channel></rss>`;
+const SECOND = `<wp:comment><wp:comment_id>21</wp:comment_id><wp:comment_author>Second fictional original reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Second fictional original reader evidence.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment>`;
+const SOURCE = `<rss xmlns:wp="urn:wordpress" xmlns:content="urn:content"><channel><link>https://fictional-reader.example/site-a/</link><item><title>Original fictional article</title><link>https://fictional-reader.example/site-a/original-article</link><wp:post_id>10</wp:post_id><wp:post_type>post</wp:post_type><wp:status>publish</wp:status><content:encoded><![CDATA[<p>Fictional article text.</p>]]></content:encoded><wp:comment><wp:comment_id>20</wp:comment_id><wp:comment_author>Original fictional reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Original fictional reader evidence.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment>${SECOND}</item></channel></rss>`;
 
 test.describe("original reader ownership review (C2.29/C3.46)", () => {
   test.setTimeout(180_000); test.afterAll(closeDb);
@@ -43,7 +44,7 @@ test.describe("original reader ownership review (C2.29/C3.46)", () => {
         // and executor. No current receipt/key is deleted to manufacture it.
         const staged = stageImportSource("wordpress-wxr", SOURCE, "https://fictional-reader.example");
         const cached = z.object({ pages: z.array(z.object({ readerComments: z.array(z.record(z.string(), z.unknown())) }).passthrough()) }).passthrough().parse(staged.preview);
-        cached.pages[0]!.readerComments[0]!.contactId = original.id;
+        for (const reader of cached.pages[0]!.readerComments) reader.contactId = original.id;
         [legacy] = await db().insert(importRuns).values({ source: "wordpress-wxr:https://fictional-reader.example", kind: "wordpress-wxr", origin: "https://fictional-reader.example", status: "previewed", preview: cached, checkpoint: { origin: "https://fictional-reader.example", kind: "wordpress-wxr" }, counts: staged.counts, createdBy: "agent:legacy-browser-source" }).returning({ id: importRuns.id });
       }
       await post("contacts.update", { id: original.id, email: "changed-original@example.test" });
@@ -52,7 +53,7 @@ test.describe("original reader ownership review (C2.29/C3.46)", () => {
       if (!legacy) await post("imports.previewFromSource", { id: run.id, payload: SOURCE });
       await page.goto(`/admin/imports/${run.id}`);
       await expect(page.getByRole("heading", { name: t("imports.readers.title"), exact: true })).toBeVisible();
-      await expect(page.getByText(EMAIL, { exact: true })).toBeVisible();
+      await expect(page.getByText(EMAIL, { exact: true })).toHaveCount(2);
       if (locale === "ar") await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
       for (const theme of ["light", "dark"]) {
         await context.addCookies([{ name: THEME_COOKIE, value: theme, url: C11_BASE_URL }]); await page.reload();
@@ -64,10 +65,13 @@ test.describe("original reader ownership review (C2.29/C3.46)", () => {
         await page.screenshot({ path: test.info().outputPath(`${locale}-${theme}-original-reader.png`), fullPage: true });
       }
       const person = page.getByLabel(t("imports.readers.person"), { exact: true });
-      await expect(person).toHaveValue(""); await person.selectOption(original.id);
+      await expect(person).toHaveCount(2);
+      for (const selected of await person.all()) { await expect(selected).toHaveValue(""); await selected.selectOption(original.id); }
       const confirmation = page.getByLabel(t("imports.readers.confirm"), { exact: true });
-      await confirmation.focus(); await page.keyboard.press("Space"); await page.keyboard.press("Tab");
-      await expect(page.getByRole("button", { name: t("imports.readers.submit"), exact: true })).toBeFocused();
+      await expect(confirmation).toHaveCount(2);
+      for (const checked of await confirmation.all()) { await expect(checked).not.toBeChecked(); await checked.focus(); await page.keyboard.press("Space"); }
+      await page.keyboard.press("Tab");
+      await expect(page.getByRole("button", { name: t("imports.readers.bulkSubmit"), exact: true })).toBeFocused();
       const reviewed = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === `/admin/imports/${run.id}`, { timeout: 120_000 });
       await page.keyboard.press("Enter");
       // The successful action redirects immediately; Chromium can discard
@@ -75,13 +79,17 @@ test.describe("original reader ownership review (C2.29/C3.46)", () => {
       // outcome without racing that intentionally disposable response body.
       const saved = await reviewed; expect(saved.status()).toBe(200);
       await expect(page.getByRole("heading", { name: t("imports.readers.title"), exact: true })).toHaveCount(0);
-      const [receipt] = await db().select().from(readerOwnershipReceipts);
-      expect(receipt).toMatchObject({ state: "bound", contactId: original.id }); expect(receipt?.contactId).not.toBe(later.id);
+      const receipts = await db().select().from(readerOwnershipReceipts);
+      expect(receipts).toHaveLength(2);
+      for (const receipt of receipts) { expect(receipt).toMatchObject({ state: "bound", contactId: original.id }); expect(receipt.contactId).not.toBe(later.id); }
       if (legacy) expect((await db().select().from(importRuns).where(eq(importRuns.id, run.id)))[0]?.createdBy).toBe("agent:legacy-browser-source");
       await post("imports.commit", { id: run.id });
-      expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([original.id]);
+      expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([original.id, original.id]);
       const [audit] = await db().select().from(auditLog).where(eq(auditLog.action, "imports.resolveReaderOwnership"));
       expect(audit).toMatchObject({ actor: "user:00000000-0000-4000-8000-000000000001", subjectType: "contact", subjectId: original.id });
+      const [batchAudit] = await db().select().from(auditLog).where(eq(auditLog.action, "imports.resolveReaderOwnershipBatch"));
+      expect(batchAudit).toMatchObject({ actor: "user:00000000-0000-4000-8000-000000000001", subjectType: "import_run", subjectId: run.id });
+      expect(JSON.stringify(batchAudit?.diff)).not.toContain(EMAIL);
       expect(JSON.stringify(audit?.diff)).not.toContain(EMAIL); expect(JSON.stringify(audit?.diff)).not.toContain("Original fictional reader evidence.");
     } finally { await context.close(); }
   });
